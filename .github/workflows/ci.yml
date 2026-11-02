@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The wordmark must stay well-formed SVG, or GitHub shows a broken image.
+  logos:
+    name: logos are valid SVG
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get install -y --no-install-recommends libxml2-utils
+      - run: xmllint --noout assets/*.svg
+
+  # Every link in every document resolves, relative ones included.
+  links:
+    name: links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          args: --no-progress --include-fragments '**/*.md'
+          fail: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
