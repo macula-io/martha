@@ -120,12 +120,40 @@ could contain an envelope that was never sent. That buys a stranger two effects:
 renaming another member's socket, and retiring a handoff as read without having
 sent it.
 
-`src/trust_only_framed_envelopes/` is the rule that closes it: an envelope is
-believed **only where the harness framed it**. A framed delivery carries its
-sender and its message id as facts the harness reports, so nothing is scanned.
-Loose text is never read for envelopes at all, whatever it contains — which is
-why a body that closes its envelope early and opens a forged one lends the
-forgery nothing.
+`src/trust_only_framed_envelopes/` is the rule that closes it. "Framed by the
+harness" is not a fact every host hands over — on the Claude Code host the plugin
+is given the turn's text and nothing else — so the frame is **derived** by a rule
+strict enough that an ordinary turn cannot wear one:
+
+1. the turn starts with the envelope's opening tag, at offset 0;
+2. its closing tag is the very end of the turn;
+3. there is exactly one envelope in the turn — a second opening tag anywhere in
+   the body means the turn is not framed at all;
+4. attributes are read from that one opening tag, never from the body.
+
+Everything between the tags is body, and body is never scanned. A room body, a
+ring purpose or a decline reason never starts with an envelope, so none of them
+can be one; a body that closes its envelope early and opens a forged one is not
+framed at all rather than framed with a forgery.
+
+The adapter takes the sender's address and name from that frame and nowhere else.
+
+**The residual, stated rather than papered over:** with that rule, a turn that
+*is* a whole envelope — the owner pasting one in — is indistinguishable from a
+delivery, and is believed. A host that can say where a turn came from must say
+so; `origin: 'owner'` is then never framed. Where the host says nothing, the
+paste is believed, and no amount of reading the text can tell the two apart.
+
+Two limits that follow from what a host actually provides:
+
+- **The name is not the identity.** `from-name` is the sender's own chosen
+  display name: good for routing a reply, never for authority. Authority is
+  `who_may_act`, and that is the calling session's own node id.
+- **A cross-session envelope carries no message id on the Claude Code host.** So
+  a framed delivery is retired by its id where the host gives one; where it does
+  not, only that delivery's **body** may be matched against an unread DM — never
+  loose text. An id could come from the sender's own record, keyed by address and
+  time; until it does, the body is all there is.
 
 Like the other core rules, this one has no caller in this repository yet: the
 scanning it replaces lives in the crew's existing plugin.
