@@ -158,6 +158,58 @@ Two limits that follow from what a host actually provides:
 Like the other core rules, this one has no caller in this repository yet: the
 scanning it replaces lives in the crew's existing plugin.
 
+## Wiring it into a host
+
+A host does these things, and the core does the rest:
+
+| When | Call |
+|---|---|
+| a session starts new | `beginSession(store, session_id)` — writes the empty record before anything arrives |
+| a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
+| before running any tool | `answerToolCall({ tool, session, policy })` — return the `{ deny }` as the hook's answer |
+| a turn arrives, from any source | `takeInTurn(session, arrival)` |
+| the session is replaced | `replaceSession(session, 'clear' \| 'new_session' \| 'compaction' \| 'handover' \| 'resume')` |
+| after a turn | `rememberSession(store, session)` |
+
+`takeInTurn` records the arrival on the inbound path that names it, so the host
+and the registry cannot drift apart: the test derives the expected set from the
+registry, and a source with no registry row is named by the check.
+
+Four rules the seam keeps, and a host must not work around:
+
+- **An identity is carried only where something attested the sender.** The
+  registry says, per path, who attests a sender — a crew roster (A1–A3), the mesh
+  station (A4, A5), or the host's binder (A6, martha#14). Every other path drops
+  the identity the host offers, so a commit authored under the supervisor's node
+  id, a `gh` login, or an envelope's `from` attribute buys nothing. A host that
+  holds no identity records an unattributed arrival, which taints.
+- **The record is persisted per session id and reloaded on start.** Held only in
+  memory, it fails open on every process restart: a resumed transcript would come
+  back to an empty record. A session that expects a record and cannot read one is
+  tainted.
+- **Only a real replacement clears the record.** `clear` and `new_session` start
+  afresh. `compaction`, `handover` and `resume` keep it. A restart that resumes a
+  transcript is `resume`, not `new_session`.
+- **A compaction and a handover are inheritances, not arrivals.** They carry the
+  predecessor's record forward through the store; `takeInTurn` has no source for
+  them. A handover is written from the predecessor's own context, so the record it
+  inherits is the honest summary of that context.
+
+The refusal text a host returns names the command that clears it — `/clear` on
+the Claude Code host.
+
+### What this repository does not contain
+
+The registration itself. On the Claude Code host that is `on('tool.call', …)` in
+the plugin package, and building a plugin needs that package's types and its mod
+loader, neither of which is in this repository. What is here is the contract
+between them: one question per tool call, one record per arrival, one call per
+replacement. Writing the adapter's line of registration against the vendored
+package is the remaining step, not a guess this repository should make.
+
+An adapter must also call `unknownSupervisorOnlyTools` with its own list of
+supervisor-only tools and fail on a difference (see *Who may act*).
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding

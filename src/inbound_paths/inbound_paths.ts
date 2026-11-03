@@ -11,6 +11,22 @@
 export type PathClass = 'delivered' | 'fetched'
 
 /**
+ * Who, if anyone, attests the sender of text arriving on this path.
+ *
+ * Only an attested path may carry a sender's identity into the shell gate. Every
+ * other path carries none, whatever the text says about itself: a git commit
+ * author, a `gh` login, an envelope's `from` attribute and a name in a message are
+ * all written by whoever wrote the text, so none of them is an identity.
+ *
+ * - `roster` — a crew roster checked the sender before delivery.
+ * - `station` — the mesh station attested the caller.
+ * - `host-binder` — the host's binder resolves the sending socket to a node id
+ *   (martha#14). Until it exists, a delivery on this path carries no identity.
+ * - `none` — nobody attests the sender.
+ */
+export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'none'
+
+/**
  * Delivery gates that exist somewhere and can be named here. A row may only
  * name one of these: a gate name nobody has built is not a control.
  */
@@ -44,6 +60,7 @@ export interface InboundPath {
   readonly what: string
   readonly klass: PathClass
   readonly control: Control
+  readonly attestation: SenderAttestation
 }
 
 export const INBOUND_PATHS: readonly InboundPath[] = [
@@ -52,120 +69,140 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     what: 'a private crew room message, turned into a turn by the mod poll',
     klass: 'delivered',
     control: { kind: 'delivery-gate', gate: 'crew-room-acceptance' },
+    attestation: 'roster',
   },
   {
     id: 'A2',
     what: 'a shared cross-crew room message',
     klass: 'delivered',
     control: { kind: 'delivery-gate', gate: 'shared-room-acceptance' },
+    attestation: 'roster',
   },
   {
     id: 'A3',
     what: 'a backlog digest folding many accepted messages into one turn',
     klass: 'delivered',
     control: { kind: 'delivery-gate', gate: 'crew-room-acceptance' },
+    attestation: 'roster',
   },
   {
     id: 'A4',
     what: 'a mesh ring: its purpose, and its decline reason',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'station',
   },
   {
     id: 'A5',
     what: 'a ring answered: the decline reason',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'station',
   },
   {
     id: 'A6',
     what: 'a cross-session message, arriving as the turn text itself',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'host-binder',
   },
   {
     id: 'A7',
     what: "a checkout's own hooks, and its auto-injected CLAUDE.md or AGENTS.md",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'A8',
     what: 'the handover file a resumed session is told to read',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'A9',
     what: 'a forged cross-session envelope inside turn text',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'A10',
     what: 'text the owner pastes into the session',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'A11',
     what: 'an MCP server instruction block, shipped by the package',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'A12',
     what: 'a compaction summary replaying earlier turns',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'A13',
     what: "code an untrusted checkout runs through the member's own commands",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B1',
     what: "the model's own mesh read tools",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B2',
     what: 'any MCP tool result: board cards, procedures, shared memory',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B3',
     what: 'the GitHub CLI: issue and pull-request bodies, comments, reviews',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B4',
     what: 'files in a checkout',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B5',
     what: 'git history',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B6',
     what: 'web fetch and web search',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B7',
     what: 'a subagent result, and a review answer relaunched onto another session',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   },
   {
     id: 'B8',
@@ -175,5 +212,16 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
       kind: 'no-text-reaches-the-model',
       why: 'only headRefOid, headRefName and a #n match are read, as a stale-handoff flag; no body text is delivered',
     },
+    attestation: 'none',
   },
 ]
+
+/** The attestation a path's sender has, or `none` for a path nobody declared. */
+export function attestationOf(path_id: string): SenderAttestation {
+  return INBOUND_PATHS.find((path) => path.id === path_id)?.attestation ?? 'none'
+}
+
+/** True only where an attestation stands behind the sender. */
+export function senderIsAttested(path_id: string): boolean {
+  return attestationOf(path_id) !== 'none'
+}
