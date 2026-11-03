@@ -10,20 +10,31 @@
 import {
   refuseExecutionAfterUngatedText,
   type Policy,
-  type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { isShellTool } from '../shell_tools/shell_tools.ts'
+import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** A host refusal, or nothing to say. */
 export type ToolCallAnswer = { readonly deny: string } | undefined
 
 export interface ToolCall {
   readonly tool: string
-  readonly session: Session
+  readonly session: HostSession
   readonly policy: Policy
 }
 
 /** Refuse the tool call, or let it run. */
 export function answerToolCall({ tool, session, policy }: ToolCall): ToolCallAnswer {
-  const decision = refuseExecutionAfterUngatedText({ tool, session, policy })
+  if (session.record_missing) {
+    return isShellTool(tool)
+      ? {
+          deny:
+            'Nothing executes in this session: its record of what it has taken in cannot be read, so it is treated as ' +
+            'having taken in everything. Start a fresh session (/clear on the Claude Code host) to clear it.',
+        }
+      : undefined
+  }
+
+  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy })
   return decision.allow ? undefined : { deny: decision.refusal }
 }

@@ -160,27 +160,43 @@ scanning it replaces lives in the crew's existing plugin.
 
 ## Wiring it into a host
 
-A host does three things, and the core does the rest:
+A host does these things, and the core does the rest:
 
 | When | Call |
 |---|---|
-| before running any tool | `answerToolCall({ tool, session, policy })` from `src/answer_a_tool_call/` — return the `{ deny }` object as the hook's answer |
-| a turn arrives, from any source | `takeInTurn(session, arrival)` from `src/take_in_a_turn/` |
-| the session is replaced | `replaceSession(session, 'clear' | 'restart' | 'new_session' | 'compaction' | 'handover' | 'resume')` |
+| a session starts new | `beginSession(store, session_id)` — writes the empty record before anything arrives |
+| a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
+| before running any tool | `answerToolCall({ tool, session, policy })` — return the `{ deny }` as the hook's answer |
+| a turn arrives, from any source | `takeInTurn(session, arrival)` |
+| the session is replaced | `replaceSession(session, 'clear' \| 'new_session' \| 'compaction' \| 'handover' \| 'resume')` |
+| after a turn | `rememberSession(store, session)` |
 
 `takeInTurn` records the arrival on the inbound path that names it, so the host
-and the registry cannot drift apart: a source the seam can produce that is not a
-registry row fails CI.
+and the registry cannot drift apart: the test derives the expected set from the
+registry, and a source with no registry row is named by the check.
 
-Two rules the seam keeps, and a host must not work around:
+Four rules the seam keeps, and a host must not work around:
 
-- **The identity is the host's, never the text's.** `takeInTurn` takes the
-  sender's identity from what the host holds, and a host that holds none records
-  an unattributed arrival — which taints the session. An identity printed inside
-  a pasted envelope is worth nothing, because whoever wrote it chose it.
-- **Only a real replacement clears the record.** `clear`, `restart` and
-  `new_session` start afresh; `compaction`, `handover` and `resume` keep what the
-  session took in, because they carry the old text into the new context.
+- **An identity is carried only where something attested the sender.** The
+  registry says, per path, who attests a sender — a crew roster (A1–A3), the mesh
+  station (A4, A5), or the host's binder (A6, martha#14). Every other path drops
+  the identity the host offers, so a commit authored under the supervisor's node
+  id, a `gh` login, or an envelope's `from` attribute buys nothing. A host that
+  holds no identity records an unattributed arrival, which taints.
+- **The record is persisted per session id and reloaded on start.** Held only in
+  memory, it fails open on every process restart: a resumed transcript would come
+  back to an empty record. A session that expects a record and cannot read one is
+  tainted.
+- **Only a real replacement clears the record.** `clear` and `new_session` start
+  afresh. `compaction`, `handover` and `resume` keep it. A restart that resumes a
+  transcript is `resume`, not `new_session`.
+- **A compaction and a handover are inheritances, not arrivals.** They carry the
+  predecessor's record forward through the store; `takeInTurn` has no source for
+  them. A handover is written from the predecessor's own context, so the record it
+  inherits is the honest summary of that context.
+
+The refusal text a host returns names the command that clears it — `/clear` on
+the Claude Code host.
 
 ### What this repository does not contain
 

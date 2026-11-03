@@ -42,6 +42,7 @@ test('a planted path with no control makes the check fail, and it names that pat
     what: 'a planted path nobody gated',
     klass: 'delivered',
     control: { kind: 'none' },
+    attestation: 'none',
   }
   const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
@@ -69,6 +70,7 @@ test('a path that claims the shell gate must really be refused by it', () => {
     what: 'a path claiming cover it does not have',
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
   }
   const gaps = gapsInGateCoverage([...INBOUND_PATHS, lying], (path) => path !== 'A98')
   assert.deepEqual(
@@ -97,6 +99,7 @@ test('a path excused from the model must say why in words', () => {
     what: 'a path excused without a reason',
     klass: 'fetched',
     control: { kind: 'no-text-reaches-the-model', why: '   ' },
+    attestation: 'none',
   }
   const gaps = gapsInGateCoverage([...INBOUND_PATHS, excused], gateRefuses)
   assert.deepEqual(

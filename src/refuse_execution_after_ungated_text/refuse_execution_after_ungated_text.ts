@@ -96,16 +96,16 @@ function refusalFor(ingest: Ingestion, path: InboundPath | undefined, policy: Po
   const tool = 'Nothing executes in this session'
 
   if (path === undefined) {
-    return `${tool}: text arrived on path ${ingest.path}, which this gate does not know. Start a fresh session to clear it.`
+    return `${tool}: text arrived on path ${ingest.path}, which this gate does not know. Start a fresh session (/clear on the Claude Code host) to clear it.`
   }
 
   if (ingest.from_node_id === null) {
-    return `${tool}: text from an unattributed sender arrived on path ${path.id} (${path.what}) and is still readable here. Start a fresh session to clear it.`
+    return `${tool}: text from an unattributed sender arrived on path ${path.id} (${path.what}) and is still readable here. Start a fresh session (/clear on the Claude Code host) to clear it.`
   }
 
   const sender = ingest.from_node_id.toLowerCase()
   if (!policy.may_send_executable_text.some((node_id) => node_id.toLowerCase() === sender)) {
-    return `${tool}: the sender of the text on path ${path.id} (${path.what}) is not named by the policy table. Start a fresh session to clear it.`
+    return `${tool}: the sender of the text on path ${path.id} (${path.what}) is not named by the policy table. Start a fresh session (/clear on the Claude Code host) to clear it.`
   }
 
   return undefined
