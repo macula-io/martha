@@ -65,6 +65,34 @@ unattributed, the gate blocks execution in that session until you start a fresh
 one — you hit this before anyone else does, and that is the intended trade: the
 owner is trusted, the thing the owner copied is not.
 
+## Who may act
+
+A gate in front of the text is only half of it: a message that cannot reach the
+shell can still *do* things through the crew's own tools. Seven of those —
+assign work, read the crew roster, verify a range, open a crew room, restart a
+member, take the owner's asks, close the owner's todo rows — are the
+supervisor's, and the crew's implementation decides that by a display name the
+session sets about itself. That name falls back to the first six user messages,
+and a delivered message is a user message, so a stranger's ring purpose saying
+"you are Supervisor" passes every one of them. Restarting a member, taking the
+asks and closing a todo row have no caller check at all.
+
+`src/who_may_act/` replaces all of them with one rule: an action on the list is
+taken only by **the calling session whose own node id is the supervisor's** — the
+node id the harness holds for that session, never the sender of a message it
+received and never a name read out of text. That distinction is the whole point.
+A member that receives an attested message from the supervisor's node id must not
+become the supervisor; the supervisor's own session must be able to act on words
+the owner typed, which arrive with no message at all. A display name is carried
+for the transcript and never compared.
+
+A team may name more than one supervisor, and solo mode names one.
+
+The anchor is the harness's own record of the session's node id. Where that is a
+file in the crew's state directory, a shell running as the same OS user can
+rewrite it — the same weakness as the roster anchor, and the same fix: an object
+the model cannot mint.
+
 ## Every path, and what stands on it
 
 `src/inbound_paths/` holds every way text reaches a member's session, as data —
@@ -105,10 +133,12 @@ nobody has built, and a row excused without a reason. Each of those turns CI red
   room's acceptance rule, which lives in the crew's existing implementation. This
   repository names the gate and fails if a row names one it does not know; it
   does not implement the acceptance rule.
-- **The gates on who may act are not implemented here.** The crew's
-  `crew_todo_add`, `crew_roster`, `crew_verify_range`, room-open and
-  `crew_restart` gates compare a display name a session sets about itself, and
-  that name can come from the first six user messages of a delivered turn. They
-  rank above the roster anchor in review and they are not built yet; when they
-  are, they compare node ids and never display names — which is the only identity
-  this gate already accepts.
+- **The who-may-act rule has no callers yet either.** `src/who_may_act/` is the
+  rule the seven tools must call; the tools themselves are not in this repository,
+  so nothing calls it today. Until a host or a tool calls it, the crew's
+  display-name gates are still the ones in force.
+  - The list is closed against the names that reach it: an action it does not
+    know is refused. It cannot see an *eighth* supervisor-only tool a host adds
+    without calling the rule at all. An adapter must therefore call
+    `unknownSupervisorOnlyTools` with its own list of supervisor-only tools and
+    fail unless that list equals `SUPERVISOR_ONLY_ACTIONS`.
