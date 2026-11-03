@@ -100,7 +100,8 @@ the machine-readable copy of the table in issue #2. Each row declares one
 control:
 
 - **delivery gate** — the sender is checked before the text is in a turn, and the
-  gate must be one this repository knows by name;
+  gate is a function this repository implements and the check drives (see *The
+  room's acceptance rule* below);
 - **shell gate** — nothing checks at delivery, and the rule above stops the
   session executing while the text is readable;
 - **no text reaches the model** — the path is listed so it is not forgotten,
@@ -210,18 +211,42 @@ package is the remaining step, not a guess this repository should make.
 An adapter must also call `unknownSupervisorOnlyTools` with its own list of
 supervisor-only tools and fail on a difference (see *Who may act*).
 
+## The room's acceptance rule
+
+`src/admit_a_room_message/` is the rule behind both delivery gates the registry
+names — the crew room's and the shared room's. Five questions, all of which must
+answer yes:
+
+1. did something attest the sender?
+2. is the sender on this room's roster?
+3. is the sender someone other than this session?
+4. is the message addressed to this session, by node id?
+5. is it a kind of message people talk with?
+
+A shared cross-crew room runs the same five against the board's roster, and what
+it gives nobody is authority: nothing said in that room authorises anything, which
+is why the roster question comes before anything the body says.
+
+The rule does not cap or fence the body — that is the room's — and it trusts the
+roster's contents, which is the anchor weakness named separately.
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding
 member with no control standing on it, and names the row. It runs in CI as the
 `gate coverage` job, and it drives the real gate once per row that claims the
-shell gate — a row cannot claim cover the gate does not give. A row cannot name a
-delivery gate that does not exist either: a name is not a control.
+shell gate — a row cannot claim cover the gate does not give.
 
-Its tests plant ungated paths to prove the check is not vacuous: a row copied
-from the table without a control, a row whose control was forgotten, a row that
-claims the shell gate while the gate does not refuse it, a row naming a gate
-nobody has built, and a row excused without a reason. Each of those turns CI red.
+A delivery gate is driven too, and both ways: it must refuse a sender the roster
+does not name, and it must admit a rostered member — so a name with no
+implementation, a gate that admits everyone and a gate that refuses everyone are
+all caught.
+
+Its tests plant each of those mistakes to prove the check is not vacuous: a row
+copied from the table without a control, a row whose control was forgotten, a row
+claiming the shell gate while the gate does not refuse it, a row naming a gate
+nobody has built, a delivery gate that admits a stranger, one that refuses a
+member, and a row excused without a reason. Each of those turns CI red.
 
 ## What this does not yet do
 
@@ -229,10 +254,10 @@ nobody has built, and a row excused without a reason. Each of those turns CI red
   the refusal from a host's tool call is the adapter's job, and no adapter is in
   this repository yet. `src/refuse_execution_after_ungated_text/` is a rule with
   tests and no caller — deliberately, and the reason nothing here is published.
-- **The delivery gates are named, not built here.** A1–A3 point at the crew
-  room's acceptance rule, which lives in the crew's existing implementation. This
-  repository names the gate and fails if a row names one it does not know; it
-  does not implement the acceptance rule.
+- **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
+  rule; the room code that delivers messages is the crew's existing implementation,
+  so nothing in this repository calls it. A host must call it before it turns a
+  message into a turn, and refuse the message when it says no.
 - **The who-may-act rule has no callers yet either.** `src/who_may_act/` is the
   rule the seven tools must call; the tools themselves are not in this repository,
   so nothing calls it today. Until a host or a tool calls it, the crew's

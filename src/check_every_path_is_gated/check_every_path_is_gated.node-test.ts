@@ -107,3 +107,27 @@ test('a path excused from the model must say why in words', () => {
     ['B98'],
   )
 })
+
+test('a delivery gate that admits everyone is not a control either', () => {
+  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, {
+    'crew-room-acceptance': () => true,
+    'shared-room-acceptance': () => true,
+  })
+  assert.deepEqual(
+    gaps.map((gap) => gap.path),
+    ['A1', 'A2', 'A3'],
+  )
+  assert.match(gaps[0]?.why ?? '', /admits a sender the roster does not name/)
+})
+
+test('a delivery gate that refuses everyone is caught too', () => {
+  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, {
+    'crew-room-acceptance': () => false,
+    'shared-room-acceptance': () => false,
+  })
+  assert.deepEqual(
+    gaps.map((gap) => gap.path),
+    ['A1', 'A2', 'A3'],
+  )
+  assert.match(gaps[0]?.why ?? '', /refuses a member the roster names/)
+})
