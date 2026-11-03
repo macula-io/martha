@@ -8,7 +8,7 @@
 // the session may act on it. A path is never removed from this list — a path
 // that stops delivering text gets a control that says so, in words.
 
-import { admitsRoomMessage, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
+import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
 
 export type PathClass = 'delivered' | 'fetched'
 
@@ -35,8 +35,8 @@ export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'none'
  * one either.
  */
 export const DELIVERY_GATES = {
-  'crew-room-acceptance': admitsRoomMessage,
-  'shared-room-acceptance': admitsRoomMessage,
+  'crew-room-acceptance': admitsInCrewRoom,
+  'shared-room-acceptance': admitsInSharedRoom,
 } as const satisfies Record<string, DeliveryGate>
 
 export type KnownDeliveryGate = keyof typeof DELIVERY_GATES

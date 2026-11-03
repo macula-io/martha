@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { admitsRoomMessage, type RoomMessage, type RoomRoster } from './admit_a_room_message.ts'
+import { admitsInCrewRoom, admitsInSharedRoom, admitsRoomMessage, type RoomMessage, type RoomRoster, type RoomRosters } from './admit_a_room_message.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const member = 'c'.repeat(64)
@@ -75,4 +75,25 @@ test('a node id is compared case-insensitively, as the crew code lowercases it',
 
 test('an empty roster admits nobody', () => {
   assert.equal(admits({}, { member_node_ids: [] }), false)
+})
+
+test('a sender that is not a node id is refused, and so is a session that is not one', () => {
+  assert.equal(admits({ from_node_id: 'not-a-node-id' }), false)
+  assert.equal(
+    admitsRoomMessage({ message: message(), roster, self_node_id: '' }),
+    false,
+  )
+})
+
+test('the two names are two rosters: a crew member is not a member of the shared room', () => {
+  const rosters: RoomRosters = { crew: roster, shared: { member_node_ids: [member] } }
+  const input = { message: message(), rosters, self_node_id: member }
+
+  assert.equal(admitsInCrewRoom(input), true)
+  assert.equal(admitsInSharedRoom(input), false)
+})
+
+test('the shared room admits a member of its own roster', () => {
+  const rosters: RoomRosters = { crew: { member_node_ids: [member] }, shared: roster }
+  assert.equal(admitsInSharedRoom({ message: message(), rosters, self_node_id: member }), true)
 })

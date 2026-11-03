@@ -117,7 +117,7 @@ test('a delivery gate that admits everyone is not a control either', () => {
     gaps.map((gap) => gap.path),
     ['A1', 'A2', 'A3'],
   )
-  assert.match(gaps[0]?.why ?? '', /admits a sender the roster does not name/)
+  assert.match(gaps[0]?.why ?? '', /admits a message nobody attested/)
 })
 
 test('a delivery gate that refuses everyone is caught too', () => {
@@ -129,5 +129,21 @@ test('a delivery gate that refuses everyone is caught too', () => {
     gaps.map((gap) => gap.path),
     ['A1', 'A2', 'A3'],
   )
-  assert.match(gaps[0]?.why ?? '', /refuses a member the roster names/)
+  assert.match(gaps[0]?.why ?? '', /refuses a rostered member/)
+})
+
+test('a gate that answers only the roster question is caught: one question right is not a control', () => {
+  const roster_only = ({ message, rosters }: { message: { from_node_id: string | null }; rosters: { crew: { member_node_ids: readonly string[] } } }) =>
+    message.from_node_id !== null && rosters.crew.member_node_ids.includes(message.from_node_id)
+
+  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, {
+    'crew-room-acceptance': roster_only as never,
+    'shared-room-acceptance': roster_only as never,
+  })
+
+  assert.deepEqual(
+    gaps.map((gap) => gap.path),
+    ['A1', 'A2', 'A3'],
+  )
+  assert.match(gaps[0]?.why ?? '', /admits a message nobody attested/)
 })
