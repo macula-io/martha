@@ -8,6 +8,8 @@
 // the session may act on it. A path is never removed from this list — a path
 // that stops delivering text gets a control that says so, in words.
 
+import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
+
 export type PathClass = 'delivered' | 'fetched'
 
 /**
@@ -27,15 +29,17 @@ export type PathClass = 'delivered' | 'fetched'
 export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'none'
 
 /**
- * Delivery gates that exist somewhere and can be named here. A row may only
- * name one of these: a gate name nobody has built is not a control.
+ * The delivery gates, by the name a row may use. A row may only name one of
+ * these, and the function behind the name is what the coverage check drives: a
+ * name on its own is not a control, and a function that admits everyone is not
+ * one either.
  */
-export const KNOWN_DELIVERY_GATES = [
-  'crew-room-acceptance',
-  'shared-room-acceptance',
-] as const
+export const DELIVERY_GATES = {
+  'crew-room-acceptance': admitsInCrewRoom,
+  'shared-room-acceptance': admitsInSharedRoom,
+} as const satisfies Record<string, DeliveryGate>
 
-export type KnownDeliveryGate = (typeof KNOWN_DELIVERY_GATES)[number]
+export type KnownDeliveryGate = keyof typeof DELIVERY_GATES
 
 /**
  * What stops outsider text on this path from being acted on.
