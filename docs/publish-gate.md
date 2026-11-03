@@ -158,6 +158,42 @@ Two limits that follow from what a host actually provides:
 Like the other core rules, this one has no caller in this repository yet: the
 scanning it replaces lives in the crew's existing plugin.
 
+## Wiring it into a host
+
+A host does three things, and the core does the rest:
+
+| When | Call |
+|---|---|
+| before running any tool | `answerToolCall({ tool, session, policy })` from `src/answer_a_tool_call/` — return the `{ deny }` object as the hook's answer |
+| a turn arrives, from any source | `takeInTurn(session, arrival)` from `src/take_in_a_turn/` |
+| the session is replaced | `replaceSession(session, 'clear' | 'restart' | 'new_session' | 'compaction' | 'handover' | 'resume')` |
+
+`takeInTurn` records the arrival on the inbound path that names it, so the host
+and the registry cannot drift apart: a source the seam can produce that is not a
+registry row fails CI.
+
+Two rules the seam keeps, and a host must not work around:
+
+- **The identity is the host's, never the text's.** `takeInTurn` takes the
+  sender's identity from what the host holds, and a host that holds none records
+  an unattributed arrival — which taints the session. An identity printed inside
+  a pasted envelope is worth nothing, because whoever wrote it chose it.
+- **Only a real replacement clears the record.** `clear`, `restart` and
+  `new_session` start afresh; `compaction`, `handover` and `resume` keep what the
+  session took in, because they carry the old text into the new context.
+
+### What this repository does not contain
+
+The registration itself. On the Claude Code host that is `on('tool.call', …)` in
+the plugin package, and building a plugin needs that package's types and its mod
+loader, neither of which is in this repository. What is here is the contract
+between them: one question per tool call, one record per arrival, one call per
+replacement. Writing the adapter's line of registration against the vendored
+package is the remaining step, not a guess this repository should make.
+
+An adapter must also call `unknownSupervisorOnlyTools` with its own list of
+supervisor-only tools and fail on a difference (see *Who may act*).
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding
