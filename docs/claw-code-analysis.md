@@ -94,7 +94,7 @@ from (section 2).
 
 **The repository's own history settles this.**
 
-- The root commit `507c246` (31 March 2026) is titled "Make the repository's
+- The first commit, `507c246` (31 March 2026), is titled "Make the repository's
   primary source tree genuinely Python". Its message says "the old tracked
   TypeScript snapshot has been removed from the repository history", that "a
   local archive can still exist outside Git", and it tells future work "do not
@@ -148,16 +148,24 @@ we write them from our own design, not by reading claw-code while we write.
 
 ## 3. Security read
 
-**What it can reach.** In its default mode, a session can do whatever the
-user can do.
+**What it can reach.** By default a session asks before each shell command.
+Once the shell is allowed, it can do whatever the user can do, and a cloned
+repository can allow it without asking.
 
-- **Default mode allows any shell command.** With no flag, environment
-  variable or config, the mode is `workspace-write`
-  (`rust/crates/rusty-claude-cli/src/main.rs:158-164`). In that mode the bash
-  check allows every command; only `read-only` and `prompt` restrict it
-  (`rust/crates/runtime/src/permission_enforcer.rs:147-175`). The workspace
-  boundary applies to the file tools, not to the shell.
-- **The sandbox does not confine files or network.** On Linux it wraps
+- **The default mode asks before each shell command.** With no flag,
+  environment variable or config, the mode is `workspace-write`
+  (`rust/crates/rusty-claude-cli/src/main.rs:158-164`). The live permission
+  gate is built from each tool's required level (`main.rs:14709-14717`), and
+  the bash tool requires `danger-full-access`
+  (`rust/crates/tools/src/lib.rs:487`, `:505`). In `workspace-write` that
+  request goes to the user for approval, and with no one to ask it is denied
+  (`rust/crates/runtime/src/permissions.rs:217-330`, `:319-330`). The parity
+  scenarios `bash_permission_prompt_approved` and
+  `bash_permission_prompt_denied` test this (`PARITY.md:23`). A second,
+  looser bash check in `rust/crates/runtime/src/permission_enforcer.rs:147-175`
+  is called only from its own tests.
+- **The sandbox does not confine files or network.** When a shell command
+  does run, on Linux it is wrapped
   commands in `unshare` with new user, mount, IPC, PID and UTS namespaces
   (`rust/crates/runtime/src/sandbox.rs:315-334`). It mounts nothing and
   remounts nothing, so the host file system stays visible and writable as the
@@ -172,8 +180,11 @@ user can do.
   because "there is no project-hook trust approval flow yet"
   (`config.rs:684-698`). The permission mode is not stripped:
   `"permissionMode": "danger-full-access"` in a repository's `.claw.json` is
-  accepted (`config.rs:2063-2095`, `main.rs:3098-3120`). The health check
-  counts it as an explicit choice and gives no warning (`main.rs:4224-4235`).
+  accepted (`config.rs:2063-2095`, `main.rs:3098-3120`). In that mode every
+  tool, the shell included, runs without asking. The health check counts it as
+  an explicit choice and gives no warning (`main.rs:4224-4235`). This is the
+  main risk: opening a session in a repository you did not write can switch
+  off the approval step.
 - **Project config can start programs.** The `mcpServers` entries are not
   stripped either. When a session is built, every configured MCP server is
   started so that its tools can be discovered (`main.rs:12446-12459`,
