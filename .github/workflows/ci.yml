@@ -30,3 +30,19 @@ jobs:
           fail: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The publish gate (issue #2): no outsider's text reaches a shell-holding
+  # member without a control, and a path added without one fails here by name.
+  # The unit tests plant ungated paths to prove the check is not vacuous.
+  gate:
+    name: gate coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
