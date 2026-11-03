@@ -82,6 +82,26 @@ control:
 A path is never removed from the list. A path that stops delivering text gets a
 control that says so, in words.
 
+## Only framed envelopes are believed
+
+The crew learns two things from a cross-session message: whose a socket is, and
+which handoffs have been read. Both were learned by scanning text for an
+envelope, and every turn the plugin submits is text — so a room body, a ring
+purpose, a decline reason, a message's own body, or something the owner pasted
+could contain an envelope that was never sent. That buys a stranger two effects:
+renaming another member's socket, and retiring a handoff as read without having
+sent it.
+
+`src/trust_only_framed_envelopes/` is the rule that closes it: an envelope is
+believed **only where the harness framed it**. A framed delivery carries its
+sender and its message id as facts the harness reports, so nothing is scanned.
+Loose text is never read for envelopes at all, whatever it contains — which is
+why a body that closes its envelope early and opens a forged one lends the
+forgery nothing.
+
+Like the other core rules, this one has no caller in this repository yet: the
+scanning it replaces lives in the crew's existing plugin.
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding
