@@ -23,6 +23,8 @@ plans, builds, reviews and releases software, with one method and one tool.
 
 > **Status: design.** Nothing is published yet. What follows is what Martha
 > will be; the design is open in [issue #1](https://github.com/macula-io/martha/issues/1).
+> How the existing crew conductor moves in, slice by slice, is in
+> [the port map](docs/port-map.md).
 
 ## What is Martha?
 
