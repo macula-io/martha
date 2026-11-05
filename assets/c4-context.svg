@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 730" role="img" aria-label="Martha system context">
+<title>Martha system context</title>
+<style>
+.t-name { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; }
+.t-desc { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 12.5px; }
+.t-rel { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 11.5px; paint-order: stroke; stroke-width: 4px; stroke-linejoin: round; }
+.t-code { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; }
+.t-type { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
+.t-bound { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+.t-leg { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 12px; }
+.edge { fill: none; stroke-width: 1.25; }
+.edge-team { fill: none; stroke-width: 1.25; stroke-dasharray: 5 4; }
+.bg { fill: #FFFFFF; }
+.b-sys { fill: #F5E9CC; stroke: #A56F0A; stroke-width: 2; }
+.b-per { fill: #E3EBF2; stroke: #3B5B7A; stroke-width: 1.25; }
+.b-mac { fill: #E6E4EE; stroke: #5E5A78; stroke-width: 1.25; stroke-dasharray: 5 4; }
+.b-ext { fill: #ECEFED; stroke: #8A9791; stroke-width: 1.25; }
+.b-cmp { fill: #FFFFFF; stroke: #A56F0A; stroke-width: 1.25; }
+.b-dat { fill: #FBF6EA; stroke: #A56F0A; stroke-width: 1.25; }
+.b-team { fill: #FFFFFF; stroke: #5E5A78; stroke-width: 1.25; stroke-dasharray: 5 4; }
+.bound { fill: none; stroke: #B3BDB8; stroke-width: 1; }
+.head { fill: #3B5B7A; }
+.t-name, .t-code { fill: #16201D; }
+.t-type, .t-bound, .t-leg { fill: #66736E; }
+.t-desc { fill: #34413C; }
+.t-rel { fill: #66736E; stroke: #FFFFFF; }
+.edge, .edge-team { stroke: #8A9791; }
+.arrowhead { fill: #8A9791; }
+@media (prefers-color-scheme: dark) {
+.bg { fill: #171F1C; }
+.b-sys { fill: #3A2E13; stroke: #E3AA3C; }
+.b-per { fill: #1D2A36; stroke: #8EB4D8; }
+.b-mac { fill: #26243A; stroke: #A9A4C8; }
+.b-ext { fill: #1C2421; stroke: #7D8B85; }
+.b-cmp { fill: #171F1C; stroke: #E3AA3C; }
+.b-dat { fill: #2A2414; stroke: #E3AA3C; }
+.b-team { fill: #171F1C; stroke: #A9A4C8; }
+.bound { stroke: #4A5752; }
+.head { fill: #8EB4D8; }
+.t-name, .t-code { fill: #E6ECE9; }
+.t-type, .t-bound, .t-leg { fill: #93A09A; }
+.t-desc { fill: #C3CDC8; }
+.t-rel { fill: #93A09A; stroke: #171F1C; }
+.edge, .edge-team { stroke: #7D8B85; }
+.arrowhead { fill: #7D8B85; }
+}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="bg" x="0" y="0" width="1000" height="730"/>
+<rect class="b-ext" x="30" y="20" width="250" height="124" rx="10"/>
+<text class="t-name" x="46" y="48">npm registry</text>
+<text class="t-type" x="46" y="66">[External system]</text>
+<text class="t-desc" x="46" y="90">The signed Martha package;</text>
+<text class="t-desc" x="46" y="106">its signature is checked</text>
+<text class="t-desc" x="46" y="122">before anything is installed</text>
+<rect class="b-per" x="375" y="20" width="250" height="124" rx="10"/>
+<circle class="head" cx="401" cy="44" r="9"/>
+<text class="t-name" x="419" y="48">The owner</text>
+<text class="t-type" x="419" y="66">[Person]</text>
+<text class="t-desc" x="391" y="90">Sets the work, answers the</text>
+<text class="t-desc" x="391" y="106">menus; in solo mode gives</text>
+<text class="t-desc" x="391" y="122">the yes every push needs</text>
+<rect class="b-per" x="720" y="20" width="250" height="124" rx="10"/>
+<circle class="head" cx="746" cy="44" r="9"/>
+<text class="t-name" x="764" y="48">Teammates</text>
+<text class="t-type" x="764" y="66">[Person, team mode]</text>
+<text class="t-desc" x="736" y="90">More people on the crew;</text>
+<text class="t-desc" x="736" y="106">the ones the team names</text>
+<text class="t-desc" x="736" y="122">give the yes to a push</text>
+<rect class="b-ext" x="30" y="200" width="250" height="140" rx="10"/>
+<text class="t-name" x="46" y="228">Claude Code</text>
+<text class="t-type" x="46" y="246">[External: coding tool]</text>
+<text class="t-desc" x="46" y="270">Runs a member session and</text>
+<text class="t-desc" x="46" y="286">talks to its own model;</text>
+<text class="t-desc" x="46" y="302">Martha is a plugin in it</text>
+<rect class="b-sys" x="375" y="200" width="250" height="140" rx="10"/>
+<text class="t-name" x="391" y="228">Martha</text>
+<text class="t-type" x="391" y="246">[In scope]</text>
+<text class="t-desc" x="391" y="270">A crew of coding agents:</text>
+<text class="t-desc" x="391" y="286">it hands work desk by desk</text>
+<text class="t-desc" x="391" y="302">from builder to reviewer,</text>
+<text class="t-desc" x="391" y="318">and writes down every step</text>
+<rect class="b-ext" x="720" y="200" width="250" height="140" rx="10"/>
+<text class="t-name" x="736" y="228">OpenCode</text>
+<text class="t-type" x="736" y="246">[External: coding tool]</text>
+<text class="t-desc" x="736" y="270">The same, on a second</text>
+<text class="t-desc" x="736" y="286">coding tool: the same crew,</text>
+<text class="t-desc" x="736" y="302">Martha is a plugin in it</text>
+<rect class="b-ext" x="30" y="420" width="250" height="140" rx="10"/>
+<text class="t-name" x="46" y="448">GitHub</text>
+<text class="t-type" x="46" y="466">[External system]</text>
+<text class="t-desc" x="46" y="490">Issues, pull requests and</text>
+<text class="t-desc" x="46" y="506">CI runs: work comes in as</text>
+<text class="t-desc" x="46" y="522">an issue and leaves as a</text>
+<text class="t-desc" x="46" y="538">reviewed pull request</text>
+<rect class="b-mac" x="375" y="420" width="250" height="140" rx="10"/>
+<text class="t-name" x="391" y="448">Macula mesh and realm</text>
+<text class="t-type" x="391" y="466">[team mode only]</text>
+<text class="t-desc" x="391" y="490">Admits a crew by invite,</text>
+<text class="t-desc" x="391" y="506">and carries the shared room</text>
+<text class="t-desc" x="391" y="522">between people and</text>
+<text class="t-desc" x="391" y="538">machines</text>
+<rect class="b-ext" x="720" y="420" width="250" height="140" rx="10"/>
+<text class="t-name" x="736" y="448">A terminal</text>
+<text class="t-type" x="736" y="466">[External system]</text>
+<text class="t-desc" x="736" y="490">One tab per member, so</text>
+<text class="t-desc" x="736" y="506">the owner sees each agent</text>
+<text class="t-desc" x="736" y="522">at work</text>
+<path class="edge" d="M375 82H280" marker-end="url(#a)"/>
+<text class="t-rel" x="327" y="74" text-anchor="middle">installs</text>
+<path class="edge" d="M500 144V200" marker-end="url(#a)"/>
+<text class="t-rel" x="412" y="178">runs, approves</text>
+<path class="edge-team" d="M845 144V172H585V200" marker-end="url(#a)"/>
+<text class="t-rel" x="715" y="166" text-anchor="middle">their seats</text>
+<path class="edge" d="M280 270H375" marker-end="url(#a)"/>
+<text class="t-rel" x="327" y="262" text-anchor="middle">loads</text>
+<path class="edge" d="M720 270H625" marker-end="url(#a)"/>
+<text class="t-rel" x="672" y="262" text-anchor="middle">loads</text>
+<path class="edge" d="M430 340V380H155V420" marker-end="url(#a)"/>
+<text class="t-rel" x="292" y="374" text-anchor="middle">gh and git</text>
+<path class="edge-team" d="M500 340V420" marker-end="url(#a)"/>
+<text class="t-rel" x="508" y="400">rooms, admission</text>
+<path class="edge" d="M570 340V380H845V420" marker-end="url(#a)"/>
+<text class="t-rel" x="708" y="374" text-anchor="middle">a tab per member</text>
+<text class="t-desc" x="30" y="610">Solo mode needs only the owner, a coding tool, GitHub and a terminal: no mesh, no account, no service. Team mode adds</text>
+<text class="t-desc" x="30" y="628">teammates and the Macula mesh, and changes nothing else: the mode is a table of who may do what, read from the crew's</text>
+<text class="t-desc" x="30" y="646">declaration, not a second program. Every push and every release still waits for a person's yes.</text>
+<rect class="b-sys" x="24" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="54" y="702">Martha</text>
+<rect class="b-per" x="103.6" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.6" y="702">Person</text>
+<rect class="b-mac" x="183.2" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="213.2" y="702">Macula, team mode only</text>
+<rect class="b-ext" x="368.4" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="398.4" y="702">External system</text>
+</svg>

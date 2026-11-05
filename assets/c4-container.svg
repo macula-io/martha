@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" role="img" aria-label="Martha containers">
+<title>Martha containers</title>
+<style>
+.t-name { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; }
+.t-desc { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 12.5px; }
+.t-rel { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 11.5px; paint-order: stroke; stroke-width: 4px; stroke-linejoin: round; }
+.t-code { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; }
+.t-type { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
+.t-bound { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+.t-leg { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 12px; }
+.edge { fill: none; stroke-width: 1.25; }
+.edge-team { fill: none; stroke-width: 1.25; stroke-dasharray: 5 4; }
+.bg { fill: #FFFFFF; }
+.b-sys { fill: #F5E9CC; stroke: #A56F0A; stroke-width: 2; }
+.b-per { fill: #E3EBF2; stroke: #3B5B7A; stroke-width: 1.25; }
+.b-mac { fill: #E6E4EE; stroke: #5E5A78; stroke-width: 1.25; stroke-dasharray: 5 4; }
+.b-ext { fill: #ECEFED; stroke: #8A9791; stroke-width: 1.25; }
+.b-cmp { fill: #FFFFFF; stroke: #A56F0A; stroke-width: 1.25; }
+.b-dat { fill: #FBF6EA; stroke: #A56F0A; stroke-width: 1.25; }
+.b-team { fill: #FFFFFF; stroke: #5E5A78; stroke-width: 1.25; stroke-dasharray: 5 4; }
+.bound { fill: none; stroke: #B3BDB8; stroke-width: 1; }
+.head { fill: #3B5B7A; }
+.t-name, .t-code { fill: #16201D; }
+.t-type, .t-bound, .t-leg { fill: #66736E; }
+.t-desc { fill: #34413C; }
+.t-rel { fill: #66736E; stroke: #FFFFFF; }
+.edge, .edge-team { stroke: #8A9791; }
+.arrowhead { fill: #8A9791; }
+@media (prefers-color-scheme: dark) {
+.bg { fill: #171F1C; }
+.b-sys { fill: #3A2E13; stroke: #E3AA3C; }
+.b-per { fill: #1D2A36; stroke: #8EB4D8; }
+.b-mac { fill: #26243A; stroke: #A9A4C8; }
+.b-ext { fill: #1C2421; stroke: #7D8B85; }
+.b-cmp { fill: #171F1C; stroke: #E3AA3C; }
+.b-dat { fill: #2A2414; stroke: #E3AA3C; }
+.b-team { fill: #171F1C; stroke: #A9A4C8; }
+.bound { stroke: #4A5752; }
+.head { fill: #8EB4D8; }
+.t-name, .t-code { fill: #E6ECE9; }
+.t-type, .t-bound, .t-leg { fill: #93A09A; }
+.t-desc { fill: #C3CDC8; }
+.t-rel { fill: #93A09A; stroke: #171F1C; }
+.edge, .edge-team { stroke: #7D8B85; }
+.arrowhead { fill: #7D8B85; }
+}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="bg" x="0" y="0" width="1000" height="900"/>
+<rect class="bound" x="16" y="40" width="600" height="650" rx="12"/>
+<text class="t-bound" x="32" y="62">Martha [one package, on the owner's machine]</text>
+<rect class="b-dat" x="32" y="76" width="268" height="110" rx="10"/>
+<text class="t-name" x="48" y="104">crew declaration</text>
+<text class="t-type" x="48" y="122">[files in .crew/]</text>
+<text class="t-desc" x="48" y="146">Who is on the crew, the</text>
+<text class="t-desc" x="48" y="162">mode's table of who may do</text>
+<text class="t-desc" x="48" y="178">what, and the house rules</text>
+<rect class="b-cmp" x="332" y="76" width="268" height="110" rx="10"/>
+<text class="t-code" x="348" y="104">launcher</text>
+<text class="t-type" x="348" y="122">[command line]</text>
+<text class="t-desc" x="348" y="146">Starts and stops members:</text>
+<text class="t-desc" x="348" y="162">one coding-tool session and</text>
+<text class="t-desc" x="348" y="178">one terminal tab each</text>
+<rect class="b-cmp" x="32" y="210" width="368" height="270" rx="10"/>
+<text class="t-code" x="48" y="238">crew core</text>
+<text class="t-type" x="48" y="256">[TypeScript, no coding-tool API]</text>
+<text class="t-desc" x="48" y="280">The protocol, one folder per capability:</text>
+<text class="t-desc" x="48" y="296">declare_crew, host_contract, who_may_act,</text>
+<text class="t-desc" x="48" y="312">deliver_crew_room, show_dashboard_beat,</text>
+<text class="t-desc" x="48" y="328">log_ledger, park_and_wake, refresh_member,</text>
+<text class="t-desc" x="48" y="344">hand_over_at_limit, ask_owner, switch_model,</text>
+<text class="t-desc" x="48" y="360">the owner's small views, watch_waits,</text>
+<text class="t-desc" x="48" y="376">prove_landing, open_and_finish_worktree,</text>
+<text class="t-desc" x="48" y="392">guard_workspace, the publish gate;</text>
+<text class="t-desc" x="48" y="408">team mode adds read_shared_room and</text>
+<text class="t-desc" x="48" y="424">announce_node_events.</text>
+<text class="t-desc" x="48" y="440">Each folder holds its hooks, tools, timer,</text>
+<text class="t-desc" x="48" y="456">store keys, prompt text and test.</text>
+<rect class="b-cmp" x="432" y="210" width="168" height="125" rx="10"/>
+<text class="t-code" x="448" y="238">Claude Code</text>
+<text class="t-type" x="448" y="256">[adapter]</text>
+<text class="t-desc" x="448" y="280">The host contract</text>
+<text class="t-desc" x="448" y="296">over the plugin</text>
+<text class="t-desc" x="448" y="312">API; the pane</text>
+<rect class="b-cmp" x="432" y="355" width="168" height="125" rx="10"/>
+<text class="t-code" x="448" y="383">OpenCode</text>
+<text class="t-type" x="448" y="401">[adapter]</text>
+<text class="t-desc" x="448" y="425">The host contract</text>
+<text class="t-desc" x="448" y="441">over the plugin</text>
+<text class="t-desc" x="448" y="457">API</text>
+<rect class="b-team" x="32" y="534" width="268" height="110" rx="10"/>
+<text class="t-code" x="48" y="562">realm admission</text>
+<text class="t-type" x="48" y="580">[team mode only]</text>
+<text class="t-desc" x="48" y="604">Joins a crew by invite,</text>
+<text class="t-desc" x="48" y="620">and refuses a seat that</text>
+<text class="t-desc" x="48" y="636">holds no credential</text>
+<rect class="b-cmp" x="332" y="534" width="268" height="110" rx="10"/>
+<text class="t-code" x="348" y="562">release</text>
+<text class="t-type" x="348" y="580">[pack, scan, sign]</text>
+<text class="t-desc" x="348" y="604">Packs what is committed,</text>
+<text class="t-desc" x="348" y="620">refuses private text, and</text>
+<text class="t-desc" x="348" y="636">signs it in CI</text>
+<rect class="b-ext" x="680" y="76" width="296" height="96" rx="10"/>
+<text class="t-name" x="696" y="104">A terminal</text>
+<text class="t-type" x="696" y="122">[External system]</text>
+<text class="t-desc" x="696" y="146">One tab per member</text>
+<rect class="b-ext" x="680" y="196" width="296" height="96" rx="10"/>
+<text class="t-name" x="696" y="224">Claude Code</text>
+<text class="t-type" x="696" y="242">[External: coding tool]</text>
+<text class="t-desc" x="696" y="266">Loads the adapter as a plugin</text>
+<rect class="b-ext" x="680" y="316" width="296" height="96" rx="10"/>
+<text class="t-name" x="696" y="344">OpenCode</text>
+<text class="t-type" x="696" y="362">[External: coding tool]</text>
+<text class="t-desc" x="696" y="386">Loads the adapter as a plugin</text>
+<rect class="b-ext" x="680" y="436" width="296" height="96" rx="10"/>
+<text class="t-name" x="696" y="464">GitHub</text>
+<text class="t-type" x="696" y="482">[External system]</text>
+<text class="t-desc" x="696" y="506">gh and git: issues, pull requests, CI</text>
+<rect class="b-mac" x="680" y="556" width="296" height="96" rx="10"/>
+<text class="t-name" x="696" y="584">Macula mesh and realm</text>
+<text class="t-type" x="696" y="602">[team mode only]</text>
+<text class="t-desc" x="696" y="626">The invite, the shared room</text>
+<rect class="b-ext" x="680" y="676" width="296" height="96" rx="10"/>
+<text class="t-name" x="696" y="704">npm and ghcr.io</text>
+<text class="t-type" x="696" y="722">[External system]</text>
+<text class="t-desc" x="696" y="746">The signed release, by digest</text>
+<path class="edge" d="M332 131H300" marker-end="url(#a)"/>
+<text class="t-rel" x="316" y="123" text-anchor="middle">reads</text>
+<path class="edge" d="M600 110H680" marker-end="url(#a)"/>
+<text class="t-rel" x="640" y="102" text-anchor="middle">a tab</text>
+<path class="edge" d="M600 160H650V230H680" marker-end="url(#a)"/>
+<text class="t-rel" x="640" y="196" text-anchor="middle" transform="rotate(90 640 196)">starts</text>
+<path class="edge" d="M166 210V186" marker-end="url(#a)"/>
+<text class="t-rel" x="174" y="202">settings, read once</text>
+<path class="edge" d="M432 275H400" marker-end="url(#a)"/>
+<text class="t-rel" x="416" y="267" text-anchor="middle">host</text>
+<path class="edge" d="M432 420H400" marker-end="url(#a)"/>
+<text class="t-rel" x="416" y="412" text-anchor="middle">host</text>
+<path class="edge" d="M680 250H600" marker-end="url(#a)"/>
+<text class="t-rel" x="640" y="242" text-anchor="middle">loads</text>
+<path class="edge" d="M680 380H600" marker-end="url(#a)"/>
+<text class="t-rel" x="640" y="372" text-anchor="middle">loads</text>
+<path class="edge" d="M216 480V507H660V484H680" marker-end="url(#a)"/>
+<text class="t-rel" x="438" y="502" text-anchor="middle">gh and git, through the host</text>
+<path class="edge-team" d="M166 644V674H660V604H680" marker-end="url(#a)"/>
+<text class="t-rel" x="438" y="669" text-anchor="middle">invite, room</text>
+<path class="edge" d="M600 589H640V724H680" marker-end="url(#a)"/>
+<text class="t-rel" x="632" y="616" text-anchor="middle" transform="rotate(90 632 616)">signed release</text>
+<text class="t-desc" x="24" y="806">One code path for both modes: the core reads the mode from the declaration and never branches on the coding tool. An adapter</text>
+<text class="t-desc" x="24" y="824">implements one small host contract (clock, stores, processes, delivery in and out, tool registration) and composes the slices.</text>
+<text class="t-desc" x="24" y="842">In solo mode no team-mode container or slice is loaded, and no mesh call is made.</text>
+<rect class="b-cmp" x="24" y="866" width="22" height="14" rx="3"/>
+<text class="t-leg" x="54" y="878">Container</text>
+<rect class="b-team" x="123.4" y="866" width="22" height="14" rx="3"/>
+<text class="t-leg" x="153.4" y="878">Container, team mode only</text>
+<rect class="b-dat" x="328.4" y="866" width="22" height="14" rx="3"/>
+<text class="t-leg" x="358.4" y="878">Data, in the project</text>
+<rect class="b-mac" x="500.4" y="866" width="22" height="14" rx="3"/>
+<text class="t-leg" x="530.4" y="878">Macula, team mode only</text>
+<rect class="b-ext" x="685.5999999999999" y="866" width="22" height="14" rx="3"/>
+<text class="t-leg" x="715.5999999999999" y="878">External system</text>
+<rect class="bound" x="824.5999999999999" y="866" width="22" height="14" rx="3"/>
+<text class="t-leg" x="854.5999999999999" y="878">Boundary</text>
+</svg>
