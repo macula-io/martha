@@ -1,7 +1,10 @@
 # Contributing to Martha
 
-Martha is in its design phase: there is no code to build yet. The most
-useful contribution right now is in the issues.
+Martha is in its design phase: the design is open in
+[issue #1](https://github.com/macula-io/martha/issues/1). The first code is
+landing in `src/`, one directory per capability, starting with the publish gate
+of [issue #2](https://github.com/macula-io/martha/issues/2); CI runs its tests
+on every change.
 
 ## Where to start
 
@@ -11,6 +14,22 @@ useful contribution right now is in the issues.
   someone can do afterwards that they cannot do today.
 - **A bug in a document** (a broken link, a wrong statement) can go straight
   to a pull request.
+
+## Running the checks
+
+Node 24.18.1 or later, from the repository root:
+
+```bash
+npm ci
+npm test               # the gate tests
+npm run typecheck      # tsc --noEmit
+```
+
+CI runs those, and three more: every link in every document must resolve, both
+logos must be valid SVG, and `npm run check:private` must find no private link,
+internal host name or private remote. The last one stops, rather than passing,
+on a machine that does not hold the list of the lab's machine families, which is
+a secret ([why](docs/nothing-private-gets-in.md)). CI holds it.
 
 ## How we build
 
