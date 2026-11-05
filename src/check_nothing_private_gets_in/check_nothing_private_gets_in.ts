@@ -66,8 +66,11 @@ const GITHUB_ROUTES = new Set([
 ])
 
 const whole = (pattern: string) => new RegExp(pattern)
-const each = (pattern: string, text: string) => [...text.matchAll(new RegExp(pattern, 'g'))].map((found) => found[0])
-const families = (rules: Rules) => {
+const each = (pattern: string, text: string, flags = 'g') => [...text.matchAll(new RegExp(pattern, flags))].map((found) => found[0])
+// A host name has no case: the lab classes match it however it is written. The
+// patterns stay the shared definition's; the flag is this reader's.
+const anyCase = 'gi'
+const families = (rules: Pick<Rules, 'labHosts'>) => {
   const bad = rules.labHosts.find((family) => !FAMILY.test(family))
   if (bad !== undefined) throw new Error('a lab host family is not a plain lowercase name')
   return rules.labHosts.join('|')
@@ -83,7 +86,7 @@ interface TextClass {
 }
 
 const textClasses = (rules: Rules): readonly TextClass[] => {
-  const synthetic = (pattern: string) => (value: string) => rules.allowSynthetic && whole(pattern).test(value)
+  const synthetic = (pattern: string, flags = '') => (value: string) => rules.allowSynthetic && new RegExp(pattern, flags).test(value)
   const machine = rules.labHosts.length === 0 ? '' : families(rules)
   // A domain has no case: an allowed address passes however its domain is written.
   const allowEmail = new RegExp(
@@ -94,14 +97,14 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
     {
       what: 'a lab hostname',
       shows: false,
-      matches: (text) => each(PUBLIC_TEXT_PATTERNS.lab_fqdn, text),
-      accepts: synthetic(SYNTHETIC.lab_fqdn),
+      matches: (text) => each(PUBLIC_TEXT_PATTERNS.lab_fqdn, text, anyCase),
+      accepts: synthetic(SYNTHETIC.lab_fqdn, 'i'),
     },
     {
       what: 'a lab machine name',
       shows: false,
-      matches: (text) => (machine === '' ? [] : each(PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', machine), text)),
-      accepts: synthetic(SYNTHETIC.lab_machine.replace('%s', machine)),
+      matches: (text) => (machine === '' ? [] : each(PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', machine), text, anyCase)),
+      accepts: synthetic(SYNTHETIC.lab_machine.replace('%s', machine), 'i'),
     },
     {
       what: 'a home directory',
@@ -132,19 +135,24 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
 }
 
 // The lab's host names, generic and declared, as one pattern.
-const labPatternOf = (rules: Rules) =>
+const labPatternOf = (rules: Pick<Rules, 'labHosts'>) =>
   rules.labHosts.length === 0
     ? PUBLIC_TEXT_PATTERNS.lab_fqdn
     : `${PUBLIC_TEXT_PATTERNS.lab_fqdn}|${PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', families(rules))}`
+
+// Any text this check prints, with each lab name in it replaced, in any case: a
+// hit's location, a repository name, an error a lookup or git threw.
+export const withoutLabNames = (text: string, labHosts: readonly string[]) =>
+  text.replace(new RegExp(labPatternOf({ labHosts }), 'gi'), '<lab host>')
 
 // Nothing printed names a lab host: not a class's value (an email at a lab host),
 // not a repository or shorthand name, not the path a hit is found at. A value of a
 // class is withheld whole; anything else has each lab name in it replaced.
 const printing = (rules: Rules) => {
   const lab = labPatternOf(rules)
-  const clean = (text: string) => text.replace(new RegExp(lab, 'g'), '<lab host>')
+  const clean = (text: string) => withoutLabNames(text, rules.labHosts)
   const shown = (one: TextClass, value: string) =>
-    one.shows && !new RegExp(lab).test(value) ? `${one.what} (${value})` : `${one.what} (value withheld)`
+    one.shows && !new RegExp(lab, 'i').test(value) ? `${one.what} (${value})` : `${one.what} (value withheld)`
   return { clean, shown }
 }
 type Printing = ReturnType<typeof printing>
@@ -211,6 +219,16 @@ const shorthandHitsOf = (line: Line, rules: Rules, print: Printing): Hit[] =>
       what: `a shorthand reference to another repository (${print.clean(name)}#...): write owner/repo#n so it can be checked`,
     }))
 
+// A lookup that throws stops the check, and its message is printed: whatever it
+// says about the repository it was asked has its lab names replaced first.
+const resolvedOrCleanError = async (resolve: Resolve, reference: RepoReference, rules: Rules) => {
+  try {
+    return await resolve(reference.owner, reference.repo)
+  } catch (error) {
+    throw new Error(withoutLabNames(error instanceof Error ? error.message : String(error), rules.labHosts))
+  }
+}
+
 // Every hit in the sources. Each distinct repository is resolved once.
 export const privateHitsIn = async (sources: readonly Source[], rules: Rules, resolve: Resolve): Promise<Hit[]> => {
   const classes = textClasses(rules)
@@ -220,7 +238,7 @@ export const privateHitsIn = async (sources: readonly Source[], rules: Rules, re
   const visibility = new Map<string, Visibility>()
   for (const reference of references) {
     const key = `${reference.owner}/${reference.repo}`.toLowerCase()
-    if (!visibility.has(key)) visibility.set(key, await resolve(reference.owner, reference.repo))
+    if (!visibility.has(key)) visibility.set(key, await resolvedOrCleanError(resolve, reference, rules))
   }
   const repoHits = references
     .filter((reference) => visibility.get(`${reference.owner}/${reference.repo}`.toLowerCase()) !== 'public')

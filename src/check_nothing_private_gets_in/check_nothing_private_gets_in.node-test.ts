@@ -12,6 +12,7 @@ import {
   type Resolve,
   type Rules,
   type Source,
+  withoutLabNames,
 } from './check_nothing_private_gets_in.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 
@@ -122,6 +123,19 @@ test('a lab name is never printed: not in a shorthand, a repository, or the path
   for (const line of [...shorthand, ...repo, ...path]) assert.ok(!line.includes('synth0'), line)
 })
 
+test('a lab host is refused in lower, upper and mixed case, and never printed', async () => {
+  for (const text of ['ran on synth04', 'ran on SYNTH04', 'ran on Synth04']) {
+    assert.deepEqual(await hitsOf(text), ['a lab machine name (value withheld)'], text)
+  }
+  for (const text of ['ssh to ci-synthetic.lab', 'ssh to CI-SYNTHETIC.LAB', 'ssh to Ci-Synthetic.Lab']) {
+    assert.deepEqual(await hitsOf(text), ['a lab hostname (value withheld)'], text)
+  }
+  const resolveAny: Resolve = async () => 'not_public'
+  const where = 'path docs/SYNTH04-notes.md'
+  const hits = await privateHitsIn([{ name: where, lines: [{ where, text: 'docs/SYNTH04-notes.md' }] }], strict, resolveAny)
+  assert.deepEqual(hits, [{ where: 'path docs/<lab host>-notes.md', what: 'a lab machine name (value withheld)' }])
+})
+
 test('a machine family is only refused when it is declared', async () => {
   assert.deepEqual(await hitsOf('it ran on synth03', { ...strict, labHosts: [] }), [])
 })
@@ -161,6 +175,20 @@ test('the synthetic allowance is the whole value, never a part of it', async () 
 
 test('a lookup that cannot answer stops the check rather than passing it', async () => {
   await assert.rejects(hitsOf(`see ${PUBLIC}#3`, strict, unreachable), /503/)
+})
+
+test('a lookup that fails on a lab-named repository stops the check without printing the name', async () => {
+  const failing: Resolve = async (owner, repo) => {
+    throw new Error(`GitHub answered 401 for ${owner}/${repo}`)
+  }
+  await assert.rejects(hitsOf('see synthetic-owner/synth07-config#2', strict, failing), (error: Error) => {
+    assert.equal(error.message, 'GitHub answered 401 for synthetic-owner/<lab host>-config')
+    return true
+  })
+})
+
+test('printed text loses its lab names in any case', () => {
+  assert.equal(withoutLabNames('could not read docs/Synth07-notes.md on ci-synthetic.LAB', ['synth']), 'could not read docs/<lab host>-notes.md on <lab host>')
 })
 
 test('a github.com page that is not a repository is not looked up', async () => {

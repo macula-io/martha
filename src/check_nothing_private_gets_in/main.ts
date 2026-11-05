@@ -9,6 +9,7 @@
 
 import {
   familiesFrom,
+  withoutLabNames,
   privateHitsIn,
   type Families,
   type Hit,
@@ -110,10 +111,23 @@ const main = async (): Promise<number> => {
   return 0
 }
 
+// An error can name anything: a tracked path git could not read, a repository
+// the lookup failed on. Its lab names are replaced before it is printed, with the
+// declared families when they can be read and the generic classes when not.
+const declaredOrNone = (): readonly string[] => {
+  try {
+    const families = familiesFrom(process.env['MARTHA_LAB_HOSTS'], true)
+    return families.kind === 'declared' ? families.labHosts : []
+  } catch {
+    return []
+  }
+}
+
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
-    console.error(`check_nothing_private_gets_in: the check could not be made: ${error instanceof Error ? error.message : String(error)}`)
+    const said = withoutLabNames(error instanceof Error ? error.message : String(error), declaredOrNone())
+    console.error(`check_nothing_private_gets_in: the check could not be made: ${said}`)
     process.exit(2)
   },
 )
