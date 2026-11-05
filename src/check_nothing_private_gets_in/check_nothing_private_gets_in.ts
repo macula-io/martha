@@ -258,12 +258,22 @@ export type Families =
   | { readonly kind: 'declared'; readonly labHosts: readonly string[] }
   | { readonly kind: 'skipped'; readonly why: string }
 
+// The secret parsed, or null. JSON.parse's own error quotes the text it could not
+// read, and this text is the secret: it must never reach the log.
+const parsedOrNull = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
 export const familiesFrom = (raw: string | undefined, forkPullRequest: boolean): Families => {
   if (raw === undefined || raw.trim() === '') {
     if (forkPullRequest) return { kind: 'skipped', why: 'a pull request from a fork gets no secrets' }
     throw new Error('MARTHA_LAB_HOSTS is not set: the lab machine families cannot be checked')
   }
-  const parsed: unknown = JSON.parse(raw)
+  const parsed = parsedOrNull(raw)
   const valid = Array.isArray(parsed) && parsed.every((family) => typeof family === 'string' && FAMILY.test(family))
   if (!valid) throw new Error('MARTHA_LAB_HOSTS must be a JSON array of plain lowercase names')
   return { kind: 'declared', labHosts: parsed as string[] }

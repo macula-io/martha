@@ -204,6 +204,16 @@ test('the lab families come from the environment, and a missing list stops the c
   assert.throws(() => familiesFrom('"synth"', false), /plain lowercase names/)
 })
 
+test('a malformed secret is refused without its text in the message', () => {
+  for (const raw of ['[synth, other]', "['synth']", '["synth",]', '{"synth"']) {
+    assert.throws(() => familiesFrom(raw, false), (error: Error) => {
+      assert.equal(error.message, 'MARTHA_LAB_HOSTS must be a JSON array of plain lowercase names', raw)
+      assert.ok(!error.message.includes('synth'), raw)
+      return true
+    })
+  }
+})
+
 const gitIn = (root: string, ...args: string[]) =>
   execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], { encoding: 'utf8' }).trim()
 
