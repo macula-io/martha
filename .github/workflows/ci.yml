@@ -46,3 +46,27 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
+
+  # Nothing private gets in (docs/nothing-private-gets-in.md): no private issue
+  # link, internal host name or private remote, in the tree or in any commit of
+  # the range. The lab's machine families are a secret and are never printed.
+  # The self-test proves the live lookup and each family bite before the scan.
+  private:
+    name: nothing private
+    runs-on: ubuntu-latest
+    env:
+      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
+      MARTHA_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '0' }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: the check bites
+        run: npm run check:private -- --self-test
+      - name: nothing private in the tree or the range
+        run: npm run check:private -- --range "$RANGE"

@@ -9,7 +9,8 @@
   },
   "scripts": {
     "test": "node --test 'src/**/*.node-test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:private": "node src/check_nothing_private_gets_in/main.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

@@ -1,0 +1,112 @@
+# Nothing private gets in
+
+This exists so that code moved into this public repository from a private one
+carries nothing that belongs to the private side: no link to a private issue, no
+internal host name, no private remote. A check in CI fails, by name, the moment
+one gets in.
+
+Martha's first code is written fresh here, but most of what it becomes is moved
+in from a private repository where those things were normal to write. A comment
+that cites a private issue is a dead link once public, and it says where the
+private work lives. A fallback remote that names a private repository tells every
+reader where to look. A lab host name is a map of the network.
+
+## What could leak, and through which path
+
+| What | Example of the shape | How it arrives |
+|------|----------------------|----------------|
+| A private issue or PR link | `synthetic-owner/private-repo#123`, `https://github.com/synthetic-owner/private-repo/issues/123` | a comment or doc moved as written |
+| A shorthand link to another repository | `synthetic-repo#123` | the same; the owner is implied, so nothing outside the author's head says whether it is public |
+| A private remote or repository name | `git@github.com:synthetic-owner/private-repo.git`, a constant holding `synthetic-owner/private-repo` | a fallback, a default, an install script |
+| An internal host name | a `*.lab` name, a lab machine named by its family and number | a log line, a comment, a test fixture |
+| A home directory, a private address, a private email, a real node id or key | `/home/<user>`, RFC 1918 addresses, a 64-hex id | the same classes the crew's note check and release scan already refuse |
+
+Each of those can enter through four paths:
+
+1. **The tree at the head of a pull request** — a file as it will be merged.
+2. **A commit inside the pull request** that a later commit removes. GitHub keeps
+   every pushed commit of a pull request reachable, so a leak that the final tree
+   no longer shows is still public. The check reads every commit's added lines.
+3. **A commit message.** It is published with the commit. The check reads it.
+4. **The check's own output.** A CI log of a public repository is public. The lab's
+   machine families are therefore never printed: a hit names the file, the line
+   and the class, and withholds the value, and the workflow masks each family.
+
+Out of reach of this check, and said here so nobody assumes otherwise:
+
+- **A push is public before CI runs.** The check makes a leak fail the pull
+  request so it never merges, but it cannot unpublish a pushed commit. Run it
+  before you push (`npm run check:private`, below). A leak that was pushed is
+  handled as an incident, not by a later commit: the range keeps failing on
+  that commit, so the work lands from a fresh branch of clean commits and the
+  old branch is deleted.
+- **The pull request's title, body and comments** are not code and are not read.
+- **A private fact said in plain words** ("the box in the cupboard") matches no
+  shape. The check guards shapes; the rewrite rule below guards the rest.
+
+## How each class is decided
+
+- **Repository references are resolved, not listed.** Every `owner/repo` the
+  check finds — in a GitHub URL, an ssh or https remote, an `owner/repo#n`
+  reference, or a bare slug under an owner this repository declares — is looked
+  up on the GitHub API. Only a repository the API reports as public passes. An
+  unknown repository, a renamed-away one, and a private one all fail. A list of
+  private repositories would have to name them in this public repository, and
+  would quietly pass every one it was not taught. The lookup reads the
+  repository's visibility, not whether the caller can see it, so running it with
+  a token that can read private repositories still refuses them.
+- **A shorthand reference to another repository is refused** (`synthetic-repo#123`).
+  Only this repository's own `martha#n` passes. Write `owner/repo#n` so the
+  check, and a reader, can tell what it points at.
+- **Lab machine families are a secret, not a file.** The generic classes (every
+  `*.lab` name, every home directory, every RFC 1918 address) need no list. The
+  families of the lab's machines do, and the list is itself private, so CI reads
+  it from the `MARTHA_LAB_HOSTS` repository secret (a JSON array). A pull request
+  from a fork gets no secrets: there the check runs every other class and says
+  which one it skipped. Anywhere else, a missing list stops the check rather than
+  passing it.
+- **The text classes are one definition.** The patterns are the crew's own
+  public-text classes, the same ones its note check and release scan hold to.
+
+The check cannot be made when the API cannot answer, the list is missing outside
+a fork, or git cannot read the range. It then exits 2 and CI fails: it never
+passes because it could not look.
+
+## Synthetic values
+
+A test of a refusal has to state the value it refuses, and that test lives in
+this public tree, where the check reads it too. Each class therefore has one
+synthetic form that the tree scan accepts: a lab name ending `-synthetic` (`ci-synthetic.lab`), a machine
+number in the 90s, `/home/synthetic`, the `192.168.255.0/24` block, the
+`synthetic.invalid` email domain, the listed all-one-digit ids, and repository
+owners starting `synthetic-`. The unit tests prove each class refuses its own
+synthetic form when the allowance is off, and a structural test holds every form
+to a whole-value match, so an allowance cannot swallow a real value that merely
+contains one.
+
+## The rewrite rule for moved code
+
+Keep the reasoning, drop the link.
+
+- A private issue reference: say what was decided and why, in the comment
+  itself. If a public issue carries the same decision, link that, as
+  `owner/repo#n`.
+- An internal host name: name the role ("the CI runner", "a lab box"), not the
+  machine.
+- A private remote or repository: take it from configuration, or name the public
+  repository it should be.
+- A home directory, address or id: use the synthetic form, or a placeholder in
+  angle brackets.
+
+## Running it
+
+```sh
+# The tree as it is, every class except the lab's families:
+MARTHA_LAB_HOSTS='[]' npm run check:private
+
+# What CI runs on a pull request: the tree, then every commit in the range.
+MARTHA_LAB_HOSTS='["<family>"]' GITHUB_TOKEN=... npm run check:private -- --range <base>..<head>
+```
+
+Exit 0 is clean, 1 lists one hit per line as `where: what`, and 2 means the check
+could not be made.

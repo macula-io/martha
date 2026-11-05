@@ -28,6 +28,10 @@ Martha carries the method it teaches:
 
 - One change per pull request, with a description that says why.
 - CI must pass on the exact commit you ask us to merge.
+- Code moved in from a private repository keeps its reasoning and drops its
+  links: no private issue reference, internal host name or private remote.
+  [The check](docs/nothing-private-gets-in.md) fails on one; run
+  `npm run check:private` before you push, because a push is public at once.
 - Every pull request gets a review before it lands.
 
 ## Licence

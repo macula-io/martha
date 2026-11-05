@@ -1,0 +1,185 @@
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { test } from 'node:test'
+
+import {
+  familiesFrom,
+  privateHitsIn,
+  SYNTHETIC,
+  type Resolve,
+  type Rules,
+  type Source,
+} from './check_nothing_private_gets_in.ts'
+import { commitSources, commitsOf, treeSources } from './read_sources.ts'
+
+// Every value planted here is a synthetic form, because this file is in the
+// public tree the check reads. The class tests switch the synthetic allowance
+// off, so each class is shown to refuse that very value on its own.
+const strict: Rules = {
+  labHosts: ['synth'],
+  publicEmails: ['macula.io'],
+  owners: ['synthetic-owner'],
+  ownRepo: 'martha',
+  allowSynthetic: false,
+}
+const scanning: Rules = { ...strict, allowSynthetic: true }
+
+// A fixed answer per repository, so no unit test touches the network.
+const PRIVATE = 'synthetic-owner/private-thing'
+const PUBLIC = 'synthetic-owner/open-thing'
+const resolveFixed: Resolve = async (owner, repo) => {
+  const key = `${owner}/${repo}`
+  if (key === PRIVATE) return 'not_public'
+  if (key === PUBLIC) return 'public'
+  throw new Error(`the test asked about ${key}`)
+}
+const unreachable: Resolve = async () => {
+  throw new Error('GitHub answered 503')
+}
+
+const one = (text: string): Source[] => [{ name: 'note.md', lines: [{ where: 'note.md:1', text }] }]
+const hitsOf = async (text: string, rules: Rules = strict, resolve: Resolve = resolveFixed) =>
+  (await privateHitsIn(one(text), rules, resolve)).map((hit) => hit.what)
+
+test('a clean line passes', async () => {
+  assert.deepEqual(await hitsOf('Nothing private here; see martha#14 and crew@macula.io.'), [])
+})
+
+// One planted leak of each kind the issue names.
+
+test('a link to a private issue is refused, in each form it is written', async () => {
+  for (const text of [
+    `as decided in ${PRIVATE}#123`,
+    `https://github.com/${PRIVATE}/issues/123`,
+    `https://github.com/${PRIVATE}/pull/7#discussion_r1`,
+  ]) {
+    assert.deepEqual(await hitsOf(text), [`a repository that is not public (${PRIVATE})`], text)
+  }
+})
+
+test('a shorthand reference to another repository is refused, this repository\'s own passes', async () => {
+  assert.deepEqual(await hitsOf('see synthetic-repo#12'), [
+    'a shorthand reference to another repository (synthetic-repo#...): write owner/repo#n so it can be checked',
+  ])
+  assert.deepEqual(await hitsOf('see martha#14 and #2'), [])
+})
+
+test('a private remote is refused, over ssh, https and as a bare slug', async () => {
+  for (const text of [
+    `git@github.com:${PRIVATE}.git`,
+    `MOD_REMOTE_FALLBACK="https://github.com/${PRIVATE}.git"`,
+    `const FALLBACK = '${PRIVATE}'`,
+  ]) {
+    assert.deepEqual(await hitsOf(text), [`a repository that is not public (${PRIVATE})`], text)
+  }
+})
+
+test('a public repository passes, in every form', async () => {
+  for (const text of [`${PUBLIC}#3`, `https://github.com/${PUBLIC}`, `git@github.com:${PUBLIC}.git`, `'${PUBLIC}'`]) {
+    assert.deepEqual(await hitsOf(text), [], text)
+  }
+})
+
+test('an internal host name is refused, and its value is never printed', async () => {
+  const fqdn = await hitsOf('ssh to ci-synthetic.lab')
+  assert.deepEqual(fqdn, ['a lab hostname (value withheld)'])
+  const machine = await hitsOf('it ran on synth03')
+  assert.deepEqual(machine, ['a lab machine name (value withheld)'])
+  assert.ok([...fqdn, ...machine].every((what) => !what.includes('synth')))
+})
+
+test('a host name inside another class\'s value is withheld there too', async () => {
+  const hits = await hitsOf('ssh ops@ci-synthetic.lab')
+  assert.deepEqual(hits, ['a lab hostname (value withheld)', 'an email address (value withheld)'])
+  assert.deepEqual(await hitsOf('ssh ops@ci-synthetic.lab', scanning), [])
+})
+
+test('a machine family is only refused when it is declared', async () => {
+  assert.deepEqual(await hitsOf('it ran on synth03', { ...strict, labHosts: [] }), [])
+})
+
+test('the crew\'s other private-text classes are refused', async () => {
+  assert.deepEqual(await hitsOf('see /home/synthetic/notes'), ['a home directory (/home/synthetic)'])
+  assert.deepEqual(await hitsOf('dial 192.168.255.7'), ['a private address (192.168.255.7)'])
+  assert.deepEqual(await hitsOf('mail ada@synthetic.invalid'), ['an email address (ada@synthetic.invalid)'])
+  const id = 'a'.repeat(64)
+  assert.deepEqual(await hitsOf(`node ${id}`), [`a 64-hex id (${id})`])
+})
+
+test('each synthetic form passes a real scan, so the tests that state them can be public', async () => {
+  for (const text of [
+    'ssh ops@ci-synthetic.lab',
+    'it ran on synth97',
+    'see /home/synthetic/notes',
+    'dial 192.168.255.7',
+    'mail ada@synthetic.invalid',
+    `node ${'a'.repeat(64)}`,
+    'see synthetic-repo#12',
+    `as decided in ${PRIVATE}#123`,
+  ]) {
+    assert.deepEqual(await hitsOf(text, scanning, unreachable), [], text)
+  }
+})
+
+test('the synthetic allowance is the whole value, never a part of it', async () => {
+  for (const [name, pattern] of Object.entries(SYNTHETIC)) {
+    assert.ok(pattern.startsWith('^') && pattern.endsWith('$'), name)
+  }
+  // A real machine number beside the synthetic one is still refused.
+  assert.deepEqual(await hitsOf('synth97 then synth03', scanning), ['a lab machine name (value withheld)'])
+  // A 64-hex id is synthetic only when it is one digit repeated.
+  assert.deepEqual((await hitsOf(`${'a'.repeat(63)}b`, scanning)).length, 1)
+})
+
+test('a lookup that cannot answer stops the check rather than passing it', async () => {
+  await assert.rejects(hitsOf(`see ${PUBLIC}#3`, strict, unreachable), /503/)
+})
+
+test('a github.com page that is not a repository is not looked up', async () => {
+  assert.deepEqual(await hitsOf('https://github.com/sponsors/synthetic-person', strict, unreachable), [])
+})
+
+test('the lab families come from the environment, and a missing list stops the check outside a fork', () => {
+  assert.deepEqual(familiesFrom('["synth"]', false), { kind: 'declared', labHosts: ['synth'] })
+  assert.throws(() => familiesFrom(undefined, false), /MARTHA_LAB_HOSTS is not set/)
+  assert.throws(() => familiesFrom('', false), /MARTHA_LAB_HOSTS is not set/)
+  assert.equal(familiesFrom(undefined, true).kind, 'skipped')
+  assert.throws(() => familiesFrom('["a|b"]', false), /plain lowercase names/)
+  assert.throws(() => familiesFrom('"synth"', false), /plain lowercase names/)
+})
+
+const gitIn = (root: string, ...args: string[]) =>
+  execFileSync('git', ['-C', root, '-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], { encoding: 'utf8' }).trim()
+
+test('a leak in a commit that a later commit removes is still found, and so is one in a message', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    gitIn(root, 'init', '-q', '-b', 'main')
+    writeFileSync(join(root, 'README.md'), 'clean\n')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '-m', 'start')
+    const base = gitIn(root, 'rev-parse', 'HEAD')
+    writeFileSync(join(root, 'README.md'), 'clean\ndial 192.168.255.7\n')
+    gitIn(root, 'commit', '-q', '-am', `as decided in ${PRIVATE}#9`)
+    writeFileSync(join(root, 'README.md'), 'clean\n')
+    gitIn(root, 'commit', '-q', '-am', 'tidy')
+    const head = gitIn(root, 'rev-parse', 'HEAD')
+
+    assert.deepEqual(await privateHitsIn(treeSources(root), strict, resolveFixed), [])
+    const commits = commitsOf(root, `${base}..${head}`)
+    assert.equal(commits.length, 2)
+    const hits = await privateHitsIn(commits.flatMap((sha) => commitSources(root, sha)), strict, resolveFixed)
+    const short = commits[0]?.slice(0, 12) ?? ''
+    // Text classes are reported line by line, then the repositories that are not public.
+    assert.deepEqual(hits, [
+      { where: `commit ${short} README.md:2`, what: 'a private address (192.168.255.7)' },
+      { where: `commit ${short} message:1`, what: `a repository that is not public (${PRIVATE})` },
+    ])
+    assert.deepEqual(commitsOf(root, `${'0'.repeat(40)}..${head}`), [])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
