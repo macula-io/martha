@@ -42,7 +42,10 @@ Each behaviour is one of three kinds, and its kind decides where it lands here:
    moving a session to another model and back.
 7. The Supervisor's small views, one package each: **keep_operator_todo**,
    **keep_standing_items**, **file_friction**, **track_backlog**,
-   **nudge_review_waits**.
+   **nudge_review_waits**. Then **watch_waits**, which is new rather than a
+   move: every wait names its target and the artifact it waits for, a cycle
+   or an over-long wait is escalated, and a wait on the owner becomes a to-do
+   with the exact act (the deadlock requirement in issue #1).
 8. **read_shared_room** and **announce_node_events**: the mesh readers, used in
    team mode only.
 9. **prove_landing**, **open_and_finish_worktree** and **guard_workspace**: the

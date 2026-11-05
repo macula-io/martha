@@ -182,9 +182,9 @@ export function context(): Diagram {
   d.box({ kind: 'b-ext', x: 30, y: 20, w: 250, h: 124, name: 'npm registry', type: '[External system]',
     desc: ['The signed Martha package;', 'its signature is checked', 'before anything is installed'] })
   d.box({ kind: 'b-per', x: 375, y: 20, w: 250, h: 124, name: 'The owner', type: '[Person]', person: true,
-    desc: ['Sets the work, answers', 'the menus, and gives the', 'yes every push needs'] })
+    desc: ['Sets the work, answers the', 'menus; in solo mode gives', 'the yes every push needs'] })
   d.box({ kind: 'b-per', x: 720, y: 20, w: 250, h: 124, name: 'Teammates', type: '[Person, team mode]', person: true,
-    desc: ['More people with their own', 'seats on the crew, under', 'the roles the team names'] })
+    desc: ['More people on the crew;', 'the ones the team names', 'give the yes to a push'] })
 
   d.box({ kind: 'b-ext', x: 30, y: 200, w: 250, h: 140, name: 'Claude Code', type: '[External: coding tool]',
     desc: ['Runs a member session and', 'talks to its own model;', 'Martha is a plugin in it'] })
@@ -203,8 +203,8 @@ export function context(): Diagram {
   d.edge('M375 82H280', { x: 327, y: 74, text: 'installs', middle: true })
   d.edge('M500 144V200', { x: 412, y: 178, text: 'runs, approves' })
   d.edge('M845 144V172H585V200', { x: 715, y: 166, text: 'their seats', middle: true }, true)
-  d.edge('M375 270H280', { x: 327, y: 262, text: 'plugin', middle: true })
-  d.edge('M625 270H720', { x: 672, y: 262, text: 'plugin', middle: true })
+  d.edge('M280 270H375', { x: 327, y: 262, text: 'loads', middle: true })
+  d.edge('M720 270H625', { x: 672, y: 262, text: 'loads', middle: true })
   d.edge('M430 340V380H155V420', { x: 292, y: 374, text: 'gh and git', middle: true })
   d.edge('M500 340V420', { x: 508, y: 400, text: 'rooms, admission' }, true)
   d.edge('M570 340V380H845V420', { x: 708, y: 374, text: 'a tab per member', middle: true })
@@ -229,24 +229,25 @@ export function containers(): Diagram {
   d.box({ kind: 'b-cmp', x: 332, y: 76, w: 268, h: 110, name: 'launcher', type: '[command line]', code: true,
     desc: ['Starts and stops members:', 'one coding-tool session and', 'one terminal tab each'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 210, w: 368, h: 290, name: 'crew core', type: '[TypeScript, no coding-tool API]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 210, w: 368, h: 270, name: 'crew core', type: '[no coding-tool API]', code: true,
     desc: [
       'The protocol, one folder per capability:',
       'declare_crew, host_contract, who_may_act,',
       'deliver_crew_room, show_dashboard_beat,',
       'log_ledger, park_and_wake, refresh_member,',
       'hand_over_at_limit, ask_owner, switch_model,',
-      'watch_waits, prove_landing, guard_workspace,',
-      'open_and_finish_worktree, the publish gate;',
+      'the owner\'s small views, watch_waits,',
+      'prove_landing, open_and_finish_worktree,',
+      'guard_workspace, the publish gate;',
       'team mode adds read_shared_room and',
       'announce_node_events.',
       'Each folder holds its hooks, tools, timer,',
       'store keys, prompt text and test.',
     ] })
 
-  d.box({ kind: 'b-cmp', x: 432, y: 210, w: 168, h: 130, name: 'Claude Code', type: '[adapter]', code: true,
+  d.box({ kind: 'b-cmp', x: 432, y: 210, w: 168, h: 125, name: 'Claude Code', type: '[adapter]', code: true,
     desc: ['The host contract', 'over the plugin', 'API; the pane'] })
-  d.box({ kind: 'b-cmp', x: 432, y: 370, w: 168, h: 130, name: 'OpenCode', type: '[adapter]', code: true,
+  d.box({ kind: 'b-cmp', x: 432, y: 355, w: 168, h: 125, name: 'OpenCode', type: '[adapter]', code: true,
     desc: ['The host contract', 'over the plugin', 'API'] })
 
   d.box({ kind: 'b-team', x: 32, y: 534, w: 268, h: 110, name: 'realm admission', type: '[team mode only]', code: true,
@@ -272,10 +273,10 @@ export function containers(): Diagram {
   d.edge('M600 160H650V230H680', { x: 640, y: 196, text: 'starts', middle: true, rotate: 90 })
   d.edge('M166 210V186', { x: 174, y: 202, text: 'settings, read once' })
   d.edge('M432 275H400', { x: 416, y: 267, text: 'host', middle: true })
-  d.edge('M432 435H400', { x: 416, y: 427, text: 'host', middle: true })
-  d.edge('M680 250H600', { x: 640, y: 242, text: 'plugin', middle: true })
-  d.edge('M680 380H600', { x: 640, y: 372, text: 'plugin', middle: true })
-  d.edge('M216 500V517H660V484H680', { x: 438, y: 512, text: 'gh and git, through the host', middle: true })
+  d.edge('M432 420H400', { x: 416, y: 412, text: 'host', middle: true })
+  d.edge('M680 250H600', { x: 640, y: 242, text: 'loads', middle: true })
+  d.edge('M680 380H600', { x: 640, y: 372, text: 'loads', middle: true })
+  d.edge('M216 480V507H660V484H680', { x: 438, y: 502, text: 'gh and git, through the host', middle: true })
   d.edge('M166 644V674H660V604H680', { x: 438, y: 669, text: 'invite, room', middle: true }, true)
   d.edge('M600 589H640V724H680', { x: 632, y: 616, text: 'signed release', middle: true, rotate: 90 })
 

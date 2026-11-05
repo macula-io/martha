@@ -6,10 +6,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { ASSETS, DIAGRAMS } from './c4_diagrams.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
+
+// The page links an SVG by its path from the page to the generator's ASSETS.
+const linkTo = (file: string): string => `${relative(import.meta.dirname, ASSETS)}/${file}`
 
 for (const make of DIAGRAMS) {
   const diagram = make()
@@ -20,7 +23,7 @@ for (const make of DIAGRAMS) {
   })
 
   test(`architecture/README.md shows ${diagram.file}`, () => {
-    assert.ok(README.includes(`../assets/${diagram.file}`), `architecture/README.md does not show ${diagram.file}`)
+    assert.ok(README.includes(linkTo(diagram.file)), `architecture/README.md does not show ${diagram.file}`)
   })
 }
 

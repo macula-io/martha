@@ -57,16 +57,16 @@
 <circle class="head" cx="401" cy="44" r="9"/>
 <text class="t-name" x="419" y="48">The owner</text>
 <text class="t-type" x="419" y="66">[Person]</text>
-<text class="t-desc" x="391" y="90">Sets the work, answers</text>
-<text class="t-desc" x="391" y="106">the menus, and gives the</text>
-<text class="t-desc" x="391" y="122">yes every push needs</text>
+<text class="t-desc" x="391" y="90">Sets the work, answers the</text>
+<text class="t-desc" x="391" y="106">menus; in solo mode gives</text>
+<text class="t-desc" x="391" y="122">the yes every push needs</text>
 <rect class="b-per" x="720" y="20" width="250" height="124" rx="10"/>
 <circle class="head" cx="746" cy="44" r="9"/>
 <text class="t-name" x="764" y="48">Teammates</text>
 <text class="t-type" x="764" y="66">[Person, team mode]</text>
-<text class="t-desc" x="736" y="90">More people with their own</text>
-<text class="t-desc" x="736" y="106">seats on the crew, under</text>
-<text class="t-desc" x="736" y="122">the roles the team names</text>
+<text class="t-desc" x="736" y="90">More people on the crew;</text>
+<text class="t-desc" x="736" y="106">the ones the team names</text>
+<text class="t-desc" x="736" y="122">give the yes to a push</text>
 <rect class="b-ext" x="30" y="200" width="250" height="140" rx="10"/>
 <text class="t-name" x="46" y="228">Claude Code</text>
 <text class="t-type" x="46" y="246">[External: coding tool]</text>
@@ -112,10 +112,10 @@
 <text class="t-rel" x="412" y="178">runs, approves</text>
 <path class="edge-team" d="M845 144V172H585V200" marker-end="url(#a)"/>
 <text class="t-rel" x="715" y="166" text-anchor="middle">their seats</text>
-<path class="edge" d="M375 270H280" marker-end="url(#a)"/>
-<text class="t-rel" x="327" y="262" text-anchor="middle">plugin</text>
-<path class="edge" d="M625 270H720" marker-end="url(#a)"/>
-<text class="t-rel" x="672" y="262" text-anchor="middle">plugin</text>
+<path class="edge" d="M280 270H375" marker-end="url(#a)"/>
+<text class="t-rel" x="327" y="262" text-anchor="middle">loads</text>
+<path class="edge" d="M720 270H625" marker-end="url(#a)"/>
+<text class="t-rel" x="672" y="262" text-anchor="middle">loads</text>
 <path class="edge" d="M430 340V380H155V420" marker-end="url(#a)"/>
 <text class="t-rel" x="292" y="374" text-anchor="middle">gh and git</text>
 <path class="edge-team" d="M500 340V420" marker-end="url(#a)"/>

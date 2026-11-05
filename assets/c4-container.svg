@@ -61,32 +61,33 @@
 <text class="t-desc" x="348" y="146">Starts and stops members:</text>
 <text class="t-desc" x="348" y="162">one coding-tool session and</text>
 <text class="t-desc" x="348" y="178">one terminal tab each</text>
-<rect class="b-cmp" x="32" y="210" width="368" height="290" rx="10"/>
+<rect class="b-cmp" x="32" y="210" width="368" height="270" rx="10"/>
 <text class="t-code" x="48" y="238">crew core</text>
-<text class="t-type" x="48" y="256">[TypeScript, no coding-tool API]</text>
+<text class="t-type" x="48" y="256">[no coding-tool API]</text>
 <text class="t-desc" x="48" y="280">The protocol, one folder per capability:</text>
 <text class="t-desc" x="48" y="296">declare_crew, host_contract, who_may_act,</text>
 <text class="t-desc" x="48" y="312">deliver_crew_room, show_dashboard_beat,</text>
 <text class="t-desc" x="48" y="328">log_ledger, park_and_wake, refresh_member,</text>
 <text class="t-desc" x="48" y="344">hand_over_at_limit, ask_owner, switch_model,</text>
-<text class="t-desc" x="48" y="360">watch_waits, prove_landing, guard_workspace,</text>
-<text class="t-desc" x="48" y="376">open_and_finish_worktree, the publish gate;</text>
-<text class="t-desc" x="48" y="392">team mode adds read_shared_room and</text>
-<text class="t-desc" x="48" y="408">announce_node_events.</text>
-<text class="t-desc" x="48" y="424">Each folder holds its hooks, tools, timer,</text>
-<text class="t-desc" x="48" y="440">store keys, prompt text and test.</text>
-<rect class="b-cmp" x="432" y="210" width="168" height="130" rx="10"/>
+<text class="t-desc" x="48" y="360">the owner's small views, watch_waits,</text>
+<text class="t-desc" x="48" y="376">prove_landing, open_and_finish_worktree,</text>
+<text class="t-desc" x="48" y="392">guard_workspace, the publish gate;</text>
+<text class="t-desc" x="48" y="408">team mode adds read_shared_room and</text>
+<text class="t-desc" x="48" y="424">announce_node_events.</text>
+<text class="t-desc" x="48" y="440">Each folder holds its hooks, tools, timer,</text>
+<text class="t-desc" x="48" y="456">store keys, prompt text and test.</text>
+<rect class="b-cmp" x="432" y="210" width="168" height="125" rx="10"/>
 <text class="t-code" x="448" y="238">Claude Code</text>
 <text class="t-type" x="448" y="256">[adapter]</text>
 <text class="t-desc" x="448" y="280">The host contract</text>
 <text class="t-desc" x="448" y="296">over the plugin</text>
 <text class="t-desc" x="448" y="312">API; the pane</text>
-<rect class="b-cmp" x="432" y="370" width="168" height="130" rx="10"/>
-<text class="t-code" x="448" y="398">OpenCode</text>
-<text class="t-type" x="448" y="416">[adapter]</text>
-<text class="t-desc" x="448" y="440">The host contract</text>
-<text class="t-desc" x="448" y="456">over the plugin</text>
-<text class="t-desc" x="448" y="472">API</text>
+<rect class="b-cmp" x="432" y="355" width="168" height="125" rx="10"/>
+<text class="t-code" x="448" y="383">OpenCode</text>
+<text class="t-type" x="448" y="401">[adapter]</text>
+<text class="t-desc" x="448" y="425">The host contract</text>
+<text class="t-desc" x="448" y="441">over the plugin</text>
+<text class="t-desc" x="448" y="457">API</text>
 <rect class="b-team" x="32" y="534" width="268" height="110" rx="10"/>
 <text class="t-code" x="48" y="562">realm admission</text>
 <text class="t-type" x="48" y="580">[team mode only]</text>
@@ -133,14 +134,14 @@
 <text class="t-rel" x="174" y="202">settings, read once</text>
 <path class="edge" d="M432 275H400" marker-end="url(#a)"/>
 <text class="t-rel" x="416" y="267" text-anchor="middle">host</text>
-<path class="edge" d="M432 435H400" marker-end="url(#a)"/>
-<text class="t-rel" x="416" y="427" text-anchor="middle">host</text>
+<path class="edge" d="M432 420H400" marker-end="url(#a)"/>
+<text class="t-rel" x="416" y="412" text-anchor="middle">host</text>
 <path class="edge" d="M680 250H600" marker-end="url(#a)"/>
-<text class="t-rel" x="640" y="242" text-anchor="middle">plugin</text>
+<text class="t-rel" x="640" y="242" text-anchor="middle">loads</text>
 <path class="edge" d="M680 380H600" marker-end="url(#a)"/>
-<text class="t-rel" x="640" y="372" text-anchor="middle">plugin</text>
-<path class="edge" d="M216 500V517H660V484H680" marker-end="url(#a)"/>
-<text class="t-rel" x="438" y="512" text-anchor="middle">gh and git, through the host</text>
+<text class="t-rel" x="640" y="372" text-anchor="middle">loads</text>
+<path class="edge" d="M216 480V507H660V484H680" marker-end="url(#a)"/>
+<text class="t-rel" x="438" y="502" text-anchor="middle">gh and git, through the host</text>
 <path class="edge-team" d="M166 644V674H660V604H680" marker-end="url(#a)"/>
 <text class="t-rel" x="438" y="669" text-anchor="middle">invite, room</text>
 <path class="edge" d="M600 589H640V724H680" marker-end="url(#a)"/>
