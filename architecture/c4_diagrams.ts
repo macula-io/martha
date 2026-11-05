@@ -229,7 +229,7 @@ export function containers(): Diagram {
   d.box({ kind: 'b-cmp', x: 332, y: 76, w: 268, h: 110, name: 'launcher', type: '[command line]', code: true,
     desc: ['Starts and stops members:', 'one coding-tool session and', 'one terminal tab each'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 210, w: 368, h: 270, name: 'crew core', type: '[no coding-tool API]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 210, w: 368, h: 270, name: 'crew core', type: '[TypeScript, no coding-tool API]', code: true,
     desc: [
       'The protocol, one folder per capability:',
       'declare_crew, host_contract, who_may_act,',

@@ -63,7 +63,7 @@
 <text class="t-desc" x="348" y="178">one terminal tab each</text>
 <rect class="b-cmp" x="32" y="210" width="368" height="270" rx="10"/>
 <text class="t-code" x="48" y="238">crew core</text>
-<text class="t-type" x="48" y="256">[no coding-tool API]</text>
+<text class="t-type" x="48" y="256">[TypeScript, no coding-tool API]</text>
 <text class="t-desc" x="48" y="280">The protocol, one folder per capability:</text>
 <text class="t-desc" x="48" y="296">declare_crew, host_contract, who_may_act,</text>
 <text class="t-desc" x="48" y="312">deliver_crew_room, show_dashboard_beat,</text>
