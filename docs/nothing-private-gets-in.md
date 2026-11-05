@@ -23,14 +23,18 @@ reader where to look. A lab host name is a map of the network.
 
 Each of those can enter through four paths:
 
-1. **The tree at the head of a pull request** — a file as it will be merged.
+1. **The tree at the head of a pull request** — a file as it will be merged,
+   and its path: a file named after a machine publishes the name with no text
+   at all. Every tracked path, and every path a commit adds, is read as a line.
 2. **A commit inside the pull request** that a later commit removes. GitHub keeps
    every pushed commit of a pull request reachable, so a leak that the final tree
    no longer shows is still public. The check reads every commit's added lines.
 3. **A commit message.** It is published with the commit. The check reads it.
 4. **The check's own output.** A CI log of a public repository is public. The lab's
    machine families are therefore never printed: a hit names the file, the line
-   and the class, and withholds the value, and the workflow masks each family.
+   and the class, and withholds the value. Nothing else printed carries one
+   either: a lab name in a path, a repository name or a shorthand is replaced
+   by `<lab host>`.
 
 Out of reach of this check, and said here so nobody assumes otherwise:
 

@@ -66,10 +66,20 @@ const selfTest = async (families: Families, resolve: Resolve): Promise<string[]>
   if (families.kind === 'declared') {
     const rules = rulesOf(families, true)
     for (const [index, family] of families.labHosts.entries()) {
-      const planted: Source = { name: 'planted', lines: [{ where: `family ${index + 1}`, text: `ran on ${family}07` }] }
+      // In text, in a path, and as a shorthand name: refused each time, printed never.
+      const planted: Source = {
+        name: 'planted',
+        lines: [
+          { where: `family ${index + 1}`, text: `ran on ${family}07` },
+          { where: `path docs/${family}07-notes.md`, text: `docs/${family}07-notes.md` },
+          { where: `family ${index + 1} shorthand`, text: `see ${family}07#3` },
+        ],
+      }
       const hits = await privateHitsIn([planted], rules, resolve)
-      if (!hits.some((hit) => hit.what === 'a lab machine name (value withheld)')) failures.push(`family ${index + 1} is not refused`)
-      if (hits.some((hit) => hit.what.includes(family))) failures.push(`family ${index + 1} is printed`)
+      const refused = hits.filter((hit) => hit.what === 'a lab machine name (value withheld)').length
+      if (refused < 3) failures.push(`family ${index + 1} is not refused in text, a path and a shorthand`)
+      // The planted name, not the bare family: a family may be an everyday word.
+      if (hits.some((hit) => `${hit.where} ${hit.what}`.includes(`${family}07`))) failures.push(`family ${index + 1} is printed`)
     }
   }
   return failures

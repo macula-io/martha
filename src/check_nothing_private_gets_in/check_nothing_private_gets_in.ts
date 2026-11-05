@@ -85,8 +85,10 @@ interface TextClass {
 const textClasses = (rules: Rules): readonly TextClass[] => {
   const synthetic = (pattern: string) => (value: string) => rules.allowSynthetic && whole(pattern).test(value)
   const machine = rules.labHosts.length === 0 ? '' : families(rules)
-  const allowEmail = whole(
+  // A domain has no case: an allowed address passes however its domain is written.
+  const allowEmail = new RegExp(
     `^(${PUBLIC_TEXT_PATTERNS.allow_email}${rules.publicEmails.map((domain) => `|[A-Za-z0-9._%+-]+@${domain.replace(/[.]/g, '\\.')}`).join('')})$`,
+    'i',
   )
   return [
     {
@@ -129,20 +131,29 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
   ]
 }
 
-// A value is printed only when it names no lab host: an email at a lab host, or
-// a home under a machine's name, would otherwise print the host by another class.
-const printable = (rules: Rules) => {
-  const lab = rules.labHosts.length === 0
-    ? new RegExp(PUBLIC_TEXT_PATTERNS.lab_fqdn)
-    : new RegExp(`${PUBLIC_TEXT_PATTERNS.lab_fqdn}|${PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', families(rules))}`)
-  return (one: TextClass, value: string) => (one.shows && !lab.test(value) ? `${one.what} (${value})` : `${one.what} (value withheld)`)
-}
+// The lab's host names, generic and declared, as one pattern.
+const labPatternOf = (rules: Rules) =>
+  rules.labHosts.length === 0
+    ? PUBLIC_TEXT_PATTERNS.lab_fqdn
+    : `${PUBLIC_TEXT_PATTERNS.lab_fqdn}|${PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', families(rules))}`
 
-const textHitsOf = (line: Line, classes: readonly TextClass[], shown: ReturnType<typeof printable>): Hit[] =>
+// Nothing printed names a lab host: not a class's value (an email at a lab host),
+// not a repository or shorthand name, not the path a hit is found at. A value of a
+// class is withheld whole; anything else has each lab name in it replaced.
+const printing = (rules: Rules) => {
+  const lab = labPatternOf(rules)
+  const clean = (text: string) => text.replace(new RegExp(lab, 'g'), '<lab host>')
+  const shown = (one: TextClass, value: string) =>
+    one.shows && !new RegExp(lab).test(value) ? `${one.what} (${value})` : `${one.what} (value withheld)`
+  return { clean, shown }
+}
+type Printing = ReturnType<typeof printing>
+
+const textHitsOf = (line: Line, classes: readonly TextClass[], print: Printing): Hit[] =>
   classes.flatMap((one) =>
     one.matches(line.text)
       .filter((value) => !one.accepts(value))
-      .map((value) => ({ where: line.where, what: shown(one, value) })),
+      .map((value) => ({ where: print.clean(line.where), what: print.shown(one, value) })),
   )
 
 export interface RepoReference {
@@ -156,11 +167,13 @@ const RAW_REFERENCE = String.raw`raw\.githubusercontent\.com/([A-Za-z0-9-]+)/([A
 const ISSUE_REFERENCE = String.raw`(?<![A-Za-z0-9._/-])([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)#[0-9]+\b`
 const SHORTHAND_REFERENCE = String.raw`(?<![A-Za-z0-9._/-])([A-Za-z][A-Za-z0-9._-]*)#[0-9]+\b`
 
+// The host is matched in any case (GitHub.com, GITHUB.COM); owner and repo are
+// kept as written.
 // A repository name as written: a remote's `.git` and a sentence's full stop are not part of it.
 const repoName = (written: string) => written.replace(/\.git$/, '').replace(/[.]+$/, '')
 
-const referencesBy = (pattern: string, line: Line): RepoReference[] =>
-  [...line.text.matchAll(new RegExp(pattern, 'g'))].map((found) => ({
+const referencesBy = (pattern: string, line: Line, flags = 'g'): RepoReference[] =>
+  [...line.text.matchAll(new RegExp(pattern, flags))].map((found) => ({
     where: line.where,
     owner: found[1] ?? '',
     repo: repoName(found[2] ?? ''),
@@ -174,8 +187,8 @@ const slugPattern = (owners: readonly string[]) =>
 // repositories to resolve.
 export const repoReferencesIn = (line: Line, rules: Rules): RepoReference[] => {
   const found = [
-    ...referencesBy(URL_REFERENCE, line),
-    ...referencesBy(RAW_REFERENCE, line),
+    ...referencesBy(URL_REFERENCE, line, 'gi'),
+    ...referencesBy(RAW_REFERENCE, line, 'gi'),
     ...referencesBy(ISSUE_REFERENCE, line),
     ...(rules.owners.length === 0 ? [] : referencesBy(slugPattern(rules.owners), line)),
   ]
@@ -188,20 +201,20 @@ export const repoReferencesIn = (line: Line, rules: Rules): RepoReference[] => {
 
 // A shorthand `name#n` names a repository without its owner. Only this
 // repository's own is allowed: anything else cannot be told public or private.
-const shorthandHitsOf = (line: Line, rules: Rules): Hit[] =>
+const shorthandHitsOf = (line: Line, rules: Rules, print: Printing): Hit[] =>
   [...line.text.matchAll(new RegExp(SHORTHAND_REFERENCE, 'g'))]
     .map((found) => found[1] ?? '')
     .filter((name) => name.toLowerCase() !== rules.ownRepo.toLowerCase())
     .filter((name) => !(rules.allowSynthetic && whole(SYNTHETIC.repo_owner).test(name)))
     .map((name) => ({
-      where: line.where,
-      what: `a shorthand reference to another repository (${name}#...): write owner/repo#n so it can be checked`,
+      where: print.clean(line.where),
+      what: `a shorthand reference to another repository (${print.clean(name)}#...): write owner/repo#n so it can be checked`,
     }))
 
 // Every hit in the sources. Each distinct repository is resolved once.
 export const privateHitsIn = async (sources: readonly Source[], rules: Rules, resolve: Resolve): Promise<Hit[]> => {
   const classes = textClasses(rules)
-  const shown = printable(rules)
+  const print = printing(rules)
   const lines = sources.flatMap((source) => source.lines)
   const references = lines.flatMap((line) => repoReferencesIn(line, rules))
   const visibility = new Map<string, Visibility>()
@@ -212,11 +225,11 @@ export const privateHitsIn = async (sources: readonly Source[], rules: Rules, re
   const repoHits = references
     .filter((reference) => visibility.get(`${reference.owner}/${reference.repo}`.toLowerCase()) !== 'public')
     .map((reference) => ({
-      where: reference.where,
-      what: `a repository that is not public (${reference.owner}/${reference.repo})`,
+      where: print.clean(reference.where),
+      what: `a repository that is not public (${print.clean(`${reference.owner}/${reference.repo}`)})`,
     }))
   return [
-    ...lines.flatMap((line) => [...textHitsOf(line, classes, shown), ...shorthandHitsOf(line, rules)]),
+    ...lines.flatMap((line) => [...textHitsOf(line, classes, print), ...shorthandHitsOf(line, rules, print)]),
     ...repoHits,
   ]
 }

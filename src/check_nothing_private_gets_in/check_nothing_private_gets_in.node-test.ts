@@ -97,6 +97,31 @@ test('a host name inside another class\'s value is withheld there too', async ()
   assert.deepEqual(await hitsOf('ssh ops@ci-synthetic.lab', scanning), [])
 })
 
+test('a GitHub host in any case is looked up', async () => {
+  for (const text of [
+    `https://GitHub.com/${PRIVATE}/issues/3`,
+    `https://GITHUB.COM/${PRIVATE}`,
+    `git@GitHub.Com:${PRIVATE}.git`,
+    `https://Raw.GitHubUserContent.com/${PRIVATE}/main/x`,
+  ]) {
+    assert.deepEqual(await hitsOf(text), [`a repository that is not public (${PRIVATE})`], text)
+  }
+})
+
+test('a lab name is never printed: not in a shorthand, a repository, or the path a hit is at', async () => {
+  const resolveAny: Resolve = async () => 'not_public'
+  const at = (where: string, text: string): Source[] => [{ name: where, lines: [{ where, text }] }]
+  const printed = async (where: string, text: string) =>
+    (await privateHitsIn(at(where, text), strict, resolveAny)).map((hit) => `${hit.where} ${hit.what}`)
+  const shorthand = await printed('note.md:1', 'see synthetic-synth04#3')
+  assert.ok(shorthand.some((line) => line.includes('a shorthand reference to another repository (synthetic-<lab host>#...)')), shorthand.join('|'))
+  const repo = await printed('note.md:1', 'see synthetic-owner/synth04-config#2')
+  assert.ok(repo.some((line) => line.includes('a repository that is not public (synthetic-owner/<lab host>-config)')), repo.join('|'))
+  const path = await printed('path docs/synth04-notes.md', 'docs/synth04-notes.md')
+  assert.deepEqual(path, ['path docs/<lab host>-notes.md a lab machine name (value withheld)'])
+  for (const line of [...shorthand, ...repo, ...path]) assert.ok(!line.includes('synth0'), line)
+})
+
 test('a machine family is only refused when it is declared', async () => {
   assert.deepEqual(await hitsOf('it ran on synth03', { ...strict, labHosts: [] }), [])
 })
@@ -179,6 +204,34 @@ test('a leak in a commit that a later commit removes is still found, and so is o
       { where: `commit ${short} message:1`, what: `a repository that is not public (${PRIVATE})` },
     ])
     assert.deepEqual(commitsOf(root, `${'0'.repeat(40)}..${head}`), [])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a path is read as well as its text, in the tree and in every commit, empty and binary files too', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    gitIn(root, 'init', '-q', '-b', 'main')
+    writeFileSync(join(root, 'README.md'), 'clean\n')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '-m', 'start')
+    const base = gitIn(root, 'rev-parse', 'HEAD')
+    writeFileSync(join(root, 'synth05-empty.md'), '')
+    writeFileSync(join(root, 'synth06.bin'), Buffer.from([0, 1, 2]))
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '-m', 'files whose names are the leak')
+    const head = gitIn(root, 'rev-parse', 'HEAD')
+
+    const inTree = (await privateHitsIn(treeSources(root), strict, resolveFixed)).map((hit) => `${hit.where} ${hit.what}`)
+    assert.deepEqual(inTree.sort(), [
+      'path <lab host>-empty.md a lab machine name (value withheld)',
+      'path <lab host>.bin a lab machine name (value withheld)',
+    ])
+    const commits = commitsOf(root, `${base}..${head}`)
+    const inRange = await privateHitsIn(commits.flatMap((sha) => commitSources(root, sha)), strict, resolveFixed)
+    assert.equal(inRange.filter((hit) => hit.where.includes(' path <lab host>')).length, 2)
+    assert.ok(inRange.every((hit) => !`${hit.where} ${hit.what}`.includes('synth0')))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

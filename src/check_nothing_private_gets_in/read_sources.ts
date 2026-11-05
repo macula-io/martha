@@ -20,13 +20,17 @@ const linesOf = (name: string, text: string, first = 1): Line[] =>
 
 const isBinary = (bytes: Buffer) => bytes.includes(0)
 
+// A path is published too: it is read as a line of its own, whether or not the
+// file has text to read.
+const pathLine = (path: string): Line => ({ where: `path ${path}`, text: path })
+
 export const treeSources = (root: string): Source[] =>
   git(root, ['ls-files', '-z'])
     .split('\0')
     .filter((path) => path !== '')
     .map((path) => ({ path, bytes: readFileSync(join(root, path)) }))
-    .filter((file) => !isBinary(file.bytes))
-    .map((file) => ({ name: file.path, lines: linesOf(file.path, file.bytes.toString('utf8')) }))
+    .map((file) => (isBinary(file.bytes) ? { ...file, bytes: Buffer.alloc(0) } : file))
+    .map((file) => ({ name: file.path, lines: [pathLine(file.path), ...linesOf(file.path, file.bytes.toString('utf8'))] }))
 
 const ZERO = /^0+$/
 
@@ -63,7 +67,14 @@ export const commitSources = (root: string, sha: string): Source[] => {
   const message = git(root, ['log', '-1', '--format=%B', sha])
   const diff = git(root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', '--diff-merges=first-parent', sha])
   const added = diff.split('\n').reduce(step(`commit ${short}`), { path: '', next: 0, lines: [] })
+  // Every path the commit adds or keeps, from git's own list: a rename, an empty
+  // file and a binary file name a path with no added line to carry it.
+  const paths = git(root, ['show', '--format=', '--name-only', '-z', '--diff-filter=d', '--diff-merges=first-parent', sha])
+    .split('\0')
+    .filter((path) => path.trim() !== '')
+    .map((path) => ({ where: `commit ${short} path ${path}`, text: path }))
   return [
+    { name: `commit ${short} paths`, lines: paths },
     { name: `commit ${short} message`, lines: linesOf(`commit ${short} message`, message) },
     { name: `commit ${short}`, lines: added.lines },
   ]
