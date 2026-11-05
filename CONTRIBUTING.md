@@ -21,7 +21,7 @@ Node 24.18.1 or later, from the repository root:
 
 ```bash
 npm ci
-npm test               # the gate tests
+npm test               # every capability's tests
 npm run typecheck      # tsc --noEmit
 ```
 
@@ -29,7 +29,8 @@ CI runs those, and three more: every link in every document must resolve, both
 logos must be valid SVG, and `npm run check:private` must find no private link,
 internal host name or private remote. The last one stops, rather than passing,
 on a machine that does not hold the list of the lab's machine families, which is
-a secret ([why](docs/nothing-private-gets-in.md)). CI holds it.
+a secret ([why](docs/nothing-private-gets-in.md)). CI holds it, except on a
+pull request from a fork, where the check skips that one class and says so.
 
 ## How we build
 
@@ -51,7 +52,7 @@ Martha carries the method it teaches:
   links: no private issue reference, internal host name or private remote.
   [The check](docs/nothing-private-gets-in.md) fails on one; run
   `npm run check:private` before you push, because a push is public at once.
-- Every pull request gets a review before it lands.
+- A pull request is reviewed by the maintainers' crew before it is merged.
 
 ## Licence
 
