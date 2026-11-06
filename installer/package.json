@@ -1,0 +1,59 @@
+{
+  "name": "@macula-io/martha",
+  "version": "1.0.0",
+  "description": "Install Martha from its signed public package: verifies the release's sigstore signature, then installs it",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "macula.io",
+  "homepage": "https://github.com/macula-io/martha",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/macula-io/martha.git",
+    "directory": "installer"
+  },
+  "bin": {
+    "martha-install": "bin/martha-install.mjs"
+  },
+  "files": [
+    "bin/martha-install.mjs",
+    "keep_the_names_in_one_place/names.mjs",
+    "check_the_node_version/check_the_node_version.mjs",
+    "read_the_release_registry/read_the_release_registry.mjs",
+    "verify_the_release_signature/verify_the_release_signature.mjs",
+    "unpack_the_release_layer/unpack_the_release_layer.mjs",
+    "place_the_release/place_the_release.mjs",
+    "install_a_release/install_a_release.mjs",
+    "refuse_in_words/refuse_in_words.mjs",
+    "signers.txt",
+    "npm-shrinkwrap.json",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.18.1"
+  },
+  "dependencies": {
+    "sigstore": "5.0.0"
+  },
+  "bundleDependencies": [
+    "sigstore"
+  ],
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-timeout=60000 '*/*.node-test.mjs'"
+  },
+  "martha": {
+    "image": "ghcr.io/macula-io/martha",
+    "sourceRepository": "https://github.com/macula-io/martha",
+    "signerWorkflow": "https://github.com/macula-io/macula-ci-images/.github/workflows/attest-image.yml",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "command": "martha",
+    "releaseTagPrefix": "v",
+    "installerTagPrefix": "installer-v",
+    "releaseFolder": "martha"
+  }
+}
