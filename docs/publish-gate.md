@@ -376,6 +376,68 @@ Every refusal a host returns says what clears the taint in the words of one
 constant, `WHAT_CLEARS_IT` in `src/refuse_execution_after_ungated_text/`, so
 the text cannot drift from the rule.
 
+### On Claude Code: the relay and the launcher
+
+[Issue #41](https://github.com/macula-io/martha/issues/41) has the threat
+model. A Claude Code hooks module runs with no Node and may import only its own
+files, so the core cannot run inside the host. It runs in the member's
+**launcher** (`src/launch_a_claude_code_member/`), one per member: the process
+that starts the host and that sends SIGKILL to its process group. Inside the
+host, a **relay** (`src/claude_code_relay/`, a plugin the launcher loads with
+`--plugin-dir`) posts each event over a Unix socket made for that launch alone,
+with the engine's own fields unchanged, and acts on the answer. The relay
+decides nothing.
+
+| Host event (the relay) | The launcher's call |
+|---|---|
+| settings `SessionStart` (`classic.SessionStart`: the host's `source` and `session_id`) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`; the mod's own `session.start` carries neither field |
+| `prompt.submit` (`text`, and the `origin` the engine stamped where it queued the prompt) | `takeInTurn(session, arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind), bindNothing)`; a prompt Martha itself submits comes back as `plugin`, and is recorded like any other |
+| `tool.call`, before `next` | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
+| `tool.call`, after `next` | `recheckLaunch(launch)`, then for an `mcp__` tool `takeInTurn(session, { source: 'mcp_result' }, bindNothing)` |
+
+The launcher starts the host as `prepareLaunch` says, with the owner's
+arguments first (`--mcp-config` takes every argument after it up to the next
+flag), and `launchEnvironment` plus the socket's path in `MARTHA_RELAY_SOCKET`.
+It records the launch with the writable store it alone holds (#42). When the
+member exits, the launcher kills the member's group, drops the launch record,
+and removes the socket directory and the snapshot.
+
+**Failing closed, per event.** Anything but the exact shape of a yes counts as
+a no: the launcher unreachable, no answer within `RELAY_DEADLINE_MS`, a status
+other than 200, an answer with a field missing or one too many, a hook that
+throws or overruns its budget (each gating hook has a `.catch`):
+
+- a prompt is dropped and never enters the session;
+- a tool call before it runs is denied;
+- after a tool ran, the member is stopped. The launcher kills the group and
+  never answers. A relay that cannot hear the launcher kills its own group and
+  holds the hook, with a host call in flight so no budget runs out;
+- a session start the launcher did not take leaves the session with no record
+  there, so every prompt and tool call of that session is refused.
+
+Inside the launcher, a session whose record cannot be kept (`ROW_NOT_DURABLE`,
+`ROW_STREAM_MOVED`, a rows directory that no longer vouches for its rows, a row
+another writer added) is refused for the rest of the process. Its prompts are
+dropped and its tools denied, and after a tool ran the member is stopped.
+
+The socket's directory is made new for each launch, mode 0700, in a parent
+owned by this user that nobody else may write. A path that already exists, a
+link, a parent that is a link or that others may write, or a socket path too
+long for an address refuses the launch.
+
+**T13, accepted under A13.** A process of the same OS user can connect to that
+socket and claim any origin, a typed turn included. This is the same-user
+tampering the owner accepted until the signed roster (martha#1 decision 1,
+martha#24): that process could already rewrite the session records, the
+launch records and the row store. A secret held only by the relay would not
+close it: anything this user runs can read the host's environment and memory.
+
+What the wiring leaves out: A6, until the host passes the attested sender to
+plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the
+launcher handing a turn to the model or registering a tool (no slice does
+either yet); and reading approvals and the policy from the crew's declaration
+(the caller passes them until port-map step 2 lands).
+
 ### Who sent a cross-session message
 
 `src/attribute_a_cross_session_sender/` is the binder on the A6 row. It exists so
