@@ -5,8 +5,9 @@
 //   names           a path of at most 1024 bytes and each part of at most 255, measured after pax and GNU long names
 //                   are applied; a pax record or long name over 1024 bytes is refused before it is parsed.
 // Then the entries: only regular files, directories and symlinks; no absolute path, no '..' (refused, never
-// stripped), no whiteout, one top-level martha/; a symlink's target relative and inside martha/; no entry under a
-// symlink, no entry twice. Directories are made first, then files, then symlinks, so nothing is ever written
+// stripped), no whiteout, one top-level martha/; a symlink's target relative and, followed part by part through every
+// link in the package, never leaving martha/ even for a step, in at most 40 links (as the kernel allows); no entry
+// under a symlink, no entry twice. Directories are made first, then files, then symlinks, so nothing is ever written
 // through a link. Modes are 0644 and 0755 (an executable bit in the header), and the tree is made read-only once it
 // is whole.
 import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises'
@@ -20,7 +21,8 @@ export const UNPACK_LIMITS = Object.freeze({
   unpackedBytes: 256 * 1024 * 1024,
   entries: 4096,
   pathBytes: 1024,
-  partBytes: 255
+  partBytes: 255,
+  linkHops: 40
 })
 
 const BLOCK = 512
@@ -160,8 +162,35 @@ const ancestors = (path) => path.split('/').slice(0, -1).map((_, i, parts) => pa
 /** @param {string} path @param {string} target */
 function checkLink (path, target) {
   if (target === '' || target.startsWith('/')) refuse(`the package links ${path} to ${target || 'nothing'}, not a relative path; refused`)
-  const resolved = posix.normalize(posix.join(posix.dirname(path), target))
-  if (resolved !== TOP && !resolved.startsWith(`${TOP}/`)) refuse(`the package links ${path} outside ${TOP}/ (${target}); refused`)
+}
+
+/**
+ * A link's target walked as the kernel walks it: part by part from the link's folder, following every link of the
+ * plan it passes through. A '..' that would leave martha/ is refused at that step, so no detour outside counts as
+ * inside; more than UNPACK_LIMITS.linkHops links followed is refused, which ends any cycle.
+ * @param {Map<string, Entry>} plan
+ * @param {Entry} link
+ */
+function walkLink (plan, link) {
+  const outside = () => refuse(`the package links ${link.path} outside ${TOP}/ (${link.target}); refused`)
+  let at = posix.dirname(link.path).split('/')
+  const rest = link.target.split('/')
+  let hops = 0
+  for (let part = rest.shift(); part !== undefined; part = rest.shift()) {
+    if (part === '' || part === '.') continue
+    if (part === '..') {
+      if (at.length === 1) outside()
+      at = at.slice(0, -1)
+      continue
+    }
+    at = [...at, part]
+    const through = plan.get(at.join('/'))
+    if (through?.kind !== 'symlink') continue
+    hops += 1
+    if (hops > UNPACK_LIMITS.linkHops) refuse(`the package links ${link.path} through more than ${UNPACK_LIMITS.linkHops} links; refused`)
+    at = at.slice(0, -1)
+    rest.unshift(...through.target.split('/'))
+  }
 }
 
 /**
@@ -179,6 +208,7 @@ export function planEntries (entries) {
     plan.set(path, { ...entry, path })
   }
   if (plan.get(TOP)?.kind === 'symlink') refuse(`the package's ${TOP} is a link; refused`)
+  for (const link of plan.values()) if (link.kind === 'symlink') walkLink(plan, link)
   for (const path of plan.keys()) {
     const under = ancestors(path).find((a) => plan.get(a)?.kind === 'symlink')
     if (under) refuse(`the package writes ${path} under the link ${under}; refused`)
