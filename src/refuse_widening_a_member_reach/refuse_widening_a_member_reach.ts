@@ -1,6 +1,8 @@
-// What a member may not do to who can reach it: serve a procedure, or change its own contact list.
+// The mesh tools a member may not call: the ones that serve a procedure or change its contact list.
 //
-// This exists so text a member takes in cannot leave behind a way in that outlives the session (martha#48).
+// This exists so a member cannot use the mesh tools to leave behind a way in that outlives the session
+// (martha#48). It does not stop a member writing the contact-policy file from its shell, or starting a
+// mesh process of its own that serves; signing that file is macula-io/macula-mcp#79.
 //
 // Two tools of the mesh server widen what reaches a member, and neither is a read, so the room gate
 // (../read_a_room_through_its_gate) does not answer them:
@@ -26,7 +28,7 @@ export const MESH_TOOLS_THAT_WIDEN_REACH: readonly string[] = ['mesh_serve', 'me
 export const WHO_DECIDES_REACH =
   "who can reach a member is the owner's decision, made in the crew's declaration and its launcher, never by a member's call"
 
-/** True when the call would change who or what can reach this member. */
+/** True when the call is one of the mesh tools that change who or what can reach this member. */
 export function widensMemberReach(tool: string, names: ToolNames): boolean {
   return MESH_TOOLS_THAT_WIDEN_REACH.includes(names.ownNameOf(tool))
 }

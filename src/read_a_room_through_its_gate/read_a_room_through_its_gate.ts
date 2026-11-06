@@ -90,9 +90,10 @@ export const MESH_TOOLS_THAT_RUN: readonly string[] = [
 ]
 
 /**
- * The mesh tools that are refused, by their own name: each hands the model a
- * room's or another agent's text that no gate has seen (B1), or changes who can
- * reach the member (../refuse_widening_a_member_reach, martha#48). At run time
+ * The mesh tools that are refused, by their own name. The first three change
+ * who or what can reach the member (../refuse_widening_a_member_reach,
+ * martha#48); every other one hands the model a room's or another agent's text
+ * that no gate has seen (B1). At run time
  * they are refused because MESH_TOOLS_THAT_RUN does not name them; this list is
  * the other half of the decision, and the coverage check proves the two halves
  * cover every tool the recorded server registers (./mesh_server_tools.ts).
