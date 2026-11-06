@@ -14,7 +14,8 @@ import {
   startFreshSession,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { gapsInGateCoverage } from './check_every_path_is_gated.ts'
+import { CLAUDE_CODE_EMITTED_SESSION_EVENTS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { gapsInGateCoverage, gapsInSessionEvents } from './check_every_path_is_gated.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -344,4 +345,23 @@ test('a gate that takes an empty read for an empty checkout is caught', () => {
     LAUNCHED,
   )
   assert.match(gaps[0]?.why ?? '', /admits a request whose config was never read/)
+})
+
+// --- every session event the host emits is declared ---------------------------
+
+test('every session event the Claude Code host emits is declared', () => {
+  assert.deepEqual(gapsInSessionEvents(), [])
+})
+
+test('a planted session event the declaration does not list turns the check red, by name', () => {
+  const gaps = gapsInSessionEvents(undefined, [...CLAUDE_CODE_EMITTED_SESSION_EVENTS, 'resume_fork'])
+  assert.equal(gaps.length, 1)
+  assert.match(gaps[0]?.path ?? '', /resume_fork/)
+})
+
+test('a declared session event the host stops emitting turns the check red, by name', () => {
+  const emitted = CLAUDE_CODE_EMITTED_SESSION_EVENTS.filter((event) => event !== 'crew_refresh')
+  const gaps = gapsInSessionEvents(undefined, emitted)
+  assert.equal(gaps.length, 1)
+  assert.match(gaps[0]?.path ?? '', /crew_refresh/)
 })

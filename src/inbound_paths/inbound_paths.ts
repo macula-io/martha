@@ -35,8 +35,10 @@ export type PathClass = 'delivered' | 'fetched' | 'launched'
  *
  * - `roster` — a crew roster checked the sender before delivery.
  * - `station` — the mesh station attested the caller.
- * - `host-binder` — the host's binder resolves the sending socket to a node id
- *   (martha#14). Until it exists, a delivery on this path carries no identity.
+ * - `host-binder` — the host attests the sending process and the binder
+ *   (../attribute_a_cross_session_sender, martha#14) resolves it to a node id
+ *   through the launcher's record. A host that attests no sender binds nothing,
+ *   and a delivery on this path then carries no identity.
  * - `none` — nobody attests the sender.
  */
 export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'none'

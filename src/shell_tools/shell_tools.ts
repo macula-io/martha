@@ -16,9 +16,11 @@ export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'] as const
 // MCP tools that only read. Keyed on the server's own names: a plugin-namespaced
 // copy of the same tool does not match, and is therefore treated as executing.
 // That is noisy and safe, which is the right way round.
+//
+// The raw mesh reads are not here: whether a tool may run while tainted and
+// whether it may run at all are different questions, and the raw reads are
+// refused at all (../read_a_room_through_its_gate).
 const READ_ONLY_MCP_TOOLS = new Set([
-  'mcp__macula__mesh_read_inbox',
-  'mcp__macula__mesh_rooms',
   'mcp__macula__mesh_agents',
   'mcp__macula__mesh_list_realms',
   'mcp__macula__mesh_list_stations',
@@ -27,8 +29,6 @@ const READ_ONLY_MCP_TOOLS = new Set([
   'mcp__macula__mesh_find_record',
   'mcp__macula__mesh_find_records_by_type',
   'mcp__macula__mesh_recall',
-  'mcp__macula__mesh_read_node_events',
-  'mcp__macula__mesh_lobby_transcript',
 ])
 
 /** True only for a tool that reads and cannot make anything happen. */
