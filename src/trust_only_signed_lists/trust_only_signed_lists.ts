@@ -24,8 +24,11 @@
 //      cannot be the anchor. The signature must carry the user-presence flag.
 //
 //   3. BOUND, NUMBERED, EXPIRING. The document names its crew and its kind, has
-//      an epoch, and has an expiry no more than MAXIMUM_LIFETIME_DAYS away. A
-//      list signed for another crew or kind, an expired one, one older than the
+//      an epoch, and signs when it was issued and when it expires, at most
+//      MAXIMUM_LIFETIME_DAYS apart. The cap counts from the signed issue date,
+//      not from now: counted from now, a list signed to live ten years would
+//      open in its final MAXIMUM_LIFETIME_DAYS. One issued in the future is
+//      refused too. A list signed for another crew or kind, an expired one, one older than the
 //      newest this verifier has opened, and a different list at the epoch
 //      already opened are all refused. Otherwise a valid old roster that still
 //      lists a removed member could be put back, or a second list signed at the
@@ -77,12 +80,12 @@ export const LIST_FIELD = {
 export type TrustListKind = keyof typeof LIST_FIELD
 
 /** Every field a trust list document has, and nothing else. */
-const DOCUMENT_FIELDS = ['body', 'crew', 'epoch', 'expires_at', 'kind'] as const
+const DOCUMENT_FIELDS = ['body', 'crew', 'epoch', 'expires_at', 'issued_at', 'kind'] as const
 
 /** The kind whose entries pair a member's name with its node id, not bare node ids. */
 const MEMBERS_KIND = 'members' satisfies TrustListKind
 
-/** The furthest ahead an expiry may be: a list lives at most this long. */
+/** The longest a list may live, from its signed issue date to its expiry. */
 export const MAXIMUM_LIFETIME_DAYS = 366
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -187,11 +190,14 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   if (document.kind !== input.kind) return `the document is a ${String(document.kind)}`
   if (document.crew !== input.crew) return 'the document is signed for another crew'
 
-  const expires = typeof document.expires_at === 'string' ? Date.parse(document.expires_at) : Number.NaN
+  const issued = instantOf(document.issued_at)
+  if (Number.isNaN(issued)) return 'the issue date cannot be read'
+  const expires = instantOf(document.expires_at)
   if (Number.isNaN(expires)) return 'the expiry cannot be read'
+  if (issued > input.now.getTime()) return 'the document is issued in the future'
   if (input.now.getTime() >= expires) return 'the document has expired'
-  if (expires - input.now.getTime() > MAXIMUM_LIFETIME_DAYS * DAY_MS) {
-    return `the document expires more than ${MAXIMUM_LIFETIME_DAYS} days from now`
+  if (expires - issued > MAXIMUM_LIFETIME_DAYS * DAY_MS) {
+    return `the document lives more than ${MAXIMUM_LIFETIME_DAYS} days from its issue date`
   }
 
   const entries = entriesOf(input.kind, document.body)
@@ -207,6 +213,10 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   }
 
   return { entries, members: membersOf(entries), epoch, digest }
+}
+
+function instantOf(value: unknown): number {
+  return typeof value === 'string' ? Date.parse(value) : Number.NaN
 }
 
 function parsed(document: Buffer | undefined): Record<string, unknown> | string {

@@ -348,9 +348,11 @@ So each list is a document the owner signs, opened by `openTrustList`
   refused, so a key file a member's user can read is never the anchor, and the
   signature must carry the user-presence flag that a touch sets.
 - **Bound, numbered, expiring.** A document names its `crew` and `kind` and has
-  an `epoch` and an `expires_at`, and no other field: a document cannot carry a
-  key of its own. A list for another crew or kind, an expired one, one that
-  expires more than `MAXIMUM_LIFETIME_DAYS` ahead, one older than the newest
+  an `epoch`, an `issued_at` and an `expires_at`, and no other field: a document
+  cannot carry a key of its own. A list for another crew or kind, an expired
+  one, one issued in the future, one whose `expires_at` is more than
+  `MAXIMUM_LIFETIME_DAYS` after its `issued_at` (counted from the signed issue
+  date, so a long-lived list cannot open in its final days), one older than the newest
   epoch the verifier has opened, and a different list at that same epoch are
   refused. The verifier's `EpochStore` keeps the epoch and a digest of the list
   it opened, and it must persist across processes where the member's user
