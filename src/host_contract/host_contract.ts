@@ -20,7 +20,7 @@
 //
 // The core imports nothing but its own slices and Node's standard library, so
 // this contract is the only way it reaches a coding tool. A test fails by name
-// on any other import; the check is in imports_beyond_the_core.ts. This file
+// on any other import; the check is in prove_the_core/imports_beyond_the_core.ts. This file
 // imports nothing at all: every slice depends on the contract, never the reverse.
 
 /** The time, in milliseconds since the Unix epoch. */
