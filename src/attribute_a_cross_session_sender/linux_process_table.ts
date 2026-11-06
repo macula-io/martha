@@ -1,31 +1,50 @@
-// When a process started, as the Linux kernel says it.
+// When a process started, as the Linux kernel says it, boot included.
 //
 // Field 22 of /proc/<pid>/stat is the process's start time in clock ticks since
 // boot. A pid the kernel hands out again goes to a process with another start
-// time, which is what lets a launch record die with its process.
+// time, which is what lets a launch record die with its process. Ticks since
+// boot repeat after a reboot, so the start time also names the boot, from
+// /proc/sys/kernel/random/boot_id, which the kernel draws afresh at every boot.
+// A record from another boot is dead; a boot that cannot be read is no boot,
+// and nobody binds.
 //
-// The second field is the command name in parentheses and may itself hold spaces
-// or parentheses, so the fields are counted from the last closing parenthesis.
-// Where there is no /proc (another kernel), every process reads as absent and the
-// binder binds nobody.
+// The second field of the stat line is the command name in parentheses and may
+// itself hold spaces or parentheses, so the fields are counted from the last
+// closing parenthesis. Where there is no /proc (another kernel), every process
+// reads as absent and the binder binds nobody.
 
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import type { ProcessTable } from './attribute_a_cross_session_sender.ts'
 
 /** The start time's place among the fields that follow the command name (field 3 onwards). */
 const START_TIME_AFTER_COMMAND = 22 - 3
 
-export const linuxProcessTable: ProcessTable = {
-  startTimeOf(pid) {
-    if (!Number.isSafeInteger(pid) || pid <= 0) return null
+/** Where the kernel says which boot this is, under its /proc. */
+const BOOT_ID = join('sys', 'kernel', 'random', 'boot_id')
 
-    const stat = statOf(pid)
-    if (stat === undefined) return null
+/** A boot id as the kernel writes it. */
+const BOOT_ID_FORM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-    return startTimeIn(stat)
-  },
+/** The process table under a /proc root; the live kernel's is `linuxProcessTable`. */
+export function procProcessTable(proc_root: string): ProcessTable {
+  return {
+    startTimeOf(pid) {
+      if (!Number.isSafeInteger(pid) || pid <= 0) return null
+
+      const boot = bootOf(proc_root)
+      const stat = textOf(join(proc_root, String(pid), 'stat'))
+      if (boot === null || stat === undefined) return null
+
+      const ticks = startTimeIn(stat)
+      return ticks === null ? null : `${boot}/${ticks}`
+    },
+  }
 }
+
+/** The live kernel's process table. */
+export const linuxProcessTable: ProcessTable = procProcessTable('/proc')
 
 /** The start time in one /proc/<pid>/stat line, or null when the line is not one. */
 export function startTimeIn(stat: string): string | null {
@@ -36,9 +55,14 @@ export function startTimeIn(stat: string): string | null {
   return start_time !== undefined && /^\d+$/.test(start_time) ? start_time : null
 }
 
-function statOf(pid: number): string | undefined {
+function bootOf(proc_root: string): string | null {
+  const boot = textOf(join(proc_root, BOOT_ID))?.trim()
+  return boot !== undefined && BOOT_ID_FORM.test(boot) ? boot : null
+}
+
+function textOf(path: string): string | undefined {
   try {
-    return readFileSync(`/proc/${pid}/stat`, 'utf8')
+    return readFileSync(path, 'utf8')
   } catch {
     return undefined
   }

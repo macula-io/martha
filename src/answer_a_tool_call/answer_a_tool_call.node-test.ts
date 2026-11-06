@@ -110,3 +110,20 @@ test('every tool that executes is refused, by whatever name the host uses', () =
     denied(answerToolCall({ tool, session: tainted, policy }))
   }
 })
+
+test('a tainted member cannot send: every tool that hands text to someone else is refused', () => {
+  // The threat model on martha#14 once said a tainted member could still send.
+  // It cannot: sending is acting, and only tools that read stay allowed.
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
+  const sends = [
+    'SendMessage',
+    'mcp__macula__mesh_say',
+    'mcp__macula__mesh_publish',
+    'mcp__macula__mesh_ring',
+    'mcp__macula__mesh_call',
+    'mcp__macula__mesh_answer_ring',
+    'mcp__macula__mesh_remember',
+    'mcp__crew__crew_mail_send',
+  ]
+  for (const tool of sends) denied(answerToolCall({ tool, session: tainted, policy }))
+})

@@ -40,7 +40,11 @@ export interface MemberLaunch {
   readonly node_id: string
   /** The process the launcher started for the member. */
   readonly pid: number
-  /** When the kernel says that process started, as the launcher read it at launch. */
+  /**
+   * When the kernel says that process started, as the launcher read it at launch:
+   * which boot, and when in that boot. A pid and its start ticks repeat across a
+   * reboot; the boot does not.
+   */
   readonly process_started_at: string
 }
 
@@ -53,16 +57,26 @@ export interface AttestedSender {
   readonly sending_pid: number
 }
 
-/** Where the launcher's records live. Only the launcher writes them. */
+/**
+ * Where the launcher's records live, one per member. Only the launcher writes
+ * them. One record per member, so two launches at once never write over each
+ * other's record: there is no shared list to read, change and write back.
+ */
 export interface MemberLaunchStore {
   /** Every record, or none when the store cannot vouch for what it holds. */
   launches(): readonly MemberLaunch[]
-  write(launches: readonly MemberLaunch[]): void
+  /** Keep this member's record, in place of any it had. */
+  keep(launch: MemberLaunch): void
+  /** Drop this member's record. */
+  drop(member_name: string): void
 }
 
 /** The kernel's view of a process. */
 export interface ProcessTable {
-  /** When the process with this pid started, or null when no process has it. */
+  /**
+   * When the process with this pid started, boot included, or null when no
+   * process has it or the boot cannot be told.
+   */
   startTimeOf(pid: number): string | null
 }
 
@@ -81,6 +95,9 @@ export interface Launched {
 
 export type LaunchRecorded = { readonly recorded: true } | { readonly recorded: false; readonly refusal: string }
 
+/** A member's name, as a record may carry it: it also names the member's record. */
+export const MEMBER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+
 /**
  * Record that the launcher started a member.
  *
@@ -90,8 +107,8 @@ export type LaunchRecorded = { readonly recorded: true } | { readonly recorded: 
  * goes with it: one member, one process, one record.
  */
 export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessTable, launched: Launched): LaunchRecorded {
-  if (launched.member_name.trim() === '') {
-    return { recorded: false, refusal: 'A member launch is not recorded: the member has no name.' }
+  if (!MEMBER_NAME.test(launched.member_name)) {
+    return { recorded: false, refusal: 'A member launch is not recorded: the member name is not a name a record can carry.' }
   }
   if (!NODE_ID.test(launched.node_id)) {
     return { recorded: false, refusal: `A launch of ${launched.member_name} is not recorded: its node id is not a node id.` }
@@ -109,17 +126,19 @@ export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessT
   }
 
   const node_id = launched.node_id.toLowerCase()
-  const kept = store
-    .launches()
-    .filter((launch) => launch.member_name !== launched.member_name && launch.pid !== launched.pid && launch.node_id !== node_id)
+  for (const stale of store.launches()) {
+    if (stale.member_name !== launched.member_name && (stale.pid === launched.pid || stale.node_id === node_id)) {
+      store.drop(stale.member_name)
+    }
+  }
 
-  store.write([...kept, { member_name: launched.member_name, node_id, pid: launched.pid, process_started_at }])
+  store.keep({ member_name: launched.member_name, node_id, pid: launched.pid, process_started_at })
   return { recorded: true }
 }
 
 /** Record that the launcher stopped a member: its record goes. */
 export function recordMemberStopped(store: MemberLaunchStore, member_name: string): void {
-  store.write(store.launches().filter((launch) => launch.member_name !== member_name))
+  store.drop(member_name)
 }
 
 /**

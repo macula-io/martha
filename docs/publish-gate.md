@@ -231,17 +231,25 @@ The rules it keeps, from the threat model on martha#14:
   pid now belongs to a process that started at another time, is dead: a reused
   pid or a socket bound at a dead member's path inherits nothing. A relaunch
   replaces the member's record.
-- **Never silently widen.** No record, two records for one pid, or a records file
-  that is missing, malformed, a link, or open to anyone but its owner: nobody.
+- **A record is valid for one boot.** A pid and its start ticks repeat after a
+  reboot, so the start time also names the boot (the kernel's `boot_id`). A
+  record from another boot, or a boot that cannot be read, is dead.
+- **Never silently widen.** No record, two records for one pid, or a records
+  directory holding anything the launcher would not write: nobody.
 
-`memberLaunchesFile(path)` keeps the records in one file that only its owner may
-read or write, replaced whole so a reader never sees half of it.
-`linuxProcessTable` reads a process's start time from `/proc`; where there is no
-`/proc`, every process reads as absent and nobody binds.
+`memberLaunchesDirectory(directory)` keeps one file per member, so two launches
+at once never write over each other's record. Each file is written whole and
+renamed into place. Read back, the directory vouches for nothing unless it is a
+real directory owned by this user that nobody else may write into, holds only
+records, and every record is opened without following a link and checked on the
+opened file itself (a regular file, owned by this user, mode `0600`, one row that
+names the member its file is named for) before that same file is read.
+`linuxProcessTable` reads a process's start time and the boot from `/proc`;
+where there is no `/proc`, every process reads as absent and nobody binds.
 
 **The residual, accepted for now:** every member runs as the same OS user, so a
-member that already holds a shell can rewrite the records file or read another
-member's mesh key. The file's mode is a speed bump, not a boundary. The signed
+member that already holds a shell can rewrite the records or read another
+member's mesh key. The modes and owners checked are speed bumps, not a boundary. The signed
 roster (#2 item 7) closes it; running untrusted checkout code under a member is
 [#24](https://github.com/macula-io/martha/issues/24).
 
