@@ -38,6 +38,10 @@ martha-install [<version>] [--downgrade] [--digest sha256:<hex>]
    package under a `dry-run-<run>-<attempt>` tag, which is never a version, so no install ever takes it. It signs it
    through the same signing workflow, then checks that the signature verifies for that branch and is refused for
    `refs/tags/v<version>`, that an unsigned image is refused, and that the layer is exactly the committed tree.
+   Its two tags are kept in the public package, not pruned: one pair per run, and runs are started by hand.
+   Neither is ever installed: no tag of that shape is a version, and the signature is for a branch, so an install,
+   which demands `refs/tags/v<version>`, refuses it. Pruning would need a workflow that can delete package versions,
+   and none of Martha's workflows holds that power. A maintainer may delete old ones by hand in the package settings.
 2. The first dry run is what makes the release package. The maintainers then link it to this repository and make it
    public, before any release tag: every install pulls anonymously, and a refused pull must never read as
    "unsigned".
