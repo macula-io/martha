@@ -17,6 +17,7 @@
     "typescript": "^5.9.3"
   },
   "martha": {
+    "hostContract": "src/host_contract",
     "hostGlue": [
       "src/linux_process_identity"
     ]

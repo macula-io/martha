@@ -202,6 +202,24 @@ test('every malformed field is refused by its name', async () => {
   for (const [declaration, field] of cases) await refusedWith(declaration, field)
 })
 
+// --- folded in from review r=3 ----------------------------------------------
+
+test('a field that is not an object is refused with its shape, naming every key it takes', async () => {
+  const shapes: [unknown, string, readonly string[]][] = [
+    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?']],
+    [{ ...team, mode: 'team' }, 'mode', Object.keys(team.mode)],
+    [{ ...team, mode: { ...team.mode, may: [] } }, 'mode.may', Object.keys(team.mode.may)],
+  ]
+  for (const [declaration, field, keys] of shapes) {
+    await assert.rejects(declare(declaration).settings, (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused)
+      assert.equal(error.field, field)
+      assert.ok(error.message.endsWith(`is not { ${keys.join(', ')} }`), error.message)
+      return true
+    })
+  }
+})
+
 // --- 4. unknown switches and roles --------------------------------------------
 
 test('a misspelt house rule is refused by name, so it cannot leave a rule off unseen', async () => {

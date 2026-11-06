@@ -273,6 +273,70 @@
           5
         ]
       }
+    ],
+    "Function reached through constructor (review r=3)": [
+      {
+        "text": "const env = [].constructor.constructor('return process.env')()\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const env = ({})['constructor']['constructor']('return process')().env\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor\nconst run = new AsyncFunction('return process.env')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const { constructor: make } = () => {}\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const make = (() => {})[`constructor`]\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "class Box {\n  constructor() {}\n}\nconst make = new Box().constructor\n",
+        "lines": [
+          4
+        ]
+      }
+    ],
+    "the network, as a global (review r=3)": [
+      {
+        "text": "const reply = await fetch('https://example.org/settings')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const socket = new WebSocket('wss://example.org')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const events = new EventSource('https://example.org/stream')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const get = globalThis.fetch\n",
+        "lines": [
+          1
+        ]
+      }
     ]
   },
   "quiet": [
@@ -293,6 +357,59 @@
     "const o = { process: 1, global: 2 }",
     "interface Host { process: string }",
     "function f(eval_text: string) { return eval_text }",
-    "import { createHash } from 'node:crypto'"
-  ]
+    "import { createHash } from 'node:crypto'",
+    "class Box {\n  constructor(readonly size: number) {}\n}\nconst box = new Box(1)",
+    "const words = 'a constructor of boxes'\ntype Maker = { constructor: Function }"
+  ],
+  "glue": {
+    "_why": "Planted host glue sources for glueReachesBeyondTheContract, judged at <a host glue directory>/planted.ts. {contract} is replaced with the host contract's directory from package.json.",
+    "caught": [
+      {
+        "text": "import { settingsFrom } from '../declare_crew/declare_crew.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import type { Settings } from '../declare_crew/declare_crew.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import ts from 'typescript'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import fs from 'fs'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const name = 'node:' + 'fs'\nconst fs = await import(name)\n",
+        "lines": [
+          2
+        ]
+      },
+      {
+        "text": "import { x } from '../../outside.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "export { x } from '../declare_crew/declare_crew.ts'\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "quiet": [
+      "import fs from 'node:fs'\nimport { join } from 'node:path'\nimport type { Processes } from '../{contract}/host_contract.ts'",
+      "const env = process.env\nconst fs = await import('node:fs')"
+    ]
+  }
 }

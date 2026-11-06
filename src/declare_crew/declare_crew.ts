@@ -95,8 +95,14 @@ export class DeclarationRefused extends Error {
 }
 
 const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions'] as const
-const MEMBER_KEYS = ['name', 'role', 'model'] as const
+const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
+const OPTIONAL_MEMBER_KEYS = ['model'] as const
+const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
 const MODE_KEYS = ['name', 'roles', 'may'] as const
+
+// What a field must look like, written from its keys: `{ a, b, c? }`.
+const shapeOf = (required: readonly string[], optional: readonly string[] = []) =>
+  `{ ${[...required, ...optional.map(key => `${key}?`)].join(', ')} }`
 const HOUSE_RULE_KEYS: readonly string[] = [...HOUSE_RULE_SWITCHES, REVIEW_MODEL]
 
 type Json = Record<string, unknown>
@@ -172,7 +178,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
 }
 
 function modeOf(refuse: Refuse, value: unknown): Mode {
-  if (!isObject(value)) return refuse.at('mode', 'is not { name, roles, may }')
+  if (!isObject(value)) return refuse.at('mode', `is not ${shapeOf(MODE_KEYS)}`)
   refuse.unknownKeys(value, MODE_KEYS, 'mode.')
   if (!isText(value['name'])) refuse.at('mode.name', 'is not a name')
   const roles = rolesOf(refuse, value['roles'])
@@ -190,7 +196,7 @@ function rolesOf(refuse: Refuse, value: unknown): string[] {
 }
 
 function mayOf(refuse: Refuse, value: unknown, roles: readonly string[]): Record<Act, string[]> {
-  if (!isObject(value)) return refuse.at('mode.may', `is not { ${ACTS.join(', ')} }`)
+  if (!isObject(value)) return refuse.at('mode.may', `is not ${shapeOf(ACTS)}`)
   refuse.unknownKeys(value, ACTS, 'mode.may.')
   const allowed = [OWNER, ...roles]
   const whoMay = (act: Act): string[] => {
@@ -211,7 +217,7 @@ function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Me
   const seen = new Set<string>()
   return value.map((member: unknown, i) => {
     const at = `members[${i}]`
-    if (!isObject(member)) return refuse.at(at, 'is not { name, role, model? }')
+    if (!isObject(member)) return refuse.at(at, `is not ${shapeOf(REQUIRED_MEMBER_KEYS, OPTIONAL_MEMBER_KEYS)}`)
     refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
     const { name, role, model } = member
     if (typeof name !== 'string' || !MEMBER_NAME.test(name)) refuse.at(`${at}.name`, `is not a name matching ${MEMBER_NAME}`)
@@ -227,7 +233,7 @@ function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Me
 
 function houseRulesOf(refuse: Refuse, value: unknown): HouseRules {
   if (value === undefined) return houseRulesFrom({})
-  if (!isObject(value)) return refuse.at('house_rules', `is not { ${HOUSE_RULE_KEYS.join(', ')} }`)
+  if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
   for (const name of HOUSE_RULE_SWITCHES) {
     if (value[name] !== undefined && typeof value[name] !== 'boolean') refuse.at(`house_rules.${name}`, 'is not true or false')

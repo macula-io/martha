@@ -11,13 +11,20 @@
 // string, a comment, a regular expression or a line break can neither hide code
 // nor pass for it. In a slice:
 //
-// - a module may be imported only when it is another slice (a relative path that
-//   stays inside src/) or a Node module on the allow-list below. Anything else,
-//   and any module whose name is computed, is named. An allow-list, because a
-//   deny-list misses the next way in (createRequire, reading /proc, running a
-//   shell). An import that is only a type is erased, so it is not judged;
-// - the globals through which a slice could reach the environment or run text as
-//   code are named wherever they are used as a value;
+// - a module may be imported only when it is another slice (a relative path whose
+//   target the caller's isSlice accepts) or a Node module on the allow-list
+//   below. Anything else, and any module whose name is computed, is named. An
+//   allow-list, because a deny-list misses the next way in (createRequire,
+//   reading /proc, running a shell, or importing the host glue or a program,
+//   which may do all of those). An import that is only a type is erased, so it is
+//   not judged;
+// - the globals through which a slice could reach the environment, the network,
+//   or run text as code are named wherever they are used as a value;
+// - the name `constructor`, as a property, an element key or a destructured
+//   field, is named: every function's constructor is Function, so
+//   `[].constructor.constructor('return process')()` reaches the environment
+//   without naming a global. A class's own `constructor() {}` declaration is
+//   not a use of the name, so it stays allowed;
 // - a string that is a path from the home directory (`~` alone or `~/...`) is
 //   named;
 // - a file the parser cannot read is named, since nothing in it can be proved.
@@ -25,6 +32,10 @@
 // Which files are slices is the caller's to say: the test derives the files that
 // are not (tests, the programs CI runs, and the host glue that implements the
 // contract on one machine) from package.json, where they are declared.
+//
+// The host glue gets the reverse rule (glueReachesBeyondTheContract): it may
+// import the host contract it implements and Node's own modules, and nothing
+// else, so it cannot become the door through which a slice's code runs.
 
 import { dirname, join, normalize, sep } from 'node:path'
 
@@ -36,7 +47,16 @@ import { lineOf, moduleReferencesIn, nodesOf, parseSource } from './parse_a_sour
 export const NODE_MODULES_A_SLICE_MAY_IMPORT = ['node:path', 'node:crypto'] as const
 
 /** The globals a slice may not use as a value. */
-export const GLOBALS_A_SLICE_MAY_NOT_USE = ['process', 'globalThis', 'global', 'require', 'eval', 'Function'] as const
+export const GLOBALS_A_SLICE_MAY_NOT_USE = [
+  'process', 'globalThis', 'global', 'require', 'eval', 'Function',
+  'fetch', 'WebSocket', 'EventSource',
+] as const
+
+/** The property every function carries, whose own constructor is Function. */
+export const REACHES_FUNCTION = 'constructor'
+
+/** The prefix of Node's own modules, the only modules besides the contract that host glue may import. */
+export const NODE_MODULE_PREFIX = 'node:'
 
 /** A path whose first segment is the home directory: `~` alone, or `~/...`. */
 export const STARTS_AT_HOME = /^~(?:\/|$)/
@@ -56,19 +76,26 @@ export interface Finding {
 const isAllowedNodeModule = (specifier: string) =>
   (NODE_MODULES_A_SLICE_MAY_IMPORT as readonly string[]).includes(specifier)
 
-// A relative specifier names another slice only while it stays inside src/.
-const staysInsideTheCore = (path: string, specifier: string) => {
+/** Says whether a path relative to src/ is a slice of the core. */
+export type IsSlice = (path: string) => boolean
+
+const isRelative = (specifier: string) => specifier.startsWith('./') || specifier.startsWith('../')
+
+// Where a relative specifier lands, relative to src/; null when it leaves src/.
+const targetOf = (path: string, specifier: string): string | null => {
   const target = normalize(join(dirname(path), specifier))
-  return target !== '..' && !target.startsWith(`..${sep}`)
+  return target === '..' || target.startsWith(`..${sep}`) ? null : target
 }
 
-function importFindings(path: string, file: ts.SourceFile): Finding[] {
+function importFindings(path: string, file: ts.SourceFile, isSlice: IsSlice): Finding[] {
   return moduleReferencesIn(file)
     .filter(reference => !reference.type_only)
     .flatMap(({ specifier, line }) => {
       if (specifier === null) return [{ path, line, why: 'imports a module whose name is computed' }]
-      if (specifier.startsWith('./') || specifier.startsWith('../')) {
-        return staysInsideTheCore(path, specifier) ? [] : [{ path, line, why: `imports ${specifier}, outside the core` }]
+      if (isRelative(specifier)) {
+        const target = targetOf(path, specifier)
+        if (target === null) return [{ path, line, why: `imports ${specifier}, outside the core` }]
+        return isSlice(target) ? [] : [{ path, line, why: `imports ${specifier}, which is not a slice` }]
       }
       return isAllowedNodeModule(specifier) ? [] : [{ path, line, why: `imports ${specifier}, which a slice may not` }]
     })
@@ -85,8 +112,7 @@ function isUsedAsAValue(node: ts.Identifier): boolean {
   if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return false
   // A declaration, a property assignment or a member names its own name: not a use of a global.
   if ('name' in parent && parent.name === node) return false
-  for (let at: ts.Node = parent; !ts.isSourceFile(at); at = at.parent) if (ts.isTypeNode(at)) return false
-  return true
+  return !isInAType(node)
 }
 
 function globalFindings(path: string, file: ts.SourceFile, nodes: readonly ts.Node[]): Finding[] {
@@ -94,6 +120,24 @@ function globalFindings(path: string, file: ts.SourceFile, nodes: readonly ts.No
     .filter((node): node is ts.Identifier => ts.isIdentifier(node))
     .filter(node => (GLOBALS_A_SLICE_MAY_NOT_USE as readonly string[]).includes(node.text) && isUsedAsAValue(node))
     .map(node => ({ path, line: lineOf(file, node), why: `uses the global ${node.text}` }))
+}
+
+const isInAType = (node: ts.Node): boolean => {
+  for (let at: ts.Node = node.parent; !ts.isSourceFile(at); at = at.parent) if (ts.isTypeNode(at)) return true
+  return false
+}
+
+// The name as an identifier (`.constructor`, `{ constructor }`) or as a key
+// (`['constructor']`, `{ 'constructor': c }`). A class's constructor declaration
+// carries no such node.
+const namesConstructor = (node: ts.Node): boolean =>
+  ((ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) && node.text === REACHES_FUNCTION && !isInAType(node)) ||
+  ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === REACHES_FUNCTION)
+
+function constructorFindings(path: string, file: ts.SourceFile, nodes: readonly ts.Node[]): Finding[] {
+  return nodes
+    .filter(namesConstructor)
+    .map(node => ({ path, line: lineOf(file, node), why: `names ${REACHES_FUNCTION}, a way to Function` }))
 }
 
 const isPathText = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateHead =>
@@ -106,18 +150,49 @@ function homeFindings(path: string, file: ts.SourceFile, nodes: readonly ts.Node
     .map(node => ({ path, line: lineOf(file, node), why: 'writes a path that starts at the home directory' }))
 }
 
-function findingsIn(source: Source): Finding[] {
+const parseFindings = (path: string, errors: ReturnType<typeof parseSource>['errors']): Finding[] =>
+  errors.map(error => ({ path, line: error.line, why: `does not parse: ${error.message}` }))
+
+function findingsIn(source: Source, isSlice: IsSlice): Finding[] {
   const { file, errors } = parseSource(source.text, source.path)
   const nodes = nodesOf(file)
   return [
-    ...errors.map(error => ({ path: source.path, line: error.line, why: `does not parse: ${error.message}` })),
-    ...importFindings(source.path, file),
+    ...parseFindings(source.path, errors),
+    ...importFindings(source.path, file, isSlice),
     ...globalFindings(source.path, file, nodes),
+    ...constructorFindings(source.path, file, nodes),
     ...homeFindings(source.path, file, nodes),
   ].sort((a, b) => a.line - b.line)
 }
 
-/** Every place in these slices that reaches for a setting other than through the declaration. */
-export function settingsReadOutsideTheDeclaration(slices: readonly Source[]): Finding[] {
-  return slices.flatMap(findingsIn)
+/**
+ * Every place in these slices that reaches for a setting other than through the
+ * declaration. `isSlice` says which paths under src/ are slices; a relative
+ * import of anything else is named.
+ */
+export function settingsReadOutsideTheDeclaration(slices: readonly Source[], isSlice: IsSlice): Finding[] {
+  return slices.flatMap(source => findingsIn(source, isSlice))
+}
+
+// Host glue may import the contract (a relative path into `contract`, a
+// directory under src/) and Node's own modules. Types count too: glue that leans
+// on a slice's types is coupled to it.
+function glueFindingsIn(source: Source, contract: string): Finding[] {
+  const { file, errors } = parseSource(source.text, source.path)
+  const path = source.path
+  const intoTheContract = (specifier: string) => targetOf(path, specifier)?.split(sep)[0] === contract
+  return [
+    ...parseFindings(path, errors),
+    ...moduleReferencesIn(file).flatMap(({ specifier, line }) => {
+      if (specifier === null) return [{ path, line, why: 'imports a module whose name is computed' }]
+      if (specifier.startsWith(NODE_MODULE_PREFIX)) return []
+      if (isRelative(specifier) && intoTheContract(specifier)) return []
+      return [{ path, line, why: `imports ${specifier}; host glue may import only the host contract and node:*` }]
+    }),
+  ].sort((a, b) => a.line - b.line)
+}
+
+/** Every import in this host glue beyond the host contract (`contract`, a directory under src/) and Node's own modules. */
+export function glueReachesBeyondTheContract(glue: readonly Source[], contract: string): Finding[] {
+  return glue.flatMap(source => glueFindingsIn(source, contract))
 }
