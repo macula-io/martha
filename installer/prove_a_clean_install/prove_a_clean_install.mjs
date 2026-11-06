@@ -3,7 +3,8 @@
 // packed from what the release job packs (git archive of HEAD), served by a local registry, installed by the installer's
 // own steps onto a box that starts empty, checked on disk, and then the box and the registry are removed, whether
 // the install passed or was refused. Every step is one log line, "ok <step>: ..." or "FAIL <step>: ...", and the run
-// ends with "passed" or "failed".
+// ends with "passed" (repeating that the signature check was stood in) or "failed". The tear-down's own result counts:
+// a run whose registry would not stop or whose box stayed behind has failed.
 //
 // A local release is signed by nobody, so sigstore's bundle check is stood in for, as the installer's own tests do
 // (serve_a_release_locally.mjs); the signer, the repository and the ref are still checked. The log says so.
@@ -12,7 +13,8 @@
 //
 //   node installer/prove_a_clean_install/prove_a_clean_install.mjs [--log <file>]
 //
-// Exit: 0 passed, 1 a step failed, 2 the arguments were refused and nothing ran.
+// Exit: 0 passed, 1 a step failed (or anything else went wrong once the run began), 2 the arguments were refused
+// (an unknown option, or a log it cannot write) and nothing ran.
 // Not shipped (package.json "files" leaves it out).
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs'
@@ -33,8 +35,22 @@ const READ_ONLY = 0o555
 // What an install may write under the box's home, and the folders on the way to them.
 const INSTALLED_UNDER = [join('.local', 'share', NAMES.releaseFolder), join('.local', 'bin')]
 const ON_THE_WAY = ['.local', join('.local', 'share')]
+// Said by the serve step and again by the final line of a passed run: nothing signed this release.
+const STOOD_IN = 'the sigstore bundle check is stood in, a local release is signed by nobody'
 
 class StepFailed extends Error {}
+
+/**
+ * Defects a test plants, to see the proof catch them; a real run plants nothing.
+ * @typedef {{ box: string, expected: string, installed: Awaited<ReturnType<typeof installRelease>>, places: import('../place_the_release/place_the_release.mjs').Places }} OnDisk
+ * @typedef {{
+ *   onDisk?: (on: OnDisk) => void,
+ *   atTearDown?: (registry: Awaited<ReturnType<typeof serveRegistry>>) => void
+ * }} Plant
+ */
+
+/** @param {unknown} error */
+const reason = (error) => error instanceof Error ? error.message : String(error)
 
 /**
  * Runs one step: its result is the line's detail; a throw is a FAIL line and stops the steps after it.
@@ -50,7 +66,7 @@ async function step (log, name, body) {
     log(`ok ${name}: ${detail}`)
     return value
   } catch (error) {
-    log(`FAIL ${name}: ${error instanceof Error ? error.message : String(error)}`)
+    log(`FAIL ${name}: ${reason(error)}`)
     throw new StepFailed(name)
   }
 }
@@ -74,7 +90,7 @@ function packTheCommittedTree (expected) {
 /**
  * What the install left on the box: the read-only release, current linked to it, exactly the committed tree, the
  * command as the installer reports it, and nothing outside Martha's places.
- * @param {{ box: string, expected: string, installed: Awaited<ReturnType<typeof installRelease>>, places: import('../place_the_release/place_the_release.mjs').Places }} on
+ * @param {OnDisk} on
  */
 function checkTheDisk ({ box, expected, installed, places }) {
   const mode = lstatSync(installed.release).mode & 0o777
@@ -90,38 +106,52 @@ function checkTheDisk ({ box, expected, installed, places }) {
 }
 
 /**
- * The run: pack, serve, install, check, and always tear down.
- * @param {{ log?: (line: string) => void, signedFor?: string }} [options]
- *   signedFor: the ref the stood-in signature is for; the release's own tag unless a test names another.
+ * What the run has started so far, for the tear-down to remove.
+ * @typedef {{ work?: string, registry?: Awaited<ReturnType<typeof serveRegistry>> }} Running
  */
-export async function proveACleanInstall ({ log = console.log, signedFor } = {}) {
-  const work = mkdtempSync(join(tmpdir(), 'martha-clean-install-'))
-  const box = join(work, 'box')
-  /** @type {{ registry?: Awaited<ReturnType<typeof serveRegistry>> }} */
+
+/**
+ * The run: pack, serve, install, check, and always tear down. It resolves whatever goes wrong: an error outside the
+ * steps is logged as "FAIL run: ..." and fails the run like a failed step.
+ * @param {{ log?: (line: string) => void, signedFor?: string, plant?: Plant }} [options]
+ *   signedFor: the ref the stood-in signature is for; the release's own tag unless a test names another.
+ *   plant: defects a test plants; see Plant.
+ */
+export async function proveACleanInstall ({ log = console.log, signedFor, plant = {} } = {}) {
+  /** @type {Running} */
   const running = {}
   let passed = true
   try {
-    await installAndCheck({ log, signedFor, work, box, running })
+    running.work = mkdtempSync(join(tmpdir(), 'martha-clean-install-'))
+    await installAndCheck({ log, signedFor, plant, work: running.work, running })
   } catch (error) {
-    if (!(error instanceof StepFailed)) throw error
+    if (!(error instanceof StepFailed)) log(`FAIL run: ${reason(error)}`)
     passed = false
-  } finally {
-    passed = await tearDown(log, work, running.registry) && passed
   }
-  log(passed ? 'passed' : 'failed')
-  return { passed, box, registry: running.registry?.base ?? '' }
+  passed = await tearDown(log, running, plant) && passed
+  log(passed ? `passed; ${STOOD_IN}` : 'failed')
+  return { passed, ...whereTheyWere(running) }
+}
+
+/**
+ * Where the box and the registry were, for a caller to check they are gone; empty when the run never made them.
+ * @param {Running} running
+ */
+function whereTheyWere ({ work, registry }) {
+  return { box: work ? join(work, 'box') : '', registry: registry?.base ?? '' }
 }
 
 /**
  * The steps before the tear-down; the registry is kept in `running` the moment it serves, so the tear-down finds it.
- * @param {{ log: (line: string) => void, signedFor?: string, work: string, box: string, running: { registry?: Awaited<ReturnType<typeof serveRegistry>> } }} run
+ * @param {{ log: (line: string) => void, signedFor?: string, plant: Plant, work: string, running: Running }} run
  */
-async function installAndCheck ({ log, signedFor, work, box, running }) {
+async function installAndCheck ({ log, signedFor, plant, work, running }) {
+  const box = join(work, 'box')
   const { version, tar } = await step(log, 'pack', () => packTheCommittedTree(join(work, 'expected')))
   const r = release({ version, gzipped: gzipSync(tar) })
   const registry = await step(log, 'serve', async () => {
     running.registry = await serveRegistry([r])
-    return { value: running.registry, detail: `${running.registry.base} serves ${version} at ${r.digest}; the sigstore bundle check is stood in, a local release is signed by nobody` }
+    return { value: running.registry, detail: `${running.registry.base} serves ${version} at ${r.digest}; ${STOOD_IN}` }
   })
   mkdirSync(box)
   const places = placesOnThisMachine(box, undefined)
@@ -130,27 +160,59 @@ async function installAndCheck ({ log, signedFor, work, box, running }) {
     const done = await installRelease({ places, version, base: registry.base, signers: [SIGNER], makeVerifier: verifier, log: () => {} })
     return { value: done, detail: `${done.version} ${done.digest} onto a box that started empty` }
   })
-  await step(log, 'on disk', () => checkTheDisk({ box, expected: join(work, 'expected'), installed, places }))
+  const onDisk = { box, expected: join(work, 'expected'), installed, places }
+  plant.onDisk?.(onDisk)
+  await step(log, 'on disk', () => checkTheDisk(onDisk))
 }
 
 /**
- * The registry stopped and the box removed, read-only release and all; true when nothing is left.
+ * The registry stopped and the box removed, read-only release and all; true when nothing is left. The box is removed
+ * even when the registry refuses to stop, and either refusal fails the step.
  * @param {(line: string) => void} log
- * @param {string} work
- * @param {Awaited<ReturnType<typeof serveRegistry>> | undefined} registry
+ * @param {Running} running
+ * @param {Plant} plant
  */
-async function tearDown (log, work, registry) {
+async function tearDown (log, { work, registry }, plant) {
   try {
     await step(log, 'tear down', async () => {
-      await registry?.close()
-      removeEvenReadOnly(work)
-      if (existsSync(work)) throw new Error(`${work} is still there`)
-      return { value: undefined, detail: `${registry ? 'registry stopped, ' : ''}box removed` }
+      const refusals = [...await stopTheRegistry(registry, plant), ...removeTheBox(work)]
+      if (refusals.length) throw new Error(refusals.join('; '))
+      return { value: undefined, detail: `${registry ? 'registry stopped, ' : ''}${work ? 'box removed' : 'no box was made'}` }
     })
     return true
   } catch {
     return false
   }
+}
+
+/**
+ * @param {Running['registry']} registry
+ * @param {Plant} plant
+ * @returns {Promise<string[]>} why it did not stop, if it did not
+ */
+async function stopTheRegistry (registry, plant) {
+  if (!registry) return []
+  plant.atTearDown?.(registry)
+  try {
+    await registry.close()
+    return []
+  } catch (error) {
+    return [`the registry did not stop: ${reason(error)}`]
+  }
+}
+
+/**
+ * @param {string | undefined} work
+ * @returns {string[]} why it is still there, if it is
+ */
+function removeTheBox (work) {
+  if (!work) return []
+  try {
+    removeEvenReadOnly(work)
+  } catch (error) {
+    return [`${work} was not removed: ${reason(error)}`]
+  }
+  return existsSync(work) ? [`${work} is still there`] : []
 }
 
 /** @param {string[]} argv @returns {{ logFile?: string }} */
@@ -164,18 +226,31 @@ function parseArguments (argv) {
   return options
 }
 
+/**
+ * Starts the log empty, so a log it cannot write is refused before anything runs.
+ * @param {string | undefined} logFile
+ */
+function openTheLog (logFile) {
+  if (!logFile) return
+  try {
+    writeFileSync(logFile, '')
+  } catch (error) {
+    throw new Error(`cannot write the log ${logFile}: ${reason(error)}`)
+  }
+}
+
 async function main () {
   /** @type {{ logFile?: string }} */
   let options
   try {
     options = parseArguments(process.argv.slice(2))
+    openTheLog(options.logFile)
   } catch (error) {
-    console.error(`prove_a_clean_install: ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`prove_a_clean_install: ${reason(error)}`)
     process.exitCode = 2
     return
   }
   const { logFile } = options
-  if (logFile) writeFileSync(logFile, '')
   const log = (/** @type {string} */ line) => { console.log(line); if (logFile) appendFileSync(logFile, `${line}\n`) }
   const { passed } = await proveACleanInstall({ log })
   process.exitCode = passed ? 0 : 1
