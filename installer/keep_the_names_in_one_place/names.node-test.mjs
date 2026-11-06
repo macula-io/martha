@@ -119,6 +119,45 @@ test('every action in a workflow that can publish or sign is pinned by a full co
   assert.ok(holdsWrite(planted) && unpinned(planted).length === 1, 'the scan bites on a planted workflow')
 })
 
+/**
+ * The echo lines of the dry run's names step that reach $GITHUB_OUTPUT: one grouped block, or lines that each
+ * redirect there.
+ * @param {string} text
+ */
+function dryRunOutputs (text) {
+  const grouped = text.match(/\{\n((?:\s*echo [^\n]*\n)+)\s*\} >> "\$GITHUB_OUTPUT"/)
+  const lines = grouped?.[1]?.split('\n') ?? [...text.matchAll(/^(\s*echo [^\n]*) >> "\$GITHUB_OUTPUT"$/gm)].map((m) => m[1] ?? '')
+  return lines.map((l) => l.trim()).filter(Boolean)
+}
+
+/**
+ * Why a workflow's builds could leave a version tag on anything but one OCI image manifest, or [] when none: each
+ * `docker buildx build` (continuation lines joined) has no buildx attestations, OCI media types, and pushes by
+ * digest only; and the first version tag is made only after the media-type check.
+ * @param {string} text
+ */
+function ociFlaws (text) {
+  const builds = [...text.replace(/\\\n\s*/g, ' ').matchAll(/docker buildx build [^\n]*/g)].map((m) => m[0])
+  const flaws = builds.length ? [] : ['no build']
+  for (const build of builds) {
+    for (const flag of ['--provenance=false', '--sbom=false', 'oci-mediatypes=true', 'push-by-digest=true']) if (!build.includes(flag)) flaws.push(`a build without ${flag}`)
+  }
+  const checked = text.indexOf('application/vnd.oci.image.manifest.v1+json')
+  const tagged = text.indexOf('docker buildx imagetools create')
+  if (checked < 0 || tagged < 0 || tagged < checked) flaws.push('a tag made before the media-type check')
+  return flaws
+}
+
+test('an image gets its version tag only once it is checked to be one OCI manifest, so a bad build burns no version', () => {
+  for (const name of /** @type {const} */ (['release', 'dryRun'])) assert.deepEqual(ociFlaws(workflow[name]), [], name)
+  // Each pin bites: dropped from release.yml, each is named.
+  for (const flag of ['--provenance=false', '--sbom=false', 'oci-mediatypes=true', 'push-by-digest=true']) {
+    assert.ok(ociFlaws(workflow.release.replace(flag, '')).includes(`a build without ${flag}`), `the ${flag} pin bites`)
+  }
+  const tagFirst = workflow.release.replace('docker buildx imagetools create', 'true').replace('docker buildx build', 'docker buildx imagetools create; docker buildx build')
+  assert.ok(ociFlaws(tagFirst).includes('a tag made before the media-type check'), 'the order pin bites')
+})
+
 test('every image is built by a docker-container builder and checked to be one OCI manifest before it is signed', () => {
   // The default docker driver ignores oci-mediatypes and pushes a Docker v2 manifest, which every install refuses
   // (the first dry run, martha#21 r=4). Only a builder set up by setup-buildx-action honours it.
@@ -139,7 +178,8 @@ test('no workflow spells the image out; each reads it from the installer package
 test('the dry run pushes into the release package itself, under a tag that is never a version', () => {
   // The package must exist, linked and public, before the first release tag; the dry run is what makes it
   // (design section 5). Its tags start with the dry-run prefix, which no version and no release tag starts with.
-  assert.match(workflow.dryRun, /echo "image=\$\(jq -r \.martha\.image installer\/package\.json\)"$/m, 'the dry run pushes to the release image, no suffix')
+  assert.ok(dryRunOutputs(workflow.dryRun).includes('echo "image=$(jq -r .martha.image installer/package.json)"'), 'the dry run hands the release image, no suffix, to $GITHUB_OUTPUT')
+  assert.ok(!dryRunOutputs(workflow.dryRun.replace('} >> "$GITHUB_OUTPUT"', '} >> /dev/null')).includes('echo "image=$(jq -r .martha.image installer/package.json)"'), 'the output check bites on a redirect elsewhere')
   assert.match(workflow.dryRun, /jq -r \.martha\.dryRunTagPrefix installer\/package\.json/, 'the dry run reads its tag prefix from the installer package.json')
   assert.match(NAMES.dryRunTagPrefix, /^[a-z][a-z-]*-$/, 'the prefix starts with a letter, so no tag it makes is a version')
   assert.ok(!NAMES.dryRunTagPrefix.startsWith(NAMES.releaseTagPrefix) && !NAMES.dryRunTagPrefix.startsWith(NAMES.installerTagPrefix))
