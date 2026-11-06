@@ -38,6 +38,7 @@ import {
   type LaunchRequest,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { undeclaredPromptOrigins, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 
 export interface Gap {
   readonly path: string
@@ -310,6 +311,29 @@ export function gapsInSessionEvents(declared: HostSessionEvents, emitted: readon
     .map((event) => ({
       path: `session event ${event} on ${declared.host}`,
       why: 'it is declared and the host never emits it',
+    }))
+  return [...undeclared, ...never_emitted]
+}
+
+/**
+ * Every origin kind a host stamps on a prompt that its declaration does not
+ * map to a turn source, and every declared kind the host never stamps. An
+ * undeclared kind fails closed at run time (another session's message); this
+ * makes it fail CI first, so a new kind is decided rather than discovered.
+ *
+ * `emitted` comes from the host's adapter, recorded from the host itself
+ * (../claude_code_host for Claude Code, whose test runs this check on it).
+ */
+export function gapsInPromptOrigins(declared: HostPromptOrigins, emitted: readonly string[]): readonly Gap[] {
+  const undeclared = undeclaredPromptOrigins(declared, emitted).map((kind) => ({
+    path: `prompt origin ${kind} on ${declared.host}`,
+    why: 'the host stamps it and its declaration does not say which source it is',
+  }))
+  const never_emitted = Object.keys(declared.sources)
+    .filter((kind) => !emitted.includes(kind))
+    .map((kind) => ({
+      path: `prompt origin ${kind} on ${declared.host}`,
+      why: 'it is declared and the host never stamps it',
     }))
   return [...undeclared, ...never_emitted]
 }

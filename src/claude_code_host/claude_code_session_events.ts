@@ -5,25 +5,13 @@
 // lists. A list typed by hand cannot see the host add one: `fork` arrived in
 // 2.1.318 and the hand list missed it. So the schema text is recorded from the
 // host binary (recorded_claude_code_host.json, re-recorded by
-// record_claude_code_host.ts) and the list is parsed from that record. The crew
-// adds one event the host never sends, the refresh its own mod runs.
+// record_claude_code_host.ts) and the list is parsed from that record
+// (recorded_claude_code_host.ts). The crew adds one event the host never sends,
+// the refresh its own mod runs.
 //
 // The coverage check (../check_every_path_is_gated, gapsInSessionEvents) runs
 // this list against the host's declaration, so a source the host adds fails CI by
 // name before it fails closed at run time.
-
-import { readFileSync } from 'node:fs'
-
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-
-export { CREW_REFRESH }
-
-/** What the host binary says, as recorded. */
-export interface RecordedHost {
-  readonly host_version: string
-  /** The host's SessionStart hook-input schema, as its binary spells it. */
-  readonly session_start_schema: string
-}
 
 // The SessionStart input schema as the host's bundle spells it: the event name
 // literal, then the `source` enum. The minifier's helper names change between
@@ -47,14 +35,3 @@ export function sessionStartSourcesOf(schema: string): readonly string[] {
   }
   return sources as string[]
 }
-
-/** The recording this repository carries. */
-export const RECORDED_HOST: RecordedHost = JSON.parse(
-  readFileSync(new URL('./recorded_claude_code_host.json', import.meta.url), 'utf8'),
-) as RecordedHost
-
-/** Every SessionStart source the recorded host sends. */
-export const CLAUDE_CODE_SESSION_START_SOURCES: readonly string[] = sessionStartSourcesOf(RECORDED_HOST.session_start_schema)
-
-/** Every event the Claude Code host emits when a session starts, the crew's refresh included. */
-export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [...CLAUDE_CODE_SESSION_START_SOURCES, CREW_REFRESH]

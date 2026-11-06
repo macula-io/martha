@@ -15,7 +15,8 @@ import {
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { gapsInGateCoverage, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
+import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { gapsInGateCoverage, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -369,6 +370,24 @@ test('a declared session event the host stops emitting turns the check red, by n
   const gaps = gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, emitted)
   assert.equal(gaps.length, 1)
   assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+})
+
+const STAMPED = Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources)
+
+test('a host that stamps exactly the origin kinds it declares has no gaps', () => {
+  assert.deepEqual(gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, STAMPED), [])
+})
+
+test('a planted origin kind the declaration does not map turns the check red, by name', () => {
+  const gaps = gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, [...STAMPED, 'session-inbox'])
+  assert.deepEqual(gaps.map((gap) => gap.path), ['prompt origin session-inbox on claude-code'])
+  assert.match(gaps[0]?.why ?? '', /does not say which source/)
+})
+
+test('a declared origin kind the host stops stamping turns the check red, by name', () => {
+  const gaps = gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, STAMPED.filter((kind) => kind !== 'bridge'))
+  assert.deepEqual(gaps.map((gap) => gap.path), ['prompt origin bridge on claude-code'])
+  assert.match(gaps[0]?.why ?? '', /never stamps it/)
 })
 
 test('a gate that pins the config but not the checkout it runs is caught', () => {

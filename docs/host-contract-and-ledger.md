@@ -61,9 +61,17 @@ launcher's records and which process holds a pid.
 - **A process** runs directly with no shell, so a signal reads as a null exit
   code.
 - **Where a turn came from** is the engine's `origin`, which it stamps where it
-  queued the prompt and no hook may set: a peer's message is `cross_session`,
-  the owner's own Enter is `owner_paste`, and anything else is text the harness
-  delivered, for the envelope rule to read. Text never sets a source.
+  queued the prompt and no hook may set. Its kind maps to a turn source through
+  the declaration in
+  [`src/name_the_source_of_a_prompt/`](../src/name_the_source_of_a_prompt/):
+  only the owner's own gestures (Enter, Remote Control, a Slack ping, a
+  follow-up to a click, the SDK host's own turn) are `owner_paste`; another
+  session's message is `cross_session`; an agent's report, a background task's
+  notification or a schedule's stored text is `subagent`; a channel server's or
+  a plugin's prompt is `mcp_result`. A kind no declaration lists is another
+  session's message. The kinds are parsed from the engine's own origin code as
+  recorded from its binary, and `gapsInPromptOrigins` fails CI on a kind the
+  declaration does not map. Text never sets a source.
 - **No sender yet.** The host knows which process sent a cross-session message
   and does not pass it to plugins (anthropics/claude-code#107216), so the
   adapter's binder is `bindNothing` and every cross-session message stays

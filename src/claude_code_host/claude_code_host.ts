@@ -22,11 +22,12 @@
 //
 // Rules from the threat model on martha#41:
 //
-//   - WHERE A TURN CAME FROM IS THE ENGINE'S WORD (T1). The engine stamps every
-//     prompt's `origin` where it queued it, and no hook may set it. A peer's
-//     message maps to `cross_session`, the owner's own Enter to `owner_paste`,
-//     and every other origin to text the harness delivered, which the envelope
-//     rule then reads. Text never sets a source.
+//   - WHERE A TURN CAME FROM IS THE ENGINE'S WORD (T1, T5). The engine stamps
+//     every prompt's `origin` where it queued it, and no hook may set it. Its
+//     kind maps to a turn source through the declaration in
+//     ../name_the_source_of_a_prompt, which names one for every kind the
+//     recorded host stamps (recorded_claude_code_host.ts); an unknown kind is
+//     another session's message. Text never sets a source.
 //   - NO SENDER UNTIL THE HOST GIVES ONE (T2, T4). The host knows which process
 //     sent a cross-session message and does not hand it to plugins yet
 //     (anthropics/claude-code#107216). So no arrival carries a `sender`, and the
@@ -50,7 +51,6 @@ import { bindNothing, type Binder } from '../attribute_a_cross_session_sender/at
 import type { SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   readingOnly,
-  type Arrival,
   type ArrivingTurn,
   type HostContract,
   type ProcessOutcome,
@@ -59,8 +59,9 @@ import {
 } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { CLAUDE_CODE_SESSION_START_SOURCES } from './claude_code_session_events.ts'
+import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
 
 /** The engine calls the adapter makes, as Claude Code's `$` offers them. */
 export interface ClaudeCodeEngine {
@@ -100,19 +101,6 @@ export interface ClaudeCodeHost {
   answerToolCall(name: string, args: Readonly<Record<string, unknown>>): Promise<string>
   /** Resolves once the engine took every tool registered so far, or rejects with why. */
   toolsRegistered(): Promise<void>
-}
-
-/** The origins that are another session's message: its model wrote it. */
-const FROM_ANOTHER_SESSION: readonly string[] = ['peer', 'peer-send-message']
-
-/** The origin of the owner's own Enter at the terminal. */
-const THE_OWNER_TYPED = 'composer'
-
-/** Where a prompt came from, in the contract's words, from the engine's origin alone. */
-export function arrivalOfPrompt(prompt: EnginePrompt): Arrival {
-  if (FROM_ANOTHER_SESSION.includes(prompt.origin.kind)) return { source: 'cross_session' }
-  if (prompt.origin.kind === THE_OWNER_TYPED) return { source: 'owner_paste' }
-  return { text: prompt.text, origin: 'harness_delivery' }
 }
 
 /** What prefixes a source the host does not send, so no declaration can list it. */
@@ -162,7 +150,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
     host,
     binder: bindNothing,
     prompted: (prompt) => {
-      const turn: ArrivingTurn = { text: prompt.text, arrival: arrivalOfPrompt(prompt) }
+      const turn: ArrivingTurn = { text: prompt.text, arrival: arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, prompt.origin.kind) }
       for (const take of listeners) take(turn)
     },
     answerToolCall: async (name, args) => {
