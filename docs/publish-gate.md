@@ -371,6 +371,17 @@ The rules the seam keeps, and a host must not work around:
   sender. The pointer a long room delivery carries must name this read, never
   a raw tool. A host that registers the read under its own tool name must also
   allow that name while tainted, or a tainted member cannot read its room.
+- **A member does not change who can reach it (martha#48).** `mesh_serve`,
+  `mesh_trust_agent` and `mesh_untrust_agent` are refused in every member
+  session, clean or tainted, under every namespace
+  (`MESH_TOOLS_THAT_WIDEN_REACH` in `src/refuse_widening_a_member_reach/`, part
+  of `MESH_TOOLS_REFUSED`). A served procedure runs on any caller's payload for
+  as long as the server runs, outside every session's record; the contact list
+  is the owner's and the crew launcher's, and removing an entry from it breaks
+  the crew's own rings as surely as adding one lets a stranger in. A member's
+  ring trust comes from the declaration and the launcher. A procedure the owner
+  signs is a proposal (martha#50), not built; signing the contact list itself
+  is macula-io/macula-mcp#79.
 
 Every refusal a host returns says what clears the taint in the words of one
 constant, `WHAT_CLEARS_IT` in `src/refuse_execution_after_ungated_text/`, so

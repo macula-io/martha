@@ -43,6 +43,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
+import { MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { PATH_OF_SOURCE, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** Every tool of the mesh server starts its own name with this. */
@@ -84,21 +85,20 @@ export const MESH_TOOLS_THAT_RUN: readonly string[] = [
   'mesh_remember_directory',
   'mesh_ring',
   SENDS_AND_MAY_WAIT,
-  'mesh_serve',
-  'mesh_trust_agent',
   'mesh_unobserve_lobby',
   'mesh_unserve',
-  'mesh_untrust_agent',
 ]
 
 /**
  * The mesh tools that are refused, by their own name: each hands the model a
- * room's or another agent's text that no gate has seen (B1). At run time they
- * are refused because MESH_TOOLS_THAT_RUN does not name them; this list is the
- * other half of the decision, and the coverage check proves the two halves
+ * room's or another agent's text that no gate has seen (B1), or changes who can
+ * reach the member (../refuse_widening_a_member_reach, martha#48). At run time
+ * they are refused because MESH_TOOLS_THAT_RUN does not name them; this list is
+ * the other half of the decision, and the coverage check proves the two halves
  * cover every tool the recorded server registers (./mesh_server_tools.ts).
  */
 export const MESH_TOOLS_REFUSED: readonly string[] = [
+  ...MESH_TOOLS_THAT_WIDEN_REACH,
   'mesh_join_room',
   'mesh_lobby_transcript',
   'mesh_read_inbox',
