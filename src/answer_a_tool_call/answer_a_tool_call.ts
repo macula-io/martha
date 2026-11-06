@@ -4,7 +4,18 @@
 // and refuses the call when the answer is a denial. The denial text is written for
 // the model that called the tool, because it is the model that has to stop.
 //
-// A raw mesh read is refused before anything else, tainted or not
+// The launch is checked again first, on every call (../refuse_launch_of_unapproved_config).
+// The hooks and servers the owner approved run scripts from the live checkout,
+// so one call that changes the tree (a `gh pr checkout`, a pull) makes every
+// hook after it run the new author's script. Once the checkout no longer
+// matches what the owner approved, no tool runs. The host also asks
+// `recheckLaunch` after every call, and on a refusal that hook does not return
+// until the launcher has sent SIGKILL to the member's process group, because a
+// host fires hooks on its own events (the end of a turn, its exit) even when
+// every call is refused. What is left: the hooks of the one call that changed
+// the tree, which run in parallel with Martha's own.
+//
+// A raw mesh read is refused next, tainted or not
 // (../read_a_room_through_its_gate): the room is read through its gate instead.
 //
 // This is the whole wiring on the host side: one question per tool call. Which
@@ -18,6 +29,12 @@ import {
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import {
+  recheckLaunch,
+  type ApprovedLaunch,
+} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+
+export type { ApprovedLaunch }
 
 /** A host refusal, or nothing to say. */
 export type ToolCallAnswer = { readonly deny: string } | undefined
@@ -28,10 +45,21 @@ export interface ToolCall {
   readonly policy: Policy
   /** The call's arguments, where the host has them: some tools read only when told to wait. */
   readonly input?: Readonly<Record<string, unknown>>
+  /** The member's launch, checked again before this call runs. */
+  readonly launch: ApprovedLaunch
 }
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input }: ToolCall): ToolCallAnswer {
+export function answerToolCall({ tool, session, policy, input, launch }: ToolCall): ToolCallAnswer {
+  const launched = recheckLaunch(launch)
+  if (!launched.allow) {
+    return {
+      deny:
+        'No tool runs in this session: the checkout it was started in no longer matches what the owner approved, ' +
+        `and its hooks run the checkout's scripts as they are now. ${launched.refusal}`,
+    }
+  }
+
   if (isRawMeshRead(tool, input)) {
     return {
       deny:
