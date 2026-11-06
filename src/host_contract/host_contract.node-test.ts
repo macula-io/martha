@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
 import { COMPUTED_SPECIFIER, SCANNED_EXTENSIONS, coreSources, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
 import { hostForTests } from './host_for_tests.ts'
+import { claudeCodeToolNames, openCodeToolNames } from './tool_names_for_tests.ts'
 
 const SRC = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -213,4 +214,28 @@ test('a tool is registered once; a second tool by the same name is refused', asy
     /already registered: note_milestone/,
   )
   assert.equal(await registeredTool('note_milestone')?.answer({}), 'kept')
+})
+
+// --- a called tool's own name is the host's to give (martha#2, item 5 (b)) ---
+
+test('tools are registering and naming a called tool, nothing else', () => {
+  assert.deepEqual(Object.keys(hostForTests().host.tools).sort(), ['ownNameOf', 'register'])
+})
+
+test("the test host names a called tool by the host's split it is given", () => {
+  const { host } = hostForTests({ toolNames: openCodeToolNames(['macula']) })
+  assert.equal(host.tools.ownNameOf('macula_mesh_read_inbox'), 'mesh_read_inbox')
+  assert.equal(hostForTests({ toolNames: claudeCodeToolNames }).host.tools.ownNameOf('mcp__x__mesh_say'), 'mesh_say')
+})
+
+test('a test host given no split takes no name apart', () => {
+  assert.equal(hostForTests().host.tools.ownNameOf('mcp__macula__mesh_read_inbox'), 'mcp__macula__mesh_read_inbox')
+})
+
+test('each split keeps a built-in tool its own name, and splits only its own form', () => {
+  const openCode = openCodeToolNames(['macula', 'macula-mcp'])
+  for (const names of [claudeCodeToolNames, openCode]) assert.equal(names.ownNameOf('Bash'), 'Bash')
+  assert.equal(claudeCodeToolNames.ownNameOf('mcp__plugin_macula-mcp_macula__mesh_read_inbox'), 'mesh_read_inbox')
+  assert.equal(openCode.ownNameOf('macula-mcp_mesh_read_inbox'), 'mesh_read_inbox')
+  assert.equal(openCode.ownNameOf('unknown_mesh_read_inbox'), 'unknown_mesh_read_inbox')
 })

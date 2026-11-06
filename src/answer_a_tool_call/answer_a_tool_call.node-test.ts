@@ -15,6 +15,9 @@ import {
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
 import { answerToolCall, type ToolCallAnswer } from './answer_a_tool_call.ts'
+import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+
+const names = claudeCodeToolNames
 
 // Synthetic identities, never a real one: this repository is public.
 const supervisor_identity = 'identity-of-the-supervisor'
@@ -37,31 +40,31 @@ const denied = (answer: ToolCallAnswer): string => {
 test('a session that took in a stranger may not run a shell, this turn or the next', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session' }, bindNothing)
 
-  const first = denied(answerToolCall({ tool: 'Bash', session: tainted, policy }))
+  const first = denied(answerToolCall({ names, tool: 'Bash', session: tainted, policy }))
   assert.match(first, /nothing executes/i)
 
   const nextTurn = takeInTurn(tainted, { source: 'mesh_read' }, bindNothing)
-  denied(answerToolCall({ tool: 'Bash', session: nextTurn, policy }))
+  denied(answerToolCall({ names, tool: 'Bash', session: nextTurn, policy }))
 })
 
 test('a fresh session under a new id lets the crew work again', () => {
   const records = store()
   const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'cross_session' }, bindNothing)
-  denied(answerToolCall({ tool: 'Bash', session: tainted, policy }))
+  denied(answerToolCall({ names, tool: 'Bash', session: tainted, policy }))
 
   const fresh = beginSession(records, 's-2')
-  assert.equal(answerToolCall({ tool: 'Bash', session: fresh, policy }), undefined)
+  assert.equal(answerToolCall({ names, tool: 'Bash', session: fresh, policy }), undefined)
 })
 
 test('a compaction keeps the id, and so does not let the crew work again', () => {
   const records = store()
   rememberSession(records, takeInTurn(beginSession(records, 's-1'), { source: 'ring' }, bindNothing))
-  denied(answerToolCall({ tool: 'Bash', session: resumeSession(records, 's-1'), policy }))
+  denied(answerToolCall({ names, tool: 'Bash', session: resumeSession(records, 's-1'), policy }))
 })
 
 test('an unreadable record refuses the shell and says so', () => {
   const resumed = resumeSession(store(), 'a-session-the-store-never-saw')
-  const answer = denied(answerToolCall({ tool: 'Bash', session: resumed, policy }))
+  const answer = denied(answerToolCall({ names, tool: 'Bash', session: resumed, policy }))
 
   assert.match(answer, /record/i)
   assert.match(answer, /cannot be read/i)
@@ -70,7 +73,7 @@ test('an unreadable record refuses the shell and says so', () => {
 
 test('an unreadable record still lets the member read', () => {
   const resumed = resumeSession(store(), 'a-session-the-store-never-saw')
-  assert.equal(answerToolCall({ tool: 'Read', session: resumed, policy }), undefined)
+  assert.equal(answerToolCall({ names, tool: 'Read', session: resumed, policy }), undefined)
 })
 
 test('a record kept across a restart carries the taint with it', () => {
@@ -78,12 +81,12 @@ test('a record kept across a restart carries the taint with it', () => {
   const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'ring' }, bindNothing)
   rememberSession(records, tainted)
 
-  denied(answerToolCall({ tool: 'Bash', session: resumeSession(records, 's-1'), policy }))
+  denied(answerToolCall({ names, tool: 'Bash', session: resumeSession(records, 's-1'), policy }))
 })
 
 test('the refusal a host returns names what to do', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  const answer = answerToolCall({ tool: 'Write', session: tainted, policy })
+  const answer = answerToolCall({ names, tool: 'Write', session: tainted, policy })
 
   assert.equal(typeof (answer as { deny: unknown }).deny, 'string')
   assert.ok(denied(answer).includes(WHAT_CLEARS_IT))
@@ -94,7 +97,7 @@ test('the refusal a host returns names what to do', () => {
 test('the member may still read the text it is not allowed to act on', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   for (const tool of ['Read', 'Grep', 'Glob']) {
-    assert.equal(answerToolCall({ tool, session: tainted, policy }), undefined, tool)
+    assert.equal(answerToolCall({ names, tool, session: tainted, policy }), undefined, tool)
   }
 })
 
@@ -105,13 +108,13 @@ test('a turn the policy names may run a shell straight away', () => {
     source: 'crew_room',
     from_identity: supervisor_identity,
   }, bindNothing)
-  assert.equal(answerToolCall({ tool: 'Bash', session, policy }), undefined)
+  assert.equal(answerToolCall({ names, tool: 'Bash', session, policy }), undefined)
 })
 
 test('every tool that executes is refused, by whatever name the host uses', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   for (const tool of ['Bash', 'bash', 'patch', 'MultiEdit', 'Agent', 'SendMessage', 'NeverSeenTool']) {
-    denied(answerToolCall({ tool, session: tainted, policy }))
+    denied(answerToolCall({ names, tool, session: tainted, policy }))
   }
 })
 
@@ -129,5 +132,5 @@ test('a tainted member cannot send: every tool that hands text to someone else i
     'mcp__macula__mesh_remember',
     'mcp__crew__crew_mail_send',
   ]
-  for (const tool of sends) denied(answerToolCall({ tool, session: tainted, policy }))
+  for (const tool of sends) denied(answerToolCall({ names, tool, session: tainted, policy }))
 })

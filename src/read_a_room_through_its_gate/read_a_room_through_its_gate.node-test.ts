@@ -9,14 +9,17 @@ import type { Policy, Session } from '../refuse_execution_after_ungated_text/ref
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import { PATH_OF_SOURCE, beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
-  RAW_MESH_READS,
+  MESH_TOOLS_THAT_RUN,
+  MESH_TOOL_PREFIX,
   gateOfRoom,
   isRawMeshRead,
-  ownToolName,
   readRoomThroughItsGate,
   type ReadableRoom,
   type RoomEnvelope,
 } from './read_a_room_through_its_gate.ts'
+import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+
+const names = claudeCodeToolNames
 
 // Synthetic node ids, never a real one: this repository is public.
 const self = '0'.repeat(64)
@@ -51,26 +54,16 @@ const read = (room: ReadableRoom, envelopes: readonly RoomEnvelope[]) =>
   readRoomThroughItsGate({ session: beginSession(store(), 's-1'), room, envelopes, rosters, self_node_id: self })
 
 const executes = (session: ReturnType<typeof read>['session']) =>
-  answerToolCall({ tool: 'Bash', session, policy }) === undefined
+  answerToolCall({ names, tool: 'Bash', session, policy }) === undefined
 
 // --- the raw reads are refused, under any namespace, tainted or not -----------
 
 const NAMESPACES = ['mcp__macula__', 'mcp__plugin_macula-mcp_macula__', 'mcp__a-prefix-nobody-installed-yet__']
 
-test('every raw mesh read is refused under every namespace, in a clean session', () => {
-  const clean = beginSession(store(), 's-1')
-  for (const prefix of NAMESPACES) {
-    for (const raw of RAW_MESH_READS) {
-      const tool = `${prefix}${raw}`
-      assert.notEqual(answerToolCall({ tool, session: clean, policy }), undefined, tool)
-    }
-  }
-})
-
-// The tools martha#2's item 5 threat model names, plus the two found while
-// building it (a ring's purpose and the public room list are other agents'
-// text too). This is the requirement the list must meet, so dropping a name
-// from RAW_MESH_READS fails here rather than shrinking the loop above.
+// The tools martha#2's item 5 threat model names, plus the ones found while
+// building it (a ring's purpose, the public room list and a joined room's
+// transcript are other agents' text too). Each must be refused; the allow-list
+// is what makes it so, and this list is the requirement it must meet.
 const REQUIRED_RAW_READS = [
   'mesh_read_inbox',
   'mesh_wait_room',
@@ -79,33 +72,101 @@ const REQUIRED_RAW_READS = [
   'mesh_watch',
   'mesh_wait_ring',
   'mesh_rooms',
+  'mesh_join_room',
 ]
 
-test('every raw read the threat model requires is on the list', () => {
-  for (const raw of REQUIRED_RAW_READS) assert.equal(isRawMeshRead(`mcp__macula__${raw}`), true, raw)
-})
-
-test('the own name of an MCP tool is what follows the last double underscore', () => {
-  assert.equal(ownToolName('mcp__plugin_macula-mcp_macula__mesh_read_inbox'), 'mesh_read_inbox')
-  assert.equal(ownToolName('Read'), 'Read')
-})
-
-test('mesh_say is a raw read only when it waits for the reply', () => {
+test('every raw mesh read is refused under every namespace, in a clean session', () => {
+  const clean = beginSession(store(), 's-1')
   for (const prefix of NAMESPACES) {
-    const tool = `${prefix}mesh_say`
-    assert.equal(isRawMeshRead(tool, { wait_reply_seconds: 60 }), true, tool)
-    assert.equal(isRawMeshRead(tool, { wait_reply_seconds: '60' }), true, tool)
-    assert.equal(isRawMeshRead(tool, {}), false, tool)
-    assert.equal(isRawMeshRead(tool, { wait_reply_seconds: 0 }), false, tool)
+    for (const raw of REQUIRED_RAW_READS) {
+      const tool = `${prefix}${raw}`
+      assert.notEqual(answerToolCall({ names, tool, session: clean, policy }), undefined, tool)
+    }
   }
 })
 
+test('no raw read the threat model requires is on the allow-list', () => {
+  for (const raw of REQUIRED_RAW_READS) {
+    assert.equal(MESH_TOOLS_THAT_RUN.includes(raw), false, raw)
+    assert.equal(isRawMeshRead(`mcp__macula__${raw}`, {}, names), true, raw)
+  }
+})
+
+// --- round (c): an allow-list, so a mesh tool nobody has judged is refused ----
+
+test('a mesh tool this repository has never seen is refused, under every namespace', () => {
+  const clean = beginSession(store(), 's-1')
+  for (const prefix of NAMESPACES) {
+    const tool = `${prefix}${MESH_TOOL_PREFIX}read_everything_new`
+    assert.equal(isRawMeshRead(tool, {}, names), true, tool)
+    assert.notEqual(answerToolCall({ names, tool, session: clean, policy, input: {} }), undefined, tool)
+  }
+})
+
+test('every mesh tool on the allow-list runs in a clean session', () => {
+  const clean = beginSession(store(), 's-1')
+  for (const own of MESH_TOOLS_THAT_RUN) {
+    const tool = `mcp__macula__${own}`
+    assert.equal(own.startsWith(MESH_TOOL_PREFIX), true, own)
+    assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {} }), undefined, tool)
+  }
+})
+
+test('a tool of another server is not judged by the mesh allow-list', () => {
+  for (const tool of ['Read', 'Bash', 'mcp__crew__crew_mail_read', 'mcp__someplugin__read_inbox']) {
+    assert.equal(isRawMeshRead(tool, {}, names), false, tool)
+  }
+})
+
+// --- round (a): mesh_say with no input is refused -----------------------------
+
+test('mesh_say is a raw read when it waits for the reply, or when the host gives no input', () => {
+  for (const prefix of NAMESPACES) {
+    const tool = `${prefix}mesh_say`
+    assert.equal(isRawMeshRead(tool, { wait_reply_seconds: 60 }, names), true, tool)
+    assert.equal(isRawMeshRead(tool, { wait_reply_seconds: '60' }, names), true, tool)
+    assert.equal(isRawMeshRead(tool, undefined, names), true, tool)
+    assert.equal(isRawMeshRead(tool, {}, names), false, tool)
+    assert.equal(isRawMeshRead(tool, { wait_reply_seconds: 0 }, names), false, tool)
+  }
+})
+
+test('a tool call that names mesh_say with no input is refused in a clean session', () => {
+  const answer = answerToolCall({ names, tool: 'mcp__macula__mesh_say', session: beginSession(store(), 's'), policy })
+  assert.notEqual(answer, undefined)
+})
+
+// --- round (b): the host splits the called name, each host its own way --------
+
+const OPENCODE_SERVERS = ['macula', 'macula-mcp']
+const openCode = openCodeToolNames(OPENCODE_SERVERS)
+
+test('on OpenCode, the raw reads are refused in its own server_tool form', () => {
+  const clean = beginSession(store(), 's-1')
+  for (const server of OPENCODE_SERVERS) {
+    for (const raw of REQUIRED_RAW_READS) {
+      const tool = `${server}_${raw}`
+      assert.equal(isRawMeshRead(tool, {}, openCode), true, tool)
+      assert.notEqual(answerToolCall({ names: openCode, tool, session: clean, policy, input: {} }), undefined, tool)
+    }
+    assert.equal(isRawMeshRead(`${server}_mesh_say`, { wait_reply_seconds: 60 }, openCode), true, server)
+    assert.equal(isRawMeshRead(`${server}_mesh_publish`, {}, openCode), false, server)
+  }
+})
+
+test("Claude Code's split does not read OpenCode's form: the split has to be the host's", () => {
+  // The reason the split is the host's: read by the wrong host's rule, an
+  // OpenCode raw read is not recognised and runs (it only taints).
+  assert.equal(isRawMeshRead('macula_mesh_read_inbox', {}, claudeCodeToolNames), false)
+  assert.equal(isRawMeshRead('macula_mesh_read_inbox', {}, openCode), true)
+})
+
 test('a raw read is no longer on the list of tools a tainted session may call', () => {
-  for (const raw of RAW_MESH_READS) assert.equal(isShellTool(`mcp__macula__${raw}`), true, raw)
+  for (const raw of REQUIRED_RAW_READS) assert.equal(isShellTool(`mcp__macula__${raw}`), true, raw)
 })
 
 test('the refusal points at the gated read', () => {
-  const answer = answerToolCall({ tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy })
+  const answer = answerToolCall({ names, tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy })
   assert.match(answer?.deny ?? '', /through its gate/)
 })
 
