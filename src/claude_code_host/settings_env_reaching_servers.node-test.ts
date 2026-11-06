@@ -63,12 +63,17 @@ test('the user settings file is under CLAUDE_CONFIG_DIR when it is set, else und
   assert.deepEqual(userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: '/config' }), { path: join('/config', USER_SETTINGS_FILE) })
 })
 
-// The launcher and Claude Code must read the same file: an empty or relative
-// CLAUDE_CONFIG_DIR could resolve one way here and another way in the host (martha#65 r=4).
+// The launcher and Claude Code must read the same file: an empty, relative or
+// untrimmed CLAUDE_CONFIG_DIR could resolve one way here and another way in the
+// host (martha#65 r=4, martha#75).
 for (const [shape, configDir] of [
   ['empty', ''],
   ['relative', 'config'],
   ['relative with a dot', './config'],
+  // Claude Code trims the value before it uses it (martha#75): the launcher must not judge the untrimmed one.
+  ['absolute with a trailing space', '/owner/config '],
+  ['absolute with a leading space', ' /owner/config'],
+  ['absolute with a trailing newline', '/owner/config\n'],
 ] as const) {
   test(`a CLAUDE_CONFIG_DIR that is ${shape} is refused, naming the variable: which settings file the host reads cannot be told`, () => {
     const read = userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: configDir })
