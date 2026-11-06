@@ -48,7 +48,7 @@
 // dependency's own environment reads are not listed by the recorder (martha#72).
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import process from 'node:process'
 
@@ -98,7 +98,7 @@ const INTEGRITY_FAILED = 'EINTEGRITY'
 const CONFINING_HOOK = new URL('./confine_to_the_recorded_tree.ts', import.meta.url)
 const PRELOAD = '--import'
 
-/** The arguments that start `file` with every module it loads confined to the tree at `dir`. */
+/** The arguments that start `file` with every module it loads confined to the tree at `dir`, a real path (provedTreeOf). */
 function confinedStart(dir: string, file: string): readonly string[] {
   const hook = new URL(CONFINING_HOOK)
   hook.searchParams.set(TREE_PARAMETER, treeUrlOf(join(dir, NODE_MODULES)))
@@ -191,10 +191,14 @@ function treeUnlike(tree: RecordedMeshTree, dir: string): string | undefined {
 }
 
 /** The recorded tree of this version at `<root>/<version>`, installed if it is not there yet; or why it cannot run. */
-function provedTreeOf(tree: RecordedMeshTree, root: string, registry: string): { readonly dir: string } | { readonly refusal: string } {
+function provedTreeOf(tree: RecordedMeshTree, given: string, registry: string): { readonly dir: string } | { readonly refusal: string } {
+  // The root by its real path, once: node resolves every module to its real
+  // path, so the tree is installed, compared and confined under the same name
+  // even when the root sits behind a symlink (/home -> /var/home).
+  mkdirSync(given, { recursive: true, mode: 0o700 })
+  const root = realpathSync(given)
   const dir = join(root, tree.server_version)
   if (!existsSync(dir)) {
-    mkdirSync(root, { recursive: true, mode: 0o700 })
     const fresh = mkdtempSync(join(root, INSTALLING))
     const failed = installLock(tree.lock, fresh, registry, join(root, NPM_HOME))
     if (failed !== undefined) {

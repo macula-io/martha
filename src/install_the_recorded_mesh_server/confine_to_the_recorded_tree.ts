@@ -21,16 +21,16 @@
 // lacks is missing on a machine where nothing was planted. Imported without
 // `?tree=`, by the launcher or a test, it only exports the rule.
 //
-// The hook is the launcher's own file, outside the tree and HOME. The flag is
-// in the server's arguments, so a worker thread or a fork of the server keeps
-// it (they inherit node's arguments); NODE_OPTIONS is emptied for the server
-// anyway (SERVER_NEEDS).
+// The hook is the launcher's own file, exactly as trusted as the launcher. The
+// flag is in the server's arguments, so a worker thread or a fork of the server
+// keeps it unless the server gives it other arguments; NODE_OPTIONS is emptied
+// for the server anyway (SERVER_NEEDS). The tree is named by its real path,
+// as node resolves every module to its real path.
 //
-// What this does not close: `process.dlopen` with an absolute path, and a child
-// node process the server starts with arguments of its own, are not resolved
-// through this hook. Only code of the tree can do either, and that code is
-// compared file by file before every launch, so what it names is the tree's own
-// choice, not the member's.
+// What this does not close: the hook confines resolution only. Whatever the
+// tree's own code chooses to do is that code's choice, and that code is
+// compared file by file before every launch: for example `process.dlopen` on an
+// absolute path, or a node child or worker started with arguments of its own.
 
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
