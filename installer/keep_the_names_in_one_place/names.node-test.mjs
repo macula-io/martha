@@ -103,6 +103,15 @@ test('every signing call is to a sha the installer lists', () => {
   }
 })
 
+test('every action a release workflow runs is pinned by a full commit sha', () => {
+  // These jobs hold packages:write or id-token:write: a moved tag on an action would run with them.
+  for (const [name, text] of Object.entries(workflow)) {
+    for (const [, ref] of text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)) {
+      assert.match(ref ?? '', /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, `${name} runs ${ref}, not pinned by sha`)
+    }
+  }
+})
+
 test('no workflow spells the image out; each reads it from the installer package.json', () => {
   for (const [name, text] of Object.entries(workflow)) assert.ok(!text.includes(NAMES.image), `${name} names ${NAMES.image} as a literal`)
 })
