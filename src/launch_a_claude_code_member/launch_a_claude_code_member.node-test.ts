@@ -794,10 +794,23 @@ for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
 // A stand-in of a recorded version, with one bin as npx would pick it, served
 // on the loopback: the launcher must not reach the real registry in a test.
 const RECORDED_MARK = 'the recorded mesh server'
+/**
+ * The only variables the stand-in answers with: the ones a test asks whether
+ * they reached the server. Never its whole environment, which is whatever the
+ * person running the suite has, secrets included (martha#92).
+ * It copies the environment by a spread, the one whole-environment read the
+ * recorder lists (prove_the_mesh_server_bytes.ts), and picks from the copy.
+ */
+const ASKED_OF_THE_STAND_IN = ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RELAY_SOCKET_VARIABLE, 'CLAUDE_CODE_PLUGIN_DIRS'] as const
+const STAND_IN_ANSWER = [
+  `const asked = ${JSON.stringify(ASKED_OF_THE_STAND_IN)}`,
+  'const started = { ...process.env }',
+  'process.stderr.write(JSON.stringify(Object.fromEntries(asked.filter((name) => name in started).map((name) => [name, started[name]]))))',
+].join('\n')
 
 async function recordedTreeOf(t: TestContext, version: string): Promise<{ registry: FakeRegistry; recording: MeshTreeRecording }> {
   const registry = await fakeMeshRegistry([
-    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\nprocess.stderr.write(JSON.stringify({ ...process.env }))\n` } },
+    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\n${STAND_IN_ANSWER}\n` } },
   ])
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
@@ -829,7 +842,9 @@ test('an approved config that installs a recorded mesh server version starts the
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
   assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
-  assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
+  // What the stand-in writes is captured, never let through into the run (martha#92).
+  const run = spawnSync(entry.command, entry.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  assert.equal(run.stdout.trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
 })

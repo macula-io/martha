@@ -46,20 +46,23 @@ export function programsRunByScriptsOf(manifest: Manifest): string[] {
 
 /**
  * The folders whose code the test script runs, such as the core and the checks
- * on it: the first segment of every file or glob it names, quoted or not. One
- * that names no folder (a file or glob at the repository's top) is thrown, by
- * name, rather than skipped.
+ * on it: the first segment of every file or glob it names, quoted or not, the
+ * runner node --test is started through included (martha#92). The word `node`
+ * is the program, wherever it stands, and a leading ./ is the repository's top.
+ * One that names no folder (a file or glob at the repository's top) is thrown,
+ * by name, rather than skipped. Each folder is named once.
  */
 export function codeFoldersOf(manifest: Manifest): string[] {
-  return (manifest.scripts[TEST_SCRIPT] ?? '')
+  const folders = (manifest.scripts[TEST_SCRIPT] ?? '')
     .split(/\s+/)
-    .filter((word, index) => word !== '' && !(index === 0 && word === 'node') && !word.startsWith('-'))
-    .map((word) => word.replace(/^(['"])(.*)\1$/, '$2'))
+    .filter((word) => word !== '' && word !== 'node' && !word.startsWith('-'))
+    .map((word) => word.replace(/^(['"])(.*)\1$/, '$2').replace(/^\.\//, ''))
     .map((path) => {
       const folder = /^([^/*?[\]{}]+)\//.exec(path)?.[1]
       if (folder === undefined) throw new Error(`the test script runs '${path}', which names no folder to scan`)
       return folder
     })
+  return [...new Set(folders)]
 }
 
 /**

@@ -242,6 +242,11 @@ test('every glob form the test script uses is read, and one naming no folder fai
     codeFoldersOf(testing("node --test --test-reporter=spec 'src/**/*.node-test.ts' architecture/*.node-test.ts \"checks/x.node-test.ts\"")),
     ['src', 'architecture', 'checks'],
   )
+  assert.deepEqual(
+    codeFoldersOf(testing("node ./runs/through.ts node --test 'src/**/*.node-test.ts'")),
+    ['runs', 'src'],
+    'a runner node --test is started through is code the script runs',
+  )
   assert.throws(() => codeFoldersOf(testing("node --test 'src/**/*.ts' '*.node-test.ts'")), /'\*\.node-test\.ts'/)
   assert.throws(() => codeFoldersOf(testing('node --test lone.node-test.ts')), /'lone\.node-test\.ts'/)
   assert.throws(() => codeFoldersOf(testing("node --test '**/*.node-test.ts'")), /'\*\*\/\*\.node-test\.ts'/)

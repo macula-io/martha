@@ -45,6 +45,15 @@ wait for it to stop (a server's `close` callback, a child's `exit`). A check
 (`prove_the_core/every_test_run_ends.ts`) fails when the script loses any of
 the three.
 
+No test prints your environment. `npm test`, here and in `installer/`, runs
+node --test through `prove_the_core/no_test_output_carries_the_environment.ts`,
+which plants a fresh secret-looking value in `MARTHA_PLANTED_SECRET` and fails
+the run when that value appears anywhere in its output, even though every
+test passed. A test that starts a child which reports its environment captures
+that child's output (`stdio: 'pipe'`) and asserts on the names it needs; it
+never lets the output through, and never puts a whole environment in an
+assertion message.
+
 CI runs those, and three more: every link in every document must resolve, both
 logos must be valid SVG, and `npm run check:private` must find no private link,
 internal host name or private remote. The last one stops, rather than passing,

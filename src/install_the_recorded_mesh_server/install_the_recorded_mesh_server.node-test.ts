@@ -44,6 +44,14 @@ const IMPORTED_ABOVE_THE_TREE = 'mesh-optional-imported'
 const UNDER_HOME = 'mesh-optional-home'
 /** The launcher's own hook that confines what the server loads to its tree. */
 const CONFINING_HOOK = fileURLToPath(new URL('./confine_to_the_recorded_tree.ts', import.meta.url))
+/**
+ * The only variables the stand-in server answers with: the ones a test asks
+ * whether they reached it. Never its whole environment, which can be whatever
+ * the person running the suite has, secrets included (martha#92).
+ * It copies the environment by a spread, the one whole-environment read the
+ * recorder lists (prove_the_mesh_server_bytes.ts), and picks from the copy.
+ */
+const ASKED_OF_THE_SERVER = ['HOME', 'PATH', 'NODE_OPTIONS', 'SOME_ADDON_PREBUILD', 'LD_PRELOAD', 'MACULA_MCP_MODEL', SETTING] as const
 
 const serverOf = (mark: string, setting = SETTING): FakePackage => ({
   name: MESH_SERVER_PACKAGE,
@@ -59,8 +67,10 @@ const serverOf = (mark: string, setting = SETTING): FakePackage => ({
       `for (const name of ['${ABOVE_THE_TREE}', '${UNDER_HOME}']) { try { require(name) } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e } }`,
       `import('${IMPORTED_ABOVE_THE_TREE}').catch((e) => { if (e.code !== 'ERR_MODULE_NOT_FOUND') { console.error(e); process.exitCode = 1 } })`,
       `console.log(said + ' ${mark}')`,
-      // What the server was started with, for the tests on its environment.
-      'process.stderr.write(JSON.stringify({ ...process.env }))',
+      // What the server was started with, for the tests on its environment: only the names they ask about.
+      `const asked = ${JSON.stringify(ASKED_OF_THE_SERVER)}`,
+      'const started = { ...process.env }',
+      'process.stderr.write(JSON.stringify(Object.fromEntries(asked.filter((name) => name in started).map((name) => [name, started[name]]))))',
       '',
     ].join('\n'),
     'dist/realm.js': 'console.log("realm")\n',
@@ -129,9 +139,15 @@ const refusalOf = (placed: Placed): string => {
   return placed.refusal
 }
 
-/** What the placed server prints when started the way the host would start it. */
-const runPlaced = (entry: { command: string; args: string[] }, cwd: string, env: NodeJS.ProcessEnv = {}): string =>
-  execFileSync(entry.command, entry.args, { cwd, env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' }).trim()
+/**
+ * What the placed server prints on stdout when started the way the host would
+ * start it. Its stderr is captured, never let through into the run (martha#92).
+ */
+const runPlaced = (entry: { command: string; args: string[] }, cwd: string, env: NodeJS.ProcessEnv = {}): string => {
+  const run = spawnSync(entry.command, entry.args, { cwd, env: { PATH: process.env.PATH, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  assert.equal(run.status, 0, `the placed server failed: ${run.stderr}`)
+  return run.stdout.trim()
+}
 
 /**
  * A config file naming the other registry and sending every request through it

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { join, relative } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -63,10 +63,18 @@ async function throughTheRunner(t: TestContext, command: readonly string[]): Pro
 /** node --test with the test script's own flags, on the planted `file`. */
 const nodeTestOn = (file: string): string[] => [process.execPath, '--test', ...testRunFlagsOf(manifestOf(repository)), plantedPath(file)]
 
-test(`npm test runs node --test through ${RUNNER}`, () => {
-  const words = (manifestOf(repository).scripts[TEST_SCRIPT] ?? '').split(/\s+/)
-  assert.deepEqual(words.slice(0, 4), ['node', RUNNER, 'node', '--test'])
-})
+/** Every package in martha whose tests npm test runs: the repository's and the installer's. */
+const PACKAGES = ['.', 'installer']
+
+for (const folder of PACKAGES) {
+  test(`npm test in ${folder} runs node --test through ${RUNNER}`, () => {
+    const at = join(repository, folder)
+    const [program, runner, ...rest] = (manifestOf(at).scripts[TEST_SCRIPT] ?? '').split(/\s+/)
+    assert.equal(program, 'node')
+    assert.equal(resolve(at, runner ?? ''), resolve(repository, RUNNER), `${folder}'s test script starts with ${runner}`)
+    assert.deepEqual(rest.slice(0, 2), ['node', '--test'])
+  })
+}
 
 test('a test file that lets a child print its environment into the run fails the run, naming the check and never the line', async (t) => {
   const run = await throughTheRunner(t, nodeTestOn('a_test_file_that_prints_its_environment.ts'))
