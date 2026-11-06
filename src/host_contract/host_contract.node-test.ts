@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
-import { SCANNED_EXTENSIONS, isScannedSource } from './imports_beyond_the_core.ts'
+import { SCANNED_EXTENSIONS, isScannedSource } from './core_source.ts'
 import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
 import { hostForTests } from './host_for_tests.ts'
 import { claudeCodeToolNames, openCodeToolNames } from './tool_names_for_tests.ts'
