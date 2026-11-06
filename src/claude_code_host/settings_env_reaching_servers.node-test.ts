@@ -59,6 +59,20 @@ for (const [shape, text] of [
 }
 
 test('the user settings file is under CLAUDE_CONFIG_DIR when it is set, else under HOME/.claude', () => {
-  assert.equal(userSettingsPath({ HOME: '/owner' }), join('/owner', '.claude', USER_SETTINGS_FILE))
-  assert.equal(userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: '/config' }), join('/config', USER_SETTINGS_FILE))
+  assert.deepEqual(userSettingsPath({ HOME: '/owner' }), { path: join('/owner', '.claude', USER_SETTINGS_FILE) })
+  assert.deepEqual(userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: '/config' }), { path: join('/config', USER_SETTINGS_FILE) })
 })
+
+// The launcher and Claude Code must read the same file: an empty or relative
+// CLAUDE_CONFIG_DIR could resolve one way here and another way in the host (martha#65 r=4).
+for (const [shape, configDir] of [
+  ['empty', ''],
+  ['relative', 'config'],
+  ['relative with a dot', './config'],
+] as const) {
+  test(`a CLAUDE_CONFIG_DIR that is ${shape} is refused, naming the variable: which settings file the host reads cannot be told`, () => {
+    const read = userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: configDir })
+    assert.ok('refusal' in read, JSON.stringify(read))
+    assert.ok(read.refusal.includes('CLAUDE_CONFIG_DIR') && read.refusal.includes(JSON.stringify(configDir)), read.refusal)
+  })
+}

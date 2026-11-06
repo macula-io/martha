@@ -780,6 +780,22 @@ test('a name in the approved --settings env nobody approved starts nothing, nami
   assert.ok(refusal.includes(USER_SETTINGS) && refusal.includes('FROM_SETTINGS'), refusal)
 })
 
+for (const [shape, configDir] of [
+  ['empty', ''],
+  ['relative', '.claude'],
+] as const) {
+  test(`a CLAUDE_CONFIG_DIR that is ${shape} starts nothing, naming the variable (#65 r=4)`, async (t) => {
+    const recorded = RECORDED_MESH_SERVERS[0]
+    assert.ok(recorded !== undefined)
+    const { recording } = await recordedTreeOf(t, recorded.server_version)
+    const place = placeFor(t, meshServerAt(recorded.server_version))
+    const fake = fakeClaude(place)
+    const launch = memberLaunch(place, fake.command, place.approved, [], recording)
+    const refusal = await refusedLeavingNothing(t, place, { ...launch, inherited: { ...launch.inherited, CLAUDE_CONFIG_DIR: configDir } }, fake.ranFile)
+    assert.ok(refusal.includes('CLAUDE_CONFIG_DIR'), refusal)
+  })
+}
+
 test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, and the mesh server is given it empty", async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
