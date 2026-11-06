@@ -1,0 +1,51 @@
+{
+  "_why": "Planted slice sources for no_setting_outside_the_declaration's tests. They live in JSON so that no walk of the core's code reads them as code.",
+  "caught": {
+    "the plain reads": [
+      "const limit = process.env['CREW_LIMIT']\n",
+      "const { env } = process\n"
+    ],
+    "importing the process module, under every spelling": [
+      "import { env } from 'node:process'\n",
+      "import * as proc from 'node:process'\n",
+      "import proc from 'process'\n",
+      "const proc = require('process')\n",
+      "const proc = await import('node:process')\n",
+      "const name = 'node:' + 'process'\nconst proc = await import(name)\n",
+      "const proc = require(['pro', 'cess'].join(''))\n"
+    ],
+    "a computed key, an alias, a line break or the global object": [
+      "const at = process['env']\n",
+      "const at = globalThis['process'].env\n",
+      "const g = globalThis\n",
+      "const g = global\n",
+      "const p = process\nconst at = p.env\n",
+      "const {\n  env,\n} = process\n",
+      "const at = `${process.env.HOME}/x`\n"
+    ],
+    "the home directory, through the os module or as a path": [
+      "import { homedir } from 'node:os'\n",
+      "import * as os from 'os'\nconst at = os['home' + 'dir']()\n",
+      "const dir = join('~', '.config')\n",
+      "const dir = '~/.config/crew'\n",
+      "const dir = \"~/.config/crew\"\n",
+      "const dir = `~/.config/crew`\n"
+    ]
+  },
+  "located": {
+    "text": "// a comment\nimport { env } from 'node:process'\n",
+    "line": 2,
+    "why": "imports node:process"
+  },
+  "quiet": [
+    "// a process restart, from process.env, at ~/x",
+    "/* globalThis */",
+    "const why = 'no process runner was given'",
+    "const why = `no process runner: ${request.command}`",
+    "const pattern = /process\\.env|globalThis/",
+    "const ok = /['\"`]~\\//.test(x)",
+    "host.processes.run(request)",
+    "const result = await host?.process",
+    "const text = 'a ~ in the middle, and ~user'"
+  ]
+}

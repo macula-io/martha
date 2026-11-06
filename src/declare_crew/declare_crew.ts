@@ -164,7 +164,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
   const mode = modeOf(refuse, value['mode'])
   return {
     paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) },
-    owner: value['owner'],
+    owner: value['owner'].trim(),
     members: membersOf(refuse, value['members'], mode.roles),
     mode,
     house_rules: houseRulesOf(refuse, value['house_rules']),
@@ -215,10 +215,12 @@ function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Me
     refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
     const { name, role, model } = member
     if (typeof name !== 'string' || !MEMBER_NAME.test(name)) refuse.at(`${at}.name`, `is not a name matching ${MEMBER_NAME}`)
-    if (seen.has(name)) refuse.at(`${at}.name`, 'is on the crew twice')
-    seen.add(name)
+    // Names are compared case-folded: Terra and terra would share branches and a mailbox.
+    const folded = name.toLowerCase()
+    if (seen.has(folded)) refuse.at(`${at}.name`, 'is on the crew twice (names are compared ignoring case)')
+    seen.add(folded)
     if (typeof role !== 'string' || !roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${roles.join(', ')})`)
-    if (model !== undefined && !isText(model)) refuse.at(`${at}.model`, 'is not a model name')
+    if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
     return { name, role, model: model ?? null }
   })
 }

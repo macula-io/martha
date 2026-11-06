@@ -216,6 +216,21 @@ test('a member whose role is not in the mode table is refused by name', async ()
   await refusedWith({ ...team, members: [...team.members, { name: 'Ghost', role: 'auditor' }] }, 'members[3].role')
 })
 
+// --- folded in from review r=1 ----------------------------------------------
+
+test('two members whose names differ only in case are one name twice', async () => {
+  await refusedWith({ ...team, members: [team.members[0], { name: 'lead', role: 'builder' }] }, 'members[1].name')
+})
+
+test('a model of null is the host\'s own model, the same as leaving the key out', async () => {
+  const settings = await declare({ ...team, members: [{ name: 'Lead', role: 'builder', model: null }] }).settings
+  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null }])
+})
+
+test('the owner\'s name is trimmed', async () => {
+  assert.equal((await declare({ ...team, owner: '  Ann ' }).settings).owner, 'Ann')
+})
+
 // --- 5. frozen ----------------------------------------------------------------
 
 test('the settings are frozen all the way down: no slice changes them for its neighbours', async () => {

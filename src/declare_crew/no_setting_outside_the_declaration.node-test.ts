@@ -1,70 +1,77 @@
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
-import {
-  PROGRAMS_RUN_BY_CI,
-  settingsReadOutsideTheDeclaration,
-  type Source,
-} from './no_setting_outside_the_declaration.ts'
+import { coreSources } from '../host_contract/imports_beyond_the_core.ts'
+import { settingsReadOutsideTheDeclaration, type Source } from './no_setting_outside_the_declaration.ts'
 
 const src = join(import.meta.dirname, '..')
+const scripts = (JSON.parse(readFileSync(join(src, '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts
 
-const sourcesUnder = (dir: string): Source[] =>
-  readdirSync(dir, { recursive: true, encoding: 'utf8' })
-    .filter(path => path.endsWith('.ts'))
-    .map(path => ({ path: relative(src, join(dir, path)), text: readFileSync(join(dir, path), 'utf8') }))
+// Which files under src/ are not slices, as package.json declares them: the test
+// files its test script runs, and the programs its other scripts run with node.
+const testSuffixes = [...(scripts['test'] ?? '').matchAll(/'src\/\*\*\/\*([^']+)'/g)].map(match => match[1] ?? '')
+const programsRunByScripts = Object.entries(scripts)
+  .filter(([name]) => name !== 'test')
+  .flatMap(([, command]) => [...command.matchAll(/\bnode\s+src\/([^/\s]+)\//g)].map(match => match[1] ?? ''))
 
-const plant = (text: string, path = 'some_slice/some_slice.ts'): Source[] => [{ path, text }]
+const isSlice = (path: string) =>
+  !testSuffixes.some(suffix => path.endsWith(suffix)) && !programsRunByScripts.includes(path.split(sep)[0] ?? '')
 
-// --- the check bites ------------------------------------------------------------
+interface Planted {
+  readonly caught: Readonly<Record<string, readonly string[]>>
+  readonly located: { readonly text: string; readonly line: number; readonly why: string }
+  readonly quiet: readonly string[]
+}
+const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_reaches.json'), 'utf8')) as Planted
 
-test('a slice that reads the environment is named', () => {
-  const found = settingsReadOutsideTheDeclaration(plant("const limit = process.env['CREW_LIMIT']\n"))
-  assert.deepEqual(found, [{ path: 'some_slice/some_slice.ts', line: 1, why: 'reads the environment' }])
+const judge = (text: string) => settingsReadOutsideTheDeclaration([{ path: 'some_slice/some_slice.ts', text }])
+const caught = (text: string) => assert.notDeepEqual(judge(text), [], `got past the check:\n${text}`)
+
+// --- what package.json says is not a slice -------------------------------------
+
+test('package.json names a test glob and at least one program, so the exemptions are not empty by accident', () => {
+  assert.notDeepEqual(testSuffixes, [])
+  assert.notDeepEqual(programsRunByScripts, [])
 })
 
-test('destructuring the environment is named too', () => {
-  const found = settingsReadOutsideTheDeclaration(plant('const { env } = process\n'))
-  assert.equal(found.length, 1)
-})
-
-test('a slice that finds the home directory is named', () => {
-  const found = settingsReadOutsideTheDeclaration(plant("import { homedir } from 'node:os'\nconst at = homedir()\n"))
-  assert.deepEqual(found.map(f => f.line), [1, 2])
-})
-
-test('a slice that writes a home-relative path is named', () => {
-  for (const quote of ["'", '"', '`']) {
-    const found = settingsReadOutsideTheDeclaration(plant(`const dir = ${quote}~/.config/crew${quote}\n`))
-    assert.equal(found.length, 1, quote)
+test('a test file and a program a script runs are not slices; a directory that only starts like one is', () => {
+  for (const suffix of testSuffixes) assert.equal(isSlice(join('a', `a${suffix}`)), false)
+  for (const program of programsRunByScripts) {
+    assert.equal(isSlice(join(program, 'main.ts')), false)
+    assert.equal(isSlice(join(`${program}_too`, 'x.ts')), true)
   }
 })
 
-test('a test file is not a slice and is not judged', () => {
-  assert.deepEqual(settingsReadOutsideTheDeclaration(plant('process.env.X', 'a/a.node-test.ts')), [])
+// --- every way to reach the environment is caught -----------------------------
+
+for (const [kind, texts] of Object.entries(planted.caught)) {
+  test(`caught: ${kind}`, () => {
+    assert.ok(texts.length > 0)
+    for (const text of texts) caught(text)
+  })
+}
+
+test('a finding names its file and line', () => {
+  const { text, line, why } = planted.located
+  assert.deepEqual(judge(text), [{ path: 'some_slice/some_slice.ts', line, why }])
 })
 
-test('a program CI runs is not a slice of the running crew and is not judged', () => {
-  for (const program of PROGRAMS_RUN_BY_CI) {
-    assert.deepEqual(settingsReadOutsideTheDeclaration(plant('process.env.X', join(program, 'main.ts'))), [])
-  }
-})
+// --- what is not a reach is left alone ----------------------------------------
 
-test('a directory whose name only starts like a CI program is still judged', () => {
-  for (const program of PROGRAMS_RUN_BY_CI) {
-    assert.equal(settingsReadOutsideTheDeclaration(plant('process.env.X', join(`${program}_too`, 'x.ts'))).length, 1)
-  }
+test('the words in comments, strings and regular expressions, and a property named process, are not reaches', () => {
+  for (const text of planted.quiet) assert.deepEqual(judge(`${text}\n`), [], text)
 })
 
 // --- the tree -----------------------------------------------------------------
 
 test('no slice in this repository reads a setting from anywhere but the declaration', () => {
-  assert.deepEqual(settingsReadOutsideTheDeclaration(sourcesUnder(src)), [])
+  const slices: Source[] = coreSources(src).filter(source => isSlice(source.path))
+  assert.deepEqual(settingsReadOutsideTheDeclaration(slices), [])
 })
 
-test('every program CI runs still exists, so the exception cannot outlive it', () => {
-  const present = new Set(readdirSync(src))
-  for (const program of PROGRAMS_RUN_BY_CI) assert.ok(present.has(program), `${program} is gone; drop it from PROGRAMS_RUN_BY_CI`)
+test('the programs package.json runs exist, so an exemption cannot outlive its program', () => {
+  const directories = new Set(coreSources(src).map(source => source.path.split(sep)[0]))
+  for (const program of programsRunByScripts) assert.ok(directories.has(program), program)
 })
