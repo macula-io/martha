@@ -16,6 +16,7 @@ export interface Manifest {
     readonly hostContract?: string
     readonly hostGlue?: readonly string[]
     readonly hostAdapters?: readonly string[]
+    readonly packageImports?: Readonly<Record<string, string>>
   }
 }
 
@@ -41,6 +42,28 @@ export function programsRunByScriptsOf(manifest: Manifest): string[] {
     .filter(([name]) => name !== TEST_SCRIPT)
     .flatMap(([, command]) => [...command.matchAll(run)].map((match) => match[1] ?? ''))
 }
+
+/**
+ * The folders whose code the test script runs, such as the core and the checks
+ * on it: the first segment of every file or glob it names, quoted or not. One
+ * that names no folder (a file or glob at the repository's top) is thrown, by
+ * name, rather than skipped.
+ */
+export function codeFoldersOf(manifest: Manifest): string[] {
+  return (manifest.scripts[TEST_SCRIPT] ?? '')
+    .split(/\s+/)
+    .filter((word, index) => word !== '' && !(index === 0 && word === 'node') && !word.startsWith('-'))
+    .map((word) => word.replace(/^(['"])(.*)\1$/, '$2'))
+    .map((path) => {
+      const folder = /^([^/*?[\]{}]+)\//.exec(path)?.[1]
+      if (folder === undefined) throw new Error(`the test script runs '${path}', which names no folder to scan`)
+      return folder
+    })
+}
+
+/** Each package code may import, with the one folder whose files may import it. */
+export const packageImportsOf = (manifest: Manifest): Readonly<Record<string, string>> =>
+  manifest.martha?.packageImports ?? {}
 
 /** Whether a path under the core is a test file the test script runs. */
 export const isTestFile = (test_suffixes: readonly string[], path: string): boolean =>

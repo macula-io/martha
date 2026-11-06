@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { specifiersOf } from '../host_contract/imports_beyond_the_core.ts'
+import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
 import {
   processGroupOf,
   relay,
@@ -244,8 +244,9 @@ test('the relay holds no verdict of its own: a deny is the launcher\'s reason, w
 
 test('the relay imports only its protocol, and the protocol imports nothing', () => {
   const read = (name: string): string => readFileSync(new URL(`./hooks/${name}`, import.meta.url), 'utf8')
-  assert.deepEqual(specifiersOf(read('register.ts')), ['./relay_protocol.ts'])
-  assert.deepEqual(specifiersOf(read('relay_protocol.ts')), [])
+  const specifiers = (name: string) => moduleReferencesOf(read(name), name).map(({ specifier }) => specifier)
+  assert.deepEqual(specifiers('register.ts'), ['./relay_protocol.ts'])
+  assert.deepEqual(specifiers('relay_protocol.ts'), [])
   assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./register.ts'] })
 })
 

@@ -46,8 +46,8 @@ import { dirname, join, relative, sep } from 'node:path'
 
 import ts from 'typescript'
 
-import { specifiersOf } from '../src/host_contract/imports_beyond_the_core.ts'
 import { coreSources } from './core_sources.ts'
+import { moduleReferencesOf } from './parse_a_source.ts'
 import { isTestFile } from './declared_in_package_json.ts'
 
 /** The slices under src/ that may write launch records, besides the host glue. */
@@ -303,7 +303,8 @@ export function hostGlueImportedBySlices(
     // A test or a program package.json runs is no slice: it may drive the real glue (#26).
     .filter((source) => !isTestFile(test_suffixes, source.path) && !programs.includes(sliceOf(source.path)))
     .flatMap((source) =>
-      specifiersOf(source.text)
+      moduleReferencesOf(source.text, source.path)
+        .flatMap(({ specifier }) => specifier ?? [])
         .filter((specifier) => specifier.startsWith('./') || specifier.startsWith('../'))
         .filter((specifier) => host_glue.includes(sliceOf(relative(src, join(src, dirname(source.path), specifier)))))
         .map((specifier) => ({ path: source.path, specifier })),
