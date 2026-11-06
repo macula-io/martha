@@ -78,6 +78,9 @@ jobs:
         run: |
           echo "image=$(jq -r .martha.image installer/package.json)" >> "$GITHUB_OUTPUT"
           echo "version=${GITHUB_REF_NAME#"$(jq -r .martha.releaseTagPrefix installer/package.json)"}" >> "$GITHUB_OUTPUT"
+      # A docker-container builder: the default docker driver ignores oci-mediatypes and pushes a Docker v2
+      # manifest, which every install refuses.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
