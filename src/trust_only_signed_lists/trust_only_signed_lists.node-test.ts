@@ -402,14 +402,15 @@ test(`${INSTANT_TESTS}: an RFC 3339 UTC instant opens, with or without milliseco
 
 test(`${INSTANT_TESTS}: the same tests hold with the verifier in ${FAR_ZONE}`, { skip: process.env.TZ === FAR_ZONE }, () => {
   const file = new URL(import.meta.url).pathname
-  const run = () =>
-    execFileSync(process.execPath, ['--test', `--test-name-pattern=${INSTANT_TESTS}`, file], {
-      env: { ...process.env, TZ: FAR_ZONE },
-      encoding: 'utf8',
-    })
-  const report = run()
-  assert.match(report, /# fail 0|ℹ fail 0/)
-  assert.doesNotMatch(report, /# pass 0|ℹ pass 0/)
+  // Without this the child reports to this runner instead of printing its own report.
+  const { NODE_TEST_CONTEXT: _, ...env } = process.env
+  // A failing child exits non-zero, and execFileSync throws.
+  const report = execFileSync(process.execPath, ['--test', '--test-reporter=tap', `--test-name-pattern=${INSTANT_TESTS}`, file], {
+    env: { ...env, TZ: FAR_ZONE },
+    encoding: 'utf8',
+  })
+  assert.match(report, /^# fail 0$/m)
+  assert.doesNotMatch(report, /^# pass 0$/m)
 })
 
 test(`${INSTANT_TESTS}: the far zone is really not UTC`, () => {

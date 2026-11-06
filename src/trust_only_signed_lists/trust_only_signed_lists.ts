@@ -28,7 +28,9 @@
 //      MAXIMUM_LIFETIME_DAYS apart. The cap counts from the signed issue date,
 //      not from now: counted from now, a list signed to live ten years would
 //      open in its final MAXIMUM_LIFETIME_DAYS. One issued in the future is
-//      refused too. A list signed for another crew or kind, an expired one, one older than the
+//      refused too. Both instants are RFC 3339 in UTC and must name a real
+//      moment: a form Date.parse reads by the verifier's timezone has two
+//      readings (rule 3a). A list signed for another crew or kind, an expired one, one older than the
 //      newest this verifier has opened, and a different list at the epoch
 //      already opened are all refused. Otherwise a valid old roster that still
 //      lists a removed member could be put back, or a second list signed at the
@@ -215,8 +217,23 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   return { entries, members: membersOf(entries), epoch, digest }
 }
 
+/**
+ * The one form a signed instant may take: RFC 3339 in UTC, as toISOString writes it,
+ * with or without milliseconds. Date.parse reads a form without an offset, or a
+ * free form, in the verifier's own timezone, so one signed byte string would
+ * open differently on two hosts (rule 3a).
+ */
+const RFC3339_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
+/** Date and time, up to the seconds: the part of an instant toISOString must give back unchanged. */
+const TO_THE_SECOND = 'YYYY-MM-DDTHH:mm:ss'.length
+
 function instantOf(value: unknown): number {
-  return typeof value === 'string' ? Date.parse(value) : Number.NaN
+  if (typeof value !== 'string' || !RFC3339_UTC.test(value)) return Number.NaN
+  const instant = Date.parse(value)
+  if (Number.isNaN(instant)) return Number.NaN
+  // An impossible date (31 November, 24:00) parses by rolling over; it must not.
+  const round_trip = new Date(instant).toISOString().slice(0, TO_THE_SECOND)
+  return round_trip === value.slice(0, TO_THE_SECOND) ? instant : Number.NaN
 }
 
 function parsed(document: Buffer | undefined): Record<string, unknown> | string {

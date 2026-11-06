@@ -352,7 +352,10 @@ So each list is a document the owner signs, opened by `openTrustList`
   cannot carry a key of its own. A list for another crew or kind, an expired
   one, one issued in the future, one whose `expires_at` is more than
   `MAXIMUM_LIFETIME_DAYS` after its `issued_at` (counted from the signed issue
-  date, so a long-lived list cannot open in its final days), one older than the newest
+  date, so a long-lived list cannot open in its final days), one whose
+  `issued_at` or `expires_at` is not an RFC 3339 UTC instant naming a real moment
+  (a form without an offset, or a free form, reads by the verifier's timezone),
+  one older than the newest
   epoch the verifier has opened, and a different list at that same epoch are
   refused. The verifier's `EpochStore` keeps the epoch and a digest of the list
   it opened, and it must persist across processes where the member's user
