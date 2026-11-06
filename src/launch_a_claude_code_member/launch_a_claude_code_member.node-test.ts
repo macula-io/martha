@@ -666,7 +666,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
   t.after(() => rmSync(scratch, { recursive: true, force: true }))
-  const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], versions: [] }
+  const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], known_environment_reads: {}, versions: [] }
   const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
   return { registry, recording: { ...recording, versions: [tree] } }
 }
