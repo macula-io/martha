@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { ROW_STREAM_MOVED } from './host_contract.ts'
-import { SCANNED_EXTENSIONS, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
+import { COMPUTED_SPECIFIER, SCANNED_EXTENSIONS, coreSources, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
 import { hostForTests } from './host_for_tests.ts'
 
 const SRC = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -30,11 +29,7 @@ test('stores are rows and documents, nothing else', () => {
 
 // --- the core reaches a coding tool only through the contract -----------------
 
-const sourcesUnder = (root: string): { path: string; text: string }[] =>
-  readdirSync(root, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && isScannedSource(entry.name))
-    .map((entry) => join(entry.parentPath, entry.name))
-    .map((path) => ({ path: relative(SRC, path), text: readFileSync(path, 'utf8') }))
+const sourcesUnder = coreSources
 
 // This file plants imports in strings below, so it is the one file the scan
 // leaves out, found by its own path rather than by a name written here.
@@ -66,7 +61,7 @@ test('a planted import of a coding tool is named, with its file', () => {
     { path: 'a/required.ts', specifier: 'some-host-sdk' },
     { path: 'a/reexport.ts', specifier: 'host-api' },
     { path: 'a/template.ts', specifier: '@opencode-ai/sdk' },
-    { path: 'a/computed.ts', specifier: '(computed: name)' },
+    { path: 'a/computed.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
   ])
 })
 

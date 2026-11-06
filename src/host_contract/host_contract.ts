@@ -17,7 +17,8 @@
 //
 // The core imports nothing but its own slices and Node's standard library, so
 // this contract is the only way it reaches a coding tool. A test fails by name
-// on any other import (imports_beyond_the_core.ts).
+// on any other import; the check is in imports_beyond_the_core.ts. This file
+// imports nothing at all: every slice depends on the contract, never the reverse.
 
 /** The time, in milliseconds since the Unix epoch. */
 export interface Clock {
@@ -37,6 +38,11 @@ export interface StoredRow {
  * Streams of rows that are only ever appended to. There is no way to rewrite
  * or remove a row: a ledger that can be edited cannot be trusted by the member
  * who reads it after a refresh.
+ *
+ * A stream name is an opaque key. An adapter must encode it before it touches
+ * anything the name could steer (a file path, a table, a URL): a name holding
+ * `..` or `/` is never a path. Slices check the names they build, and the
+ * adapter does not rely on that.
  */
 export interface RowStore {
   /**

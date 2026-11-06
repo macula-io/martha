@@ -13,6 +13,14 @@
 //   instead of sending it again. That is the mechanical half of revalidating on
 //   resume (#3).
 //
+//   Where that holds: for every act sent through sendOutwardAct, which is the
+//   only way this slice lets an act out. A slice that sends a kind of act (a
+//   push, a room message) routes it through sendOutwardAct when it lands; until
+//   then nothing sends one at all.
+//
+// A package is an issue, owner/repo#n, and its name is checked before it names
+// a stream.
+//
 // Nothing here rewrites or removes a row. An outcome names the row of the act it
 // concludes; the store's expected-length append makes sure that two successors
 // concluding the same act cannot both be kept.
@@ -96,8 +104,16 @@ interface Work {
   readonly member: string
 }
 
-/** The stream a package's ledger lives in. */
-export const ledgerStreamOf = (work_package: string): string => `ledger/${work_package}`
+// A work package is an issue: owner/repo#n, as GitHub names it. Nothing else is
+// one, and refusing everything else here keeps a package name from steering
+// where its stream lives.
+const WORK_PACKAGE = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.+#)[A-Za-z0-9._-]+#[1-9][0-9]*$/
+
+/** The stream a package's ledger lives in; refuses a name that is not owner/repo#n. */
+export const ledgerStreamOf = (work_package: string): string => {
+  if (!WORK_PACKAGE.test(work_package)) throw new Error(`${JSON.stringify(work_package)} is not a work package (owner/repo#n)`)
+  return `ledger/${work_package}`
+}
 
 // --- reading --------------------------------------------------------------------
 
@@ -132,9 +148,13 @@ interface PlacedRow {
 }
 
 // A row the ledger cannot read is refused, never skipped: skipping it could hide
-// an act that was sent, and a successor would send it again.
+// an act that was sent, and a successor would send it again. So is a row filed
+// under another package's stream: its positions would be read as this one's.
 const placed = (work_package: string, stored: StoredRow): PlacedRow => {
   if (!isLedgerRow(stored.row)) throw new Error(`row ${stored.position} of ${work_package} is not a ledger row`)
+  if (stored.row.package !== work_package) {
+    throw new Error(`row ${stored.position} of ${work_package} belongs to ${stored.row.package}`)
+  }
   return { position: stored.position, row: stored.row }
 }
 
@@ -193,44 +213,113 @@ const streamMoved = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: unknown }).code === ROW_STREAM_MOVED
 
 /**
+ * How many times concluding reads the stream again after it moved. Each attempt
+ * follows a row another writer kept; a stream that moves this often while one
+ * outcome is being kept is reported, not chased.
+ */
+export const CONCLUDE_ATTEMPTS = 5
+
+/**
  * Records the outcome of an act announced at `announced_at`. Used by the member
  * that sent it, and by a successor that checked an act left awaiting.
  *
  * The outcome is kept only if no row landed since the check that the act is
- * still awaiting; if one did, the check runs again on what is there now.
+ * still awaiting; if one did, the check runs again on what is there now, at
+ * most CONCLUDE_ATTEMPTS times.
  */
 export async function concludeAct(
   host: LedgerHost,
   input: Work & { readonly announced_at: number; readonly outcome: Outcome },
 ): Promise<void> {
-  const rows = await placedRows(host, input.package)
-  const refusal = refusalToConclude(rows, input.announced_at)
-  if (refusal !== undefined) throw new Error(refusal)
-  const row: ActConcludedRow = {
-    kind: ACT_CONCLUDED,
-    package: input.package,
-    member: input.member,
-    at: host.clock.now(),
-    announced_at: input.announced_at,
-    outcome: input.outcome,
+  for (let attempt = 1; attempt <= CONCLUDE_ATTEMPTS; attempt += 1) {
+    const rows = await placedRows(host, input.package)
+    const refusal = refusalToConclude(rows, input.announced_at)
+    if (refusal !== undefined) throw new Error(refusal)
+    const row: ActConcludedRow = {
+      kind: ACT_CONCLUDED,
+      package: input.package,
+      member: input.member,
+      at: host.clock.now(),
+      announced_at: input.announced_at,
+      outcome: input.outcome,
+    }
+    try {
+      await keep(host, row, rows.length)
+      return
+    } catch (error) {
+      if (!streamMoved(error)) throw error
+    }
   }
-  try {
-    await keep(host, row, rows.length)
-  } catch (error) {
-    if (!streamMoved(error)) throw error
-    await concludeAct(host, input)
-  }
+  throw new Error(
+    `the outcome of the act at row ${input.announced_at} was not kept: ${input.package} kept moving for ${CONCLUDE_ATTEMPTS} attempts`,
+  )
 }
 
 const detailOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
+/** The code of a failure before the act ran: it was never sent, and sending it again is safe. */
+export const ACT_NOT_SENT = 'ACT_NOT_SENT'
+
+/** The code of a failure after the act ran: it was sent, and its outcome is not in the ledger. */
+export const OUTCOME_NOT_KEPT = 'OUTCOME_NOT_KEPT'
+
+/** The act was never sent, because its row was not kept. The cause says why. */
+export class ActNotSent extends Error {
+  readonly code = ACT_NOT_SENT
+
+  constructor(act: OutwardAct, cause: unknown) {
+    super(`the ${act.kind} was not sent: its row was not kept (${detailOf(cause)})`, { cause })
+    this.name = 'ActNotSent'
+  }
+}
+
+/**
+ * The act was sent, and its outcome could not be kept. Never send it again:
+ * check what happened, then record it with concludeAct.
+ *
+ * When the act itself failed, that failure is the cause, so it is not lost; the
+ * reason the outcome was not kept is `keeping_error` either way.
+ */
+export class OutcomeNotKept extends Error {
+  readonly code = OUTCOME_NOT_KEPT
+  readonly announced_at: number
+  readonly sent: { readonly succeeded: true; readonly result: string } | { readonly succeeded: false }
+  readonly keeping_error: unknown
+
+  constructor(input: {
+    readonly act: OutwardAct
+    readonly announced_at: number
+    readonly sent: OutcomeNotKept['sent']
+    readonly send_error?: unknown
+    readonly keeping_error: unknown
+  }) {
+    super(
+      `the ${input.act.kind} at row ${input.announced_at} was sent, and its outcome was not kept (${detailOf(input.keeping_error)})`,
+      { cause: input.sent.succeeded ? input.keeping_error : input.send_error },
+    )
+    this.name = 'OutcomeNotKept'
+    this.announced_at = input.announced_at
+    this.sent = input.sent
+    this.keeping_error = input.keeping_error
+  }
+}
+
 /**
  * Sends an outward act: its row first, then the act, then its outcome.
  *
- * If the store does not keep the first row, `send` never runs and the refusal
- * reaches the caller. If `send` fails, the failure is kept as the outcome and
- * still reaches the caller. If the outcome cannot be kept, the act stays
- * awaiting, which is the truth: it was sent and its outcome is not recorded.
+ * A caller can tell three failures apart, and each says what a retry may do:
+ * - ActNotSent (ACT_NOT_SENT): the row was not kept, so `send` never ran.
+ *   Sending again is safe.
+ * - the act's own error, unchanged: `send` failed, and that failure is the
+ *   act's kept outcome.
+ * - OutcomeNotKept (OUTCOME_NOT_KEPT): `send` ran and its outcome could not be
+ *   kept, by a store failure or because a successor concluded the act first.
+ *   The act stays awaiting until someone checks it. Never send it again.
+ *
+ * This is the only way the ledger lets an act out, so an act sent through it
+ * always has its row first. An act that does not go through it has no row: the
+ * slice that sends each kind of act (a push, a room message) routes it here
+ * when that slice lands.
  */
 export async function sendOutwardAct(
   host: LedgerHost,
@@ -243,12 +332,25 @@ export async function sendOutwardAct(
     member: input.member,
     at: host.clock.now(),
     act: input.act,
+  }).catch((cause: unknown) => {
+    throw new ActNotSent(input.act, cause)
   })
-  const conclude = (outcome: Outcome) => concludeAct(host, { ...input, announced_at, outcome })
-  const sent = await send().catch(async (error: unknown) => {
-    await conclude({ succeeded: false, detail: detailOf(error) })
-    throw error
-  })
-  await conclude({ succeeded: true, detail: sent })
-  return sent
+
+  const keepOutcome = async (outcome: Outcome, sent: OutcomeNotKept['sent'], send_error?: unknown) => {
+    try {
+      await concludeAct(host, { package: input.package, member: input.member, announced_at, outcome })
+    } catch (keeping_error) {
+      throw new OutcomeNotKept({ act: input.act, announced_at, sent, send_error, keeping_error })
+    }
+  }
+
+  let result: string
+  try {
+    result = await send()
+  } catch (send_error) {
+    await keepOutcome({ succeeded: false, detail: detailOf(send_error) }, { succeeded: false }, send_error)
+    throw send_error
+  }
+  await keepOutcome({ succeeded: true, detail: result }, { succeeded: true, result })
+  return result
 }
