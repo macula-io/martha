@@ -10,7 +10,8 @@
 //   - running a process, and telling which process holds a pid;
 //   - delivery in and out: a turn handed to the model, and the turns that
 //     arrive, with where each came from as far as the tool itself can say;
-//   - registering a tool.
+//   - registering a tool, and taking apart the name a called tool has on
+//     this host.
 //
 // Nothing that decides anything lives here. A behaviour one host needs and
 // another does not is a slice, never a branch in an adapter. Settings are not
@@ -239,7 +240,20 @@ export interface Tool {
   answer(args: Readonly<Record<string, unknown>>): Promise<string>
 }
 
-export interface Tools {
+/**
+ * How this host names a tool its model calls. A host composes an MCP tool's
+ * name from the server it was installed under and the tool's own name, each
+ * host its own way (Claude Code `mcp__<server>__<tool>`, OpenCode
+ * `<server>_<tool>`, where `_` also occurs inside both names). Only the host
+ * knows its form and its installed servers, so the core never takes a called
+ * name apart itself (martha#2, item 5 (b)).
+ */
+export interface ToolNames {
+  /** The name a called tool's own server gave it; a tool built into the host is its own name. */
+  ownNameOf(called: string): string
+}
+
+export interface Tools extends ToolNames {
   /** Registers a tool; a second tool by a name already registered is refused. */
   register(tool: Tool): void
 }

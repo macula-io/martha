@@ -24,6 +24,7 @@ import type {
   Row,
   StoredRow,
   Tool,
+  ToolNames,
 } from './host_contract.ts'
 import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
 
@@ -38,6 +39,8 @@ export interface HostForTestsOptions {
   readonly launches?: readonly KeyedRow[]
   /** Which process holds a pid; asked afresh every time. */
   readonly identityOf?: (pid: number) => string | null
+  /** How the host this test stands for names a called tool; with none, no name is taken apart. */
+  readonly toolNames?: ToolNames
 }
 
 export interface HostForTests {
@@ -127,6 +130,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
         if (tools.has(tool.name)) throw new Error(`a tool is already registered: ${tool.name}`)
         tools.set(tool.name, tool)
       },
+      ownNameOf: (called) => options.toolNames?.ownNameOf(called) ?? called,
     },
   }
 
