@@ -1233,7 +1233,8 @@ test('a member on the owner\'s terminal starts the recorded mesh server tree, by
   const entry = serverConfigIn(terminal.fake.argsFile).mcpServers.macula
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
-  assert.deepEqual(entry.args, [join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
+  // Started by path, confined to its tree by the launcher's hook (martha#73).
+  assert.equal(entry.args.at(-1), join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   terminal.type(LEAVE_LINE)
   await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
 })
