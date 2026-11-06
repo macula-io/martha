@@ -165,7 +165,7 @@ test('a recorded version is installed from its lock and started by path, with th
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(undefined, { [SETTING]: 'x' }), root, recording: recorded(t, good) }))
   assert.equal(entry.command, process.execPath)
   assert.deepEqual(entry.args, [join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
-  assert.deepEqual(entry.env, { [SETTING]: 'x' }, 'the entry keeps its own settings')
+  assert.deepEqual(entry.env, { ...HOST, [SETTING]: 'x' }, 'the entry keeps its own settings, and HOME and PATH from the host')
   assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
 

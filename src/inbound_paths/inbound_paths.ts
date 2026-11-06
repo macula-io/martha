@@ -192,7 +192,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'B1',
-    what: "the model's own mesh read tools",
+    what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment reads, which the recorder does not list (martha#72); and a module the tree lacks, which node looks for above it and under HOME (martha#73)",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',

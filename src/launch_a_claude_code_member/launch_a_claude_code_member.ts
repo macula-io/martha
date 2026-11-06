@@ -9,11 +9,8 @@
 // for this launch alone. In order:
 //
 //   1. `prepareLaunch`, then the mesh server version the approved server config
-//      installs, which must be a recorded one (martha#49), and its recorded
-//      tree, installed or compared file by file, which the approved copy then
-//      starts by path instead of through npx (martha#65,
-//      ../install_the_recorded_mesh_server): on a refusal of any of them
-//      nothing starts, and the refusal goes to the owner.
+//      installs, which must be a recorded one (martha#49): on a refusal of
+//      either nothing starts, and the refusal goes to the owner.
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
 //      Inside it, an empty 0500 directory: where the member's git looks for
@@ -26,7 +23,11 @@
 //      environment is `launchEnvironment(inherited, switches)`, then the
 //      settings that keep a checkout from running its hooks, install scripts
 //      and .envrc through the member's own commands (martha#24), plus the
-//      socket's path.
+//      socket's path. Before it starts, each mesh server entry of the approved
+//      copy is rewritten to start its recorded tree by path, installed or
+//      compared file by file, with every variable of that environment emptied
+//      but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
+//      a refusal starts nothing.
 //   5. `recordMemberLaunch` with the writable store only the launcher holds
 //      (#42). A launch that cannot be recorded is stopped.
 //
@@ -163,13 +164,20 @@ function meshServerUnproved(serverConfig: Uint8Array | undefined): string | unde
 
 /**
  * Rewrites the approved server config in the snapshot so each mesh server
- * starts from its recorded tree by path; why it cannot, or undefined (martha#65).
+ * starts from its recorded tree by path, with an environment built from the
+ * one the host is given; why it cannot, or undefined (martha#65).
  */
-function meshServersPlaced(serverConfig: Uint8Array | undefined, launch: ClaudeCodeMemberLaunch, snapshotDir: string): string | undefined {
+function meshServersPlaced(
+  serverConfig: Uint8Array | undefined,
+  launch: ClaudeCodeMemberLaunch,
+  snapshotDir: string,
+  hostEnvironment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
   if (serverConfig === undefined) return undefined
   const placed = placeRecordedMeshServers({
     serverConfig: new TextDecoder().decode(serverConfig),
     root: launch.places.mesh_servers,
+    hostEnvironment,
     ...(launch.mesh_trees === undefined ? {} : { recording: launch.mesh_trees }),
   })
   if ('refusal' in placed) return placed.refusal
@@ -192,11 +200,6 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   if (unproved !== undefined) {
     removeSnapshot()
     return refuse(`${NOT_STARTED}: ${unproved}`)
-  }
-  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir)
-  if (placed !== undefined) {
-    removeSnapshot()
-    return refuse(`${NOT_STARTED}: ${placed}`)
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
 
@@ -246,6 +249,13 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   const env = {
     ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, emptyDirectory)),
     [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path,
+  }
+  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, env)
+  if (placed !== undefined) {
+    await server.close()
+    relayDirectory.remove()
+    removeSnapshot()
+    return refuse(`${NOT_STARTED}: ${placed}`)
   }
   const child = spawn(launch.command, [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR], {
     cwd: launch.place.launch_dir,

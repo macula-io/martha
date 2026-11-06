@@ -414,7 +414,7 @@ The rules the seam keeps, and a host must not work around:
   judges a mesh tool by its name from any server, the check fails closed:
   every server in the approved `.mcp.json`, the mesh server or not, must start
   as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
-  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or
+  mesh server's own settings that someone reviewed, `known_settings`, no other key), or
   the member is not started, naming the server. The mesh server may also start
   as `npx -y -p <package>@<x.y.z> <bin>`, the shape members use. Each record
   holds that version's bins and names the one that is the server
@@ -437,11 +437,20 @@ The rules the seam keeps, and a host must not work around:
   npm config or environment, compares the tree file by file before every
   launch, refusing a changed, missing or added file by path, and the approved
   copy starts the record's server bin by path with the launcher's own node,
-  never through npx (`src/install_the_recorded_mesh_server/`). What this does not close: a
+  never through npx (`src/install_the_recorded_mesh_server/`). A host starts
+  a server with its own environment under the entry's `env`, so the
+  launcher's environment would reach the server: a `NODE_OPTIONS` preload, a
+  library for libc to preload, a `<NAME>_PREBUILD` directory a dependency
+  loads a native addon from. So the placed entry's `env` names every variable
+  the host is given: HOME and PATH keep their values, the entry's reviewed
+  settings keep theirs, and every other one is emptied, an allow-list. What
+  this does not close: a
   member's shell runs as the same user and can edit the installed tree during
   a session; the next launch refuses it, but the running server is not checked
   again. This is the same class as the contact-policy file
-  (macula-io/macula-mcp#79). Only the
+  (macula-io/macula-mcp#79). A dependency's own environment reads are not
+  listed by the recorder (martha#72), and a module the tree lacks is looked
+  for in the `node_modules` above it and under HOME (martha#73). Only the
   servers an installed plugin brings are not version-checked; their tools are
   still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry

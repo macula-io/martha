@@ -25,16 +25,26 @@
 //      beside the install, which whoever can edit the tree could rewrite too.
 //   3. START it by path: in the approved copy the host is given, the entry
 //      becomes `<this node> <root>/<version>/node_modules/<package>/<file>`, with
-//      its own keys (its settings) kept. The file is the one the version's
+//      its own keys kept. The file is the one the version's
 //      record gives its server bin (`server_bin`, martha#49); an entry naming any
 //      other bin is refused, whatever the launch gate let through.
+//   4. BUILD its environment: a host starts a server with its own environment
+//      under the entry's `env`, so whatever the launcher hands the host would
+//      reach the server: a NODE_OPTIONS preload, a library for libc to preload,
+//      a <NAME>_PREBUILD directory a dependency loads a native addon from. So the
+//      entry's `env` names every variable the host is given: HOME and PATH
+//      (SERVER_NEEDS) keep the host's values, the entry's own approved settings
+//      keep theirs, and every other one is set empty. An allow-list: a variable
+//      nobody thought of is emptied too. What the host adds by itself after it
+//      starts is its own, not the launcher's.
 //
 // What this does not close: a member's shell runs as the same user, so it can
 // edit the installed tree while a session runs. The next launch refuses that
 // tree, naming the file; the server already running is not checked again. This
-// is the same class as the contact-policy file (macula-io/macula-mcp#79). The
-// launcher's own environment, the owner's, still reaches the server through the
-// host.
+// is the same class as the contact-policy file (macula-io/macula-mcp#79). A
+// module the tree does not hold, an optional one, would be looked for in the
+// node_modules above it and under HOME (martha#73); a dependency's own environment
+// reads are not listed by the recorder (martha#72).
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -75,6 +85,12 @@ const INSTALLING = '.installing-'
 /** The name the recorded lock is made under, so every lock names the same project. */
 const LOCK_PROJECT = 'mesh-server'
 const CODE = /\.[cm]?js$/
+/**
+ * The host's variables the server keeps: HOME, where it keeps its identity and
+ * its databases, and PATH, which the commands it runs for a served procedure
+ * are found on. Every other variable the host is given is emptied.
+ */
+export const SERVER_NEEDS: readonly string[] = ['HOME', 'PATH']
 const INTEGRITY_FAILED = 'EINTEGRITY'
 
 /** The npm program that ships with this node. */
@@ -198,11 +214,21 @@ function pinOf(entry: Entry): { readonly pkg: string; readonly version: string; 
   return { pkg: spec.slice(0, at), version: spec.slice(at + 1), bin }
 }
 
+/** The server's environment: every host variable emptied but SERVER_NEEDS, then the entry's own approved settings. */
+function builtEnvironment(host: Readonly<Record<string, string | undefined>>, own: unknown): Record<string, string> {
+  const emptied = Object.fromEntries(Object.keys(host).map((name) => [name, '']))
+  const kept = Object.fromEntries(SERVER_NEEDS.flatMap((name) => (host[name] === undefined ? [] : [[name, host[name]]])))
+  const settings = typeof own === 'object' && own !== null ? (own as Record<string, string>) : {}
+  return { ...emptied, ...kept, ...settings }
+}
+
 export interface MeshServerPlacement {
   /** The approved server config, as JSON text. */
   readonly serverConfig: string
   /** Where the recorded trees are installed: a directory only the launcher writes. */
   readonly root: string
+  /** Every variable the launcher hands the host, which the host would pass on to the server. */
+  readonly hostEnvironment: Readonly<Record<string, string | undefined>>
   readonly recording?: MeshTreeRecording
   /** The recorded versions, each naming its server bin; the reviewed records unless a test gives its own. */
   readonly servers?: readonly RecordedMeshServer[]
@@ -247,7 +273,7 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
     const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
     const file = join(packageDir, binFile)
     if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
-    servers[name] = { ...entry, command: process.execPath, args: [file] }
+    servers[name] = { ...entry, command: process.execPath, args: [file], env: builtEnvironment(placement.hostEnvironment, entry.env) }
   }
   return { config: `${JSON.stringify({ ...config, mcpServers: servers }, null, 2)}\n` }
 }
