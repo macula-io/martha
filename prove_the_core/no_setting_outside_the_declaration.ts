@@ -7,9 +7,9 @@
 // machine only through the host contract: files through host.stores, programs
 // through host.processes.
 //
-// This check proves that on each slice's syntax tree (parse_a_source.ts), so a
-// string, a comment, a regular expression or a line break can neither hide code
-// nor pass for it. In a slice:
+// This check judges each slice's syntax tree (parse_a_source.ts), so a string, a
+// comment, a regular expression or a line break does not decide what it sees. In a
+// slice:
 //
 // - a module may be imported only when it is another slice (a relative path whose
 //   target the caller's isSlice accepts) or a Node module on the allow-list
@@ -27,7 +27,16 @@
 //   not a use of the name, so it stays allowed;
 // - a string that is a path from the home directory (`~` alone or `~/...`) is
 //   named;
-// - a file the parser cannot read is named, since nothing in it can be proved.
+// - a file the parser cannot read is named, since nothing in it can be judged.
+//
+// What it catches is mistakes and plain reaches, not a slice written to get past
+// it; reviewed code guards against that. A key computed at run time
+// (`constru${''}ctor`, or a string put together by concatenation) or Function
+// found by listing a prototype's own properties
+// (Object.getOwnPropertyDescriptors(Object.getPrototypeOf(() => 0))) reaches
+// Function without the name ever appearing in the tree. And the node:* the host
+// glue may import includes node:module, whose createRequire loads any module: the
+// glue's reverse rule keeps it from importing slices, not from reaching further.
 //
 // Which files are slices is the caller's to say: the test derives the files that
 // are not (tests, the programs CI runs, and the host glue that implements the

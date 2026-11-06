@@ -44,11 +44,20 @@ export const lineOf = (file: ts.SourceFile, node: ts.Node): number =>
 export function parseSource(text: string, path: string): ParsedSource {
   const kind = scriptKindOf(path)
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind)
-  const { diagnostics = [] } = ts.transpileModule(text, {
-    fileName: path,
-    reportDiagnostics: true,
-    compilerOptions: { allowJs: true, jsx: ts.JsxEmit.Preserve },
-  })
+  // The compiler's own assertions can fail on input it does not expect (a private
+  // field named #constructor ends in a Debug Failure). Such a file cannot be read,
+  // so it is reported like any other that does not parse, never thrown.
+  let diagnostics: readonly ts.Diagnostic[]
+  try {
+    diagnostics = ts.transpileModule(text, {
+      fileName: path,
+      reportDiagnostics: true,
+      compilerOptions: { allowJs: true, jsx: ts.JsxEmit.Preserve },
+    }).diagnostics ?? []
+  } catch (failure) {
+    const reason = String(failure).split('\n')[0]
+    return { file, errors: [{ line: 1, message: `the compiler failed on it: ${reason}` }] }
+  }
   const errors = diagnostics.map(diagnostic => ({
     line: diagnostic.file !== undefined && diagnostic.start !== undefined
       ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line + 1

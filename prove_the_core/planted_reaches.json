@@ -262,6 +262,12 @@
           2,
           3
         ]
+      },
+      {
+        "text": "class A {\n  #constructor = 1\n}\n",
+        "lines": [
+          1
+        ]
       }
     ],
     "each finding at its own line": [
