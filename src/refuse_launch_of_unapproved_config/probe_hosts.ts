@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path'
 import {
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
+  launchEnvironment,
   prepareLaunch,
   readLaunchState,
   type Host,
@@ -58,6 +59,8 @@ interface Probe {
   readonly expected: Readonly<Record<string, boolean>>
   /** Run through `prepareLaunch`, on approved config. */
   readonly planned: boolean
+  /** Set in the environment the host inherits, as an owner's shell might. */
+  readonly inherited?: Readonly<Record<string, string>>
 }
 
 function put(dir: string, name: string, content: string): void {
@@ -145,6 +148,20 @@ const PROBES: readonly Probe[] = [
     expected: { APPROVED_SERVER: true, PLANTED_SERVER: false, PLANTED_PLUGIN: false },
     planned: true,
   },
+  {
+    what: "OpenCode as Martha starts it, run: the owner's environment says project config on",
+    host: 'opencode',
+    command: (switches) => ({ command: 'opencode', args: ['run', ...switches.args, PROMPT] }),
+    approved: (place) =>
+      put(place.checkout, OPENCODE_CONFIG, opencodeServer('approved', place.marker('APPROVED_SERVER'))),
+    planted: (place) => {
+      put(place.checkout, OPENCODE_CONFIG, opencodeServer('planted', place.marker('PLANTED_SERVER')))
+      put(place.checkout, join(OPENCODE_DIR, 'plugin', 'probe.ts'), opencodePlugin(place.marker('PLANTED_PLUGIN')))
+    },
+    inherited: { OPENCODE_CONFIG_PROJECT_DISABLE: '0', OPENCODE_DISABLE_PROJECT_CONFIG: '0' },
+    expected: { APPROVED_SERVER: true, PLANTED_SERVER: false, PLANTED_PLUGIN: false },
+    planned: true,
+  },
 ]
 
 function version(command: string): string {
@@ -152,7 +169,7 @@ function version(command: string): string {
   return run.error === undefined ? run.stdout.trim().split('\n')[0] ?? '' : `not installed (${run.error.message})`
 }
 
-const NO_SWITCHES: HostSwitches = { args: [], env: {} }
+const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
 
 /** The switches to start with, or why the planned launch was refused. */
 function switchesFor(probe: Probe, place: Place): HostSwitches | string {
@@ -188,7 +205,7 @@ function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
     const { command, args } = probe.command(switches)
     const run = spawnSync(command, args, {
       cwd: checkout,
-      env: { ...process.env, ...switches.env },
+      env: launchEnvironment({ ...process.env, ...probe.inherited }, switches),
       stdio: 'ignore',
       timeout: RUN_TIMEOUT_MS,
     })

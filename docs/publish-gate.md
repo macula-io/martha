@@ -138,6 +138,7 @@ when a host does anything else):
 | OpenCode 2.2.5 by hand | the project's tool server and its plugin, even for `opencode debug config` |
 | Claude Code 2.1.318 as Martha starts it, config rewritten after approval | the approved server and hook only; the rewritten ones do not start |
 | OpenCode 2.2.5 as Martha starts it, config rewritten and a plugin added after approval | the approved server only; the rewritten server and the added plugin do not start |
+| OpenCode 2.2.5 as Martha starts it, the owner's environment setting both project-config switches to `0` | the same: the approved server only |
 
 The host's own approval is name-keyed where it exists at all, so it cannot be the
 control. `src/refuse_launch_of_unapproved_config/` is five rules:
@@ -145,9 +146,14 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
 1. **The host never reads the checkout's own config.** `prepareLaunch` copies the
    approved files into a snapshot outside the checkout and returns the switches
    that start the host on that copy with project config off: for Claude Code
-   `--setting-sources user` with `--mcp-config` and `--settings` naming the copy
-   (the owner's own servers stay); for OpenCode `--standalone` with
-   `OPENCODE_DISABLE_PROJECT_CONFIG=1` and `OPENCODE_CONFIG` naming the copy. The
+   `--setting-sources user` and `--strict-mcp-config` with `--mcp-config` and
+   `--settings` naming the copy, so only the servers passed start; for OpenCode
+   `--standalone` with `OPENCODE_CONFIG` naming the copy and both of its switch
+   names, `OPENCODE_CONFIG_PROJECT_DISABLE=1` and
+   `OPENCODE_DISABLE_PROJECT_CONFIG=1`: OpenCode reads the first that is set, so
+   setting only the second lets an inherited `=0` of the first win. The
+   inherited `OPENCODE_CONFIG_CONTENT` and `OPENCODE_CONFIG_DIR` are dropped
+   (`launchEnvironment`), since each brings config in from somewhere else. The
    background OpenCode service ignores a client's environment, hence
    `--standalone`. A pull that rewrites the config while the host runs changes a
    file the host is not reading, so a host that reloads its config live reloads
@@ -159,7 +165,9 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
    tree: the tree git would write if every tracked change and every untracked,
    unignored file were staged now (`checkout_tree.ts`, in a scratch index, with
    inherited `GIT_*` variables dropped and fsmonitor off). A pull that changes
-   only the script an approved hook runs changes the fingerprint.
+   only the script an approved hook runs changes the fingerprint. It is read
+   before every tool call, so a checkout git reports clean reads as HEAD's own
+   tree without staging anything.
 3. **The directories above count**, up to but not including the stop directory
    the launcher names (the owner's home); a start outside it is read up to the
    root. This is for a host started by hand, which walks up — OpenCode with no
@@ -167,7 +175,9 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
    config. A planned launch reads none of them.
 4. **What the gate cannot pin down is refused**: a symlink, even an approved one;
    a path that is not a plain file or directory; config in a directory that is
-   no git checkout, where nothing pins what it runs; a request that does not show
+   no git checkout, or in one whose top is the stop directory or above it (a
+   home kept in git), where nothing pins what it runs and staging the tree would
+   copy a whole home into the object store; a request that does not show
    every listed file as read, so a reader that returned nothing cannot pass for
    an empty checkout; two files that would be passed through one carrier; and a
    host with no file list.
@@ -188,14 +198,17 @@ What the plan leaves out, stated rather than hidden:
 - **The tree does not cover** a file git ignores and does not track — the
   checkout's author cannot ship one; it is written on this machine by a command
   the member ran (A13) — nor the inside of a submodule beyond the commit its
-  parent records.
-- **The fingerprint-to-launch race** closes only if the first re-check (*Wiring
-  it into a host*, below) runs before any tool: between `prepareLaunch` and the
-  host's start, a script the snapshot runs can still be rewritten in the
-  checkout.
-- **Between turns**, a host that restarts an approved server or fires a hook runs
-  the script as it is then. The next turn's re-check refuses the changed
-  checkout; it does not undo what already ran.
+  parent records, nor a change the checkout's own index hides from
+  `git status` (assume-unchanged, skip-worktree): those flags are the
+  member's, and no commit carries them.
+- **The fingerprint-to-launch race**: between `prepareLaunch` and the host's
+  start, a script the snapshot runs can still be rewritten in the checkout, and
+  a `SessionStart` hook runs it before the first tool call is checked.
+- **Inside a turn**, the snapshot's hooks run the checkout's scripts as they
+  are at that moment. `answerToolCall` checks the launch before every call, so
+  once a call changes the tree (a reviewer's own `gh pr checkout`) the next call
+  is refused and the launcher stops the member. What is left is the hooks of
+  the one call that changed the tree; it does not undo what they ran.
 - **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
   servers in their frontmatter. They start only when the model spawns that
   agent, which is a tool call the shell gate refuses while unapproved text is
@@ -266,9 +279,8 @@ A host does these things, and the core does the rest:
 | a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
 | a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
-| before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches`, show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
-| before every turn, and before the first tool | `decideLaunch({ host, ...readLaunchState({ host, launch_dir, stop_dir }), approved_fingerprints })` — a host that reloads its config reads the snapshot, so this re-check covers the scripts the snapshot runs, which still live in the checkout; on a refusal the member executes nothing until the owner approves or the member restarts |
-| before running any tool | `answerToolCall({ tool, session, policy, input })` — return the `{ deny }` as the hook's answer |
+| before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches` (their `args`, and the environment `launchEnvironment(process.env, switches)`, which drops inherited variables that would bring config back), show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
+| before running any tool | `answerToolCall({ tool, session, policy, input, launch })`, where `launch` is the place and approvals `prepareLaunch` was given — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. On that refusal the launcher stops the member, because a host keeps firing hooks on its own events when calls are refused. What is left is the hooks of the one call that changed the tree |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(store, processes, launched)`, `recordMemberStopped(store, member_name)` |

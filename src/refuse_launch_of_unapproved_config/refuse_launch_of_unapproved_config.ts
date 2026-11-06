@@ -31,7 +31,8 @@
 //
 //   4. WHAT THE GATE CANNOT PIN DOWN IS REFUSED: a symlink, even an approved one;
 //      a path that is not a plain file or directory; config in a directory that
-//      is no git checkout, where nothing pins what it runs; a request that does
+//      is no git checkout, or in one whose top is the owner's home or above it,
+//      where nothing pins what it runs; a request that does
 //      not show every listed file as read; and a host with no entry here.
 //
 //   5. NO CONFIG NEEDS NO APPROVAL. A checkout holding none of the files starts
@@ -47,10 +48,27 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree } from './checkout_tree.ts'
 
-/** Arguments and environment a launcher adds when it starts a host. */
+/** What a launcher changes when it starts a host: arguments and environment it adds, and inherited variables it drops. */
 export interface HostSwitches {
   readonly args: readonly string[]
   readonly env: Readonly<Record<string, string>>
+  /** Inherited variables that would bring config back in; the launcher removes them. */
+  readonly env_dropped: readonly string[]
+}
+
+/**
+ * The environment to start the host with: `inherited` without the dropped
+ * variables, with the switches' own on top, so no inherited value can switch
+ * project config back on.
+ */
+export function launchEnvironment(
+  inherited: Readonly<Record<string, string | undefined>>,
+  switches: HostSwitches,
+): Record<string, string> {
+  const kept = Object.entries(inherited).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined && !switches.env_dropped.includes(entry[0]),
+  )
+  return { ...Object.fromEntries(kept), ...switches.env }
 }
 
 /**
@@ -77,25 +95,40 @@ export interface HostLaunch {
 
 const NO_ENV: Readonly<Record<string, string>> = {}
 const NO_ARGS: readonly string[] = []
+const NOTHING_DROPPED: readonly string[] = []
+
+/**
+ * OpenCode 2.2.5 reads the first of these that is set, so both are set: an
+ * inherited OPENCODE_CONFIG_PROJECT_DISABLE=0 would otherwise win over the
+ * fallback name.
+ */
+const OPENCODE_PROJECT_CONFIG_OFF = ['OPENCODE_CONFIG_PROJECT_DISABLE', 'OPENCODE_DISABLE_PROJECT_CONFIG'] as const
+/** Each brings config in that is no listed file: inline content, and a whole config directory. */
+const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR'] as const
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
   'claude-code': {
-    project_config_off: { args: ['--setting-sources', 'user'], env: NO_ENV },
+    // --strict-mcp-config: only the servers passed by --mcp-config start.
+    project_config_off: { args: ['--setting-sources', 'user', '--strict-mcp-config'], env: NO_ENV, env_dropped: NOTHING_DROPPED },
     carried: {
-      [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV }),
-      [CLAUDE_SETTINGS]: (path) => ({ args: ['--settings', path], env: NO_ENV }),
+      [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
+      [CLAUDE_SETTINGS]: (path) => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
     },
   },
   opencode: {
     // The background service ignores a client's environment, so the host runs
     // its own server.
-    project_config_off: { args: ['--standalone'], env: { OPENCODE_DISABLE_PROJECT_CONFIG: '1' } },
+    project_config_off: {
+      args: ['--standalone'],
+      env: Object.fromEntries(OPENCODE_PROJECT_CONFIG_OFF.map((name) => [name, '1'])),
+      env_dropped: OPENCODE_CONFIG_ELSEWHERE,
+    },
     carried: {
-      [OPENCODE_CONFIG]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path } }),
-      [OPENCODE_CONFIG_WITH_COMMENTS]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path } }),
+      [OPENCODE_CONFIG]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
+      [OPENCODE_CONFIG_WITH_COMMENTS]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
     },
   },
 }
@@ -118,11 +151,11 @@ export type ConfigEntry =
 /** Everything an approval binds: the config, and the work tree the config runs. */
 export interface LaunchState {
   readonly entries: readonly ConfigEntry[]
-  /** The checkout's work tree (./checkout_tree.ts), or `null` outside any checkout. */
+  /** The checkout's work tree (./checkout_tree.ts), or `null` outside any checkout below the stop. */
   readonly tree: string | null
 }
 
-/** What a launcher asks before it starts a host, and before every turn after. */
+/** What a launcher asks before it starts a host, and what every tool call asks after (../answer_a_tool_call). */
 export interface LaunchRequest extends LaunchState {
   /** The host about to start, by its name in HOSTS. */
   readonly host: string
@@ -174,7 +207,7 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints }: Lau
   if (tree === null) {
     return {
       allow: false,
-      refusal: `${REFUSED}: it holds config that starts code by itself (${present.join(', ')}) outside any git checkout, so nothing pins what that config runs.`,
+      refusal: `${REFUSED}: it holds config that starts code by itself (${present.join(', ')}) outside any git checkout below the owner's home, so nothing pins what that config runs.`,
     }
   }
 
@@ -219,13 +252,13 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace): r
 
 /** The config and the work tree, as the gate reads them. */
 export function readLaunchState(place: LaunchPlace): LaunchState {
-  return { entries: readLaunchConfig(place), tree: readCheckoutTree(realOrResolved(place.launch_dir)) }
+  return { entries: readLaunchConfig(place), tree: readCheckoutTree(realOrResolved(place.launch_dir), place.stop_dir) }
 }
 
 export type PreparedLaunch =
   | {
       readonly allow: true
-      /** Add these to the host's command line and environment. */
+      /** Add these to the host's command line, and start it with `launchEnvironment(process.env, switches)`. */
       readonly switches: HostSwitches
       /** Where the approved copies are. The launcher removes it when the member stops. */
       readonly snapshot_dir: string
@@ -303,7 +336,11 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState): Prep
 
   return {
     allow: true,
-    switches: { args: carried.flatMap((switches) => switches.args), env },
+    switches: {
+      args: carried.flatMap((switches) => switches.args),
+      env,
+      env_dropped: carried.flatMap((switches) => switches.env_dropped),
+    },
     snapshot_dir,
     not_carried,
   }

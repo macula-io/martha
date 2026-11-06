@@ -11,6 +11,7 @@ import {
   fingerprintOf,
   HOSTS,
   LAUNCH_FILES_OF_HOST,
+  launchEnvironment,
   prepareLaunch,
   readLaunchConfig,
   readLaunchState,
@@ -167,6 +168,29 @@ test('config outside any git checkout is refused, even with its fingerprint appr
   assert.equal(decide('claude-code', place, [fingerprintOf(state)]).decision.allow, false)
 })
 
+test("a checkout whose top is the owner's home is no checkout: its config is refused", (t) => {
+  const place = scratch(t, { repository: false })
+  git(place.home, 'init', '-q', '.')
+  put(place.checkout, SERVERS, server('echo one'))
+  commitAll(place.home, 'the whole home')
+
+  const below = decide('claude-code', place)
+  assert.equal(below.state.tree, null)
+  assert.equal(decide('claude-code', place, [fingerprintOf(below.state)]).decision.allow, false)
+
+  const at_home = { host: 'claude-code', launch_dir: place.home, stop_dir: place.home }
+  assert.equal(readLaunchState(at_home).tree, null)
+  // A stop below the checkout's top: the top is above it.
+  assert.equal(readCheckoutTree(place.checkout, join(place.checkout, 'below')), null)
+})
+
+test('a checkout outside the stop directory altogether still has its tree read', (t) => {
+  const place = scratch(t)
+  const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))
+  t.after(() => rmSync(elsewhere, { recursive: true, force: true }))
+  assert.equal(readCheckoutTree(place.checkout, elsewhere), git(place.checkout, 'rev-parse', 'HEAD^{tree}'))
+})
+
 // --- where it looks -------------------------------------------------------------
 
 test('a config one directory above the checkout counts; one in the stop directory does not', (t) => {
@@ -289,7 +313,7 @@ test("reading the work tree leaves the member's own staging area as it was", (t)
   const staged = () => git(place.checkout, 'diff', '--cached', '--name-only')
   const before = staged()
 
-  assert.notEqual(readCheckoutTree(place.checkout), null)
+  assert.notEqual(readCheckoutTree(place.checkout, place.home), null)
   assert.equal(staged(), before)
 })
 
@@ -299,11 +323,30 @@ test("a GIT_DIR in the caller's environment does not move the work tree it reads
   put(other.checkout, 'other.txt', 'another repository')
   commitAll(other.checkout, 'other')
 
-  const own = readCheckoutTree(place.checkout)
+  const own = readCheckoutTree(place.checkout, place.home)
   const saved = process.env.GIT_DIR
   process.env.GIT_DIR = join(other.checkout, '.git')
   t.after(() => (saved === undefined ? delete process.env.GIT_DIR : (process.env.GIT_DIR = saved)))
-  assert.equal(readCheckoutTree(place.checkout), own)
+  assert.equal(readCheckoutTree(place.checkout, place.home), own)
+})
+
+test('a clean checkout reads as the tree of its HEAD, and any change moves it', (t) => {
+  const place = scratch(t)
+  const tree = () => readCheckoutTree(place.checkout, place.home)
+  const head = git(place.checkout, 'rev-parse', 'HEAD^{tree}')
+  assert.equal(tree(), head)
+
+  put(place.checkout, 'README.md', 'edited\n')
+  const edited = tree()
+  assert.notEqual(edited, head)
+  // A second edit to a file already shown as modified: git status says the same, the tree does not.
+  put(place.checkout, 'README.md', 'edited again\n')
+  assert.notEqual(tree(), edited)
+
+  put(place.checkout, 'README.md', 'a checkout\n')
+  assert.equal(tree(), head)
+  put(place.checkout, 'tools/new.sh', 'echo new')
+  assert.notEqual(tree(), head)
 })
 
 // --- the planned launch ---------------------------------------------------------
@@ -355,6 +398,37 @@ test('a planned OpenCode launch runs its own server with project config off, and
   const carried = Object.values(prepared.switches.env).find((value) => value.startsWith(prepared.snapshot_dir)) ?? ''
   assert.equal(readFileSync(carried, 'utf8'), '{}')
   assert.deepEqual(prepared.not_carried, [OPENCODE_DIR])
+})
+
+test('an OpenCode launch keeps project config off whatever the inherited environment says', (t) => {
+  const place = scratch(t)
+  put(place.checkout, OPENCODE_CONFIG, '{}')
+  const { prepared } = prepare('opencode', place, approve('opencode', place))
+  assert.equal(prepared.allow, true)
+  if (!prepared.allow) return
+
+  const inherited = {
+    OPENCODE_CONFIG_PROJECT_DISABLE: '0',
+    OPENCODE_DISABLE_PROJECT_CONFIG: 'false',
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({ mcp: { planted: { type: 'local', command: ['sh'] } } }),
+    OPENCODE_CONFIG_DIR: join(place.checkout, '.opencode'),
+    PATH: '/usr/bin',
+  }
+  const env = launchEnvironment(inherited, prepared.switches)
+  assert.equal(env.OPENCODE_CONFIG_PROJECT_DISABLE, '1')
+  assert.equal(env.OPENCODE_DISABLE_PROJECT_CONFIG, '1')
+  assert.equal(Object.hasOwn(env, 'OPENCODE_CONFIG_CONTENT'), false)
+  assert.equal(Object.hasOwn(env, 'OPENCODE_CONFIG_DIR'), false)
+  assert.ok(env.OPENCODE_CONFIG?.startsWith(prepared.snapshot_dir))
+  assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
+})
+
+test('a planned Claude Code launch starts only the servers it passes', (t) => {
+  const place = scratch(t)
+  const { prepared } = prepare('claude-code', place, [])
+  assert.equal(prepared.allow, true)
+  if (!prepared.allow) return
+  assert.ok(prepared.switches.args.includes('--strict-mcp-config'))
 })
 
 test('a checkout with no config still starts with project config off', (t) => {
