@@ -55,10 +55,7 @@ import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import {
-  makeEmptyDirectory,
-  switchesThatRunNothingFromACheckout,
-} from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   launchEnvironment,
@@ -67,6 +64,7 @@ import {
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay } from './answer_the_relay.ts'
+import { makeEmptyDirectory } from './empty_directory.ts'
 import { makeRelayDirectory } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'

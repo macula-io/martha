@@ -11,7 +11,7 @@
 // switch each door back on, so the launcher's settings must win over it.
 //
 // Real git, real npm and real direnv. The .envrc door follows the tool: each
-// direnv the tests prove (../refuse_code_a_checkout_runs_itself/direnvs_under_test.ts)
+// direnv the tests prove (direnvs_under_test.ts)
 // gets its own pair of tests, and with none installed the door is left out by
 // name. CI names two direnvs, so there it is never left out. Everything a test
 // makes is removed after it.
@@ -24,8 +24,9 @@ import { basename, delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { direnvsUnderTest, type Direnv } from '../refuse_code_a_checkout_runs_itself/direnvs_under_test.ts'
-import { DIRENV_CONFIG_VARIABLE, EMPTY_DIRECTORY_MODE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
+import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { EMPTY_DIRECTORY_MODE } from './empty_directory.ts'
 import { CLAUDE_CODE, EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
