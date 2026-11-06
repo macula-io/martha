@@ -172,6 +172,7 @@ A host does these things, and the core does the rest:
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
 | before running any tool | `answerToolCall({ tool, session, policy, input, names: host.tools })` — return the `{ deny }` as the hook's answer; `names` is the host's own split of a called tool's name |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
+| after any MCP tool result | `takeInTurn(session, { source: 'mcp_result' }, binder)` — a mesh tool that runs (`mesh_call`, `mesh_get`, `mesh_recall`, a ring's answer) hands back text with no sender to admit, so the shell gate judges it (B2) |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
 | after a turn | `rememberSession(store, session)` |
@@ -233,7 +234,12 @@ new id. Only `startup` and an owner's own
   input. The match is on the tool's own name, which the host takes out of the
   name it calls (`host.tools.ownNameOf`): Claude Code names an MCP tool
   `mcp__<server>__<tool>`, OpenCode `<server>_<tool>`, and only the host knows
-  its form and its servers. The one read that remains returns
+  its form and its servers. The two lists, `MESH_TOOLS_THAT_RUN` and
+  `MESH_TOOLS_REFUSED`, are proved against the tools the mesh server's published
+  package registers (`recorded_mesh_server_tools.json`, re-recorded by
+  `record_mesh_server_tools.ts`): the coverage check fails CI by name on a tool
+  nobody decided, a decided name the server no longer registers, or a tool
+  outside `MESH_TOOL_PREFIX`. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
   binds to that room, and says how many envelopes it withheld, never their
   text, sender or kind. Each admitted envelope is an ingestion with its

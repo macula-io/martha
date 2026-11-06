@@ -207,6 +207,7 @@ test('a recorded tool without the mesh prefix is named: the prefix is the run-ti
 
 test('a name both allowed and refused is named', () => {
   const [both] = MESH_TOOLS_REFUSED
+  assert.ok(both !== undefined)
   const gaps = gapsInMeshTools(RECORDED_MESH_SERVER, [...MESH_TOOLS_THAT_RUN, both], MESH_TOOLS_REFUSED)
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${both}`])
   assert.match(gaps[0]?.why ?? '', /both allowed and refused/)

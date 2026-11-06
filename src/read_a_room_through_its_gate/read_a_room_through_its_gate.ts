@@ -91,6 +91,24 @@ export const MESH_TOOLS_THAT_RUN: readonly string[] = [
   'mesh_untrust_agent',
 ]
 
+/**
+ * The mesh tools that are refused, by their own name: each hands the model a
+ * room's or another agent's text that no gate has seen (B1). At run time they
+ * are refused because MESH_TOOLS_THAT_RUN does not name them; this list is the
+ * other half of the decision, and the coverage check proves the two halves
+ * cover every tool the recorded server registers (./mesh_server_tools.ts).
+ */
+export const MESH_TOOLS_REFUSED: readonly string[] = [
+  'mesh_join_room',
+  'mesh_lobby_transcript',
+  'mesh_read_inbox',
+  'mesh_read_node_events',
+  'mesh_rooms',
+  'mesh_wait_ring',
+  'mesh_wait_room',
+  'mesh_watch',
+]
+
 /** True when the call would hand the model other agents' text that no gate has seen. */
 export function isRawMeshRead(
   tool: string,

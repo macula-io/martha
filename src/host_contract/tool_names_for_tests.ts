@@ -27,11 +27,16 @@ const OPENCODE_SEPARATOR = '_'
 /**
  * OpenCode's form. The separator also occurs inside both names, so the name
  * cannot be split by its text alone: the host knows which servers it installed
- * and strips the one the called name starts with.
+ * and strips the longest one the called name starts with. The first match
+ * would not do: with `macula` and `macula_mcp` installed, `macula_mcp_mesh_read_inbox`
+ * would split to `mcp_mesh_read_inbox`, and the raw read would run.
  */
-export const openCodeToolNames = (servers: readonly string[]): ToolNames => ({
-  ownNameOf: (called) => {
-    const server = servers.find((name) => called.startsWith(`${name}${OPENCODE_SEPARATOR}`))
-    return server === undefined ? called : called.slice(server.length + OPENCODE_SEPARATOR.length)
-  },
-})
+export const openCodeToolNames = (servers: readonly string[]): ToolNames => {
+  const longest_first = [...servers].sort((a, b) => b.length - a.length)
+  return {
+    ownNameOf: (called) => {
+      const server = longest_first.find((name) => called.startsWith(`${name}${OPENCODE_SEPARATOR}`))
+      return server === undefined ? called : called.slice(server.length + OPENCODE_SEPARATOR.length)
+    },
+  }
+}
