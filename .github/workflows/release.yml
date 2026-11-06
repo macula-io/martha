@@ -67,10 +67,12 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
       image: ${{ steps.names.outputs.image }}
-    env:
-      RELEASE_CTX: ${{ runner.temp }}/release-ctx-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner context is not allowed in a job-level env, so the build context is named here, once, for the
+      # steps after it.
+      - name: The build context
+        run: echo "RELEASE_CTX=$RUNNER_TEMP/release-ctx-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
       - name: The names, from the installer's package.json
         id: names
         run: |

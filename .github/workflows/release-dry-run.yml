@@ -43,16 +43,20 @@ jobs:
       unsigned: ${{ steps.push.outputs.unsigned }}
       image: ${{ steps.names.outputs.image }}
       version: ${{ steps.names.outputs.version }}
-    env:
-      RELEASE_CTX: ${{ runner.temp }}/dry-run-ctx-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner context is not allowed in a job-level env, so the build context is named here, once, for the
+      # steps after it.
+      - name: The build context
+        run: echo "RELEASE_CTX=$RUNNER_TEMP/dry-run-ctx-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
       - name: The names
         id: names
         run: |
-          echo "image=$(jq -r .martha.image installer/package.json)" >> "$GITHUB_OUTPUT"
-          echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
-          echo "tag=$(jq -r .martha.dryRunTagPrefix installer/package.json)${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          {
+            echo "image=$(jq -r .martha.image installer/package.json)"
+            echo "version=$(jq -r .version package.json)"
+            echo "tag=$(jq -r .martha.dryRunTagPrefix installer/package.json)${{ github.run_id }}-${{ github.run_attempt }}"
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
