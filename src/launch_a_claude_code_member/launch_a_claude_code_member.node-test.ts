@@ -703,6 +703,11 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     assert.equal(readdirSync(place.relay_root).length, 1)
     assert.equal(readdirSync(place.snapshot_root).length, 1)
     const child = Number(readFileSync(fake.childFile, 'utf8').trim())
+    const group = groupOf(child)
+    assert.ok(
+      group !== undefined && Number.isInteger(group) && group > 1 && group !== groupOf(process.pid) && group !== groupOf(launcher.pid ?? 0),
+      'the member runs in a group of its own, which the group kill relies on',
+    )
 
     launcher.kill(signal)
     assert.equal(await ended, signal, 'the signal still ends the launcher')
