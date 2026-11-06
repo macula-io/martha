@@ -20,6 +20,8 @@
   "martha": {
     "hostGlue": [
       "src/claude_code_host",
+      "src/claude_code_relay",
+      "src/launch_a_claude_code_member",
       "src/linux_process_identity",
       "src/row_streams_directory"
     ]

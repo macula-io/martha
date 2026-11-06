@@ -185,6 +185,11 @@ export function ownNameOfCalledTool(called: string): string {
   return own === '' ? called : own
 }
 
+/** Whether a called tool is an MCP server's: its result is that server's text (B2). */
+export function isMcpToolCall(called: string): boolean {
+  return called.startsWith(MCP_NAME_PREFIX)
+}
+
 /** Runs a process directly, with no shell, and reports how it ended. */
 function runProcess(request: ProcessRequest): Promise<ProcessOutcome> {
   return new Promise((resolve, reject) => {

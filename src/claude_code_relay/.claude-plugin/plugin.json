@@ -1,0 +1,6 @@
+{
+  "name": "martha-relay",
+  "version": "0.1.0",
+  "description": "Relays a Martha member's session start, prompts and tool calls to its launcher, and refuses what the launcher does not allow.",
+  "license": "Apache-2.0"
+}
