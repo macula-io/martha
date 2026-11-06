@@ -1,7 +1,7 @@
 {
   "name": "martha",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "A crew of coding agents. Core first; hosts are thin adapters.",
   "engines": {
@@ -29,10 +29,15 @@
       "src/row_streams_directory"
     ],
     "hostAdapters": [
+      "src/approve_a_checkouts_config",
       "src/claude_code_host",
       "src/claude_code_relay",
+      "src/declare_a_solo_crew",
       "src/install_the_recorded_mesh_server",
-      "src/launch_a_claude_code_member"
+      "src/keep_martha_state_outside_the_checkout",
+      "src/launch_a_claude_code_member",
+      "src/run_the_martha_command",
+      "src/start_a_member"
     ],
     "packageImports": {
       "typescript": "prove_the_core",

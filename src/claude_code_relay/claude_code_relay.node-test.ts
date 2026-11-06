@@ -265,3 +265,11 @@ test('the process group is read after the command name, whatever the name holds'
   assert.equal(processGroupOf('7 (x) S 1 1 1 0'), undefined, 'never the init group')
   assert.equal(processGroupOf('garbage'), undefined)
 })
+
+// The relay ships inside the Martha release (pack_a_release packs the whole tree, and the launcher loads this
+// folder with --plugin-dir), so its version is the release's: the root package.json, which the release guard
+// checks against the tag. A version stated here would be a second copy nothing checks (#21).
+test('the relay states no version of its own: it is the Martha release version, from the root package.json', () => {
+  const manifest = JSON.parse(readFileSync(new URL('./.claude-plugin/plugin.json', import.meta.url), 'utf8')) as Record<string, unknown>
+  assert.equal(Object.hasOwn(manifest, 'version'), false, `.claude-plugin/plugin.json states version ${String(manifest.version)}; leave it out, the release's version is the root package.json's`)
+})
