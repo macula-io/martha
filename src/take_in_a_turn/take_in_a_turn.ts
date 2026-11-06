@@ -168,6 +168,8 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
   'B8', // no body text reaches the model
+  // code the host starts by itself is not text taken in: the launch gate stands there
+  ...INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id),
 ]
 
 /** Registry rows a source can record that the registry does not know. */

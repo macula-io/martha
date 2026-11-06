@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node --test 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts'",
     "typecheck": "tsc --noEmit",
-    "check:private": "node src/check_nothing_private_gets_in/main.ts"
+    "check:private": "node src/check_nothing_private_gets_in/main.ts",
+    "probe:launch": "node src/refuse_launch_of_unapproved_config/probe_hosts.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

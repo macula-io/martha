@@ -95,8 +95,9 @@ the model cannot mint.
 
 ## Every path, and what stands on it
 
-`src/inbound_paths/` holds every way text reaches a member's session, as data —
-the machine-readable copy of the table in issue #2. Each row declares one
+`src/inbound_paths/` holds every way text reaches a member's session, and every
+way a checkout gets code started on a member's machine, as data — the
+machine-readable copy of the tables in issues #2 and #16. Each row declares one
 control:
 
 - **delivery gate** — the sender is checked before the text is in a turn, and the
@@ -106,10 +107,61 @@ control:
   session executing while the text is readable;
 - **no text reaches the model** — the path is listed so it is not forgotten,
   carries no body text, and must say why;
+- **launch gate** — for code the host starts by itself (below), the only
+  control such a row may declare;
 - **none** — no control. A row in this state fails CI on purpose.
 
 A path is never removed from the list. A path that stops delivering text gets a
 control that says so, in words.
+
+## Code the host starts by itself
+
+This section answers [issue #16](https://github.com/macula-io/martha/issues/16),
+which has the threat model.
+
+A coding tool reads files from the directory it starts in and starts what they
+name: a project's tool servers, its hooks, its plugins. That is not text for the
+model. No tool is called and no model runs, so the shell gate has nothing to
+refuse, and no sender exists for a delivery gate to check. Whoever last wrote
+those files runs code as the owner's OS user. The plainest case is a reviewer
+checking out a pull request to run its tests.
+
+These are the `launched` rows: C1 for a checkout's tool-server config, C2 for
+its hooks and plugins. What was seen on the two hosts, in a fresh checkout whose
+config only touched a marker file:
+
+| Host | What starts with nobody asked |
+|---|---|
+| Claude Code 2.1.318, interactive | nothing: a project server waits for approval. The approval is stored as a list of **server names**, so a later change to an approved server's command is not asked about again |
+| Claude Code 2.1.318, headless `claude -p` | the project's tool server, and its `SessionStart` hook |
+| OpenCode 2.2.5 | the project's tool server and its plugin, even for `opencode debug config` |
+
+The host's own approval is name-keyed where it exists at all, so it cannot be the
+control. `src/refuse_launch_of_unapproved_config/` is:
+
+1. **Approval is by content, never by name.** The files each host reads
+   (`LAUNCH_FILES_OF_HOST`) are fingerprinted: every file's content hash, every
+   file under a listed directory, and which of the files are absent. A pull that
+   changes an approved command changes the fingerprint.
+2. **The directories above count**, up to but not including the stop directory
+   the launcher names (the owner's home). A start outside it is read up to the
+   root.
+3. **What the gate cannot pin down is refused**: a symlink, even an approved one,
+   a path that is not a plain file or directory, and a host with no file list.
+4. **No config needs no approval, once it was looked for.** A checkout holding
+   none of the files starts as it does today; a request that does not show every
+   listed file as read is refused, so a reader that returned nothing cannot pass
+   for an empty checkout.
+
+Only the owner approves a fingerprint, typed in that member's tab and logged
+(martha#1, decision 4). The refusal names the files and the fingerprint to
+approve.
+
+**Where Martha does not start the host** — the owner opens the coding tool by
+hand and Martha loads inside it — the host has started these before any of
+Martha runs. Each launched row says so in its `residual`, and the check fails a
+row that does not. The adapter must then refuse that session a place in the
+crew: the machine is already reached, the crew is not.
 
 ## Only framed envelopes are believed
 
@@ -167,6 +219,8 @@ A host does these things, and the core does the rest:
 |---|---|
 | a session starts new | `beginSession(store, session_id)` — writes the empty record before anything arrives |
 | a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
+| before starting the coding tool in a checkout | `decideLaunch({ host, entries: readLaunchConfig({ host, launch_dir, stop_dir }), approved_fingerprints })` — do not start it on a refusal; show the refusal to the owner |
+| before every turn | the same call again: some hosts re-read their config mid-session, so on a refusal the member executes nothing until the owner approves or the member restarts |
 | before running any tool | `answerToolCall({ tool, session, policy })` — return the `{ deny }` as the hook's answer |
 | a turn arrives, from any source | `takeInTurn(session, arrival)` |
 | the session is replaced | `replaceSession(session, 'clear' \| 'new_session' \| 'compaction' \| 'handover' \| 'resume')` |
@@ -246,6 +300,14 @@ a node id — and it must admit a rostered member. A name with no implementation
 gate that admits everyone, a gate that refuses everyone and a gate that answers
 only the roster question are all caught.
 
+A launched row may only declare the launch gate, and must say what happens where
+Martha does not start the host. The launch gate is driven once per question: it
+must admit config the owner approved and a checkout with no config, and refuse
+unapproved config, an approved file whose content changed under the same name,
+a file added after the approval, a config one directory up, a symlink even when
+approved, a host it has no file list for, and a request whose config was never
+read.
+
 Its tests plant each of those mistakes to prove the check is not vacuous: a row
 copied from the table without a control, a row whose control was forgotten, a row
 claiming the shell gate while the gate does not refuse it, a row naming a gate
@@ -258,6 +320,10 @@ member, and a row excused without a reason. Each of those turns CI red.
   the refusal from a host's tool call is the adapter's job, and no adapter is in
   this repository yet. `src/refuse_execution_after_ungated_text/` is a rule with
   tests and no caller — deliberately, and the reason nothing here is published.
+- **The launch gate has no caller yet.** `src/refuse_launch_of_unapproved_config/`
+  is the rule and the reader; no launcher or turn hook calls it, because no host
+  adapter is in this repository. Until one does, a checkout's own config starts
+  as each host decides, which the table above describes.
 - **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
   rule; the room code that delivers messages is the crew's existing implementation,
   so nothing in this repository calls it. A host must call it before it turns a
