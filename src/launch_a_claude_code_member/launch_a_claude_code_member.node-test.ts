@@ -1293,6 +1293,17 @@ async function ownersTerminal(t: TestContext, place: Place, how: TerminalLaunch 
   return { ...terminal, launcher: terminal.launcher() }
 }
 
+/** The line the launcher process prints when it refuses (launcherProcess), as the terminal shows it. */
+const REFUSED_LINE = /refused: [^\r\n]*/
+
+/**
+ * Waits on the owner's terminal for what a test means, and fails at once when
+ * the launcher has said it refused: after that, no member event can come
+ * (martha#94).
+ */
+const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
+  until(what, holds, t, () => terminal.shown(), () => REFUSED_LINE.exec(terminal.shown())?.[0])
+
 /** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
 function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
   const fake = fakeTerminalClaude(place, how.exitsAfterMs)
@@ -1456,6 +1467,16 @@ test('a launcher whose stderr is not the terminal starts its member detached, an
   terminal.type(LEAVE_LINE)
   await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === LEAVE_LINE, t, () => terminal.shown())
   await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t, () => terminal.shown())
+})
+
+test('a wait on the owner\'s terminal fails at once, naming the refusal, once the launcher has refused (#94)', async (t) => {
+  const place = placeFor(t)
+  const command = join(place.home, 'no-such-claude')
+  const terminal = terminalLaunch(t, place, { command })
+  await assert.rejects(
+    untilOnTerminal(terminal, 'the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t),
+    (error: Error) => error.message.startsWith('the launcher to say its member stopped by itself cannot happen: refused: ') && error.message.includes(notACommandThisTerminalCanRun(command)),
+  )
 })
 
 for (const [what, make] of [

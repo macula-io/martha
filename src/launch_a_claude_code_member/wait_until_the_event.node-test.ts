@@ -59,3 +59,36 @@ test('a wait returns as soon as the event it means has happened, however long th
   await until('the event this test plants', () => happened, t)
   assert.ok(happened)
 })
+
+/** What ends the planted wait before its event: the line a launcher prints when it refuses (martha#94). */
+const ENDED_BY = 'refused: A launch of Mercury is not recorded: no process 4242 is running.'
+
+test('a wait whose event can no longer come fails at once, naming why, instead of hanging to the harness timeout (#94)', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'martha-94-wait-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const planted = join(dir, 'an_ended_wait.node-test.ts')
+  writeFileSync(
+    planted,
+    [
+      "import { test } from 'node:test'",
+      `import { until } from ${JSON.stringify(new URL('./wait_until_the_event.ts', import.meta.url).href)}`,
+      '',
+      "test('a wait the launcher has ended', async (t) => {",
+      `  await until(${JSON.stringify(WHAT)}, () => false, t, () => ${JSON.stringify(SHOWN)}, () => ${JSON.stringify(ENDED_BY)})`,
+      '})',
+      '',
+    ].join('\n'),
+  )
+  const run = spawnSync(process.execPath, ['--test', `${HUNG_TEST_TIMEOUT_FLAG}=${String(HUNG_TEST_TIMEOUT_MS)}`, planted], {
+    encoding: 'utf8',
+    env: Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== TEST_CONTEXT_VARIABLE)),
+  })
+  const said = `${run.stdout}${run.stderr}`
+  assert.notEqual(run.status, 0, `the ended wait fails the run: ${said}`)
+  assert.doesNotMatch(said, /test timed out/, 'it fails before the harness timeout')
+  assert.ok(said.includes(`${WHAT} cannot happen: ${ENDED_BY}`), `the failure names the wait and why it ended: ${said}`)
+})
+
+test('a wait whose event has happened returns, though what would end it has happened too', async (t) => {
+  await until('the event this test plants', () => true, t, undefined, () => ENDED_BY)
+})
