@@ -81,9 +81,24 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      # A checkout's .envrc is one of the doors martha#24 shuts; the test plants
-      # one, and its control needs a real direnv to show the door bites.
+      # A checkout's .envrc is one of the doors martha#24 shuts, in two ways:
+      # DIRENV_DISABLE for direnv 2.38 and later, and the DIRENV_CONFIG fallback
+      # for older ones. Ubuntu's direnv is older, so it proves the fallback; a
+      # pinned release proves DIRENV_DISABLE. MARTHA_TESTS_DIRENV names both, and
+      # a test fails by name when either is missing, so CI never drops the door.
       - run: sudo apt-get install -y --no-install-recommends direnv && direnv version && git --version
+      - name: a pinned direnv that knows DIRENV_DISABLE
+        env:
+          DIRENV_VERSION: v2.38.2
+          DIRENV_SHA256: 148820a187930d36ca6a204504e5cdb30d8396cd1a97e64c3b3f10d793c11247
+          DIRENV_DIR: ${{ runner.temp }}/direnv-pinned
+        run: |
+          mkdir -p "$DIRENV_DIR"
+          curl -fsSLo "$DIRENV_DIR/direnv" "https://github.com/direnv/direnv/releases/download/$DIRENV_VERSION/direnv.linux-amd64"
+          echo "$DIRENV_SHA256  $DIRENV_DIR/direnv" | sha256sum --check --strict
+          chmod 0755 "$DIRENV_DIR/direnv"
+          "$DIRENV_DIR/direnv" version
+          echo "MARTHA_TESTS_DIRENV=$(command -v direnv):$DIRENV_DIR/direnv" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
