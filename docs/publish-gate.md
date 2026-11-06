@@ -375,7 +375,24 @@ The rules the seam keeps, and a host must not work around:
   as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
   mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or the member is not started, naming the
   server. A git or GitHub spec, a URL server, a shell wrapper, a package named
-  in a variable or a bare bin is refused; there is no exempt list. Only the
+  in a variable or a bare bin is refused; there is no exempt list. The version
+  does not prove the bytes by itself (martha#65): npx would take them from
+  whatever registry, project `.npmrc`, `node_modules` or global prefix it
+  finds, and the server's caret dependencies drift under one version. So each
+  recorded version also carries its whole tree
+  (`src/prove_the_mesh_server_bytes/recorded_mesh_server_trees.json`): the
+  tarball's integrity, npm's lock for that version alone with a sha512 for
+  every package, the `MACULA_*` settings its code reads (a version reading one
+  nobody reviewed is not recorded), and every installed file with its sha512.
+  The launcher installs the lock with `npm ci --ignore-scripts` and no outside
+  npm config or environment, compares the tree file by file before every
+  launch, refusing a changed, missing or added file by path, and the approved
+  copy starts the server by path with the launcher's own node, never through
+  npx (`src/install_the_recorded_mesh_server/`). What this does not close: a
+  member's shell runs as the same user and can edit the installed tree during
+  a session; the next launch refuses it, but the running server is not checked
+  again. This is the same class as the contact-policy file
+  (macula-io/macula-mcp#79). Only the
   servers an installed plugin brings are not version-checked; their tools are
   still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry

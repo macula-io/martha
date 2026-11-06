@@ -73,7 +73,7 @@ const REFUSED_LOCK_ENTRIES: Record<string, Record<string, unknown>> = {
 for (const [what, change] of Object.entries(REFUSED_LOCK_ENTRIES)) {
   test(`a lock holding ${what} is refused, naming the package`, () => {
     const refusal = refusalOfLock(lockWith({ [DEPENDENCY_KEY]: change }), pinned)
-    assert.ok(refusal?.includes(DEPENDENCY), refusal)
+    assert.ok(refusal?.includes(DEPENDENCY), refusal ?? 'accepted')
   })
 }
 
@@ -148,7 +148,7 @@ const treeAt = (server_version: string, files: Record<string, string> = FILES): 
 })
 
 test('recording a tree keeps every other version, in version order, with its files sorted by path', () => {
-  const empty = { _why: '', server: MESH_SERVER_PACKAGE, registry: MESH_SERVER_REGISTRY, known_settings: [], versions: [] }
+  const empty = { _why: '', registry: MESH_SERVER_REGISTRY, known_settings: [], versions: [] }
   const reversed = Object.fromEntries(Object.entries(FILES).reverse())
   const recorded = withRecordedTree(withRecordedTree(withRecordedTree(empty, treeAt('1.10.0')), treeAt('1.9.0', reversed)), treeAt('1.10.0'))
   assert.deepEqual(recorded.versions.map((tree) => tree.server_version), ['1.9.0', '1.10.0'])

@@ -8,12 +8,16 @@
 // what a substituted registry or a poisoned mirror does. The tarballs are
 // built with tar from files the test writes, so nothing here runs package
 // code. No shipped code imports it.
+//
+// It serves from a process of its own: the code under test runs npm with
+// spawnSync, which holds this process's event loop until npm ends, so a server
+// in it could never answer.
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import process from 'node:process'
+import { createInterface } from 'node:readline'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -41,6 +45,9 @@ export interface FakeRegistry {
 /** The SRI string npm writes for a tarball. */
 export const sha512Of = (bytes: Uint8Array): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
 
+/** The file a package's packument is served from, inside its directory. */
+const PACKUMENT = 'packument.json'
+
 const tarballName = (pkg: FakePackage): string => `${pkg.name.replace(/^@[^/]+\//, '')}-${pkg.version}.tgz`
 
 /** A tarball with every file under `package/`, as npm packs one. */
@@ -62,57 +69,83 @@ function pack(pkg: FakePackage): Uint8Array {
   }
 }
 
-/** Starts a registry serving these packages on 127.0.0.1. */
+// The server, run by `node -e`: it serves the directory given, a path as a file
+// or as that directory's packument, logs one line per request, and prints its
+// port once it listens.
+const SERVE = `
+const { createServer } = require('node:http')
+const { appendFileSync, existsSync, readFileSync, statSync } = require('node:fs')
+const { join } = require('node:path')
+const [root, log] = process.argv.slice(1)
+const fileOf = (path) => {
+  const asFile = join(root, path)
+  if (existsSync(asFile) && statSync(asFile).isFile()) return asFile
+  const asPackument = join(asFile, '${PACKUMENT}')
+  return existsSync(asPackument) ? asPackument : undefined
+}
+const server = createServer((request, response) => {
+  appendFileSync(log, request.url + '\\n')
+  const file = fileOf(decodeURIComponent((request.url || '/').slice(1)))
+  if (file === undefined) { response.writeHead(404); response.end(); return }
+  response.writeHead(200)
+  response.end(readFileSync(file))
+})
+server.listen(0, '127.0.0.1', () => console.log(server.address().port))
+`
+
+/** Starts a registry serving these packages on 127.0.0.1, from a process of its own. */
 export async function fakeMeshRegistry(packages: readonly FakePackage[]): Promise<FakeRegistry> {
-  const served = new Map<string, { pkg: FakePackage; tarball: Uint8Array }>()
-  for (const pkg of packages) served.set(pkg.name, { pkg, tarball: pack(pkg) })
-  let count = 0
-  let base = ''
+  const dir = mkdtempSync(join(tmpdir(), 'martha-fake-registry-'))
+  const root = join(dir, 'served')
+  const log = join(dir, 'requests')
+  writeFileSync(log, '')
+  const child = spawn(process.execPath, ['-e', SERVE, root, log], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const [port] = await new Promise<string[]>((resolve, reject) => {
+    child.once('error', reject)
+    createInterface({ input: child.stdout }).once('line', (line) => resolve([line]))
+  })
+  const base = `http://127.0.0.1:${String(port)}/`
 
-  const packument = (pkg: FakePackage, tarball: Uint8Array) => ({
-    name: pkg.name,
-    'dist-tags': { latest: pkg.version },
-    versions: {
-      [pkg.version]: {
-        name: pkg.name,
-        version: pkg.version,
-        dependencies: pkg.dependencies ?? {},
-        bin: pkg.bin,
-        dist: { tarball: `${base}${pkg.name}/-/${tarballName(pkg)}`, integrity: sha512Of(tarball) },
+  const tarballs = new Map<string, Uint8Array>()
+  const serve = (pkg: FakePackage): void => {
+    const tarball = pack(pkg)
+    tarballs.set(pkg.name, tarball)
+    const at = join(root, pkg.name)
+    mkdirSync(join(at, '-'), { recursive: true })
+    writeFileSync(join(at, '-', tarballName(pkg)), tarball)
+    const packument = {
+      name: pkg.name,
+      'dist-tags': { latest: pkg.version },
+      versions: {
+        [pkg.version]: {
+          name: pkg.name,
+          version: pkg.version,
+          dependencies: pkg.dependencies ?? {},
+          bin: pkg.bin,
+          dist: { tarball: `${base}${pkg.name}/-/${tarballName(pkg)}`, integrity: sha512Of(tarball) },
+        },
       },
-    },
-  })
-
-  const server: Server = createServer((request, response) => {
-    count++
-    const path = decodeURIComponent((request.url ?? '/').slice(1))
-    const asTarball = [...served.values()].find(({ pkg }) => path === `${pkg.name}/-/${tarballName(pkg)}`)
-    if (asTarball !== undefined) {
-      response.writeHead(200, { 'content-type': 'application/octet-stream' })
-      response.end(asTarball.tarball)
-      return
     }
-    const asPackument = served.get(path)
-    if (asPackument !== undefined) {
-      response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify(packument(asPackument.pkg, asPackument.tarball)))
-      return
-    }
-    response.writeHead(404)
-    response.end()
-  })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
+    writeFileSync(join(at, PACKUMENT), JSON.stringify(packument))
+  }
+  for (const pkg of packages) serve(pkg)
 
   return {
     registry: base,
     tarballOf: (name) => {
-      const found = served.get(name)
+      const found = tarballs.get(name)
       if (found === undefined) throw new Error(`the fake registry serves no ${name}`)
-      return found.tarball
+      return found
     },
-    swap: (other) => void served.set(other.name, { pkg: other, tarball: pack(other) }),
-    requests: () => count,
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    swap: serve,
+    requests: () => readFileSync(log, 'utf8').split('\n').filter((line) => line !== '').length,
+    stop: async () => {
+      if (child.exitCode === null) {
+        const exited = new Promise((resolve) => child.once('exit', resolve))
+        child.kill('SIGKILL')
+        await exited
+      }
+      rmSync(dir, { recursive: true, force: true })
+    },
   }
 }

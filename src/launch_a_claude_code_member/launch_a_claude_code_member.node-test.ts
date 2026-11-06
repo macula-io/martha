@@ -633,7 +633,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
   t.after(() => rmSync(scratch, { recursive: true, force: true }))
-  const recording: MeshTreeRecording = { _why: 'test', server: MESH_SERVER_PACKAGE, registry: registry.registry, known_settings: [], versions: [] }
+  const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], versions: [] }
   const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
   return { registry, recording: { ...recording, versions: [tree] } }
 }
@@ -674,7 +674,7 @@ test('a mesh server tree changed since it was installed starts nothing, naming t
   assert.ok(first.started, first.started ? '' : first.refusal)
   first.stop('the test is over')
   await first.stopped
-  rmSync(fake.ranFile)
+  rmSync(fake.ranFile, { force: true })
 
   const changed = join('node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
   writeFileSync(join(place.mesh_servers, recorded.server_version, changed), "console.log('planted')\n")

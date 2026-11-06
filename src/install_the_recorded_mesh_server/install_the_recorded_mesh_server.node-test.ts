@@ -25,6 +25,8 @@ const OTHER_BIN = 'macula-mcp-realm'
 const SETTING = 'MACULA_MCP_AGENT'
 const RECORDED_MARK = 'the recorded mesh server'
 const PLANTED_MARK = 'planted bytes'
+/** The dependency's one file: the server prints it, so a run shows which dependency bytes it had. */
+const MARK_FILE = 'mark.txt'
 
 const serverOf = (mark: string, setting = SETTING): FakePackage => ({
   name: MESH_SERVER_PACKAGE,
@@ -32,14 +34,20 @@ const serverOf = (mark: string, setting = SETTING): FakePackage => ({
   dependencies: { [DEPENDENCY]: VERSION },
   bin: { [BIN]: 'dist/index.js', [OTHER_BIN]: 'dist/realm.js' },
   files: {
-    'dist/index.js': `const said = require('${DEPENDENCY}'); const agent = process.env.${setting}; console.log(said + ' ${mark}')\n`,
+    'dist/index.js': [
+      "const fs = process.getBuiltinModule('node:fs')",
+      `const said = fs.readFileSync(__dirname + '/../../../${DEPENDENCY}/${MARK_FILE}', 'utf8').trim()`,
+      `const agent = process.env.${setting}`,
+      `console.log(said + ' ${mark}')`,
+      '',
+    ].join('\n'),
     'dist/realm.js': 'console.log("realm")\n',
   },
 })
 const dependencyOf = (mark: string): FakePackage => ({
   name: DEPENDENCY,
   version: VERSION,
-  files: { 'index.js': `module.exports = '${mark}'\n` },
+  files: { [MARK_FILE]: `${mark}\n` },
 })
 
 const RECORDED = [serverOf(RECORDED_MARK), dependencyOf(RECORDED_MARK)]
@@ -60,7 +68,6 @@ async function registries(t: TestContext): Promise<{ good: FakeRegistry; evil: F
 
 const recordingAt = (registry: string, known_settings: readonly string[] = [SETTING]): MeshTreeRecording => ({
   _why: 'test',
-  server: MESH_SERVER_PACKAGE,
   registry,
   known_settings,
   versions: [],
@@ -79,7 +86,9 @@ const pinnedConfig = (args: readonly string[] = ['-y', '-p', `${MESH_SERVER_PACK
 type Placed = ReturnType<typeof placeRecordedMeshServers>
 const placedEntry = (placed: Placed) => {
   assert.ok('config' in placed, 'refusal' in placed ? placed.refusal : '')
-  return (JSON.parse(placed.config) as { mcpServers: Record<string, { command: string; args: string[]; env?: Record<string, string> }> }).mcpServers.macula
+  const entry = (JSON.parse(placed.config) as { mcpServers: Record<string, { command: string; args: string[]; env?: Record<string, string> }> }).mcpServers.macula
+  assert.ok(entry !== undefined, 'the mesh server entry is kept')
+  return entry
 }
 const refusalOf = (placed: Placed): string => {
   assert.ok('refusal' in placed, 'the server was placed')
@@ -89,6 +98,12 @@ const refusalOf = (placed: Placed): string => {
 /** What the placed server prints when started the way the host would start it. */
 const runPlaced = (entry: { command: string; args: string[] }, cwd: string, env: NodeJS.ProcessEnv = {}): string =>
   execFileSync(entry.command, entry.args, { cwd, env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' }).trim()
+
+/**
+ * A config file naming the other registry and sending every request through it
+ * as a proxy: if npm reads the file at all, the other registry sees a request.
+ */
+const plantedConfig = (evil: FakeRegistry): string => `registry=${evil.registry}\nreplace-registry-host=always\nproxy=${evil.registry}\n`
 
 /** Sets variables for one test and puts the old values back after it. */
 function withEnvironment(t: TestContext, values: Record<string, string>): void {
@@ -113,7 +128,7 @@ test('a recorded tree names the server\'s integrity, the settings it reads and e
   const paths = Object.keys(tree.files)
   assert.deepEqual(paths, [...paths].sort())
   assert.ok(paths.includes(`node_modules/${MESH_SERVER_PACKAGE}/dist/index.js`), paths.join(' '))
-  assert.ok(paths.includes(`node_modules/${DEPENDENCY}/index.js`), paths.join(' '))
+  assert.ok(paths.includes(`node_modules/${DEPENDENCY}/${MARK_FILE}`), paths.join(' '))
   for (const path of paths) assert.match(tree.files[path] ?? '', /^sha512-[A-Za-z0-9+/]+=*$/, path)
 })
 
@@ -169,7 +184,7 @@ test('a user config, a global config and npm settings in the environment are not
   const recording = recorded(t, good)
   const home = scratch(t, 'home')
   const rc = join(home, '.npmrc')
-  writeFileSync(rc, `registry=${evil.registry}\nreplace-registry-host=always\n`)
+  writeFileSync(rc, plantedConfig(evil))
   withEnvironment(t, {
     HOME: home,
     npm_config_userconfig: rc,
@@ -191,13 +206,37 @@ test('a project .npmrc where the launcher runs, above the install or in the chec
   const root = join(above, 'servers')
   mkdirSync(root)
   const checkout = scratch(t, 'checkout')
-  for (const dir of [above, root, checkout]) writeFileSync(join(dir, '.npmrc'), `registry=${evil.registry}\nreplace-registry-host=always\n`)
+  for (const dir of [above, root, checkout]) writeFileSync(join(dir, '.npmrc'), plantedConfig(evil))
   const before = process.cwd()
   process.chdir(checkout)
   t.after(() => process.chdir(before))
   const entry = placedEntry(placeRecordedMeshServers({ serverConfig: pinnedConfig(), root, recording }))
   assert.equal(evil.requests(), 0, 'nothing reached the other registry')
   assert.equal(runPlaced(entry, checkout), `${RECORDED_MARK} ${RECORDED_MARK}`)
+})
+
+test('a config planted where the launcher keeps npm\'s own home is not read', async (t) => {
+  const { good, evil } = await registries(t)
+  const recording = recorded(t, good)
+  const root = scratch(t, 'servers')
+  // The launcher's npm home sits under its root, which the member's user can write.
+  mkdirSync(join(root, '.npm'), { recursive: true })
+  writeFileSync(join(root, '.npm', '.npmrc'), plantedConfig(evil))
+  const entry = placedEntry(placeRecordedMeshServers({ serverConfig: pinnedConfig(), root, recording }))
+  assert.equal(evil.requests(), 0, 'nothing reached the other registry')
+  assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
+})
+
+test('code the launcher\'s environment would preload into npm is not loaded', async (t) => {
+  const { good } = await registries(t)
+  const recording = recorded(t, good)
+  const planted = scratch(t, 'preload')
+  const ran = join(planted, 'ran')
+  writeFileSync(join(planted, 'preload.cjs'), `require('node:fs').appendFileSync(${JSON.stringify(ran)}, 'x')\n`)
+  withEnvironment(t, { NODE_OPTIONS: `--require ${join(planted, 'preload.cjs')}` })
+  const root = scratch(t, 'servers')
+  placedEntry(placeRecordedMeshServers({ serverConfig: pinnedConfig(), root, recording }))
+  assert.throws(() => execFileSync('ls', [ran], { stdio: 'ignore' }), 'the preload never ran')
 })
 
 test('a planted install in the checkout\'s node_modules or under the global prefix is never what starts', async (t) => {
@@ -233,12 +272,12 @@ test('an installed file changed, removed or added since the install refuses the 
   placedEntry(placeRecordedMeshServers({ serverConfig: pinnedConfig(), root, recording }))
   const installed = join(root, VERSION, 'node_modules')
 
-  const changed = join(installed, DEPENDENCY, 'index.js')
+  const changed = join(installed, DEPENDENCY, MARK_FILE)
   appendFileSync(changed, '// edited\n')
   const changedRefusal = refusalOf(placeRecordedMeshServers({ serverConfig: pinnedConfig(), root, recording }))
-  assert.ok(changedRefusal.includes(`node_modules/${DEPENDENCY}/index.js`), changedRefusal)
+  assert.ok(changedRefusal.includes(`node_modules/${DEPENDENCY}/${MARK_FILE}`), changedRefusal)
 
-  writeFileSync(changed, `module.exports = '${RECORDED_MARK}'\n`)
+  writeFileSync(changed, `${RECORDED_MARK}\n`)
   assert.ok('config' in placeRecordedMeshServers({ serverConfig: pinnedConfig(), root, recording }), 'the recorded bytes put back pass again')
 
   const planted = join(installed, MESH_SERVER_PACKAGE, 'dist', 'preload.js')

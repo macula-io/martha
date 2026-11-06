@@ -99,7 +99,8 @@ export function refusalOfInstalledMeshServers(
 
 const partsOf = (version: string): readonly number[] => version.split('.').map(Number)
 
-function olderFirst(a: string, b: string): number {
+/** Orders exact versions oldest first. */
+export function olderFirst(a: string, b: string): number {
   const [left, right] = [partsOf(a), partsOf(b)]
   for (let at = 0; at < left.length; at++) {
     const order = (left[at] ?? 0) - (right[at] ?? 0)

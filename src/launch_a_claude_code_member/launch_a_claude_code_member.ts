@@ -9,8 +9,11 @@
 // for this launch alone. In order:
 //
 //   1. `prepareLaunch`, then the mesh server version the approved server config
-//      installs, which must be a recorded one (martha#49): on a refusal of
-//      either nothing starts, and the refusal goes to the owner.
+//      installs, which must be a recorded one (martha#49), and its recorded
+//      tree, installed or compared file by file, which the approved copy then
+//      starts by path instead of through npx (martha#65,
+//      ../install_the_recorded_mesh_server): on a refusal of any of them
+//      nothing starts, and the refusal goes to the owner.
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
 //   3. The relay's server on that socket, answering with memberRelay.
@@ -37,7 +40,7 @@
 
 import { spawn, type StdioOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { rmSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -50,10 +53,12 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerVersionsIn } from '../claude_code_host/mesh_server_install.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { placeRecordedMeshServers } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, refusalOfInstalledMeshServers } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   CLAUDE_SERVERS,
@@ -81,6 +86,8 @@ export interface LauncherPlaces {
   readonly launch_records: string
   /** The parent of each launch's relay socket directory: owned by this user, written by no one else. */
   readonly relay_root: string
+  /** Where the recorded mesh server trees are installed, one directory per version (martha#65). */
+  readonly mesh_servers: string
 }
 
 export interface ClaudeCodeMemberLaunch {
@@ -90,6 +97,8 @@ export interface ClaudeCodeMemberLaunch {
   readonly place: SnapshotPlace
   readonly policy: Policy
   readonly places: LauncherPlaces
+  /** The recorded mesh server trees; the reviewed recording unless a test gives its own. */
+  readonly mesh_trees?: MeshTreeRecording
   /** The host's command: `claude`, or a path to it. */
   readonly command: string
   /** The owner's own arguments, the prompt among them; they go before Martha's. */
@@ -142,6 +151,22 @@ function meshServerUnproved(serverConfig: Uint8Array | undefined): string | unde
   return 'refusal' in installed ? installed.refusal : refusalOfInstalledMeshServers(installed.versions)
 }
 
+/**
+ * Rewrites the approved server config in the snapshot so each mesh server
+ * starts from its recorded tree by path; why it cannot, or undefined (martha#65).
+ */
+function meshServersPlaced(serverConfig: Uint8Array | undefined, launch: ClaudeCodeMemberLaunch, snapshotDir: string): string | undefined {
+  if (serverConfig === undefined) return undefined
+  const placed = placeRecordedMeshServers({
+    serverConfig: new TextDecoder().decode(serverConfig),
+    root: launch.places.mesh_servers,
+    ...(launch.mesh_trees === undefined ? {} : { recording: launch.mesh_trees }),
+  })
+  if ('refusal' in placed) return placed.refusal
+  writeFileSync(join(snapshotDir, CLAUDE_SERVERS), placed.config)
+  return undefined
+}
+
 /** Starts one Claude Code member on its approved config, with its relay answered here. */
 export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
@@ -157,6 +182,11 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   if (unproved !== undefined) {
     removeSnapshot()
     return refuse(`${NOT_STARTED}: ${unproved}`)
+  }
+  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir)
+  if (placed !== undefined) {
+    removeSnapshot()
+    return refuse(`${NOT_STARTED}: ${placed}`)
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
 
