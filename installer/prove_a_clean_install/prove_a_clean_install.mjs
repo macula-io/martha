@@ -17,7 +17,7 @@
 // (an unknown option, or a log it cannot write) and nothing ran.
 // Not shipped (package.json "files" leaves it out).
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -202,6 +202,7 @@ async function stopTheRegistry (registry, plant) {
 }
 
 /**
+ * Removing either works or throws: its rmSync forgives only a box that is already gone.
  * @param {string | undefined} work
  * @returns {string[]} why it is still there, if it is
  */
@@ -209,10 +210,10 @@ function removeTheBox (work) {
   if (!work) return []
   try {
     removeEvenReadOnly(work)
+    return []
   } catch (error) {
     return [`${work} was not removed: ${reason(error)}`]
   }
-  return existsSync(work) ? [`${work} is still there`] : []
 }
 
 /** @param {string[]} argv @returns {{ logFile?: string }} */
