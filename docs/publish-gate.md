@@ -139,6 +139,8 @@ when a host does anything else):
 | Claude Code 2.1.318 as Martha starts it, config rewritten after approval | the approved server and hook only; the rewritten ones do not start |
 | OpenCode 2.2.5 as Martha starts it, config rewritten and a plugin added after approval | the approved server only; the rewritten server and the added plugin do not start |
 | OpenCode 2.2.5 as Martha starts it, the owner's environment setting both project-config switches to `0` | the same: the approved server only |
+| Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that only reports | the after-call hook, then the approved `Stop` and `SessionEnd` hooks: the host goes on past a hook that returns |
+| Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that waits for the launcher to SIGKILL the member's process group | the after-call hook only: neither the approved `Stop` nor the `SessionEnd` hook runs |
 
 The host's own approval is name-keyed where it exists at all, so it cannot be the
 control. `src/refuse_launch_of_unapproved_config/` is five rules:
@@ -200,16 +202,24 @@ What the plan leaves out, stated rather than hidden:
   the member ran (A13) — nor the inside of a submodule beyond the commit its
   parent records, nor a change the checkout's own index hides from
   `git status` (assume-unchanged, skip-worktree): those flags are the
-  member's, and no commit carries them.
+  member's, and no commit carries them. Of the same class: a member's own git
+  config whose `include.path` names a tracked file, which lets the checkout's
+  author define a clean filter that reading the tree runs.
 - **The fingerprint-to-launch race**: between `prepareLaunch` and the host's
   start, a script the snapshot runs can still be rewritten in the checkout, and
   a `SessionStart` hook runs it before the first tool call is checked.
 - **Inside a turn**, the snapshot's hooks run the checkout's scripts as they
   are at that moment. The launch is checked before every call
-  (`answerToolCall`) and after it (`recheckLaunch`), so once a call changes the
-  tree (a reviewer's own `gh pr checkout`) the launcher stops the member before
-  the host fires another event, and any later call is refused. What is left is the hooks of
-  the one call that changed the tree; it does not undo what they ran.
+  (`answerToolCall`) and after it (`recheckLaunch`). The stop after a call is
+  not a report: Martha's after-call hook does not return until the launcher has
+  sent SIGKILL to the member's whole process group, the host and its tool
+  servers. A host waits for its hooks, so nothing fires past that point. A hook
+  that only reported would let the host go on, and a fast text reply would fire
+  the approved `Stop` hook first; a SIGTERM or a normal exit fires the
+  `SessionEnd` hooks on the way out (`npm run probe:launch` shows both). What
+  is left is the hooks of the one call that changed the tree, which run in
+  parallel with Martha's own (`PreToolUse`/`PostToolUse`); the stop does not
+  undo what they ran.
 - **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
   servers in their frontmatter. They start only when the model spawns that
   agent, which is a tool call the shell gate refuses while unapproved text is
@@ -282,7 +292,7 @@ A host does these things, and the core does the rest:
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
 | before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches` (their `args`, and the environment `launchEnvironment(process.env, switches)`, which drops inherited variables that would bring config back), show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
 | before running any tool | `answerToolCall({ tool, session, policy, input, launch })`, where `launch` is the place and approvals `prepareLaunch` was given — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
-| after every tool call | `recheckLaunch(launch)` — on a refusal the launcher stops the member at once: a host keeps firing hooks on its own events (the end of the turn, the next prompt) when calls are refused, and those would run the changed scripts before any later call is checked |
+| after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(store, processes, launched)`, `recordMemberStopped(store, member_name)` |

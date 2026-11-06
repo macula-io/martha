@@ -229,8 +229,10 @@ export interface ApprovedLaunch extends LaunchPlace {
  * The launch, checked again on a running member: before every tool call
  * (../answer_a_tool_call) and after it. The approved hooks and servers run
  * scripts from the live checkout, so a call that changes the tree is refused
- * from then on, and on a refusal after a call the launcher stops the member
- * before the host fires its next event.
+ * from then on. On a refusal after a call, the hook asking does not return
+ * until the launcher has sent SIGKILL to the member's whole process group: a
+ * hook that returned would let the host fire its Stop hook, and a SIGTERM or a
+ * normal exit fires SessionEnd (npm run probe:launch).
  */
 export function recheckLaunch(launch: ApprovedLaunch): LaunchDecision {
   return decideLaunch({ ...readLaunchState(launch), host: launch.host, approved_fingerprints: launch.approved_fingerprints })

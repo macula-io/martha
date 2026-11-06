@@ -9,10 +9,11 @@
 // so one call that changes the tree (a `gh pr checkout`, a pull) makes every
 // hook after it run the new author's script. Once the checkout no longer
 // matches what the owner approved, no tool runs. The host also asks
-// `recheckLaunch` after every call and stops the member on a refusal, because a
-// host fires hooks on its own events (the end of a turn, the next prompt) even
-// when every call is refused. What is left: the hooks of the one call that
-// changed the tree.
+// `recheckLaunch` after every call, and on a refusal that hook does not return
+// until the launcher has sent SIGKILL to the member's process group, because a
+// host fires hooks on its own events (the end of a turn, its exit) even when
+// every call is refused. What is left: the hooks of the one call that changed
+// the tree, which run in parallel with Martha's own.
 //
 // A raw mesh read is refused next, tainted or not
 // (../read_a_room_through_its_gate): the room is read through its gate instead.

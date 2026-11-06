@@ -79,6 +79,37 @@ const opencodeServer = (name: string, marker: string) =>
 const opencodePlugin = (marker: string) =>
   `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, '')\nexport const Probe = async () => ({})\n`
 
+/**
+ * Approved hooks for the stop: one after every tool call (the launcher's), one
+ * when the turn ends, one when the session ends. `after` is what the
+ * after-call hook does once it has marked that it ran.
+ */
+const claudeStopHooks = (place: Place, after: string) => {
+  const hook = (command: string) => [{ hooks: [{ type: 'command', command }] }]
+  return JSON.stringify({
+    hooks: {
+      PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: `touch ${place.marker('AFTER_CALL_HOOK')}; ${after}` }] }],
+      Stop: hook(`touch ${place.marker('STOP_HOOK')}`),
+      SessionEnd: hook(`touch ${place.marker('SESSION_END_HOOK')}`),
+    },
+  })
+}
+
+/** The launcher's stop: SIGKILL the member's whole process group, and do not return before it lands. */
+const KILL_THE_GROUP = `kill -KILL -- "-$MEMBER_GROUP"; sleep ${RUN_TIMEOUT_MS / 1000}`
+/** An after-call hook that only reports, and lets the host go on. */
+const ONLY_REPORT = 'true'
+
+/** Claude Code as the leader of its own process group, whose id the hooks read as MEMBER_GROUP. */
+const claudeInItsOwnGroup = (...extra: readonly string[]): Command => (switches) => ({
+  command: 'setsid',
+  args: ['sh', '-c', 'export MEMBER_GROUP=$$; exec "$0" "$@"', 'claude', ...extra, ...switches.args],
+})
+/** A prompt that makes one tool call before the reply. */
+const ONE_CALL_PROMPT = 'Run the shell command `true` with the Bash tool, then reply with the single word ok.'
+// The prompt goes before `--allowedTools`, which takes every argument up to the next option.
+const ONE_CALL_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', ONE_CALL_PROMPT, '--allowedTools', 'Bash(true)']
+
 const claude = (...extra: readonly string[]): Command => (switches) => ({
   command: 'claude',
   args: [...extra, ...switches.args],
@@ -160,6 +191,24 @@ const PROBES: readonly Probe[] = [
     },
     inherited: { OPENCODE_CONFIG_PROJECT_DISABLE: '0', OPENCODE_DISABLE_PROJECT_CONFIG: '0' },
     expected: { APPROVED_SERVER: true, PLANTED_SERVER: false, PLANTED_PLUGIN: false },
+    planned: true,
+  },
+  {
+    what: 'Claude Code as Martha starts it, headless: an after-call hook that only reports',
+    host: 'claude-code',
+    command: claudeInItsOwnGroup(...ONE_CALL_CLAUDE),
+    approved: (place) => put(place.checkout, CLAUDE_SETTINGS, claudeStopHooks(place, ONLY_REPORT)),
+    planted: () => {},
+    expected: { AFTER_CALL_HOOK: true, STOP_HOOK: true, SESSION_END_HOOK: true },
+    planned: true,
+  },
+  {
+    what: "Claude Code as Martha starts it, headless: the after-call hook waits for the launcher to SIGKILL the member's group",
+    host: 'claude-code',
+    command: claudeInItsOwnGroup(...ONE_CALL_CLAUDE),
+    approved: (place) => put(place.checkout, CLAUDE_SETTINGS, claudeStopHooks(place, KILL_THE_GROUP)),
+    planted: () => {},
+    expected: { AFTER_CALL_HOOK: true, STOP_HOOK: false, SESSION_END_HOOK: false },
     planned: true,
   },
 ]
