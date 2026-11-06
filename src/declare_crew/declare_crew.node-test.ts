@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   DECLARATION_DIRECTORY,
@@ -20,19 +21,11 @@ const root = '/crew-project'
 const crew_directory = join(root, DECLARATION_DIRECTORY)
 const declaration_path = join(crew_directory, DECLARATION_FILE)
 
-// A document store the test controls: it serves the documents it is given and
-// counts every read, so a test can say how often the declaration was read.
+// The core's in-memory host, holding the given documents; it records every
+// document read, so a test can say how often the declaration was read.
 const storeOf = (documents: Readonly<Record<string, string>>) => {
-  const reads: string[] = []
-  const store: DocumentStore = {
-    read: async (path: string) => {
-      reads.push(path)
-      const text = documents[path]
-      if (text === undefined) throw Object.assign(new Error(`no such document: ${path}`), { code: 'ENOENT' })
-      return text
-    },
-  }
-  return { store, reads }
+  const { host, documentsRead } = hostForTests({ documents })
+  return { store: host.stores.documents, documentsRead }
 }
 
 const allActsTo = (who: readonly string[]) => Object.fromEntries(ACTS.map(act => [act, who]))
@@ -64,8 +57,8 @@ const team = {
 }
 
 const declare = (declaration: unknown) => {
-  const { store, reads } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
-  return { settings: declareCrew(store, root), reads }
+  const { store, documentsRead } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
+  return { settings: declareCrew(store, root), documentsRead }
 }
 
 const refusedWith = async (declaration: unknown, field: string | null) => {
@@ -128,12 +121,12 @@ test('the mode is data: a mode of any name reads exactly as the same table named
 // --- 2. read once -------------------------------------------------------------
 
 test('the declaration is read exactly once, and using the settings reads nothing more', async () => {
-  const { settings, reads } = declare(team)
+  const { settings, documentsRead } = declare(team)
   const read: CrewSettings = await settings
   // Every later slice takes these settings as its argument; walking all of them
   // stands in for every slice using them, and must not reach the store again.
   JSON.stringify(read)
-  assert.deepEqual(reads, [declaration_path])
+  assert.deepEqual(documentsRead(), [declaration_path])
 })
 
 // --- 3. no silent default -----------------------------------------------------
@@ -174,9 +167,9 @@ test('a declaration that is not JSON is refused by its file', async () => {
 })
 
 test('a root that is not an absolute path is refused before anything is read', async () => {
-  const { store, reads } = storeOf({})
+  const { store, documentsRead } = storeOf({})
   await assert.rejects(declareCrew(store, 'relative/root'), DeclarationRefused)
-  assert.deepEqual(reads, [])
+  assert.deepEqual(documentsRead(), [])
 })
 
 test('every malformed field is refused by its name', async () => {
