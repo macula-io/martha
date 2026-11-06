@@ -110,14 +110,23 @@ jobs:
           set -euo pipefail
           # No provenance or SBOM from buildx: attest-image signs and attests the digest, and buildx's attestations
           # would turn the push into an image index, which the installer refuses.
+          # Built to a local OCI layout and checked THERE: nothing reaches the registry until the one manifest is an
+          # OCI image manifest, so a bad build leaves no <version> for the published-once step to block forever.
+          # Then that same layout is pushed unchanged, and the pushed digest must be the checked one.
+          layout="$RUNNER_TEMP/layout"
           docker buildx build -f "$RELEASE_CTX/Containerfile" --provenance=false --sbom=false \
-            --output "type=image,name=$IMAGE:$VERSION,push=true,oci-mediatypes=true,compression=gzip" \
-            --metadata-file "$RUNNER_TEMP/metadata.json" "$RELEASE_CTX"
-          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")"
-          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
-          type="$(docker buildx imagetools inspect --raw "$IMAGE@$digest" | jq -r .mediaType)"
-          [ "$type" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::$IMAGE@$digest is a $type, not one image manifest"; exit 1; }
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            --output "type=oci,dest=$layout,tar=false,oci-mediatypes=true,compression=gzip" "$RELEASE_CTX"
+          [ "$(jq '.manifests | length' "$layout/index.json")" = 1 ] || { echo "::error::the build made more than one manifest; nothing was pushed"; exit 1; }
+          checked="$(jq -r '.manifests[0].digest' "$layout/index.json")"
+          [[ "$checked" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build; nothing was pushed"; exit 1; }
+          type="$(jq -r .mediaType "$layout/blobs/sha256/${checked#sha256:}")"
+          [ "$type" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::the build made a $type, not one image manifest; nothing was pushed"; exit 1; }
+          skopeo copy --preserve-digests --digestfile "$RUNNER_TEMP/pushed.digest" "oci:$layout" "docker://$IMAGE:$VERSION"
+          [ "$(cat "$RUNNER_TEMP/pushed.digest")" = "$checked" ] || { echo "::error::$IMAGE:$VERSION was pushed as $(cat "$RUNNER_TEMP/pushed.digest"), not the checked $checked"; exit 1; }
+          # A second guard, on what the registry now serves.
+          served="$(docker buildx imagetools inspect --raw "$IMAGE@$checked" | jq -r .mediaType)"
+          [ "$served" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::$IMAGE@$checked is served as a $served"; exit 1; }
+          echo "digest=$checked" >> "$GITHUB_OUTPUT"
 
   attest:
     needs: release

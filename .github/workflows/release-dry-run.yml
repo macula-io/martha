@@ -74,20 +74,29 @@ jobs:
           TAG: ${{ steps.names.outputs.tag }}
         run: |
           set -euo pipefail
+          # As release.yml: built to a local OCI layout, checked there before anything reaches the registry, then
+          # that same layout pushed unchanged and the pushed digest compared with the checked one. Rehearsing that
+          # order is the point of running it here. Prints the checked digest.
           build() {
+            local layout="$RUNNER_TEMP/layout-$1" checked type
             docker buildx build -f "$RELEASE_CTX/Containerfile" --provenance=false --sbom=false "${@:2}" \
-              --output "type=image,name=$IMAGE:$1,push=true,oci-mediatypes=true,compression=gzip" \
-              --metadata-file "$RUNNER_TEMP/metadata-$1.json" "$RELEASE_CTX"
+              --output "type=oci,dest=$layout,tar=false,oci-mediatypes=true,compression=gzip" "$RELEASE_CTX" >&2
+            [ "$(jq '.manifests | length' "$layout/index.json")" = 1 ] || { echo "::error::the build of $1 made more than one manifest; nothing was pushed" >&2; return 1; }
+            checked="$(jq -r '.manifests[0].digest' "$layout/index.json")"
+            [[ "$checked" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build of $1; nothing was pushed" >&2; return 1; }
+            type="$(jq -r .mediaType "$layout/blobs/sha256/${checked#sha256:}")"
+            [ "$type" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::the build of $1 made a $type, not one image manifest; nothing was pushed" >&2; return 1; }
+            skopeo copy --preserve-digests --digestfile "$layout.digest" "oci:$layout" "docker://$IMAGE:$1" >&2
+            [ "$(cat "$layout.digest")" = "$checked" ] || { echo "::error::$IMAGE:$1 was pushed as $(cat "$layout.digest"), not the checked $checked" >&2; return 1; }
+            echo "$checked"
           }
-          build "$TAG"
-          build "$TAG-unsigned" --label dev.macula.dry-run=unsigned
-          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$TAG.json")"
-          unsigned="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$TAG-unsigned.json")"
-          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
-          [[ "$unsigned" =~ ^sha256:[0-9a-f]{64}$ && "$unsigned" != "$digest" ]] || { echo "::error::the unsigned image is not a second digest"; exit 1; }
+          digest="$(build "$TAG")"
+          unsigned="$(build "$TAG-unsigned" --label dev.macula.dry-run=unsigned)"
+          [ "$unsigned" != "$digest" ] || { echo "::error::the unsigned image is not a second digest"; exit 1; }
           for pushed in "$digest" "$unsigned"; do
-            type="$(docker buildx imagetools inspect --raw "$IMAGE@$pushed" | jq -r .mediaType)"
-            [ "$type" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::$IMAGE@$pushed is a $type, not one image manifest"; exit 1; }
+            # A second guard, on what the registry now serves.
+            served="$(docker buildx imagetools inspect --raw "$IMAGE@$pushed" | jq -r .mediaType)"
+            [ "$served" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::$IMAGE@$pushed is served as a $served"; exit 1; }
           done
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "unsigned=$unsigned" >> "$GITHUB_OUTPUT"
