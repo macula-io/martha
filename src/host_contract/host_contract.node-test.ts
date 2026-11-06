@@ -226,7 +226,8 @@ test("the test host names a called tool by the host's split it is given", () => 
   const { host } = hostForTests({ toolNames: openCodeToolNames(['macula']) })
   assert.equal(host.tools.ownNameOf('macula_mesh_read_inbox'), 'mesh_read_inbox')
   assert.equal(hostForTests({ toolNames: claudeCodeToolNames }).host.tools.ownNameOf('mcp__x__mesh_say'), 'mesh_say')
-  assert.equal(claudeCodeToolNames.ownNameOf('mcp__x__tool__with__parts'), 'tool__with__parts')
+  // A server name may hold __ (the host only replaces characters outside [A-Za-z0-9_-]): the last __ splits.
+  assert.equal(claudeCodeToolNames.ownNameOf('mcp__macula__x__mesh_read_inbox'), 'mesh_read_inbox')
 })
 
 test("a test host given no split uses Claude Code's, so a core test cannot fail open by forgetting it", () => {

@@ -157,16 +157,16 @@ test('a registration the engine refuses is not lost: toolsRegistered rejects wit
 
 // --- a called tool's own name, as the host splits it ----------------------------
 
-test('a called tool\'s own name is split as Claude Code splits mcp__<server>__<tool>', (t) => {
+test('a called tool\'s own name is what follows the last __ of an mcp__ name', (t) => {
   const { adapter } = adapterIn(t)
   const names = adapter.host.tools
   assert.equal(names.ownNameOf, ownNameOfCalledTool)
   assert.equal(names.ownNameOf('mcp__plugin_macula-mcp_macula__mesh_read_inbox'), 'mesh_read_inbox')
   assert.equal(names.ownNameOf('mcp__macula__mesh_say'), 'mesh_say')
-  // The server part holds no __ (the host normalises it); the tool's own name may.
-  assert.equal(names.ownNameOf('mcp__srv__tool__with__parts'), 'tool__with__parts')
-  // A built-in tool, or a name with no server or no tool part, is its own name.
-  for (const called of ['Bash', 'mesh_read_inbox', 'mcp__srv', 'mcp____tool', 'mcp__srv__', 'xmcp__srv__tool', '']) {
+  // The host only replaces characters outside [A-Za-z0-9_-], so a server name may hold __.
+  assert.equal(names.ownNameOf('mcp__macula__x__mesh_read_inbox'), 'mesh_read_inbox')
+  // A built-in tool, or an mcp__ name with nothing after its last __, is its own name.
+  for (const called of ['Bash', 'mesh_read_inbox', 'mcp__srv__', 'xmcp__srv__mesh_read_inbox', '']) {
     assert.equal(names.ownNameOf(called), called, called)
   }
 })
@@ -175,16 +175,19 @@ test('the core judges a Claude Code mesh tool by its own name when the hook pass
   const { adapter } = adapterIn(t)
   const launch_dir = scratch(t)
   const launch: ApprovedLaunch = { host: 'claude-code', launch_dir, stop_dir: launch_dir, approved_fingerprints: [] }
-  const call = (names: { ownNameOf(called: string): string }) =>
+  const callOf = (tool: string, names: { ownNameOf(called: string): string }) =>
     answerToolCall({
-      tool: 'mcp__plugin_macula-mcp_macula__mesh_read_inbox',
+      tool,
       session: beginSession(sessions(), 's-1'),
       policy: { may_send_executable_text: [] },
       input: {},
       launch,
       names,
     })
+  const call = (names: { ownNameOf(called: string): string }) => callOf('mcp__plugin_macula-mcp_macula__mesh_read_inbox', names)
   assert.match((call(adapter.host.tools) as { deny?: string } | undefined)?.deny ?? '', /no gate has seen/)
+  // A server name holding __ does not let the raw read through.
+  assert.match((callOf('mcp__macula__x__mesh_read_inbox', adapter.host.tools) as { deny?: string } | undefined)?.deny ?? '', /no gate has seen/)
   // A host that took no name apart would let it through: the split is what refuses it.
   assert.equal(call({ ownNameOf: (called) => called }), undefined)
 })

@@ -344,11 +344,17 @@ export function gapsInPromptOrigins(declared: HostPromptOrigins, emitted: readon
   return [...undeclared, ...never_emitted]
 }
 
+/** Where Claude Code joins a server's name to its tool's own name; its adapter splits at the last one. */
+const HOST_NAME_SEPARATOR = '__'
+
 /**
  * Every mesh tool whose decision does not match the recorded server: a tool it
  * registers that is neither allowed nor refused, an allowed or refused name it
  * does not register, a name both allowed and refused, and a tool outside the
- * mesh prefix, which the run-time check would not judge at all. A new release
+ * mesh prefix, which the run-time check would not judge at all, and a tool
+ * whose name holds `__`, which Claude Code's adapter would cut short: it takes
+ * a called `mcp__<server>__<tool>` apart at the last `__`, because a server's
+ * name may hold `__` and a mesh tool's may not. A new release
  * of the server fails CI here by name before a member meets the tool.
  */
 export function gapsInMeshTools(
@@ -365,11 +371,14 @@ export function gapsInMeshTools(
     .filter((tool) => tool.startsWith(MESH_TOOL_PREFIX) && !allowed.includes(tool) && !refused.includes(tool))
     .map((tool) => gap(tool, `${on} registers it, and it is neither allowed nor refused`))
   const both = allowed.filter((tool) => refused.includes(tool)).map((tool) => gap(tool, 'it is both allowed and refused'))
+  const split = recorded.tools
+    .filter((tool) => tool.includes(HOST_NAME_SEPARATOR))
+    .map((tool) => gap(tool, `${on} registers it, and its name holds ${HOST_NAME_SEPARATOR}: a host that takes a called name apart at its last ${HOST_NAME_SEPARATOR} would judge only its tail`))
   const unregistered = (names: readonly string[], decision: string) =>
     names
       .filter((tool) => !recorded.tools.includes(tool))
       .map((tool) => gap(tool, `it is ${decision}, and the recorded server does not register it (${on})`))
-  return [...unprefixed, ...undecided, ...both, ...unregistered(allowed, 'allowed'), ...unregistered(refused, 'refused')]
+  return [...unprefixed, ...undecided, ...both, ...split, ...unregistered(allowed, 'allowed'), ...unregistered(refused, 'refused')]
 }
 
 function deliveryGateGap(name: string, gate: DeliveryGate | undefined): string | undefined {

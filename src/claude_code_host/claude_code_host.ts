@@ -19,8 +19,8 @@
 //     raises, with where it came from read only from the engine's `origin`;
 //   - tools: the engine's registration, behind a registry of the adapter's own
 //     that refuses a name twice before the engine sees it (T12), and the name
-//     a called tool's own server gave it, split as the host splits
-//     `mcp__<server>__<tool>`; the hook glue passes `host.tools` to
+//     a called tool's own server gave it, taken from `mcp__<server>__<tool>` at
+//     the last `__`; the hook glue passes `host.tools` to
 //     ../answer_a_tool_call as its `names`.
 //
 // Rules from the threat model on martha#41:
@@ -168,18 +168,21 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
 
 /** What Claude Code puts between the parts of an MCP tool's name: `mcp__<server>__<tool>`. */
 const MCP_NAME_SEPARATOR = '__'
-const MCP_NAME_MARK = 'mcp'
+const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
 
 /**
- * The name a called tool's own server gave it, split as Claude Code splits it:
- * the server is the part after `mcp__`, which the host normalises so it holds
- * no `__`, and the tool's own name is everything after that, `__` included. A
- * built-in tool, or a name with no server or no tool part, is its own name.
+ * The name a called tool's own server gave it: what follows the last `__` of an
+ * `mcp__` tool. The host only replaces characters outside [A-Za-z0-9_-] in a
+ * server's name, so the server part may itself hold `__`; splitting at the last
+ * one is exact while no tool's own name holds `__` (gapsInMeshTools checks the
+ * mesh tools), and otherwise yields a shorter name the core refuses rather than
+ * misses. A built-in tool, or an `mcp__` name with nothing after its last `__`,
+ * is its own name.
  */
 export function ownNameOfCalledTool(called: string): string {
-  const [mark, server, ...own] = called.split(MCP_NAME_SEPARATOR)
-  const tool = own.join(MCP_NAME_SEPARATOR)
-  return mark === MCP_NAME_MARK && server !== undefined && server !== '' && tool !== '' ? tool : called
+  if (!called.startsWith(MCP_NAME_PREFIX)) return called
+  const own = called.slice(called.lastIndexOf(MCP_NAME_SEPARATOR) + MCP_NAME_SEPARATOR.length)
+  return own === '' ? called : own
 }
 
 /** Runs a process directly, with no shell, and reports how it ended. */

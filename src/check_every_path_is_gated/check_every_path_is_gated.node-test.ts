@@ -427,6 +427,13 @@ test('a recorded tool without the mesh prefix is named: the prefix is the run-ti
   assert.ok(gaps.some((gap) => gap.path === `mesh tool ${unprefixed}` && new RegExp(MESH_TOOL_PREFIX).test(gap.why)))
 })
 
+test('a recorded mesh tool whose name holds __ is named: the last-__ split would judge only its tail', () => {
+  const joined = `${MESH_TOOL_PREFIX}read__inbox`
+  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, joined]), [...MESH_TOOLS_THAT_RUN], [...MESH_TOOLS_REFUSED, joined])
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${joined}`])
+  assert.match(gaps[0]?.why ?? '', /holds __/)
+})
+
 test('a name both allowed and refused is named', () => {
   const [both] = MESH_TOOLS_REFUSED
   assert.ok(both !== undefined)
