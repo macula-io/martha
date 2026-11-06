@@ -114,6 +114,20 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
+      # macOS's default TMPDIR is long and is reached through a link
+      # (/var -> /private/var), martha#79. The suite runs again under that shape,
+      # longer than the default, so a path built under TMPDIR with no room left
+      # for a socket, or a path compared without resolving the link, fails here.
+      - name: the suite under a long TMPDIR reached through a link
+        env:
+          PRIVATE_VAR: ${{ runner.temp }}/private/var
+          LINKED_VAR: ${{ runner.temp }}/var
+          MAC_SHAPED_TMP: folders/zz/abcdefghijklmnopqrstuvwxyz0123/T
+        run: |
+          mkdir -p "$PRIVATE_VAR/$MAC_SHAPED_TMP"
+          chmod 700 "$PRIVATE_VAR/$MAC_SHAPED_TMP"
+          ln -s "$PRIVATE_VAR" "$LINKED_VAR"
+          TMPDIR="$LINKED_VAR/$MAC_SHAPED_TMP" npm test
 
   # Nothing private gets in (docs/nothing-private-gets-in.md): no private issue
   # link, internal host name or private remote, in the tree or in any commit of

@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
@@ -47,7 +47,8 @@ function trustedEnvrc(t: TestContext, direnv: Direnv): Envrc {
   writeFileSync(join(dir, '.envrc'), `: > '${marker}'\n`)
   const config = join(home, 'direnv-config')
   mkdirSync(config)
-  writeFileSync(join(config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(home)}]\n`)
+  // direnv matches the .envrc's real path against the prefix: a TMPDIR behind a link (macOS) needs the real one (martha#79).
+  writeFileSync(join(config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(realpathSync(home))}]\n`)
   const owner_env = {
     ...process.env,
     PATH: `${dirname(direnv.path)}${delimiter}${process.env.PATH ?? ''}`,

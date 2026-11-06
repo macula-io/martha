@@ -166,6 +166,20 @@ test('a recorded tree names the server\'s integrity, the settings it reads and e
   for (const path of paths) assert.match(tree.files[path] ?? '', /^sha512-[A-Za-z0-9+/]+=*$/, path)
 })
 
+test('a scratch reached through a symlink records the same tree, as under the macOS default TMPDIR (martha#79)', async (t) => {
+  const { good } = await registries(t)
+  const real = scratch(t, 'linked-real')
+  const linked = `${real}-link`
+  symlinkSync(real, linked)
+  t.after(() => rmSync(linked, { force: true }))
+  const recording = recordingAt(good.registry)
+  const through_link = recordMeshTree({ tarball: good.tarballOf(MESH_SERVER_PACKAGE), recording, scratch: linked })
+  const [direct] = recorded(t, good).versions
+  assert.ok(direct !== undefined)
+  assert.equal(through_link.integrity, direct.integrity)
+  assert.deepEqual(through_link.files, direct.files)
+})
+
 test('recording a tarball that is not what the registry serves for that version fails, naming both integrities', async (t) => {
   const { good, evil } = await registries(t)
   assert.throws(
@@ -349,7 +363,7 @@ test('a root reached through a symlink still starts the confined server: the tre
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: link, recording }))
   // The bin and the confined tree are named by the real path, as a test's expectations must name them.
   assert.equal(entry.args.at(-1), join(realpathSync(link), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
-  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(real, VERSION, 'node_modules')).href), String(entry.args[1]))
+  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(realpathSync(real), VERSION, 'node_modules')).href), String(entry.args[1]))
   const run = spawnSync(entry.command, entry.args, { cwd: real, env: { ...HOST, ...entry.env }, encoding: 'utf8' })
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)

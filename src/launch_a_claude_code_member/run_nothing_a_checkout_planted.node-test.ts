@@ -18,7 +18,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
@@ -28,6 +28,7 @@ import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { EMPTY_DIRECTORY_MODE } from './empty_directory.ts'
 import { CLAUDE_CODE, EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
+import { shortRelayRoot } from './short_relay_root.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
 const CONFIG_HOOKS_SINCE: readonly [number, number] = [2, 54]
@@ -141,7 +142,8 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   // come after the owner's to win.
   const direnv_config = join(home, 'direnv-config')
   mkdirSync(direnv_config)
-  writeFileSync(join(direnv_config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(home)}]\n`)
+  // direnv matches the .envrc's real path against the prefix: a TMPDIR behind a link (macOS) needs the real one (martha#79).
+  writeFileSync(join(direnv_config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(realpathSync(home))}]\n`)
   const owner_env = {
     ...process.env,
     PATH: direnv === undefined ? process.env.PATH : `${dirname(direnv.path)}${delimiter}${process.env.PATH ?? ''}`,
@@ -226,12 +228,13 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     chmodSync(member, 0o700)
 
     const lines: string[] = []
+    const relay_root = shortRelayRoot(t)
     const started = await launchClaudeCodeMember({
       member_name: 'Mercury',
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root: closed('relay'), mesh_servers: closed('mesh-servers') },
+      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers') },
       command: member,
       args: [],
       inherited: place.owner_env,
@@ -248,8 +251,8 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
 
     const [emptyPath, modeAndCount] = readFileSync(empty, 'utf8').trimEnd().split('\n')
     assert.equal(basename(emptyPath ?? ''), EMPTY_DIRECTORY_NAME)
-    assert.equal(dirname(dirname(emptyPath ?? '')), join(place.home, 'relay'), 'inside this launch\'s own relay directory')
+    assert.equal(dirname(dirname(emptyPath ?? '')), relay_root, 'inside this launch\'s own relay directory')
     assert.equal(modeAndCount, `${EMPTY_DIRECTORY_MODE.toString(8)} 0`, 'the member saw it empty, mode 0500')
-    assert.deepEqual(readdirSync(join(place.home, 'relay')), [], 'the empty directory went with the launch')
+    assert.deepEqual(readdirSync(relay_root), [], 'the empty directory went with the launch')
   })
 }
