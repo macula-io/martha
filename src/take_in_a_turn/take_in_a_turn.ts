@@ -40,7 +40,7 @@
 //      remembered as lost, never as empty, so a second restart does not turn it
 //      fresh.
 
-import type { AttestedSender, Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
 import {
   recordIngestion,
@@ -48,27 +48,8 @@ import {
   type Ingestion,
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { framedDeliveryOf, type TurnOrigin } from '../trust_only_framed_envelopes/trust_only_framed_envelopes.ts'
-
-/** Every way text reaches a session, in the words a host would use for it. */
-export type TurnSource =
-  | 'crew_room'
-  | 'shared_room'
-  | 'backlog_digest'
-  | 'ring'
-  | 'ring_answer'
-  | 'cross_session'
-  | 'checkout_hook'
-  | 'owner_paste'
-  | 'server_instructions'
-  | 'checkout_run'
-  | 'mesh_read'
-  | 'mcp_result'
-  | 'gh'
-  | 'checkout_file'
-  | 'git_history'
-  | 'web'
-  | 'subagent'
+import { framedDeliveryOf } from '../trust_only_framed_envelopes/trust_only_framed_envelopes.ts'
+import type { Arrival, AttestedSender, TurnSource } from '../host_contract/host_contract.ts'
 
 /** The inbound path each source is recorded on, so the registry and the host agree. */
 export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
@@ -90,31 +71,6 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   web: 'B6',
   subagent: 'B7',
 }
-
-/** The source whose sender only the binder may name. */
-type BoundSource = 'cross_session'
-
-/** Something a session took in, as the host describes it. */
-export type Arrival =
-  | {
-      /** The host knows what it was. */
-      readonly source: Exclude<TurnSource, BoundSource>
-      /** The identity the host holds for the sender; omitted or null means it holds none. */
-      readonly from_identity?: string | null
-    }
-  | {
-      /** The host knows it was a cross-session delivery. */
-      readonly source: BoundSource
-      /** The sending process, as the host attests it out of band; omitted when it cannot. */
-      readonly sender?: AttestedSender
-    }
-  | {
-      /** The host has only the turn's text, as the Claude Code host does. */
-      readonly text: string
-      readonly origin?: TurnOrigin
-      /** The sending process, as the host attests it out of band; omitted when it cannot. */
-      readonly sender?: AttestedSender
-    }
 
 /** A session, with the record the gate reads and whether that record could be read. */
 export interface HostSession {

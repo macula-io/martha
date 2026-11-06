@@ -22,6 +22,7 @@ import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 const strict: Rules = {
   labHosts: ['synth'],
   publicEmails: ['macula.io'],
+  publicAddresses: ['ada@synthetic.invalid'],
   owners: ['synthetic-owner'],
   ownRepo: 'martha',
   allowSynthetic: false,
@@ -143,7 +144,7 @@ test('a machine family is only refused when it is declared', async () => {
 test('the crew\'s other private-text classes are refused', async () => {
   assert.deepEqual(await hitsOf('see /home/synthetic/notes'), ['a home directory (/home/synthetic)'])
   assert.deepEqual(await hitsOf('dial 192.168.255.7'), ['a private address (192.168.255.7)'])
-  assert.deepEqual(await hitsOf('mail ada@synthetic.invalid'), ['an email address (ada@synthetic.invalid)'])
+  assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
   const id = 'a'.repeat(64)
   assert.deepEqual(await hitsOf(`node ${id}`), [`a 64-hex id (${id})`])
 })
@@ -273,4 +274,10 @@ test('a path is read as well as its text, in the tree and in every commit, empty
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('a declared public address passes as that exact string, and its domain does not', async () => {
+  assert.deepEqual(await hitsOf('the key type ada@synthetic.invalid'), [])
+  assert.deepEqual(await hitsOf('the key type xada@synthetic.invalid'), ['an email address (xada@synthetic.invalid)'])
+  assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
 })

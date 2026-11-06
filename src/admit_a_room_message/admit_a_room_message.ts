@@ -58,6 +58,11 @@ export const TALK_KINDS: readonly string[] = [
 /** A node id as the mesh writes it: 64 hex characters. */
 export const NODE_ID = /^[0-9a-f]{64}$/i
 
+/** True for a node id as the mesh writes it; anything else is nobody. */
+export function isNodeId(candidate: string): boolean {
+  return NODE_ID.test(candidate)
+}
+
 /** A delivery gate: may this message in? */
 export type DeliveryGate = (input: {
   readonly message: RoomMessage
@@ -75,9 +80,9 @@ export const admitsRoomMessage = ({
   readonly roster: RoomRoster
   readonly self_node_id: string
 }): boolean => {
-  if (!NODE_ID.test(self_node_id)) return false
+  if (!isNodeId(self_node_id)) return false
   if (message.from_node_id === null) return false
-  if (!NODE_ID.test(message.from_node_id)) return false
+  if (!isNodeId(message.from_node_id)) return false
   if (!message.attested) return false
 
   const sender = message.from_node_id.toLowerCase()

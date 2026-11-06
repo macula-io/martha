@@ -25,9 +25,11 @@ Each behaviour is one of three kinds, and its kind decides where it lands here:
 ## Landing order
 
 1. **host_contract** with **log_ledger**. The small contract every host
-   implements (clock, store, files, processes, prompts, tool registration,
-   settings), and the ledger of package milestones. Both hosts already carry
-   the ledger, so one package proves the slice shape and its reuse across hosts.
+   implements (a clock, stores, running a process, delivery in and out, and
+   registering a tool; settings are not in it), and the ledger of package
+   milestones, which keeps a row before every outward act. Both hosts already
+   carry the ledger, so one package proves the slice shape and its reuse across
+   hosts. Landed: [the host contract and the ledger](host-contract-and-ledger.md).
 2. **declare_crew**: the declaration read once into typed settings, before any
    second slice, so every later slice takes its settings as an argument and
    never reads a global. The house rules live here as switches.

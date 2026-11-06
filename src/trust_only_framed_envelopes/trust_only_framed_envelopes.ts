@@ -28,12 +28,11 @@
 // `origin: 'owner'` is then never framed; where the host says nothing, the paste
 // is believed. That is the one place text alone cannot decide.
 
+import type { TurnOrigin } from '../host_contract/host_contract.ts'
+
 const TAG_NAME = 'cross-session-message'
 const OPENING = `<${TAG_NAME}`
 const CLOSING = `</${TAG_NAME}>`
-
-/** What the host says about where a turn came from, when it says anything. */
-export type TurnOrigin = 'harness_delivery' | 'owner'
 
 /** One turn a session took in. */
 export interface Turn {

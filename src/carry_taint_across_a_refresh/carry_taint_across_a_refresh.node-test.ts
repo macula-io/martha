@@ -118,6 +118,14 @@ test('a forked resume, which arrives as resume under a new id, has lost its reco
   assert.equal(executes(fork), false)
 })
 
+test('a fork, which carries its parent under a new id, has lost its record and never starts fresh', () => {
+  const store = sessions()
+  taintedPredecessor(store, stampStore())
+  const fork = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'fork', session_id: 'forked', predecessor_id: 'old' })
+  assert.equal(fork.record_missing, true)
+  assert.equal(executes(fork), false)
+})
+
 test('a compaction keeps the session id, so the store already carries the taint', () => {
   const store = sessions()
   taintedPredecessor(store, stampStore())
