@@ -134,7 +134,8 @@ function fixture(t: TestContext): Fixture {
     'git commit -q --allow-empty -m "a member commits"',
     'git status --porcelain > /dev/null',
     'npm install --offline --no-audit --no-fund > /dev/null 2>&1',
-    'eval "$(direnv export sh)"',
+    // What direnv's shell hook runs on entering a directory, in the shell it hooks.
+    `bash -c 'eval "$(direnv export bash)"'`,
     `cd '${husky}'`,
     'git commit -q --allow-empty -m "a member commits"',
     '',
