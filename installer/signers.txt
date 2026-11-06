@@ -1,0 +1,11 @@
+# The signers a Martha release may carry (martha#21). One full commit sha of macula-io/macula-ci-images'
+# .github/workflows/attest-image.yml per line; the installer verifies the certificate identity
+# https://github.com/macula-io/macula-ci-images/.github/workflows/attest-image.yml@<sha> EXACTLY.
+#
+# Only a sha that carries the whole release guard goes here, never one from before it (b304162, 601c719, 56a597e,
+# and e8fe1a8, whose checks ran from the caller's tree). A new sha arrives in three steps, so an installed user is
+# never stranded:
+#   1. an installer version that adds it, keeping the old ones;
+#   2. a release signed under a sha ALREADY listed;
+#   3. only then a release signed under the new sha.
+b4c41abb404c32215a2823b7f19ac65b732e1dfe
