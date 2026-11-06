@@ -260,3 +260,59 @@ test('a refused envelope leaves no trace of its text, sender or kind in the resu
   }
   assert.equal(executes(result.session), true, 'what was withheld is not an ingestion')
 })
+
+// --- martha#48: tools that widen what a member can be reached by are refused --
+
+// The tools martha#48's threat model names: mesh_serve leaves a standing
+// procedure that runs on any caller's payload after the session moves on, and
+// the trust tools let the model rewrite the owner's contact list (in either
+// direction: removing an entry breaks the crew's rings). Each must be refused
+// in a member session, clean or tainted, under every namespace and host form.
+const REQUIRED_REACH_TOOLS = ['mesh_serve', 'mesh_trust_agent', 'mesh_untrust_agent']
+
+const sessionsOfBothKinds = () => {
+  const clean = beginSession(store(), 's-1')
+  return { clean, tainted: takeInTurn(clean, { source: 'mcp_result' }, bindNothing) }
+}
+
+test('the tools that widen a member reach are refused in a clean and in a tainted session, under every namespace', () => {
+  const { clean, tainted } = sessionsOfBothKinds()
+  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch }), undefined, 'the session is tainted')
+  for (const prefix of NAMESPACES) {
+    for (const own of REQUIRED_REACH_TOOLS) {
+      const tool = `${prefix}${own}`
+      for (const [kind, session] of [['clean', clean], ['tainted', tainted]] as const) {
+        const answer = answerToolCall({ names, tool, session, policy, input: {}, launch })
+        assert.notEqual(answer, undefined, `${tool} in a ${kind} session`)
+        assert.match(answer?.deny ?? '', /owner/, `${tool} in a ${kind} session`)
+      }
+    }
+  }
+})
+
+test('on OpenCode, the tools that widen a member reach are refused in its own server_tool form', () => {
+  const { clean, tainted } = sessionsOfBothKinds()
+  for (const server of OPENCODE_SERVERS) {
+    for (const own of REQUIRED_REACH_TOOLS) {
+      const tool = `${server}_${own}`
+      for (const session of [clean, tainted]) {
+        assert.notEqual(answerToolCall({ names: openCode, tool, session, policy, input: {}, launch }), undefined, tool)
+      }
+    }
+  }
+})
+
+test('no tool that widens a member reach is on the allow-list, and each is named as refused', () => {
+  for (const own of REQUIRED_REACH_TOOLS) {
+    assert.equal(MESH_TOOLS_THAT_RUN.includes(own), false, own)
+    assert.equal(MESH_TOOLS_REFUSED.includes(own), true, own)
+  }
+})
+
+test('a refused reach tool is not told to read a room through its gate: that is not why it is refused', () => {
+  const { clean } = sessionsOfBothKinds()
+  for (const own of REQUIRED_REACH_TOOLS) {
+    const answer = answerToolCall({ names, tool: `mcp__macula__${own}`, session: clean, policy, input: {}, launch })
+    assert.doesNotMatch(answer?.deny ?? '', /through its gate/, own)
+  }
+})
