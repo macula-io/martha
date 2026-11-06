@@ -620,6 +620,42 @@ test('a member that exits by itself leaves no record, socket or snapshot, and no
   assert.deepEqual(readdirSync(place.snapshot_root), [])
 })
 
+/** The process group of a pid, or undefined when the process is gone. */
+function groupOf(pid: number): number | undefined {
+  try {
+    return Number(readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Sends SIGKILL to the group of every process whose environment names this
+ * relay root: the member and everything it started carry its socket's path,
+ * whether or not it got as far as writing any file. Never this test's own group.
+ */
+function killGroupsCarrying(relay_root: string): void {
+  const own = groupOf(process.pid)
+  for (const entry of readdirSync('/proc')) {
+    const pid = Number(entry)
+    if (!Number.isInteger(pid) || pid <= 1) continue
+    let environment: string
+    try {
+      environment = readFileSync(`/proc/${pid}/environ`, 'utf8')
+    } catch {
+      continue
+    }
+    if (!environment.split('\0').some((line) => line.startsWith(`${RELAY_SOCKET_VARIABLE}=${relay_root}/`))) continue
+    const group = groupOf(pid)
+    if (group === undefined || group <= 1 || group === own) continue
+    try {
+      process.kill(-group, 'SIGKILL')
+    } catch {
+      // The group is gone already.
+    }
+  }
+}
+
 /** A launcher in a process of its own, started on this place, that says when its member runs. */
 function launcherProcess(place: Place, command: string): string {
   const script = join(place.home, 'launcher.ts')
@@ -653,8 +689,13 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     const place = placeFor(t)
     const fake = fakeClaude(place)
     const launcher = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
-    t.after(() => launcher.kill('SIGKILL'))
     const ended = new Promise<NodeJS.Signals | null>((resolve) => launcher.once('exit', (_code, by) => resolve(by)))
+    // Before any assertion: a test that fails must not leave the member running.
+    t.after(async () => {
+      if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+      await ended
+      killGroupsCarrying(place.relay_root)
+    })
     let said = ''
     launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
     await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), 10000)
@@ -662,15 +703,6 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     assert.equal(readdirSync(place.relay_root).length, 1)
     assert.equal(readdirSync(place.snapshot_root).length, 1)
     const child = Number(readFileSync(fake.childFile, 'utf8').trim())
-    const group = Number(readFileSync(`/proc/${child}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
-    assert.ok(Number.isInteger(group) && group > 1 && group !== process.pid, 'the member has a group of its own')
-    t.after(() => {
-      try {
-        process.kill(-group, 'SIGKILL')
-      } catch {
-        // The group is gone, as it should be.
-      }
-    })
 
     launcher.kill(signal)
     assert.equal(await ended, signal, 'the signal still ends the launcher')

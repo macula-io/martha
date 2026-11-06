@@ -210,6 +210,10 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   const onLauncherSignal = (signal: NodeJS.Signals): void => {
     offLauncherEnd()
     onLauncherExit()
+    // A `once` listener registered before this one has already been removed
+    // when this runs, so it counts as 0 here: the signal is raised again before
+    // that listener's own asynchronous shutdown can finish. A part of the
+    // process that needs one must keep listening with `on`.
     if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
   }
   const offLauncherEnd = (): void => {
