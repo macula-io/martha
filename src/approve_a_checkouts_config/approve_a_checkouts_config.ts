@@ -12,6 +12,13 @@
 // `martha approve` is refused before anything is read. That is a speed bump, not a boundary: a member runs as
 // the owner's OS user and could write the approvals file itself (martha#1 decision 2). `martha start` shows the
 // owner the approval it starts on and when it was given, so one the owner never gave is on their screen.
+// Under the same residual, a member's shell can swap a file between approve showing it and the owner reading it
+// in their editor: the owner approves the bytes approve hashed and showed, and the gate refuses any other, but
+// the owner cannot tell those bytes from what they opened. Only a boundary between the member and the owner's
+// files closes it (martha#24).
+//
+// Every line approve shows reaches the owner through the command's escaping (../run_the_martha_command), so a
+// path that holds terminal controls is shown as escapes, never acted on.
 //
 // Nothing is asked when there is nothing to approve (a checkout with no such config needs no approval, rule 5),
 // when the config is already approved, or when the gate would refuse the config whatever the owner said (a

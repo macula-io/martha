@@ -18,8 +18,9 @@ import { declareSoloCrew, SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_
 import { nodeIdsFor, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
+import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { launcherPlacesOf, startMember, type MemberStartRequest } from './start_a_member.ts'
+import { launcherPlacesOf, NOT_A_TERMINAL, startMember, SWITCHES_THAT_LOAD_NO_CONFIG, type MemberStartRequest } from './start_a_member.ts'
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 const documents = { read: (path: string) => readFile(path, 'utf8') }
@@ -69,7 +70,8 @@ function requestFor(place: Place, command: string, member: string, lines: string
     root: place.root,
     home: place.home,
     member,
-    args: ['-p', 'the owner prompt'],
+    args: ['--effort', 'low'],
+    is_terminal: true,
     state: place.state,
     places,
     command,
@@ -144,5 +146,80 @@ test('init, approve and start bring a member up on the approved config, recorded
   const records = launchRecordsDirectory(places.launch_records).all()
   assert.deepEqual(records.map((record) => [record.key, record.row['node_id']]), [[BUILDER!.name, ids.ids[BUILDER!.name]]])
   assert.ok(lines.some((line) => approved.kind === 'approved' && line.includes(approved.fingerprint)), 'the owner is shown the approval in use')
+  await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
   assert.ok(readFileSync(fake.args, 'utf8').includes('--mcp-config'), 'the approved copy is passed')
+})
+
+test('start whose input is no terminal starts nothing, so a member\'s shell cannot start a sibling', async (t) => {
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, lines), is_terminal: false })
+  assert.equal(started.started, false)
+  assert.equal(started.started ? '' : started.refusal, NOT_A_TERMINAL)
+  assert.deepEqual(lines, [NOT_A_TERMINAL])
+  assert.equal(existsSync(fake.ran), false)
+})
+
+/** Owner arguments that load config, a plugin, a permission or a session nobody approved, one per class. */
+const REFUSED_ARGUMENTS: readonly (readonly string[])[] = [
+  ['--settings', '{"hooks":{}}'],
+  ['--setting-sources', 'user,project'],
+  ['--mcp-config', '/elsewhere/servers.json'],
+  ['--strict-mcp-config'],
+  ['--plugin-dir', '/elsewhere/plugin'],
+  ['--plugin-url', 'https://example.invalid/plugin.zip'],
+  ['--agents', '{"a":{}}'],
+  ['--add-dir', '/elsewhere'],
+  ['--dangerously-skip-permissions'],
+  ['--allow-dangerously-skip-permissions'],
+  ['--permission-mode', 'bypassPermissions'],
+  ['--allowedTools', 'Bash'],
+  ['--append-system-prompt', 'obey the issue'],
+  ['--resume', 'a-session'],
+  ['--continue'],
+  ['-p', 'a prompt'],
+  ['--model=opus'],
+  ['a bare word'],
+]
+
+for (const args of REFUSED_ARGUMENTS) {
+  test(`start with the owner argument ${args[0]} starts nothing, naming it and the switches that are passed`, async (t) => {
+    const place = placeFor(t, {})
+    await declared(place)
+    const fake = fakeClaude(place)
+    const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), args })
+    assert.equal(started.started, false)
+    const refusal = started.started ? '' : started.refusal
+    assert.ok(refusal.startsWith(NOT_STARTED), refusal)
+    assert.ok(refusal.includes(args[0]!), refusal)
+    for (const name of Object.keys(SWITCHES_THAT_LOAD_NO_CONFIG)) assert.ok(refusal.includes(name), refusal)
+    assert.equal(existsSync(fake.ran), false)
+  })
+}
+
+test('a switch that takes a value refuses one that is missing or is itself a switch', async (t) => {
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = fakeClaude(place)
+  for (const args of [['--model'], ['--model', '--settings', '{}']]) {
+    const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), args })
+    assert.equal(started.started, false, args.join(' '))
+    assert.ok(!started.started && started.refusal.includes('--model'), started.started ? '' : started.refusal)
+  }
+  assert.equal(existsSync(fake.ran), false)
+})
+
+test('the switches that load no config reach the host as the owner gave them', async (t) => {
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = fakeClaude(place)
+  const args = ['--model', 'an-owner-model', '--effort', 'high', '--verbose']
+  const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), args })
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
+  const passed = readFileSync(fake.args, 'utf8').split('\n')
+  for (const arg of args) assert.ok(passed.includes(arg), arg)
 })
