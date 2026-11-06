@@ -23,6 +23,9 @@ import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
+import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -43,6 +46,8 @@ interface Place {
   readonly launch_records: string
   readonly relay_root: string
   readonly snapshot_root: string
+  /** Where the launcher installs the recorded mesh server trees (martha#65). */
+  readonly mesh_servers: string
   readonly approved: readonly string[]
 }
 
@@ -82,6 +87,7 @@ function placeFor(t: TestContext, servers = SERVERS): Place {
     launch_records: closed('launches'),
     relay_root: closed('relay'),
     snapshot_root: closed('snapshots'),
+    mesh_servers: closed('mesh-servers'),
     approved,
   }
 }
@@ -522,13 +528,14 @@ const isAlive = (pid: number): boolean => {
 
 const NODE_ID = 'ab'.repeat(32)
 
-function memberLaunch(place: Place, command: string, approved = place.approved, lines: string[] = []) {
+function memberLaunch(place: Place, command: string, approved = place.approved, lines: string[] = [], mesh_trees?: MeshTreeRecording) {
   return {
     member_name: 'Mercury',
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root },
+    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },
+    ...(mesh_trees === undefined ? {} : { mesh_trees }),
     command,
     args: ['-p', 'the owner prompt'],
     inherited: { PATH: process.env.PATH, OPENCODE_CONFIG_DIR: '/elsewhere' },
@@ -614,17 +621,73 @@ for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
   })
 }
 
-test('an approved config that installs a recorded mesh server version starts the member', async (t) => {
+// --- the mesh server it starts is the recorded tree (martha#65) -----------------
+// A stand-in of a recorded version, with one bin as npx would pick it, served
+// on the loopback: the launcher must not reach the real registry in a test.
+const RECORDED_MARK = 'the recorded mesh server'
+
+async function recordedTreeOf(t: TestContext, version: string): Promise<{ registry: FakeRegistry; recording: MeshTreeRecording }> {
+  const registry = await fakeMeshRegistry([
+    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\n` } },
+  ])
+  t.after(() => registry.stop())
+  const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
+  t.after(() => rmSync(scratch, { recursive: true, force: true }))
+  const recording: MeshTreeRecording = { _why: 'test', server: MESH_SERVER_PACKAGE, registry: registry.registry, known_settings: [], versions: [] }
+  const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
+  return { registry, recording: { ...recording, versions: [tree] } }
+}
+
+const serverConfigIn = (argsFile: string) => {
+  const args = readFileSync(argsFile, 'utf8').split('\n')
+  const path = args[args.indexOf('--mcp-config') + 1]
+  assert.ok(path !== undefined)
+  return JSON.parse(readFileSync(path, 'utf8')) as { mcpServers: Record<string, { command: string; args: string[] }> }
+}
+
+test('an approved config that installs a recorded mesh server version starts the member on the recorded tree, by path', async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
   const place = placeFor(t, meshServerAt(recorded.server_version))
   const fake = fakeClaude(place)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
   t.after(() => started.stop('the test is over'))
-  await until('the fake host to start', () => existsSync(fake.ranFile))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  const entry = serverConfigIn(fake.argsFile).mcpServers.macula
+  assert.ok(entry !== undefined)
+  assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
+  assert.deepEqual(entry.args, [join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
+  assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
+})
+
+test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const first = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
+  assert.ok(first.started, first.started ? '' : first.refusal)
+  first.stop('the test is over')
+  await first.stopped
+  rmSync(fake.ranFile)
+
+  const changed = join('node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
+  writeFileSync(join(place.mesh_servers, recorded.server_version, changed), "console.log('planted')\n")
+  const lines: string[] = []
+  const second = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines, recording))
+  if (second.started) t.after(async () => (second.stop('the test is over'), await second.stopped))
+  assert.equal(second.started, false)
+  const refusal = second.started ? '' : second.refusal
+  assert.ok(refusal.includes(changed), refusal)
+  assert.equal(existsSync(fake.ranFile), false)
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+  assert.deepEqual(lines, [refusal])
 })
 
 test('an approved launch starts the host with the switches and the relay, and a refusal after a call kills its whole group', async (t) => {
