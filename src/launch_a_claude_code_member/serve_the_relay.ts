@@ -6,7 +6,8 @@
 // One POST per event, its path naming the event (relay_protocol.ts). A request
 // for any other path or method, or a body too large or not JSON, gets a status
 // the relay reads as a refusal. While the launcher stops a member, the request
-// that led to it is held open and never answered.
+// that led to it is held open and never answered. A request that fails before it
+// is answered is dropped, and the others are still served.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
@@ -30,7 +31,10 @@ export interface RelayServer {
 
 /** Serves `relay` on a Unix socket at `socket_path`, which must not exist yet. */
 export function serveTheRelay(relay: MemberRelay, socket_path: string): Promise<RelayServer> {
-  const server = createServer((request, response) => void answerOne(relay, request, response))
+  // A request that fails before it is answered (the relay dropped it mid-body,
+  // among others) gets no answer, which the relay hears as a no; the launcher
+  // keeps serving the member's other requests.
+  const server = createServer((request, response) => void answerOne(relay, request, response).catch(() => response.destroy()))
   return new Promise((resolve, reject) => {
     server.once('error', reject)
     server.listen(socket_path, () => {

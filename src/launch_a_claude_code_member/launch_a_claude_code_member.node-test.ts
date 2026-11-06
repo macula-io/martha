@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -410,6 +411,39 @@ test('end to end: the relay posts each event, and a refused tool call never runs
     socketPath: directory.socket_path,
   })
   assert.equal(unknown.status, 404)
+  directory.remove()
+})
+
+test('a request dropped before its body ends gets nothing, and the launcher answers the next one', async (t) => {
+  const place = placeFor(t)
+  const directory = makeRelayDirectory(join(place.relay_root, 'dropped'))
+  assert.ok(directory.made)
+  if (!directory.made) return
+  const { relay } = answering(place)
+  const server = await serveTheRelay(relay, directory.socket_path)
+  t.after(() => server.close())
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown): void => void unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  t.after(() => process.off('unhandledRejection', onUnhandled))
+
+  await new Promise<void>((resolve, reject) => {
+    const socket = connect(directory.socket_path, () => {
+      socket.write(`POST ${RELAY_PATHS.tool_called} HTTP/1.1\r\nhost: martha-launcher\r\ncontent-length: 1000\r\n\r\n{"session_id"`)
+      setTimeout(() => (socket.destroy(), resolve()), 50)
+    })
+    socket.once('error', reject)
+  })
+  await new Promise((resolve) => setTimeout(resolve, 100))
+
+  assert.deepEqual(unhandled, [])
+  const next = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.tool_called}`, {
+    method: 'POST',
+    headers: {},
+    body: JSON.stringify({ session_id: SESSION, call: { tool: 'Read' } }),
+    socketPath: directory.socket_path,
+  })
+  assert.equal(next.status, 200)
   directory.remove()
 })
 
