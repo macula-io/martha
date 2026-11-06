@@ -377,7 +377,10 @@ async function binds(path: string): Promise<boolean> {
   return bound
 }
 
-test("a relay socket as long as this kernel binds is made; a byte longer is refused, naming both lengths (martha#79)", async (t) => {
+/** The byte sun_path keeps for a terminating NUL, which the launcher may leave free. */
+const SUN_PATH_NUL = 1
+
+test("a relay socket as long as this kernel binds, or a NUL byte less, is made; a byte longer is refused, naming both lengths (martha#79)", async (t) => {
   const root = shortRelayRoot(t)
   const room = Buffer.byteLength(join(root, 'x', RELAY_SOCKET_NAME)) - 1
   const directoryFor = (socket_bytes: number): string => join(root, 'd'.repeat(socket_bytes - room))
@@ -389,16 +392,22 @@ test("a relay socket as long as this kernel binds is made; a byte longer is refu
   while (await binds(probed(longest + 1))) longest += 1
   rmSync(probe, { recursive: true, force: true })
 
-  const fits = makeRelayDirectory(directoryFor(longest))
+  // The launcher may keep sun_path's terminating NUL, which Linux lets a path fill: one byte short of the kernel.
+  const accepted = [longest, longest - SUN_PATH_NUL].find((bytes) => {
+    const made = makeRelayDirectory(directoryFor(bytes))
+    if (made.made) made.remove()
+    return made.made
+  })
+  assert.ok(accepted !== undefined, `a socket path of ${String(longest)} bytes, or one byte less, is refused`)
+  const fits = makeRelayDirectory(directoryFor(accepted))
   assert.ok(fits.made, fits.made ? '' : fits.refusal)
-  assert.equal(Buffer.byteLength(fits.socket_path), longest)
   assert.ok(await binds(fits.socket_path), 'the socket at that length binds')
   fits.remove()
 
-  const over = makeRelayDirectory(directoryFor(longest + 1))
+  const over = makeRelayDirectory(directoryFor(accepted + 1))
   assert.equal(over.made, false)
   if (over.made) return
-  assert.match(over.refusal, new RegExp(`is ${String(longest + 1)} bytes, longer than the ${String(longest)} `))
+  assert.match(over.refusal, new RegExp(`is ${String(accepted + 1)} bytes, longer than the ${String(accepted)} `))
   assert.deepEqual(readdirSync(root), [], 'no refusal left a directory behind')
 })
 

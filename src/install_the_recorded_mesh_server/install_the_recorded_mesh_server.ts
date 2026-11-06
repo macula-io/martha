@@ -112,9 +112,16 @@ export function npmBesideNode(node: string = process.execPath): string {
 
 type Ran = { readonly ran: true } | { readonly ran: false; readonly why: string }
 
-/** Runs npm in `dir` with no config, setting or install but the ones given here. */
-function runIsolatedNpm(args: readonly string[], dir: string, registry: string, npmHome: string): Ran {
+/**
+ * Runs npm in `dir` with no config, setting or install but the ones given here.
+ * npm is given `dir`'s real path: it resolves its working directory through
+ * links but not `--prefix`, and a prefix reached through a link (macOS's default
+ * TMPDIR, /var -> /private/var) makes it key the lock by a path that climbs out
+ * and back in, so the server's entry is not found (martha#79).
+ */
+function runIsolatedNpm(args: readonly string[], linkedDir: string, registry: string, npmHome: string): Ran {
   const npm = npmBesideNode()
+  const dir = realpathSync(linkedDir)
   if (!existsSync(npm)) return { ran: false, why: `the npm of this node is not at ${npm}` }
   mkdirSync(npmHome, { recursive: true, mode: 0o700 })
   // Two files: npm refuses to load one file as both.

@@ -227,12 +227,13 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     chmodSync(member, 0o700)
 
     const lines: string[] = []
+    const relay_root = shortRelayRoot(t)
     const started = await launchClaudeCodeMember({
       member_name: 'Mercury',
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root: shortRelayRoot(t), mesh_servers: closed('mesh-servers') },
+      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers') },
       command: member,
       args: [],
       inherited: place.owner_env,
@@ -249,8 +250,8 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
 
     const [emptyPath, modeAndCount] = readFileSync(empty, 'utf8').trimEnd().split('\n')
     assert.equal(basename(emptyPath ?? ''), EMPTY_DIRECTORY_NAME)
-    assert.equal(dirname(dirname(emptyPath ?? '')), join(place.home, 'relay'), 'inside this launch\'s own relay directory')
+    assert.equal(dirname(dirname(emptyPath ?? '')), relay_root, 'inside this launch\'s own relay directory')
     assert.equal(modeAndCount, `${EMPTY_DIRECTORY_MODE.toString(8)} 0`, 'the member saw it empty, mode 0500')
-    assert.deepEqual(readdirSync(join(place.home, 'relay')), [], 'the empty directory went with the launch')
+    assert.deepEqual(readdirSync(relay_root), [], 'the empty directory went with the launch')
   })
 }

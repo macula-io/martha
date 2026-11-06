@@ -16,7 +16,7 @@
 
 import { lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { getuid } from 'node:process'
+import process, { getuid } from 'node:process'
 
 /** Only the owner may enter, list or write the directory. */
 export const RELAY_DIRECTORY_MODE = 0o700
@@ -24,11 +24,20 @@ export const RELAY_DIRECTORY_MODE = 0o700
 /** The socket's name inside the directory. */
 export const RELAY_SOCKET_NAME = 'relay.sock'
 
+/** sizeof(sun_path) in <sys/un.h>: 108 bytes on Linux, 104 on macOS and the BSDs. */
+const SUN_PATH_LINUX = 108
+const SUN_PATH_BSD = 104
+/** The byte sun_path keeps for the terminating NUL. */
+const SUN_PATH_NUL = 1
+
 /**
- * The longest socket path a Unix socket address holds on Linux (sun_path is 108
- * bytes, NUL included); the host's own fetch says "near 100 B at most".
+ * The longest socket path a Unix socket address holds on `platform`, in bytes.
+ * A root under a long TMPDIR (macOS's default is about 49 bytes, behind a link)
+ * can leave no room for `<root>/<launch>/relay.sock` (martha#79).
  */
-export const LONGEST_SOCKET_PATH = 100
+export function longestSocketPath(platform: NodeJS.Platform = process.platform): number {
+  return (platform === 'linux' ? SUN_PATH_LINUX : SUN_PATH_BSD) - SUN_PATH_NUL
+}
 
 const PERMISSION_BITS = 0o777
 const WRITABLE_BY_OTHERS = 0o022
@@ -42,8 +51,15 @@ const REFUSED = 'The member is not started: its relay socket has no safe place'
 /** Makes `directory`, which must not exist yet, for one launch's relay socket. */
 export function makeRelayDirectory(directory: string, owner_uid: number = getuid?.() ?? -1): RelayDirectory {
   const socket_path = join(directory, RELAY_SOCKET_NAME)
-  if (Buffer.byteLength(socket_path) > LONGEST_SOCKET_PATH) {
-    return { made: false, refusal: `${REFUSED}: ${socket_path} is longer than a socket address holds.` }
+  const bytes = Buffer.byteLength(socket_path)
+  const longest = longestSocketPath()
+  if (bytes > longest) {
+    return {
+      made: false,
+      refusal:
+        `${REFUSED}: ${socket_path} is ${String(bytes)} bytes, longer than the ${String(longest)} a socket address holds ` +
+        `on ${process.platform}; give the launcher a shorter relay root.`,
+    }
   }
 
   const parent = dirname(directory)

@@ -299,7 +299,7 @@ test('a root reached through a symlink still starts the confined server: the tre
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: link, recording }))
   // The bin and the confined tree are named by the real path, as a test's expectations must name them.
   assert.equal(entry.args.at(-1), join(realpathSync(link), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
-  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(real, VERSION, 'node_modules')).href), String(entry.args[1]))
+  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(realpathSync(real), VERSION, 'node_modules')).href), String(entry.args[1]))
   const run = spawnSync(entry.command, entry.args, { cwd: real, env: { ...HOST, ...entry.env }, encoding: 'utf8' })
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)

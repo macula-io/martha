@@ -36,7 +36,7 @@
 // through `processes.runNow`, the scratch index lives in `stores.scratch`, and
 // links are resolved through `stores.files`.
 
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import type { Processes, Stores } from '../host_contract/host_contract.ts'
 
@@ -93,9 +93,20 @@ function holds(dir: string, path: string): boolean {
   return rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest)
 }
 
-/** The path with every link resolved, or as given when it cannot be. */
+/**
+ * The path with every link resolved. A path not made yet is resolved through
+ * the nearest directory above it that exists, so a stop directory not made yet
+ * under a link (macOS's /var -> /private/var) still compares with the real path
+ * git reports (martha#79); a path nothing of which resolves is given back
+ * absolute.
+ */
 export function realOrResolved(host: LaunchHost, path: string): string {
-  return host.stores.files.realPathOf(path) ?? resolve(path)
+  const absolute = resolve(path)
+  const real = host.stores.files.realPathOf(absolute)
+  if (real !== null) return real
+  const parent = dirname(absolute)
+  if (parent === absolute) return absolute
+  return join(realOrResolved(host, parent), basename(absolute))
 }
 
 function git(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
