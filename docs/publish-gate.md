@@ -223,7 +223,6 @@ Four rules the seam keeps, and a host must not work around:
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the
   open question under item 6).
-
 - **A room is read through its gate, never raw (B1).** The raw mesh reads
   (`RAW_MESH_READS`, plus `mesh_say` when it waits for a reply) are refused in
   every session, tainted or not, under every server namespace: the match is on
@@ -236,8 +235,9 @@ Four rules the seam keeps, and a host must not work around:
   a raw tool. A host that registers the read under its own tool name must also
   allow that name while tainted, or a tainted member cannot read its room.
 
-The refusal text a host returns names the command that clears it — `/clear` on
-the Claude Code host.
+Every refusal a host returns says what clears the taint in the words of one
+constant, `WHAT_CLEARS_IT` in `src/refuse_execution_after_ungated_text/`, so
+the text cannot drift from the rule.
 
 ### What this repository does not contain
 
