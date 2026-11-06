@@ -69,6 +69,17 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   from a fork gets no secrets: there the check runs every other class and says
   which one it skipped. Anywhere else, a missing list stops the check rather than
   passing it.
+- **A public digest passes only where it is written as one.** A sha256 digest
+  of a public file has the shape of a node id or a key, so a bare 64-hex string
+  is refused whatever it is. A digest passes when the text around it says it is
+  a digest: labelled as a sha256 (an image's `@sha256:<digest>`, an OCI
+  `sha256:<digest>`, a `sha256` field in YAML, JSON or TOML), or a sha256sum
+  line, the digest followed by the tool's own separator and the file name it is
+  the digest of (`<digest>  direnv.linux-amd64`). Each form vouches for the
+  digest it holds and nothing else: an id beside it on the same line is still
+  refused. The forms, with how each is written, are one definition in
+  `src/check_nothing_private_gets_in/public_digest.ts`, and the tests plant
+  every written form with a real-shaped digest drawn at run time.
 - **The text classes are one definition.** The patterns are the crew's own
   public-text classes, the same ones its note check and release scan hold to.
 
