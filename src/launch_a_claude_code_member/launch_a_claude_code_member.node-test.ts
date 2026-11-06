@@ -31,6 +31,8 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD, notACommandThisTerminalCanRun } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
@@ -534,7 +536,10 @@ test('a request dropped before its body ends gets nothing, and the launcher answ
 // --- starting and stopping a member ---------------------------------------------
 
 /** A fake `claude`: writes what it was started with, leaves a child in its group, and waits. */
-function fakeClaude(place: Place): { command: string; argsFile: string; envFile: string; childFile: string; ranFile: string } {
+function fakeClaude(
+  place: Place,
+  answers: HostAnswers = {},
+): { command: string; argsFile: string; envFile: string; childFile: string; ranFile: string; callsFile: string } {
   const dir = join(place.home, 'fake')
   mkdirSync(dir)
   const files = {
@@ -542,12 +547,14 @@ function fakeClaude(place: Place): { command: string; argsFile: string; envFile:
     envFile: join(dir, 'socket'),
     childFile: join(dir, 'child'),
     ranFile: join(dir, 'ran'),
+    callsFile: join(dir, 'calls'),
   }
   const command = join(dir, 'claude')
   writeFileSync(
     command,
     [
       '#!/bin/sh',
+      ...hostAnswers({ callsFile: files.callsFile, ...answers }),
       `: > '${files.ranFile}'`,
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `printf '%s' "$${RELAY_SOCKET_VARIABLE}" > '${files.envFile}'`,
@@ -705,6 +712,100 @@ test('a refused launch starts no process and leaves nothing behind', async (t) =
 const MEMBER_BIN = 'macula-mcp'
 const memberShapeAt = (version: string) => ({ command: 'npx', args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${version}`, MEMBER_BIN] })
 const meshServerAt = (version: string) => JSON.stringify({ mcpServers: { macula: memberShapeAt(version) } })
+
+// --- the host runs Martha's relay, or the member does not start (#104) --------------
+
+test("a host that will not load Martha's relay starts nothing, naming the relay and the host's first error", async (t) => {
+  const place = placeFor(t)
+  const why = 'register.ts: $.env.get takes a literal name as its first argument'
+  const fake = fakeClaude(place, { report: refusesTheRelay(why) })
+  const lines: string[] = []
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.startsWith(NOT_STARTED), refusal)
+  assert.ok(refusal.includes(RELAY_PLUGIN_DIR), refusal)
+  assert.ok(refusal.includes(why), refusal)
+  assert.equal(existsSync(fake.ranFile), false, 'the member itself never ran')
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+  assert.deepEqual(lines, [refusal])
+})
+
+test('a host whose load check cannot be read starts nothing', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place, { report: 'not a report', reportExit: 0 })
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  assert.equal(started.started, false)
+  assert.ok(!started.started && started.refusal.includes(RELAY_PLUGIN_DIR), started.started ? '' : started.refusal)
+  assert.equal(existsSync(fake.ranFile), false)
+})
+
+test('a host of another version than the recording starts its member, after one line naming both versions', async (t) => {
+  const place = placeFor(t)
+  const other = '999.0.0'
+  const fake = fakeClaude(place, { version: other })
+  const lines: string[] = []
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  assert.equal(started.started, true, started.started ? '' : started.refusal)
+  const named = lines.filter((line) => line.includes(other) && line.includes(RECORDED_HOST.host_version))
+  assert.equal(named.length, 1, lines.join('\n'))
+})
+
+test('the member, its load check and its version check all run the one file its command resolves to', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const onPath = join(place.home, 'on-path')
+  mkdirSync(onPath)
+  symlinkSync(fake.command, join(onPath, 'claude'))
+  const launch = memberLaunch(place, 'claude')
+  const started = await launchClaudeCodeMember({ ...launch, inherited: { ...launch.inherited, PATH: `${onPath}:${process.env.PATH ?? ''}` } })
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '', t)
+  const calls = readFileSync(fake.callsFile, 'utf8').trimEnd().split('\n')
+  assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', '-p'])
+  for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
+})
+
+test('a member whose relay never reports its session start is stopped once the deadline passes, saying why', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const relay_deadline_ms = 300
+  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command, place.approved, lines), relay_deadline_ms })
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const stopped = await started.stopped
+  assert.equal(stopped.signal, 'SIGKILL')
+  const why = (stopped as { stopped_because?: string }).stopped_because ?? ''
+  assert.ok(why.includes(`${relay_deadline_ms} ms`), why)
+  assert.ok(lines.some((line) => line.includes(why)), lines.join('\n'))
+  assert.deepEqual(readdirSync(place.relay_root), [])
+})
+
+test('a member whose relay reports its session start in time is not stopped by the deadline', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const relay_deadline_ms = 1_000
+  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command), relay_deadline_ms })
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const socketPath = readFileSync(fake.envFile, 'utf8')
+  const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(start('startup')),
+    socketPath,
+  })
+  assert.equal(posted.text, '{"taken":1}')
+  await new Promise((resolve) => setTimeout(resolve, 2 * relay_deadline_ms))
+  assert.equal(isAlive(started.pid), true, 'the member still runs')
+})
 
 test('an approved config that installs a mesh server version nobody recorded starts nothing, naming both versions', async (t) => {
   const unrecorded = '999.0.0'
@@ -1251,6 +1352,7 @@ function fakeTerminalClaude(place: Place, exitsAfterMs = 0): {
     command,
     [
       '#!/bin/sh',
+      ...hostAnswers(),
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `if { true >&${MEMBER_PID_FD}; } 2> /dev/null; then : > '${files.pidPipeFile}'; fi`,
       `trap ": > '${files.resizedFile}'" WINCH`,

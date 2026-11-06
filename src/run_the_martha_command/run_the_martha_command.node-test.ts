@@ -17,6 +17,7 @@ import { LAUNCH_RECORDS_PLACE, NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from 
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, STATE_ROOT_NAME, USAGE } from './run_the_martha_command.ts'
+import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -143,7 +144,7 @@ function claudeThatEnds(place: Place, t: TestContext): { readonly ran: string; r
   const ran = join(place.home, 'ran')
   const launches = join(place.home, 'state', STATE_ROOT_NAME, '*', LAUNCH_RECORDS_PLACE, '*')
   const recorded = `until ls ${launches} >/dev/null 2>&1; do sleep 0.02; done`
-  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', `: > '${ran}'`, recorded, 'exit 7', ''].join('\n'), { mode: 0o700 })
+  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, recorded, 'exit 7', ''].join('\n'), { mode: 0o700 })
   return { ran, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
 }
 
