@@ -39,6 +39,12 @@ import {
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { undeclaredPromptOrigins, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { RECORDED_MESH_SERVER, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import {
+  MESH_TOOLS_REFUSED,
+  MESH_TOOLS_THAT_RUN,
+  MESH_TOOL_PREFIX,
+} from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 export interface Gap {
   readonly path: string
@@ -336,6 +342,34 @@ export function gapsInPromptOrigins(declared: HostPromptOrigins, emitted: readon
       why: 'it is declared and the host never stamps it',
     }))
   return [...undeclared, ...never_emitted]
+}
+
+/**
+ * Every mesh tool whose decision does not match the recorded server: a tool it
+ * registers that is neither allowed nor refused, an allowed or refused name it
+ * does not register, a name both allowed and refused, and a tool outside the
+ * mesh prefix, which the run-time check would not judge at all. A new release
+ * of the server fails CI here by name before a member meets the tool.
+ */
+export function gapsInMeshTools(
+  recorded: RecordedMeshServer = RECORDED_MESH_SERVER,
+  allowed: readonly string[] = MESH_TOOLS_THAT_RUN,
+  refused: readonly string[] = MESH_TOOLS_REFUSED,
+): readonly Gap[] {
+  const on = `${recorded.server} ${recorded.server_version}`
+  const gap = (tool: string, why: string): Gap => ({ path: `mesh tool ${tool}`, why })
+  const unprefixed = recorded.tools
+    .filter((tool) => !tool.startsWith(MESH_TOOL_PREFIX))
+    .map((tool) => gap(tool, `${on} registers it, and its name does not start with ${MESH_TOOL_PREFIX}: the run-time check would not judge it`))
+  const undecided = recorded.tools
+    .filter((tool) => tool.startsWith(MESH_TOOL_PREFIX) && !allowed.includes(tool) && !refused.includes(tool))
+    .map((tool) => gap(tool, `${on} registers it, and it is neither allowed nor refused`))
+  const both = allowed.filter((tool) => refused.includes(tool)).map((tool) => gap(tool, 'it is both allowed and refused'))
+  const unregistered = (names: readonly string[], decision: string) =>
+    names
+      .filter((tool) => !recorded.tools.includes(tool))
+      .map((tool) => gap(tool, `it is ${decision}, and the recorded server does not register it (${on})`))
+  return [...unprefixed, ...undecided, ...both, ...unregistered(allowed, 'allowed'), ...unregistered(refused, 'refused')]
 }
 
 function deliveryGateGap(name: string, gate: DeliveryGate | undefined): string | undefined {

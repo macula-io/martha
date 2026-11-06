@@ -291,9 +291,10 @@ A host does these things, and the core does the rest:
 | a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
 | before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches` (their `args`, and the environment `launchEnvironment(process.env, switches)`, which drops inherited variables that would bring config back), show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
-| before running any tool | `answerToolCall({ tool, session, policy, input, launch })`, where `launch` is the place and approvals `prepareLaunch` was given — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
+| before running any tool | `answerToolCall({ tool, session, policy, input, launch, names: host.tools })`, where `launch` is the place and approvals `prepareLaunch` was given and `names` is the host's own split of a called tool's name — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
 | after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
+| after any MCP tool result | `takeInTurn(session, { source: 'mcp_result' }, binder)` — a mesh tool that runs (`mesh_call`, `mesh_get`, `mesh_recall`, a ring's answer) hands back text with no sender to admit, so the shell gate judges it (B2) |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
 | after a turn | `rememberSession(store, session)` |
@@ -350,10 +351,19 @@ The rules the seam keeps, and a host must not work around:
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the
   open question under item 6).
-- **A room is read through its gate, never raw (B1).** The raw mesh reads
-  (`RAW_MESH_READS`, plus `mesh_say` when it waits for a reply) are refused in
-  every session, tainted or not, under every server namespace: the match is on
-  the tool's own name after the last `__`. The one read that remains returns
+- **A room is read through its gate, never raw (B1).** A mesh tool runs only
+  when `MESH_TOOLS_THAT_RUN` names it: every other mesh tool, a new one
+  included, is refused in every session, tainted or not, under every server
+  namespace, and so is `mesh_say` when it waits for a reply or comes with no
+  input. The match is on the tool's own name, which the host takes out of the
+  name it calls (`host.tools.ownNameOf`): Claude Code names an MCP tool
+  `mcp__<server>__<tool>`, OpenCode `<server>_<tool>`, and only the host knows
+  its form and its servers. The two lists, `MESH_TOOLS_THAT_RUN` and
+  `MESH_TOOLS_REFUSED`, are proved against the tools the mesh server's published
+  package registers (`recorded_mesh_server_tools.json`, re-recorded by
+  `record_mesh_server_tools.ts`): the coverage check fails CI by name on a tool
+  nobody decided, a decided name the server no longer registers, or a tool
+  outside `MESH_TOOL_PREFIX`. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
   binds to that room, and says how many envelopes it withheld, never their
   text, sender or kind. Each admitted envelope is an ingestion with its

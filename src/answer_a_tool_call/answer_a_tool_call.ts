@@ -26,6 +26,7 @@ import {
   refuseExecutionAfterUngatedText,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
@@ -45,12 +46,14 @@ export interface ToolCall {
   readonly policy: Policy
   /** The call's arguments, where the host has them: some tools read only when told to wait. */
   readonly input?: Readonly<Record<string, unknown>>
+  /** How this host names a called tool: `host.tools`, never a split of the core's own. */
+  readonly names: ToolNames
   /** The member's launch, checked again before this call runs. */
   readonly launch: ApprovedLaunch
 }
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch }: ToolCall): ToolCallAnswer {
+export function answerToolCall({ tool, session, policy, input, launch, names }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunch(launch)
   if (!launched.allow) {
     return {
@@ -60,7 +63,7 @@ export function answerToolCall({ tool, session, policy, input, launch }: ToolCal
     }
   }
 
-  if (isRawMeshRead(tool, input)) {
+  if (isRawMeshRead(tool, input, names)) {
     return {
       deny:
         `${tool} hands this session other agents' text that no gate has seen, so it is not called at all. ` +
