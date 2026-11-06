@@ -369,9 +369,15 @@ The rules the seam keeps, and a host must not work around:
   (martha#49): the launcher reads the version the approved `.mcp.json` pins
   (`<package>@<version>`, nothing looser) and refuses to start a member whose
   version is not recorded, naming both. A version is retired by removing its
-  record, after which a member still on it is refused by name. A mesh server
-  whose config never names the package, or one an installed plugin brings, is
-  not version-checked; its tools are still refused at run time unless decided. The one read that remains returns
+  record, after which a member still on it is refused by name. Since the gate
+  judges a mesh tool by its name from any server, the check fails closed:
+  every server in the approved `.mcp.json`, the mesh server or not, must start
+  as `npx -y <package>@<x.y.z>` (stdio, an `env` that changes nothing npx
+  installs or runs, no other key), or the member is not started, naming the
+  server. A git or GitHub spec, a URL server, a shell wrapper, a package named
+  in a variable or a bare bin is refused; there is no exempt list. Only the
+  servers an installed plugin brings are not version-checked; their tools are
+  still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
   binds to that room, and says how many envelopes it withheld, never their
   text, sender or kind. Each admitted envelope is an ingestion with its
