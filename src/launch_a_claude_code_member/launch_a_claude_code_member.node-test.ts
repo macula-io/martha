@@ -638,6 +638,12 @@ test('cleanup finds a process of the relay root it caught inside exec (#85)', as
   assert.equal(await carriesRelayRoot(PLANTED_PID, root, proc.read), true)
 })
 
+test('cleanup passes by a process whose environment stays empty, which `env -i` starts, and never hangs on it (#85)', async () => {
+  const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), [''])
+  assert.equal(await carriesRelayRoot(PLANTED_PID, '/relay/root', proc.read), false)
+  assert.ok(proc.reads() > 1, 'the empty environment was read again before cleanup passed it by')
+})
+
 const NODE_ID = 'ab'.repeat(32)
 
 function memberLaunch(place: Place, command: string, approved = place.approved, lines: string[] = [], mesh_trees?: MeshTreeRecording) {
