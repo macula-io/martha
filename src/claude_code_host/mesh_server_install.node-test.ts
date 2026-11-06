@@ -5,41 +5,42 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { MESH_SERVER_PACKAGE } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { meshServerVersionsIn } from './mesh_server_install.ts'
+import { meshServerInstallsIn } from './mesh_server_install.ts'
 
 const VERSION = '0.51.0'
 const OTHER_PACKAGE = 'another-tool-server'
 const SERVER_NAME = 'tools'
+const BIN = 'some-bin'
 const config = (servers: Record<string, unknown>) => JSON.stringify({ mcpServers: servers })
 const npx = (...args: string[]) => ({ command: 'npx', args: ['-y', ...args] })
 
 test('a server pinned to an exact version reads as that version', () => {
-  assert.deepEqual(meshServerVersionsIn(config({ macula: npx(`${MESH_SERVER_PACKAGE}@${VERSION}`) }), MESH_SERVER_PACKAGE), { versions: [VERSION] })
+  assert.deepEqual(meshServerInstallsIn(config({ macula: npx(`${MESH_SERVER_PACKAGE}@${VERSION}`) }), MESH_SERVER_PACKAGE), { installs: [{ server: 'macula', version: VERSION }] })
 })
 
 test('a config whose servers are pinned to other packages, or has no servers at all, installs no mesh server', () => {
-  assert.deepEqual(meshServerVersionsIn(config({ other: npx(`${OTHER_PACKAGE}@${VERSION}`) }), MESH_SERVER_PACKAGE), { versions: [] })
-  assert.deepEqual(meshServerVersionsIn(JSON.stringify({}), MESH_SERVER_PACKAGE), { versions: [] })
+  assert.deepEqual(meshServerInstallsIn(config({ other: npx(`${OTHER_PACKAGE}@${VERSION}`) }), MESH_SERVER_PACKAGE), { installs: [] })
+  assert.deepEqual(meshServerInstallsIn(JSON.stringify({}), MESH_SERVER_PACKAGE), { installs: [] })
 })
 
 test('every mesh server in the config is read, each by its own version', () => {
-  const read = meshServerVersionsIn(
+  const read = meshServerInstallsIn(
     config({ a: npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), b: npx(`${MESH_SERVER_PACKAGE}@0.51.2`) }),
     MESH_SERVER_PACKAGE,
   )
-  assert.deepEqual(read, { versions: [VERSION, '0.51.2'] })
+  assert.deepEqual(read, { installs: [{ server: 'a', version: VERSION }, { server: 'b', version: '0.51.2' }] })
 })
 
 for (const spec of [MESH_SERVER_PACKAGE, `${MESH_SERVER_PACKAGE}@latest`, `${MESH_SERVER_PACKAGE}@^${VERSION}`, `${MESH_SERVER_PACKAGE}@${VERSION}-rc.1`]) {
   test(`a server that names the package as ${spec} is refused, naming the server: no exact version, no proof`, () => {
-    const read = meshServerVersionsIn(config({ macula: npx(spec) }), MESH_SERVER_PACKAGE)
+    const read = meshServerInstallsIn(config({ macula: npx(spec) }), MESH_SERVER_PACKAGE)
     assert.ok('refusal' in read, JSON.stringify(read))
     assert.ok(read.refusal.includes('macula') && read.refusal.includes(spec), read.refusal)
   })
 }
 
 test('a server started from an installed copy of the package is refused: a path pins no version', () => {
-  const read = meshServerVersionsIn(
+  const read = meshServerInstallsIn(
     config({ macula: { command: 'node', args: [`node_modules/${MESH_SERVER_PACKAGE}/dist/index.js`] } }),
     MESH_SERVER_PACKAGE,
   )
@@ -72,14 +73,14 @@ const UNPINNED: Record<string, unknown> = {
 
 for (const [shape, entry] of Object.entries(UNPINNED)) {
   test(`a server that is ${shape} is refused, naming the server: no exact pin, no proof`, () => {
-    const read = meshServerVersionsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
+    const read = meshServerInstallsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
     assert.ok('refusal' in read, JSON.stringify(read))
     assert.ok(read.refusal.includes(SERVER_NAME), read.refusal)
   })
 }
 
 test('one unpinned server refuses a config whose mesh server is pinned', () => {
-  const read = meshServerVersionsIn(
+  const read = meshServerInstallsIn(
     config({ macula: npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), [SERVER_NAME]: UNPINNED['a bare installed bin'] }),
     MESH_SERVER_PACKAGE,
   )
@@ -88,18 +89,44 @@ test('one unpinned server refuses a config whose mesh server is pinned', () => {
 
 test('an env key outside the allowlist is refused by name, beside an allowed one', () => {
   const entry = { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r', PREFIX: '/x', macula_lower: 'x' } }
-  const read = meshServerVersionsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
+  const read = meshServerInstallsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
   assert.ok('refusal' in read, JSON.stringify(read))
   assert.ok(read.refusal.includes('PREFIX') && read.refusal.includes('macula_lower') && !read.refusal.includes('MACULA_MESH_REALMS,'), read.refusal)
 })
 
+test('a pin that names the bin to run reads as that version and that bin', () => {
+  const entry = { command: 'npx', args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, BIN] }
+  assert.deepEqual(meshServerInstallsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { installs: [{ server: 'macula', version: VERSION, bin: BIN }] })
+})
+
+test('a named bin of a package nobody recorded is refused: what it runs is not proved', () => {
+  const entry = { command: 'npx', args: ['-y', '-p', `${OTHER_PACKAGE}@${VERSION}`, BIN] }
+  const read = meshServerInstallsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
+  assert.ok('refusal' in read && read.refusal.includes(SERVER_NAME) && read.refusal.includes(OTHER_PACKAGE), JSON.stringify(read))
+})
+
+for (const args of [
+  ['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`],
+  ['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, BIN, '--extra'],
+  ['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, `./${BIN}`],
+  ['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, `--${BIN}`],
+  ['-y', '--package', `${MESH_SERVER_PACKAGE}@${VERSION}`, BIN],
+  ['-y', '-p', `${MESH_SERVER_PACKAGE}@latest`, BIN],
+  ['-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, '-y', BIN],
+]) {
+  test(`npx with ${JSON.stringify(args)} is refused, naming the server`, () => {
+    const read = meshServerInstallsIn(config({ [SERVER_NAME]: { command: 'npx', args } }), MESH_SERVER_PACKAGE)
+    assert.ok('refusal' in read && read.refusal.includes(SERVER_NAME), JSON.stringify(read))
+  })
+}
+
 test('a pin may name the stdio transport and an env that leaves the install alone', () => {
   const entry = { type: 'stdio', ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r' } }
-  assert.deepEqual(meshServerVersionsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { versions: [VERSION] })
+  assert.deepEqual(meshServerInstallsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { installs: [{ server: 'macula', version: VERSION }] })
 })
 
 test('a config that is not a JSON object, or whose servers are not one, is refused', () => {
   for (const text of ['not json', '[]', JSON.stringify({ mcpServers: [] }), JSON.stringify({ mcpServers: { macula: 'npx' } })]) {
-    assert.ok('refusal' in meshServerVersionsIn(text, MESH_SERVER_PACKAGE), text)
+    assert.ok('refusal' in meshServerInstallsIn(text, MESH_SERVER_PACKAGE), text)
   }
 })

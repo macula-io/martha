@@ -414,8 +414,12 @@ The rules the seam keeps, and a host must not work around:
   judges a mesh tool by its name from any server, the check fails closed:
   every server in the approved `.mcp.json`, the mesh server or not, must start
   as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
-  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or the member is not started, naming the
-  server. A git or GitHub spec, a URL server, a shell wrapper, a package named
+  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or
+  the member is not started, naming the server. The mesh server may also start
+  as `npx -y -p <package>@<x.y.z> <bin>`, the shape members use, since each
+  record holds that version's bins: the bin named must be one of them, and the
+  shorter shape is accepted only where npx can pick the bin itself (one bin, or
+  one named after the package), which the mesh server's seven bins do not allow. A git or GitHub spec, a URL server, a shell wrapper, a package named
   in a variable or a bare bin is refused; there is no exempt list. Only the
   servers an installed plugin brings are not version-checked; their tools are
   still refused at run time unless decided. The one read that remains returns

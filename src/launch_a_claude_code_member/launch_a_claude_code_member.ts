@@ -52,7 +52,7 @@ import {
   recordMemberStopped,
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { meshServerVersionsIn } from '../claude_code_host/mesh_server_install.ts'
+import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -143,12 +143,13 @@ function killGroup(group: number): void {
 
 /**
  * Why the mesh server the approved server config installs is not proved, or
- * undefined when it is a recorded version or none is installed (martha#49).
+ * undefined when it is a recorded version started as a bin it has, or none is
+ * installed (martha#49).
  */
 function meshServerUnproved(serverConfig: Uint8Array | undefined): string | undefined {
   if (serverConfig === undefined) return undefined
-  const installed = meshServerVersionsIn(new TextDecoder().decode(serverConfig), MESH_SERVER_PACKAGE)
-  return 'refusal' in installed ? installed.refusal : refusalOfInstalledMeshServers(installed.versions)
+  const installed = meshServerInstallsIn(new TextDecoder().decode(serverConfig), MESH_SERVER_PACKAGE)
+  return 'refusal' in installed ? installed.refusal : refusalOfInstalledMeshServers(installed.installs)
 }
 
 /** Starts one Claude Code member on its approved config, with its relay answered here. */

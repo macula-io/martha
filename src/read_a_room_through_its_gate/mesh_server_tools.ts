@@ -20,6 +20,13 @@
 // (refusalOfInstalledMeshServers). So a version is retired by removing its
 // record in a reviewed commit: a host still on it is then refused by name.
 //
+// A record also holds the version's bins, read from its package.json, because
+// npx runs one of them: told none (`npx -y <pkg>@<v>`), it runs the only bin or
+// the one named after the package, and refuses when there are several and none
+// is (libnpmexec's getBinFromManifest); told one (`npx -y -p <pkg>@<v> <bin>`),
+// it runs that bin. So a launch is refused unless the bin it would run is one
+// the recorded version has (refusalOfInstalledMeshServers, binNpxRuns).
+//
 // The records are read from the package's own code: every
 // `registerTool("<name>"` call in its JavaScript. A call whose name is not a
 // literal is refused by file, because the list could then not be complete.
@@ -33,15 +40,28 @@ export interface RecordedMeshServer {
   /** The package's name, as its package.json gives it. */
   readonly server: string
   readonly server_version: string
+  /** Its bins, as its package.json names them, each to the file it runs. */
+  readonly bins: Readonly<Record<string, string>>
   /** Every tool name it registers, sorted. */
   readonly tools: readonly string[]
+}
+
+/** How one member's config installs the mesh server: the server's name there, the version, and the bin it names, if any. */
+export interface MeshServerInstall {
+  readonly server: string
+  readonly version: string
+  readonly bin?: string
 }
 
 /** The recording file: the package once, then each recorded version. */
 export interface MeshServerRecording {
   readonly _why: string
   readonly server: string
-  readonly versions: readonly { readonly server_version: string; readonly tools: readonly string[] }[]
+  readonly versions: readonly {
+    readonly server_version: string
+    readonly bins: Readonly<Record<string, string>>
+    readonly tools: readonly string[]
+  }[]
 }
 
 /** A version that names one release: no range, no tag, no pre-release. */
@@ -82,19 +102,53 @@ export const RECORDED_MESH_SERVERS: readonly RecordedMeshServer[] = RECORDING.ve
   ...recorded,
 }))
 
+/** A package's name without its scope: the bin npx runs when it is told none. */
+const unscoped = (pkg: string): string => pkg.slice(pkg.lastIndexOf('/') + 1)
+
 /**
- * Why a member that installs these versions of the mesh server must not start,
- * or undefined when every one is recorded. An install of none needs no proof.
+ * The bin `npx -y <pkg>@<version>` runs when it is told none, as npx picks it:
+ * the only one, or the one named after the package; undefined when it cannot pick.
+ */
+export function binNpxRuns(bins: Readonly<Record<string, string>>, pkg: string): string | undefined {
+  const names = Object.keys(bins)
+  if (names.length === 1) return names[0]
+  return names.includes(unscoped(pkg)) ? unscoped(pkg) : undefined
+}
+
+/** Why one recorded version cannot be started the way it is installed, or undefined. */
+function refusalOfBin(install: MeshServerInstall, record: RecordedMeshServer): string | undefined {
+  const named = Object.keys(record.bins)
+  const bins = named.join(', ') || 'none'
+  if (install.bin === undefined) {
+    if (binNpxRuns(record.bins, record.server) !== undefined) return undefined
+    return `its server ${install.server} starts ${record.server} ${record.server_version} without naming a bin, and npx cannot pick one of its bins (${bins}): name the one to run, as npx -y -p ${record.server}@${record.server_version} <bin>.`
+  }
+  if (named.includes(install.bin)) return undefined
+  return `its server ${install.server} starts bin ${install.bin} of ${record.server} ${record.server_version}, which has no such bin (it has ${bins}).`
+}
+
+/**
+ * Why a member that installs the mesh server this way must not start, or
+ * undefined when every install is a recorded version and a bin it has. An
+ * install of none needs no proof.
  */
 export function refusalOfInstalledMeshServers(
-  installed: readonly string[],
+  installed: readonly MeshServerInstall[],
   recorded: readonly RecordedMeshServer[] = RECORDED_MESH_SERVERS,
 ): string | undefined {
-  const unrecorded = installed.filter((version) => !recorded.some((record) => record.server_version === version))
-  if (unrecorded.length === 0) return undefined
-  const held = recorded.map((record) => record.server_version).join(', ') || 'none'
-  const named = unrecorded.map((version) => `${MESH_SERVER_PACKAGE} ${version}`).join(' and ')
-  return `it installs ${named}, and the recorded versions are ${held}: the mesh tools it would register are not proved against the gate's decisions. Record that version, or install a recorded one.`
+  const recordOf = (install: MeshServerInstall) => recorded.find((record) => record.server_version === install.version)
+  const unrecorded = installed.filter((install) => recordOf(install) === undefined)
+  if (unrecorded.length > 0) {
+    const held = recorded.map((record) => record.server_version).join(', ') || 'none'
+    const named = unrecorded.map((install) => `${MESH_SERVER_PACKAGE} ${install.version}`).join(' and ')
+    return `it installs ${named}, and the recorded versions are ${held}: the mesh tools it would register are not proved against the gate's decisions. Record that version, or install a recorded one.`
+  }
+  for (const install of installed) {
+    const record = recordOf(install)
+    const refusal = record === undefined ? undefined : refusalOfBin(install, record)
+    if (refusal !== undefined) return refusal
+  }
+  return undefined
 }
 
 const partsOf = (version: string): readonly number[] => version.split('.').map(Number)
@@ -109,13 +163,13 @@ function olderFirst(a: string, b: string): number {
 }
 
 /**
- * The recording with one version's tools recorded: added in version order, or
+ * The recording with one version's bins and tools recorded: added in version order, or
  * replacing that version's record, every other version kept. A package of
  * another name, or a version that names no single release, is refused.
  */
 export function withRecordedVersion(
   current: MeshServerRecording,
-  manifest: { readonly name: string; readonly version: string },
+  manifest: { readonly name: string; readonly version: string; readonly bin?: string | Readonly<Record<string, string>> },
   tools: readonly string[],
 ): MeshServerRecording {
   if (manifest.name !== current.server) {
@@ -124,7 +178,11 @@ export function withRecordedVersion(
   if (!EXACT_VERSION.test(manifest.version)) {
     throw new Error(`The package's version ${manifest.version} names no single release: record an exact version`)
   }
+  const bins = typeof manifest.bin === 'string' ? { [unscoped(manifest.name)]: manifest.bin } : { ...(manifest.bin ?? {}) }
+  if (Object.keys(bins).length === 0) {
+    throw new Error(`The package ${manifest.name} ${manifest.version} has no bin, so npx can start nothing from it: this is not the mesh server`)
+  }
   const others = current.versions.filter((recorded) => recorded.server_version !== manifest.version)
-  const versions = [...others, { server_version: manifest.version, tools }].sort((a, b) => olderFirst(a.server_version, b.server_version))
+  const versions = [...others, { server_version: manifest.version, bins, tools }].sort((a, b) => olderFirst(a.server_version, b.server_version))
   return { ...current, versions }
 }

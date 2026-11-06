@@ -1,5 +1,5 @@
-// Records the tools one version of the mesh server registers, from its
-// published package, beside every version already recorded (martha#49).
+// Records one version of the mesh server: its bins and the tools it registers,
+// from its published package, beside every version already recorded (martha#49).
 //
 //   npm pack @macula-io/mcp@<version>; tar -xzf <the .tgz>
 //   npm run record:mesh-tools -- <the extracted package directory>
@@ -25,7 +25,7 @@ if (directory === undefined) {
   exit(2)
 }
 
-const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { name: string; version: string }
+const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { name: string; version: string; bin?: string | Record<string, string> }
 const files = (readdirSync(directory, { recursive: true, encoding: 'utf8' }) as string[])
   .filter((file) => file.endsWith(CODE))
   .sort()
