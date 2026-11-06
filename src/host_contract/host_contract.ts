@@ -120,19 +120,38 @@ export type TurnSource =
   | 'web'
   | 'subagent'
 
+/**
+ * What a host attests about who sent one delivery: the sending process, as the
+ * host learned it out of band (the kernel's peer credentials on a Unix socket).
+ * A host that knows only the turn's text has nothing to put here.
+ */
+export interface AttestedSender {
+  readonly sending_pid: number
+}
+
+/** The source whose sender only the binder may name. */
+type BoundSource = 'cross_session'
+
 /** Something a session took in, as the host describes it. */
 export type Arrival =
   | {
       /** The host knows what it was. */
-      readonly source: TurnSource
+      readonly source: Exclude<TurnSource, BoundSource>
       /** The identity the host holds for the sender; omitted or null means it holds none. */
       readonly from_identity?: string | null
+    }
+  | {
+      /** The host knows it was a cross-session delivery. */
+      readonly source: BoundSource
+      /** The sending process, as the host attests it out of band; omitted when it cannot. */
+      readonly sender?: AttestedSender
     }
   | {
       /** The host has only the turn's text, as the Claude Code host does. */
       readonly text: string
       readonly origin?: TurnOrigin
-      readonly from_identity?: string | null
+      /** The sending process, as the host attests it out of band; omitted when it cannot. */
+      readonly sender?: AttestedSender
     }
 
 /** A turn that arrived: its text, and what the host can say about where it came from. */

@@ -89,14 +89,14 @@ test('a tool name nobody has ever seen executes: the list is an allow-list, not 
 
 test('reading and searching stay allowed: the member reads the text, it just may not act on it', () => {
   const outsider: Ingestion = { path: 'A6', from_node_id: stranger }
-  for (const tool of ['Read', 'Grep', 'Glob', 'mcp__macula__mesh_read_inbox']) {
+  for (const tool of ['Read', 'Grep', 'Glob', 'mcp__macula__mesh_get']) {
     assert.equal(isReadOnlyTool(tool), true, tool)
     assert.equal(allowed(tool, [outsider]), true, tool)
   }
 })
 
 test('a plugin-namespaced copy of a read tool is treated as executing, not as a read', () => {
-  assert.equal(isShellTool('mcp__someplugin__mesh_read_inbox'), true)
+  assert.equal(isShellTool('mcp__someplugin__mesh_get'), true)
 })
 
 // --- the taint lasts as long as the text is readable --------------------------
@@ -191,6 +191,6 @@ test('the refusal names the path and says what clears it, in business words', ()
   const why = refusal('Bash', [{ path: 'A4', from_node_id: stranger }])
   assert.match(why, /A4/)
   assert.match(why, /nothing executes/i)
-  assert.match(why, /fresh session/i)
+  assert.match(why, /fresh start that reads no handover/i)
   assert.doesNotMatch(why, /undefined|null|NaN/)
 })

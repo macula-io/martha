@@ -35,19 +35,20 @@ export const isScannedSource = (path: string): boolean =>
 // Every way a module names another: an import or export with a from clause, a
 // bare import of a module for its effects, a dynamic import call with a quoted
 // or template specifier, and a require call. (Written in words: the check reads
-// comments too.)
+// comments too.) A specifier never spans a line, so a quote that closes on a
+// later line is text, not a specifier.
 const QUOTED = [
-  /\b(?:import|export)\b[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g,
-  /\bimport\s*['"]([^'"]+)['"]/g,
-  /\bimport\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
-  /\brequire\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
+  /\b(?:import|export)\b[^'"`;]*?\bfrom\s*['"]([^'"\n]+)['"]/g,
+  /\bimport\s*['"]([^'"\n]+)['"]/g,
+  /\bimport\s*\(\s*['"`]([^'"`\n]+)['"`]\s*\)/g,
+  /\brequire\s*\(\s*['"`]([^'"`\n]+)['"`]\s*\)/g,
 ]
 
 /** The prefix of every specifier the scan reports for a computed import. */
 export const COMPUTED_SPECIFIER = '(computed: '
 
 // A dynamic import or require whose argument starts with no quote at all.
-const COMPUTED = /\b(?:import|require)\s*\(\s*([^'"`\s)][^)]*)\)/g
+const COMPUTED = /\b(?:import|require)\s*\(\s*([^'"`\s)][^)\n]*)\)/g
 
 const isWithinTheCore = (specifier: string): boolean =>
   specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('node:')

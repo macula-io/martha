@@ -14,30 +14,42 @@
 //      whatever the text claims: a git commit author, a `gh` login, an envelope's
 //      `from` attribute and a name in a message are written by whoever wrote the
 //      text. A commit authored under the supervisor's node id gets no shell.
+//      On the binder's path the host hands over no identity at all, only the
+//      sending process it attests, and the binder alone turns that into a node
+//      id (../attribute_a_cross_session_sender).
 //
 //   2. THE RECORD IS PERSISTED PER SESSION ID AND RELOADED ON START. Holding it
 //      only in memory fails open on every process restart, because a resumed
 //      transcript would come back to an empty record. A session that expects a
 //      record and cannot read one is TAINTED, never fresh.
 //
-//   3. ONLY A REAL REPLACEMENT CLEARS THE RECORD. `clear` and `new_session` start
-//      afresh. `compaction`, `handover` and `resume` keep it — they carry the old
-//      text forward, and a restart that resumes a transcript is `resume`, not
-//      `new_session`.
+//   3. A SESSION ID IS NEVER STARTED TWICE. Only a session under a new id starts
+//      with no record, and only when the host's declared event says it is
+//      fresh (../carry_taint_across_a_refresh). A compaction and a resume keep
+//      the id and so keep the record. A fresh start on an id that already holds
+//      a record has lost its record and overwrites nothing: reusing an id must
+//      never wipe what the old session took in.
 //
 //   4. COMPACTION AND A HANDOVER ARE NOT ARRIVALS. They inherit the predecessor's
 //      record from the store; they are not new text to record. A handover is
-//      written from the predecessor's own context, so the record it inherits is
-//      the honest summary of what that context held.
+//      written and stamped by the host and read through
+//      ../carry_taint_across_a_refresh, so the record it inherits is the
+//      predecessor's own, from the store, and never the file's word for it.
+//
+//   5. A LOST RECORD STAYS LOST. A session whose record could not be read is
+//      remembered as lost, never as empty, so a second restart does not turn it
+//      fresh.
 
-import { INBOUND_PATHS, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
+import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
 import {
   recordIngestion,
   startFreshSession,
+  type Ingestion,
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { framedDeliveryOf } from '../trust_only_framed_envelopes/trust_only_framed_envelopes.ts'
-import type { Arrival, TurnSource } from '../host_contract/host_contract.ts'
+import type { Arrival, AttestedSender, TurnSource } from '../host_contract/host_contract.ts'
 
 /** The inbound path each source is recorded on, so the registry and the host agree. */
 export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
@@ -60,11 +72,6 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   subagent: 'B7',
 }
 
-/** A replacement of the session, in the words a host would use for it. */
-export type Replacement = 'clear' | 'new_session' | 'compaction' | 'handover' | 'resume'
-
-const REPLACES_THE_SESSION: readonly Replacement[] = ['clear', 'new_session']
-
 /** A session, with the record the gate reads and whether that record could be read. */
 export interface HostSession {
   readonly id: string
@@ -79,10 +86,36 @@ export interface SessionRecordStore {
   write(session_id: string, session: Session): void
 }
 
-/** A session that is starting new: its empty record is written before anything arrives. */
+/**
+ * A session that is starting new: its empty record is written before anything
+ * arrives. An id that already holds a record is not new, and has lost its record.
+ */
 export function beginSession(store: SessionRecordStore, session_id: string): HostSession {
+  if (store.read(session_id) !== undefined) return sessionWithLostRecord(session_id)
   const gate = startFreshSession()
   store.write(session_id, gate)
+  return { id: session_id, gate, record_missing: false }
+}
+
+/**
+ * What the store keeps for a session whose record could not be read.
+ *
+ * Writing an empty record instead would fail open: the next start would read it
+ * as a session that took in nothing. Its path is one the registry does not know,
+ * so the gate refuses on it even where `record_missing` is not consulted.
+ */
+export const RECORD_LOST: Ingestion = { path: 'record-lost', from_node_id: null }
+
+/** A session whose record cannot be read: tainted, never fresh. */
+export function sessionWithLostRecord(session_id: string): HostSession {
+  return { id: session_id, gate: startFreshSession(), record_missing: true }
+}
+
+/** The host's view of a record read from the store. */
+export function sessionFromRecord(session_id: string, gate: Session | undefined): HostSession {
+  if (gate === undefined || gate.ingested.some((ingest) => ingest.path === RECORD_LOST.path)) {
+    return sessionWithLostRecord(session_id)
+  }
   return { id: session_id, gate, record_missing: false }
 }
 
@@ -92,15 +125,12 @@ export function beginSession(store: SessionRecordStore, session_id: string): Hos
  * is the one thing that must never be assumed.
  */
 export function resumeSession(store: SessionRecordStore, session_id: string): HostSession {
-  const gate = store.read(session_id)
-  return gate === undefined
-    ? { id: session_id, gate: startFreshSession(), record_missing: true }
-    : { id: session_id, gate, record_missing: false }
+  return sessionFromRecord(session_id, store.read(session_id))
 }
 
-/** Keep the record, so the next process can load it. */
+/** Keep the record, so the next process can load it. A lost record stays lost. */
 export function rememberSession(store: SessionRecordStore, session: HostSession): void {
-  store.write(session.id, session.gate)
+  store.write(session.id, session.record_missing ? recordIngestion(session.gate, [RECORD_LOST]) : session.gate)
 }
 
 /**
@@ -108,24 +138,15 @@ export function rememberSession(store: SessionRecordStore, session: HostSession)
  *
  * The identity is carried only where the registry says something attested the
  * sender. Everywhere else it is dropped, even when the host offers one, because a
- * path nobody attests cannot make a stranger a member.
+ * path nobody attests cannot make a stranger a member. On the binder's path the
+ * identity is the binder's answer for the sender the host attests, and nothing
+ * else: a host whose binder binds nothing records the delivery unattributed.
  */
-export function takeInTurn(session: HostSession, arrival: Arrival): HostSession {
+export function takeInTurn(session: HostSession, arrival: Arrival, binder: Binder): HostSession {
   const path = pathOf(arrival)
-  const identity = senderIsAttested(path) ? (arrival.from_identity ?? null) : null
+  const identity = identityOf(path, arrival, binder)
 
   return { ...session, gate: recordIngestion(session.gate, [{ path, from_node_id: identity }]) }
-}
-
-/**
- * The session after a replacement.
- *
- * Only a real replacement clears what the session took in. A compaction, a
- * handover or a resumed transcript keeps it.
- */
-export function replaceSession(session: HostSession, replacement: Replacement): HostSession {
-  if (!REPLACES_THE_SESSION.includes(replacement)) return session
-  return { ...session, gate: startFreshSession(), record_missing: false }
 }
 
 /** The registry rows that are not a turn source the host reports. */
@@ -149,6 +170,24 @@ export function sourcesThatMayCarryAnIdentity(): readonly string[] {
   return Object.entries(PATH_OF_SOURCE)
     .filter(([, path]) => senderIsAttested(path))
     .map(([source]) => source)
+}
+
+function identityOf(path: string, arrival: Arrival, binder: Binder): string | null {
+  if (!senderIsAttested(path)) return null
+  if (attestationOf(path) === 'host-binder') return binder(attestedSenderOf(arrival))
+  return 'from_identity' in arrival ? (arrival.from_identity ?? null) : null
+}
+
+/**
+ * The sender the host attests for a delivery, or undefined.
+ *
+ * A text-only turn names its sender only where the host also says the harness
+ * delivered it: a whole envelope the owner pasted is otherwise indistinguishable
+ * from a delivery, and must stay unattributed.
+ */
+function attestedSenderOf(arrival: Arrival): AttestedSender | undefined {
+  if ('source' in arrival) return arrival.source === 'cross_session' ? arrival.sender : undefined
+  return arrival.origin === 'harness_delivery' ? arrival.sender : undefined
 }
 
 function pathOf(arrival: Arrival): string {

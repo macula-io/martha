@@ -52,6 +52,7 @@ test('a planted import of a coding tool is named, with its file', () => {
     { path: 'a/template.ts', text: 'const sdk = await import(`@opencode-ai/sdk`)' },
     { path: 'a/computed.ts', text: 'const sdk = await import(name)' },
     { path: 'a/fine.ts', text: "import { join } from 'node:path'\nimport { x } from '../b/b.ts'" },
+    { path: 'a/prose.ts', text: "lines.filter((line) => line.startsWith('import '))\nassert(x, ['y'])" },
   ]
   assert.deepEqual(importsBeyondTheCore(planted), [
     { path: 'a/static.ts', specifier: '@opencode-ai/plugin' },
