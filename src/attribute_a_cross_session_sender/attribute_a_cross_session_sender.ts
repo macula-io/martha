@@ -27,12 +27,26 @@
 //   - NEVER SILENTLY WIDEN. No record, two records for one pid, or a record the
 //     store cannot vouch for: unattributed.
 //
+//   - ONLY A SIGNED PAIR BINDS. The launcher's file is writable by every member's
+//     user, so a record binds only when its (member_name, node_id) pair is in the
+//     members list the owner signed (../trust_only_signed_lists, kind 'members').
+//     A planted record naming an unsigned node id, or pairing a signed node id
+//     with another member's name, binds nothing.
+//
 // The residual, accepted for now (owner's ruling on martha#1, A13 is martha#24):
 // every member runs as the same OS user, so a member that already holds a shell
-// can rewrite the launcher's file. The signed roster (martha#2 item 7) closes it.
+// can rewrite the launcher's file and point a SIGNED member's record at its own
+// pid. The pid is dynamic and no owner can sign it; that binding stays martha#24.
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import type { AttestedSender } from '../host_contract/host_contract.ts'
+
+/** One member the owner signed for: the name and node id a launch record must pair. */
+export interface SignedMember {
+  readonly member_name: string
+  /** Lowercased, as the signed list is opened. */
+  readonly node_id: string
+}
 
 /** What the launcher records when it starts a member. */
 export interface MemberLaunch {
@@ -136,10 +150,16 @@ export function recordMemberStopped(store: MemberLaunchStore, member_name: strin
 /**
  * The binder over the launcher's records.
  *
- * It reads the records and the kernel on every delivery, so a member that exited
- * since the last delivery is already dead here.
+ * It reads the records, the signed members list and the kernel on every delivery,
+ * so a member that exited, or that the owner dropped from the list, since the last
+ * delivery is already dead here. `signedMembers` returns the opened list
+ * (trustedMembers of openTrustList); a refused list is nobody, and binds nothing.
  */
-export function binderOverLaunches(store: MemberLaunchStore, processes: ProcessTable): Binder {
+export function binderOverLaunches(
+  store: MemberLaunchStore,
+  processes: ProcessTable,
+  signedMembers: () => readonly SignedMember[],
+): Binder {
   return (sender) => {
     if (sender === undefined || !isPid(sender.sending_pid)) return null
 
@@ -149,6 +169,10 @@ export function binderOverLaunches(store: MemberLaunchStore, processes: ProcessT
     const [launch] = matching
     if (launch === undefined) return null
     if (processes.startTimeOf(launch.pid) !== launch.process_started_at) return null
+    const signed = signedMembers().some(
+      (member) => member.member_name === launch.member_name && member.node_id === launch.node_id,
+    )
+    if (!signed) return null
 
     return launch.node_id
   }
