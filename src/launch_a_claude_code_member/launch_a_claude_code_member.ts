@@ -17,9 +17,10 @@
 //      hooks and direnv for its config (../refuse_code_a_checkout_runs_itself).
 //   3. The relay's server on that socket, answering with memberRelay.
 //   4. `claude` in a process group of its own, so one SIGKILL reaches the host
-//      and its tool servers. On the owner's own terminal (inherited stdio) it is
-//      that terminal's foreground job, which gets the terminal back to the
-//      launcher as it was once the member ends (member_on_the_owners_terminal.ts);
+//      and its tool servers. On the owner's own terminal (inherited stdio, with
+//      stdin and stderr terminals) it is that terminal's foreground job, which
+//      gets the terminal back to the launcher as it was once the member ends
+//      (member_on_the_owners_terminal.ts);
 //      otherwise it is also in a session of its own (`detached`). In both, the
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay plugin. `--mcp-config` takes every argument after
@@ -73,7 +74,7 @@ import {
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
-import { isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { type ForegroundJob, isOnTheOwnersTerminal, type MemberStart, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
@@ -133,7 +134,8 @@ export type MemberStarted =
     }
   | { readonly started: false; readonly refusal: string }
 
-const NOT_STARTED = 'The member is not started'
+/** The start of every refusal: the member was not started. */
+export const NOT_STARTED = 'The member is not started'
 
 /** The signals that end the launcher without its 'exit' event, and so clean up on their own. */
 const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
@@ -145,6 +147,17 @@ function killGroup(group: number): void {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
   }
+}
+
+/**
+ * How a spawned member's start ended: the pid the launcher kills the group of,
+ * or why there is none. On the owner's terminal the job-control shell says it
+ * (member_on_the_owners_terminal.ts); detached, the member is the spawned child.
+ */
+async function memberStartOf(command: string, spawned: Error | undefined, job: ForegroundJob | undefined, childPid: number | undefined): Promise<MemberStart> {
+  if (spawned !== undefined) return { refusal: `${command} could not be started (${spawned.message}).` }
+  if (job !== undefined) return job.member
+  return childPid === undefined ? { refusal: `${command} could not be started (no pid).` } : { pid: childPid }
 }
 
 /**
@@ -235,16 +248,16 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     child.once('spawn', () => resolve(undefined))
     child.once('error', resolve)
   })
-  const memberPid = spawned === undefined ? await (job?.member ?? child.pid) : undefined
-  if (spawned !== undefined || memberPid === undefined) {
+  const start = await memberStartOf(launch.command, spawned, job, child.pid)
+  if ('refusal' in start) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
     await server.close()
     relayDirectory.remove()
     removeSnapshot()
-    return refuse(`${NOT_STARTED}: ${launch.command} could not be started (${spawned?.message ?? 'no pid'}).`)
+    return refuse(`${NOT_STARTED}: ${start.refusal}`)
   }
-  group = memberPid
-  const pid = memberPid
+  group = start.pid
+  const pid = start.pid
 
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const onLauncherExit = (): void => {

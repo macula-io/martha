@@ -27,8 +27,8 @@ import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_c
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
-import { CLAUDE_CODE, launchClaudeCodeMember, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
-import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
+import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
+import { MEMBER_PID_FD, notACommandThisTerminalCanRun } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
@@ -797,7 +797,7 @@ function launcherProcess(
       '  tellOwner: () => undefined,',
       '})',
       "if (started.started) process.once('SIGUSR2', () => started.stop('the test said so'))",
-      "process.stdout.write(started.started ? `started ${started.pid}\\n` : 'refused\\n')",
+      "process.stdout.write(started.started ? `started ${started.pid}\\n` : `refused: ${started.refusal}\\n`)",
       "if (started.started) process.stdout.write(`stopped ${(await started.stopped).signal ?? 'by itself'}\\n`)",
       'setInterval(() => undefined, 1 << 30)',
       '',
@@ -923,23 +923,45 @@ interface OwnersTerminal {
   shown(): string
 }
 
+/** How the owner's terminal launches: what it starts, its environment, and where the launcher's stderr goes. */
+interface TerminalLaunch {
+  readonly inherited?: Readonly<Record<string, string>>
+  /** The command the launcher starts, instead of the fake terminal member. */
+  readonly command?: string
+  /** A file the launcher's stderr is redirected to, so only its stdin is the terminal. */
+  readonly stderrTo?: string
+}
+
 /**
  * The owner's terminal: a pseudo-terminal whose session leader is a shell that
  * outlives the launcher, as the owner's shell does. The shell notes the
- * terminal, its settings and the launcher's pid before the launch.
+ * terminal, its settings and the launcher's pid before the launch. Resolves
+ * once the fake member is ready.
  */
-async function ownersTerminal(t: TestContext, place: Place, inherited: Readonly<Record<string, string>> = {}): Promise<OwnersTerminal> {
+async function ownersTerminal(t: TestContext, place: Place, how: TerminalLaunch = {}): Promise<OwnersTerminal> {
+  const terminal = terminalLaunch(t, place, how)
+  await until('the owner\'s terminal to launch the member', () => terminal.launcher() !== 0 && textIn(terminal.fake.readyFile) !== '', 10000).catch(
+    (error: Error) => {
+      throw new Error(`${error.message}; the terminal showed: ${JSON.stringify(terminal.shown())}`)
+    },
+  )
+  return { ...terminal, launcher: terminal.launcher() }
+}
+
+/** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
+function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
   const fake = fakeTerminalClaude(place)
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
-  const launcher = launcherProcess(place, fake.command, 'inherit', inherited)
+  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {})
+  const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
     `readlink /proc/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
     // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
-    `'${process.execPath}' '${launcher}' < /dev/tty & echo $! > '${note('launcher')}'; wait`,
+    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & echo $! > '${note('launcher')}'; wait`,
     'read finished',
   ].join('; ')
   const runner = spawn(PTY_RUNNER, ['-qec', shell, '/dev/null'], { stdio: ['pipe', 'pipe', 'inherit'] })
@@ -954,16 +976,17 @@ async function ownersTerminal(t: TestContext, place: Place, inherited: Readonly<
     runner.kill('SIGKILL')
     await ended
   })
-  await until('the owner\'s terminal to launch the member', () => textIn(note('launcher')) !== '' && textIn(fake.readyFile) !== '', 10000).catch(
-    (error: Error) => {
-      throw new Error(`${error.message}; the terminal showed: ${JSON.stringify(shown)}`)
-    },
-  )
   return {
-    launcher: Number(textIn(note('launcher'))),
-    tty: textIn(note('tty')),
-    before: textIn(note('before')),
-    owner_shell: Number(textIn(note('shell'))),
+    launcher: () => Number(textIn(note('launcher'))),
+    get tty() {
+      return textIn(note('tty'))
+    },
+    get before() {
+      return textIn(note('before'))
+    },
+    get owner_shell() {
+      return Number(textIn(note('shell')))
+    },
     fake,
     type: (line: string) => void runner.stdin.write(`${line}\n`),
     press: (keys: string) => void runner.stdin.write(keys),
@@ -979,7 +1002,7 @@ test('a member on the owner\'s terminal is its foreground job: it reads the owne
   const fgRan = join(place.home, 'exported-fg-ran')
   const startup = join(place.home, 'bash-env')
   writeFileSync(startup, `: > '${startupRan}'\n`)
-  const terminal = await ownersTerminal(t, place, { BASH_ENV: startup, 'BASH_FUNC_fg%%': `() { : > '${fgRan}'; }` })
+  const terminal = await ownersTerminal(t, place, { inherited: { BASH_ENV: startup, 'BASH_FUNC_fg%%': `() { : > '${fgRan}'; }` } })
   assert.equal(existsSync(startupRan), false, 'no BASH_ENV ran in the job-control shell')
   assert.equal(existsSync(fgRan), false, 'no exported function stood in for fg')
   const member = Number(textIn(terminal.fake.readyFile))
@@ -1056,3 +1079,33 @@ test('SIGTERM to a launcher whose member is on the owner\'s terminal kills the g
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
 })
+
+test('a launcher whose stderr is not the terminal starts its member detached, and the member still reads the owner\'s line', async (t) => {
+  const place = placeFor(t)
+  const log = join(place.home, 'launcher-stderr')
+  const terminal = await ownersTerminal(t, place, { stderrTo: log })
+  const member = Number(textIn(terminal.fake.readyFile))
+  assert.notEqual(foregroundOf(member), member, 'bash hands a job the terminal through its stderr, so the member is not made the foreground job')
+  terminal.type(LEAVE_LINE)
+  await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === LEAVE_LINE)
+  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
+})
+
+for (const [what, make] of [
+  ['names no command on its PATH', (dir: string) => join(dir, 'no-such-claude')],
+  ['is a file that cannot be run', (dir: string) => {
+    const file = join(dir, 'not-runnable-claude')
+    writeFileSync(file, '#!/bin/sh\n', { mode: 0o600 })
+    return file
+  }],
+] as const) {
+  test(`a member on the owner's terminal whose command ${what} is refused at start and leaves nothing behind`, async (t) => {
+    const place = placeFor(t)
+    const command = make(place.home)
+    const terminal = terminalLaunch(t, place, { command })
+    await until('the launcher to refuse the launch', () => terminal.shown().includes('refused: '))
+    assert.ok(terminal.shown().includes(`refused: ${NOT_STARTED}: ${notACommandThisTerminalCanRun(command)}`), terminal.shown())
+    assert.deepEqual(readdirSync(place.relay_root), [])
+    assert.deepEqual(readdirSync(place.snapshot_root), [])
+  })
+}

@@ -23,6 +23,11 @@
 // function (one named fg would stand in for the builtin), no SHELLOPTS. In
 // order, the script:
 //
+//   0. ends with NOT_A_COMMAND, before anything starts, when its command is no
+//      file it can run (type -P: not on the PATH, not executable, a directory),
+//      so the launcher refuses the launch as it does a detached one that cannot
+//      be spawned: nothing is said on MEMBER_PID_FD, and the shell's exit status
+//      says why;
 //   1. turns job control on (set -m);
 //   2. starts the member as a job, without the launcher's pipe, so no member
 //      can write a pid of its choosing where the launcher reads the group to
@@ -49,8 +54,11 @@
 //      shell with the same signal (a shell sees both as 128+n, so a member that
 //      exits with 128+n by itself reads as killed by n).
 //
-// A command that cannot be run is not refused at start here, as it is when
-// detached: the member starts, and stops at once with 127 or 126.
+// The member is put on the terminal this way only when the launcher's stderr is
+// that terminal too (isOnTheOwnersTerminal): bash takes the terminal it hands a
+// job from its own stderr, so with stderr redirected fg could never hand it over
+// and the member would wait for it forever. Such a launch starts the member
+// detached instead, where it still reads the terminal it inherits.
 //
 // What the member gets as the foreground job is the terminal it was handed
 // anyway, through its inherited stdio: reading it, writing it and setting its
@@ -73,8 +81,15 @@ export const MEMBER_PID_FD = 3
 /** The name the script runs under ($0), as `ps` shows it. */
 export const JOB_SHELL_NAME = 'martha-member-job'
 
+/** Why a launch on the owner's terminal starts nothing: its command is no file this shell can run. */
+export const notACommandThisTerminalCanRun = (command: string): string => `${command} is not a command this terminal can run.`
+
+/** The status the script ends with when its command is no file it can run, as a shell's own is. */
+export const NOT_A_COMMAND = 127
+
 /** The script, fixed: the member's command reaches it only as "$@". */
 export const FOREGROUND_JOB_SCRIPT = [
+  `type -P -- "$1" > /dev/null || exit ${NOT_A_COMMAND}`,
   'set -m',
   `"$@" ${MEMBER_PID_FD}>&- &`,
   `echo "$!" >&${MEMBER_PID_FD}`,
@@ -95,17 +110,21 @@ export const FOREGROUND_JOB_SCRIPT = [
 
 /**
  * Whether a launch hands the member the owner's terminal: its stdio is
- * inherited and the launcher's standard input is a terminal.
+ * inherited, and the launcher's standard input and its stderr, through which
+ * the job-control shell hands the terminal over, are terminals.
  */
 export function isOnTheOwnersTerminal(stdio: StdioOptions): boolean {
-  return stdio === 'inherit' && isatty(0)
+  return stdio === 'inherit' && isatty(0) && isatty(2)
 }
+
+/** How a member's start ends: its pid, which is also its group's id, or why it did not start. */
+export type MemberStart = { readonly pid: number } | { readonly refusal: string }
 
 export interface ForegroundJob {
   /** The job-control shell; it exits once the member has and the terminal is given back. */
   readonly shell: ChildProcess
-  /** The member's pid, which is also its group's id; undefined when it never started. */
-  readonly member: Promise<number | undefined>
+  /** The member's pid, or why it never started. */
+  readonly member: Promise<MemberStart>
 }
 
 /** Starts a member as the foreground job of the owner's terminal, which the launcher inherits. */
@@ -117,8 +136,12 @@ export function startForegroundJob(
   const stdio: StdioOptions = ['inherit', 'inherit', 'inherit', 'pipe']
   const shell = spawn(JOB_SHELL, [NOTHING_FROM_THE_ENVIRONMENT, '-c', FOREGROUND_JOB_SCRIPT, JOB_SHELL_NAME, command, ...args], { ...options, stdio })
   const said = shell.stdio[MEMBER_PID_FD]
-  const member = new Promise<number | undefined>((resolve) => {
-    if (said === null || said === undefined) return resolve(undefined)
+  const exited = new Promise<number | null>((resolve) => shell.once('exit', (code) => resolve(code)))
+  const noPid = `${command} could not be started (no pid).`
+  // A shell that said no pid ends on its own: its status says whether its command was one it could not run.
+  const whyNot = async (): Promise<MemberStart> => ({ refusal: (await exited) === NOT_A_COMMAND ? notACommandThisTerminalCanRun(command) : noPid })
+  const member = new Promise<MemberStart>((resolve) => {
+    if (said === null || said === undefined) return resolve({ refusal: noPid })
     // The first line is the pid.
     let text = ''
     said.on('data', (chunk: Buffer) => {
@@ -126,10 +149,10 @@ export function startForegroundJob(
       const end = text.indexOf('\n')
       if (end === -1) return
       const pid = Number(text.slice(0, end))
-      resolve(Number.isInteger(pid) && pid > 1 ? pid : undefined)
+      resolve(Number.isInteger(pid) && pid > 1 ? { pid } : { refusal: noPid })
     })
-    said.once('close', () => resolve(undefined))
-    shell.once('error', () => resolve(undefined))
+    said.once('close', () => void whyNot().then(resolve))
+    shell.once('error', (error) => resolve({ refusal: `${command} could not be started (${error.message}).` }))
   })
   return { shell, member }
 }
