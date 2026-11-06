@@ -22,6 +22,7 @@ import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } fro
 import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -55,14 +56,14 @@ function git(cwd: string, ...args: string[]): string {
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'true', args: [] } } })
 
-function placeFor(t: TestContext): Place {
+function placeFor(t: TestContext, servers = SERVERS): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-cc-launch-'))
   t.after(() => rmSync(home, { recursive: true, force: true }))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '.')
   writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
-  writeFileSync(join(checkout, '.mcp.json'), SERVERS)
+  writeFileSync(join(checkout, '.mcp.json'), servers)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
 
@@ -544,6 +545,40 @@ test('a refused launch starts no process and leaves nothing behind', async (t) =
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
   assert.equal(lines.length, 1, 'the refusal is shown to the owner')
+})
+
+// --- the mesh server it installs is a recorded one (martha#49) ------------------
+
+const meshServerAt = (version: string) =>
+  JSON.stringify({ mcpServers: { macula: { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@${version}`] } } })
+
+test('an approved config that installs a mesh server version nobody recorded starts nothing, naming both versions', async (t) => {
+  const unrecorded = '999.0.0'
+  const place = placeFor(t, meshServerAt(unrecorded))
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(`${MESH_SERVER_PACKAGE} ${unrecorded}`), refusal)
+  for (const recorded of RECORDED_MESH_SERVERS) assert.ok(refusal.includes(recorded.server_version), refusal)
+  assert.equal(existsSync(fake.ranFile), false)
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+  assert.deepEqual(lines, [refusal])
+})
+
+test('an approved config that installs a recorded mesh server version starts the member', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(() => started.stop('the test is over'))
+  await until('the fake host to start', () => existsSync(fake.ranFile))
+  started.stop('the test is over')
+  await started.stopped
 })
 
 test('an approved launch starts the host with the switches and the relay, and a refusal after a call kills its whole group', async (t) => {
