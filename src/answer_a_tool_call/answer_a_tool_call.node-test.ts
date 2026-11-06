@@ -2,11 +2,14 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import {
+  WHAT_CLEARS_IT,
+  type Policy,
+  type Session,
+} from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   beginSession,
   rememberSession,
-  replaceSession,
   resumeSession,
   takeInTurn,
   type SessionRecordStore,
@@ -41,18 +44,19 @@ test('a session that took in a stranger may not run a shell, this turn or the ne
   denied(answerToolCall({ tool: 'Bash', session: nextTurn, policy }))
 })
 
-test('a real replacement lets the crew work again', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session' }, bindNothing)
+test('a fresh session under a new id lets the crew work again', () => {
+  const records = store()
+  const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'cross_session' }, bindNothing)
   denied(answerToolCall({ tool: 'Bash', session: tainted, policy }))
 
-  const fresh = replaceSession(tainted, 'clear')
+  const fresh = beginSession(records, 's-2')
   assert.equal(answerToolCall({ tool: 'Bash', session: fresh, policy }), undefined)
 })
 
-test('a compaction does not let the crew work again', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  const compacted = replaceSession(tainted, 'compaction')
-  denied(answerToolCall({ tool: 'Bash', session: compacted, policy }))
+test('a compaction keeps the id, and so does not let the crew work again', () => {
+  const records = store()
+  rememberSession(records, takeInTurn(beginSession(records, 's-1'), { source: 'ring' }, bindNothing))
+  denied(answerToolCall({ tool: 'Bash', session: resumeSession(records, 's-1'), policy }))
 })
 
 test('an unreadable record refuses the shell and says so', () => {
@@ -61,7 +65,7 @@ test('an unreadable record refuses the shell and says so', () => {
 
   assert.match(answer, /record/i)
   assert.match(answer, /cannot be read/i)
-  assert.match(answer, /\/clear/)
+  assert.ok(answer.includes(WHAT_CLEARS_IT))
 })
 
 test('an unreadable record still lets the member read', () => {
@@ -82,7 +86,7 @@ test('the refusal a host returns names what to do', () => {
   const answer = answerToolCall({ tool: 'Write', session: tainted, policy })
 
   assert.equal(typeof (answer as { deny: unknown }).deny, 'string')
-  assert.match(denied(answer), /\/clear/)
+  assert.ok(denied(answer).includes(WHAT_CLEARS_IT))
 })
 
 // --- reading is still allowed -------------------------------------------------
