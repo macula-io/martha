@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { after, test } from 'node:test'
 
 import type { DeliveryGate, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
-import { answerToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { gapsInGateCoverage } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -17,6 +20,17 @@ import {
   type ReadableRoom,
   type RoomEnvelope,
 } from './read_a_room_through_its_gate.ts'
+
+// A member started in a directory holding no launch config: the launch check
+// passes, so these tests see only the rules they are about. Removed at the end.
+const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
+after(() => rmSync(launch_home, { recursive: true, force: true }))
+const launch: ApprovedLaunch = {
+  host: 'claude-code',
+  launch_dir: mkdtempSync(join(launch_home, 'work-')),
+  stop_dir: launch_home,
+  approved_fingerprints: [],
+}
 
 // Synthetic node ids, never a real one: this repository is public.
 const self = '0'.repeat(64)
@@ -51,7 +65,7 @@ const read = (room: ReadableRoom, envelopes: readonly RoomEnvelope[]) =>
   readRoomThroughItsGate({ session: beginSession(store(), 's-1'), room, envelopes, rosters, self_node_id: self })
 
 const executes = (session: ReturnType<typeof read>['session']) =>
-  answerToolCall({ tool: 'Bash', session, policy }) === undefined
+  answerToolCall({ tool: 'Bash', session, policy, launch }) === undefined
 
 // --- the raw reads are refused, under any namespace, tainted or not -----------
 
@@ -62,7 +76,7 @@ test('every raw mesh read is refused under every namespace, in a clean session',
   for (const prefix of NAMESPACES) {
     for (const raw of RAW_MESH_READS) {
       const tool = `${prefix}${raw}`
-      assert.notEqual(answerToolCall({ tool, session: clean, policy }), undefined, tool)
+      assert.notEqual(answerToolCall({ tool, session: clean, policy, launch }), undefined, tool)
     }
   }
 })
@@ -105,7 +119,7 @@ test('a raw read is no longer on the list of tools a tainted session may call', 
 })
 
 test('the refusal points at the gated read', () => {
-  const answer = answerToolCall({ tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy })
+  const answer = answerToolCall({ tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy, launch })
   assert.match(answer?.deny ?? '', /through its gate/)
 })
 

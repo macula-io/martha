@@ -8,6 +8,18 @@
 // delivery gate that does not exist, a delivery gate that admits everyone, one
 // that refuses everyone, and one that answers only some of the questions.
 //
+// A `launched` row (code the host starts by itself, issue #16) is held to the
+// same standard with its own gate. No tool is called and no model runs on such
+// a path, so a launched row claiming the shell gate or a delivery gate is
+// claiming cover that cannot stand there, and is a gap. The launch gate it
+// names is driven once per question: it must refuse config the owner has not
+// approved, an approved server whose content changed under the same name, an
+// approved config whose checkout changed under it (the script it runs), config
+// outside any git checkout, a file added after approval, a config one
+// directory up, a symlink even when approved, a host it has no file list for,
+// and a request whose config was never read — and it must admit approved
+// config and a checkout with no config at all.
+//
 // A name is not a control, and neither is a gate that gets one question right.
 // Every delivery gate a row names is DRIVEN here, once per question it has to
 // answer: it must refuse an unattested message, a session talking to itself, a
@@ -15,8 +27,16 @@
 // does not name — and it must admit a rostered member, so a gate that refuses
 // everything is caught too.
 
-import { DELIVERY_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { DELIVERY_GATES, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
+import {
+  fingerprintOf,
+  LAUNCH_FILES_OF_HOST,
+  type ConfigEntry,
+  type Host,
+  type LaunchGate,
+  type LaunchRequest,
+} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_SESSION_EVENTS,
@@ -106,6 +126,7 @@ export function gapsInGateCoverage(
   paths: readonly InboundPath[],
   gateRefuses: (path: string) => boolean,
   delivery_gates: Readonly<Record<string, DeliveryGate>> = DELIVERY_GATES,
+  launch_gates: Readonly<Record<string, LaunchGate>> = LAUNCH_GATES,
 ): readonly Gap[] {
   const gaps: Gap[] = []
 
@@ -119,6 +140,21 @@ export function gapsInGateCoverage(
 
     if (control.kind === 'none') {
       gaps.push({ path: path.id, why: 'declared as having no control' })
+      continue
+    }
+
+    if (path.klass === 'launched' && control.kind !== 'launch-gate') {
+      gaps.push({ path: path.id, why: `is code the host starts by itself, and ${control.kind} does not stand in front of that` })
+      continue
+    }
+
+    if (control.kind === 'launch-gate') {
+      const gap = path.klass !== 'launched'
+        ? 'names a launch gate on a path the host does not start by itself'
+        : control.residual.trim() === ''
+          ? 'does not say what happens where Martha does not start the host'
+          : launchGateGap(control.gate, launch_gates[control.gate])
+      if (gap !== undefined) gaps.push({ path: path.id, why: gap })
       continue
     }
 
@@ -139,6 +175,124 @@ export function gapsInGateCoverage(
   }
 
   return gaps
+}
+
+// A host the launch probes use, its first listed file, and a second one: the
+// probes are built from the module's own lists, never a restated file name.
+const PROBE_HOST: Host = 'claude-code'
+const [SERVERS, SETTINGS] = LAUNCH_FILES_OF_HOST[PROBE_HOST]
+
+const sha = (digit: string) => digit.repeat(64)
+
+/** Every listed file for the probe host, absent, with any present ones laid over. */
+function onDisk(present: readonly ConfigEntry[]): readonly ConfigEntry[] {
+  const absent: ConfigEntry[] = LAUNCH_FILES_OF_HOST[PROBE_HOST]
+    .filter((name) => !present.some((entry) => entry.path === name))
+    .map((name) => ({ path: name, kind: 'absent' }))
+  return [...absent, ...present]
+}
+
+const SERVERS_ONLY = onDisk([{ path: SERVERS, kind: 'file', sha256: sha('a') }])
+// Synthetic git tree ids: the checkout as approved, and after a pull.
+const TREE = '1'.repeat(40)
+const PULLED = '2'.repeat(40)
+const APPROVED = [fingerprintOf({ entries: SERVERS_ONLY, tree: TREE })]
+
+export interface LaunchProbe {
+  readonly admits: boolean
+  readonly what: string
+  readonly request: LaunchRequest
+}
+
+/** The questions every launch gate is asked; the first is the approved config. */
+export const LAUNCH_PROBES: readonly LaunchProbe[] = [
+  {
+    admits: true,
+    what: 'config the owner approved',
+    request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: TREE, approved_fingerprints: APPROVED },
+  },
+  {
+    admits: true,
+    what: 'a checkout with no config at all',
+    request: { host: PROBE_HOST, entries: onDisk([]), tree: null, approved_fingerprints: [] },
+  },
+  {
+    admits: false,
+    what: 'config the owner has not approved',
+    request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: TREE, approved_fingerprints: [] },
+  },
+  {
+    admits: false,
+    what: 'an approved file whose content changed under the same name',
+    request: { host: PROBE_HOST, entries: onDisk([{ path: SERVERS, kind: 'file', sha256: sha('b') }]), tree: TREE, approved_fingerprints: APPROVED },
+  },
+  {
+    admits: false,
+    what: 'an approved config whose checkout changed under it, the script it runs included',
+    request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: PULLED, approved_fingerprints: APPROVED },
+  },
+  {
+    admits: false,
+    what: 'config outside any git checkout, even with its fingerprint approved',
+    request: {
+      host: PROBE_HOST,
+      entries: SERVERS_ONLY,
+      tree: null,
+      approved_fingerprints: [fingerprintOf({ entries: SERVERS_ONLY, tree: null })],
+    },
+  },
+  {
+    admits: false,
+    what: 'a file added after the approval',
+    request: {
+      host: PROBE_HOST,
+      entries: onDisk([{ path: SERVERS, kind: 'file', sha256: sha('a') }, { path: SETTINGS, kind: 'file', sha256: sha('c') }]),
+      tree: TREE,
+      approved_fingerprints: APPROVED,
+    },
+  },
+  {
+    admits: false,
+    what: 'a config one directory up from the checkout',
+    request: {
+      host: PROBE_HOST,
+      entries: [...SERVERS_ONLY, { path: `../${SERVERS}`, kind: 'file', sha256: sha('d') }],
+      tree: TREE,
+      approved_fingerprints: APPROVED,
+    },
+  },
+  {
+    admits: false,
+    what: 'a symlink, even one the owner approved',
+    request: {
+      host: PROBE_HOST,
+      entries: onDisk([{ path: SERVERS, kind: 'symlink', target: SERVERS }]),
+      tree: TREE,
+      approved_fingerprints: [fingerprintOf({ entries: onDisk([{ path: SERVERS, kind: 'symlink', target: SERVERS }]), tree: TREE })],
+    },
+  },
+  {
+    admits: false,
+    what: 'a request whose config was never read',
+    request: { host: PROBE_HOST, entries: [], tree: TREE, approved_fingerprints: [] },
+  },
+  {
+    admits: false,
+    what: 'a host it has no file list for',
+    request: { host: 'a-host-nobody-listed', entries: [], tree: TREE, approved_fingerprints: [] },
+  },
+]
+
+function launchGateGap(name: string, gate: LaunchGate | undefined): string | undefined {
+  if (gate === undefined) return `names a launch gate nobody has built: ${name}`
+
+  for (const probe of LAUNCH_PROBES) {
+    if (gate(probe.request) !== probe.admits) {
+      return probe.admits ? `the gate ${name} refuses ${probe.what}` : `the gate ${name} admits ${probe.what}`
+    }
+  }
+
+  return undefined
 }
 
 /**
