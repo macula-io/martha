@@ -143,7 +143,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A7',
-    what: "text a checkout puts into the session: its auto-injected CLAUDE.md or AGENTS.md, and what an approved hook prints",
+    what: "text a checkout puts into the session: its auto-injected CLAUDE.md or AGENTS.md, what an approved hook prints, and the agents a checkout defines (.claude/agents), whose frontmatter may name hooks and tool servers that start only when the model spawns that agent, a tool call",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'none',
@@ -257,7 +257,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
       kind: 'launch-gate',
       gate: 'owner-approved-launch-config',
       residual:
-        'Where the owner starts the coding tool by hand, the host starts these servers before any of Martha runs. Observed: interactive Claude Code 2.1.318 holds a project server for approval but records the approval by server name only, so a later change to an approved command is not asked again; headless claude -p starts it unasked; OpenCode 2.2.5 starts it unasked, even for opencode debug config. The adapter must then refuse that session a place in the crew: the machine is already reached, the crew is not.',
+        'Martha starts the host on an approved snapshot of this config, with the checkout\'s own config switched off (prepareLaunch; npm run probe:launch). What is left: a host the owner starts by hand starts these servers before any of Martha runs (observed: interactive Claude Code 2.1.318 holds a project server for approval but records it by server name only, so a later change to its command is not asked again; headless claude -p and OpenCode 2.2.5, even for opencode debug config, start it unasked), so the adapter must refuse that session a place in the crew; a host that restarts an approved server between turns runs the script as it is then, which the next turn\'s re-check refuses but does not undo; and a file git ignores and does not track is outside the approval.',
     },
     attestation: 'none',
   },
@@ -269,7 +269,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
       kind: 'launch-gate',
       gate: 'owner-approved-launch-config',
       residual:
-        "Where the owner starts the coding tool by hand, the host runs these before any of Martha runs. Observed: headless claude -p 2.1.318 runs a checkout's SessionStart hook unasked; OpenCode 2.2.5 loads a checkout's plugin unasked, even for opencode debug config. The adapter must then refuse that session a place in the crew: the machine is already reached, the crew is not.",
+        "Martha starts the host on an approved snapshot of this config, with the checkout's own config switched off (prepareLaunch; npm run probe:launch); a checkout's .claude/settings.local.json and its .opencode plugins are never carried, and prepareLaunch names them as not_carried for the launcher to show the owner. What is left: a host the owner starts by hand runs these before any of Martha runs (observed: headless claude -p 2.1.318 runs a checkout's SessionStart hook unasked; OpenCode 2.2.5 loads its plugin unasked, even for opencode debug config), so the adapter must refuse that session a place in the crew; a hook that fires between turns runs its script as it is then, which the next turn's re-check refuses but does not undo; and a file git ignores and does not track is outside the approval.",
     },
     attestation: 'none',
   },

@@ -42,7 +42,7 @@
 // roster, which martha#1 decision 2 accepts for now.
 
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree } from './checkout_tree.ts'
@@ -243,10 +243,23 @@ export type PreparedLaunch =
  * approved, so a file rewritten between the decision and the copy is refused
  * rather than carried.
  */
-export function prepareLaunch(
-  place: LaunchPlace & { readonly snapshot_root: string; readonly approved_fingerprints: readonly string[] },
-): PreparedLaunch {
-  const state = readLaunchState(place)
+export function prepareLaunch(place: SnapshotPlace): PreparedLaunch {
+  return snapshotApproved(place, readLaunchState(place))
+}
+
+/** A launch place, where its snapshots go, and what the owner approved. */
+export type SnapshotPlace = LaunchPlace & {
+  readonly snapshot_root: string
+  readonly approved_fingerprints: readonly string[]
+}
+
+/**
+ * The second half of `prepareLaunch`: decide on `state`, as read a moment ago,
+ * and copy what it approved. Every byte copied must hash to `state`, so a file
+ * rewritten after `state` was read is refused, and no snapshot is left behind
+ * on any refusal.
+ */
+export function snapshotApproved(place: SnapshotPlace, state: LaunchState): PreparedLaunch {
   const decision = decideLaunch({ host: place.host, ...state, approved_fingerprints: place.approved_fingerprints })
   if (!decision.allow) return decision
 
@@ -268,6 +281,7 @@ export function prepareLaunch(
 
     const content = readFileSync(join(start, entry.path))
     if (createHash('sha256').update(content).digest('hex') !== entry.sha256) {
+      rmSync(snapshot_dir, { recursive: true, force: true })
       return { allow: false, refusal: `${REFUSED}: ${entry.path} changed while it was being approved. Start again.` }
     }
     const copy = join(snapshot_dir, entry.path)
@@ -280,6 +294,7 @@ export function prepareLaunch(
   for (const switches of carried) {
     for (const [name, value] of Object.entries(switches.env)) {
       if (Object.hasOwn(env, name)) {
+        rmSync(snapshot_dir, { recursive: true, force: true })
         return { allow: false, refusal: `${REFUSED}: two of its config files would be passed through ${name}, which carries one. Keep one.` }
       }
       env[name] = value

@@ -128,34 +128,78 @@ checking out a pull request to run its tests.
 
 These are the `launched` rows: C1 for a checkout's tool-server config, C2 for
 its hooks and plugins. What was seen on the two hosts, in a fresh checkout whose
-config only touched a marker file:
+config only touched a marker file (`npm run probe:launch`, which exits non-zero
+when a host does anything else):
 
-| Host | What starts with nobody asked |
+| Host, and how it was started | What starts with nobody asked |
 |---|---|
-| Claude Code 2.1.318, interactive | nothing: a project server waits for approval. The approval is stored as a list of **server names**, so a later change to an approved server's command is not asked about again |
-| Claude Code 2.1.318, headless `claude -p` | the project's tool server, and its `SessionStart` hook |
-| OpenCode 2.2.5 | the project's tool server and its plugin, even for `opencode debug config` |
+| Claude Code 2.1.318 by hand, interactive | nothing: a project server waits for approval. The approval is stored as a list of **server names**, so a later change to an approved server's command is not asked about again |
+| Claude Code 2.1.318 by hand, headless `claude -p` | the project's tool server, and its `SessionStart` hook |
+| OpenCode 2.2.5 by hand | the project's tool server and its plugin, even for `opencode debug config` |
+| Claude Code 2.1.318 as Martha starts it, config rewritten after approval | the approved server and hook only; the rewritten ones do not start |
+| OpenCode 2.2.5 as Martha starts it, config rewritten and a plugin added after approval | the approved server only; the rewritten server and the added plugin do not start |
 
 The host's own approval is name-keyed where it exists at all, so it cannot be the
-control. `src/refuse_launch_of_unapproved_config/` is:
+control. `src/refuse_launch_of_unapproved_config/` is five rules:
 
-1. **Approval is by content, never by name.** The files each host reads
-   (`LAUNCH_FILES_OF_HOST`) are fingerprinted: every file's content hash, every
-   file under a listed directory, and which of the files are absent. A pull that
-   changes an approved command changes the fingerprint.
-2. **The directories above count**, up to but not including the stop directory
-   the launcher names (the owner's home). A start outside it is read up to the
-   root.
-3. **What the gate cannot pin down is refused**: a symlink, even an approved one,
-   a path that is not a plain file or directory, and a host with no file list.
-4. **No config needs no approval, once it was looked for.** A checkout holding
-   none of the files starts as it does today; a request that does not show every
-   listed file as read is refused, so a reader that returned nothing cannot pass
-   for an empty checkout.
+1. **The host never reads the checkout's own config.** `prepareLaunch` copies the
+   approved files into a snapshot outside the checkout and returns the switches
+   that start the host on that copy with project config off: for Claude Code
+   `--setting-sources user` with `--mcp-config` and `--settings` naming the copy
+   (the owner's own servers stay); for OpenCode `--standalone` with
+   `OPENCODE_DISABLE_PROJECT_CONFIG=1` and `OPENCODE_CONFIG` naming the copy. The
+   background OpenCode service ignores a client's environment, hence
+   `--standalone`. A pull that rewrites the config while the host runs changes a
+   file the host is not reading, so a host that reloads its config live reloads
+   the snapshot. Each copied file is hashed again as it is copied, and a file
+   that changed since the decision is refused rather than carried.
+2. **Approval is by content, never by name, and covers what the config runs.**
+   The fingerprint holds every listed file's content hash, every file under a
+   listed directory, which of the files are absent, and the checkout's work
+   tree: the tree git would write if every tracked change and every untracked,
+   unignored file were staged now (`checkout_tree.ts`, in a scratch index, with
+   inherited `GIT_*` variables dropped and fsmonitor off). A pull that changes
+   only the script an approved hook runs changes the fingerprint.
+3. **The directories above count**, up to but not including the stop directory
+   the launcher names (the owner's home); a start outside it is read up to the
+   root. This is for a host started by hand, which walks up — OpenCode with no
+   stop at all, so it also reads `~/.opencode` and `~/opencode.json` as project
+   config. A planned launch reads none of them.
+4. **What the gate cannot pin down is refused**: a symlink, even an approved one;
+   a path that is not a plain file or directory; config in a directory that is
+   no git checkout, where nothing pins what it runs; a request that does not show
+   every listed file as read, so a reader that returned nothing cannot pass for
+   an empty checkout; two files that would be passed through one carrier; and a
+   host with no file list.
+5. **No config needs no approval.** A checkout holding none of the files starts,
+   still with project config off.
 
 Only the owner approves a fingerprint, typed in that member's tab and logged
 (martha#1, decision 4). The refusal names the files and the fingerprint to
 approve.
+
+What the plan leaves out, stated rather than hidden:
+
+- **Not every listed file is carried.** A checkout's
+  `.claude/settings.local.json` (a member's own permission answers) and its
+  `.opencode` directory (its plugins) are fingerprinted but never loaded;
+  `prepareLaunch` returns them as `not_carried` for the launcher to show the
+  owner.
+- **The tree does not cover** a file git ignores and does not track — the
+  checkout's author cannot ship one; it is written on this machine by a command
+  the member ran (A13) — nor the inside of a submodule beyond the commit its
+  parent records.
+- **The fingerprint-to-launch race** closes only if the first re-check (*Wiring
+  it into a host*, below) runs before any tool: between `prepareLaunch` and the
+  host's start, a script the snapshot runs can still be rewritten in the
+  checkout.
+- **Between turns**, a host that restarts an approved server or fires a hook runs
+  the script as it is then. The next turn's re-check refuses the changed
+  checkout; it does not undo what already ran.
+- **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
+  servers in their frontmatter. They start only when the model spawns that
+  agent, which is a tool call the shell gate refuses while unapproved text is
+  readable (A7), and their files are in the tree the approval binds.
 
 **Where Martha does not start the host** — the owner opens the coding tool by
 hand and Martha loads inside it — the host has started these before any of
@@ -222,8 +266,8 @@ A host does these things, and the core does the rest:
 | a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
 | a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
-| before starting the coding tool in a checkout | `decideLaunch({ host, entries: readLaunchConfig({ host, launch_dir, stop_dir }), approved_fingerprints })` — do not start it on a refusal; show the refusal to the owner |
-| before every turn | the same call again: some hosts re-read their config mid-session, so on a refusal the member executes nothing until the owner approves or the member restarts |
+| before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches`, show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
+| before every turn, and before the first tool | `decideLaunch({ host, ...readLaunchState({ host, launch_dir, stop_dir }), approved_fingerprints })` — a host that reloads its config reads the snapshot, so this re-check covers the scripts the snapshot runs, which still live in the checkout; on a refusal the member executes nothing until the owner approves or the member restarts |
 | before running any tool | `answerToolCall({ tool, session, policy, input })` — return the `{ deny }` as the hook's answer |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
