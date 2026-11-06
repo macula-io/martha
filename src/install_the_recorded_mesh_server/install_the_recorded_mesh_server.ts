@@ -435,14 +435,30 @@ export function recordMeshTree(request: MeshTreeRecordRequest): RecordedMeshTree
   const refusal = refusalOfLock(lock, { server: MESH_SERVER_PACKAGE, version: manifest.version, integrity, registry: recording.registry })
   if (refusal !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${refusal}`)
 
-  const installed = join(scratch, 'tree')
+  const { files, environment_reads } = installedTreeOf(lock, manifest.version, { installed: join(scratch, 'tree'), npmHome }, recording)
+  return { server_version: manifest.version, integrity, settings, lock, files, environment_reads }
+}
+
+/**
+ * Installs the lock of a server `version` into `installed` and reads back every file npm put there and
+ * what each package of it reads from the environment. Throws, naming the
+ * server's version, when the install fails, a file is not one npm installs, or
+ * a package reads a name the server is started with and nobody reviewed it.
+ */
+function installedTreeOf(
+  lock: NpmLock,
+  version: string,
+  { installed, npmHome }: { readonly installed: string; readonly npmHome: string },
+  recording: MeshTreeRecording,
+): Pick<RecordedMeshTree, 'files' | 'environment_reads'> {
+  const notRecorded = (why: string): Error => new Error(`${MESH_SERVER_PACKAGE} ${version} is not recorded: ${why}`)
   mkdirSync(installed)
   const failed = installLock(lock, installed, recording.registry, npmHome)
-  if (failed !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${failed}`)
+  if (failed !== undefined) throw notRecorded(failed)
   const files = filesOfTree(installed)
-  if ('refusal' in files) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${files.refusal}`)
+  if ('refusal' in files) throw notRecorded(files.refusal)
   const environment_reads = environmentReadsInTree(codeOfTree(installed, files.files), lock)
   const unreviewed = refusalOfEnvironmentReads(environment_reads, environmentReviewOf(recording))
-  if (unreviewed !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${unreviewed}`)
-  return { server_version: manifest.version, integrity, settings, lock, files: files.files, environment_reads }
+  if (unreviewed !== undefined) throw notRecorded(unreviewed)
+  return { files: files.files, environment_reads }
 }
