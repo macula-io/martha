@@ -972,6 +972,7 @@ test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, an
   assert.ok(entry !== undefined)
   // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
   const run = spawnSync(entry.command, entry.args, { env: { ...process.env, ...fromSettings, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
   const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
   assert.equal(seen.CLAUDE_CODE_PLUGIN_DIRS, '', `it reached the server as ${seen.CLAUDE_CODE_PLUGIN_DIRS}`)
