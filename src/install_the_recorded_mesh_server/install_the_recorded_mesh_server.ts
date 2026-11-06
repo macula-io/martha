@@ -44,8 +44,13 @@
 // What this does not close: a member's shell runs as the same user, so it can
 // edit the installed tree while a session runs. The next launch refuses that
 // tree, naming the file; the server already running is not checked again. This
-// is the same class as the contact-policy file (macula-io/macula-mcp#79). A
-// dependency's own environment reads are not listed by the recorder (martha#72).
+// is the same class as the contact-policy file (macula-io/macula-mcp#79).
+//
+// What every package of the tree reads from the environment is recorded with
+// it (martha#72). A read of a name the server is started with (SERVER_NEEDS
+// and the approved settings) that nobody reviewed for that package refuses
+// the record, and refuses the launch too, so a name added to SERVER_NEEDS or
+// to the settings later cannot reach a dependency that reads it unreviewed.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -62,10 +67,13 @@ import {
 import {
   MESH_TREE_RECORDING,
   changesInTree,
+  environmentReadsInTree,
+  refusalOfEnvironmentReads,
   refusalOfLock,
   refusalOfSettings,
   settingsReadIn,
   sriOf,
+  type EnvironmentReview,
   type MeshTreeRecording,
   type NpmLock,
   type RecordedMeshTree,
@@ -182,6 +190,16 @@ function installLock(lock: NpmLock, dir: string, registry: string, npmHome: stri
   return `npm could not install the recorded lock: ${ran.why.split('\n').slice(0, 3).join(' ')}`
 }
 
+/** What judges a tree's environment reads: every name the server is started with a value for, and the reviewed reads. */
+function environmentReviewOf(recording: MeshTreeRecording): EnvironmentReview {
+  return {
+    server: MESH_SERVER_PACKAGE,
+    startedWith: [...SERVER_NEEDS, ...recording.known_settings],
+    knownSettings: recording.known_settings,
+    knownReads: recording.known_environment_reads,
+  }
+}
+
 /** Why the tree at `dir` is not the recorded one, or undefined. */
 function treeUnlike(tree: RecordedMeshTree, dir: string): string | undefined {
   const found = filesOfTree(dir)
@@ -275,6 +293,8 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
     if (tree === undefined) {
       return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not recorded: the bytes it would run are not proved. Record that version, or install a recorded one.` }
     }
+    const unreviewed = refusalOfEnvironmentReads(tree.environment_reads, environmentReviewOf(recording))
+    if (unreviewed !== undefined) return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not reviewed: ${unreviewed}` }
     const record = records.find((recorded) => recorded.server_version === pin.version)
     if (record === undefined) {
       return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose bins are not recorded, so its server bin is not known.` }
@@ -312,11 +332,20 @@ function codeOf(dir: string): PackageSource[] {
     .map((path) => ({ path, text: readFileSync(join(dir, path), 'utf8') }))
 }
 
+/** Every code file of an installed tree, by the path its record names it with. */
+function codeOfTree(dir: string, files: Readonly<Record<string, string>>): PackageSource[] {
+  return Object.keys(files)
+    .filter((path) => CODE.test(path))
+    .map((path) => ({ path, text: readFileSync(join(dir, path), 'utf8') }))
+}
+
 /**
  * The tree of the version this tarball holds: its integrity, the settings its
- * code reads, a lock made from the registry alone, and every file npm installs
- * from that lock. Throws, naming why, when the tarball is not what the
- * registry serves, a setting is unknown, or the lock cannot pin the tree.
+ * code reads, a lock made from the registry alone, every file npm installs
+ * from that lock, and what each package of it reads from the environment.
+ * Throws, naming why, when the tarball is not what the registry serves, a
+ * setting is unknown, the lock cannot pin the tree, or a package reads a name
+ * the server is started with and nobody reviewed that read.
  */
 export function recordMeshTree(request: MeshTreeRecordRequest): RecordedMeshTree {
   const { tarball, recording, scratch } = request
@@ -352,5 +381,8 @@ export function recordMeshTree(request: MeshTreeRecordRequest): RecordedMeshTree
   if (failed !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${failed}`)
   const files = filesOfTree(installed)
   if ('refusal' in files) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${files.refusal}`)
-  return { server_version: manifest.version, integrity, settings, lock, files: files.files }
+  const environment_reads = environmentReadsInTree(codeOfTree(installed, files.files), lock)
+  const unreviewed = refusalOfEnvironmentReads(environment_reads, environmentReviewOf(recording))
+  if (unreviewed !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${unreviewed}`)
+  return { server_version: manifest.version, integrity, settings, lock, files: files.files, environment_reads }
 }
