@@ -231,6 +231,47 @@ Martha runs. Each launched row says so in its `residual`, and the check fails a
 row that does not. The adapter must then refuse that session a place in the
 crew: the machine is already reached, the crew is not.
 
+### Code a checkout runs through the member's own commands
+
+[Issue #24](https://github.com/macula-io/martha/issues/24), option 3, as a
+partial measure. A member commits, installs or runs a shell in a checkout, and
+the checkout's own files start code with the member's full rights: a git hook,
+an npm install script, an `.envrc`. No model is asked, so no gate sees it (row
+A13). The launcher shuts those doors for every member it starts, in one place
+(`src/refuse_code_a_checkout_runs_itself/`), through the environment the host
+and everything under it inherit:
+
+| Door | What the launcher sets | Why it wins |
+|---|---|---|
+| git hooks: `.git/hooks`, a `core.hooksPath` the checkout's config names, hooks named in config (git 2.54+), `core.fsmonitor` | `core.hooksPath` = an empty 0500 directory made for this launch, `hook.<event>.enabled=false` for every event git documents, `core.fsmonitor=false` | appended to `GIT_CONFIG_PARAMETERS`, which git reads after every config file and after `GIT_CONFIG_COUNT`; the owner's own settings there are kept |
+| npm install scripts, `pre`/`post` scripts included | `npm_config_ignore_scripts=true` | npm ranks its environment above every `.npmrc`; every inherited spelling of the setting is dropped |
+| the program a tracked `.npmrc` names as `git`, which `npm install` runs to fetch a git dependency, scripts off or not | `npm_config_git=git`, the member's own git from its `PATH` | the same |
+| `.envrc` and `.env` through direnv | `DIRENV_DISABLE=1`, and `DIRENV_CONFIG` = the same empty directory | direnv 2.38+ stops outright; an older one finds no `direnv.toml`, so no whitelist trusts a directory wholesale |
+
+These apply whoever wrote the checkout: the launcher cannot tell a crew
+checkout from another, since a crew checkout pulls other people's commits.
+
+What option 3 does **not** close, stated rather than hidden:
+
+- **Code the member runs on purpose.** `npm test`, `npm run`, `make`, a test
+  runner, a build script: running the checkout's code is what those commands
+  are for. Only a boundary (option 1 or 2 on #24) holds there.
+- **Other tools that load a directory's files**: pnpm, yarn and bun scripts,
+  mise, a shell's own directory hooks. Not tested here, so not claimed.
+- **An `.envrc` the owner allowed by its exact content**, on a direnv older
+  than 2.38.
+- **A git hook event newer than the documented list**, when named in config;
+  a hook file for it is still off through `core.hooksPath`. A test reads the
+  installed git's githooks(5) page and fails on an event the list lacks.
+- **The other `.npmrc` settings that name a program.** `script-shell` runs
+  scripts and `node-gyp` builds native addons; under `ignore-scripts` an
+  install runs neither, and `npm run` or `npm test` is code run on purpose.
+  `shell` serves `npm exec` and `npm explore`, `editor` serves `npm edit` and
+  `npm config edit`. `npm install` reaches none of them.
+- **Anything that has already run as this user**, which can undo every
+  setting here, rewrite the roster or read another member's key (A13). The
+  owner accepted that for now (martha#1 decision 1).
+
 ## Only framed envelopes are believed
 
 The crew learns two things from a cross-session message: whose a socket is, and
