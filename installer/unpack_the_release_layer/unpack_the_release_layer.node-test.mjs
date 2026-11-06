@@ -62,6 +62,33 @@ const hostile = [
   ['a path outside martha/', [{ name: 'other/file', body: 'x' }], /outside martha\//]
 ]
 
+// A link judged on its text alone escapes through another link: X climbs back to martha/ on its own, and esc walks
+// into X and on up past it, out of martha/ and past the home directory (martha#21 code review r=1).
+const linkThroughLink = [
+  { name: 'martha/', type: '5' },
+  { name: 'martha/a/b/c/d/e/f/', type: '5' },
+  { name: 'martha/a/b/c/d/e/f/X', type: '2', target: '../../../../../..' },
+  { name: 'martha/esc', type: '2', target: 'a/b/c/d/e/f/X/../../../../../../../ssh' }
+]
+hostile.push(
+  ['a link that escapes through another link', linkThroughLink, /links martha\/esc outside martha\//],
+  ['a link that leaves martha/ and comes back', [{ name: 'martha/', type: '5' }, { name: 'martha/back', type: '2', target: '../martha/README.md' }], /links martha\/back outside martha\//],
+  ['a cycle of links', [{ name: 'martha/', type: '5' }, { name: 'martha/p', type: '2', target: 'q' }, { name: 'martha/q', type: '2', target: 'p' }], new RegExp(`through more than ${UNPACK_LIMITS.linkHops} links`)]
+)
+
+test('a link through another link that stays inside martha/ is written as given', async (t) => {
+  const dir = stage(t)
+  await unpackLayer(layerOf([
+    { name: 'martha/', type: '5' },
+    { name: 'martha/d/', type: '5' },
+    { name: 'martha/d/f', body: 'f\n' },
+    { name: 'martha/l', type: '2', target: 'd' },
+    { name: 'martha/m', type: '2', target: 'l/f' }
+  ]), dir)
+  assert.equal(readlinkSync(join(dir, 'martha', 'm')), 'l/f')
+  assert.equal(readFileSync(join(dir, 'martha', 'm'), 'utf8'), 'f\n')
+})
+
 for (const [what, entries, pattern] of hostile) {
   test(`refused: ${what}`, async (t) => {
     await refusedWithNothingWritten(t, layerOf(/** @type {any} */ (entries)), /** @type {RegExp} */ (pattern))
