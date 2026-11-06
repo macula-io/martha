@@ -8,7 +8,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
+import ts from 'typescript'
+
+import { lineOf, moduleReferencesOf, nodesOf, parseSource } from '../../prove_the_core/parse_a_source.ts'
 import {
   processGroupOf,
   relay,
@@ -257,6 +259,40 @@ test('the relay reads the socket only from the variable the launcher sets', asyn
   await relay($, 'prompt_submitted', { session_id: SESSION }, heardTaken)
   assert.deepEqual(asked, [RELAY_SOCKET_VARIABLE])
   assert.equal(fake.posted[0]?.socketPath, SOCKET)
+})
+
+/** Each `$.env.<call>(name, ...)` in a source, with what its first argument is as written. */
+function environmentReadsOf(text: string, path: string): { readonly line: number; readonly name: string | null }[] {
+  const { file, errors } = parseSource(text, path)
+  assert.deepEqual(errors, [], `${path} must parse`)
+  return nodesOf(file).flatMap((node) => {
+    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return []
+    const noun = node.expression.expression
+    if (!ts.isPropertyAccessExpression(noun) || noun.name.text !== 'env' || !ts.isIdentifier(noun.expression) || noun.expression.text !== '$') return []
+    const [first] = node.arguments
+    const name = first !== undefined && (ts.isStringLiteral(first) || ts.isNoSubstitutionTemplateLiteral(first)) ? first.text : null
+    return [{ line: lineOf(file, node), name }]
+  })
+}
+
+// The host reads a hooks module before it runs it, to list the variables it reads and writes, and refuses the
+// whole module when $.env.get's first argument is anything but a literal name: an imported constant is refused
+// too. A refused module leaves every gate the relay carries off (#104).
+test('the relay names every variable it reads by a literal, the name the protocol defines, as the host demands', () => {
+  const path = 'register.ts'
+  const reads = environmentReadsOf(readFileSync(new URL(`./hooks/${path}`, import.meta.url), 'utf8'), path)
+  assert.notEqual(reads.length, 0, 'the relay reads the launcher\'s socket from its environment')
+  for (const { line, name } of reads) {
+    assert.equal(name, RELAY_SOCKET_VARIABLE, `hooks/${path}:${line} reads $.env by ${name === null ? 'something that is not a literal name' : `the literal ${name}`}; the host refuses the module unless it is the literal ${RELAY_SOCKET_VARIABLE}`)
+  }
+})
+
+test('the literal-name check bites: a constant, a template with a substitution and no name are each caught', () => {
+  const cases = ['$.env.get(RELAY_SOCKET_VARIABLE)', '$.env.get(`${prefix}_SOCKET`)', '$.env.get()']
+  for (const call of cases) {
+    assert.deepEqual(environmentReadsOf(`async ($) => ${call}`, 'probe.ts').map(({ name }) => name), [null], call)
+  }
+  assert.deepEqual(environmentReadsOf(`async ($) => $.env.get('${RELAY_SOCKET_VARIABLE}')`, 'probe.ts').map(({ name }) => name), [RELAY_SOCKET_VARIABLE])
 })
 
 test('the process group is read after the command name, whatever the name holds', () => {
