@@ -6,7 +6,7 @@
 // stand in for the engine's calls. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect } from 'node:net'
@@ -655,7 +655,7 @@ const RECORDED_MARK = 'the recorded mesh server'
 
 async function recordedTreeOf(t: TestContext, version: string): Promise<{ registry: FakeRegistry; recording: MeshTreeRecording }> {
   const registry = await fakeMeshRegistry([
-    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\n` } },
+    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\nprocess.stderr.write(JSON.stringify({ ...process.env }))\n` } },
   ])
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
@@ -687,6 +687,37 @@ test('an approved config that installs a recorded mesh server version starts the
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   assert.deepEqual(entry.args, [join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
   assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test('what the launcher\'s environment would load into the mesh server never reaches it (#65 r=2)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const ran = join(place.home, 'preload-ran')
+  const preload = join(place.home, 'preload.cjs')
+  writeFileSync(preload, `require('node:fs').appendFileSync(${JSON.stringify(ran)}, 'x')\n`)
+  const launch = memberLaunch(place, fake.command, place.approved, [], recording)
+  const planted = { ...launch, inherited: { ...launch.inherited, NODE_OPTIONS: `--require ${preload}`, SOME_ADDON_PREBUILD: place.home } }
+  const started = await launchClaudeCodeMember(planted)
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(() => started.stop('the test is over'))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
+  const hostEnv = Object.fromEntries(
+    readFileSync(`/proc/${started.pid}/environ`, 'utf8').split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]),
+  )
+  assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
+  const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
+  assert.ok(entry !== undefined)
+  const run = spawnSync(entry.command, entry.args, { env: { ...hostEnv, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
+  assert.equal(existsSync(ran), false, 'the preload never ran in the server')
+  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
+  for (const name of ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RELAY_SOCKET_VARIABLE]) assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
   started.stop('the test is over')
   await started.stopped
 })

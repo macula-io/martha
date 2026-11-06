@@ -6,7 +6,7 @@
 // and counts what reached a second registry standing for every other source.
 
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -39,6 +39,8 @@ const serverOf = (mark: string, setting = SETTING): FakePackage => ({
       `const said = fs.readFileSync(__dirname + '/../../../${DEPENDENCY}/${MARK_FILE}', 'utf8').trim()`,
       `const agent = process.env.${setting}`,
       `console.log(said + ' ${mark}')`,
+      // What the server was started with, for the tests on its environment.
+      'process.stderr.write(JSON.stringify({ ...process.env }))',
       '',
     ].join('\n'),
     'dist/realm.js': 'console.log("realm")\n',
@@ -49,6 +51,9 @@ const dependencyOf = (mark: string): FakePackage => ({
   version: VERSION,
   files: { [MARK_FILE]: `${mark}\n` },
 })
+
+/** The environment a host hands its servers in most tests: the test's own home and path. */
+const HOST: Readonly<Record<string, string | undefined>> = { HOME: process.env.HOME, PATH: process.env.PATH }
 
 const RECORDED = [serverOf(RECORDED_MARK), dependencyOf(RECORDED_MARK)]
 /** The version's record of its bins, naming the server bin (martha#49). */
@@ -157,7 +162,7 @@ test('recording a version that reads a setting nobody has reviewed fails, naming
 test('a recorded version is installed from its lock and started by path, with the node that runs the launcher', async (t) => {
   const { good } = await registries(t)
   const root = scratch(t, 'servers')
-  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(undefined, { [SETTING]: 'x' }), root, recording: recorded(t, good) }))
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(undefined, { [SETTING]: 'x' }), root, recording: recorded(t, good) }))
   assert.equal(entry.command, process.execPath)
   assert.deepEqual(entry.args, [join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
   assert.deepEqual(entry.env, { [SETTING]: 'x' }, 'the entry keeps its own settings')
@@ -170,17 +175,46 @@ test('the bin started is the server bin the version\'s record names, and an entr
   const root = scratch(t, 'servers')
   const server = join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
   // The launch gate decides which shapes may start; whichever passed, the server bin is what runs.
-  const withoutBin = placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(['-y', `${MESH_SERVER_PACKAGE}@${VERSION}`]), root, recording }))
+  const withoutBin = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(['-y', `${MESH_SERVER_PACKAGE}@${VERSION}`]), root, recording }))
   assert.deepEqual(withoutBin.args, [server])
-  const other = refusalOf(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, OTHER_BIN]), root, recording }))
+  const other = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, OTHER_BIN]), root, recording }))
   assert.ok(other.includes(OTHER_BIN) && other.includes(BIN), other)
-  const unrecorded = refusalOf(placeRecordedMeshServers({ servers: [], serverConfig: pinnedConfig(), root, recording }))
+  const unrecorded = refusalOf(placeRecordedMeshServers({ servers: [], hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.ok(unrecorded.includes(`${MESH_SERVER_PACKAGE} ${VERSION}`), unrecorded)
+})
+
+test('the server starts with HOME, PATH and its approved settings: every other variable the host was given is emptied', async (t) => {
+  const { good } = await registries(t)
+  const recording = recorded(t, good)
+  const root = scratch(t, 'servers')
+  const planted = scratch(t, 'planted')
+  const ran = join(planted, 'ran')
+  writeFileSync(join(planted, 'preload.cjs'), `require('node:fs').appendFileSync(${JSON.stringify(ran)}, 'x')\n`)
+  // What the launcher hands the host: a preload, a native addon's directory as node-gyp-build reads it,
+  // a library for libc to preload, and a mesh setting nobody approved for this server.
+  const host = {
+    HOME: planted,
+    PATH: process.env.PATH,
+    NODE_OPTIONS: `--require ${join(planted, 'preload.cjs')}`,
+    SOME_ADDON_PREBUILD: planted,
+    LD_PRELOAD: join(planted, 'no-such-library.so'),
+    MACULA_MCP_MODEL: 'inherited',
+  }
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: host, serverConfig: pinnedConfig(undefined, { [SETTING]: 'approved' }), root, recording }))
+  // The host starts a server with its own environment under the entry's env, as Claude Code does.
+  const run = spawnSync(entry.command, entry.args, { cwd: root, env: { ...host, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)
+  assert.throws(() => execFileSync('ls', [ran], { stdio: 'ignore' }), 'the preload never ran')
+  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
+  for (const name of ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', 'LD_PRELOAD', 'MACULA_MCP_MODEL']) assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
+  assert.equal(seen[SETTING], 'approved')
+  assert.equal(seen.HOME, planted)
+  assert.equal(seen.PATH, process.env.PATH)
 })
 
 test('a version whose tree is not recorded is refused, naming it', async (t) => {
   const { good } = await registries(t)
-  const refusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root: scratch(t, 'servers'), recording: recordingAt(good.registry) }))
+  const refusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: scratch(t, 'servers'), recording: recordingAt(good.registry) }))
   assert.ok(refusal.includes(`${MESH_SERVER_PACKAGE} ${VERSION}`), refusal)
 })
 
@@ -199,7 +233,7 @@ test('a user config, a global config and npm settings in the environment are not
     NPM_CONFIG_REGISTRY: evil.registry,
   })
   const root = scratch(t, 'servers')
-  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.equal(evil.requests(), 0, 'nothing reached the other registry')
   assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
@@ -215,7 +249,7 @@ test('a project .npmrc where the launcher runs, above the install or in the chec
   const before = process.cwd()
   process.chdir(checkout)
   t.after(() => process.chdir(before))
-  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.equal(evil.requests(), 0, 'nothing reached the other registry')
   assert.equal(runPlaced(entry, checkout), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
@@ -227,7 +261,7 @@ test('a config planted where the launcher keeps npm\'s own home is not read', as
   // The launcher's npm home sits under its root, which the member's user can write.
   mkdirSync(join(root, '.npm'), { recursive: true })
   writeFileSync(join(root, '.npm', '.npmrc'), plantedConfig(evil))
-  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.equal(evil.requests(), 0, 'nothing reached the other registry')
   assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
@@ -240,7 +274,7 @@ test('code the launcher\'s environment would preload into npm is not loaded', as
   writeFileSync(join(planted, 'preload.cjs'), `require('node:fs').appendFileSync(${JSON.stringify(ran)}, 'x')\n`)
   withEnvironment(t, { NODE_OPTIONS: `--require ${join(planted, 'preload.cjs')}` })
   const root = scratch(t, 'servers')
-  placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.throws(() => execFileSync('ls', [ran], { stdio: 'ignore' }), 'the preload never ran')
 })
 
@@ -256,7 +290,7 @@ test('a planted install in the checkout\'s node_modules or under the global pref
   }
   withEnvironment(t, { npm_config_prefix: prefix, NPM_CONFIG_PREFIX: prefix })
   const root = scratch(t, 'servers')
-  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.equal(runPlaced(entry, checkout, { npm_config_prefix: prefix }), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
 
@@ -265,7 +299,7 @@ test('a registry that now serves other bytes for a locked package refuses the in
   const recording = recorded(t, good)
   good.swap(dependencyOf(PLANTED_MARK))
   const root = scratch(t, 'servers')
-  const refusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const refusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.ok(refusal.includes(DEPENDENCY), refusal)
   assert.throws(() => execFileSync('ls', [join(root, VERSION)], { stdio: 'ignore' }), 'no tree is left to start')
 })
@@ -274,19 +308,19 @@ test('an installed file changed, removed or added since the install refuses the 
   const { good } = await registries(t)
   const recording = recorded(t, good)
   const root = scratch(t, 'servers')
-  placedEntry(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   const installed = join(root, VERSION, 'node_modules')
 
   const changed = join(installed, DEPENDENCY, MARK_FILE)
   appendFileSync(changed, '// edited\n')
-  const changedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const changedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.ok(changedRefusal.includes(`node_modules/${DEPENDENCY}/${MARK_FILE}`), changedRefusal)
 
   writeFileSync(changed, `${RECORDED_MARK}\n`)
-  assert.ok('config' in placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }), 'the recorded bytes put back pass again')
+  assert.ok('config' in placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }), 'the recorded bytes put back pass again')
 
   const planted = join(installed, MESH_SERVER_PACKAGE, 'dist', 'preload.js')
   writeFileSync(planted, 'evil()\n')
-  const plantedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, serverConfig: pinnedConfig(), root, recording }))
+  const plantedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.ok(plantedRefusal.includes(`node_modules/${MESH_SERVER_PACKAGE}/dist/preload.js`), plantedRefusal)
 })
