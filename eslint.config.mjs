@@ -1,4 +1,4 @@
-// The structural floor (martha#87, the shared floor of macula-io/macula-codebase-checks#9): a function that nests
+// The structural floor (martha#87, the one every live Macula code repo is held to): a function that nests
 // too deep, branches too much or runs too long cannot reach main. The caps are named here and nowhere else:
 // prove_the_core/structure_stays_flat.node-test.ts reads them from this file and plants a function one step over
 // each. A repo may tighten the shared floor, never relax it.
