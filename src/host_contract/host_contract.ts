@@ -19,8 +19,6 @@
 // this contract is the only way it reaches a coding tool. A test fails by name
 // on any other import (imports_beyond_the_core.ts).
 
-import type { Arrival } from '../take_in_a_turn/take_in_a_turn.ts'
-
 /** The time, in milliseconds since the Unix epoch. */
 export interface Clock {
   now(): number
@@ -87,6 +85,49 @@ export interface ProcessOutcome {
 export interface Processes {
   run(request: ProcessRequest): Promise<ProcessOutcome>
 }
+
+// --- where a turn came from ---------------------------------------------------
+//
+// What a host can say about an arriving turn. These are the contract's words:
+// the publish gate's slices read them, and no slice defines them.
+
+/** What the host says about where a turn came from, when it says anything. */
+export type TurnOrigin = 'harness_delivery' | 'owner'
+
+/** Every way text reaches a session, in the words a host would use for it. */
+export type TurnSource =
+  | 'crew_room'
+  | 'shared_room'
+  | 'backlog_digest'
+  | 'ring'
+  | 'ring_answer'
+  | 'cross_session'
+  | 'checkout_hook'
+  | 'owner_paste'
+  | 'server_instructions'
+  | 'checkout_run'
+  | 'mesh_read'
+  | 'mcp_result'
+  | 'gh'
+  | 'checkout_file'
+  | 'git_history'
+  | 'web'
+  | 'subagent'
+
+/** Something a session took in, as the host describes it. */
+export type Arrival =
+  | {
+      /** The host knows what it was. */
+      readonly source: TurnSource
+      /** The identity the host holds for the sender; omitted or null means it holds none. */
+      readonly from_identity?: string | null
+    }
+  | {
+      /** The host has only the turn's text, as the Claude Code host does. */
+      readonly text: string
+      readonly origin?: TurnOrigin
+      readonly from_identity?: string | null
+    }
 
 /** A turn that arrived: its text, and what the host can say about where it came from. */
 export interface ArrivingTurn {

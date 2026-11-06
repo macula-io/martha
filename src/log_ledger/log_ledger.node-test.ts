@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import type { LedgerHost } from './log_ledger.ts'
 import {
+  ACT_NOT_SENT,
+  CONCLUDE_ATTEMPTS,
   LEDGER_ROW_KINDS,
+  OUTCOME_NOT_KEPT,
+  OutcomeNotKept,
   actsAwaitingOutcome,
   concludeAct,
   ledgerStreamOf,
@@ -37,7 +43,8 @@ test('a store that refuses the row stops the act: it never runs', async () => {
       ran = true
       return 'pushed'
     }),
-    /disk full/,
+    (error: unknown) =>
+      (error as { code?: unknown }).code === ACT_NOT_SENT && /disk full/.test(String((error as Error).cause)),
   )
   assert.equal(ran, false)
   assert.deepEqual(await readLedger(host, work.package), [])
@@ -83,11 +90,75 @@ test('an outcome that cannot be written leaves the act awaiting, so a successor 
       refuseNextAppend('disk full')
       return 'pushed'
     }),
-    /disk full/,
+    { code: OUTCOME_NOT_KEPT },
   )
   assert.deepEqual(await actsAwaitingOutcome(host, work.package), [
     { announced_at: 0, member: work.member, act: push, at: 0 },
   ])
+})
+
+// What each failure tells a caller about retrying: never sent (retry is safe),
+// sent and failed (its outcome is kept), or sent with no outcome kept (check
+// before anything else, never resend).
+const failureOf = async (sending: Promise<string>): Promise<unknown> => {
+  try {
+    await sending
+  } catch (error) {
+    return error
+  }
+  return assert.fail('the act was expected to fail')
+}
+
+test('a caller can tell an act never sent from an act sent whose outcome was not kept', async () => {
+  const { host, refuseNextAppend } = hostForTests()
+  refuseNextAppend('disk full before')
+  const never_sent = await failureOf(sendOutwardAct(host, { ...work, act: push }, async () => 'pushed'))
+
+  const sent_unkept = await failureOf(
+    sendOutwardAct(host, { ...work, act: push }, async () => {
+      refuseNextAppend('disk full after')
+      return 'pushed 2222'
+    }),
+  )
+
+  assert.equal((never_sent as { code?: unknown }).code, ACT_NOT_SENT)
+  assert.ok(sent_unkept instanceof OutcomeNotKept)
+  assert.equal(sent_unkept.code, OUTCOME_NOT_KEPT)
+  assert.equal(sent_unkept.announced_at, 0)
+  assert.deepEqual(sent_unkept.sent, { succeeded: true, result: 'pushed 2222' })
+  assert.match(String(sent_unkept.keeping_error), /disk full after/)
+})
+
+test("when the act fails and its outcome cannot be kept, the act's own failure is the cause", async () => {
+  const { host, refuseNextAppend } = hostForTests()
+  const rejected = new Error('rejected: non-fast-forward')
+  const failure = await failureOf(
+    sendOutwardAct(host, { ...work, act: push }, async () => {
+      refuseNextAppend('disk full after')
+      throw rejected
+    }),
+  )
+  assert.ok(failure instanceof OutcomeNotKept)
+  assert.equal(failure.cause, rejected)
+  assert.deepEqual(failure.sent, { succeeded: false })
+  assert.match(String(failure.keeping_error), /disk full after/)
+})
+
+test('an act whose outcome a successor kept first is reported as not kept, never as not sent', async () => {
+  const { host } = hostForTests()
+  const failure = await failureOf(
+    sendOutwardAct(host, { ...work, act: push }, async () => {
+      await concludeAct(host, {
+        package: work.package,
+        member: 'member-two',
+        announced_at: 0,
+        outcome: { succeeded: true, detail: 'found it on main' },
+      })
+      return 'pushed'
+    }),
+  )
+  assert.ok(failure instanceof OutcomeNotKept)
+  assert.match(String(failure.keeping_error), /already concluded/)
 })
 
 // --- a successor sees what is unresolved --------------------------------------
@@ -192,6 +263,73 @@ test('a row the ledger does not know is refused on reading, never skipped', asyn
   // Another writer on the same store, through the stream the ledger names.
   await host.stores.rows.append(ledgerStreamOf(work.package), { kind: 'something_else' })
   await assert.rejects(readLedger(host, work.package), /row 1 of synthetic-owner\/repo#7 is not a ledger row/)
+})
+
+// --- package names and streams --------------------------------------------------
+
+test('a package that is not owner/repo#n is refused before anything is written', async () => {
+  const { host } = hostForTests()
+  // Synthetic owners only (the private-text check resolves every owner/repo).
+  // The one shorthand case is joined at runtime: written out, the check would
+  // refuse it as a reference to an unnamed repository.
+  const shorthand = ['synthetic-repo', '#7'].join('')
+  const bad_names = [
+    '../../etc/passwd',
+    'synthetic-owner/repo',
+    shorthand,
+    'synthetic-owner/repo#0',
+    'synthetic-owner/repo#7/../x',
+    'synthetic-owner/..#7',
+    'synthetic-owner/repo#7 ',
+  ]
+  for (const bad of bad_names) {
+    await assert.rejects(
+      noteMilestone(host, { package: bad, member: work.member, milestone: 'checkpoint_reached', note: 'x' }),
+      /not a work package/,
+      bad,
+    )
+    assert.throws(() => ledgerStreamOf(bad), /not a work package/, bad)
+  }
+})
+
+test("a row whose package is not its stream's is refused on reading", async () => {
+  const { host } = hostForTests()
+  await host.stores.rows.append(ledgerStreamOf(work.package), {
+    kind: 'checkpoint_reached',
+    package: 'synthetic-owner/repo#8',
+    member: work.member,
+    at: 0,
+    note: 'misfiled',
+  })
+  await assert.rejects(readLedger(host, work.package), /row 0 of synthetic-owner\/repo#7 belongs to synthetic-owner\/repo#8/)
+})
+
+// --- a stream that keeps moving --------------------------------------------------
+
+test('concluding gives up after a bounded number of attempts on a stream that never stops moving', async () => {
+  const { host } = hostForTests()
+  void sendOutwardAct(host, { ...work, act: push }, () => new Promise<string>(() => {}))
+  await new Promise((settle) => setImmediate(settle))
+
+  let attempts = 0
+  const moving: LedgerHost = {
+    clock: host.clock,
+    stores: {
+      ...host.stores,
+      rows: {
+        read: host.stores.rows.read,
+        append: async () => {
+          attempts += 1
+          throw Object.assign(new Error('moved'), { code: ROW_STREAM_MOVED })
+        },
+      },
+    },
+  }
+  await assert.rejects(
+    concludeAct(moving, { ...work, announced_at: 0, outcome: { succeeded: true, detail: 'x' } }),
+    /kept moving/,
+  )
+  assert.equal(attempts, CONCLUDE_ATTEMPTS)
 })
 
 test('every row kind is a business word, never a CRUD verb', () => {

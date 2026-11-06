@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { ROW_STREAM_MOVED } from './host_contract.ts'
-import { importsBeyondTheCore } from './imports_beyond_the_core.ts'
+import { SCANNED_EXTENSIONS, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
 import { hostForTests } from './host_for_tests.ts'
 
 const SRC = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -32,7 +32,7 @@ test('stores are rows and documents, nothing else', () => {
 
 const sourcesUnder = (root: string): { path: string; text: string }[] =>
   readdirSync(root, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+    .filter((entry) => entry.isFile() && isScannedSource(entry.name))
     .map((entry) => join(entry.parentPath, entry.name))
     .map((path) => ({ path: relative(SRC, path), text: readFileSync(path, 'utf8') }))
 
@@ -54,6 +54,8 @@ test('a planted import of a coding tool is named, with its file', () => {
     { path: 'a/dynamic.ts', text: "const sdk = await import('@opencode-ai/sdk')" },
     { path: 'a/required.ts', text: "const sdk = require('some-host-sdk')" },
     { path: 'a/reexport.ts', text: "export * from 'host-api'" },
+    { path: 'a/template.ts', text: 'const sdk = await import(`@opencode-ai/sdk`)' },
+    { path: 'a/computed.ts', text: 'const sdk = await import(name)' },
     { path: 'a/fine.ts', text: "import { join } from 'node:path'\nimport { x } from '../b/b.ts'" },
   ]
   assert.deepEqual(importsBeyondTheCore(planted), [
@@ -63,7 +65,24 @@ test('a planted import of a coding tool is named, with its file', () => {
     { path: 'a/dynamic.ts', specifier: '@opencode-ai/sdk' },
     { path: 'a/required.ts', specifier: 'some-host-sdk' },
     { path: 'a/reexport.ts', specifier: 'host-api' },
+    { path: 'a/template.ts', specifier: '@opencode-ai/sdk' },
+    { path: 'a/computed.ts', specifier: '(computed: name)' },
   ])
+})
+
+test('the scan reads every kind of script file, not only .ts', () => {
+  const names = sourcesUnder(SRC).map((source) => source.path)
+  assert.ok(names.every((name) => SCANNED_EXTENSIONS.some((extension) => name.endsWith(extension))))
+  for (const extension of ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']) {
+    assert.ok(isScannedSource(`a/b${extension}`), extension)
+  }
+  assert.equal(isScannedSource('a/b.md'), false)
+})
+
+test('the contract itself imports nothing: every slice depends on it, never the reverse', () => {
+  const contract = sourcesUnder(SRC).find((source) => source.path === join('host_contract', 'host_contract.ts'))
+  assert.ok(contract, 'the contract was read')
+  assert.doesNotMatch(contract.text, /^\s*import\b/m)
 })
 
 // --- rows are append only -----------------------------------------------------
