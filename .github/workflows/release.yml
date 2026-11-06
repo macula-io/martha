@@ -1,0 +1,129 @@
+# A Martha release (martha#21): a v<X.Y.Z> tag on main publishes the release image (installer/package.json, martha.image) at <X.Y.Z>, one layer
+# FROM scratch holding `git archive` of the tagged tree, signed by macula-ci-images' attest-image.yml.
+#
+# Nothing is pushed while the guard refuses (the tag is off main, or names another version than the root
+# package.json), the suite fails, the tagged tree holds private text, or the version is already on the registry.
+# The installer (installer/, @macula-io/martha on npm) checks the signature on the digest this job pushes, by the
+# signer sha listed in installer/signers.txt; keep-the-names-in-one-place fails when the sha below is not listed.
+#
+# The tag glob v* never matches an installer tag (installer-v*), and installer.yml's glob never matches this one.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Never cancelled: a cancelled release is a red nobody caused.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    uses: macula-io/macula-ci-images/.github/workflows/release-guard.yml@b4c41abb404c32215a2823b7f19ac65b732e1dfe
+    with:
+      tag-prefix: v
+      version-root: .
+      versions: check
+      require-tag: true
+
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  # The tagged tree is a superset of what git archive packs (installer/ is export-ignored), so a clean tree is a
+  # clean release.
+  private:
+    runs-on: ubuntu-latest
+    env:
+      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm run check:private -- --self-test
+      - run: npm run check:private
+
+  release:
+    needs: [guard, suite, private]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      image: ${{ steps.names.outputs.image }}
+    env:
+      RELEASE_CTX: ${{ runner.temp }}/release-ctx-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: The names, from the installer's package.json
+        id: names
+        run: |
+          echo "image=$(jq -r .martha.image installer/package.json)" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME#"$(jq -r .martha.releaseTagPrefix installer/package.json)"}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: A version is published once
+        # An install refuses a second digest for a version it holds; a tag pushed again must not make one. Only the
+        # registry's own "not found" lets the release go on: a 5xx, a refused login or a dropped connection proves
+        # nothing about what is published, and stops it.
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          VERSION: ${{ steps.names.outputs.version }}
+        run: |
+          set -uo pipefail
+          status=0
+          out="$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1)" || status=$?
+          if [ "$status" -eq 0 ]; then echo "::error::$IMAGE:$VERSION is already published"; exit 1; fi
+          if [ "$out" != "ERROR: $IMAGE:$VERSION: not found" ]; then echo "::error::could not tell whether $IMAGE:$VERSION is published: $out"; exit 1; fi
+      - name: Pack the tree
+        run: pack_a_release/pack_a_release.sh "${{ steps.names.outputs.version }}" "$RELEASE_CTX"
+      - name: Build and push one image manifest, one layer FROM scratch
+        id: push
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          VERSION: ${{ steps.names.outputs.version }}
+        run: |
+          set -euo pipefail
+          # No provenance or SBOM from buildx: attest-image signs and attests the digest, and buildx's attestations
+          # would turn the push into an image index, which the installer refuses.
+          docker buildx build -f "$RELEASE_CTX/Containerfile" --provenance=false --sbom=false \
+            --output "type=image,name=$IMAGE:$VERSION,push=true,oci-mediatypes=true,compression=gzip" \
+            --metadata-file "$RUNNER_TEMP/metadata.json" "$RELEASE_CTX"
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
+          type="$(docker buildx imagetools inspect --raw "$IMAGE@$digest" | jq -r .mediaType)"
+          [ "$type" = application/vnd.oci.image.manifest.v1+json ] || { echo "::error::$IMAGE@$digest is a $type, not one image manifest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  attest:
+    needs: release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: macula-io/macula-ci-images/.github/workflows/attest-image.yml@b4c41abb404c32215a2823b7f19ac65b732e1dfe
+    with:
+      image: ${{ needs.release.outputs.image }}
+      digest: ${{ needs.release.outputs.digest }}
+      tag-prefix: v
+      version-root: .
+      versions: check

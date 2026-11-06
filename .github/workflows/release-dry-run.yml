@@ -1,0 +1,112 @@
+# Martha's release, rehearsed without a tag (martha#21, design section 5 step 1).
+#
+# This exists so the first v<X.Y.Z> tag is not the first time the pipeline runs. Started by hand on any branch:
+#
+#   gh workflow run release-dry-run.yml --ref <branch>
+#
+# It packs the tree, pushes one image to <image>-dry-run (never the release package) and an unsigned image beside
+# it, signs the first through attest-image.yml at the sha release.yml calls (its guard passes a ref that is no
+# tag), and then rehearses the install against the real Sigstore trust root:
+#   - the signature verifies for THIS branch's ref, by a listed signer, for this repository;
+#   - the same signature is refused for refs/tags/v<version>, the ref every real install demands;
+#   - the unsigned digest is refused;
+#   - the signed layer unpacks to exactly the committed tree.
+# The ref check only ever runs against a branch ref here, from installer/rehearse_a_release/, a script the npm
+# package does not ship: the installer itself has no way to name another ref.
+#
+# What it cannot rehearse: the guard on a v* tag and the published-once check; those run on the tag only.
+
+name: release dry run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      unsigned: ${{ steps.push.outputs.unsigned }}
+      image: ${{ steps.names.outputs.image }}
+      version: ${{ steps.names.outputs.version }}
+    env:
+      RELEASE_CTX: ${{ runner.temp }}/dry-run-ctx-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: The names
+        id: names
+        run: |
+          echo "image=$(jq -r .martha.image installer/package.json)-dry-run" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Pack the tree
+        run: pack_a_release/pack_a_release.sh "${{ steps.names.outputs.version }}" "$RELEASE_CTX"
+      - name: Push the image, and an unsigned one beside it
+        id: push
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          VERSION: ${{ steps.names.outputs.version }}
+        run: |
+          set -euo pipefail
+          build() {
+            docker buildx build -f "$RELEASE_CTX/Containerfile" --provenance=false --sbom=false "${@:2}" \
+              --output "type=image,name=$IMAGE:$1,push=true,oci-mediatypes=true,compression=gzip" \
+              --metadata-file "$RUNNER_TEMP/metadata-$1.json" "$RELEASE_CTX"
+          }
+          build "$VERSION"
+          build "$VERSION-unsigned" --label dev.macula.dry-run=unsigned
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$VERSION.json")"
+          unsigned="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$VERSION-unsigned.json")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
+          [[ "$unsigned" =~ ^sha256:[0-9a-f]{64}$ && "$unsigned" != "$digest" ]] || { echo "::error::the unsigned image is not a second digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "unsigned=$unsigned" >> "$GITHUB_OUTPUT"
+
+  sign:
+    needs: push
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: macula-io/macula-ci-images/.github/workflows/attest-image.yml@b4c41abb404c32215a2823b7f19ac65b732e1dfe
+    with:
+      image: ${{ needs.push.outputs.image }}
+      digest: ${{ needs.push.outputs.digest }}
+      version-root: .
+
+  rehearse:
+    needs: [push, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: installer
+      - name: Verify for this branch, refuse for the tag, refuse the unsigned, compare the tree
+        env:
+          DRY_RUN_IMAGE: ${{ needs.push.outputs.image }}
+          DRY_RUN_VERSION: ${{ needs.push.outputs.version }}
+          DRY_RUN_DIGEST: ${{ needs.push.outputs.digest }}
+          DRY_RUN_UNSIGNED_DIGEST: ${{ needs.push.outputs.unsigned }}
+          DRY_RUN_REF: ${{ github.ref }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: node installer/rehearse_a_release/rehearse_a_release.mjs

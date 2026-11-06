@@ -1,0 +1,37 @@
+# @macula-io/martha
+
+Installs [Martha](https://github.com/macula-io/martha) from its signed public package, with nothing but Node.
+
+```sh
+npx -y --ignore-scripts @macula-io/martha@<exact version> [<martha version>]
+```
+
+Always name the installer's exact version: npm never lets a published version be replaced, so that line is what you
+trust. Leave out the Martha version to install the highest one; name it to install exactly that one.
+
+## What it checks, before anything is written
+
+1. The Node running it is one Martha runs on.
+2. The version resolves once, to a digest computed from the manifest's bytes. Never `:latest`.
+3. A version lower than the installed one needs `--downgrade` and the version named; a second digest for a version
+   you hold is always refused.
+4. The digest carries a Sigstore signature from `macula-io/macula-ci-images`' `attest-image.yml`, at a commit listed
+   in `signers.txt`, for `github.com/macula-io/martha` and the tag `v<version>`. A signature check that could not
+   run says "could not check", never "unsigned".
+5. The one layer matches its digest and size; every tar entry is checked (and the unpacked size, the number of
+   entries and every name capped) before a byte is written.
+6. The release gets its own read-only directory under `$XDG_DATA_HOME/martha/releases/` (default
+   `~/.local/share`), `current` is swapped to it by one rename, and `~/.local/bin/martha` links through `current`
+   when the release carries a `martha` command.
+
+Check the installer itself with `npm audit signatures`: it is published with provenance from this repository.
+
+## Options
+
+```text
+martha-install [<version>] [--downgrade] [--digest sha256:<hex>]
+```
+
+## License
+
+Apache-2.0

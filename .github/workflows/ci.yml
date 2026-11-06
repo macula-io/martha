@@ -129,6 +129,26 @@ jobs:
           ln -s "$PRIVATE_VAR" "$LINKED_VAR"
           TMPDIR="$LINKED_VAR/$MAC_SHAPED_TMP" npm test
 
+  # The installer (martha#21): every refusal it makes, red first, against a local registry; the packed package run
+  # from under node_modules; and the names held to their one place across the workflows, both package.json files
+  # and the READMEs. The release itself (release.yml) and the dry run run on a tag and by hand only.
+  installer:
+    name: installer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: installer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: installer/npm-shrinkwrap.json
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+
   # Nothing private gets in (docs/nothing-private-gets-in.md): no private issue
   # link, internal host name or private remote, in the tree or in any commit of
   # the range. The lab's machine families are a secret and are never printed.

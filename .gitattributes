@@ -1,0 +1,3 @@
+# What a release packs is `git archive` of the tagged tree (martha#21). The installer ships on npm, from its own
+# tag, and is never part of a release.
+installer/ export-ignore

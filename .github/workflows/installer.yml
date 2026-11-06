@@ -1,0 +1,57 @@
+# The installer (martha#21): an installer-v<X.Y.Z> tag on main publishes @macula-io/martha@<X.Y.Z> to npm by trusted
+# publishing, with provenance: npm takes this workflow's OIDC token, so no npm token is stored anywhere, and the
+# registry refuses the provenance unless installer/package.json's repository.url names this repository.
+#
+# Nothing is published while the guard refuses (the tag is off main, or names another version than
+# installer/package.json), the installer's suite fails, or a production dependency carries a known advisory.
+#
+# The tag glob installer-v* never matches a release tag (v*), and release.yml's glob never matches this one.
+
+name: installer
+
+on:
+  push:
+    tags: ['installer-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    uses: macula-io/macula-ci-images/.github/workflows/release-guard.yml@b4c41abb404c32215a2823b7f19ac65b732e1dfe
+    with:
+      tag-prefix: installer-v
+      version-root: installer
+      versions: check
+      require-tag: true
+
+  publish:
+    needs: guard
+    # npm trusted publishing takes its token from a GitHub-hosted runner only.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: installer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g --ignore-scripts npm@11.19.1
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+      # What the installer ships is its bundled sigstore, so an advisory there is an advisory in the tarball.
+      - run: npm audit --omit=dev --audit-level=low
+      # The production dependencies exactly as the shrinkwrap pins them: these are the bytes bundleDependencies packs.
+      - run: npm ci --omit=dev --ignore-scripts
+      - run: npm publish --provenance --access public --ignore-scripts
