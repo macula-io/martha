@@ -37,7 +37,8 @@ export const APPROVALS_FILE = 'approvals.jsonl'
 /** How many random bytes a node id holds: 64 hex digits, the shape NODE_ID accepts. */
 const NODE_ID_BYTES = 32
 
-const PERMISSION_BITS = 0o777
+/** The bits of a mode that say who may read, write and enter. */
+export const PERMISSION_BITS = 0o777
 const WRITABLE_BY_OTHERS = 0o022
 const OPEN_TO_OTHERS = 0o077
 const STAGING_PREFIX = '.staging-'

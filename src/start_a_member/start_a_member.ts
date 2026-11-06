@@ -21,6 +21,7 @@ import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { DeclarationRefused, declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import {
   nodeIdsFor,
+  PERMISSION_BITS,
   readApprovals,
   stateSubdirectory,
   STATE_DIRECTORY_MODE,
@@ -40,27 +41,26 @@ import { decideLaunch, fingerprintOf, readLaunchState } from '../refuse_launch_o
 /** The launcher's places, and where its approved snapshots go. */
 export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string }
 
-/** The directories inside Martha's state that the launcher keeps a member's files in. */
-const STATE_PLACES = { rows: 'rows', launch_records: 'launches', snapshot_root: 'snapshots', mesh_servers: 'mesh-servers' } as const
+/** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
+const STATE_PLACES = ['rows', 'launches', 'snapshots', 'mesh-servers'] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
   if (fs.lstatSync(relay_root, { throwIfNoEntry: false }) === undefined) fs.mkdirSync(relay_root, { recursive: true, mode: STATE_DIRECTORY_MODE })
   const found = fs.lstatSync(relay_root)
-  const closed = found.isDirectory() && found.uid === process.getuid?.() && (found.mode & 0o777) === STATE_DIRECTORY_MODE
+  const closed = found.isDirectory() && found.uid === process.getuid?.() && (found.mode & PERMISSION_BITS) === STATE_DIRECTORY_MODE
   return closed ? undefined : `${NOT_STARTED}: ${relay_root} is not a directory of this user's that only this user may enter.`
 }
 
 /** The launcher's places in Martha's state, and the relay root for its sockets; or why one cannot be used. */
 export function launcherPlacesOf(state: MarthaState, relay_root: string): MemberPlaces | { readonly refusal: string } {
-  const places: Record<string, string> = {}
-  for (const [place, name] of Object.entries(STATE_PLACES)) {
-    const made = stateSubdirectory(state, name)
-    if ('refusal' in made) return made
-    places[place] = made.path
-  }
+  const made = STATE_PLACES.map((name) => stateSubdirectory(state, name))
+  const refused = made.find((place) => 'refusal' in place)
+  if (refused !== undefined && 'refusal' in refused) return refused
+  const [rows, launch_records, snapshot_root, mesh_servers] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
-  return unsafe === undefined ? ({ ...places, relay_root } as unknown as MemberPlaces) : { refusal: unsafe }
+  if (unsafe !== undefined) return { refusal: unsafe }
+  return { rows: rows!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_root }
 }
 
 export interface MemberStartRequest {
