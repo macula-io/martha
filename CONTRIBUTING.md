@@ -28,11 +28,22 @@ npm run typecheck      # tsc --noEmit
 `npm test` ends on its own. A test that runs longer than the test script's
 `--test-timeout` fails by name, and `--test-force-exit` ends each test file's
 process once its tests are done, even if it still holds something open. So a
-hung test never outlives an interrupted run, and a check
-(`prove_the_core/every_test_run_ends.ts`) fails when the script loses either
-flag. The timeout is written once, in the test script in package.json. A test that leaves a
-server or timer running no longer hangs the run, so it gets no warning
-either: clean up in `t.after`, registered before the first assert.
+hung test never outlives an interrupted run. The timeout is written once, in
+the test script in package.json.
+
+Ending a file's process must not hide what it left behind, so the script also
+loads `prove_the_core/fail_a_test_file_that_leaves_something_running.ts` into
+every test file's process. A test file that leaves a server, socket, timer or
+child process running after its tests fails by name, with what it left:
+
+```text
+src/x/x.node-test.ts left running after its tests: a listening TCP server (TCPServerWrap). Stop it in t.after.
+```
+
+Stop what a test starts in `t.after`, registered before the first assert, and
+wait for it to stop (a server's `close` callback, a child's `exit`). A check
+(`prove_the_core/every_test_run_ends.ts`) fails when the script loses any of
+the three.
 
 CI runs those, and three more: every link in every document must resolve, both
 logos must be valid SVG, and `npm run check:private` must find no private link,
