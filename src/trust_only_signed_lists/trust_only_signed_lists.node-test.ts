@@ -33,6 +33,9 @@ const attacker = '2'.repeat(64)
 const crew = 'a-crew'
 const now = new Date('2026-11-06T12:00:00Z')
 const later = '2026-12-01T00:00:00Z'
+const issued = '2026-11-01T00:00:00Z'
+const DAY_MS = 24 * 60 * 60 * 1000
+const daysFromNow = (days: number) => new Date(now.getTime() + days * DAY_MS).toISOString()
 
 const owner = fixtureKey()
 
@@ -54,6 +57,7 @@ const documentValue = (kind: TrustListKind, node_ids: readonly string[], overrid
   crew,
   kind,
   epoch: 1,
+  issued_at: issued,
   expires_at: later,
   body: { [LIST_FIELD[kind]]: entriesFor(kind, node_ids) },
   ...overrides,
@@ -306,9 +310,9 @@ test('a different list signed at the epoch already opened refuses everyone', () 
 test('a duplicate key at any depth refuses everyone: the owner signed one reading, not two', () => {
   const approved = `"body":{"member_node_ids":["${member}"]}`
   const shadow = `"body":{"member_node_ids":["${attacker}"]}`
-  const top = Buffer.from(`{"crew":"${crew}","kind":"crew_roster","epoch":1,"expires_at":"${later}",${approved},${shadow}}`)
+  const top = Buffer.from(`{"crew":"${crew}","kind":"crew_roster","epoch":1,"issued_at":"${issued}","expires_at":"${later}",${approved},${shadow}}`)
   const inner = Buffer.from(
-    `{"crew":"${crew}","kind":"crew_roster","epoch":1,"expires_at":"${later}","body":{"member_node_ids":["${member}"],"member_node_ids":["${attacker}"]}}`,
+    `{"crew":"${crew}","kind":"crew_roster","epoch":1,"issued_at":"${issued}","expires_at":"${later}","body":{"member_node_ids":["${member}"],"member_node_ids":["${attacker}"]}}`,
   )
   for (const document of [top, inner]) {
     const opened = open({ document, signature: signed(document) })
@@ -336,13 +340,38 @@ test('a key spelled with escapes, or any other layout, refuses everyone', () => 
   }
 })
 
-test(`a list that expires more than ${MAXIMUM_LIFETIME_DAYS} days ahead refuses everyone, and one at the limit opens`, () => {
-  const dayMs = 24 * 60 * 60 * 1000
-  const at = (days: number) => new Date(now.getTime() + days * dayMs).toISOString()
-  const too_far = documentOf('crew_roster', [member], { expires_at: at(MAXIMUM_LIFETIME_DAYS + 1) })
-  refusesEveryone(open({ document: too_far, signature: signed(too_far) }), new RegExp(`more than ${MAXIMUM_LIFETIME_DAYS} days`))
-  const limit = documentOf('crew_roster', [member], { expires_at: at(MAXIMUM_LIFETIME_DAYS) })
+// --- round 3: the lifetime counts from signing, not from now -----------------
+
+test(`a list signed to live more than ${MAXIMUM_LIFETIME_DAYS} days refuses everyone, even in its final days`, () => {
+  const ten_years = 10 * 365
+  const last_days = 100
+  const document = documentOf('crew_roster', [member], {
+    issued_at: daysFromNow(last_days - ten_years),
+    expires_at: daysFromNow(last_days),
+  })
+  refusesEveryone(open({ document, signature: signed(document) }), new RegExp(`lives more than ${MAXIMUM_LIFETIME_DAYS} days`))
+})
+
+test(`a list signed to live exactly ${MAXIMUM_LIFETIME_DAYS} days opens, and one second more refuses everyone`, () => {
+  const issued_at = daysFromNow(-1)
+  const end = Date.parse(issued_at) + MAXIMUM_LIFETIME_DAYS * DAY_MS
+  const limit = documentOf('crew_roster', [member], { issued_at, expires_at: new Date(end).toISOString() })
   assert.equal(open({ document: limit, signature: signed(limit) }).trusted, true)
+  const over = documentOf('crew_roster', [member], { issued_at, expires_at: new Date(end + 1000).toISOString() })
+  refusesEveryone(open({ document: over, signature: signed(over) }), new RegExp(`lives more than ${MAXIMUM_LIFETIME_DAYS} days`))
+})
+
+test('a list issued in the future refuses everyone', () => {
+  const document = documentOf('crew_roster', [member], { issued_at: daysFromNow(1), expires_at: daysFromNow(2) })
+  refusesEveryone(open({ document, signature: signed(document) }), /issued in the future/)
+})
+
+test('a list with no issued_at, or one that cannot be read, refuses everyone', () => {
+  const { issued_at: _, ...without } = documentValue('crew_roster', [member])
+  const missing = Buffer.from(JSON.stringify(without))
+  refusesEveryone(open({ document: missing, signature: signed(missing) }), /fields are/)
+  const unreadable = documentOf('crew_roster', [member], { issued_at: 'yesterday' })
+  refusesEveryone(open({ document: unreadable, signature: signed(unreadable) }), /issue date cannot be read/)
 })
 
 test('an upper-case node id in a signed policy matches the same sender in lower case', () => {
