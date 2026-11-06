@@ -207,7 +207,9 @@ The rules the seam keeps, and a host must not work around:
   (`CLAUDE_CODE_SESSION_EVENTS`): the `/clear` the crew's mod ran itself is
   `crew_refresh`, an inheritance from the predecessor's id, which the mod knows
   and the model never supplies. A forked resume arrives as `resume` under a new
-  id with no record, and has lost it. Only `startup` and an owner's own
+  id with no record, and has lost it; so does a `fork`, which the host sends as
+its own SessionStart `source` and which carries its parent's context under a
+new id. Only `startup` and an owner's own
   `/clear` are fresh, and only until the session reads a handover. The events
   the host emits are listed separately (`CLAUDE_CODE_EMITTED_SESSION_EVENTS`),
   and `gapsInSessionEvents` fails CI on one the declaration does not cover.
@@ -348,6 +350,63 @@ the roster question comes before anything the body says.
 The rule does not cap or fence the body — that is the room's — and it trusts the
 roster's contents, which is the anchor weakness named separately.
 
+## Every list a gate trusts is signed
+
+Every gate compares against a list: the crew room's roster and the shared
+room's, the policy that names whose text a session may act on, the
+supervisors who may act, and the members the binder may attribute a sender to. Kept as plain files, one command run as a member's
+user adds a node id to any of them, and the gate then admits whoever was added.
+So each list is a document the owner signs, opened by `openTrustList`
+(`src/trust_only_signed_lists/`) from the signed bytes on every read.
+
+- **Nothing signed, nobody trusted.** A missing, unsigned, edited or malformed
+  list opens empty, and the gate built on it admits nobody. `trustedRoomRosters`,
+  `trustedPolicy` and `trustedSupervisors` turn an opened list into what each
+  gate reads, so a refused list reaches the gate as nobody, never as the file.
+- **Only a hardware key, touched.** The owner signs on their own machine with
+  `ssh-keygen -Y sign`, a FIDO key (`sk-ssh-ed25519@openssh.com`), and the
+  namespace `TRUST_LIST_NAMESPACE`. The signature is OpenSSH's SSHSIG format,
+  verified here without any other tool. A pinned key of any other type is
+  refused, so a key file a member's user can read is never the anchor, and the
+  signature must carry the user-presence flag that a touch sets.
+- **Bound, numbered, expiring.** A document names its `crew` and `kind` and has
+  an `epoch`, an `issued_at` and an `expires_at`, and no other field: a document
+  cannot carry a key of its own. A list for another crew or kind, an expired
+  one, one issued in the future, one whose `expires_at` is more than
+  `MAXIMUM_LIFETIME_DAYS` after its `issued_at` (counted from the signed issue
+  date, so a long-lived list cannot open in its final days), one whose
+  `issued_at` or `expires_at` is not an RFC 3339 UTC instant naming a real moment
+  (a form without an offset, or a free form, reads by the verifier's timezone),
+  one older than the newest
+  epoch the verifier has opened, and a different list at that same epoch are
+  refused. The verifier's `EpochStore` keeps the epoch and a digest of the list
+  it opened, and it must persist across processes where the member's user
+  cannot write: a store in memory forgets on restart and lets an old list back.
+- **One byte string, one reading.** The signed bytes must be exactly what
+  `JSON.stringify` writes for the value they parse to, compact or indented by
+  `PRETTY_INDENT`, with or without one final newline. A duplicate key at any
+  depth, or a key spelled with escapes, serialises differently and is refused,
+  so no parser can read a list the owner did not review.
+- **Node ids compare without case.** Every node id is lowercased when a list is
+  opened, as the gates lowercase the senders they compare.
+- **The verifying key is the host's to pin**, from where it installed it,
+  outside the directory the lists live in. The key inside a signature counts
+  only when it is pinned.
+- **Nothing shipped signs.** The test fixtures sign with keys held in memory,
+  and real `ssh-keygen -Y verify` accepts what they write. A test fails if
+  shipped code imports them or if a private key is tracked in this repository.
+
+Not signed: the session record store, which the host writes on every turn and
+no owner could sign. It keeps the fail-closed rule instead (a missing or
+unreadable record taints). The binder's rows (martha#14) are bound by the
+signed `members` list: a launch record binds only when its `member_name` and
+`node_id` pair is in that list, so a planted record for a stranger, or a signed
+node id under another member's name, binds nothing. The pid in a record is
+dynamic and no owner can sign it, so pointing a signed member's record at
+another process stays martha#24's residual. Code running as the member's own user can still replace a
+pinned key the host installed where that user can write, which is the OS
+boundary of martha#24.
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding
@@ -378,7 +437,8 @@ member, and a row excused without a reason. Each of those turns CI red.
   tested; no adapter in this repository hands it a sender, so every
   cross-session message still taints. A host gains it by attesting the sending
   process out of band and passing
-  `binderOverLaunches(host.stores.launches, host.processes)`.
+  `binderOverLaunches(host.stores.launches, host.processes, signedMembers)`,
+  where `signedMembers` returns `trustedMembers` of the opened `members` list.
 - **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
   rule; the room code that delivers messages is the crew's existing implementation,
   so nothing in this repository calls it. A host must call it before it turns a

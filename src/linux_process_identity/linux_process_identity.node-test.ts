@@ -32,6 +32,9 @@ import { linuxProcessIdentities, procProcessIdentities, startTimeIn } from './pr
 // Synthetic node ids and pids, never a real one: this repository is public.
 const PLUTO = { member_name: 'Pluto', node_id: 'a'.repeat(64), pid: 4101 }
 const NEPTUNUS = { member_name: 'Neptunus', node_id: 'b'.repeat(64), pid: 4102 }
+
+/** The members list the owner signed, as openTrustList hands it to the binder. */
+const signedMembers = () => [PLUTO, NEPTUNUS].map(({ member_name, node_id }) => ({ member_name, node_id }))
 const STARTED = '900100'
 const ROW = { ...PLUTO, process_started_at: STARTED }
 
@@ -58,7 +61,7 @@ const plantRecord = (path: string, row: unknown) =>
   writeFileSync(path, typeof row === 'string' ? row : JSON.stringify(row), { mode: LAUNCH_RECORD_FILE_MODE })
 
 const bindsPluto = (directory: string) =>
-  binderOverLaunches(launchRecordsDirectory(directory), kernel({ [PLUTO.pid]: STARTED }))({ sending_pid: PLUTO.pid })
+  binderOverLaunches(launchRecordsDirectory(directory), kernel({ [PLUTO.pid]: STARTED }), signedMembers)({ sending_pid: PLUTO.pid })
 
 // --- a key is never a path ----------------------------------------------------
 
@@ -225,10 +228,10 @@ test('the same pid with the same start ticks under another boot binds nobody', (
   const proc = fakeProc(t, BOOT)
   const store = memoryStore()
   assert.deepEqual(recordMemberLaunch(store, proc.processes, PLUTO), { recorded: true })
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), PLUTO.node_id)
+  assert.equal(binderOverLaunches(store, proc.processes, signedMembers)({ sending_pid: PLUTO.pid }), PLUTO.node_id)
 
   proc.setBoot(NEXT_BOOT)
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), null)
+  assert.equal(binderOverLaunches(store, proc.processes, signedMembers)({ sending_pid: PLUTO.pid }), null)
 })
 
 test('a boot that cannot be told is no boot: nothing is recorded and nobody binds', (t) => {
@@ -242,7 +245,7 @@ test('a boot that cannot be told is no boot: nothing is recorded and nobody bind
   const store = memoryStore()
   recordMemberLaunch(store, proc.processes, PLUTO)
   proc.setBoot(undefined)
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), null)
+  assert.equal(binderOverLaunches(store, proc.processes, signedMembers)({ sending_pid: PLUTO.pid }), null)
 })
 
 test('an identity names the boot as well as the start, so neither alone can match', (t) => {
@@ -269,5 +272,5 @@ test('end to end on Linux: this process launched as a member binds, through the 
   const store = launchRecordsDirectory(recordsDirectory(t))
   assert.deepEqual(recordMemberLaunch(store, linuxProcessIdentities, { ...PLUTO, pid: process.pid }), { recorded: true })
 
-  assert.equal(binderOverLaunches(store, linuxProcessIdentities)({ sending_pid: process.pid }), PLUTO.node_id)
+  assert.equal(binderOverLaunches(store, linuxProcessIdentities, signedMembers)({ sending_pid: process.pid }), PLUTO.node_id)
 })
