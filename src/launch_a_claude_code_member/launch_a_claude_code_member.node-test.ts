@@ -577,6 +577,74 @@ const isAlive = (pid: number): boolean => {
   }
 }
 
+/** Reads one file under /proc; throws when the process is gone. The tests of environmentOf plant their own. */
+type ProcRead = (path: string) => string
+const readProc: ProcRead = (path) => readFileSync(path, 'utf8')
+/** The kernel's thread daemon: it and every thread it parents have no environment at all. */
+const KERNEL_THREAD_PARENT = 2
+/** How long cleanup waits on one process's environment before passing it by. */
+const CLEANUP_SETTLE_MS = 500
+
+/**
+ * A process's environment as the kernel holds it (martha#85). While a process is
+ * inside exec the kernel reports an empty environment, so an empty answer from a
+ * live process is read again until it settles. Undefined for a process that has
+ * none to give: gone, a zombie, or a kernel thread.
+ */
+async function environmentOf(pid: number, read: ProcRead = readProc, ms?: number): Promise<Record<string, string> | undefined> {
+  let text: string | undefined
+  await until(`the environment of process ${pid} to settle`, () => {
+    try {
+      const stat = read(`/proc/${pid}/stat`)
+      const [state, parent] = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')
+      if (state === 'Z' || pid === KERNEL_THREAD_PARENT || Number(parent) === KERNEL_THREAD_PARENT) return true
+      text = read(`/proc/${pid}/environ`)
+      return text !== ''
+    } catch {
+      text = undefined
+      return true
+    }
+  }, ms)
+  if (text === undefined || text === '') return undefined
+  return Object.fromEntries(text.split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]))
+}
+
+/** A /proc of one process whose environ answers each read with the next of `answers`, the last one for good. */
+function plantedProc(pid: number, stat: string, answers: string[]): { read: ProcRead; reads: () => number } {
+  let reads = 0
+  return {
+    read: (path) => {
+      if (path === `/proc/${pid}/stat`) return stat
+      if (path === `/proc/${pid}/environ`) return answers[Math.min(reads++, answers.length - 1)] ?? ''
+      throw new Error(`no ${path}`)
+    },
+    reads: () => reads,
+  }
+}
+
+const PLANTED_PID = 4242
+const statOf = (state: string, parent: number) => `${PLANTED_PID} (sh) ${state} ${parent} ${PLANTED_PID} ${PLANTED_PID} 0 -1`
+
+test('an environment read while its process is inside exec is read again until the kernel has it (#85)', async () => {
+  const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), ['', '', 'NODE_OPTIONS=--require x\0HOME=/h\0'])
+  assert.deepEqual(await environmentOf(PLANTED_PID, proc.read), { NODE_OPTIONS: '--require x', HOME: '/h' })
+  assert.equal(proc.reads(), 3, 'both empty answers were read past')
+})
+
+test('a process with no environment to give is answered at once, never waited on (#85)', async () => {
+  for (const stat of [statOf('Z', process.pid), statOf('S', KERNEL_THREAD_PARENT)]) {
+    const proc = plantedProc(PLANTED_PID, stat, [''])
+    assert.equal(await environmentOf(PLANTED_PID, proc.read, 0), undefined, stat)
+  }
+  assert.equal(await environmentOf(PLANTED_PID, plantedProc(PLANTED_PID + 1, '', []).read, 0), undefined, 'a process that is gone')
+})
+
+test('cleanup finds a process of the relay root it caught inside exec (#85)', async () => {
+  const root = '/relay/root'
+  const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), ['', `${RELAY_SOCKET_VARIABLE}=${root}/s\0`])
+  assert.equal(await carriesRelayRoot(PLANTED_PID, root, proc.read), true)
+})
+
 const NODE_ID = 'ab'.repeat(32)
 
 function memberLaunch(place: Place, command: string, approved = place.approved, lines: string[] = [], mesh_trees?: MeshTreeRecording) {
@@ -764,9 +832,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
   t.after(() => started.stop('the test is over'))
   await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
   // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
-  const hostEnv = Object.fromEntries(
-    readFileSync(`/proc/${started.pid}/environ`, 'utf8').split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]),
-  )
+  const hostEnv = (await environmentOf(started.pid)) ?? {}
   assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
   assert.equal(Object.hasOwn(hostEnv, 'CLAUDE_CODE_SHELL_PREFIX'), false, 'the host is never given a prefix it would run every server through (#65 r=3)')
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
@@ -978,22 +1044,31 @@ function groupOf(pid: number): number | undefined {
 }
 
 /**
+ * Whether a process's environment names this relay root. A process caught inside
+ * exec is waited on for a moment (#85); one whose environment stays empty past
+ * that, which `env -i` can start, carries no relay root.
+ */
+async function carriesRelayRoot(pid: number, relay_root: string, read: ProcRead = readProc): Promise<boolean> {
+  let environment: Record<string, string> | undefined
+  try {
+    environment = await environmentOf(pid, read, CLEANUP_SETTLE_MS)
+  } catch {
+    return false
+  }
+  return environment?.[RELAY_SOCKET_VARIABLE]?.startsWith(`${relay_root}/`) ?? false
+}
+
+/**
  * Sends SIGKILL to the group of every process whose environment names this
  * relay root: the member and everything it started carry its socket's path,
  * whether or not it got as far as writing any file. Never this test's own group.
  */
-function killGroupsCarrying(relay_root: string): void {
+async function killGroupsCarrying(relay_root: string): Promise<void> {
   const own = groupOf(process.pid)
   for (const entry of readdirSync('/proc')) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
-    let environment: string
-    try {
-      environment = readFileSync(`/proc/${pid}/environ`, 'utf8')
-    } catch {
-      continue
-    }
-    if (!environment.split('\0').some((line) => line.startsWith(`${RELAY_SOCKET_VARIABLE}=${relay_root}/`))) continue
+    if (!(await carriesRelayRoot(pid, relay_root))) continue
     const group = groupOf(pid)
     if (group === undefined || group <= 1 || group === own) continue
     try {
@@ -1056,7 +1131,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     t.after(async () => {
       if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
       await ended
-      killGroupsCarrying(place.relay_root)
+      await killGroupsCarrying(place.relay_root)
     })
     let said = ''
     launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
@@ -1217,7 +1292,7 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   t.after(async () => {
     const launcherPid = Number(textIn(note('launcher')))
     if (launcherPid > 1 && isAlive(launcherPid)) process.kill(launcherPid, 'SIGKILL')
-    killGroupsCarrying(place.relay_root)
+    await killGroupsCarrying(place.relay_root)
     runner.kill('SIGKILL')
     await ended
   })
