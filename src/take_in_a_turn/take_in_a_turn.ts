@@ -36,27 +36,8 @@ import {
   startFreshSession,
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { framedDeliveryOf, type TurnOrigin } from '../trust_only_framed_envelopes/trust_only_framed_envelopes.ts'
-
-/** Every way text reaches a session, in the words a host would use for it. */
-export type TurnSource =
-  | 'crew_room'
-  | 'shared_room'
-  | 'backlog_digest'
-  | 'ring'
-  | 'ring_answer'
-  | 'cross_session'
-  | 'checkout_hook'
-  | 'owner_paste'
-  | 'server_instructions'
-  | 'checkout_run'
-  | 'mesh_read'
-  | 'mcp_result'
-  | 'gh'
-  | 'checkout_file'
-  | 'git_history'
-  | 'web'
-  | 'subagent'
+import { framedDeliveryOf } from '../trust_only_framed_envelopes/trust_only_framed_envelopes.ts'
+import type { Arrival, TurnSource } from '../host_contract/host_contract.ts'
 
 /** The inbound path each source is recorded on, so the registry and the host agree. */
 export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
@@ -78,21 +59,6 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   web: 'B6',
   subagent: 'B7',
 }
-
-/** Something a session took in, as the host describes it. */
-export type Arrival =
-  | {
-      /** The host knows what it was. */
-      readonly source: TurnSource
-      /** The identity the host holds for the sender; omitted or null means it holds none. */
-      readonly from_identity?: string | null
-    }
-  | {
-      /** The host has only the turn's text, as the Claude Code host does. */
-      readonly text: string
-      readonly origin?: TurnOrigin
-      readonly from_identity?: string | null
-    }
 
 /** A replacement of the session, in the words a host would use for it. */
 export type Replacement = 'clear' | 'new_session' | 'compaction' | 'handover' | 'resume'
