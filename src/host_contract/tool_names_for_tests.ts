@@ -13,12 +13,17 @@ import type { ToolNames } from './host_contract.ts'
 const CLAUDE_CODE_SEPARATOR = '__'
 const CLAUDE_CODE_MCP = `mcp${CLAUDE_CODE_SEPARATOR}`
 
-/** Claude Code's form: the own name is what follows the last `__` of an `mcp__` tool. */
+/**
+ * Claude Code's form: the own name is everything after the server part of an
+ * `mcp__` tool, `__` included, as the host itself splits it (the server name
+ * is normalised to hold no `__`; the tool's own name may).
+ */
 export const claudeCodeToolNames: ToolNames = {
-  ownNameOf: (called) =>
-    called.startsWith(CLAUDE_CODE_MCP)
-      ? called.slice(called.lastIndexOf(CLAUDE_CODE_SEPARATOR) + CLAUDE_CODE_SEPARATOR.length)
-      : called,
+  ownNameOf: (called) => {
+    if (!called.startsWith(CLAUDE_CODE_MCP)) return called
+    const server_end = called.indexOf(CLAUDE_CODE_SEPARATOR, CLAUDE_CODE_MCP.length)
+    return server_end === -1 ? called : called.slice(server_end + CLAUDE_CODE_SEPARATOR.length)
+  },
 }
 
 /** The separator OpenCode puts between the server's name and the tool's: `<server>_<tool>`. */

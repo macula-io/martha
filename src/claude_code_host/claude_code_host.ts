@@ -18,7 +18,10 @@
 //   - delivery: the engine's prompt submission, and every prompt the engine
 //     raises, with where it came from read only from the engine's `origin`;
 //   - tools: the engine's registration, behind a registry of the adapter's own
-//     that refuses a name twice before the engine sees it (T12).
+//     that refuses a name twice before the engine sees it (T12), and the name
+//     a called tool's own server gave it, split as the host splits
+//     `mcp__<server>__<tool>`; the hook glue passes `host.tools` to
+//     ../answer_a_tool_call as its `names`.
 //
 // Rules from the threat model on martha#41:
 //
@@ -134,6 +137,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
       onTurn: (take) => void listeners.push(take),
     },
     tools: {
+      ownNameOf: ownNameOfCalledTool,
       register: (tool) => {
         if (tools.has(tool.name)) throw new Error(`a tool is already registered: ${tool.name}`)
         tools.set(tool.name, tool)
@@ -160,6 +164,22 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
     },
     toolsRegistered: async () => void (await Promise.all(registrations)),
   }
+}
+
+/** What Claude Code puts between the parts of an MCP tool's name: `mcp__<server>__<tool>`. */
+const MCP_NAME_SEPARATOR = '__'
+const MCP_NAME_MARK = 'mcp'
+
+/**
+ * The name a called tool's own server gave it, split as Claude Code splits it:
+ * the server is the part after `mcp__`, which the host normalises so it holds
+ * no `__`, and the tool's own name is everything after that, `__` included. A
+ * built-in tool, or a name with no server or no tool part, is its own name.
+ */
+export function ownNameOfCalledTool(called: string): string {
+  const [mark, server, ...own] = called.split(MCP_NAME_SEPARATOR)
+  const tool = own.join(MCP_NAME_SEPARATOR)
+  return mark === MCP_NAME_MARK && server !== undefined && server !== '' && tool !== '' ? tool : called
 }
 
 /** Runs a process directly, with no shell, and reports how it ended. */

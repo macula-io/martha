@@ -17,11 +17,12 @@ import {
   type HostSessionEvents,
 } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { gapsInPromptOrigins, gapsInSessionEvents } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
+import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { claudeCodeHost, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
+import { claudeCodeHost, ownNameOfCalledTool, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
 import { promptOriginKindsOf, promptOriginsIn } from './claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_session_events.ts'
 import {
@@ -152,6 +153,40 @@ test('a registration the engine refuses is not lost: toolsRegistered rejects wit
   const adapter = claudeCodeHost(engine, places)
   adapter.host.tools.register(tool('crew_land'))
   await assert.rejects(adapter.toolsRegistered(), /not bound/)
+})
+
+// --- a called tool's own name, as the host splits it ----------------------------
+
+test('a called tool\'s own name is split as Claude Code splits mcp__<server>__<tool>', (t) => {
+  const { adapter } = adapterIn(t)
+  const names = adapter.host.tools
+  assert.equal(names.ownNameOf, ownNameOfCalledTool)
+  assert.equal(names.ownNameOf('mcp__plugin_macula-mcp_macula__mesh_read_inbox'), 'mesh_read_inbox')
+  assert.equal(names.ownNameOf('mcp__macula__mesh_say'), 'mesh_say')
+  // The server part holds no __ (the host normalises it); the tool's own name may.
+  assert.equal(names.ownNameOf('mcp__srv__tool__with__parts'), 'tool__with__parts')
+  // A built-in tool, or a name with no server or no tool part, is its own name.
+  for (const called of ['Bash', 'mesh_read_inbox', 'mcp__srv', 'mcp____tool', 'mcp__srv__', 'xmcp__srv__tool', '']) {
+    assert.equal(names.ownNameOf(called), called, called)
+  }
+})
+
+test('the core judges a Claude Code mesh tool by its own name when the hook passes host.tools', (t) => {
+  const { adapter } = adapterIn(t)
+  const launch_dir = scratch(t)
+  const launch: ApprovedLaunch = { host: 'claude-code', launch_dir, stop_dir: launch_dir, approved_fingerprints: [] }
+  const call = (names: { ownNameOf(called: string): string }) =>
+    answerToolCall({
+      tool: 'mcp__plugin_macula-mcp_macula__mesh_read_inbox',
+      session: beginSession(sessions(), 's-1'),
+      policy: { may_send_executable_text: [] },
+      input: {},
+      launch,
+      names,
+    })
+  assert.match((call(adapter.host.tools) as { deny?: string } | undefined)?.deny ?? '', /no gate has seen/)
+  // A host that took no name apart would let it through: the split is what refuses it.
+  assert.equal(call({ ownNameOf: (called) => called }), undefined)
 })
 
 // --- T1, T2, T5: where a turn came from ------------------------------------------
