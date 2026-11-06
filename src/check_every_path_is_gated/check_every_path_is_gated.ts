@@ -13,10 +13,11 @@
 // a path, so a launched row claiming the shell gate or a delivery gate is
 // claiming cover that cannot stand there, and is a gap. The launch gate it
 // names is driven once per question: it must refuse config the owner has not
-// approved, an approved server whose content changed under the same name, a
-// file added after approval, a config one directory up, a symlink even when
-// approved, a host it has no file list for, and a request whose config was
-// never read — and it must admit approved
+// approved, an approved server whose content changed under the same name, an
+// approved config whose checkout changed under it (the script it runs), config
+// outside any git checkout, a file added after approval, a config one
+// directory up, a symlink even when approved, a host it has no file list for,
+// and a request whose config was never read — and it must admit approved
 // config and a checkout with no config at all.
 //
 // A name is not a control, and neither is a gate that gets one question right.
@@ -192,34 +193,53 @@ function onDisk(present: readonly ConfigEntry[]): readonly ConfigEntry[] {
 }
 
 const SERVERS_ONLY = onDisk([{ path: SERVERS, kind: 'file', sha256: sha('a') }])
-const APPROVED = [fingerprintOf(SERVERS_ONLY)]
+// Synthetic git tree ids: the checkout as approved, and after a pull.
+const TREE = '1'.repeat(40)
+const PULLED = '2'.repeat(40)
+const APPROVED = [fingerprintOf({ entries: SERVERS_ONLY, tree: TREE })]
 
-interface LaunchProbe {
+export interface LaunchProbe {
   readonly admits: boolean
   readonly what: string
   readonly request: LaunchRequest
 }
 
-const LAUNCH_PROBES: readonly LaunchProbe[] = [
+/** The questions every launch gate is asked; the first is the approved config. */
+export const LAUNCH_PROBES: readonly LaunchProbe[] = [
   {
     admits: true,
     what: 'config the owner approved',
-    request: { host: PROBE_HOST, entries: SERVERS_ONLY, approved_fingerprints: APPROVED },
+    request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: TREE, approved_fingerprints: APPROVED },
   },
   {
     admits: true,
     what: 'a checkout with no config at all',
-    request: { host: PROBE_HOST, entries: onDisk([]), approved_fingerprints: [] },
+    request: { host: PROBE_HOST, entries: onDisk([]), tree: null, approved_fingerprints: [] },
   },
   {
     admits: false,
     what: 'config the owner has not approved',
-    request: { host: PROBE_HOST, entries: SERVERS_ONLY, approved_fingerprints: [] },
+    request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: TREE, approved_fingerprints: [] },
   },
   {
     admits: false,
     what: 'an approved file whose content changed under the same name',
-    request: { host: PROBE_HOST, entries: onDisk([{ path: SERVERS, kind: 'file', sha256: sha('b') }]), approved_fingerprints: APPROVED },
+    request: { host: PROBE_HOST, entries: onDisk([{ path: SERVERS, kind: 'file', sha256: sha('b') }]), tree: TREE, approved_fingerprints: APPROVED },
+  },
+  {
+    admits: false,
+    what: 'an approved config whose checkout changed under it, the script it runs included',
+    request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: PULLED, approved_fingerprints: APPROVED },
+  },
+  {
+    admits: false,
+    what: 'config outside any git checkout, even with its fingerprint approved',
+    request: {
+      host: PROBE_HOST,
+      entries: SERVERS_ONLY,
+      tree: null,
+      approved_fingerprints: [fingerprintOf({ entries: SERVERS_ONLY, tree: null })],
+    },
   },
   {
     admits: false,
@@ -227,6 +247,7 @@ const LAUNCH_PROBES: readonly LaunchProbe[] = [
     request: {
       host: PROBE_HOST,
       entries: onDisk([{ path: SERVERS, kind: 'file', sha256: sha('a') }, { path: SETTINGS, kind: 'file', sha256: sha('c') }]),
+      tree: TREE,
       approved_fingerprints: APPROVED,
     },
   },
@@ -236,6 +257,7 @@ const LAUNCH_PROBES: readonly LaunchProbe[] = [
     request: {
       host: PROBE_HOST,
       entries: [...SERVERS_ONLY, { path: `../${SERVERS}`, kind: 'file', sha256: sha('d') }],
+      tree: TREE,
       approved_fingerprints: APPROVED,
     },
   },
@@ -245,18 +267,19 @@ const LAUNCH_PROBES: readonly LaunchProbe[] = [
     request: {
       host: PROBE_HOST,
       entries: onDisk([{ path: SERVERS, kind: 'symlink', target: SERVERS }]),
-      approved_fingerprints: [fingerprintOf(onDisk([{ path: SERVERS, kind: 'symlink', target: SERVERS }]))],
+      tree: TREE,
+      approved_fingerprints: [fingerprintOf({ entries: onDisk([{ path: SERVERS, kind: 'symlink', target: SERVERS }]), tree: TREE })],
     },
   },
   {
     admits: false,
     what: 'a request whose config was never read',
-    request: { host: PROBE_HOST, entries: [], approved_fingerprints: [] },
+    request: { host: PROBE_HOST, entries: [], tree: TREE, approved_fingerprints: [] },
   },
   {
     admits: false,
     what: 'a host it has no file list for',
-    request: { host: 'a-host-nobody-listed', entries: [], approved_fingerprints: [] },
+    request: { host: 'a-host-nobody-listed', entries: [], tree: TREE, approved_fingerprints: [] },
   },
 ]
 

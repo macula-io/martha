@@ -15,7 +15,7 @@ import {
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_EMITTED_SESSION_EVENTS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { gapsInGateCoverage, gapsInSessionEvents } from './check_every_path_is_gated.ts'
+import { gapsInGateCoverage, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -316,7 +316,8 @@ test('a gate that trusts an approved symlink is caught', () => {
   const trusts_links: LaunchGate = (request) =>
     admitsLaunch(request) ||
     (Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host) &&
-      request.approved_fingerprints.includes(fingerprintOf(request.entries)))
+      request.tree !== null &&
+      request.approved_fingerprints.includes(fingerprintOf(request)))
   const gaps = withLaunchGates(trusts_links)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
@@ -364,4 +365,16 @@ test('a declared session event the host stops emitting turns the check red, by n
   const gaps = gapsInSessionEvents(undefined, emitted)
   assert.equal(gaps.length, 1)
   assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+})
+
+test('a gate that pins the config but not the checkout it runs is caught', () => {
+  const approved_tree = LAUNCH_PROBES[0]?.request.tree ?? null
+  const config_only: LaunchGate = (request) =>
+    admitsLaunch({ ...request, tree: request.tree === null ? null : approved_tree })
+  const gaps = withLaunchGates(config_only)
+  assert.deepEqual(
+    gaps.map((gap) => gap.path),
+    LAUNCHED,
+  )
+  assert.match(gaps[0]?.why ?? '', /admits an approved config whose checkout changed under it/)
 })
