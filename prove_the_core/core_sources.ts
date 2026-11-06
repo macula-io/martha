@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
-import { isScannedSource, type CoreSource } from '../src/host_contract/imports_beyond_the_core.ts'
+import { isScannedSource, type CoreSource } from '../src/host_contract/core_source.ts'
 
 /** Every script file under `root`, with its path relative to `root`. */
 export function coreSources(root: string): CoreSource[] {

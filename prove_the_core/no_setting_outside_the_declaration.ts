@@ -55,7 +55,7 @@ import { dirname, join, normalize, sep } from 'node:path'
 
 import ts from 'typescript'
 
-import { lineOf, moduleReferencesIn, nodesOf, parseSource } from './parse_a_source.ts'
+import { isInAType, isUsedAsAValue, lineOf, moduleReferencesIn, nodesOf, parseSource } from './parse_a_source.ts'
 
 /** The Node modules a slice may import: pure computation that reads no setting and no machine state. */
 export const NODE_MODULES_A_SLICE_MAY_IMPORT = ['node:path', 'node:crypto'] as const
@@ -115,30 +115,11 @@ function importFindings(path: string, file: ts.SourceFile, isSlice: IsSlice): Fi
     })
 }
 
-// Whether an identifier names a value here, rather than a property, a
-// declaration, a label or a type.
-function isUsedAsAValue(node: ts.Identifier): boolean {
-  const parent = node.parent
-  if (ts.isShorthandPropertyAssignment(parent)) return true
-  if (ts.isQualifiedName(parent) && parent.right === node) return false
-  if (ts.isBindingElement(parent) && parent.propertyName === node) return false
-  if (ts.isLabeledStatement(parent) || ts.isBreakOrContinueStatement(parent)) return false
-  if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return false
-  // A declaration, a property assignment or a member names its own name: not a use of a global.
-  if ('name' in parent && parent.name === node) return false
-  return !isInAType(node)
-}
-
 function globalFindings(path: string, file: ts.SourceFile, nodes: readonly ts.Node[]): Finding[] {
   return nodes
     .filter((node): node is ts.Identifier => ts.isIdentifier(node))
     .filter(node => (GLOBALS_A_SLICE_MAY_NOT_USE as readonly string[]).includes(node.text) && isUsedAsAValue(node))
     .map(node => ({ path, line: lineOf(file, node), why: `uses the global ${node.text}` }))
-}
-
-const isInAType = (node: ts.Node): boolean => {
-  for (let at: ts.Node = node.parent; !ts.isSourceFile(at); at = at.parent) if (ts.isTypeNode(at)) return true
-  return false
 }
 
 // The name as an identifier (`.constructor`, `{ constructor }`) or as a key
