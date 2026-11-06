@@ -66,7 +66,7 @@ type Pin = { readonly pkg: string; readonly version: string; readonly bin?: stri
 
 /** The package spec and the bin a pinned server's arguments name, or undefined for any other shape. */
 function specAndBin(args: unknown): { readonly spec: string; readonly bin?: string } | undefined {
-  if (!Array.isArray(args) || !args.every((arg): arg is string => typeof arg === 'string')) return undefined
+  if (!isStringList(args)) return undefined
   const [first, second, third, fourth, ...rest] = args
   if (first !== INSTALL_WITHOUT_ASKING || second === undefined || rest.length > 0) return undefined
   if (third === undefined) return { spec: second }
@@ -74,27 +74,56 @@ function specAndBin(args: unknown): { readonly spec: string; readonly bin?: stri
   return undefined
 }
 
+function isStringList(args: unknown): args is string[] {
+  return Array.isArray(args) && args.every((arg): arg is string => typeof arg === 'string')
+}
+
 /** The exact pin a server entry installs, or why it says no exact pin. */
 function pinOf(name: string, entry: unknown, mesh: string): Pin | { readonly refusal: string } {
   const refused = (why: string) => ({ refusal: `its server ${name} ${why}: every server must start as ${SHAPE}, so the code it runs is named by one release` })
   if (!isObject(entry)) return refused('is not an object')
-  const extra = Object.keys(entry).filter((key) => !PINNED_ENTRY_KEYS.has(key))
-  if (extra.length > 0) return refused(`carries ${extra.join(', ')}`)
-  if (entry.type !== undefined && entry.type !== PINNED_TRANSPORT) return refused(`is a ${String(entry.type)} server`)
-  if (entry.command !== PINNED_INSTALLER) return refused(`starts ${String(entry.command)}`)
+  const pin = pinIn(entry, mesh)
+  return typeof pin === 'string' ? refused(pin) : pin
+}
+
+/** The exact pin an entry installs, or why not, checked in order: its shape, its spec, its bin, its env. */
+function pinIn(entry: Record<string, unknown>, mesh: string): Pin | string {
+  const not_pinned = whyShapeIsNoPin(entry)
+  if (not_pinned !== undefined) return not_pinned
   const named = specAndBin(entry.args)
-  if (named === undefined) return refused(`starts ${PINNED_INSTALLER} with ${JSON.stringify(entry.args ?? [])}`)
-  const { spec, bin } = named
+  if (named === undefined) return `starts ${PINNED_INSTALLER} with ${JSON.stringify(entry.args ?? [])}`
+  const pin = pinNamed(named, mesh)
+  if (typeof pin === 'string') return pin
+  const env_refused = whyEnvIsRefused(entry.env)
+  if (env_refused !== undefined) return env_refused
+  return pin
+}
+
+/** Why an entry's keys, transport or command are not those of a pinned server, or undefined when they are. */
+function whyShapeIsNoPin(entry: Record<string, unknown>): string | undefined {
+  const extra = Object.keys(entry).filter((key) => !PINNED_ENTRY_KEYS.has(key))
+  if (extra.length > 0) return `carries ${extra.join(', ')}`
+  if (entry.type !== undefined && entry.type !== PINNED_TRANSPORT) return `is a ${String(entry.type)} server`
+  if (entry.command !== PINNED_INSTALLER) return `starts ${String(entry.command)}`
+  return undefined
+}
+
+/** The exact release a spec names, and its bin when only the mesh server's may be named; or why not. */
+function pinNamed({ spec, bin }: { readonly spec: string; readonly bin?: string }, mesh: string): Pin | string {
   const at = spec.lastIndexOf('@')
   const [pkg, version] = at > 0 ? [spec.slice(0, at), spec.slice(at + 1)] : [spec, '']
-  if (!PACKAGE_NAME.test(pkg) || !EXACT_VERSION.test(version)) return refused(`installs ${spec}, which is no exact release`)
-  if (bin !== undefined && pkg !== mesh) return refused(`names bin ${bin} of ${pkg}, whose bins nobody recorded, so what it runs is not proved`)
-  if (entry.env !== undefined) {
-    if (!isObject(entry.env)) return refused('gives an env that is not an object')
-    const unallowed = Object.keys(entry.env).filter((key) => !SERVER_ENV_ALLOWED.has(key))
-    if (unallowed.length > 0) return refused(`sets ${unallowed.join(', ')}, which no server may be given (only the mesh server's reviewed settings, known_settings)`)
-  }
+  if (!PACKAGE_NAME.test(pkg) || !EXACT_VERSION.test(version)) return `installs ${spec}, which is no exact release`
+  if (bin !== undefined && pkg !== mesh) return `names bin ${bin} of ${pkg}, whose bins nobody recorded, so what it runs is not proved`
   return bin === undefined ? { pkg, version } : { pkg, version, bin }
+}
+
+/** Why an entry's env may not be given, or undefined when it names only the mesh server's reviewed settings. */
+function whyEnvIsRefused(env: unknown): string | undefined {
+  if (env === undefined) return undefined
+  if (!isObject(env)) return 'gives an env that is not an object'
+  const unallowed = Object.keys(env).filter((key) => !SERVER_ENV_ALLOWED.has(key))
+  if (unallowed.length > 0) return `sets ${unallowed.join(', ')}, which no server may be given (only the mesh server's reviewed settings, known_settings)`
+  return undefined
 }
 
 /**

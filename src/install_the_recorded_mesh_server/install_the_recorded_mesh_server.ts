@@ -273,32 +273,59 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
   }
   const servers: Record<string, Entry> = {}
   for (const [name, entry] of Object.entries(config.mcpServers ?? {})) {
-    const pin = pinOf(entry)
-    if (pin === undefined || pin.pkg !== MESH_SERVER_PACKAGE || !EXACT_VERSION.test(pin.version)) {
-      servers[name] = entry
-      continue
-    }
-    const tree = recording.versions.find((recorded) => recorded.server_version === pin.version)
-    if (tree === undefined) {
-      return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not recorded: the bytes it would run are not proved. Record that version, or install a recorded one.` }
-    }
-    const record = records.find((recorded) => recorded.server_version === pin.version)
-    if (record === undefined) {
-      return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose bins are not recorded, so its server bin is not known.` }
-    }
-    if (pin.bin !== undefined && pin.bin !== record.server_bin) {
-      return { refusal: `its server ${name} starts the bin ${pin.bin}, and the server bin recorded for ${MESH_SERVER_PACKAGE} ${pin.version} is ${record.server_bin}.` }
-    }
-    const binFile = record.bins[record.server_bin]
-    if (binFile === undefined) return { refusal: `the record of ${MESH_SERVER_PACKAGE} ${pin.version} names the server bin ${record.server_bin}, which is none of its bins.` }
-    const proved = provedTreeOf(tree, placement.root, recording.registry)
-    if ('refusal' in proved) return { refusal: `its server ${name}: ${proved.refusal}` }
-    const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
-    const file = join(packageDir, binFile)
-    if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
-    servers[name] = { ...entry, command: process.execPath, args: confinedStart(proved.dir, file), env: builtEnvironment(placement.hostEnvironment, entry.env) }
+    const placed = placedEntry(name, entry, placement, recording, records)
+    if ('refusal' in placed) return placed
+    servers[name] = placed.entry
   }
   return { config: `${JSON.stringify({ ...config, mcpServers: servers }, null, 2)}\n` }
+}
+
+type Pin = NonNullable<ReturnType<typeof pinOf>>
+
+/** A pin of an exact release of the mesh server: the only entry that is placed. */
+function isExactMeshServerPin(pin: Pin | undefined): pin is Pin {
+  return pin !== undefined && pin.pkg === MESH_SERVER_PACKAGE && EXACT_VERSION.test(pin.version)
+}
+
+/**
+ * One server entry as the member starts it: a mesh server entry started from its
+ * recorded tree by path, any other entry as it is; or why the member must not start.
+ */
+function placedEntry(
+  name: string,
+  entry: Entry,
+  placement: MeshServerPlacement,
+  recording: MeshTreeRecording,
+  records: readonly RecordedMeshServer[],
+): { readonly entry: Entry } | { readonly refusal: string } {
+  const pin = pinOf(entry)
+  if (!isExactMeshServerPin(pin)) return { entry }
+  const tree = recording.versions.find((recorded) => recorded.server_version === pin.version)
+  if (tree === undefined) {
+    return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not recorded: the bytes it would run are not proved. Record that version, or install a recorded one.` }
+  }
+  const record = records.find((recorded) => recorded.server_version === pin.version)
+  if (record === undefined) {
+    return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose bins are not recorded, so its server bin is not known.` }
+  }
+  const binFile = serverBinFileOf(name, pin, record)
+  if (typeof binFile !== 'string') return binFile
+  const proved = provedTreeOf(tree, placement.root, recording.registry)
+  if ('refusal' in proved) return { refusal: `its server ${name}: ${proved.refusal}` }
+  const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
+  const file = join(packageDir, binFile)
+  if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
+  return { entry: { ...entry, command: process.execPath, args: confinedStart(proved.dir, file), env: builtEnvironment(placement.hostEnvironment, entry.env) } }
+}
+
+/** The file of the server bin recorded for a pin's version, when the pin names no other bin; or why not. */
+function serverBinFileOf(name: string, pin: Pin, record: RecordedMeshServer): string | { readonly refusal: string } {
+  if (pin.bin !== undefined && pin.bin !== record.server_bin) {
+    return { refusal: `its server ${name} starts the bin ${pin.bin}, and the server bin recorded for ${MESH_SERVER_PACKAGE} ${pin.version} is ${record.server_bin}.` }
+  }
+  const binFile = record.bins[record.server_bin]
+  if (binFile === undefined) return { refusal: `the record of ${MESH_SERVER_PACKAGE} ${pin.version} names the server bin ${record.server_bin}, which is none of its bins.` }
+  return binFile
 }
 
 // --- recording a version's tree --------------------------------------------------

@@ -337,38 +337,20 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
   const snapshot = machine.stores.scratch.make(place.snapshot_root, 'launch-')
   const snapshot_dir = snapshot.path
 
-  const carried: HostSwitches[] = [launch.project_config_off]
-  const carried_files: Record<string, Uint8Array> = {}
-  const not_carried: string[] = []
-
-  for (const entry of state.entries) {
-    if (entry.kind === 'absent') continue
-    const carry = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
-    if (carry === undefined || entry.kind !== 'file') {
-      if (!not_carried.some((path) => entry.path.startsWith(`${path}/`))) not_carried.push(entry.path)
-      continue
-    }
-
-    const content = machine.stores.files.bytesOf(join(start, entry.path))
-    if (createHash('sha256').update(content).digest('hex') !== entry.sha256) {
-      snapshot.remove()
-      return { allow: false, refusal: `${REFUSED}: ${entry.path} changed while it was being approved. Start again.` }
-    }
-    carried.push(carry(snapshot.write(entry.path, content)))
-    carried_files[entry.path] = content
+  const carrying: Carrying = { carried: [launch.project_config_off], carried_files: {}, not_carried: [] }
+  const changed = carryApproved(state.entries, { launch, start, snapshot, machine }, carrying)
+  if (changed !== undefined) {
+    snapshot.remove()
+    return { allow: false, refusal: `${REFUSED}: ${changed} changed while it was being approved. Start again.` }
   }
 
-  const env: Record<string, string> = {}
-  for (const switches of carried) {
-    for (const [name, value] of Object.entries(switches.env)) {
-      if (Object.hasOwn(env, name)) {
-        snapshot.remove()
-        return { allow: false, refusal: `${REFUSED}: two of its config files would be passed through ${name}, which carries one. Keep one.` }
-      }
-      env[name] = value
-    }
+  const env = envOf(carrying.carried)
+  if (typeof env === 'string') {
+    snapshot.remove()
+    return { allow: false, refusal: `${REFUSED}: two of its config files would be passed through ${env}, which carries one. Keep one.` }
   }
 
+  const { carried, carried_files, not_carried } = carrying
   return {
     allow: true,
     switches: {
@@ -380,6 +362,58 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
     carried_files,
     not_carried,
   }
+}
+
+/** What `snapshotApproved` gathers as it copies: the switches, the copied bytes, and what it left behind. */
+interface Carrying {
+  readonly carried: HostSwitches[]
+  readonly carried_files: Record<string, Uint8Array>
+  readonly not_carried: string[]
+}
+
+/** Where `snapshotApproved` copies from and to. */
+interface CopyPlace {
+  readonly launch: HostLaunch
+  readonly start: string
+  readonly snapshot: ReturnType<LaunchHost['stores']['scratch']['make']>
+  readonly machine: LaunchHost
+}
+
+/**
+ * Copy each carried entry into the snapshot, in order, and note the rest. Stops
+ * at the first file whose bytes no longer hash as approved and returns its path.
+ */
+function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carrying: Carrying): string | undefined {
+  const { launch, start, snapshot, machine } = place
+  for (const entry of entries) {
+    if (entry.kind === 'absent') continue
+    const carry = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
+    if (carry === undefined || entry.kind !== 'file') {
+      noteNotCarried(carrying.not_carried, entry.path)
+      continue
+    }
+
+    const content = machine.stores.files.bytesOf(join(start, entry.path))
+    if (createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
+    carrying.carried.push(carry(snapshot.write(entry.path, content)))
+    carrying.carried_files[entry.path] = content
+  }
+  return undefined
+}
+
+/** Note a path left behind, unless a directory above it is already noted. */
+function noteNotCarried(not_carried: string[], path: string): void {
+  if (!not_carried.some((noted) => path.startsWith(`${noted}/`))) not_carried.push(path)
+}
+
+/** The environment every switch adds, or the name of the first variable two of them would set. */
+function envOf(carried: readonly HostSwitches[]): Record<string, string> | string {
+  const env: Record<string, string> = {}
+  for (const [name, value] of carried.flatMap((switches) => Object.entries(switches.env))) {
+    if (Object.hasOwn(env, name)) return name
+    env[name] = value
+  }
+  return env
 }
 
 /** The start, then each directory above it, stopping below `stop` or at the root. */
