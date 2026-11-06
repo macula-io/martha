@@ -3,7 +3,7 @@
 // ../linux_process_identity: a directory, not a coding tool's store, so every
 // host adapter on such a machine composes this one.
 //
-// One directory per stream, one file per row, named by its position. Four rules,
+// One directory per stream, one file per row, named by its position. Five rules,
 // from the threat model on martha#41:
 //
 //   - A STREAM NAME IS NEVER A PATH (T9). The directory's name is the stream's
@@ -18,6 +18,10 @@
 //     readable as a JSON object, a link, or a file not owned by this user or open
 //     to anyone else: the read rejects. A ledger that skipped a row would hide an
 //     act that was sent, and its successor would send it twice.
+//   - A ROW IS KEPT ONLY ONCE IT IS ON DISK (T11). The row's file is fsynced
+//     before it is linked, and after the link the stream's directory and the
+//     rows directory are fsynced too, so a crash after `append` resolves cannot
+//     lose the name of a row whose act then ran.
 //   - THE DIRECTORIES ARE CLOSED. The rows directory and every stream directory
 //     are real directories, owned by this user, that nobody else may write into.
 //
@@ -79,7 +83,13 @@ function appendRow(directory: string, stream: string, row: Row, expected_length:
     for (;;) {
       const length = rowsIn(stream_directory, stream).length
       if (expected_length !== undefined && length !== expected_length) throw moved(stream, length, expected_length)
-      if (linkedAt(staging, join(stream_directory, rowFileNameOf(length)))) return length
+      if (linkedAt(staging, join(stream_directory, rowFileNameOf(length)))) {
+        // The row is kept only once both names are on disk: its position in the
+        // stream's directory, and the stream's directory in the rows directory.
+        syncDirectory(stream_directory)
+        syncDirectory(directory)
+        return length
+      }
       if (expected_length !== undefined) throw moved(stream, length + 1, expected_length)
     }
   } finally {
@@ -102,7 +112,19 @@ function writeWhole(path: string, text: string): void {
   const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW
   const descriptor = fs.openSync(path, flags, ROW_FILE_MODE)
   try {
+    // The mode the file was opened with is masked by the process's umask.
+    fs.fchmodSync(descriptor, ROW_FILE_MODE)
     fs.writeFileSync(descriptor, text)
+    fs.fsyncSync(descriptor)
+  } finally {
+    fs.closeSync(descriptor)
+  }
+}
+
+/** Flushes a directory's entries to disk, so a name linked or made in it survives a crash. */
+function syncDirectory(path: string): void {
+  const descriptor = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY)
+  try {
     fs.fsyncSync(descriptor)
   } finally {
     fs.closeSync(descriptor)

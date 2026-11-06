@@ -54,7 +54,9 @@ launcher's records and which process holds a pid.
 - **Rows** live one directory per stream, the name encoded so it is never a
   path, one file per row named by its position. A row is staged, then linked to
   its position, and a link never replaces a file, so two writers cannot both
-  land at one position. A read refuses a gap, a link, an entry it never writes,
+  land at one position. An append resolves only once the row's file, its
+  position and the stream's directory are fsynced, so a crash cannot lose the
+  row of an act that then ran. A read refuses a gap, a link, an entry it never writes,
   a row that is not a JSON object, and a file anyone else may read or write; it
   never skips one.
 - **The launcher's records** reach slices only as `readingOnly(store)`.

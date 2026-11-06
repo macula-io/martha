@@ -168,3 +168,83 @@ test('a row that would not survive as JSON is refused before anything is written
   await assert.rejects(store.append('acts', cycle), Error)
   assert.deepEqual(await store.read('acts'), [])
 })
+
+/** Every file and directory the store opens, linked into and fsynced, in order, while `run` goes. */
+const diskEvents = async (t: TestContext, run: () => Promise<unknown>): Promise<string[]> => {
+  const events: string[] = []
+  const opened = new Map<number, string>()
+  const real_open = fs.openSync
+  const real_fsync = fs.fsyncSync
+  const real_link = fs.linkSync
+  t.mock.method(fs, 'openSync', (...args: Parameters<typeof fs.openSync>) => {
+    const descriptor = real_open(...args)
+    opened.set(descriptor, String(args[0]))
+    return descriptor
+  })
+  t.mock.method(fs, 'fsyncSync', (descriptor: number) => {
+    events.push(`fsync ${opened.get(descriptor) ?? `unknown descriptor ${descriptor}`}`)
+    real_fsync(descriptor)
+  })
+  t.mock.method(fs, 'linkSync', (...args: Parameters<typeof fs.linkSync>) => {
+    real_link(...args)
+    events.push(`link ${String(args[1])}`)
+  })
+  try {
+    await run()
+  } finally {
+    t.mock.restoreAll()
+  }
+  return events
+}
+
+test('an append resolves only after the row, its position and its stream directory are on disk', async (t) => {
+  const directory = rowsDirectory(t)
+  const store = rowStreamsDirectory(directory)
+  const stream_directory = join(directory, streamDirectoryNameOf('ledger'))
+  const position = join(stream_directory, rowFileNameOf(0))
+
+  const events = await diskEvents(t, () => store.append('ledger', { act: 'a' }))
+  const link = events.indexOf(`link ${position}`)
+  assert.ok(link > 0, events.join('\n'))
+  assert.match(events[link - 1] ?? '', /^fsync .*\.staging-/, 'the row is on disk before it is linked')
+  assert.deepEqual(events.slice(link + 1), [`fsync ${stream_directory}`, `fsync ${directory}`])
+
+  // A second row in a stream that exists: its position is flushed the same way.
+  const again = await diskEvents(t, () => store.append('ledger', { act: 'b' }))
+  assert.deepEqual(again.slice(again.indexOf(`link ${join(stream_directory, rowFileNameOf(1))}`) + 1), [
+    `fsync ${stream_directory}`,
+    `fsync ${directory}`,
+  ])
+})
+
+test('an append whose directory cannot be flushed rejects, so its act never runs', async (t) => {
+  const store = rowStreamsDirectory(rowsDirectory(t))
+  const real_fsync = fs.fsyncSync
+  let calls = 0
+  t.mock.method(fs, 'fsyncSync', (descriptor: number) => {
+    calls += 1
+    if (calls === 2) throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' })
+    real_fsync(descriptor)
+  })
+  await assert.rejects(store.append('ledger', { act: 'a' }), /EIO/)
+  t.mock.restoreAll()
+})
+
+test('a row file is only its owner\'s whatever the umask lets through', async (t) => {
+  const directory = rowsDirectory(t)
+  const store = rowStreamsDirectory(directory)
+  await store.append('ledger', { act: 'a' })
+  // A umask that takes the owner's own write bit off a new file.
+  const previous = process.umask(0o277)
+  try {
+    await store.append('ledger', { act: 'b' })
+  } finally {
+    process.umask(previous)
+  }
+  const position = join(directory, streamDirectoryNameOf('ledger'), rowFileNameOf(1))
+  assert.equal(fs.statSync(position).mode & 0o777, ROW_FILE_MODE)
+  assert.deepEqual(await store.read('ledger'), [
+    { position: 0, row: { act: 'a' } },
+    { position: 1, row: { act: 'b' } },
+  ])
+})
