@@ -453,3 +453,8 @@ test('a gate that pins the config but not the checkout it runs is caught', () =>
   )
   assert.match(gaps[0]?.why ?? '', /admits an approved config whose checkout changed under it/)
 })
+
+test('the allowed and refused mesh tools together are exactly the recorded tools, each once', () => {
+  const decided = [...MESH_TOOLS_THAT_RUN, ...MESH_TOOLS_REFUSED].sort()
+  assert.deepEqual(decided, [...RECORDED_MESH_SERVER.tools].sort())
+})
