@@ -8,7 +8,7 @@
     "node": ">=24.18.1"
   },
   "scripts": {
-    "test": "node --test 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts'",
+    "test": "node --test --test-timeout=60000 --test-force-exit 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts'",
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
