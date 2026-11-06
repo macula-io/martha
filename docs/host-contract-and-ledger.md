@@ -17,8 +17,8 @@ test fails by name if a sixth appears:
 | Part | What a host gives |
 |---|---|
 | `clock` | the time |
-| `stores` | `rows`: streams that are only ever appended to; `documents`: files read as text |
-| `processes` | running a command and getting its exit status and output |
+| `stores` | `rows`: streams that are only ever appended to; `documents`: files read as text; `launches`: the launcher's records, one row per key, which slices only read; the writable store is the launcher's own seam, outside the contract (#42) |
+| `processes` | running a command and getting its exit status and output; `identityOf(pid)`: which process holds a pid, boot included (#42) |
 | `delivery` | handing a turn to the model, and the turns that arrive, with where each came from as far as the tool can say |
 | `tools` | registering a tool the model can call |
 

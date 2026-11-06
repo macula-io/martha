@@ -18,15 +18,53 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends libxml2-utils
       - run: xmllint --noout assets/*.svg
 
-  # Every link in every document resolves, relative ones included.
+  # Every link in every document resolves, relative ones included. A host that
+  # answers slowly is retried before its link is called broken; the badge URLs
+  # are scanned like any other link, so a renamed workflow still fails here.
   links:
     name: links resolve
     runs-on: ubuntu-latest
+    env:
+      # Retry and timeout options, defined once and used by both runs below.
+      # A timeout is retried, and the wait doubles: five tries of 30 s with
+      # 3 s, 6 s, 12 s and 24 s between them, so a link that is really gone
+      # fails within about 3 min 15 s and a slow host has all that time to
+      # answer.
+      LYCHEE_OPTIONS: '--no-progress --include-fragments --max-retries 4 --retry-wait-time 3 --timeout 30'
     steps:
       - uses: actions/checkout@v7
-      - uses: lycheeverse/lychee-action@v2.9.0
+      # The self-test plants a link to a file that is not there, outside the
+      # checkout so the scan below never sees it, and holds the same options to
+      # it: the job must still go red, and name that link when it does.
+      - name: plant a dead link
+        run: |
+          mkdir -p "${{ runner.temp }}/links-self-test"
+          printf '[a page that is not there](missing-page.md)\n' > "${{ runner.temp }}/links-self-test/dead-link.md"
+      - name: the check bites
+        id: self_test
+        # The action version is anchored here and aliased below, so a hand bump
+        # cannot move one step and leave the other on the old action.
+        uses: &lychee_action lycheeverse/lychee-action@v2.9.0
         with:
-          args: --no-progress --include-fragments '**/*.md'
+          args: ${{ env.LYCHEE_OPTIONS }} '${{ runner.temp }}/links-self-test/*.md'
+          fail: false
+          output: ${{ runner.temp }}/links-self-test/report.md
+          jobSummary: false
+      - name: the dead link was refused
+        env:
+          EXIT_CODE: ${{ steps.self_test.outputs.exit_code }}
+        # The three tests share one && chain on purpose: a bare `test -n ...`
+        # line would not fail the step on an empty value, because bash's -e
+        # exempts a non-final command in an && list, and the grep below would
+        # then pass on its own.
+        run: |
+          test -n "$EXIT_CODE" \
+            && test "$EXIT_CODE" -ne 0 \
+            && grep -q missing-page.md "${{ runner.temp }}/links-self-test/report.md"
+      - name: every link resolves
+        uses: *lychee_action
+        with:
+          args: ${{ env.LYCHEE_OPTIONS }} '**/*.md'
           fail: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
