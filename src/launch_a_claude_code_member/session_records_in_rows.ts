@@ -18,10 +18,10 @@
 //   - a stream that cannot be read, or whose last row is not a record, reads as
 //     lost, and takes no append in this process;
 //   - an append the store refuses (ROW_STREAM_MOVED, ROW_NOT_DURABLE, anything
-//     else) rejects the flush, and a stream that reads back other than as kept
-//     rejects the check the launcher runs before every tool call. The launcher
-//     then refuses that session's every event for the rest of the process
-//     (Mars's point 3).
+//     else) rejects that session's flush, and only that session's; a stream
+//     that reads back other than as kept rejects the check the launcher runs
+//     before every tool call. The launcher then refuses that session's every
+//     event for the rest of the process (Mars's point 3).
 
 import type { Row, RowStore } from '../host_contract/host_contract.ts'
 import type { Ingestion, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -38,8 +38,13 @@ export interface SessionRecords {
   load(session_id: string): Promise<void>
   /** The store the core reads and writes, synchronously. */
   readonly store: SessionRecordStore
-  /** Appends every record written since the last flush, in order; rejects with the store's own error. */
-  flush(): Promise<void>
+  /**
+   * Appends the record written for this session since its last flush; rejects
+   * with the store's own error. Only this session's record is touched, and a
+   * record that fails is dropped, so one session's broken stream never refuses
+   * another session of the same launcher.
+   */
+  flush(session_id: string): Promise<void>
   /**
    * Reads a loaded session's stream again and rejects unless it still holds
    * exactly the rows this launcher kept: a store that no longer vouches for its
@@ -75,17 +80,17 @@ export function sessionRecordsIn(rows: RowStore): SessionRecords {
       },
       write: (session_id, session) => void pending.set(session_id, session),
     },
-    flush: async () => {
-      for (const [session_id, session] of [...pending]) {
-        const state = loaded.get(session_id)
-        if (state === undefined || !state.readable) {
-          throw new Error(`The record of session ${session_id} is not kept: its stream could not be read.`)
-        }
-        await rows.append(streamOf(session_id), session as unknown as Row, state.length)
-        state.length += 1
-        state.last = session
-        pending.delete(session_id)
+    flush: async (session_id) => {
+      const session = pending.get(session_id)
+      if (session === undefined) return
+      pending.delete(session_id)
+      const state = loaded.get(session_id)
+      if (state === undefined || !state.readable) {
+        throw new Error(`The record of session ${session_id} is not kept: its stream could not be read.`)
       }
+      await rows.append(streamOf(session_id), session as unknown as Row, state.length)
+      state.length += 1
+      state.last = session
     },
     check: async (session_id) => {
       const state = loaded.get(session_id)

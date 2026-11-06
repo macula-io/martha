@@ -25,7 +25,8 @@
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
 // tool server outlives it, its launch record is dropped, the server closes, and
 // the socket directory and the snapshot are removed. If the launcher itself
-// exits first, it kills the group and removes both directories on the way out.
+// exits first, or is ended by SIGTERM or SIGINT, it kills the group and removes
+// both directories on the way out.
 //
 // What the launcher does not do yet: hand a turn to the model or register a
 // tool for it (the contract's `delivery.handToModel` and `tools.register`). No
@@ -114,6 +115,9 @@ export type MemberStarted =
 
 const NOT_STARTED = 'The member is not started'
 
+/** The signals that end the launcher without its 'exit' event, and so clean up on their own. */
+const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
+
 /** Sends SIGKILL to a whole process group; a group already gone is no error. */
 function killGroup(group: number): void {
   try {
@@ -199,6 +203,20 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     removeSnapshot()
   }
   process.once('exit', onLauncherExit)
+  // SIGTERM and SIGINT end the process without 'exit', so each cleans up too.
+  // The signal is raised again once this launcher's handlers are off, unless
+  // some other part of the process still listens for it, so it still ends the
+  // launcher the way it would have.
+  const onLauncherSignal = (signal: NodeJS.Signals): void => {
+    offLauncherEnd()
+    onLauncherExit()
+    if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
+  }
+  const offLauncherEnd = (): void => {
+    process.off('exit', onLauncherExit)
+    for (const signal of LAUNCHER_END_SIGNALS) process.off(signal, onLauncherSignal)
+  }
+  for (const signal of LAUNCHER_END_SIGNALS) process.once(signal, onLauncherSignal)
 
   const stopped = new Promise<MemberStopped>((resolve) => {
     child.once('exit', (exit_code, signal) => {
@@ -208,7 +226,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
         await server.close()
         relayDirectory.remove()
         removeSnapshot()
-        process.off('exit', onLauncherExit)
+        offLauncherEnd()
         resolve({ exit_code, signal })
       })()
     })

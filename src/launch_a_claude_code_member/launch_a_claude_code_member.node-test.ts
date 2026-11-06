@@ -6,7 +6,7 @@
 // stand in for the engine's calls. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect } from 'node:net'
@@ -251,6 +251,27 @@ test('ROW_NOT_DURABLE on a record is never an allow: the prompt is refused, and 
   assert.equal(stops.length, 0)
 })
 
+test('one session whose record cannot be kept refuses only itself: another session starts and prompts', async (t) => {
+  const place = placeFor(t)
+  const real = rowStreamsDirectory(place.rows)
+  const broken = `${SESSION_RECORD_STREAM}session-a`
+  const rows: RowStore = {
+    read: (stream) => real.read(stream),
+    append: async (stream, row: Row, expected) => {
+      if (stream !== broken) return real.append(stream, row, expected)
+      throw Object.assign(new Error('the row is in the stream and not known to be durable'), { code: ROW_NOT_DURABLE })
+    },
+  }
+  const { relay } = answering(place, rows)
+  assert.ok(isRefused(await relay.answer('session_started', start('startup', 'session-a'))))
+
+  assert.deepEqual(await relay.answer('session_started', start('startup', 'session-b')), TAKEN_REPLY)
+  assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer', 'hello', 'session-b')), TAKEN_REPLY)
+  assert.deepEqual(await relay.answer('session_started', start('clear', 'session-c')), TAKEN_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call('Read', {}, 'session-b')), ALLOW_REPLY)
+  assert.ok(isRefused(await relay.answer('prompt_submitted', prompt('composer', 'hello', 'session-a'))), 'the broken session stays refused')
+})
+
 test('a second writer of a session record refuses the session', async (t) => {
   const place = placeFor(t)
   const { relay, rows } = answering(place)
@@ -294,7 +315,8 @@ test('a session record nobody loaded, or whose last row is no record, reads as l
   chmodSync(place.rows, 0o700)
   assert.equal(records.store.read('unreadable'), LOST)
   records.store.write('unreadable', { ingested: [] })
-  await assert.rejects(records.flush(), /could not be read/)
+  await assert.rejects(records.flush('unreadable'), /could not be read/)
+  assert.equal(records.store.read('unreadable'), LOST, 'a record that fails is dropped, and the session reads as lost')
 })
 
 // --- the relay socket's directory -----------------------------------------------
@@ -597,3 +619,63 @@ test('a member that exits by itself leaves no record, socket or snapshot, and no
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
 })
+
+/** A launcher in a process of its own, started on this place, that says when its member runs. */
+function launcherProcess(place: Place, command: string): string {
+  const script = join(place.home, 'launcher.ts')
+  const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
+  writeFileSync(
+    script,
+    [
+      `import { CLAUDE_CODE, launchClaudeCodeMember } from ${JSON.stringify(launchModule)}`,
+      `const place = ${JSON.stringify(place)}`,
+      'const started = await launchClaudeCodeMember({',
+      "  member_name: 'Mercury',",
+      `  node_id: ${JSON.stringify(NODE_ID)},`,
+      '  place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },',
+      '  policy: { may_send_executable_text: [] },',
+      '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root },',
+      `  command: ${JSON.stringify(command)},`,
+      "  args: ['-p', 'the owner prompt'],",
+      '  inherited: { PATH: process.env.PATH },',
+      "  stdio: 'ignore',",
+      '  tellOwner: () => undefined,',
+      '})',
+      "process.stdout.write(started.started ? 'started\\n' : 'refused\\n')",
+      '',
+    ].join('\n'),
+  )
+  return script
+}
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  test(`${signal} to the launcher kills its member's group and leaves no socket or snapshot`, async (t) => {
+    const place = placeFor(t)
+    const fake = fakeClaude(place)
+    const launcher = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+    t.after(() => launcher.kill('SIGKILL'))
+    const ended = new Promise<NodeJS.Signals | null>((resolve) => launcher.once('exit', (_code, by) => resolve(by)))
+    let said = ''
+    launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+    await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), 10000)
+    assert.equal(said, 'started\n')
+    assert.equal(readdirSync(place.relay_root).length, 1)
+    assert.equal(readdirSync(place.snapshot_root).length, 1)
+    const child = Number(readFileSync(fake.childFile, 'utf8').trim())
+    const group = Number(readFileSync(`/proc/${child}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
+    assert.ok(Number.isInteger(group) && group > 1 && group !== process.pid, 'the member has a group of its own')
+    t.after(() => {
+      try {
+        process.kill(-group, 'SIGKILL')
+      } catch {
+        // The group is gone, as it should be.
+      }
+    })
+
+    launcher.kill(signal)
+    assert.equal(await ended, signal, 'the signal still ends the launcher')
+    await until('the member\'s group to be killed', () => !isAlive(child))
+    assert.deepEqual(readdirSync(place.relay_root), [])
+    assert.deepEqual(readdirSync(place.snapshot_root), [])
+  })
+}

@@ -95,7 +95,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
   const keep = async (session: HostSession): Promise<string | undefined> => {
     rememberSession(place.records.store, session)
     try {
-      await place.records.flush()
+      await place.records.flush(session.id)
       sessions.set(session.id, session)
       return undefined
     } catch (error) {

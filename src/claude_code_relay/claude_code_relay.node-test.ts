@@ -11,13 +11,14 @@ import { test } from 'node:test'
 import { specifiersOf } from '../host_contract/imports_beyond_the_core.ts'
 import {
   processGroupOf,
+  relay,
   register,
   REFUSED_BY_THE_RELAY,
   type RelayCatch,
   type RelayEngine,
   type RelayHook,
 } from './hooks/register.ts'
-import { RELAY_DEADLINE_MS, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
+import { heardTaken, RELAY_DEADLINE_MS, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 type AnyHook = RelayHook<any, any>
 type AnyCatch = RelayCatch<any, any>
@@ -248,9 +249,13 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./register.ts'] })
 })
 
-test('the variable the relay reads is the one the launcher sets', () => {
-  const source = readFileSync(new URL('./hooks/register.ts', import.meta.url), 'utf8')
-  assert.deepEqual([...source.matchAll(/\$\.env\.get\('([^']+)'\)/g)].map((match) => match[1]), [RELAY_SOCKET_VARIABLE])
+test('the relay reads the socket only from the variable the launcher sets', async () => {
+  const asked: string[] = []
+  const fake = fakeEngine(sayYes)
+  const $: RelayEngine = { ...fake.$, env: { get: async (name) => (asked.push(name), fake.$.env.get(name)) } }
+  await relay($, 'prompt_submitted', { session_id: SESSION }, heardTaken)
+  assert.deepEqual(asked, [RELAY_SOCKET_VARIABLE])
+  assert.equal(fake.posted[0]?.socketPath, SOCKET)
 })
 
 test('the process group is read after the command name, whatever the name holds', () => {
