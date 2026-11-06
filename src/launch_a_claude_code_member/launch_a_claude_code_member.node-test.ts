@@ -54,7 +54,9 @@ function git(cwd: string, ...args: string[]): string {
   ).trim()
 }
 
-const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'true', args: [] } } })
+// A tool server pinned to one release: the only shape the launcher starts (martha#49).
+// The fake host never starts it.
+const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 
 function placeFor(t: TestContext, servers = SERVERS): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-cc-launch-'))
@@ -569,6 +571,39 @@ test('an approved config that installs a mesh server version nobody recorded sta
   assert.deepEqual(readdirSync(place.snapshot_root), [])
   assert.deepEqual(lines, [refusal])
 })
+
+// The shapes Neptunus's probe let through at PR 59 r=1: each starts code no
+// exact release names, so each starts nothing, naming the server.
+const SERVER_NAME = 'macula'
+const unpinnedServer = (entry: unknown) => JSON.stringify({ mcpServers: { [SERVER_NAME]: entry } })
+const UNPINNED_SHAPES: Record<string, unknown> = {
+  'a GitHub spec': { command: 'npx', args: ['-y', 'github:macula-io/macula-mcp'] },
+  'a git+https spec': { command: 'npx', args: ['-y', 'git+https://github.com/macula-io/macula-mcp.git'] },
+  'an http server': { type: 'http', url: 'https://mesh.example.invalid/mcp' },
+  'an sse server': { type: 'sse', url: 'https://mesh.example.invalid/sse' },
+  'a shell wrapper': { command: 'sh', args: ['-c', `npx -y "${MESH_SERVER_PACKAGE}"@latest`] },
+  'a package named in a variable': { command: 'sh', args: ['-c', 'npx -y "$P"'], env: { P: `${MESH_SERVER_PACKAGE}@latest` } },
+  'a global bin': { command: 'macula-mcp', args: [] },
+  'the package at latest': { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@latest`] },
+}
+
+for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
+  test(`an approved config whose server is ${shape} starts nothing, naming the server`, async (t) => {
+    const place = placeFor(t, unpinnedServer(entry))
+    const fake = fakeClaude(place)
+    const lines: string[] = []
+    const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+    // A launch that wrongly starts is stopped whole, so a failing run leaves no member behind.
+    if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+    assert.equal(started.started, false)
+    const refusal = started.started ? '' : started.refusal
+    assert.ok(refusal.includes(`server ${SERVER_NAME}`), refusal)
+    assert.equal(existsSync(fake.ranFile), false)
+    assert.deepEqual(readdirSync(place.relay_root), [])
+    assert.deepEqual(readdirSync(place.snapshot_root), [])
+    assert.deepEqual(lines, [refusal])
+  })
+}
 
 test('an approved config that installs a recorded mesh server version starts the member', async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]

@@ -8,6 +8,8 @@ import { MESH_SERVER_PACKAGE } from '../read_a_room_through_its_gate/mesh_server
 import { meshServerVersionsIn } from './mesh_server_install.ts'
 
 const VERSION = '0.51.0'
+const OTHER_PACKAGE = 'another-tool-server'
+const SERVER_NAME = 'tools'
 const config = (servers: Record<string, unknown>) => JSON.stringify({ mcpServers: servers })
 const npx = (...args: string[]) => ({ command: 'npx', args: ['-y', ...args] })
 
@@ -15,8 +17,8 @@ test('a server pinned to an exact version reads as that version', () => {
   assert.deepEqual(meshServerVersionsIn(config({ macula: npx(`${MESH_SERVER_PACKAGE}@${VERSION}`) }), MESH_SERVER_PACKAGE), { versions: [VERSION] })
 })
 
-test('a config with no mesh server, or no servers at all, installs none', () => {
-  assert.deepEqual(meshServerVersionsIn(config({ probe: { command: 'true', args: [] } }), MESH_SERVER_PACKAGE), { versions: [] })
+test('a config whose servers are pinned to other packages, or has no servers at all, installs no mesh server', () => {
+  assert.deepEqual(meshServerVersionsIn(config({ other: npx(`${OTHER_PACKAGE}@${VERSION}`) }), MESH_SERVER_PACKAGE), { versions: [] })
   assert.deepEqual(meshServerVersionsIn(JSON.stringify({}), MESH_SERVER_PACKAGE), { versions: [] })
 })
 
@@ -44,9 +46,46 @@ test('a server started from an installed copy of the package is refused: a path 
   assert.ok('refusal' in read && read.refusal.includes('macula'), JSON.stringify(read))
 })
 
-test('a server whose command itself names the package is read too', () => {
-  const read = meshServerVersionsIn(config({ macula: { command: `${MESH_SERVER_PACKAGE}@${VERSION}` } }), MESH_SERVER_PACKAGE)
-  assert.deepEqual(read, { versions: [VERSION] })
+// Every shape that starts code no exact release names is refused, naming the
+// server, whether or not it looks like the mesh server (Neptunus's probe, PR 59 r=1).
+const UNPINNED: Record<string, unknown> = {
+  'a GitHub spec': npx(`github:${OTHER_PACKAGE}`),
+  'a git+https spec': npx(`git+https://example.invalid/${OTHER_PACKAGE}.git`),
+  'an http server': { type: 'http', url: 'https://mesh.example.invalid/mcp' },
+  'an sse server': { type: 'sse', url: 'https://mesh.example.invalid/sse' },
+  'a shell wrapper': { command: 'sh', args: ['-c', `npx -y "${MESH_SERVER_PACKAGE.slice(0, 3)}"${MESH_SERVER_PACKAGE.slice(3)}@latest`] },
+  'a package named in a variable': { command: 'sh', args: ['-c', 'npx -y "$P"'], env: { P: `${MESH_SERVER_PACKAGE}@${VERSION}` } },
+  'a bare installed bin': { command: OTHER_PACKAGE, args: [] },
+  'the package as the command': { command: `${MESH_SERVER_PACKAGE}@${VERSION}` },
+  'a pin with its registry changed': { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { npm_config_registry: 'https://registry.example.invalid' } },
+  'a pin with node options': { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { NODE_OPTIONS: '--import=/x.mjs' } },
+  'a pin with its PATH changed': { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { PATH: '/x' } },
+  'a pin through npm exec': { command: 'npm', args: ['exec', '-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, '--', OTHER_PACKAGE] },
+  'a pin with more arguments': npx(`${MESH_SERVER_PACKAGE}@${VERSION}`, '--package', `${MESH_SERVER_PACKAGE}@latest`),
+  'a pin with a working directory': { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), cwd: '/x' },
+  'an unpinned other package': npx(`${OTHER_PACKAGE}@latest`),
+  'a command that does nothing': { command: 'true', args: [] },
+}
+
+for (const [shape, entry] of Object.entries(UNPINNED)) {
+  test(`a server that is ${shape} is refused, naming the server: no exact pin, no proof`, () => {
+    const read = meshServerVersionsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
+    assert.ok('refusal' in read, JSON.stringify(read))
+    assert.ok(read.refusal.includes(SERVER_NAME), read.refusal)
+  })
+}
+
+test('one unpinned server refuses a config whose mesh server is pinned', () => {
+  const read = meshServerVersionsIn(
+    config({ macula: npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), [SERVER_NAME]: UNPINNED['a bare installed bin'] }),
+    MESH_SERVER_PACKAGE,
+  )
+  assert.ok('refusal' in read && read.refusal.includes(SERVER_NAME), JSON.stringify(read))
+})
+
+test('a pin may name the stdio transport and an env that leaves the install alone', () => {
+  const entry = { type: 'stdio', ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r' } }
+  assert.deepEqual(meshServerVersionsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { versions: [VERSION] })
 })
 
 test('a config that is not a JSON object, or whose servers are not one, is refused', () => {
