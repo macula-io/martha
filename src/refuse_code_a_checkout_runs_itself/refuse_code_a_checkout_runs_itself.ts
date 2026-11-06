@@ -79,6 +79,7 @@ export const GIT_SETTINGS_VARIABLE = 'GIT_CONFIG_PARAMETERS'
 
 /** npm's setting, as its environment spells it. */
 export const NPM_SCRIPTS_OFF_VARIABLE = 'npm_config_ignore_scripts'
+export const NPM_GIT_VARIABLE = 'npm_config_git'
 const NPM_SETTING = 'ignore-scripts'
 const NPM_PREFIX = /^npm_config_/i
 
@@ -100,7 +101,7 @@ export function gitQuoted(word: string): string {
 }
 
 /** The name npm reads an environment variable as, or `undefined` for one npm does not read. */
-function npmSettingOf(name: string): string | undefined {
+export function npmSettingOf(name: string): string | undefined {
   if (!NPM_PREFIX.test(name)) return undefined
   return name.slice('npm_config_'.length).replace(/(?!^)_/g, '-').toLowerCase()
 }
