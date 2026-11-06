@@ -30,7 +30,7 @@ npm run typecheck      # tsc --noEmit
 process once its tests are done, even if it still holds something open. So a
 hung test never outlives an interrupted run, and a check
 (`prove_the_core/every_test_run_ends.ts`) fails when the script loses either
-flag. The timeout is defined there and nowhere else. A test that leaves a
+flag. The timeout is written once, in the test script in package.json. A test that leaves a
 server or timer running no longer hangs the run, so it gets no warning
 either: clean up in `t.after`, registered before the first assert.
 
