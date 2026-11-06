@@ -91,6 +91,26 @@ test('a link through another link that stays inside martha/ is written as given'
   assert.equal(readFileSync(join(dir, 'martha', 'm'), 'utf8'), 'f\n')
 })
 
+/**
+ * A chain of `links` links, l1 -> l2 -> ... -> l<links> -> f: resolving l1 follows every one of them.
+ * @param {number} links
+ */
+const chainOf = (links) => [
+  { name: 'martha/', type: '5' },
+  { name: 'martha/f', body: 'f\n' },
+  ...Array.from({ length: links }, (_, i) => ({ name: `martha/l${i + 1}`, type: '2', target: i + 1 === links ? 'f' : `l${i + 2}` }))
+]
+
+test('a chain of as many links as the kernel follows is written, and resolves on disk', async (t) => {
+  const dir = stage(t)
+  await unpackLayer(layerOf(chainOf(UNPACK_LIMITS.linkHops)), dir)
+  assert.equal(readFileSync(join(dir, 'martha', 'l1'), 'utf8'), 'f\n')
+})
+
+test('refused: a chain of one link more than the kernel follows', async (t) => {
+  await refusedWithNothingWritten(t, layerOf(chainOf(UNPACK_LIMITS.linkHops + 1)), new RegExp(`through more than ${UNPACK_LIMITS.linkHops} links`))
+})
+
 for (const [what, entries, pattern] of hostile) {
   test(`refused: ${what}`, async (t) => {
     await refusedWithNothingWritten(t, layerOf(/** @type {any} */ (entries)), /** @type {RegExp} */ (pattern))
