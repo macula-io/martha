@@ -58,7 +58,8 @@
 //      when fg handed the terminal over: bash's job control does both, and the
 //      tests that kill a member and that let one exit with the terminal changed
 //      fail if a bash does not;
-//   6. ends the way the member ended: a member killed by a signal ends the
+//   6. ends the way the member ended, also when it ended before fg reached it
+//      (its status is waited for then, not fg's): a member killed by a signal ends the
 //      shell with the same signal (a shell sees both as 128+n, so a member that
 //      exits with 128+n by itself reads as killed by n).
 //
@@ -111,18 +112,28 @@ export const FOREGROUND_JOB_SCRIPT = [
   `type -P -- "$1" > /dev/null || exit ${NOT_A_COMMAND}`,
   'set -m',
   `{ read -r _ <&${ADMIT_FD} || exit ${NOT_ADMITTED}; exec ${ADMIT_FD}<&- "$@"; } ${MEMBER_PID_FD}>&- &`,
+  'member=$!',
   `echo "$!" >&${MEMBER_PID_FD}`,
   `exec ${MEMBER_PID_FD}>&- ${ADMIT_FD}<&-`,
   // fg prints the job's command line; only that goes nowhere. A job stopped by
   // SIGTSTP (Ctrl-Z) makes bash break out of every loop it is in, and a stop
   // abandons the rest of the list fg is in, so the resuming is a function that
   // calls itself again, with fg and what reads its status commands of their own.
+  // A job that ended before fg reached it is no job fg can bring back, and fg
+  // fails with 1, not the member's status; the shell still has that status to
+  // wait for (martha#94: a member not admitted ends at once). Once fg has
+  // collected a job, wait has nothing (127, not a child), and fg's status is
+  // the member's.
+  'endedBeforeFg() { wait "$member" 2> /dev/null; ended=$?; }',
   'resume() {',
+  '  [ -n "$(jobs -p)" ] || { endedBeforeFg; rc=$ended; return; }',
   '  fg > /dev/null',
   '  rc=$?',
   '  [ -z "$(jobs -s)" ] || resume',
   '}',
   'resume',
+  // The job ended between the look and fg: fg failed with 1, and wait has the member's status.
+  '[ "$rc" -ne 1 ] || { endedBeforeFg; [ "$ended" -eq 127 ] || rc=$ended; }',
   '[ "$rc" -gt 128 ] && kill -s "$(kill -l "$rc")" "$$"',
   'exit "$rc"',
 ].join('\n')
