@@ -27,7 +27,8 @@
 // does not name — and it must admit a rostered member, so a gate that refuses
 // everything is caught too.
 
-import { DELIVERY_GATES, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, DELIVERY_GATES, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import type { ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
   fingerprintOf,
@@ -129,27 +130,31 @@ export function gapsInGateCoverage(
   gateRefuses: (path: string) => boolean,
   delivery_gates: Readonly<Record<string, DeliveryGate>> = DELIVERY_GATES,
   launch_gates: Readonly<Record<string, LaunchGate>> = LAUNCH_GATES,
+  argument_gates: Readonly<Record<string, ArgumentGate>> = ARGUMENT_GATES,
 ): readonly Gap[] {
   const gaps: Gap[] = []
+  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates }
 
   for (const path of paths) {
-    const why = gapOfRow(path, gateRefuses, delivery_gates, launch_gates)
+    const why = gapOfRow(path, gateRefuses, gates)
     if (why !== undefined) gaps.push({ path: path.id, why })
   }
 
   return gaps
 }
 
+/** Every gate a row may name, by kind. */
+interface Gates {
+  readonly delivery: Readonly<Record<string, DeliveryGate>>
+  readonly launch: Readonly<Record<string, LaunchGate>>
+  readonly argument: Readonly<Record<string, ArgumentGate>>
+}
+
 /**
  * Why one row is a gap, or undefined when its control stands on it. Each kind
  * of control is judged by its own rule, and the first rule that applies decides.
  */
-function gapOfRow(
-  path: InboundPath,
-  gateRefuses: (path: string) => boolean,
-  delivery_gates: Readonly<Record<string, DeliveryGate>>,
-  launch_gates: Readonly<Record<string, LaunchGate>>,
-): string | undefined {
+function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gates: Gates): string | undefined {
   const control: InboundPath['control'] | undefined = path.control
 
   if (control === undefined) return 'no control is declared'
@@ -160,10 +165,50 @@ function gapOfRow(
     return `is code the host starts by itself, and ${control.kind} does not stand in front of that`
   }
 
-  if (control.kind === 'launch-gate') return launchedRowGap(path, control, launch_gates)
+  if (control.kind === 'launch-gate') return launchedRowGap(path, control, gates.launch)
 
-  return claimedControlGap(path, control, gateRefuses, delivery_gates)
+  if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
+
+  return claimedControlGap(path, control, gateRefuses, gates.delivery)
 }
+
+/** Why a row naming an argument gate is a gap: it is not delivered text, or its gate fails a question. */
+function argumentRowGap(path: InboundPath, name: string, argument_gates: Readonly<Record<string, ArgumentGate>>): string | undefined {
+  if (path.klass !== 'delivered') return 'names an argument gate on a path that hands the host no words'
+  const gate = argument_gates[name]
+  if (gate === undefined) return `names an argument gate nobody has built: ${name}`
+  const failed = ARGUMENT_PROBES.find((probe) => gate(probe.args) !== probe.passes)
+  if (failed === undefined) return undefined
+  return failed.passes ? `the gate ${name} refuses ${failed.what}` : `the gate ${name} passes ${failed.what}`
+}
+
+export interface ArgumentProbe {
+  readonly passes: boolean
+  readonly what: string
+  readonly args: readonly string[]
+}
+
+/**
+ * The questions every argument gate is asked, one per class of word the host
+ * acts on after the launch gate: a prompt, config, a plugin, a permission, a
+ * session brought back, a switch smuggled in as another's value, a switch the
+ * gate has never heard of. The first is no arguments at all, so a gate that
+ * refuses everything is caught.
+ */
+export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
+  { passes: true, what: 'no arguments at all', args: [] },
+  { passes: true, what: 'a model to run', args: ['--model', 'a-model'] },
+  { passes: false, what: 'a prompt on the command line', args: ['a prompt'] },
+  { passes: false, what: 'a settings file or JSON', args: ['--settings', '{}'] },
+  { passes: false, what: 'which settings sources load', args: ['--setting-sources', 'user,project'] },
+  { passes: false, what: 'a tool-server config', args: ['--mcp-config', 'servers.json'] },
+  { passes: false, what: 'a plugin directory', args: ['--plugin-dir', 'plugin'] },
+  { passes: false, what: 'skipping every permission check', args: ['--dangerously-skip-permissions'] },
+  { passes: false, what: 'a permission mode', args: ['--permission-mode', 'bypassPermissions'] },
+  { passes: false, what: 'a session brought back', args: ['--resume', 'a-session'] },
+  { passes: false, what: 'a switch carried as another switch\'s value', args: ['--model', '--settings', '{}'] },
+  { passes: false, what: 'a switch nobody has read', args: ['--a-switch-a-later-host-adds'] },
+]
 
 /** Why a row naming a launch gate is a gap: it is not launched, says nothing of where Martha does not start the host, or its gate fails a question. */
 function launchedRowGap(

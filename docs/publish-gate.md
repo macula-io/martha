@@ -109,6 +109,10 @@ control:
   carries no body text, and must say why;
 - **launch gate** — for code the host starts by itself (below), the only
   control such a row may declare;
+- **refused before launch** — for words handed to the host when Martha starts
+  it (A15, below): an argument gate this repository implements and the check
+  drives judges them before the host starts, and any word it does not pass
+  refuses the start;
 - **none** — no control. A row in this state fails CI on purpose.
 
 A path is never removed from the list. A path that stops delivering text gets a
@@ -606,11 +610,36 @@ A typed turn never clears a stranger's text already in the session. A paste is
 the owner's act: whatever the owner pastes is the owner's. Claiming `composer`
 on the socket is T13, and A14 does not widen it.
 
+**The owner relays every hand-off between members (first release, martha#51
+ruling).** A member's policy names no node id (`martha start` passes
+`may_send_executable_text: []`), so no member's text keeps another member's
+shell. A hand-off reaches the next member only when the owner pastes it at that
+member's terminal, which arrives on A14 as the owner's act. That is the same
+path, so it has no row of its own. What it rests on, stated: the text was
+written by a member that may have read a stranger's text, and the owner reading
+it before pasting is the only gate between the two.
+
+**The owner's words to `martha start` (A15, martha#98).** `martha start
+<member> -- <args>` hands words to the host after the launch gate has judged the
+launch. A prompt there would be a turn no host stamped as the owner's; a
+`--settings`, `--mcp-config` or `--plugin-dir` loads config or code nobody
+approved; `--setting-sources` and `--strict-mcp-config` undo the switches the
+gate passes; a permission switch lets a tool past the shell gate's hook;
+`--resume` and `--continue` bring back a session whose record the launch does
+not hold. `src/pass_only_switches_that_load_no_config/` is an allow-list:
+`--model <value>`, `--effort <value>` and `--verbose`, each of which loads no
+file, starts nothing and changes no permission. Every other word, a switch a
+later host adds included, refuses the start by name. A value switch refuses a
+missing value or one that starts with `-`, so one switch cannot carry another as
+its value. `martha start` also starts only on a terminal, as `martha approve`
+asks only on one, so a member's shell tool cannot start a sibling.
+
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the
 launcher handing a turn to the model or registering a tool (no slice does
-either yet); and reading approvals and the policy from the crew's declaration
-(the caller passes them until port-map step 2 lands).
+either yet); and reading the policy from the crew's declaration. `martha start`
+passes the approvals the owner gave in `martha approve`, kept in Martha's state
+outside the checkout, and a policy that names nobody (the owner relays).
 
 ### Who sent a cross-session message
 
@@ -799,6 +828,15 @@ a file added after the approval, a config one directory up, a symlink even when
 approved, a host it has no file list for, and a request whose config was never
 read.
 
+A row refused before launch must be delivered text, and its argument gate is
+driven once per class of word the host acts on: it must pass no arguments and a
+model, and refuse a prompt on the command line, a settings file, the settings
+sources, a tool-server config, a plugin directory, skipping permission checks, a
+permission mode, a session brought back, a switch carried as another's value and
+a switch nobody has read. A gate that passes everything, one that refuses
+everything, one that knows only one config switch, and a row naming a gate nobody
+built are each named.
+
 Its tests plant each of those mistakes to prove the check is not vacuous: a row
 copied from the table without a control, a row whose control was forgotten, a row
 claiming the shell gate while the gate does not refuse it, a row naming a gate
@@ -807,24 +845,23 @@ member, and a row excused without a reason. Each of those turns CI red.
 
 ## What this does not yet do
 
-- **No host adapter is wired.** The rule and the check are the core's; calling
-  the refusal from a host's tool call is the adapter's job, and no adapter is in
-  this repository yet. `src/refuse_execution_after_ungated_text/` is a rule with
-  tests and no caller — deliberately, and the reason nothing here is published.
-- **The launch gate has no caller yet.** `src/refuse_launch_of_unapproved_config/`
-  is the rule and the reader; no launcher or turn hook calls it, because no host
-  adapter is in this repository. Until one does, a checkout's own config starts
-  as each host decides, which the table above describes.
+What runs today, through `martha start`: the launch gate (`prepareLaunch`, on
+the owner's approval), the shell gate (`answerToolCall`, from the Claude Code
+relay before every tool call), the recheck after every call, the argument gate,
+and the owner's typed turn on A14. What does not:
+
 - **No host attests a cross-session sender yet.** The binder is built and
   tested; no adapter in this repository hands it a sender, so every
   cross-session message still taints. A host gains it by attesting the sending
   process out of band and passing
   `binderOverLaunches(host.stores.launches, host.processes, signedMembers)`,
   where `signedMembers` returns `trustedMembers` of the opened `members` list.
+  For the first release this is why the owner relays every hand-off.
 - **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
-  rule; the room code that delivers messages is the crew's existing implementation,
-  so nothing in this repository calls it. A host must call it before it turns a
-  message into a turn, and refuse the message when it says no.
+  rule, and `readRoomThroughItsGate` calls it, but no host registers that read,
+  so a member started by `martha start` reads no room: the raw mesh reads are
+  refused (B1). A host that delivers room messages must call it before it turns
+  a message into a turn, and refuse the message when it says no.
 - **The who-may-act rule has no callers yet either.** `src/who_may_act/` is the
   rule the seven tools must call; the tools themselves are not in this repository,
   so nothing calls it today. Until a host or a tool calls it, the crew's
@@ -834,3 +871,46 @@ member, and a row excused without a reason. Each of those turns CI red.
     without calling the rule at all. An adapter must therefore call
     `unknownSupervisorOnlyTools` with its own list of supervisor-only tools and
     fail unless that list equals `SUPERVISOR_ONLY_ACTIONS`.
+
+## What Martha shows the owner
+
+The gate decides by what the owner reads, in `martha approve` above all, so
+nothing Martha shows may move, erase or reorder it. Every line the `martha`
+command writes, on stdout and stderr, goes through one function
+(`shownSafely` in `src/run_the_martha_command/`) first:
+
+| What could reach the owner's terminal | What stands on it |
+|---|---|
+| a path, a member's name or a kept approval holding bytes a terminal acts on: C0 and C1 controls, DEL, the bidirectional overrides and isolates, the left-to-right, right-to-left and Arabic letter marks (U+200E, U+200F, U+061C), and the line and paragraph separators (U+2028, U+2029) | each is written out as an escape (`\x1b`, `\u202e`), so the line shows what is there and does nothing else |
+| an error no act expected, whose message may hold any of the above | `runMarthaCommand` catches it and shows its message as one refused `martha:` line, escaped like every other; Node's own trace, which would print the message raw, never runs |
+
+Both are tested by the command as a stranger runs it (`bin/martha`), with a
+directory name holding every class above.
+
+## What the first release leaves open
+
+Stated, not closed. Each is a residual a reader should know before trusting a
+crew with a shell:
+
+- **Martha's own state is the owner's user's to write
+  ([#1](https://github.com/macula-io/martha/issues/1) decision 2,
+  [#24](https://github.com/macula-io/martha/issues/24)).** A member runs as the
+  owner's OS user, so its shell can append a line to `approvals.jsonl`, rewrite
+  `members.json`, or swap a file between `martha approve` showing it and the
+  owner reading it. A line is believed only in the exact shape approve writes,
+  with the gate's own fingerprint over its own entries, and `martha start` shows
+  the owner the approval it starts on and when it was given: speed bumps, not a
+  boundary. The boundary is #24.
+- **The contact list ([#48](https://github.com/macula-io/martha/issues/48)).**
+  The mesh tools that serve or change it are refused, but a clean member can
+  still write the contact-policy file from its shell, or start a mesh process
+  of its own that serves. Signing that file is macula-io/macula-mcp#79.
+- **A procedure the owner signs ([#50](https://github.com/macula-io/martha/issues/50))**
+  is a proposal, not built: no member serves anything.
+- **T13**: a process of the same OS user can connect to a launch's relay socket
+  and claim any origin, `composer` included (above).
+- **The terminal check is a speed bump.** `martha approve` and `martha start`
+  ask only when their input is a terminal, so a member's shell tool, whose input
+  never is one, is refused. A member's shell can still give a command a terminal
+  of its own, with `script(1)` or `unbuffer`, and answer for the owner. Only a
+  boundary between the member and the owner's terminal closes it (#24).

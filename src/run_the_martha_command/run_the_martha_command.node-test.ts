@@ -173,11 +173,27 @@ test('martha start whose input is no terminal refuses, so a member\'s shell cann
 test('what martha shows the owner carries no terminal control: it is written out as an escape', (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-command-')))
   t.after(() => rmSync(home, { recursive: true, force: true }))
-  const root = join(home, 'erase\u001b[2K\u009bline\u202e')
+  const root = join(home, 'erase\u001b[2K\u009bline\u202e\u200e\u200f\u061c\u2028\u2029')
   mkdirSync(root)
   const run = martha({ home, root }, 'init')
   assert.equal(run.status, EXIT_REFUSED, run.said)
-  assert.doesNotMatch(run.said, /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u)
-  assert.ok(run.err.includes('erase\\x1b[2K\\x9bline\\u202e'), run.err)
+  assert.doesNotMatch(run.said, SHOWN_CONTROLS)
+  assert.ok(run.err.includes('erase\\x1b[2K\\x9bline\\u202e\\u200e\\u200f\\u061c\\u2028\\u2029'), run.err)
+  allSaidByMartha(run.err)
+})
+
+/** What no line Martha shows may carry: every control and direction mark a terminal acts on, the newline that ends a line aside. */
+const SHOWN_CONTROLS = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u
+
+test('an error nobody expected reaches the owner as one escaped martha: line, never as Node\'s own trace', (t) => {
+  const place = placeFor(t)
+  const closed = join(place.home, 'closed\u001b[2K\u202e')
+  // Empty and closed to writing: the state root cannot be made in it, and the home's removal still takes it.
+  mkdirSync(closed, { mode: 0o500 })
+  const run = marthaWith(place, { XDG_STATE_HOME: closed }, 'init')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.doesNotMatch(run.said, SHOWN_CONTROLS)
+  assert.doesNotMatch(run.err, /^\s+at /m, 'no stack trace')
+  assert.ok(run.err.includes('closed\\x1b[2K\\u202e'), run.err)
   allSaidByMartha(run.err)
 })

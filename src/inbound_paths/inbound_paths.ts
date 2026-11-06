@@ -13,6 +13,7 @@
 
 import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
 import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 /**
  * How the path reaches the member.
@@ -72,6 +73,17 @@ export const LAUNCH_GATES = {
 export type KnownLaunchGate = keyof typeof LAUNCH_GATES
 
 /**
+ * The argument gates, by the name a row may use: what decides which of the
+ * owner's words reach the host when Martha starts it. The coverage check drives
+ * the function behind the name, once per question.
+ */
+export const ARGUMENT_GATES = {
+  'owner-arguments-load-no-config': passesOnlySwitchesThatLoadNoConfig,
+} as const satisfies Record<string, ArgumentGate>
+
+export type KnownArgumentGate = keyof typeof ARGUMENT_GATES
+
+/**
  * What stops outsider text on this path from being acted on.
  *
  * - `delivery-gate` — a deterministic check on the sender runs before the text
@@ -86,6 +98,10 @@ export type KnownLaunchGate = keyof typeof LAUNCH_GATES
  *   (../refuse_launch_of_unapproved_config). The only control a `launched` row
  *   may declare. `residual` says, in words, what happens where Martha does not
  *   start the host itself and so cannot run the gate first.
+ * - `refused-before-launch` — words handed to the host when Martha starts it,
+ *   judged before the host starts: every word the named argument gate does not
+ *   pass refuses the start, so none reaches the model or the host's config.
+ *   Only a `delivered` row may declare it.
  * - `none` — no control. A row in this state fails CI on purpose.
  */
 export type Control =
@@ -93,6 +109,7 @@ export type Control =
   | { readonly kind: 'shell-gate' }
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
   | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
+  | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
   | { readonly kind: 'none' }
 
 export interface InboundPath {
@@ -201,6 +218,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'host-engine',
+  },
+  {
+    id: 'A15',
+    what: "the owner's words after martha start <member> --, which the host would act on after the launch gate judged the launch: a prompt there is a turn no host stamped as the owner's, a --settings, --mcp-config or --plugin-dir loads config or code nobody approved, a permission switch lets a tool past the shell gate's hook (martha#98)",
+    klass: 'delivered',
+    control: { kind: 'refused-before-launch', gate: 'owner-arguments-load-no-config' },
+    attestation: 'none',
   },
   {
     id: 'B1',
