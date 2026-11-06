@@ -23,8 +23,8 @@ test('the host contract has exactly the five parts decided on #1', () => {
   assert.deepEqual({ extra, missing }, { extra: [], missing: [] })
 })
 
-test('stores are rows and documents, nothing else', () => {
-  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'rows'])
+test('stores are rows, documents and the launcher\'s records (#42), nothing else', () => {
+  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'launches', 'rows'])
 })
 
 // --- the core reaches a coding tool only through the contract -----------------

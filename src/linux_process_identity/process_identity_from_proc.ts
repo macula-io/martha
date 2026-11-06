@@ -1,4 +1,8 @@
-// When a process started, as the Linux kernel says it, boot included.
+// Which process holds a pid, as the Linux kernel says it: the host contract's
+// `processes.identityOf` (#42). Host-neutral host glue: Linux facts, not a coding
+// tool's, so every host adapter on Linux composes this one.
+//
+// The identity is when the process started, boot included.
 //
 // Field 22 of /proc/<pid>/stat is the process's start time in clock ticks since
 // boot. A pid the kernel hands out again goes to a process with another start
@@ -16,7 +20,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { ProcessTable } from './attribute_a_cross_session_sender.ts'
+import type { Processes } from '../host_contract/host_contract.ts'
+
+/** The part of the contract this file provides. */
+export type ProcessIdentities = Pick<Processes, 'identityOf'>
 
 /** The start time's place among the fields that follow the command name (field 3 onwards). */
 const START_TIME_AFTER_COMMAND = 22 - 3
@@ -27,10 +34,10 @@ const BOOT_ID = join('sys', 'kernel', 'random', 'boot_id')
 /** A boot id as the kernel writes it. */
 const BOOT_ID_FORM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-/** The process table under a /proc root; the live kernel's is `linuxProcessTable`. */
-export function procProcessTable(proc_root: string): ProcessTable {
+/** Process identities under a /proc root; the live kernel's are `linuxProcessIdentities`. */
+export function procProcessIdentities(proc_root: string): ProcessIdentities {
   return {
-    startTimeOf(pid) {
+    identityOf(pid) {
       if (!Number.isSafeInteger(pid) || pid <= 0) return null
 
       const boot = bootOf(proc_root)
@@ -43,8 +50,8 @@ export function procProcessTable(proc_root: string): ProcessTable {
   }
 }
 
-/** The live kernel's process table. */
-export const linuxProcessTable: ProcessTable = procProcessTable('/proc')
+/** The live kernel's process identities. */
+export const linuxProcessIdentities: ProcessIdentities = procProcessIdentities('/proc')
 
 /** The start time in one /proc/<pid>/stat line, or null when the line is not one. */
 export function startTimeIn(stat: string): string | null {

@@ -5,8 +5,9 @@
 // (issue #1, "Host-neutral core, one host contract"; #15 finding 1):
 //
 //   - a clock;
-//   - stores: append-only rows, and documents read as text;
-//   - running a process;
+//   - stores: append-only rows, documents read as text, and the launcher's
+//     records kept one per key;
+//   - running a process, and telling which process holds a pid;
 //   - delivery in and out: a turn handed to the model, and the turns that
 //     arrive, with where each came from as far as the tool itself can say;
 //   - registering a tool.
@@ -69,9 +70,44 @@ export interface DocumentStore {
   read(path: string): Promise<string>
 }
 
+/** A row kept under a key, read back with its key. */
+export interface KeyedRow {
+  readonly key: string
+  readonly row: Row
+}
+
+/**
+ * Rows kept one per key, each written whole in place of the last, for the
+ * launcher's records (martha#14, #42). Only the launcher's slice writes here;
+ * a check in prove_the_core names any other caller of `keep` or `drop`.
+ *
+ * Synchronous on purpose: the binder runs inside a synchronous turn, and with no
+ * await between reading a record and asking which process holds its pid, nothing
+ * else can run in between.
+ *
+ * A key is an opaque name, like a stream name: the adapter encodes it before it
+ * touches a path. The adapter must keep these promises, which its own tests prove:
+ *
+ *   - `all` returns no rows at all when the store cannot vouch for what it holds:
+ *     a place others may write into, an entry it did not write, a link, or a row
+ *     not readable as JSON;
+ *   - a row is read from the very thing that was checked, never checked by one
+ *     name and read by another;
+ *   - a reader never sees half of a row.
+ */
+export interface KeyedRowStore {
+  /** Every row with its key, or none when the store cannot vouch for what it holds. */
+  all(): readonly KeyedRow[]
+  /** Keeps this row under this key, in place of any row it had. */
+  keep(key: string, row: Row): void
+  /** Drops the row under this key, if there is one. */
+  drop(key: string): void
+}
+
 export interface Stores {
   readonly rows: RowStore
   readonly documents: DocumentStore
+  readonly launches: KeyedRowStore
 }
 
 /** A process to run: the command, its arguments and the directory it runs in. */
@@ -90,6 +126,14 @@ export interface ProcessOutcome {
 
 export interface Processes {
   run(request: ProcessRequest): Promise<ProcessOutcome>
+  /**
+   * Which process holds this pid now: an opaque text naming the boot and when in
+   * that boot the process started, or null when no process holds it or the boot
+   * cannot be told. A pid handed out again, or the same pid and start after a
+   * reboot, gives another text. Callers compare it for equality and never parse it.
+   * Synchronous for the reason KeyedRowStore gives.
+   */
+  identityOf(pid: number): string | null
 }
 
 // --- where a turn came from ---------------------------------------------------

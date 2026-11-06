@@ -7,10 +7,15 @@
 // clock, make the next append fail, see which documents were read, watch what
 // was handed to the model, and make a turn arrive. It runs no process of its
 // own: a test that needs one passes the runner, and without one a run is refused.
+//
+// It fails closed where the core trusts the host (#42): with nothing given, the
+// launcher's records are empty and no pid is held by any process, so a binder
+// over this host binds nobody unless a test says otherwise.
 
 import type {
   ArrivingTurn,
   HostContract,
+  KeyedRow,
   ProcessOutcome,
   ProcessRequest,
   Row,
@@ -26,6 +31,10 @@ export interface HostForTestsOptions {
   readonly documents?: Readonly<Record<string, string>>
   /** Runs a process for the test. */
   readonly run?: (request: ProcessRequest) => Promise<ProcessOutcome>
+  /** The launcher's records the store starts with. */
+  readonly launches?: readonly KeyedRow[]
+  /** Which process holds a pid; asked afresh every time. */
+  readonly identityOf?: (pid: number) => string | null
 }
 
 export interface HostForTests {
@@ -55,6 +64,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
   const listeners: ((turn: ArrivingTurn) => void)[] = []
   const tools = new Map<string, Tool>()
   const documents = options.documents ?? {}
+  const launches = new Map((options.launches ?? []).map(({ key, row }) => [key, kept(row)]))
 
   const append = async (stream: string, row: Row, expected_length?: number): Promise<number> => {
     if (refusal !== undefined) {
@@ -88,12 +98,18 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
           return text
         },
       },
+      launches: {
+        all: () => [...launches].map(([key, text]) => ({ key, row: JSON.parse(text) as Row })),
+        keep: (key, row) => void launches.set(key, kept(row)),
+        drop: (key) => void launches.delete(key),
+      },
     },
     processes: {
       run: async (request) => {
         if (options.run === undefined) throw new Error(`no process runner was given to this test host: ${request.command}`)
         return options.run(request)
       },
+      identityOf: (pid) => options.identityOf?.(pid) ?? null,
     },
     delivery: {
       handToModel: async (text) => void handed.push(text),

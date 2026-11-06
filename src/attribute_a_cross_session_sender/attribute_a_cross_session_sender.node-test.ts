@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import fs, { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { test, type TestContext } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   refuseExecutionAfterUngatedText,
@@ -11,19 +10,20 @@ import {
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import type { Arrival } from '../host_contract/host_contract.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { coreSources, specifiersOf } from '../host_contract/imports_beyond_the_core.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   binderOverLaunches,
   bindNothing,
   recordMemberLaunch,
+  launchesIn,
   recordMemberStopped,
   type Binder,
   type MemberLaunch,
   type MemberLaunchStore,
   type ProcessTable,
 } from './attribute_a_cross_session_sender.ts'
-import { linuxProcessTable, procProcessTable, startTimeIn } from './linux_process_table.ts'
-import { MEMBER_LAUNCH_FILE_MODE, MEMBER_LAUNCH_SUFFIX, memberLaunchesDirectory } from './member_launches_directory.ts'
 
 // Synthetic node ids and pids, never a real one: this repository is public.
 const PLUTO = { member_name: 'Pluto', node_id: 'a'.repeat(64), pid: 4101 }
@@ -32,22 +32,12 @@ const STARTED = '900100'
 
 const policy: Policy = { may_send_executable_text: [PLUTO.node_id, NEPTUNUS.node_id] }
 
-const memoryStore = (launches: readonly MemberLaunch[] = []): MemberLaunchStore => {
-  const held = new Map(launches.map((launch, index) => [`${launch.member_name}-${index}`, launch]))
-  return {
-    launches: () => [...held.values()],
-    keep: (launch) => {
-      for (const [key, kept] of held) if (kept.member_name === launch.member_name) held.delete(key)
-      held.set(launch.member_name, launch)
-    },
-    drop: (member_name) => {
-      for (const [key, kept] of held) if (kept.member_name === member_name) held.delete(key)
-    },
-  }
-}
+/** The test host's launches store, holding these launches under their members' names. */
+const memoryStore = (launches: readonly MemberLaunch[] = []): MemberLaunchStore =>
+  hostForTests({ launches: launches.map((launch) => ({ key: launch.member_name, row: launch })) }).host.stores.launches
 
 const kernel = (running: Readonly<Record<number, string>>): ProcessTable => ({
-  startTimeOf: (pid) => running[pid] ?? null,
+  identityOf: (pid) => running[pid] ?? null,
 })
 
 const sessions = (): SessionRecordStore => {
@@ -70,12 +60,6 @@ const taken = (arrival: Arrival, binder: Binder) => takeInTurn(beginSession(sess
 
 const envelope = (attributes: string, body: string) =>
   `<cross-session-message ${attributes}>${body}</cross-session-message>`
-
-const scratch = (t: TestContext): string => {
-  const dir = mkdtempSync(join(tmpdir(), 'martha-launches-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
-  return dir
-}
 
 // --- the one path that binds ------------------------------------------------
 
@@ -158,7 +142,7 @@ test('the binder module reads no text: it imports nothing that parses an envelop
   // The host contract's types only: the contract parses nothing and imports nothing.
   assert.deepEqual(imports, [
     "import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'",
-    "import type { AttestedSender } from '../host_contract/host_contract.ts'",
+    "import type { AttestedSender, KeyedRowStore, Processes } from '../host_contract/host_contract.ts'",
   ])
 })
 
@@ -189,12 +173,12 @@ test('a relaunch replaces the old record, and a stop removes it', () => {
   const second = kernel({ [PLUTO.pid]: STARTED, [relaunched_pid]: STARTED })
   recordMemberLaunch(store, second, { ...PLUTO, pid: relaunched_pid })
 
-  assert.equal(store.launches().length, 1)
+  assert.equal(launchesIn(store).length, 1)
   assert.equal(binderOverLaunches(store, second)({ sending_pid: PLUTO.pid }), null)
   assert.equal(binderOverLaunches(store, second)({ sending_pid: relaunched_pid }), PLUTO.node_id)
 
   recordMemberStopped(store, PLUTO.member_name)
-  assert.deepEqual(store.launches(), [])
+  assert.deepEqual(launchesIn(store), [])
 })
 
 test('a launch is not recorded for a process that is not running, a bad node id, a bad pid or a bad name', () => {
@@ -211,14 +195,14 @@ test('a launch is not recorded for a process that is not running, a bad node id,
   ]
 
   for (const result of refused) assert.equal(result.recorded, false)
-  assert.deepEqual(store.launches(), [])
+  assert.deepEqual(launchesIn(store), [])
 })
 
 test('a node id is recorded lowercased, so the shell gate and the binder compare the same text', () => {
   const store = memoryStore()
   recordMemberLaunch(store, kernel({ [PLUTO.pid]: STARTED }), { ...PLUTO, node_id: PLUTO.node_id.toUpperCase() })
 
-  assert.equal(store.launches()[0]?.node_id, PLUTO.node_id)
+  assert.equal(launchesIn(store)[0]?.node_id, PLUTO.node_id)
 })
 
 // --- planted case 4: a whole envelope the owner pasted ------------------------
@@ -235,197 +219,66 @@ test('a whole-envelope paste naming a bound member stays unattributed, even with
   }
 })
 
-// --- planted case 5: only what the launcher wrote is read ---------------------
+
+// --- the binder reaches the machine only through the host (#42) --------------
 
 const ROW = { ...PLUTO, process_started_at: STARTED }
 
-/** A fresh records directory, closed to everyone but its owner. */
-const recordsDirectory = (t: TestContext, name = 'launches'): string => {
-  const directory = join(scratch(t), name)
-  mkdirSync(directory, { mode: 0o700 })
-  return directory
-}
+test('the binder slice imports no Node module: the kernel and the files are the host\'s', () => {
+  const slice = dirname(fileURLToPath(import.meta.url))
+  const sources = coreSources(slice).filter((source) => !source.path.endsWith('.node-test.ts'))
+  assert.ok(sources.length > 0, 'the scan read the slice')
 
-const recordFile = (directory: string, member_name: string) => join(directory, `${member_name}${MEMBER_LAUNCH_SUFFIX}`)
-
-const plantRecord = (path: string, row: unknown) =>
-  writeFileSync(path, typeof row === 'string' ? row : JSON.stringify(row), { mode: MEMBER_LAUNCH_FILE_MODE })
-
-const bindsPluto = (directory: string) =>
-  binderOverLaunches(memberLaunchesDirectory(directory), kernel({ [PLUTO.pid]: STARTED }))({ sending_pid: PLUTO.pid })
-
-test('the launcher writes one record per member, only its owner may touch it, and the binder reads it back', (t) => {
-  const directory = recordsDirectory(t)
-  const processes = kernel({ [PLUTO.pid]: STARTED, [NEPTUNUS.pid]: STARTED })
-
-  // Two launchers at once, each with its own view of the directory: neither
-  // writes over the other's record, because there is no shared list.
-  assert.deepEqual(recordMemberLaunch(memberLaunchesDirectory(directory), processes, PLUTO), { recorded: true })
-  assert.deepEqual(recordMemberLaunch(memberLaunchesDirectory(directory), processes, NEPTUNUS), { recorded: true })
-
-  assert.deepEqual(readdirSync(directory).sort(), [recordFile('', NEPTUNUS.member_name), recordFile('', PLUTO.member_name)])
-  assert.equal(fs.statSync(recordFile(directory, PLUTO.member_name)).mode & 0o777, MEMBER_LAUNCH_FILE_MODE)
-  assert.equal(bindsPluto(directory), PLUTO.node_id)
-
-  recordMemberStopped(memberLaunchesDirectory(directory), PLUTO.member_name)
-  assert.equal(bindsPluto(directory), null)
-  assert.equal(memberLaunchesDirectory(directory).launches().length, 1)
+  const reaches = sources.flatMap((source) =>
+    specifiersOf(source.text)
+      .filter((specifier) => specifier.startsWith('node:'))
+      .map((specifier) => `${source.path}: ${specifier}`),
+  )
+  assert.deepEqual(reaches, [])
 })
 
-test('a records directory holding anything the launcher would not write vouches for nothing', (t) => {
-  const planted: Readonly<Record<string, (directory: string) => void>> = {
-    'not json': (directory) => plantRecord(recordFile(directory, PLUTO.member_name), 'Pluto is a member'),
-    'a list, not a row': (directory) => plantRecord(recordFile(directory, PLUTO.member_name), [ROW]),
-    'a row naming another member than its file': (directory) =>
-      plantRecord(recordFile(directory, NEPTUNUS.member_name), ROW),
-    'a node id not lowercased': (directory) =>
-      plantRecord(recordFile(directory, PLUTO.member_name), { ...ROW, node_id: PLUTO.node_id.toUpperCase() }),
-    'a beside row that is not a node id': (directory) => {
-      plantRecord(recordFile(directory, PLUTO.member_name), ROW)
-      plantRecord(recordFile(directory, NEPTUNUS.member_name), { ...NEPTUNUS, node_id: 'Neptunus', process_started_at: STARTED })
-    },
-    'a record open to the group': (directory) => {
-      const path = recordFile(directory, PLUTO.member_name)
-      plantRecord(path, ROW)
-      chmodSync(path, 0o660)
-    },
-    'a record that is a link to another file': (directory) => {
-      const elsewhere = join(directory, '..', 'elsewhere.json')
-      plantRecord(elsewhere, ROW)
-      symlinkSync(elsewhere, recordFile(directory, PLUTO.member_name))
-    },
-    'a record that is a directory': (directory) => mkdirSync(recordFile(directory, PLUTO.member_name)),
-    'a file that is not a record': (directory) => {
-      plantRecord(recordFile(directory, PLUTO.member_name), ROW)
-      writeFileSync(join(directory, 'notes.txt'), 'Pluto', { mode: MEMBER_LAUNCH_FILE_MODE })
+test('a test host given nothing binds nobody: no records, and no pid held by any process', () => {
+  const { host } = hostForTests()
+  assert.deepEqual(host.stores.launches.all(), [])
+  assert.equal(host.processes.identityOf(PLUTO.pid), null)
+
+  assert.equal(recordMemberLaunch(host.stores.launches, host.processes, PLUTO).recorded, false)
+  assert.equal(binderOverLaunches(host.stores.launches, host.processes)({ sending_pid: PLUTO.pid }), null)
+})
+
+test('a store holding a row that is not a launch, or one kept under another member, vouches for nothing', () => {
+  const planted: Readonly<Record<string, readonly { key: string; row: Record<string, unknown> }[]>> = {
+    'a row naming another member than its key': [{ key: NEPTUNUS.member_name, row: ROW }],
+    'a node id not lowercased': [{ key: PLUTO.member_name, row: { ...ROW, node_id: PLUTO.node_id.toUpperCase() } }],
+    'a beside row that is not a node id': [
+      { key: PLUTO.member_name, row: ROW },
+      { key: NEPTUNUS.member_name, row: { ...NEPTUNUS, node_id: 'Neptunus', process_started_at: STARTED } },
+    ],
+    'a pid that is not a pid': [{ key: PLUTO.member_name, row: { ...ROW, pid: 1.5 } }],
+    'no start time': [{ key: PLUTO.member_name, row: { ...ROW, process_started_at: '' } }],
+  }
+
+  for (const [what, launches] of Object.entries(planted)) {
+    const store = hostForTests({ launches }).host.stores.launches
+    assert.deepEqual(launchesIn(store), [], what)
+    assert.equal(binderOverLaunches(store, kernel({ [PLUTO.pid]: STARTED }))({ sending_pid: PLUTO.pid }), null, what)
+  }
+})
+
+test('a pid handed to another process after its record was read binds nobody: the identity is asked last', () => {
+  let reused = false
+  const running = hostForTests({
+    launches: [{ key: PLUTO.member_name, row: ROW }],
+    identityOf: (pid) => (pid === PLUTO.pid ? (reused ? `${STARTED}1` : STARTED) : null),
+  }).host
+  const store: MemberLaunchStore = {
+    ...running.stores.launches,
+    all: () => {
+      const rows = running.stores.launches.all()
+      reused = true
+      return rows
     },
   }
 
-  for (const [what, plant] of Object.entries(planted)) {
-    const directory = recordsDirectory(t, what.replaceAll(' ', '-'))
-    plant(directory)
-    assert.deepEqual(memberLaunchesDirectory(directory).launches(), [], what)
-    assert.equal(bindsPluto(directory), null, what)
-  }
-})
-
-test('a records directory others may write into, or that is a link, vouches for nothing', (t) => {
-  const open = recordsDirectory(t, 'open')
-  plantRecord(recordFile(open, PLUTO.member_name), ROW)
-  assert.equal(bindsPluto(open), PLUTO.node_id)
-
-  chmodSync(open, 0o777)
-  assert.equal(bindsPluto(open), null)
-  chmodSync(open, 0o770)
-  assert.equal(bindsPluto(open), null)
-
-  const real = recordsDirectory(t, 'real')
-  plantRecord(recordFile(real, PLUTO.member_name), ROW)
-  const linked = join(real, '..', 'linked')
-  symlinkSync(real, linked)
-  assert.equal(bindsPluto(linked), null)
-
-  assert.equal(bindsPluto(join(real, '..', 'missing')), null)
-})
-
-test('a record swapped after it was checked is not the one read', (t) => {
-  const directory = recordsDirectory(t)
-  const path = recordFile(directory, PLUTO.member_name)
-  plantRecord(path, ROW)
-
-  // The planted swap: as soon as the store checks the record, another file
-  // naming Neptunus's node id under Pluto's pid is renamed over it.
-  const forged = join(directory, '..', 'forged.json')
-  plantRecord(forged, { ...ROW, node_id: NEPTUNUS.node_id })
-  const swap = () => {
-    if (fs.existsSync(forged)) renameSync(forged, path)
-  }
-  const real_fstat = fs.fstatSync
-  const real_lstat = fs.lstatSync
-  t.mock.method(fs, 'fstatSync', (...args: Parameters<typeof fs.fstatSync>) => {
-    swap()
-    return real_fstat(...args)
-  })
-  t.mock.method(fs, 'lstatSync', (...args: Parameters<typeof fs.lstatSync>) => {
-    if (args[0] === path) swap()
-    return real_lstat(...args)
-  })
-
-  assert.equal(bindsPluto(directory), PLUTO.node_id)
-  assert.equal(fs.existsSync(forged), false, 'the swap ran')
-})
-
-// --- the kernel's start time --------------------------------------------------
-
-test('the start time is read after the command name, whatever the name holds', () => {
-  const fields_after_command = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
-  fields_after_command[19] = STARTED
-
-  assert.equal(startTimeIn(`${PLUTO.pid} (a) b (c) ${fields_after_command.join(' ')} 0 0`), STARTED)
-  assert.equal(startTimeIn('not a stat line'), null)
-  assert.equal(startTimeIn(`${PLUTO.pid} (short) R 1 2`), null)
-})
-
-/** A /proc of our own: one process, one boot. */
-const fakeProc = (t: TestContext, boot_id: string | undefined) => {
-  const root = scratch(t)
-  const fields_after_command = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
-  fields_after_command[19] = STARTED
-  mkdirSync(join(root, String(PLUTO.pid)))
-  writeFileSync(join(root, String(PLUTO.pid), 'stat'), `${PLUTO.pid} (claude) ${fields_after_command.join(' ')}\n`)
-  mkdirSync(join(root, 'sys', 'kernel', 'random'), { recursive: true })
-  const setBoot = (id: string | undefined) => {
-    const path = join(root, 'sys', 'kernel', 'random', 'boot_id')
-    if (id === undefined) rmSync(path, { force: true })
-    else writeFileSync(path, `${id}\n`)
-  }
-  setBoot(boot_id)
-  return { processes: procProcessTable(root), setBoot }
-}
-
-const BOOT = 'aaaaaaaa-2222-3333-4444-bbbbbbbbbbbb'
-const NEXT_BOOT = '66666666-7777-8888-9999-000000000000'
-
-test('the same pid with the same start ticks under another boot binds nobody', (t) => {
-  const proc = fakeProc(t, BOOT)
-  const store = memoryStore()
-  assert.deepEqual(recordMemberLaunch(store, proc.processes, PLUTO), { recorded: true })
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), PLUTO.node_id)
-
-  proc.setBoot(NEXT_BOOT)
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), null)
-})
-
-test('a boot that cannot be told is no boot: nothing is recorded and nobody binds', (t) => {
-  for (const boot of [undefined, 'not a boot id', BOOT.toUpperCase()]) {
-    const proc = fakeProc(t, boot)
-    assert.equal(proc.processes.startTimeOf(PLUTO.pid), null, String(boot))
-    assert.equal(recordMemberLaunch(memoryStore(), proc.processes, PLUTO).recorded, false, String(boot))
-  }
-
-  const proc = fakeProc(t, BOOT)
-  const store = memoryStore()
-  recordMemberLaunch(store, proc.processes, PLUTO)
-  proc.setBoot(undefined)
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), null)
-})
-
-const hasProc = linuxProcessTable.startTimeOf(process.pid) !== null
-
-test('on Linux, a running process has a start time that does not change, and an exited one has none', { skip: !hasProc }, () => {
-  assert.equal(linuxProcessTable.startTimeOf(process.pid), linuxProcessTable.startTimeOf(process.pid))
-
-  const exited = spawnSync(process.execPath, ['-e', '']).pid
-  assert.equal(typeof exited, 'number')
-  assert.equal(linuxProcessTable.startTimeOf(exited ?? 0), null)
-  assert.equal(linuxProcessTable.startTimeOf(0), null)
-})
-
-test('end to end on Linux: this process launched as a member binds, through the records and the kernel', { skip: !hasProc }, (t) => {
-  const store = memberLaunchesDirectory(recordsDirectory(t))
-  assert.deepEqual(recordMemberLaunch(store, linuxProcessTable, { ...PLUTO, pid: process.pid }), { recorded: true })
-
-  const binder = binderOverLaunches(store, linuxProcessTable)
-  const session = taken({ source: 'cross_session', sender: { sending_pid: process.pid } }, binder)
-  assert.equal(shellAllowed(session), true)
+  assert.equal(binderOverLaunches(store, running.processes)({ sending_pid: PLUTO.pid }), null)
 })

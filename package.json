@@ -8,12 +8,17 @@
     "node": ">=24.18.1"
   },
   "scripts": {
-    "test": "node --test 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts'",
+    "test": "node --test 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts'",
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "typescript": "^5.9.3"
+  },
+  "martha": {
+    "hostGlue": [
+      "src/linux_process_identity"
+    ]
   }
 }
