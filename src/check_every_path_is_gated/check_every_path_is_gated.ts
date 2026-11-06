@@ -39,7 +39,7 @@ import {
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { undeclaredPromptOrigins, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { RECORDED_MESH_SERVER, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import {
   MESH_TOOLS_REFUSED,
   MESH_TOOLS_THAT_RUN,
@@ -348,37 +348,48 @@ export function gapsInPromptOrigins(declared: HostPromptOrigins, emitted: readon
 const HOST_NAME_SEPARATOR = '__'
 
 /**
- * Every mesh tool whose decision does not match the recorded server: a tool it
- * registers that is neither allowed nor refused, an allowed or refused name it
- * does not register, a name both allowed and refused, and a tool outside the
- * mesh prefix, which the run-time check would not judge at all, and a tool
- * whose name holds `__`, which Claude Code's adapter would cut short: it takes
- * a called `mcp__<server>__<tool>` apart at the last `__`, because a server's
- * name may hold `__` and a mesh tool's may not. A new release
- * of the server fails CI here by name before a member meets the tool.
+ * Every mesh tool whose decision does not match the recorded servers, all of
+ * them at once (martha#49): a tool any recorded version registers that is
+ * neither allowed nor refused, an allowed or refused name no recorded version
+ * registers, a name both allowed and refused, a tool outside the mesh prefix,
+ * which the run-time check would not judge at all, and a tool whose name holds
+ * `__`, which Claude Code's adapter would cut short: it takes a called
+ * `mcp__<server>__<tool>` apart at the last `__`, because a server's name may
+ * hold `__` and a mesh tool's may not. A version recorded twice is named too. A
+ * new release of the server fails CI here by name before a member meets the
+ * tool, and so does a decision that only a retired version needed.
  */
 export function gapsInMeshTools(
-  recorded: RecordedMeshServer = RECORDED_MESH_SERVER,
+  recorded: readonly RecordedMeshServer[] = RECORDED_MESH_SERVERS,
   allowed: readonly string[] = MESH_TOOLS_THAT_RUN,
   refused: readonly string[] = MESH_TOOLS_REFUSED,
 ): readonly Gap[] {
-  const on = `${recorded.server} ${recorded.server_version}`
   const gap = (tool: string, why: string): Gap => ({ path: `mesh tool ${tool}`, why })
-  const unprefixed = recorded.tools
+  const registered = [...new Set(recorded.flatMap((record) => record.tools))].sort()
+  const by = (tool: string) =>
+    recorded
+      .filter((record) => record.tools.includes(tool))
+      .map((record) => `${record.server} ${record.server_version}`)
+      .join(', ')
+  const twice = recorded
+    .filter((record, at) => recorded.findIndex((other) => other.server === record.server && other.server_version === record.server_version) !== at)
+    .map((record) => ({ path: `mesh server ${record.server} ${record.server_version}`, why: 'it is recorded twice: each version has one record' }))
+  const unprefixed = registered
     .filter((tool) => !tool.startsWith(MESH_TOOL_PREFIX))
-    .map((tool) => gap(tool, `${on} registers it, and its name does not start with ${MESH_TOOL_PREFIX}: the run-time check would not judge it`))
-  const undecided = recorded.tools
+    .map((tool) => gap(tool, `${by(tool)} registers it, and its name does not start with ${MESH_TOOL_PREFIX}: the run-time check would not judge it`))
+  const undecided = registered
     .filter((tool) => tool.startsWith(MESH_TOOL_PREFIX) && !allowed.includes(tool) && !refused.includes(tool))
-    .map((tool) => gap(tool, `${on} registers it, and it is neither allowed nor refused`))
+    .map((tool) => gap(tool, `${by(tool)} registers it, and it is neither allowed nor refused`))
   const both = allowed.filter((tool) => refused.includes(tool)).map((tool) => gap(tool, 'it is both allowed and refused'))
-  const split = recorded.tools
+  const split = registered
     .filter((tool) => tool.includes(HOST_NAME_SEPARATOR))
-    .map((tool) => gap(tool, `${on} registers it, and its name holds ${HOST_NAME_SEPARATOR}: a host that takes a called name apart at its last ${HOST_NAME_SEPARATOR} would judge only its tail`))
+    .map((tool) => gap(tool, `${by(tool)} registers it, and its name holds ${HOST_NAME_SEPARATOR}: a host that takes a called name apart at its last ${HOST_NAME_SEPARATOR} would judge only its tail`))
+  const held = recorded.map((record) => `${record.server} ${record.server_version}`).join(', ') || 'none'
   const unregistered = (names: readonly string[], decision: string) =>
     names
-      .filter((tool) => !recorded.tools.includes(tool))
-      .map((tool) => gap(tool, `it is ${decision}, and the recorded server does not register it (${on})`))
-  return [...unprefixed, ...undecided, ...both, ...split, ...unregistered(allowed, 'allowed'), ...unregistered(refused, 'refused')]
+      .filter((tool) => !registered.includes(tool))
+      .map((tool) => gap(tool, `it is ${decision}, and no recorded server registers it (${held})`))
+  return [...twice, ...unprefixed, ...undecided, ...both, ...split, ...unregistered(allowed, 'allowed'), ...unregistered(refused, 'refused')]
 }
 
 function deliveryGateGap(name: string, gate: DeliveryGate | undefined): string | undefined {

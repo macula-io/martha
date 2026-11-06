@@ -401,10 +401,32 @@ The rules the seam keeps, and a host must not work around:
   `mcp__<server>__<tool>`, OpenCode `<server>_<tool>`, and only the host knows
   its form and its servers. The two lists, `MESH_TOOLS_THAT_RUN` and
   `MESH_TOOLS_REFUSED`, are proved against the tools the mesh server's published
-  package registers (`recorded_mesh_server_tools.json`, re-recorded by
-  `npm run record:mesh-tools`, the program in `src/record_mesh_server_tools/`): the coverage check fails CI by name on a tool
-  nobody decided, a decided name the server no longer registers, or a tool
-  outside `MESH_TOOL_PREFIX`. The one read that remains returns
+  package registers, one record per version a member may install
+  (`recorded_mesh_server_tools.json`; `npm run record:mesh-tools`, the program
+  in `src/record_mesh_server_tools/`, adds or replaces one version's record): the
+  coverage check fails CI by name on a tool any recorded version registers that
+  nobody decided, a decided name no recorded version registers, or a tool
+  outside `MESH_TOOL_PREFIX`. The records are tied to what members run
+  (martha#49): the launcher reads the version the approved `.mcp.json` pins
+  (`<package>@<version>`, nothing looser) and refuses to start a member whose
+  version is not recorded, naming both. A version is retired by removing its
+  record, after which a member still on it is refused by name. Since the gate
+  judges a mesh tool by its name from any server, the check fails closed:
+  every server in the approved `.mcp.json`, the mesh server or not, must start
+  as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
+  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or
+  the member is not started, naming the server. The mesh server may also start
+  as `npx -y -p <package>@<x.y.z> <bin>`, the shape members use. Each record
+  holds that version's bins and names the one that is the server
+  (`server_bin`, chosen by whoever records it and visible in the reviewed
+  record); the bin named must be that one, since the package's other bins are
+  its own tools (a doctor that spawns the commands every MCP client config
+  names, a register that rewrites host configs). The shorter shape is accepted
+  only where npx would pick the server bin itself (one bin, or one named after
+  the package), which the mesh server's seven bins do not allow. A git or GitHub spec, a URL server, a shell wrapper, a package named
+  in a variable or a bare bin is refused; there is no exempt list. Only the
+  servers an installed plugin brings are not version-checked; their tools are
+  still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
   binds to that room, and says how many envelopes it withheld, never their
   text, sender or kind. Each admitted envelope is an ingestion with its

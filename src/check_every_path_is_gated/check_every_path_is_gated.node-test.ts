@@ -17,7 +17,7 @@ import {
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
-import { RECORDED_MESH_SERVER } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
@@ -393,43 +393,81 @@ test('a declared origin kind the host stops stamping turns the check red, by nam
 })
 
 // --- every tool the mesh server registers is decided (martha#2, item 5 (c)) --
+//
+// Against every recorded version at once (martha#49): a tool any of them
+// registers is decided, and a decided name none of them registers is a gap.
 
-const withTools = (tools: readonly string[]) => ({ ...RECORDED_MESH_SERVER, tools })
+const NEWEST = RECORDED_MESH_SERVERS[RECORDED_MESH_SERVERS.length - 1] as RecordedMeshServer
+const UNRECORDED = '999.0.0'
+const withTools = (tools: readonly string[]): readonly RecordedMeshServer[] => [{ ...NEWEST, tools }]
+const recordedTools = [...new Set(RECORDED_MESH_SERVERS.flatMap((recorded) => recorded.tools))].sort()
 
-test('every tool the recorded mesh server registers is either allowed or refused, and nothing else is named', () => {
+test('every tool any recorded mesh server registers is either allowed or refused, and nothing else is named', () => {
   assert.deepEqual(gapsInMeshTools(), [])
 })
 
 test('a tool the server adds, neither allowed nor refused, is named', () => {
   const added = `${MESH_TOOL_PREFIX}read_everything_new`
-  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, added]))
+  const gaps = gapsInMeshTools(withTools([...NEWEST.tools, added]))
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${added}`])
   assert.match(gaps[0]?.why ?? '', /neither allowed nor refused/)
 })
 
-test('an allowed name the server does not register is named', () => {
-  const [gone] = MESH_TOOLS_THAT_RUN
-  const gaps = gapsInMeshTools(withTools(RECORDED_MESH_SERVER.tools.filter((tool) => tool !== gone)))
-  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${gone}`])
-  assert.match(gaps[0]?.why ?? '', /allowed, and the recorded server does not register it/)
+test('a planted record of a version nobody recorded, with a tool nobody decided, is named with its version', () => {
+  const added = `${MESH_TOOL_PREFIX}read_everything_new`
+  const planted: RecordedMeshServer = { ...NEWEST, server_version: UNRECORDED, tools: [...NEWEST.tools, added] }
+  const gaps = gapsInMeshTools([...RECORDED_MESH_SERVERS, planted])
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${added}`])
+  assert.ok(gaps[0]?.why.includes(`${NEWEST.server} ${UNRECORDED}`), gaps[0]?.why ?? '')
 })
 
-test('a refused name the server does not register is named', () => {
-  const [gone] = MESH_TOOLS_REFUSED
-  const gaps = gapsInMeshTools(withTools(RECORDED_MESH_SERVER.tools.filter((tool) => tool !== gone)))
+test('with two versions recorded, a tool only the newer one registers must be decided too', () => {
+  const added = `${MESH_TOOL_PREFIX}only_in_the_newer`
+  const older: RecordedMeshServer = { ...NEWEST, server_version: '0.0.1' }
+  const newer: RecordedMeshServer = { ...NEWEST, server_version: UNRECORDED, tools: [...NEWEST.tools, added] }
+  const gaps = gapsInMeshTools([older, newer])
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${added}`])
+  assert.ok(gaps[0]?.why.includes(UNRECORDED), gaps[0]?.why ?? '')
+})
+
+test('a version recorded twice is named', () => {
+  const gaps = gapsInMeshTools([NEWEST, NEWEST])
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh server ${NEWEST.server} ${NEWEST.server_version}`])
+  assert.match(gaps[0]?.why ?? '', /recorded twice/)
+})
+
+test('an allowed name no recorded server registers is named', () => {
+  const [gone] = MESH_TOOLS_THAT_RUN
+  const gaps = gapsInMeshTools(withTools(NEWEST.tools.filter((tool) => tool !== gone)))
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${gone}`])
-  assert.match(gaps[0]?.why ?? '', /refused, and the recorded server does not register it/)
+  assert.match(gaps[0]?.why ?? '', /allowed, and no recorded server registers it/)
+})
+
+test('a refused name no recorded server registers is named', () => {
+  const [gone] = MESH_TOOLS_REFUSED
+  const gaps = gapsInMeshTools(withTools(NEWEST.tools.filter((tool) => tool !== gone)))
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${gone}`])
+  assert.match(gaps[0]?.why ?? '', /refused, and no recorded server registers it/)
+})
+
+test('a name the retired version alone registered is named once its record is gone', () => {
+  const [gone] = MESH_TOOLS_THAT_RUN
+  assert.ok(gone !== undefined)
+  const retiring: RecordedMeshServer = { ...NEWEST, server_version: '0.0.1' }
+  const staying: RecordedMeshServer = { ...NEWEST, tools: NEWEST.tools.filter((tool) => tool !== gone) }
+  assert.deepEqual(gapsInMeshTools([retiring, staying]), [])
+  assert.deepEqual(gapsInMeshTools([staying]).map((gap) => gap.path), [`mesh tool ${gone}`])
 })
 
 test('a recorded tool without the mesh prefix is named: the prefix is the run-time hinge', () => {
   const unprefixed = 'read_everything_new'
-  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, unprefixed]))
+  const gaps = gapsInMeshTools(withTools([...NEWEST.tools, unprefixed]))
   assert.ok(gaps.some((gap) => gap.path === `mesh tool ${unprefixed}` && new RegExp(MESH_TOOL_PREFIX).test(gap.why)))
 })
 
 test('a recorded mesh tool whose name holds __ is named: the last-__ split would judge only its tail', () => {
   const joined = `${MESH_TOOL_PREFIX}read__inbox`
-  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, joined]), [...MESH_TOOLS_THAT_RUN], [...MESH_TOOLS_REFUSED, joined])
+  const gaps = gapsInMeshTools(withTools([...NEWEST.tools, joined]), [...MESH_TOOLS_THAT_RUN], [...MESH_TOOLS_REFUSED, joined])
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${joined}`])
   assert.match(gaps[0]?.why ?? '', /holds __/)
 })
@@ -437,7 +475,7 @@ test('a recorded mesh tool whose name holds __ is named: the last-__ split would
 test('a name both allowed and refused is named', () => {
   const [both] = MESH_TOOLS_REFUSED
   assert.ok(both !== undefined)
-  const gaps = gapsInMeshTools(RECORDED_MESH_SERVER, [...MESH_TOOLS_THAT_RUN, both], MESH_TOOLS_REFUSED)
+  const gaps = gapsInMeshTools(RECORDED_MESH_SERVERS, [...MESH_TOOLS_THAT_RUN, both], MESH_TOOLS_REFUSED)
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${both}`])
   assert.match(gaps[0]?.why ?? '', /both allowed and refused/)
 })
@@ -456,5 +494,5 @@ test('a gate that pins the config but not the checkout it runs is caught', () =>
 
 test('the allowed and refused mesh tools together are exactly the recorded tools, each once', () => {
   const decided = [...MESH_TOOLS_THAT_RUN, ...MESH_TOOLS_REFUSED].sort()
-  assert.deepEqual(decided, [...RECORDED_MESH_SERVER.tools].sort())
+  assert.deepEqual(decided, recordedTools)
 })
