@@ -4,6 +4,7 @@ import { dirname, join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { ROW_STREAM_MOVED } from './host_contract.ts'
 import { importsBeyondTheCore } from './imports_beyond_the_core.ts'
 import { hostForTests } from './host_for_tests.ts'
 
@@ -35,8 +36,14 @@ const sourcesUnder = (root: string): { path: string; text: string }[] =>
     .map((entry) => join(entry.parentPath, entry.name))
     .map((path) => ({ path: relative(SRC, path), text: readFileSync(path, 'utf8') }))
 
+// This file plants imports in strings below, so it is the one file the scan
+// leaves out, found by its own path rather than by a name written here.
+const THIS_FILE = relative(SRC, fileURLToPath(import.meta.url))
+
 test('no file in the core imports anything but its own slices and Node', () => {
-  assert.deepEqual(importsBeyondTheCore(sourcesUnder(SRC)), [])
+  const core = sourcesUnder(SRC).filter((source) => source.path !== THIS_FILE)
+  assert.ok(core.length > 1, 'the scan read the core')
+  assert.deepEqual(importsBeyondTheCore(core), [])
 })
 
 test('a planted import of a coding tool is named, with its file', () => {
@@ -87,6 +94,14 @@ test('a row read back cannot be changed in the store through the copy', async ()
   assert.deepEqual(first?.row, { n: 1 })
 })
 
+test('an append that expects the stream at a length lands only at that length', async () => {
+  const rows = hostForTests().host.stores.rows
+  assert.equal(await rows.append('one', { n: 1 }, 0), 0)
+  await assert.rejects(rows.append('one', { n: 2 }, 0), { code: ROW_STREAM_MOVED })
+  assert.equal(await rows.append('one', { n: 2 }, 1), 1)
+  assert.equal((await rows.read('one')).length, 2)
+})
+
 test('a store told to refuse the next append refuses it, then works again', async () => {
   const { host, refuseNextAppend } = hostForTests()
   refuseNextAppend('disk full')
@@ -100,6 +115,14 @@ test('a document is read as text, and a missing one rejects with ENOENT', async 
   const { host } = hostForTests({ documents: { '/crew/declaration.json': '{"mode":"solo"}' } })
   assert.equal(await host.stores.documents.read('/crew/declaration.json'), '{"mode":"solo"}')
   await assert.rejects(host.stores.documents.read('/crew/absent.json'), { code: 'ENOENT' })
+})
+
+test('a test can see every document read, in order, missing ones included', async () => {
+  const { host, documentsRead } = hostForTests({ documents: { '/crew/a': 'a' } })
+  await host.stores.documents.read('/crew/a')
+  await host.stores.documents.read('/crew/b').catch(() => undefined)
+  await host.stores.documents.read('/crew/a')
+  assert.deepEqual(documentsRead(), ['/crew/a', '/crew/b', '/crew/a'])
 })
 
 // --- the other parts --------------------------------------------------------------

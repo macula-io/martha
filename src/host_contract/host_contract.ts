@@ -41,11 +41,19 @@ export interface StoredRow {
  * who reads it after a refresh.
  */
 export interface RowStore {
-  /** Appends a row and resolves to its position; rejects when the row was not kept. */
-  append(stream: string, row: Row): Promise<number>
+  /**
+   * Appends a row and resolves to its position; rejects when the row was not kept.
+   * With `expected_length`, the row is kept only if the stream holds exactly that
+   * many rows; otherwise it rejects with an error whose `code` is
+   * ROW_STREAM_MOVED, and the caller reads again before deciding again.
+   */
+  append(stream: string, row: Row, expected_length?: number): Promise<number>
   /** Every row of a stream, oldest first; a stream never written to is empty. */
   read(stream: string): Promise<readonly StoredRow[]>
 }
+
+/** The code an append rejects with when the stream is not at the length it expected. */
+export const ROW_STREAM_MOVED = 'ROW_STREAM_MOVED'
 
 /**
  * Documents read as UTF-8 text, by absolute path. A missing document rejects

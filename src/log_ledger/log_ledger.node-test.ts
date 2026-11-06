@@ -140,6 +140,23 @@ test('an outcome for an act never announced is refused', async () => {
   )
 })
 
+test('two successors concluding the same act at once: one outcome is kept, the other refused', async () => {
+  const { host } = hostForTests()
+  void sendOutwardAct(host, { ...work, act: push }, () => new Promise<string>(() => {}))
+  await new Promise((settle) => setImmediate(settle))
+
+  const conclude = (member: string) =>
+    concludeAct(host, { package: work.package, member, announced_at: 0, outcome: { succeeded: true, detail: member } })
+  const results = await Promise.allSettled([conclude('member-two'), conclude('member-three')])
+
+  assert.deepEqual(
+    results.map((result) => result.status),
+    ['fulfilled', 'rejected'],
+  )
+  const concluded = (await readLedger(host, work.package)).filter((row) => row.kind === 'act_concluded')
+  assert.equal(concluded.length, 1)
+})
+
 test('a second outcome for the same act is refused', async () => {
   const { host } = hostForTests()
   await sendOutwardAct(host, { ...work, act: push }, async () => 'pushed')
