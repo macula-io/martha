@@ -307,19 +307,22 @@ test('a real digest passes in every declared form, with no synthetic allowance',
   }
 })
 
+// A fresh real-shaped id under one label, after and before one accepted digest.
+const assertRefusedBeside = async (name: string, digest: string, label: string) => {
+  const id = realShaped()
+  for (const text of [`${digest} ${label} ${id}`, `${digest}\t${id}`]) {
+    assert.deepEqual(await hitsOf(text), [hexHit(id)], `${name}: ${text}`)
+  }
+  // Before it, the id is refused; a sha256sum line then no longer opens the
+  // line, so its digest may be refused too, which errs on the closed side.
+  const before = `${label} ${id} ${digest}`
+  assert.ok((await hitsOf(before)).includes(hexHit(id)), `${name}: ${before}`)
+}
+
 test('a real-shaped node id or key beside an accepted digest is still refused', async () => {
   for (const { name, written } of writtenDigests) {
     const digest = filled(written, realShaped())
-    for (const label of ['node', 'key']) {
-      const id = realShaped()
-      for (const text of [`${digest} ${label} ${id}`, `${digest}\t${id}`]) {
-        assert.deepEqual(await hitsOf(text), [hexHit(id)], `${name}: ${text}`)
-      }
-      // Before it, the id is refused; a sha256sum line then no longer opens the
-      // line, so its digest may be refused too, which errs on the closed side.
-      const before = `${label} ${id} ${digest}`
-      assert.ok((await hitsOf(before)).includes(hexHit(id)), `${name}: ${before}`)
-    }
+    for (const label of ['node', 'key']) await assertRefusedBeside(name, digest, label)
   }
 })
 

@@ -50,30 +50,36 @@ const sessionsOfBothKinds = () => {
   return { clean, tainted: takeInTurn(clean, { source: 'mcp_result' }, bindNothing) }
 }
 
+type BothKinds = ReturnType<typeof sessionsOfBothKinds>
+
+// One tool, refused in a clean and in a tainted session, the refusal naming the owner.
+const assertRefusedForTheOwner = (tool: string, { clean, tainted }: BothKinds) => {
+  for (const [kind, session] of [['clean', clean], ['tainted', tainted]] as const) {
+    const answer = answerToolCall({ names, tool, session, policy, input: {}, launch, host: thisMachine })
+    assert.notEqual(answer, undefined, `${tool} in a ${kind} session`)
+    assert.match(answer?.deny ?? '', /owner/, `${tool} in a ${kind} session`)
+  }
+}
+
+// One tool in OpenCode's server_tool form, refused in a clean and in a tainted session.
+const assertRefusedOnOpenCode = (tool: string, { clean, tainted }: BothKinds) => {
+  for (const session of [clean, tainted]) {
+    assert.notEqual(answerToolCall({ names: openCode, tool, session, policy, input: {}, launch, host: thisMachine }), undefined, tool)
+  }
+}
+
 test('the tools that widen a member reach are refused in a clean and in a tainted session, under every namespace', () => {
-  const { clean, tainted } = sessionsOfBothKinds()
-  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch, host: thisMachine }), undefined, 'the session is tainted')
+  const sessions = sessionsOfBothKinds()
+  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: sessions.tainted, policy, launch, host: thisMachine }), undefined, 'the session is tainted')
   for (const prefix of NAMESPACES) {
-    for (const own of REQUIRED_REACH_TOOLS) {
-      const tool = `${prefix}${own}`
-      for (const [kind, session] of [['clean', clean], ['tainted', tainted]] as const) {
-        const answer = answerToolCall({ names, tool, session, policy, input: {}, launch, host: thisMachine })
-        assert.notEqual(answer, undefined, `${tool} in a ${kind} session`)
-        assert.match(answer?.deny ?? '', /owner/, `${tool} in a ${kind} session`)
-      }
-    }
+    for (const own of REQUIRED_REACH_TOOLS) assertRefusedForTheOwner(`${prefix}${own}`, sessions)
   }
 })
 
 test('on OpenCode, the tools that widen a member reach are refused in its own server_tool form', () => {
-  const { clean, tainted } = sessionsOfBothKinds()
+  const sessions = sessionsOfBothKinds()
   for (const server of OPENCODE_SERVERS) {
-    for (const own of REQUIRED_REACH_TOOLS) {
-      const tool = `${server}_${own}`
-      for (const session of [clean, tainted]) {
-        assert.notEqual(answerToolCall({ names: openCode, tool, session, policy, input: {}, launch, host: thisMachine }), undefined, tool)
-      }
-    }
+    for (const own of REQUIRED_REACH_TOOLS) assertRefusedOnOpenCode(`${server}_${own}`, sessions)
   }
 })
 

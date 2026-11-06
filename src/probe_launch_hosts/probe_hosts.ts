@@ -273,12 +273,13 @@ for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES).c
   console.log(`${command}: ${version(command)}`)
 }
 
-for (const probe of PROBES) {
+/** Runs one probe and prints each marker against its claim; a probe that cannot run, or a marker that differs, fails the run. */
+function reportProbe(probe: Probe): void {
   const seen = runProbe(probe)
   if (typeof seen === 'string') {
     console.log(`${probe.what}: ${seen}`)
     process.exitCode = 1
-    continue
+    return
   }
   for (const [name, claimed] of Object.entries(probe.expected)) {
     const matches = seen[name] === claimed
@@ -288,3 +289,5 @@ for (const probe of PROBES) {
     )
   }
 }
+
+for (const probe of PROBES) reportProbe(probe)
