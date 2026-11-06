@@ -130,32 +130,36 @@ function dryRunOutputs (text) {
   return lines.map((l) => l.trim()).filter(Boolean)
 }
 
+const OCI_FLAGS = ['--provenance=false', '--sbom=false', 'type=oci,', 'tar=false', 'oci-mediatypes=true']
+const PUSH = 'skopeo copy --preserve-digests'
+
 /**
- * Why a workflow's builds could leave a version tag on anything but one OCI image manifest, or [] when none: each
- * `docker buildx build` (continuation lines joined) has no buildx attestations, OCI media types, and pushes by
- * digest only; and the first version tag is made only after the media-type check.
+ * Why a workflow could put anything but one checked OCI image manifest on the registry, or [] when none. Each
+ * `docker buildx build` (continuation lines joined) writes a local OCI layout with no buildx attestations and OCI
+ * media types; the layout's manifest is checked before anything is pushed (Raf, 2026-11-06: "a check should run
+ * locally before any push"); the same layout is pushed unchanged, and the pushed digest compared with the checked.
  * @param {string} text
  */
 function ociFlaws (text) {
   const builds = [...text.replace(/\\\n\s*/g, ' ').matchAll(/docker buildx build [^\n]*/g)].map((m) => m[0])
   const flaws = builds.length ? [] : ['no build']
-  for (const build of builds) {
-    for (const flag of ['--provenance=false', '--sbom=false', 'oci-mediatypes=true', 'push-by-digest=true']) if (!build.includes(flag)) flaws.push(`a build without ${flag}`)
-  }
+  for (const build of builds) for (const flag of OCI_FLAGS) if (!build.includes(flag)) flaws.push(`a build without ${flag}`)
+  if (/push=true|docker push/.test(text)) flaws.push('a push that is not the checked layout')
   const checked = text.indexOf('application/vnd.oci.image.manifest.v1+json')
-  const tagged = text.indexOf('docker buildx imagetools create')
-  if (checked < 0 || tagged < 0 || tagged < checked) flaws.push('a tag made before the media-type check')
+  const pushed = text.indexOf(PUSH)
+  if (checked < 0 || pushed < 0 || pushed < checked) flaws.push('a push before the media-type check')
+  if (!text.includes(`${PUSH} --digestfile`) || !/\[ "\$\(cat "[^"]+"\)" = "\$checked" \]/.test(text)) flaws.push('no proof the pushed digest is the checked one')
   return flaws
 }
 
-test('an image gets its version tag only once it is checked to be one OCI manifest, so a bad build burns no version', () => {
+test('nothing reaches the registry until its manifest is checked locally, and what is pushed is what was checked', () => {
   for (const name of /** @type {const} */ (['release', 'dryRun'])) assert.deepEqual(ociFlaws(workflow[name]), [], name)
-  // Each pin bites: dropped from release.yml, each is named.
-  for (const flag of ['--provenance=false', '--sbom=false', 'oci-mediatypes=true', 'push-by-digest=true']) {
-    assert.ok(ociFlaws(workflow.release.replace(flag, '')).includes(`a build without ${flag}`), `the ${flag} pin bites`)
-  }
-  const tagFirst = workflow.release.replace('docker buildx imagetools create', 'true').replace('docker buildx build', 'docker buildx imagetools create; docker buildx build')
-  assert.ok(ociFlaws(tagFirst).includes('a tag made before the media-type check'), 'the order pin bites')
+  // Each pin bites: dropped from a copy of release.yml, each is named.
+  for (const flag of OCI_FLAGS) assert.ok(ociFlaws(workflow.release.replace(flag, '')).includes(`a build without ${flag}`), `the ${flag} pin bites`)
+  const pushFirst = workflow.release.replace(PUSH, 'true').replace('docker buildx build', `${PUSH} x y; docker buildx build`)
+  assert.ok(ociFlaws(pushFirst).includes('a push before the media-type check'), 'the order pin bites')
+  assert.ok(ociFlaws(workflow.release.replace('--digestfile', '--quiet')).includes('no proof the pushed digest is the checked one'), 'the digest pin bites')
+  assert.ok(ociFlaws(workflow.release.replace('type=oci,', 'type=image,push=true,')).includes('a push that is not the checked layout'), 'a direct push is named')
 })
 
 test('every image is built by a docker-container builder and checked to be one OCI manifest before it is signed', () => {
