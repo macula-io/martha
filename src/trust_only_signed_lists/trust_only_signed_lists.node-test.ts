@@ -374,6 +374,52 @@ test('a list with no issued_at, or one that cannot be read, refuses everyone', (
   refusesEveryone(open({ document: unreadable, signature: signed(unreadable) }), /issue date cannot be read/)
 })
 
+// --- round 4: one signed instant, one reading, in every timezone -------------
+
+// A zone far from UTC: Date.parse reads an instant without an offset as local time.
+const FAR_ZONE = 'Pacific/Kiritimati'
+const INSTANT_TESTS = 'an instant that is not RFC 3339 UTC'
+
+test(`${INSTANT_TESTS} refuses everyone: no offset, a free form, an impossible date`, () => {
+  const issued_forms = ['2026-11-01T00:00:00', 'Nov 1 2026', '2026-11-31T00:00:00Z', '2026-13-01T00:00:00Z', '2026-11-01T24:00:00Z']
+  for (const issued_at of issued_forms) {
+    const document = documentOf('crew_roster', [member], { issued_at })
+    refusesEveryone(open({ document, signature: signed(document) }), /issue date cannot be read/)
+  }
+  const expires_forms = ['2026-12-01T00:00:00', 'Dec 1 2026', '2026-11-31T00:00:00Z', '2026-12-01T00:00:00+00:00']
+  for (const expires_at of expires_forms) {
+    const document = documentOf('crew_roster', [member], { expires_at })
+    refusesEveryone(open({ document, signature: signed(document) }), /expiry cannot be read/)
+  }
+})
+
+test(`${INSTANT_TESTS}: an RFC 3339 UTC instant opens, with or without milliseconds`, () => {
+  for (const issued_at of ['2026-11-01T00:00:00Z', '2026-11-01T00:00:00.5Z', '2026-11-01T00:00:00.250Z']) {
+    const document = documentOf('crew_roster', [member], { issued_at })
+    assert.equal(open({ document, signature: signed(document) }).trusted, true)
+  }
+})
+
+test(`${INSTANT_TESTS}: the same tests hold with the verifier in ${FAR_ZONE}`, { skip: process.env.TZ === FAR_ZONE }, () => {
+  const file = new URL(import.meta.url).pathname
+  const run = () =>
+    execFileSync(process.execPath, ['--test', `--test-name-pattern=${INSTANT_TESTS}`, file], {
+      env: { ...process.env, TZ: FAR_ZONE },
+      encoding: 'utf8',
+    })
+  const report = run()
+  assert.match(report, /# fail 0|ℹ fail 0/)
+  assert.doesNotMatch(report, /# pass 0|ℹ pass 0/)
+})
+
+test(`${INSTANT_TESTS}: the far zone is really not UTC`, () => {
+  const zoned = execFileSync(process.execPath, ['-e', 'process.stdout.write(String(new Date(0).getTimezoneOffset()))'], {
+    env: { ...process.env, TZ: FAR_ZONE },
+    encoding: 'utf8',
+  })
+  assert.notEqual(Number(zoned), 0)
+})
+
 test('an upper-case node id in a signed policy matches the same sender in lower case', () => {
   const document = documentOf('policy', [member.replace(/1/g, 'A')])
   const sender = 'a'.repeat(64)
