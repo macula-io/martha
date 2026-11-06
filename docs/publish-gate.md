@@ -482,9 +482,13 @@ The rules the seam keeps, and a host must not work around:
   the package in `known_environment_reads`; the refusal names the package,
   the name and the file, and CI checks every recorded version against the
   same rule, so a name added to the kept list or the settings later fails by
-  name. The scan reads code text: a read that never spells `process.env`
-  (`os.homedir()`, a native addon's `getenv`, `process['env']`) is not seen,
-  and every name outside the kept list and the settings is emptied for the
+  name. Before a placed tree starts, its reads are taken again from the
+  installed bytes and must equal the recorded list, so a read struck from the
+  record is refused by package, name and file. The scan reads code text:
+  `process['env']` and `globalThis['process']` are listed as computed reads,
+  but a read that never names the environment (`os.homedir()`, a native
+  addon's `getenv`, the process kept under another name) is not seen, and
+  every name outside the kept list and the settings is emptied for the
   server anyway. A module the tree lacks, such as an
   optional one, would be looked for in every `node_modules` above the tree and
   under HOME, which that user can write; so the server is started with the

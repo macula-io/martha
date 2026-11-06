@@ -172,8 +172,9 @@ export function refusalOfLock(lock: NpmLock, pin: LockPin): string | undefined {
 // `process.env["X"]`, can be listed; so can a spread, `...process.env`, which
 // hands the whole environment to a child and reads no setting itself. Anything
 // else (a computed key, a destructure, the object kept under another name or
-// passed along) could read a setting nobody can list, so it is refused by file.
-const ANY_READ = /\bprocess\.env\b/g
+// passed along, the environment or the process named by a bracket) could read
+// a setting nobody can list, so it is refused by file.
+const ANY_READS = [/\bprocess\s*\.\s*env\b/g, /\bprocess\s*\[\s*(["'`])env\1\s*\]/g, /\bglobalThis\s*\[\s*(["'`])process\1\s*\]/g]
 const DOT_READ = /\bprocess\.env\.([A-Za-z_$][\w$]*)/g
 const BRACKET_READ = /\bprocess\.env\[\s*(["'])([^"'\\]+)\1\s*\]/g
 const SPREAD = /\.\.\.\s*process\.env\b(?!\s*[.[?])/g
@@ -183,7 +184,8 @@ function environmentReadOf(text: string): { readonly names: readonly string[]; r
   const dotted = [...text.matchAll(DOT_READ)].map((match) => match[1] ?? '')
   const bracketed = [...text.matchAll(BRACKET_READ)].map((match) => match[2] ?? '')
   const spreads = [...text.matchAll(SPREAD)].length
-  return { names: [...dotted, ...bracketed], computed: [...text.matchAll(ANY_READ)].length !== dotted.length + bracketed.length + spreads }
+  const any = ANY_READS.reduce((count, read) => count + [...text.matchAll(read)].length, 0)
+  return { names: [...dotted, ...bracketed], computed: any !== dotted.length + bracketed.length + spreads }
 }
 
 /** Every setting the sources read, sorted; refuses a read whose key cannot be listed. */
@@ -234,6 +236,33 @@ export function environmentReadsInTree(sources: readonly PackageSource[], lock: 
       { reads: Object.fromEntries([...reads.entries()].sort(byName).map(([read, files]) => [read, [...files].sort()])), computed: [...computed].sort() },
     ]),
   )
+}
+
+/** Each read of a list as one line: the package, the name or that it is computed, and the file. */
+function linesOfReads(reads: Readonly<Record<string, PackageEnvironmentReads>>): Set<string> {
+  return new Set(
+    Object.entries(reads).flatMap(([name, of]) => [
+      ...Object.entries(of.reads).flatMap(([read, files]) => files.map((file) => `${name} reads ${read} in ${file}`)),
+      ...of.computed.map((file) => `${name} reads by a key that is no literal in ${file}`),
+    ]),
+  )
+}
+
+/**
+ * How the reads a tree was recorded with differ from the reads its bytes hold,
+ * or undefined when they are the same: a record judged only against itself
+ * would pass a read struck from it. Names each read with package and file.
+ */
+export function changesInEnvironmentReads(
+  recorded: Readonly<Record<string, PackageEnvironmentReads>>,
+  derived: Readonly<Record<string, PackageEnvironmentReads>>,
+): string | undefined {
+  const inRecord = linesOfReads(recorded)
+  const inBytes = linesOfReads(derived)
+  const unrecorded = [...inBytes].filter((line) => !inRecord.has(line)).sort()
+  const gone = [...inRecord].filter((line) => !inBytes.has(line)).sort()
+  const changes = [...listed('the bytes hold reads the record leaves out:', unrecorded), ...listed('the record holds reads the bytes do not:', gone)]
+  return changes.length === 0 ? undefined : changes.join('; ')
 }
 
 /** What decides whether a tree's environment reads may be recorded and run. */

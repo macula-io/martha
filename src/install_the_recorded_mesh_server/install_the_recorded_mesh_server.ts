@@ -66,6 +66,7 @@ import {
 } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import {
   MESH_TREE_RECORDING,
+  changesInEnvironmentReads,
   changesInTree,
   environmentReadsInTree,
   refusalOfEnvironmentReads,
@@ -76,6 +77,7 @@ import {
   type EnvironmentReview,
   type MeshTreeRecording,
   type NpmLock,
+  type PackageEnvironmentReads,
   type RecordedMeshTree,
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { TREE_PARAMETER, treeUrlOf } from './confine_to_the_recorded_tree.ts'
@@ -241,6 +243,21 @@ function provedTreeOf(tree: RecordedMeshTree, given: string, registry: string): 
   return unlike === undefined ? { dir } : { refusal: unlike }
 }
 
+/**
+ * What the proved tree at `dir` reads from the environment, read from its
+ * bytes, or why that is not what the tree was recorded with.
+ */
+function environmentReadsOfProved(dir: string, tree: RecordedMeshTree): { readonly reads: Record<string, PackageEnvironmentReads> } | { readonly refusal: string } {
+  let reads: Record<string, PackageEnvironmentReads>
+  try {
+    reads = environmentReadsInTree(codeOfTree(dir, tree.files), tree.lock)
+  } catch (error) {
+    return { refusal: (error as Error).message }
+  }
+  const changes = changesInEnvironmentReads(tree.environment_reads, reads)
+  return changes === undefined ? { reads } : { refusal: changes }
+}
+
 type Entry = Record<string, unknown> & { readonly args?: unknown }
 
 /** The package, version and bin a pinned entry asks npx for, or undefined when it is no such pin. */
@@ -300,8 +317,6 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
     if (tree === undefined) {
       return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not recorded: the bytes it would run are not proved. Record that version, or install a recorded one.` }
     }
-    const unreviewed = refusalOfEnvironmentReads(tree.environment_reads, environmentReviewOf(recording))
-    if (unreviewed !== undefined) return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not reviewed: ${unreviewed}` }
     const record = records.find((recorded) => recorded.server_version === pin.version)
     if (record === undefined) {
       return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose bins are not recorded, so its server bin is not known.` }
@@ -313,6 +328,10 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
     if (binFile === undefined) return { refusal: `the record of ${MESH_SERVER_PACKAGE} ${pin.version} names the server bin ${record.server_bin}, which is none of its bins.` }
     const proved = provedTreeOf(tree, placement.root, recording.registry)
     if ('refusal' in proved) return { refusal: `its server ${name}: ${proved.refusal}` }
+    const reads = environmentReadsOfProved(proved.dir, tree)
+    if ('refusal' in reads) return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose reads are not the recorded ones: ${reads.refusal}` }
+    const unreviewed = refusalOfEnvironmentReads(reads.reads, environmentReviewOf(recording))
+    if (unreviewed !== undefined) return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not reviewed: ${unreviewed}` }
     const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
     const file = join(packageDir, binFile)
     if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
