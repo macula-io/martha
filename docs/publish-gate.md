@@ -170,7 +170,8 @@ A host does these things, and the core does the rest:
 | a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
 | a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
-| before running any tool | `answerToolCall({ tool, session, policy })` — return the `{ deny }` as the hook's answer |
+| before running any tool | `answerToolCall({ tool, session, policy, input })` — return the `{ deny }` as the hook's answer |
+| a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival)` |
 | after a turn | `rememberSession(store, session)` |
 
@@ -222,6 +223,18 @@ Four rules the seam keeps, and a host must not work around:
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the
   open question under item 6).
+
+- **A room is read through its gate, never raw (B1).** The raw mesh reads
+  (`RAW_MESH_READS`, plus `mesh_say` when it waits for a reply) are refused in
+  every session, tainted or not, under every server namespace: the match is on
+  the tool's own name after the last `__`. The one read that remains returns
+  only what the room's own delivery gate admits, with the roster the registry
+  binds to that room, and says how many envelopes it withheld, never their
+  text, sender or kind. Each admitted envelope is an ingestion with its
+  sender's node id, so the shell is kept only when the policy names every
+  sender. The pointer a long room delivery carries must name this read, never
+  a raw tool. A host that registers the read under its own tool name must also
+  allow that name while tainted, or a tainted member cannot read its room.
 
 The refusal text a host returns names the command that clears it — `/clear` on
 the Claude Code host.
