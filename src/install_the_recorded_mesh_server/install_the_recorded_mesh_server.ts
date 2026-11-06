@@ -23,9 +23,12 @@
 //      every launch: a changed, missing or added file refuses the launch by path.
 //      The record is the reviewed one in the repository, never a digest kept
 //      beside the install, which whoever can edit the tree could rewrite too.
-//   3. START it by path: in the approved copy the host is given, the entry
-//      becomes `<this node> <root>/<version>/node_modules/<package>/<file>`, with
-//      its own keys kept. The file is the one the version's
+//   3. START it by path, confined to its tree: in the approved copy the host is
+//      given, the entry becomes `<this node> --import <hook>?tree=<url>
+//      <root>/<version>/node_modules/<package>/<file>`, with its own keys kept.
+//      The hook (./confine_to_the_recorded_tree.ts, the launcher's own file)
+//      refuses every module that resolves outside the tree, so a module the
+//      tree lacks is not found above it or under HOME (martha#73). The file is the one the version's
 //      record gives its server bin (`server_bin`, martha#49); an entry naming any
 //      other bin is refused, whatever the launch gate let through.
 //   4. BUILD its environment: a host starts a server with its own environment
@@ -42,12 +45,10 @@
 // edit the installed tree while a session runs. The next launch refuses that
 // tree, naming the file; the server already running is not checked again. This
 // is the same class as the contact-policy file (macula-io/macula-mcp#79). A
-// module the tree does not hold, an optional one, would be looked for in the
-// node_modules above it and under HOME (martha#73); a dependency's own environment
-// reads are not listed by the recorder (martha#72).
+// dependency's own environment reads are not listed by the recorder (martha#72).
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import process from 'node:process'
 
@@ -69,6 +70,7 @@ import {
   type NpmLock,
   type RecordedMeshTree,
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import { TREE_PARAMETER, treeUrlOf } from './confine_to_the_recorded_tree.ts'
 
 /** Where npm's own program sits beside the node that runs this: `<prefix>/bin/node` and `<prefix>/lib/node_modules/npm`. */
 const NPM_CLI_FROM_PREFIX = ['lib', 'node_modules', 'npm', 'bin', 'npm-cli.js']
@@ -92,6 +94,16 @@ const CODE = /\.[cm]?js$/
  */
 export const SERVER_NEEDS: readonly string[] = ['HOME', 'PATH']
 const INTEGRITY_FAILED = 'EINTEGRITY'
+/** The launcher's own hook that confines what the server loads to its tree; never a file of the tree. */
+const CONFINING_HOOK = new URL('./confine_to_the_recorded_tree.ts', import.meta.url)
+const PRELOAD = '--import'
+
+/** The arguments that start `file` with every module it loads confined to the tree at `dir`, a real path (provedTreeOf). */
+function confinedStart(dir: string, file: string): readonly string[] {
+  const hook = new URL(CONFINING_HOOK)
+  hook.searchParams.set(TREE_PARAMETER, treeUrlOf(join(dir, NODE_MODULES)))
+  return [PRELOAD, hook.href, file]
+}
 
 /** The npm program that ships with this node. */
 export function npmBesideNode(node: string = process.execPath): string {
@@ -179,10 +191,14 @@ function treeUnlike(tree: RecordedMeshTree, dir: string): string | undefined {
 }
 
 /** The recorded tree of this version at `<root>/<version>`, installed if it is not there yet; or why it cannot run. */
-function provedTreeOf(tree: RecordedMeshTree, root: string, registry: string): { readonly dir: string } | { readonly refusal: string } {
+function provedTreeOf(tree: RecordedMeshTree, given: string, registry: string): { readonly dir: string } | { readonly refusal: string } {
+  // The root by its real path, once: node resolves every module to its real
+  // path, so the tree is installed, compared and confined under the same name
+  // even when the root sits behind a symlink (/home -> /var/home).
+  mkdirSync(given, { recursive: true, mode: 0o700 })
+  const root = realpathSync(given)
   const dir = join(root, tree.server_version)
   if (!existsSync(dir)) {
-    mkdirSync(root, { recursive: true, mode: 0o700 })
     const fresh = mkdtempSync(join(root, INSTALLING))
     const failed = installLock(tree.lock, fresh, registry, join(root, NPM_HOME))
     if (failed !== undefined) {
@@ -273,7 +289,7 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
     const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
     const file = join(packageDir, binFile)
     if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
-    servers[name] = { ...entry, command: process.execPath, args: [file], env: builtEnvironment(placement.hostEnvironment, entry.env) }
+    servers[name] = { ...entry, command: process.execPath, args: confinedStart(proved.dir, file), env: builtEnvironment(placement.hostEnvironment, entry.env) }
   }
   return { config: `${JSON.stringify({ ...config, mcpServers: servers }, null, 2)}\n` }
 }

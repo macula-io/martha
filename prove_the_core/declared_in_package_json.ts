@@ -17,6 +17,7 @@ export interface Manifest {
     readonly hostGlue?: readonly string[]
     readonly hostAdapters?: readonly string[]
     readonly packageImports?: Readonly<Record<string, string>>
+    readonly loaderImports?: Readonly<Record<string, string>>
   }
 }
 
@@ -60,6 +61,13 @@ export function codeFoldersOf(manifest: Manifest): string[] {
       return folder
     })
 }
+
+/**
+ * Each file that may import one of Node's modules that load others by name,
+ * with that module: a reviewed decision per file, never per folder.
+ */
+export const loaderImportsOf = (manifest: Manifest): Readonly<Record<string, string>> =>
+  manifest.martha?.loaderImports ?? {}
 
 /** Each package code may import, with the one folder whose files may import it. */
 export const packageImportsOf = (manifest: Manifest): Readonly<Record<string, string>> =>

@@ -449,9 +449,10 @@ The rules the seam keeps, and a host must not work around:
   variable before the host starts. And it gives every server the `env` of each
   settings file it loads, which under `--setting-sources user` is the owner's
   user settings (`$CLAUDE_CONFIG_DIR/settings.json`, else
-  `~/.claude/settings.json`; a `CLAUDE_CONFIG_DIR` that is set but empty or
-  not absolute refuses the launch, since the launcher and the host could
-  resolve it to different files) and the approved `--settings` copy: a launch is
+  `~/.claude/settings.json`; a `CLAUDE_CONFIG_DIR` that is set but empty,
+  not absolute, or with white space around it, which Claude Code trims,
+  refuses the launch, since the launcher and the host could resolve it to
+  different files) and the approved `--settings` copy: a launch is
   refused, naming the file and the variable, when either sets a name other
   than HOME, PATH or a reviewed setting, except Claude Code's own variables
   that no file of a recorded tree reads (`CLAUDE_CODE_OWN_VARIABLES`, today
@@ -470,8 +471,17 @@ The rules the seam keeps, and a host must not work around:
   starts and the host reads it again itself, so an edit by that user in
   between reaches the host unchecked. Both are the same class as the contact-policy file
   (macula-io/macula-mcp#79). A dependency's own environment reads are not
-  listed by the recorder (martha#72), and a module the tree lacks is looked
-  for in the `node_modules` above it and under HOME (martha#73). Only the
+  listed by the recorder (martha#72). A module the tree lacks, such as an
+  optional one, would be looked for in every `node_modules` above the tree and
+  under HOME, which that user can write; so the server is started with the
+  launcher's own resolve hook (`node --import`; the hook is the launcher's own
+  file and exactly as trusted as the launcher), which refuses every `require`
+  and `import`, computed ones included, that resolves anywhere but node's own
+  modules or the tree (by its real path), as not found (martha#73). The hook
+  confines resolution only: whatever the tree's own code chooses to do is that
+  code's choice, and that code is compared file by file. For example, a
+  `process.dlopen` on an absolute path, or a node child or worker the server
+  starts with arguments of its own, does not pass the hook. Only the
   servers an installed plugin brings are not version-checked; their tools are
   still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry

@@ -3,12 +3,13 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { coreSources } from './core_sources.ts'
-import { codeFoldersOf, manifestOf, packageImportsOf, type Manifest } from './declared_in_package_json.ts'
+import { codeFoldersOf, loaderImportsOf, manifestOf, packageImportsOf, type Manifest } from './declared_in_package_json.ts'
 import { importsBeyondTheCore, LOADS_BY_NAME, RUNS_TEXT, CALLS_REQUIRE_INDIRECTLY, COMPUTED } from './imports_beyond_the_core.ts'
 
 const repository = join(import.meta.dirname, '..')
 const manifest = manifestOf(repository)
 const packages = packageImportsOf(manifest)
+const loaders = loaderImportsOf(manifest)
 
 // The planted imports below sit in strings, which the parser never reads as
 // imports, so this file is scanned like any other.
@@ -23,7 +24,25 @@ const loader = (path: string, why: string, line = 1) => named(path, line, null, 
 test('no file imports anything but its own code, Node, or a package in the one folder declared for it', () => {
   assert.ok(scanned.some((source) => source.path.startsWith('src')), 'the scan read the core')
   assert.ok(scanned.some((source) => source.path.startsWith('prove_the_core')), 'the scan read the checks')
-  assert.deepEqual(importsBeyondTheCore(scanned, packages), [])
+  assert.deepEqual(importsBeyondTheCore(scanned, packages, loaders), [])
+})
+
+const CONFINING_HOOK = 'src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
+
+test('tripwire: package.json lets exactly the mesh server\'s confining hook import node:module; another loader file is a decision, not a drift (martha#73)', () => {
+  assert.deepEqual(loaders, { [CONFINING_HOOK]: 'node:module' })
+})
+
+test('a loader module allowed for one file is still named in any other file, and another loader module in that file is named too', () => {
+  const planted = [
+    { path: CONFINING_HOOK, text: "import { registerHooks } from 'node:module'" },
+    { path: 'src/install_the_recorded_mesh_server/other.ts', text: "import { createRequire } from 'node:module'" },
+    { path: CONFINING_HOOK, text: "import vm from 'node:vm'" },
+  ]
+  assert.deepEqual(importsBeyondTheCore(planted, packages, loaders), [
+    named('src/install_the_recorded_mesh_server/other.ts', 1, 'node:module', `imports node:module, ${LOADS_BY_NAME}`),
+    named(CONFINING_HOOK, 1, 'node:vm', `imports node:vm, ${LOADS_BY_NAME}`),
+  ])
 })
 
 test('tripwire: package.json allows exactly typescript, and only in prove_the_core; a new package is a decision, not a drift', () => {
