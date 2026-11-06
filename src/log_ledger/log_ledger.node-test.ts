@@ -292,6 +292,20 @@ test('a package that is not owner/repo#n is refused before anything is written',
   }
 })
 
+test('an act for a package that is not owner/repo#n is not sent, and says so', async () => {
+  const { host } = hostForTests()
+  let ran = false
+  const failure = await failureOf(
+    sendOutwardAct(host, { package: '../etc', member: work.member, act: push }, async () => {
+      ran = true
+      return 'pushed'
+    }),
+  )
+  assert.equal(ran, false)
+  assert.equal((failure as { code?: unknown }).code, ACT_NOT_SENT)
+  assert.match(String((failure as Error).cause), /not a work package/)
+})
+
 test("a row whose package is not its stream's is refused on reading", async () => {
   const { host } = hostForTests()
   await host.stores.rows.append(ledgerStreamOf(work.package), {
