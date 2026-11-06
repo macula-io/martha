@@ -26,6 +26,7 @@ import {
   type HandoverStampStore,
 } from './carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
 const names = claudeCodeToolNames
 
@@ -57,7 +58,7 @@ const stampStore = (): HandoverStampStore & { readonly all: Map<string, Handover
   return { all, read: (file) => all.get(file), write: (file, stamp) => void all.set(file, stamp) }
 }
 
-const executes = (session: HostSession) => answerToolCall({ names, tool: 'Bash', session, policy, launch }) === undefined
+const executes = (session: HostSession) => answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine }) === undefined
 
 const handover = { file: 'handover-of-a-member.md', content: 'where the work stands' }
 
@@ -200,7 +201,7 @@ test('a tainted session can still hand over: the host stamps it, no Write is nee
   const stamps = stampStore()
   const predecessor = taintedPredecessor(store, stamps)
 
-  assert.notEqual(answerToolCall({ names, tool: 'Write', session: predecessor, policy, launch }), undefined, 'the model may not Write')
+  assert.notEqual(answerToolCall({ names, tool: 'Write', session: predecessor, policy, launch, host: thisMachine }), undefined, 'the model may not Write')
   assert.equal(stamps.all.get(handover.file)?.predecessor_id, 'old')
 })
 

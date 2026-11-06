@@ -34,9 +34,10 @@ import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_membe
 import {
   recheckLaunch,
   type ApprovedLaunch,
+  type LaunchHost,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
-export type { ApprovedLaunch }
+export type { ApprovedLaunch, LaunchHost }
 
 /** A host refusal, or nothing to say. */
 export type ToolCallAnswer = { readonly deny: string } | undefined
@@ -51,11 +52,13 @@ export interface ToolCall {
   readonly names: ToolNames
   /** The member's launch, checked again before this call runs. */
   readonly launch: ApprovedLaunch
+  /** The host the launch is read again through: its files, scratch and git. */
+  readonly host: LaunchHost
 }
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch, names }: ToolCall): ToolCallAnswer {
-  const launched = recheckLaunch(launch)
+export function answerToolCall({ tool, session, policy, input, launch, names, host }: ToolCall): ToolCallAnswer {
+  const launched = recheckLaunch(launch, host)
   if (!launched.allow) {
     return {
       deny:

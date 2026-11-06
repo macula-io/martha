@@ -1,5 +1,5 @@
 {
-  "_why": "The tools the mesh server registers, read from its published package so the allowed and refused mesh tools are proved against the server, not a list typed by hand (martha#2, item 5). Re-record with: node src/read_a_room_through_its_gate/record_mesh_server_tools.ts <extracted package directory>.",
+  "_why": "The tools the mesh server registers, read from its published package so the allowed and refused mesh tools are proved against the server, not a list typed by hand (martha#2, item 5). Re-record with: npm run record:mesh-tools -- <extracted package directory>.",
   "server": "@macula-io/mcp",
   "server_version": "0.51.2",
   "tools": [

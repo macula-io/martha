@@ -31,26 +31,38 @@
 // Git runs here with every inherited GIT_ variable dropped, so the caller's
 // environment cannot point it at another repository or index, and with
 // fsmonitor off, the one setting that would make `git add` start a program.
+//
+// The machine is reached only through the host contract (martha#26): git runs
+// through `processes.runNow`, the scratch index lives in `stores.scratch`, and
+// links are resolved through `stores.files`.
 
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+
+import type { Processes, Stores } from '../host_contract/host_contract.ts'
+
+/** The parts of the host contract the launch gate reads the machine through. */
+export interface LaunchHost {
+  readonly stores: Pick<Stores, 'files' | 'scratch'>
+  readonly processes: Pick<Processes, 'runNow'>
+}
+
+/** The variables git would take a repository, an index or a config from; none is inherited. */
+const GIT_VARIABLES = 'GIT_'
 
 /**
  * The tree id of the checkout holding `dir`, with its uncommitted and untracked
  * (unignored) changes included, or `null` when `dir` is in no git checkout, the
  * checkout's top is `stop_dir` or a directory above it, or git cannot read it.
  */
-export function readCheckoutTree(dir: string, stop_dir: string): string | null {
-  const top = git(dir, ['rev-parse', '--show-toplevel'])
-  if (top === undefined || holds(realOrResolved(top), realOrResolved(stop_dir))) return null
-  return cleanTree(top) ?? stagedTree(top)
+export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost): string | null {
+  const top = git(host, dir, ['rev-parse', '--show-toplevel'])
+  if (top === undefined || holds(realOrResolved(host, top), realOrResolved(host, stop_dir))) return null
+  return cleanTree(host, top) ?? stagedTree(host, top)
 }
 
 /** HEAD's tree when git reports nothing changed and nothing untracked, else `undefined`. */
-function cleanTree(top: string): string | undefined {
-  const changes = git(top, [
+function cleanTree(host: LaunchHost, top: string): string | undefined {
+  const changes = git(host, top, [
     '--no-optional-locks',
     'status',
     '--porcelain=v2',
@@ -58,20 +70,20 @@ function cleanTree(top: string): string | undefined {
     '--ignore-submodules=none',
   ])
   if (changes !== '') return undefined
-  return git(top, ['rev-parse', '--verify', '--quiet', 'HEAD^{tree}'])
+  return git(host, top, ['rev-parse', '--verify', '--quiet', 'HEAD^{tree}'])
 }
 
 /** The tree git would write with every change staged, in a scratch index. */
-function stagedTree(top: string): string | null {
-  const scratch = mkdtempSync(join(tmpdir(), 'martha-tree-'))
+function stagedTree(host: LaunchHost, top: string): string | null {
+  const scratch = host.stores.scratch.make(null, 'martha-tree-')
   try {
-    const index = { GIT_INDEX_FILE: join(scratch, 'index') }
-    const seeded = git(top, ['read-tree', 'HEAD'], index) ?? git(top, ['read-tree', '--empty'], index)
+    const index = { GIT_INDEX_FILE: join(scratch.path, 'index') }
+    const seeded = git(host, top, ['read-tree', 'HEAD'], index) ?? git(host, top, ['read-tree', '--empty'], index)
     if (seeded === undefined) return null
-    if (git(top, ['add', '--all', '--', '.'], index) === undefined) return null
-    return git(top, ['write-tree'], index) ?? null
+    if (git(host, top, ['add', '--all', '--', '.'], index) === undefined) return null
+    return git(host, top, ['write-tree'], index) ?? null
   } finally {
-    rmSync(scratch, { recursive: true, force: true })
+    scratch.remove()
   }
 }
 
@@ -81,20 +93,17 @@ function holds(dir: string, path: string): boolean {
   return rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest)
 }
 
-function realOrResolved(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    return resolve(path)
-  }
+/** The path with every link resolved, or as given when it cannot be. */
+export function realOrResolved(host: LaunchHost, path: string): string {
+  return host.stores.files.realPathOf(path) ?? resolve(path)
 }
 
-function git(cwd: string, args: readonly string[], extra: Readonly<Record<string, string>> = {}): string | undefined {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')))
-  const run = spawnSync('git', ['-c', 'core.fsmonitor=false', ...args], {
+function git(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
+  const run = host.processes.runNow({
+    command: 'git',
+    args: ['-c', 'core.fsmonitor=false', ...args],
     cwd,
-    encoding: 'utf8',
-    env: { ...env, ...extra },
+    environment: { drop_prefixes: [GIT_VARIABLES], set },
   })
-  return run.status === 0 ? run.stdout.trim() : undefined
+  return run.exit_code === 0 ? run.stdout.trim() : undefined
 }

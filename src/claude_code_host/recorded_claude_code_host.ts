@@ -2,7 +2,8 @@
 // from the host binary (recorded_claude_code_host.json), and the lists the
 // adapter and the coverage check derive from it (#41, threats T1, T5 and T7).
 //
-// The recording is re-taken by record_claude_code_host.ts, which uses only the
+// The recording is re-taken by npm run record:claude-code-host
+// (src/record_claude_code_host/), which uses only the
 // parsers, never this module: a recording an older parser cannot read must not
 // stop a new one being taken.
 

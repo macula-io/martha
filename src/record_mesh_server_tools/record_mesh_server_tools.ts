@@ -1,7 +1,7 @@
 // Re-records the tools the mesh server registers, from its published package.
 //
 //   npm pack @macula-io/mcp@<version>; tar -xzf <the .tgz>
-//   node src/read_a_room_through_its_gate/record_mesh_server_tools.ts <the extracted package directory>
+//   npm run record:mesh-tools -- <the extracted package directory>
 //
 // Run it when the server is upgraded; the coverage check then names any tool the
 // new server registers that nobody has decided to allow or refuse. The package
@@ -11,9 +11,9 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { argv, exit, stderr } from 'node:process'
 
-import { registeredToolsIn, type RecordedMeshServer } from './mesh_server_tools.ts'
+import { registeredToolsIn, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 
-const RECORDING = new URL('./recorded_mesh_server_tools.json', import.meta.url)
+const RECORDING = new URL('../read_a_room_through_its_gate/recorded_mesh_server_tools.json', import.meta.url)
 const CODE = '.js'
 
 const [directory] = argv.slice(2)

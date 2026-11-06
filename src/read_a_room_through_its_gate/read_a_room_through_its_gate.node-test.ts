@@ -24,6 +24,7 @@ import {
   type RoomEnvelope,
 } from './read_a_room_through_its_gate.ts'
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
 const names = claudeCodeToolNames
 
@@ -71,7 +72,7 @@ const read = (room: ReadableRoom, envelopes: readonly RoomEnvelope[]) =>
   readRoomThroughItsGate({ session: beginSession(store(), 's-1'), room, envelopes, rosters, self_node_id: self })
 
 const executes = (session: ReturnType<typeof read>['session']) =>
-  answerToolCall({ names, tool: 'Bash', session, policy, launch }) === undefined
+  answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine }) === undefined
 
 // --- the raw reads are refused, under any namespace, tainted or not -----------
 
@@ -97,7 +98,7 @@ test('every raw mesh read is refused under every namespace, in a clean session',
   for (const prefix of NAMESPACES) {
     for (const raw of REQUIRED_RAW_READS) {
       const tool = `${prefix}${raw}`
-      assert.notEqual(answerToolCall({ names, tool, session: clean, policy, launch }), undefined, tool)
+      assert.notEqual(answerToolCall({ names, tool, session: clean, policy, launch, host: thisMachine }), undefined, tool)
     }
   }
 })
@@ -117,7 +118,7 @@ test('a mesh tool this repository has never seen is refused, under every namespa
   for (const prefix of NAMESPACES) {
     const tool = `${prefix}${MESH_TOOL_PREFIX}read_everything_new`
     assert.equal(isRawMeshRead(tool, {}, names), true, tool)
-    assert.notEqual(answerToolCall({ names, tool, session: clean, policy, input: {}, launch }), undefined, tool)
+    assert.notEqual(answerToolCall({ names, tool, session: clean, policy, input: {}, launch, host: thisMachine }), undefined, tool)
   }
 })
 
@@ -126,7 +127,7 @@ test('every mesh tool on the allow-list runs in a clean session', () => {
   for (const own of MESH_TOOLS_THAT_RUN) {
     const tool = `mcp__macula__${own}`
     assert.equal(own.startsWith(MESH_TOOL_PREFIX), true, own)
-    assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {}, launch }), undefined, tool)
+    assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {}, launch, host: thisMachine }), undefined, tool)
   }
 })
 
@@ -150,7 +151,7 @@ test('mesh_say is a raw read when it waits for the reply, or when the host gives
 })
 
 test('a tool call that names mesh_say with no input is refused in a clean session', () => {
-  const answer = answerToolCall({ names, tool: 'mcp__macula__mesh_say', session: beginSession(store(), 's'), policy, launch })
+  const answer = answerToolCall({ names, tool: 'mcp__macula__mesh_say', session: beginSession(store(), 's'), policy, launch, host: thisMachine })
   assert.notEqual(answer, undefined)
 })
 
@@ -165,7 +166,7 @@ test('on OpenCode, the raw reads are refused in its own server_tool form', () =>
     for (const raw of REQUIRED_RAW_READS) {
       const tool = `${server}_${raw}`
       assert.equal(isRawMeshRead(tool, {}, openCode), true, tool)
-      assert.notEqual(answerToolCall({ names: openCode, tool, session: clean, policy, input: {}, launch }), undefined, tool)
+      assert.notEqual(answerToolCall({ names: openCode, tool, session: clean, policy, input: {}, launch, host: thisMachine }), undefined, tool)
     }
     assert.equal(isRawMeshRead(`${server}_mesh_say`, { wait_reply_seconds: 60 }, openCode), true, server)
     assert.equal(isRawMeshRead(`${server}_mesh_publish`, {}, openCode), false, server)
@@ -184,9 +185,9 @@ test("Claude Code's split does not read OpenCode's form: the split has to be the
 test('an allowed mesh_call runs, and once its result is taken in, Bash is refused', () => {
   const clean = beginSession(store(), 's-1')
   const tool = 'mcp__macula__mesh_call'
-  assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {}, launch }), undefined)
+  assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {}, launch, host: thisMachine }), undefined)
   const after = takeInTurn(clean, { source: 'mcp_result' }, bindNothing)
-  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: after, policy, launch }), undefined)
+  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: after, policy, launch, host: thisMachine }), undefined)
 })
 
 test('a raw read is no longer on the list of tools a tainted session may call', () => {
@@ -194,7 +195,7 @@ test('a raw read is no longer on the list of tools a tainted session may call', 
 })
 
 test('the refusal points at the gated read', () => {
-  const answer = answerToolCall({ names, tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy, launch })
+  const answer = answerToolCall({ names, tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy, launch, host: thisMachine })
   assert.match(answer?.deny ?? '', /through its gate/)
 })
 

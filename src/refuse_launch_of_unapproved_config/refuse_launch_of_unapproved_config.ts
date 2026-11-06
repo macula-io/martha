@@ -41,12 +41,18 @@
 // The approvals are the owner's, typed in that member's tab and logged, which no
 // model can mint (martha#1, decision 4). They are a same-user file like the
 // roster, which martha#1 decision 2 accepts for now.
+//
+// The gate reaches the machine only through the host contract (martha#26): it
+// reads files through `stores.files`, writes snapshots into `stores.scratch` and
+// runs git through `processes.runNow` (./checkout_tree.ts). Every reader takes
+// the host it reads through.
 
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 
-import { readCheckoutTree } from './checkout_tree.ts'
+import { readCheckoutTree, realOrResolved, type LaunchHost } from './checkout_tree.ts'
+
+export type { LaunchHost }
 
 /** What a launcher changes when it starts a host: arguments and environment it adds, and inherited variables it drops. */
 export interface HostSwitches {
@@ -234,8 +240,8 @@ export interface ApprovedLaunch extends LaunchPlace {
  * hook that returned would let the host fire its Stop hook, and a SIGTERM or a
  * normal exit fires SessionEnd (npm run probe:launch).
  */
-export function recheckLaunch(launch: ApprovedLaunch): LaunchDecision {
-  return decideLaunch({ ...readLaunchState(launch), host: launch.host, approved_fingerprints: launch.approved_fingerprints })
+export function recheckLaunch(launch: ApprovedLaunch, host: LaunchHost): LaunchDecision {
+  return decideLaunch({ ...readLaunchState(launch, host), host: launch.host, approved_fingerprints: launch.approved_fingerprints })
 }
 
 /** The launch gate the registry names. */
@@ -255,13 +261,13 @@ export interface LaunchPlace {
  * Both are resolved through symlinks first. A start outside `stop_dir` is read
  * all the way up to the filesystem root. A host with no entry reads nothing.
  */
-export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace): readonly ConfigEntry[] {
+export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
   if (!Object.hasOwn(HOSTS, host)) return []
   const names: readonly string[] = LAUNCH_FILES_OF_HOST[host as Host]
 
-  const start = realOrResolved(launch_dir)
-  const found = directoriesUpFrom(start, realOrResolved(stop_dir)).flatMap((dir) =>
-    names.flatMap((name) => entriesAt(start, dir, name)),
+  const start = realOrResolved(machine, launch_dir)
+  const found = directoriesUpFrom(start, realOrResolved(machine, stop_dir)).flatMap((dir) =>
+    names.flatMap((name) => entriesAt(machine, start, dir, name)),
   )
   // Two listed names share a parent (.claude/…): a parent that is not a
   // directory is reported once.
@@ -269,8 +275,11 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace): r
 }
 
 /** The config and the work tree, as the gate reads them. */
-export function readLaunchState(place: LaunchPlace): LaunchState {
-  return { entries: readLaunchConfig(place), tree: readCheckoutTree(realOrResolved(place.launch_dir), place.stop_dir) }
+export function readLaunchState(place: LaunchPlace, machine: LaunchHost): LaunchState {
+  return {
+    entries: readLaunchConfig(place, machine),
+    tree: readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine),
+  }
 }
 
 export type PreparedLaunch =
@@ -294,8 +303,8 @@ export type PreparedLaunch =
  * approved, so a file rewritten between the decision and the copy is refused
  * rather than carried.
  */
-export function prepareLaunch(place: SnapshotPlace): PreparedLaunch {
-  return snapshotApproved(place, readLaunchState(place))
+export function prepareLaunch(place: SnapshotPlace, machine: LaunchHost): PreparedLaunch {
+  return snapshotApproved(place, readLaunchState(place, machine), machine)
 }
 
 /** A launch place, where its snapshots go, and what the owner approved. */
@@ -310,14 +319,14 @@ export type SnapshotPlace = LaunchPlace & {
  * rewritten after `state` was read is refused, and no snapshot is left behind
  * on any refusal.
  */
-export function snapshotApproved(place: SnapshotPlace, state: LaunchState): PreparedLaunch {
+export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machine: LaunchHost): PreparedLaunch {
   const decision = decideLaunch({ host: place.host, ...state, approved_fingerprints: place.approved_fingerprints })
   if (!decision.allow) return decision
 
   const launch = HOSTS[place.host as Host]
-  const start = realOrResolved(place.launch_dir)
-  mkdirSync(place.snapshot_root, { recursive: true })
-  const snapshot_dir = mkdtempSync(join(place.snapshot_root, 'launch-'))
+  const start = realOrResolved(machine, place.launch_dir)
+  const snapshot = machine.stores.scratch.make(place.snapshot_root, 'launch-')
+  const snapshot_dir = snapshot.path
 
   const carried: HostSwitches[] = [launch.project_config_off]
   const not_carried: string[] = []
@@ -330,22 +339,19 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState): Prep
       continue
     }
 
-    const content = readFileSync(join(start, entry.path))
+    const content = machine.stores.files.bytesOf(join(start, entry.path))
     if (createHash('sha256').update(content).digest('hex') !== entry.sha256) {
-      rmSync(snapshot_dir, { recursive: true, force: true })
+      snapshot.remove()
       return { allow: false, refusal: `${REFUSED}: ${entry.path} changed while it was being approved. Start again.` }
     }
-    const copy = join(snapshot_dir, entry.path)
-    mkdirSync(dirname(copy), { recursive: true })
-    writeFileSync(copy, content)
-    carried.push(carry(copy))
+    carried.push(carry(snapshot.write(entry.path, content)))
   }
 
   const env: Record<string, string> = {}
   for (const switches of carried) {
     for (const [name, value] of Object.entries(switches.env)) {
       if (Object.hasOwn(env, name)) {
-        rmSync(snapshot_dir, { recursive: true, force: true })
+        snapshot.remove()
         return { allow: false, refusal: `${REFUSED}: two of its config files would be passed through ${name}, which carries one. Keep one.` }
       }
       env[name] = value
@@ -364,14 +370,6 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState): Prep
   }
 }
 
-function realOrResolved(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    return resolve(path)
-  }
-}
-
 /** The start, then each directory above it, stopping below `stop` or at the root. */
 function directoriesUpFrom(start: string, stop: string): readonly string[] {
   const dirs: string[] = [start]
@@ -383,39 +381,41 @@ function directoriesUpFrom(start: string, stop: string): readonly string[] {
 }
 
 /** The entries for one listed name in one directory, checking every component. */
-function entriesAt(start: string, dir: string, name: string): readonly ConfigEntry[] {
+function entriesAt(machine: LaunchHost, start: string, dir: string, name: string): readonly ConfigEntry[] {
   const parts = name.split('/')
   for (let depth = 1; depth < parts.length; depth++) {
-    const parent = entryOf(start, join(dir, ...parts.slice(0, depth)))
+    const parent = entryOf(machine, start, join(dir, ...parts.slice(0, depth)))
     if (parent.kind === 'absent') return [{ path: pathFrom(start, join(dir, name)), kind: 'absent' }]
     if (parent.kind !== 'directory') return [parent]
   }
-  return walk(start, join(dir, name))
+  return walk(machine, start, join(dir, name))
 }
 
 /** One path, and everything under it when it is a directory other than installed packages. */
-function walk(start: string, path: string): readonly ConfigEntry[] {
-  const entry = entryOf(start, path)
+function walk(machine: LaunchHost, start: string, path: string): readonly ConfigEntry[] {
+  const entry = entryOf(machine, start, path)
   if (entry.kind !== 'directory') return [entry]
   if (path.split(sep).at(-1) === INSTALLED_PACKAGES) return [entry]
 
   let children: string[]
   try {
-    children = readdirSync(path).sort()
+    children = [...machine.stores.files.childrenOf(path)].sort()
   } catch (error) {
     return [{ path: entry.path, kind: 'unreadable', why: codeOf(error) }]
   }
-  return [entry, ...children.flatMap((child) => walk(start, join(path, child)))]
+  return [entry, ...children.flatMap((child) => walk(machine, start, join(path, child)))]
 }
 
-function entryOf(start: string, path: string): ConfigEntry {
+function entryOf(machine: LaunchHost, start: string, path: string): ConfigEntry {
   const at = pathFrom(start, path)
+  const files = machine.stores.files
   try {
-    const stat = lstatSync(path)
-    if (stat.isSymbolicLink()) return { path: at, kind: 'symlink', target: readlinkSync(path) }
-    if (stat.isDirectory()) return { path: at, kind: 'directory' }
-    if (!stat.isFile()) return { path: at, kind: 'unreadable', why: 'not a regular file' }
-    return { path: at, kind: 'file', sha256: createHash('sha256').update(readFileSync(path)).digest('hex') }
+    const found = files.kindOf(path)
+    if (found.kind === 'absent') return { path: at, kind: 'absent' }
+    if (found.kind === 'symlink') return { path: at, kind: 'symlink', target: found.target }
+    if (found.kind === 'directory') return { path: at, kind: 'directory' }
+    if (found.kind === 'other') return { path: at, kind: 'unreadable', why: 'not a regular file' }
+    return { path: at, kind: 'file', sha256: createHash('sha256').update(files.bytesOf(path)).digest('hex') }
   } catch (error) {
     const code = codeOf(error)
     return code === 'ENOENT' ? { path: at, kind: 'absent' } : { path: at, kind: 'unreadable', why: code }

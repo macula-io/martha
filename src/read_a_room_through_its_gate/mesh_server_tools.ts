@@ -15,9 +15,9 @@
 // The record is read from the package's own code: every `registerTool("<name>"`
 // call in its JavaScript. A call whose name is not a literal is refused by file,
 // because the list could then not be complete. Re-record with
-// record_mesh_server_tools.ts when the server is upgraded.
+// `npm run record:mesh-tools` when the server is upgraded.
 
-import { readFileSync } from 'node:fs'
+import recordedMeshServer from './recorded_mesh_server_tools.json' with { type: 'json' }
 
 /** What the mesh server's package registers, as recorded. */
 export interface RecordedMeshServer {
@@ -55,6 +55,4 @@ export function registeredToolsIn(sources: readonly PackageSource[]): readonly s
 }
 
 /** The recording this repository carries. */
-export const RECORDED_MESH_SERVER: RecordedMeshServer = JSON.parse(
-  readFileSync(new URL('./recorded_mesh_server_tools.json', import.meta.url), 'utf8'),
-) as RecordedMeshServer
+export const RECORDED_MESH_SERVER: RecordedMeshServer = recordedMeshServer as RecordedMeshServer

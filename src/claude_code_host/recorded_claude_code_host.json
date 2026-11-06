@@ -1,5 +1,5 @@
 {
-  "_why": "What the Claude Code host itself says, recorded from its binary so the adapter derives from the host and not from a list typed by hand (#41). Re-record with: node src/claude_code_host/record_claude_code_host.ts <claude binary> <version>.",
+  "_why": "What the Claude Code host itself says, recorded from its binary so the adapter derives from the host and not from a list typed by hand (#41). Re-record with: npm run record:claude-code-host -- <claude binary> <version>.",
   "host_version": "2.1.318",
   "session_start_schema": "hook_event_name:T(\"SessionStart\"),source:B([\"startup\",\"resume\",\"clear\",\"compact\",\"fork\"])",
   "prompt_origin_mapper": "function efe(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&R0e(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind}}}",

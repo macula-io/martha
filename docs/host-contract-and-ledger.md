@@ -44,8 +44,12 @@ lives in memory and keeps the same promises.
 ### On Claude Code
 
 [`src/claude_code_host/`](../src/claude_code_host/) implements the contract on
-Claude Code (#41). It is host glue, declared in package.json `martha.hostGlue`,
-and it decides nothing: it composes the engine's clock, prompt submission and
+Claude Code (#41). It is a host adapter, declared in package.json
+`martha.hostAdapters` with the relay mod
+([`src/claude_code_relay/`](../src/claude_code_relay/)) and the launcher
+([`src/launch_a_claude_code_member/`](../src/launch_a_claude_code_member/)).
+None of the three is a slice, and an adapter may import the contract, `node:*`,
+host glue and slices, never a test or a program. It decides nothing: it composes the engine's clock, prompt submission and
 tool registration with two pieces of glue any POSIX host can use,
 [`src/row_streams_directory/`](../src/row_streams_directory/) for the rows and
 [`src/linux_process_identity/`](../src/linux_process_identity/) for the
@@ -87,8 +91,9 @@ launcher's records and which process holds a pid.
   nothing else. A source the host does not send, the crew's refresh among them,
   maps to an event no declaration lists and fails closed. The emitted events
   are parsed from the host's SessionStart schema as recorded from its binary
-  (`recorded_claude_code_host.json`; `record_claude_code_host.ts` takes it
-  again after an upgrade), plus the crew's refresh.
+  (`recorded_claude_code_host.json`; `npm run record:claude-code-host`, the
+  program in `src/record_claude_code_host/`, takes it again after an upgrade),
+  plus the crew's refresh.
 - **A tool name** is refused a second time before the engine sees it.
 
 The launcher's wiring (who writes the records) waits for #16's launch gate.

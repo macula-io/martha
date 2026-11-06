@@ -46,7 +46,9 @@ import { dirname, join, relative, sep } from 'node:path'
 
 import ts from 'typescript'
 
-import { coreSources, specifiersOf } from '../src/host_contract/imports_beyond_the_core.ts'
+import { specifiersOf } from '../src/host_contract/imports_beyond_the_core.ts'
+import { coreSources } from './core_sources.ts'
+import { isTestFile } from './declared_in_package_json.ts'
 
 /** The slices under src/ that may write launch records, besides the host glue. */
 export const LAUNCH_RECORD_WRITERS = ['attribute_a_cross_session_sender', 'host_contract'] as const
@@ -89,32 +91,40 @@ export interface HostGlueImport {
   readonly specifier: string
 }
 
+/** The two lists of directories package.json declares that are not slices: machine glue and the host adapters that compose it (#26). */
+export type HostGlueKey = 'hostGlue' | 'hostAdapters'
+
 /**
- * The host glue package.json declares, as directory names under src/. Refuses,
- * with the entry it names, anything but a list of `src/<one directory>` entries,
- * each naming a real directory (not a link) and none twice.
+ * The directories package.json declares under `key`, as names under src/.
+ * Refuses, with the entry it names, anything but a list of `src/<one
+ * directory>` entries, each naming a real directory (not a link) and none twice.
  */
-export function hostGlueOf(declared: unknown, isDirectory: (name: string) => boolean): string[] {
+export function hostGlueOf(declared: unknown, isDirectory: (name: string) => boolean, key: HostGlueKey = 'hostGlue'): string[] {
+  const list = `package.json martha.${key}`
   if (declared === undefined) return []
-  if (!Array.isArray(declared)) throw new Error('package.json martha.hostGlue is not a list of directories.')
+  if (!Array.isArray(declared)) throw new Error(`${list} is not a list of directories.`)
   const names = declared.map((entry: unknown) => {
     const name = typeof entry === 'string' ? HOST_GLUE_ENTRY.exec(entry)?.[1] : undefined
     if (name === undefined) {
-      throw new Error(`package.json martha.hostGlue holds ${JSON.stringify(entry)}, which is not exactly ${HOST_GLUE_ROOT}/<one directory>.`)
+      throw new Error(`${list} holds ${JSON.stringify(entry)}, which is not exactly ${HOST_GLUE_ROOT}/<one directory>.`)
     }
-    if (!isDirectory(name)) throw new Error(`package.json martha.hostGlue names ${HOST_GLUE_ROOT}/${name}, which is not a directory there.`)
+    if (!isDirectory(name)) throw new Error(`${list} names ${HOST_GLUE_ROOT}/${name}, which is not a directory there.`)
     return name
   })
   const twice = names.find((name, index) => names.indexOf(name) !== index)
-  if (twice !== undefined) throw new Error(`package.json martha.hostGlue names ${HOST_GLUE_ROOT}/${twice} twice.`)
+  if (twice !== undefined) throw new Error(`${list} names ${HOST_GLUE_ROOT}/${twice} twice.`)
   return names
 }
 
-/** The host glue this repository's package.json declares, checked by hostGlueOf. */
-export function declaredHostGlue(repository: string): string[] {
-  const manifest = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as { martha?: { hostGlue?: unknown } }
+/**
+ * What package.json declares under `key` (machine glue by default, or the host
+ * adapters), checked by hostGlueOf. Neither is a slice, and no slice may import
+ * either: an adapter builds the writable store as glue does.
+ */
+export function declaredHostGlue(repository: string, key: HostGlueKey = 'hostGlue'): string[] {
+  const manifest = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as { martha?: Record<HostGlueKey, unknown> }
   const src = join(repository, HOST_GLUE_ROOT)
-  return hostGlueOf(manifest.martha?.hostGlue, (name) => {
+  return hostGlueOf(manifest.martha?.[key], (name) => {
     try {
       return lstatSync(join(src, name)).isDirectory()
     } catch {
@@ -283,11 +293,15 @@ export function launchRecordWritesOutsideTheLauncher(
 export function hostGlueImportedBySlices(
   repository: string,
   host_glue: readonly string[],
+  test_suffixes: readonly string[],
+  programs: readonly string[],
   planted: readonly PlantedSource[] = [],
 ): HostGlueImport[] {
   const src = join(repository, 'src')
   return [...coreSources(src), ...planted]
     .filter((source) => !host_glue.includes(sliceOf(source.path)))
+    // A test or a program package.json runs is no slice: it may drive the real glue (#26).
+    .filter((source) => !isTestFile(test_suffixes, source.path) && !programs.includes(sliceOf(source.path)))
     .flatMap((source) =>
       specifiersOf(source.text)
         .filter((specifier) => specifier.startsWith('./') || specifier.startsWith('../'))
