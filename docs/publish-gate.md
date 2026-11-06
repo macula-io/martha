@@ -360,10 +360,18 @@ The rules the seam keeps, and a host must not work around:
   `mcp__<server>__<tool>`, OpenCode `<server>_<tool>`, and only the host knows
   its form and its servers. The two lists, `MESH_TOOLS_THAT_RUN` and
   `MESH_TOOLS_REFUSED`, are proved against the tools the mesh server's published
-  package registers (`recorded_mesh_server_tools.json`, re-recorded by
-  `npm run record:mesh-tools`, the program in `src/record_mesh_server_tools/`): the coverage check fails CI by name on a tool
-  nobody decided, a decided name the server no longer registers, or a tool
-  outside `MESH_TOOL_PREFIX`. The one read that remains returns
+  package registers, one record per version a member may install
+  (`recorded_mesh_server_tools.json`; `npm run record:mesh-tools`, the program
+  in `src/record_mesh_server_tools/`, adds or replaces one version's record): the
+  coverage check fails CI by name on a tool any recorded version registers that
+  nobody decided, a decided name no recorded version registers, or a tool
+  outside `MESH_TOOL_PREFIX`. The records are tied to what members run
+  (martha#49): the launcher reads the version the approved `.mcp.json` pins
+  (`<package>@<version>`, nothing looser) and refuses to start a member whose
+  version is not recorded, naming both. A version is retired by removing its
+  record, after which a member still on it is refused by name. A mesh server
+  whose config never names the package, or one an installed plugin brings, is
+  not version-checked; its tools are still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
   binds to that room, and says how many envelopes it withheld, never their
   text, sender or kind. Each admitted envelope is an ingestion with its

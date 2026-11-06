@@ -112,7 +112,7 @@ const OPENCODE_PROJECT_CONFIG_OFF = ['OPENCODE_CONFIG_PROJECT_DISABLE', 'OPENCOD
 /** Each brings config in that is no listed file: inline content, and a whole config directory. */
 const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR'] as const
 
-const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
+export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
@@ -291,6 +291,8 @@ export type PreparedLaunch =
       readonly snapshot_dir: string
       /** Files the checkout holds that this launch does not load, to tell the owner. */
       readonly not_carried: readonly string[]
+      /** The approved bytes of each carried file, by its listed name: what the host reads, hashed as approved. */
+      readonly carried_files: Readonly<Record<string, Uint8Array>>
     }
   | { readonly allow: false; readonly refusal: string }
 
@@ -329,6 +331,7 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
   const snapshot_dir = snapshot.path
 
   const carried: HostSwitches[] = [launch.project_config_off]
+  const carried_files: Record<string, Uint8Array> = {}
   const not_carried: string[] = []
 
   for (const entry of state.entries) {
@@ -345,6 +348,7 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
       return { allow: false, refusal: `${REFUSED}: ${entry.path} changed while it was being approved. Start again.` }
     }
     carried.push(carry(snapshot.write(entry.path, content)))
+    carried_files[entry.path] = content
   }
 
   const env: Record<string, string> = {}
@@ -366,6 +370,7 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
       env_dropped: carried.flatMap((switches) => switches.env_dropped),
     },
     snapshot_dir,
+    carried_files,
     not_carried,
   }
 }

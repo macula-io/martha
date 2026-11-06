@@ -418,7 +418,7 @@ test('a planted record of a version nobody recorded, with a tool nobody decided,
   const planted: RecordedMeshServer = { ...NEWEST, server_version: UNRECORDED, tools: [...NEWEST.tools, added] }
   const gaps = gapsInMeshTools([...RECORDED_MESH_SERVERS, planted])
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${added}`])
-  assert.ok(gaps[0]?.why.includes(`${NEWEST.server} ${UNRECORDED}`), gaps[0]?.why)
+  assert.ok(gaps[0]?.why.includes(`${NEWEST.server} ${UNRECORDED}`), gaps[0]?.why ?? '')
 })
 
 test('with two versions recorded, a tool only the newer one registers must be decided too', () => {
@@ -427,7 +427,7 @@ test('with two versions recorded, a tool only the newer one registers must be de
   const newer: RecordedMeshServer = { ...NEWEST, server_version: UNRECORDED, tools: [...NEWEST.tools, added] }
   const gaps = gapsInMeshTools([older, newer])
   assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${added}`])
-  assert.ok(gaps[0]?.why.includes(UNRECORDED), gaps[0]?.why)
+  assert.ok(gaps[0]?.why.includes(UNRECORDED), gaps[0]?.why ?? '')
 })
 
 test('a version recorded twice is named', () => {

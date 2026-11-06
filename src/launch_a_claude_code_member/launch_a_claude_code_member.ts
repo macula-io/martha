@@ -8,8 +8,9 @@
 // and the member's relay (../claude_code_relay) asks it over a Unix socket made
 // for this launch alone. In order:
 //
-//   1. `prepareLaunch`: on a refusal nothing starts, and the refusal goes to the
-//      owner.
+//   1. `prepareLaunch`, then the mesh server version the approved server config
+//      installs, which must be a recorded one (martha#49): on a refusal of
+//      either nothing starts, and the refusal goes to the owner.
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
 //   3. The relay's server on that socket, answering with memberRelay.
@@ -47,12 +48,15 @@ import {
   recordMemberStopped,
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { meshServerVersionsIn } from '../claude_code_host/mesh_server_install.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { MESH_SERVER_PACKAGE, refusalOfInstalledMeshServers } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
+  CLAUDE_SERVERS,
   launchEnvironment,
   prepareLaunch,
   type SnapshotPlace,
@@ -128,6 +132,16 @@ function killGroup(group: number): void {
   }
 }
 
+/**
+ * Why the mesh server the approved server config installs is not proved, or
+ * undefined when it is a recorded version or none is installed (martha#49).
+ */
+function meshServerUnproved(serverConfig: Uint8Array | undefined): string | undefined {
+  if (serverConfig === undefined) return undefined
+  const installed = meshServerVersionsIn(new TextDecoder().decode(serverConfig), MESH_SERVER_PACKAGE)
+  return 'refusal' in installed ? installed.refusal : refusalOfInstalledMeshServers(installed.versions)
+}
+
 /** Starts one Claude Code member on its approved config, with its relay answered here. */
 export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
@@ -139,6 +153,11 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   const prepared = prepareLaunch(launch.place, thisMachine)
   if (!prepared.allow) return refuse(prepared.refusal)
   const removeSnapshot = (): void => rmSync(prepared.snapshot_dir, { recursive: true, force: true })
+  const unproved = meshServerUnproved(prepared.carried_files[CLAUDE_SERVERS])
+  if (unproved !== undefined) {
+    removeSnapshot()
+    return refuse(`${NOT_STARTED}: ${unproved}`)
+  }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
 
   const relayDirectory = makeRelayDirectory(join(launch.places.relay_root, randomUUID()))

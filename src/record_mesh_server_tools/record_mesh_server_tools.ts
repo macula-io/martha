@@ -1,17 +1,20 @@
-// Re-records the tools the mesh server registers, from its published package.
+// Records the tools one version of the mesh server registers, from its
+// published package, beside every version already recorded (martha#49).
 //
 //   npm pack @macula-io/mcp@<version>; tar -xzf <the .tgz>
 //   npm run record:mesh-tools -- <the extracted package directory>
 //
-// Run it when the server is upgraded; the coverage check then names any tool the
-// new server registers that nobody has decided to allow or refuse. The package
-// is read as text only: nothing in it runs.
+// Run it for each version a member may install; the coverage check then names
+// any tool a recorded version registers that nobody has decided to allow or
+// refuse. A version nobody installs any more is retired by removing its record
+// from the recording in a reviewed commit. The package is read as text only:
+// nothing in it runs.
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { argv, exit, stderr } from 'node:process'
 
-import { registeredToolsIn, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { registeredToolsIn, withRecordedVersion, type MeshServerRecording } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 
 const RECORDING = new URL('../read_a_room_through_its_gate/recorded_mesh_server_tools.json', import.meta.url)
 const CODE = '.js'
@@ -28,11 +31,5 @@ const files = (readdirSync(directory, { recursive: true, encoding: 'utf8' }) as 
   .sort()
 const sources = files.map((file) => ({ path: relative(directory, join(directory, file)), text: readFileSync(join(directory, file), 'utf8') }))
 
-const previous = JSON.parse(readFileSync(RECORDING, 'utf8')) as { _why: string }
-const recorded: RecordedMeshServer & { _why: string } = {
-  _why: previous._why,
-  server: manifest.name,
-  server_version: manifest.version,
-  tools: registeredToolsIn(sources),
-}
-writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)
+const current = JSON.parse(readFileSync(RECORDING, 'utf8')) as MeshServerRecording
+writeFileSync(RECORDING, `${JSON.stringify(withRecordedVersion(current, manifest, registeredToolsIn(sources)), null, 2)}\n`)

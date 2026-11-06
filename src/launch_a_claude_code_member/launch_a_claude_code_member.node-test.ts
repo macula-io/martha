@@ -558,6 +558,8 @@ test('an approved config that installs a mesh server version nobody recorded sta
   const fake = fakeClaude(place)
   const lines: string[] = []
   const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  // A launch that wrongly starts is stopped whole, so a failing run leaves no member behind.
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.includes(`${MESH_SERVER_PACKAGE} ${unrecorded}`), refusal)
