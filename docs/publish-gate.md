@@ -443,7 +443,24 @@ The rules the seam keeps, and a host must not work around:
   library for libc to preload, a `<NAME>_PREBUILD` directory a dependency
   loads a native addon from. So the placed entry's `env` names every variable
   the host is given: HOME and PATH keep their values, the entry's reviewed
-  settings keep theirs, and every other one is emptied, an allow-list. What
+  settings keep theirs, and every other one is emptied. Claude Code adds two
+  sources of its own. It starts every server as `<prefix> "<command>"` when
+  its environment holds `CLAUDE_CODE_SHELL_PREFIX`, so the launcher drops that
+  variable before the host starts. And it gives every server the `env` of each
+  settings file it loads, which under `--setting-sources user` is the owner's
+  user settings (`$CLAUDE_CONFIG_DIR/settings.json`, else
+  `~/.claude/settings.json`) and the approved `--settings` copy: a launch is
+  refused, naming the file and the variable, when either sets a name other
+  than HOME, PATH or a reviewed setting, except Claude Code's own variables
+  that no file of a recorded tree reads (`CLAUDE_CODE_OWN_VARIABLES`, today
+  `CLAUDE_CODE_PLUGIN_DIRS`), which the server is given empty
+  (`src/claude_code_host/settings_env_reaching_servers.ts`). With those, what
+  the launcher and the settings files hand a mesh server is an allow-list.
+  Claude Code also sets `CLAUDE_PROJECT_DIR`, `CLAUDE_CODE_SESSION_ID`,
+  `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` for a server by itself; the server
+  reads only the session id, to scope what it keeps per session, and none of
+  them changes what code it loads. Admin-managed settings
+  (`/etc/claude-code/managed-settings.json`) are root's and are not read. What
   this does not close: a
   member's shell runs as the same user and can edit the installed tree during
   a session; the next launch refuses it, but the running server is not checked

@@ -112,13 +112,20 @@ const OPENCODE_PROJECT_CONFIG_OFF = ['OPENCODE_CONFIG_PROJECT_DISABLE', 'OPENCOD
 /** Each brings config in that is no listed file: inline content, and a whole config directory. */
 const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR'] as const
 
+/**
+ * Claude Code 2.1 reads this from its own environment and starts every tool
+ * server as `<prefix> "<command>"`: the prefix runs first, so it would decide
+ * what a server is, whatever the approved config says (martha#65 r=3).
+ */
+const CLAUDE_COMMAND_ELSEWHERE = ['CLAUDE_CODE_SHELL_PREFIX'] as const
+
 export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
   'claude-code': {
     // --strict-mcp-config: only the servers passed by --mcp-config start.
-    project_config_off: { args: ['--setting-sources', 'user', '--strict-mcp-config'], env: NO_ENV, env_dropped: NOTHING_DROPPED },
+    project_config_off: { args: ['--setting-sources', 'user', '--strict-mcp-config'], env: NO_ENV, env_dropped: CLAUDE_COMMAND_ELSEWHERE },
     carried: {
       [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
       [CLAUDE_SETTINGS]: (path) => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),

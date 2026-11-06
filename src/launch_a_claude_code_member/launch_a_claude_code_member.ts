@@ -9,8 +9,11 @@
 // for this launch alone. In order:
 //
 //   1. `prepareLaunch`, then the mesh server version the approved server config
-//      installs, which must be a recorded one (martha#49): on a refusal of
-//      either nothing starts, and the refusal goes to the owner.
+//      installs, which must be a recorded one (martha#49), then the env of the
+//      settings files the host loads, the owner's user settings and the
+//      approved --settings copy, which may name only what the mesh server may
+//      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
+//      on a refusal of any nothing starts, and the refusal goes to the owner.
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
 //      Inside it, an empty 0500 directory: where the member's git looks for
@@ -25,8 +28,8 @@
 //      and .envrc through the member's own commands (martha#24), plus the
 //      socket's path. Before it starts, each mesh server entry of the approved
 //      copy is rewritten to start its recorded tree by path, installed or
-//      compared file by file, with every variable of that environment emptied
-//      but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
+//      compared file by file, with every variable of that environment and of
+//      the settings files' env emptied but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
 //      a refusal starts nothing.
 //   5. `recordMemberLaunch` with the writable store only the launcher holds
 //      (#42). A launch that cannot be recorded is stopped.
@@ -45,7 +48,7 @@
 
 import { spawn, type StdioOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -57,17 +60,19 @@ import {
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
+import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { placeRecordedMeshServers } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, refusalOfInstalledMeshServers } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import { KNOWN_MESH_SERVER_SETTINGS, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   CLAUDE_SERVERS,
+  CLAUDE_SETTINGS,
   launchEnvironment,
   prepareLaunch,
   type SnapshotPlace,
@@ -185,6 +190,27 @@ function meshServersPlaced(
   return undefined
 }
 
+/**
+ * What the settings files the host loads add to every server's environment:
+ * the owner's user settings, then the approved --settings copy; or why the
+ * launch is refused (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers).
+ */
+function settingsEnvironment(
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  approvedSettings: Uint8Array | undefined,
+  snapshotDir: string,
+  knownSettings: readonly string[],
+): { readonly env: Readonly<Record<string, string>> } | { readonly refusal: string } {
+  const user = userSettingsPath(hostEnv)
+  return environmentFromSettings(
+    [
+      { path: user, text: existsSync(user) ? readFileSync(user, 'utf8') : undefined },
+      { path: join(snapshotDir, CLAUDE_SETTINGS), text: approvedSettings === undefined ? undefined : new TextDecoder().decode(approvedSettings) },
+    ],
+    [...SERVER_NEEDS, ...knownSettings],
+  )
+}
+
 /** Starts one Claude Code member on its approved config, with its relay answered here. */
 export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
@@ -200,6 +226,17 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   if (unproved !== undefined) {
     removeSnapshot()
     return refuse(`${NOT_STARTED}: ${unproved}`)
+  }
+  const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
+  const fromSettings = settingsEnvironment(
+    hostEnv,
+    prepared.carried_files[CLAUDE_SETTINGS],
+    prepared.snapshot_dir,
+    launch.mesh_trees?.known_settings ?? KNOWN_MESH_SERVER_SETTINGS,
+  )
+  if ('refusal' in fromSettings) {
+    removeSnapshot()
+    return refuse(`${NOT_STARTED}: ${fromSettings.refusal}`)
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
 
@@ -245,12 +282,13 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     return refuse(`${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`)
   }
 
-  const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
   const env = {
     ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, emptyDirectory)),
     [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path,
   }
-  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, env)
+  // The host hands a server its own environment and then the settings files' env,
+  // so the server's is built from both.
+  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, { ...env, ...fromSettings.env })
   if (placed !== undefined) {
     await server.close()
     relayDirectory.remove()
