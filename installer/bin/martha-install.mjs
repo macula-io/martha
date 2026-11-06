@@ -22,14 +22,23 @@ export function parseArguments (argv) {
   const options = { downgrade: false, help: false }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] ?? ''
-    if (arg === '--downgrade') options.downgrade = true
-    else if (arg === '--digest') options.digest = argv[++i] ?? ''
-    else if (arg === '-h' || arg === '--help') options.help = true
-    else if (arg.startsWith('-')) throw new Refused(`unknown option '${arg}' (${USAGE})`)
+    if (arg === '--digest') options.digest = argv[++i] ?? ''
+    else if (arg.startsWith('-')) setSwitch(options, arg)
     else if (options.version !== undefined) throw new Refused('one version at a time')
     else options.version = arg
   }
   return options
+}
+
+/**
+ * Sets the switch `arg` names, one that takes no value; refuses one it does not know.
+ * @param {{ downgrade: boolean, help: boolean }} options
+ * @param {string} arg
+ */
+function setSwitch (options, arg) {
+  if (arg === '--downgrade') options.downgrade = true
+  else if (arg === '-h' || arg === '--help') options.help = true
+  else throw new Refused(`unknown option '${arg}' (${USAGE})`)
 }
 
 async function main () {

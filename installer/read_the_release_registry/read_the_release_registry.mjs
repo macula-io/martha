@@ -59,12 +59,11 @@ async function readCapped (response, limit, what) {
   /** @type {Buffer[]} */
   const chunks = []
   let total = 0
-  if (response.body) {
-    for await (const chunk of response.body) {
-      total += chunk.length
-      if (total > limit) refuse(`${what} is over the ${limit} bytes a release may carry; refused`)
-      chunks.push(Buffer.from(chunk))
-    }
+  if (!response.body) return Buffer.concat(chunks)
+  for await (const chunk of response.body) {
+    total += chunk.length
+    if (total > limit) refuse(`${what} is over the ${limit} bytes a release may carry; refused`)
+    chunks.push(Buffer.from(chunk))
   }
   return Buffer.concat(chunks)
 }
@@ -108,6 +107,41 @@ export function layerOf (manifest, where) {
 }
 
 /**
+ * @typedef {(path: string, accept: string, what: string) => Promise<Response>} Get
+ */
+
+/**
+ * A blob by digest, exactly `size` bytes, hashing to that digest.
+ * @param {Get} get
+ * @param {{ digest: string, size: number }} blob
+ * @param {string} what
+ */
+async function blobOf (get, { digest, size }, what) {
+  const bytes = await readCapped(await get(`blobs/${digest}`, '', what), size, what)
+  if (bytes.length !== size) refuse(`${what} is ${bytes.length} bytes, not the ${size} its manifest names; refused`)
+  if (sha256(bytes) !== digest) refuse(`${what} hashes to ${sha256(bytes)}, not ${digest}; refused`)
+  return bytes
+}
+
+/**
+ * The sigstore bundle a signature manifest holds, or undefined for a manifest that is no cosign signature.
+ * @param {Get} get
+ * @param {string} manifestDigest
+ */
+async function bundleAt (get, manifestDigest) {
+  const response = await get(`manifests/${manifestDigest}`, IMAGE_MANIFEST, 'a signature manifest')
+  const bytes = await readCapped(response, LIMITS.manifestBytes, 'a signature manifest')
+  if (sha256(bytes) !== manifestDigest) refuse(`a signature manifest hashes to ${sha256(bytes)}, not ${manifestDigest}; refused`)
+  const manifest = parsed(bytes, 'a signature manifest')
+  if (manifest.annotations?.['dev.sigstore.bundle.predicateType'] !== COSIGN_SIGN) return undefined
+  const layer = (manifest.layers ?? [])[0] ?? {}
+  if (layer.mediaType !== BUNDLE || !isDigest(layer.digest) || !(layer.size <= LIMITS.bundleBytes)) {
+    refuse(`signature ${manifestDigest} is not one sigstore bundle of at most ${LIMITS.bundleBytes} bytes; refused`)
+  }
+  return parsed(await blobOf(get, layer, `signature bundle ${layer.digest}`), `signature bundle ${layer.digest}`)
+}
+
+/**
  * A reader for one package. `image` is <registry host>/<owner>/<name>; `base` the registry's URL, a test's own
  * server or the real one.
  * @param {{ image: string, base?: string, fetch?: typeof globalThis.fetch }} options
@@ -143,30 +177,10 @@ export function registry ({ image, base = `https://${image.split('/')[0]}`, fetc
   }
 
   /**
-   * A blob by digest, exactly `size` bytes, hashing to that digest.
-   * @param {{ digest: string, size: number }} blob
+   * @param {{ digest: string, size: number }} wanted
    * @param {string} what
    */
-  const blob = async ({ digest, size }, what) => {
-    const bytes = await readCapped(await get(`blobs/${digest}`, '', what), size, what)
-    if (bytes.length !== size) refuse(`${what} is ${bytes.length} bytes, not the ${size} its manifest names; refused`)
-    if (sha256(bytes) !== digest) refuse(`${what} hashes to ${sha256(bytes)}, not ${digest}; refused`)
-    return bytes
-  }
-
-  /** @param {string} manifestDigest */
-  const bundleAt = async (manifestDigest) => {
-    const response = await get(`manifests/${manifestDigest}`, IMAGE_MANIFEST, 'a signature manifest')
-    const bytes = await readCapped(response, LIMITS.manifestBytes, 'a signature manifest')
-    if (sha256(bytes) !== manifestDigest) refuse(`a signature manifest hashes to ${sha256(bytes)}, not ${manifestDigest}; refused`)
-    const manifest = parsed(bytes, 'a signature manifest')
-    if (manifest.annotations?.['dev.sigstore.bundle.predicateType'] !== COSIGN_SIGN) return undefined
-    const layer = (manifest.layers ?? [])[0] ?? {}
-    if (layer.mediaType !== BUNDLE || !isDigest(layer.digest) || !(layer.size <= LIMITS.bundleBytes)) {
-      refuse(`signature ${manifestDigest} is not one sigstore bundle of at most ${LIMITS.bundleBytes} bytes; refused`)
-    }
-    return parsed(await blob(layer, `signature bundle ${layer.digest}`), `signature bundle ${layer.digest}`)
-  }
+  const blob = async (wanted, what) => blobOf(get, wanted, what)
 
   return {
     image,
@@ -220,7 +234,7 @@ export function registry ({ image, base = `https://${image.split('/')[0]}`, fetc
       /** @type {any[]} */
       const found = []
       for (const entry of entries) {
-        const bundle = await bundleAt(entry.digest)
+        const bundle = await bundleAt(get, entry.digest)
         if (bundle) found.push(bundle)
       }
       return found

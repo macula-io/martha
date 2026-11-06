@@ -62,26 +62,35 @@ const padded = (body) => Buffer.concat([body, Buffer.alloc((BLOCK - (body.length
 export function tarOf (entries) {
   /** @type {Buffer[]} */
   const parts = []
-  for (const e of entries) {
-    if (e.pax !== undefined) {
-      const body = Buffer.from(paxRecord('path', e.pax))
-      parts.push(header({ name: 'PaxHeader', type: 'x', size: body.length }), padded(body))
-    }
-    if (e.paxRaw !== undefined) {
-      const body = Buffer.from(e.paxRaw)
-      parts.push(header({ name: 'PaxHeader', type: 'x', size: body.length }), padded(body))
-    }
-    if (e.gnuLong !== undefined) {
-      const body = Buffer.from(`${e.gnuLong}\0`)
-      parts.push(header({ name: '././@LongLink', type: 'L', size: body.length }), padded(body))
-    }
-    const body = Buffer.from(e.body ?? '')
-    const carries = e.type !== '5' && e.type !== '2'
-    parts.push(header({ ...e, size: carries ? body.length : 0 }))
-    if (body.length && carries) parts.push(padded(body))
-  }
+  for (const e of entries) parts.push(...longNameHeadersOf(e), ...entryBlocksOf(e))
   parts.push(Buffer.alloc(BLOCK * 2))
   return Buffer.concat(parts)
+}
+
+/**
+ * The headers that carry an entry's long name ahead of it: pax 'x' records, then a GNU 'L' header.
+ * @param {TarEntry} e
+ * @returns {Buffer[]}
+ */
+function longNameHeadersOf (e) {
+  /** @type {[string, string, Buffer][]} */
+  const extra = []
+  if (e.pax !== undefined) extra.push(['PaxHeader', 'x', Buffer.from(paxRecord('path', e.pax))])
+  if (e.paxRaw !== undefined) extra.push(['PaxHeader', 'x', Buffer.from(e.paxRaw)])
+  if (e.gnuLong !== undefined) extra.push(['././@LongLink', 'L', Buffer.from(`${e.gnuLong}\0`)])
+  return extra.flatMap(([name, type, body]) => [header({ name, type, size: body.length }), padded(body)])
+}
+
+/**
+ * An entry's own header and, for a type that carries one, its padded body.
+ * @param {TarEntry} e
+ * @returns {Buffer[]}
+ */
+function entryBlocksOf (e) {
+  const body = Buffer.from(e.body ?? '')
+  const carries = e.type !== '5' && e.type !== '2'
+  const head = header({ ...e, size: carries ? body.length : 0 })
+  return body.length && carries ? [head, padded(body)] : [head]
 }
 
 /** @param {{ command?: boolean }} [shape] @returns {TarEntry[]} */
@@ -134,57 +143,102 @@ export function release ({ version = '1.2.0', entries = goodEntries(), layerByte
  * in its index, `bundlePadding` pads each bundle by that many bytes, and `bundleLayer` overrides what its manifest
  * says of the bundle's layer. hits[] records every path asked for.
  * @param {Release[]} releases
- * @param {{ tags?: Record<string, Release>, extraTags?: string[], tagListPadding?: number, nextPage?: boolean, unsigned?: string[], signatureEntries?: number, bundlePadding?: number, bundleLayer?: { mediaType?: string, size?: number } }} [options]
+ * @param {RegistryOptions} [options]
  */
-export async function serveRegistry (releases, { tags: moved = {}, extraTags = [], tagListPadding = 0, nextPage = false, unsigned = [], signatureEntries = 1, bundlePadding = 0, bundleLayer = {} } = {}) {
+export async function serveRegistry (releases, options = {}) {
   /** @type {string[]} */
   const hits = []
-  /** @type {Map<string, Buffer>} */
-  const blobs = new Map()
-  /** @type {Map<string, Buffer>} */
-  const manifests = new Map()
-  /** @type {Map<string, Buffer>} */
-  const tags = new Map()
-  for (const r of releases) {
-    tags.set(r.version, r.manifest)
-    manifests.set(r.digest, r.manifest)
-    if (unsigned.includes(r.digest)) continue
-    const bundleBytes = Buffer.from(JSON.stringify(bundlePadding ? { ...r.bundle, padding: 'x'.repeat(bundlePadding) } : r.bundle))
-    blobs.set(sha256(bundleBytes), bundleBytes)
-    const bundleManifest = Buffer.from(JSON.stringify({
-      schemaVersion: 2, mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: 'application/vnd.dev.sigstore.bundle.v0.3+json',
-      annotations: { 'dev.sigstore.bundle.predicateType': 'https://sigstore.dev/cosign/sign/v1' },
-      layers: [{ mediaType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleBytes), size: bundleBytes.length, ...bundleLayer }]
-    }))
-    manifests.set(sha256(bundleManifest), bundleManifest)
-    const entry = { mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleManifest), size: bundleManifest.length }
-    tags.set(r.digest.replace(':', '-'), Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: 'application/vnd.oci.image.index.v1+json', manifests: Array(signatureEntries).fill(entry) })))
-  }
-  for (const [tag, r] of Object.entries(moved)) tags.set(tag, r.manifest)
-  // A layer served for its manifest's layer digest, whatever bytes the release carries (a tampered layer).
-  for (const r of releases) blobs.set(JSON.parse(r.manifest.toString()).layers[0].digest, r.layer)
-  const name = NAMES.image.slice(NAMES.image.indexOf('/') + 1)
+  const contents = contentsOf(releases, options)
   const server = createServer((req, res) => {
     const url = req.url ?? ''
     hits.push(url)
-    /** @param {Buffer} body @param {number} [status] @param {Record<string, string>} [extra] */
-    const send = (body, status = 200, extra = {}) => { res.writeHead(status, { 'content-length': body.length, ...extra }); res.end(body) }
-    if (url.startsWith('/token')) return send(Buffer.from(JSON.stringify({ token: 'anonymous' })))
-    if (!url.startsWith(`/v2/${name}/`)) return send(Buffer.from('{}'), 404)
-    const m = url.slice(`/v2/${name}/`.length).match(/^(tags\/list|manifests|blobs)\/?([^?]*)/)
-    if (!m) return send(Buffer.from('{}'), 404)
-    if (m[1] === 'tags/list') {
-      const list = { tags: [...tags.keys(), ...extraTags], ...(tagListPadding ? { padding: 'x'.repeat(tagListPadding) } : {}) }
-      return send(Buffer.from(JSON.stringify(list)), 200, nextPage ? { link: `</v2/${name}/tags/list?last=z&n=10000>; rel="next"` } : {})
-    }
-    const key = m[2] ?? ''
-    const body = m[1] === 'blobs' ? blobs.get(key) : (tags.get(key) ?? manifests.get(key))
-    return body ? send(body) : send(Buffer.from('{}'), 404)
+    const { body, status, extra } = answerTo(url, contents, options)
+    res.writeHead(status, { 'content-length': body.length, ...extra })
+    res.end(body)
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)))
   const address = server.address()
   const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`
   return { base, hits, close: () => new Promise((resolve) => server.close(() => resolve(undefined))) }
+}
+
+/** The repository path the registry serves, as its URLs name it. */
+const REPOSITORY = NAMES.image.slice(NAMES.image.indexOf('/') + 1)
+
+/**
+ * @typedef {{ tags?: Record<string, Release>, extraTags?: string[], tagListPadding?: number, nextPage?: boolean, unsigned?: string[], signatureEntries?: number, bundlePadding?: number, bundleLayer?: { mediaType?: string, size?: number } }} RegistryOptions
+ * @typedef {{ blobs: Map<string, Buffer>, manifests: Map<string, Buffer>, tags: Map<string, Buffer> }} RegistryContents
+ */
+
+/**
+ * What the registry holds: each release's manifest by tag and digest, its signature unless `unsigned` names it,
+ * the moved tags, and each layer under its manifest's layer digest, whatever bytes the release carries (a
+ * tampered layer).
+ * @param {Release[]} releases
+ * @param {RegistryOptions} options
+ * @returns {RegistryContents}
+ */
+function contentsOf (releases, { tags: moved = {}, unsigned = [], ...signing }) {
+  const contents = { blobs: new Map(), manifests: new Map(), tags: new Map() }
+  for (const r of releases) {
+    contents.tags.set(r.version, r.manifest)
+    contents.manifests.set(r.digest, r.manifest)
+    if (!unsigned.includes(r.digest)) addSignature(contents, r, signing)
+  }
+  for (const [tag, r] of Object.entries(moved)) contents.tags.set(tag, r.manifest)
+  for (const r of releases) contents.blobs.set(JSON.parse(r.manifest.toString()).layers[0].digest, r.layer)
+  return contents
+}
+
+/**
+ * A release's signature as cosign stores it: the bundle as a blob, its manifest, and an index under the
+ * release digest's tag that lists that manifest `signatureEntries` times.
+ * @param {RegistryContents} contents
+ * @param {Release} r
+ * @param {RegistryOptions} options
+ */
+function addSignature ({ blobs, manifests, tags }, r, { signatureEntries = 1, bundlePadding = 0, bundleLayer = {} }) {
+  const bundleBytes = Buffer.from(JSON.stringify(bundlePadding ? { ...r.bundle, padding: 'x'.repeat(bundlePadding) } : r.bundle))
+  blobs.set(sha256(bundleBytes), bundleBytes)
+  const bundleManifest = Buffer.from(JSON.stringify({
+    schemaVersion: 2, mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: 'application/vnd.dev.sigstore.bundle.v0.3+json',
+    annotations: { 'dev.sigstore.bundle.predicateType': 'https://sigstore.dev/cosign/sign/v1' },
+    layers: [{ mediaType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleBytes), size: bundleBytes.length, ...bundleLayer }]
+  }))
+  manifests.set(sha256(bundleManifest), bundleManifest)
+  const entry = { mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleManifest), size: bundleManifest.length }
+  tags.set(r.digest.replace(':', '-'), Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: 'application/vnd.oci.image.index.v1+json', manifests: Array(signatureEntries).fill(entry) })))
+}
+
+/** @param {Buffer} body @param {number} [status] @param {Record<string, string>} [extra] */
+const reply = (body, status = 200, extra = {}) => ({ body, status, extra })
+const NOT_FOUND = () => reply(Buffer.from('{}'), 404)
+
+/**
+ * The registry's answer to one request: an anonymous token, the tag list, or a manifest or blob by name.
+ * @param {string} url
+ * @param {RegistryContents} contents
+ * @param {RegistryOptions} options
+ */
+function answerTo (url, contents, options) {
+  if (url.startsWith('/token')) return reply(Buffer.from(JSON.stringify({ token: 'anonymous' })))
+  if (!url.startsWith(`/v2/${REPOSITORY}/`)) return NOT_FOUND()
+  const m = url.slice(`/v2/${REPOSITORY}/`.length).match(/^(tags\/list|manifests|blobs)\/?([^?]*)/)
+  if (!m) return NOT_FOUND()
+  if (m[1] === 'tags/list') return tagListOf(contents, options)
+  const key = m[2] ?? ''
+  const body = m[1] === 'blobs' ? contents.blobs.get(key) : (contents.tags.get(key) ?? contents.manifests.get(key))
+  return body ? reply(body) : NOT_FOUND()
+}
+
+/**
+ * The tag list, with `extraTags` added, padded by `tagListPadding` bytes, and a Link header when `nextPage`.
+ * @param {RegistryContents} contents
+ * @param {RegistryOptions} options
+ */
+function tagListOf ({ tags }, { extraTags = [], tagListPadding = 0, nextPage = false }) {
+  const list = { tags: [...tags.keys(), ...extraTags], ...(tagListPadding ? { padding: 'x'.repeat(tagListPadding) } : {}) }
+  return reply(Buffer.from(JSON.stringify(list)), 200, nextPage ? { link: `</v2/${REPOSITORY}/tags/list?last=z&n=10000>; rel="next"` } : {})
 }
 
 const SAN = `${NAMES.signerWorkflow}@${SIGNER}`
