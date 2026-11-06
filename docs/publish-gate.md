@@ -95,8 +95,9 @@ the model cannot mint.
 
 ## Every path, and what stands on it
 
-`src/inbound_paths/` holds every way text reaches a member's session, as data —
-the machine-readable copy of the table in issue #2. Each row declares one
+`src/inbound_paths/` holds every way text reaches a member's session, and every
+way a checkout gets code started on a member's machine, as data — the
+machine-readable copy of the tables in issues #2 and #16. Each row declares one
 control:
 
 - **delivery gate** — the sender is checked before the text is in a turn, and the
@@ -106,10 +107,129 @@ control:
   session executing while the text is readable;
 - **no text reaches the model** — the path is listed so it is not forgotten,
   carries no body text, and must say why;
+- **launch gate** — for code the host starts by itself (below), the only
+  control such a row may declare;
 - **none** — no control. A row in this state fails CI on purpose.
 
 A path is never removed from the list. A path that stops delivering text gets a
 control that says so, in words.
+
+## Code the host starts by itself
+
+This section answers [issue #16](https://github.com/macula-io/martha/issues/16),
+which has the threat model.
+
+A coding tool reads files from the directory it starts in and starts what they
+name: a project's tool servers, its hooks, its plugins. That is not text for the
+model. No tool is called and no model runs, so the shell gate has nothing to
+refuse, and no sender exists for a delivery gate to check. Whoever last wrote
+those files runs code as the owner's OS user. The plainest case is a reviewer
+checking out a pull request to run its tests.
+
+These are the `launched` rows: C1 for a checkout's tool-server config, C2 for
+its hooks and plugins. What was seen on the two hosts, in a fresh checkout whose
+config only touched a marker file (`npm run probe:launch`, which exits non-zero
+when a host does anything else):
+
+| Host, and how it was started | What starts with nobody asked |
+|---|---|
+| Claude Code 2.1.318 by hand, interactive | nothing: a project server waits for approval. The approval is stored as a list of **server names**, so a later change to an approved server's command is not asked about again |
+| Claude Code 2.1.318 by hand, headless `claude -p` | the project's tool server, and its `SessionStart` hook |
+| OpenCode 2.2.5 by hand | the project's tool server and its plugin, even for `opencode debug config` |
+| Claude Code 2.1.318 as Martha starts it, config rewritten after approval | the approved server and hook only; the rewritten ones do not start |
+| OpenCode 2.2.5 as Martha starts it, config rewritten and a plugin added after approval | the approved server only; the rewritten server and the added plugin do not start |
+| OpenCode 2.2.5 as Martha starts it, the owner's environment setting both project-config switches to `0` | the same: the approved server only |
+| Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that only reports | the after-call hook, then the approved `Stop` and `SessionEnd` hooks: the host goes on past a hook that returns |
+| Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that waits for the launcher to SIGKILL the member's process group | the after-call hook only: neither the approved `Stop` nor the `SessionEnd` hook runs |
+
+The host's own approval is name-keyed where it exists at all, so it cannot be the
+control. `src/refuse_launch_of_unapproved_config/` is five rules:
+
+1. **The host never reads the checkout's own config.** `prepareLaunch` copies the
+   approved files into a snapshot outside the checkout and returns the switches
+   that start the host on that copy with project config off: for Claude Code
+   `--setting-sources user` and `--strict-mcp-config` with `--mcp-config` and
+   `--settings` naming the copy, so only the servers passed start; for OpenCode
+   `--standalone` with `OPENCODE_CONFIG` naming the copy and both of its switch
+   names, `OPENCODE_CONFIG_PROJECT_DISABLE=1` and
+   `OPENCODE_DISABLE_PROJECT_CONFIG=1`: OpenCode reads the first that is set, so
+   setting only the second lets an inherited `=0` of the first win. The
+   inherited `OPENCODE_CONFIG_CONTENT` and `OPENCODE_CONFIG_DIR` are dropped
+   (`launchEnvironment`), since each brings config in from somewhere else. The
+   background OpenCode service ignores a client's environment, hence
+   `--standalone`. A pull that rewrites the config while the host runs changes a
+   file the host is not reading, so a host that reloads its config live reloads
+   the snapshot. Each copied file is hashed again as it is copied, and a file
+   that changed since the decision is refused rather than carried.
+2. **Approval is by content, never by name, and covers what the config runs.**
+   The fingerprint holds every listed file's content hash, every file under a
+   listed directory, which of the files are absent, and the checkout's work
+   tree: the tree git would write if every tracked change and every untracked,
+   unignored file were staged now (`checkout_tree.ts`, in a scratch index, with
+   inherited `GIT_*` variables dropped and fsmonitor off). A pull that changes
+   only the script an approved hook runs changes the fingerprint. It is read
+   before every tool call, so a checkout git reports clean reads as HEAD's own
+   tree without staging anything.
+3. **The directories above count**, up to but not including the stop directory
+   the launcher names (the owner's home); a start outside it is read up to the
+   root. This is for a host started by hand, which walks up — OpenCode with no
+   stop at all, so it also reads `~/.opencode` and `~/opencode.json` as project
+   config. A planned launch reads none of them.
+4. **What the gate cannot pin down is refused**: a symlink, even an approved one;
+   a path that is not a plain file or directory; config in a directory that is
+   no git checkout, or in one whose top is the stop directory or above it (a
+   home kept in git), where nothing pins what it runs and staging the tree would
+   copy a whole home into the object store; a request that does not show
+   every listed file as read, so a reader that returned nothing cannot pass for
+   an empty checkout; two files that would be passed through one carrier; and a
+   host with no file list.
+5. **No config needs no approval.** A checkout holding none of the files starts,
+   still with project config off.
+
+Only the owner approves a fingerprint, typed in that member's tab and logged
+(martha#1, decision 4). The refusal names the files and the fingerprint to
+approve.
+
+What the plan leaves out, stated rather than hidden:
+
+- **Not every listed file is carried.** A checkout's
+  `.claude/settings.local.json` (a member's own permission answers) and its
+  `.opencode` directory (its plugins) are fingerprinted but never loaded;
+  `prepareLaunch` returns them as `not_carried` for the launcher to show the
+  owner.
+- **The tree does not cover** a file git ignores and does not track — the
+  checkout's author cannot ship one; it is written on this machine by a command
+  the member ran (A13) — nor the inside of a submodule beyond the commit its
+  parent records, nor a change the checkout's own index hides from
+  `git status` (assume-unchanged, skip-worktree): those flags are the
+  member's, and no commit carries them. Of the same class: a member's own git
+  config whose `include.path` names a tracked file, which lets the checkout's
+  author define a clean filter that reading the tree runs.
+- **The fingerprint-to-launch race**: between `prepareLaunch` and the host's
+  start, a script the snapshot runs can still be rewritten in the checkout, and
+  a `SessionStart` hook runs it before the first tool call is checked.
+- **Inside a turn**, the snapshot's hooks run the checkout's scripts as they
+  are at that moment. The launch is checked before every call
+  (`answerToolCall`) and after it (`recheckLaunch`). The stop after a call is
+  not a report: Martha's after-call hook does not return until the launcher has
+  sent SIGKILL to the member's whole process group, the host and its tool
+  servers. A host waits for its hooks, so nothing fires past that point. A hook
+  that only reported would let the host go on, and a fast text reply would fire
+  the approved `Stop` hook first; a SIGTERM or a normal exit fires the
+  `SessionEnd` hooks on the way out (`npm run probe:launch` shows both). What
+  is left is the hooks of the one call that changed the tree, which run in
+  parallel with Martha's own (`PreToolUse`/`PostToolUse`); the stop does not
+  undo what they ran.
+- **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
+  servers in their frontmatter. They start only when the model spawns that
+  agent, which is a tool call the shell gate refuses while unapproved text is
+  readable (A7), and their files are in the tree the approval binds.
+
+**Where Martha does not start the host** — the owner opens the coding tool by
+hand and Martha loads inside it — the host has started these before any of
+Martha runs. Each launched row says so in its `residual`, and the check fails a
+row that does not. The adapter must then refuse that session a place in the
+crew: the machine is already reached, the crew is not.
 
 ## Only framed envelopes are believed
 
@@ -170,7 +290,9 @@ A host does these things, and the core does the rest:
 | a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
 | a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
-| before running any tool | `answerToolCall({ tool, session, policy, input, names: host.tools })` — return the `{ deny }` as the hook's answer; `names` is the host's own split of a called tool's name |
+| before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches` (their `args`, and the environment `launchEnvironment(process.env, switches)`, which drops inherited variables that would bring config back), show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
+| before running any tool | `answerToolCall({ tool, session, policy, input, launch, names: host.tools })`, where `launch` is the place and approvals `prepareLaunch` was given and `names` is the host's own split of a called tool's name — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
+| after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | after any MCP tool result | `takeInTurn(session, { source: 'mcp_result' }, binder)` — a mesh tool that runs (`mesh_call`, `mesh_get`, `mesh_recall`, a ring's answer) hands back text with no sender to admit, so the shell gate judges it (B2) |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
@@ -431,6 +553,14 @@ a node id — and it must admit a rostered member. A name with no implementation
 gate that admits everyone, a gate that refuses everyone and a gate that answers
 only the roster question are all caught.
 
+A launched row may only declare the launch gate, and must say what happens where
+Martha does not start the host. The launch gate is driven once per question: it
+must admit config the owner approved and a checkout with no config, and refuse
+unapproved config, an approved file whose content changed under the same name,
+a file added after the approval, a config one directory up, a symlink even when
+approved, a host it has no file list for, and a request whose config was never
+read.
+
 Its tests plant each of those mistakes to prove the check is not vacuous: a row
 copied from the table without a control, a row whose control was forgotten, a row
 claiming the shell gate while the gate does not refuse it, a row naming a gate
@@ -443,6 +573,10 @@ member, and a row excused without a reason. Each of those turns CI red.
   the refusal from a host's tool call is the adapter's job, and no adapter is in
   this repository yet. `src/refuse_execution_after_ungated_text/` is a rule with
   tests and no caller — deliberately, and the reason nothing here is published.
+- **The launch gate has no caller yet.** `src/refuse_launch_of_unapproved_config/`
+  is the rule and the reader; no launcher or turn hook calls it, because no host
+  adapter is in this repository. Until one does, a checkout's own config starts
+  as each host decides, which the table above describes.
 - **No host attests a cross-session sender yet.** The binder is built and
   tested; no adapter in this repository hands it a sender, so every
   cross-session message still taints. A host gains it by attesting the sending
