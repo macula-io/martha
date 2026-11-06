@@ -6,7 +6,6 @@ import type { Policy, Session } from '../refuse_execution_after_ungated_text/ref
 import {
   beginSession,
   rememberSession,
-  replaceSession,
   resumeSession,
   takeInTurn,
   type HostSession,
@@ -96,14 +95,11 @@ test('an inheriting start with no predecessor, or one whose record is gone, has 
   }
 })
 
-test('a forked resume is an inheritance, never a fresh start', () => {
+test('a forked resume, which arrives as resume under a new id, has lost its record', () => {
   const store = sessions()
   taintedPredecessor(store, stampStore())
-  const fork = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'resume_fork',
-    session_id: 'fork',
-    predecessor_id: 'old',
-  })
+  const fork = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'resume', session_id: 'fork' })
+  assert.equal(fork.record_missing, true)
   assert.equal(executes(fork), false)
 })
 
@@ -217,7 +213,13 @@ test('the record a handover carries comes from the store, never from the stamp',
   const stamps = stampStore()
   taintedPredecessor(store, stamps)
   const stamp = stamps.all.get(handover.file)
-  assert.deepEqual(Object.keys(stamp ?? {}).sort(), ['digest', 'member', 'predecessor_id'])
+  assert.deepEqual(Object.keys(stamp ?? {}).sort(), [
+    'digest',
+    'member',
+    'predecessor_id',
+    'record_digest',
+    'record_length',
+  ])
 })
 
 test('a handover read by a different member taints, even from a clean predecessor', () => {
@@ -263,9 +265,59 @@ test('a lost record, inherited by a refresh, is still lost', () => {
   assert.equal(successor.record_missing, true)
 })
 
-test('a real replacement still clears a lost record', () => {
+test('a fresh start under a new id is not touched by a lost record elsewhere', () => {
   const store = sessions()
-  const cleared = replaceSession(resumeSession(store, 'gone'), 'clear')
-  rememberSession(store, cleared)
-  assert.equal(executes(resumeSession(store, 'gone')), true)
+  rememberSession(store, resumeSession(store, 'gone'))
+  assert.equal(executes(startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })), true)
+})
+
+// --- the stamp holds the record as it was when the handover was stamped -------
+
+test('(A) a predecessor record reset to empty after the stamp still taints the reader', () => {
+  const store = sessions()
+  const stamps = stampStore()
+  const predecessor = taintedPredecessor(store, stamps)
+  rememberSession(store, { ...predecessor, gate: { ingested: [] } })
+
+  const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
+  assert.equal(executes(readHandover(store, stamps, { member, session: cleared }, handover)), false)
+})
+
+test('(B) a fresh start that reuses a stamped predecessor id has lost its record and overwrites nothing', () => {
+  const store = sessions()
+  const stamps = stampStore()
+  taintedPredecessor(store, stamps)
+
+  const reused = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'old' })
+  assert.equal(executes(reused), false)
+
+  const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
+  assert.equal(executes(readHandover(store, stamps, { member, session: cleared }, handover)), false)
+})
+
+test('a predecessor that kept working after the stamp still hands over what it held then', () => {
+  const store = sessions()
+  const stamps = stampStore()
+  const predecessor = taintedPredecessor(store, stamps)
+  rememberSession(store, takeInTurn(predecessor, { source: 'web' }))
+
+  const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
+  const read = readHandover(store, stamps, { member, session: cleared }, handover)
+  assert.equal(read.record_missing, false)
+  assert.equal(executes(read), false)
+})
+
+test('a predecessor record rewritten to a clean one of the same length still taints the reader', () => {
+  const store = sessions()
+  const stamps = stampStore()
+  const predecessor = taintedPredecessor(store, stamps)
+  const rewritten = takeInTurn(beginSession(sessions(), 'scratch'), {
+    source: 'crew_room',
+    from_identity: supervisor_identity,
+  })
+  assert.equal(rewritten.gate.ingested.length, predecessor.gate.ingested.length)
+  rememberSession(store, { ...predecessor, gate: rewritten.gate })
+
+  const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
+  assert.equal(executes(readHandover(store, stamps, { member, session: cleared }, handover)), false)
 })

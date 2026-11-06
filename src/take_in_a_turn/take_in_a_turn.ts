@@ -20,11 +20,12 @@
 //      transcript would come back to an empty record. A session that expects a
 //      record and cannot read one is TAINTED, never fresh.
 //
-//   3. ONLY A REAL REPLACEMENT CLEARS THE RECORD. `clear` and `new_session` start
-//      afresh. `compaction` and `resume` keep it — they carry the old text
-//      forward, and a restart that resumes a transcript is `resume`, not
-//      `new_session`. A start under a NEW session id — a crew refresh, a forked
-//      resume — is ../carry_taint_across_a_refresh's, which inherits by id.
+//   3. A SESSION ID IS NEVER STARTED TWICE. Only a session under a new id starts
+//      with no record, and only when the host's declared event says it is
+//      fresh (../carry_taint_across_a_refresh). A compaction and a resume keep
+//      the id and so keep the record. A fresh start on an id that already holds
+//      a record has lost its record and overwrites nothing: reusing an id must
+//      never wipe what the old session took in.
 //
 //   4. COMPACTION AND A HANDOVER ARE NOT ARRIVALS. They inherit the predecessor's
 //      record from the store; they are not new text to record. A handover is
@@ -101,11 +102,6 @@ export type Arrival =
       readonly from_identity?: string | null
     }
 
-/** A replacement of the session, in the words a host would use for it. */
-export type Replacement = 'clear' | 'new_session' | 'compaction' | 'resume'
-
-const REPLACES_THE_SESSION: readonly Replacement[] = ['clear', 'new_session']
-
 /** A session, with the record the gate reads and whether that record could be read. */
 export interface HostSession {
   readonly id: string
@@ -120,8 +116,12 @@ export interface SessionRecordStore {
   write(session_id: string, session: Session): void
 }
 
-/** A session that is starting new: its empty record is written before anything arrives. */
+/**
+ * A session that is starting new: its empty record is written before anything
+ * arrives. An id that already holds a record is not new, and has lost its record.
+ */
 export function beginSession(store: SessionRecordStore, session_id: string): HostSession {
+  if (store.read(session_id) !== undefined) return sessionWithLostRecord(session_id)
   const gate = startFreshSession()
   store.write(session_id, gate)
   return { id: session_id, gate, record_missing: false }
@@ -175,17 +175,6 @@ export function takeInTurn(session: HostSession, arrival: Arrival): HostSession 
   const identity = senderIsAttested(path) ? (arrival.from_identity ?? null) : null
 
   return { ...session, gate: recordIngestion(session.gate, [{ path, from_node_id: identity }]) }
-}
-
-/**
- * The session after a replacement.
- *
- * Only a real replacement clears what the session took in. A compaction or a
- * resumed transcript keeps it.
- */
-export function replaceSession(session: HostSession, replacement: Replacement): HostSession {
-  if (!REPLACES_THE_SESSION.includes(replacement)) return session
-  return { ...session, gate: startFreshSession(), record_missing: false }
 }
 
 /** The registry rows that are not a turn source the host reports. */

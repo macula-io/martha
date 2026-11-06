@@ -16,7 +16,9 @@
 //      says whether the id stays (`same_id`), a new id inherits a predecessor's
 //      record (`inherits`), or a new id starts with no context (`fresh`). An
 //      event the declaration does not list fails closed: the session is held as
-//      having lost its record, never as fresh.
+//      having lost its record, never as fresh. The events the host EMITS are a
+//      second list, and ../check_every_path_is_gated fails CI on any emitted
+//      event the declaration does not cover.
 //
 //   2. A REFRESH IS AN INHERITANCE, MADE BY THE HOST. The host's mod knows both
 //      ids — it ran the refresh — so it hands the predecessor's id to the seam.
@@ -26,9 +28,13 @@
 //   3. A HANDOVER IS STAMPED BY THE HOST, NOT WRITTEN THROUGH `Write`. A tainted
 //      session cannot run `Write`, so a handover written that way is lost exactly
 //      when it matters. The host writes the file for the member and stamps it:
-//      the member, the predecessor's session id, and a digest of the content.
-//      The record itself is never copied into the stamp; reading the handover
-//      takes the predecessor's record from the session store.
+//      the member, the predecessor's session id, a digest of the content, and
+//      the predecessor's record AS IT WAS when stamped (its length and a digest
+//      of it). Reading the handover takes the predecessor's record from the
+//      session store and checks it still begins with what was stamped, so a
+//      record reset after the stamp — a reused id, a same-user rewrite — reads
+//      as lost, never as clean. The record itself is never copied into the
+//      stamp.
 //
 //   4. READING A HANDOVER IS AN INHERITANCE WHEN THE STAMP HOLDS, AND A TAINT
 //      WHEN IT DOES NOT. No stamp, a digest that does not match the content, or
@@ -58,7 +64,7 @@ import {
   type HostSession,
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
-import { recordIngestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 /** What an event that starts a session does to the record. */
 export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
@@ -75,11 +81,11 @@ export interface HostSessionEvents {
  * The Claude Code host's session events.
  *
  * `compact` and `resume` keep the session id, so the store already carries the
- * record. `crew_refresh` is the `/clear` the crew's mod ran itself, after the
- * member's handover: the mod reports it as a refresh, with the predecessor's id,
- * because it is one. `resume_fork` resumes a transcript under a new id, which is
- * the old context and therefore an inheritance. Only `startup` and a `/clear`
- * the mod did not run start with no context.
+ * record. A forked resume arrives as `resume` under a new id, which has no
+ * record, and so has lost it: fail closed. `crew_refresh` is the `/clear` the
+ * crew's mod ran itself, after the member's handover: the mod reports it as a
+ * refresh, with the predecessor's id, because it is one. Only `startup` and a
+ * `/clear` the mod did not run start with no context.
  */
 export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
   host: 'claude-code',
@@ -88,10 +94,22 @@ export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
     clear: 'fresh',
     compact: 'same_id',
     resume: 'same_id',
-    resume_fork: 'inherits',
     crew_refresh: 'inherits',
   },
 }
+
+/**
+ * Every event the Claude Code host emits when a session starts: its own
+ * SessionStart sources, plus the refresh the crew's mod reports. The coverage
+ * check runs this list against the declaration above.
+ */
+export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [
+  'startup',
+  'resume',
+  'clear',
+  'compact',
+  'crew_refresh',
+]
 
 /** A session starting, as the host reports it. */
 export interface SessionStart {
@@ -131,6 +149,10 @@ export interface HandoverStamp {
   readonly member: string
   readonly predecessor_id: string
   readonly digest: string
+  /** How many ingestions the predecessor's record held when stamped. */
+  readonly record_length: number
+  /** A digest of those ingestions, in order. */
+  readonly record_digest: string
 }
 
 /** Where stamps live: the host's, keyed by handover file. A model writes none of it. */
@@ -149,6 +171,15 @@ function digestOf(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
+function digestOfRecord(ingested: readonly Ingestion[]): string {
+  return digestOf(JSON.stringify(ingested.map((ingest) => [ingest.path, ingest.from_node_id])))
+}
+
+/** True when the record still begins with exactly what the stamp saw; a shorter one cannot. */
+function recordStillHolds(stamp: HandoverStamp, ingested: readonly Ingestion[]): boolean {
+  return digestOfRecord(ingested.slice(0, stamp.record_length)) === stamp.record_digest
+}
+
 /** Stamp a handover the host wrote for the member whose session is handing over. */
 export function stampHandover(
   stamps: HandoverStampStore,
@@ -159,6 +190,8 @@ export function stampHandover(
     member: writer.member,
     predecessor_id: writer.session.id,
     digest: digestOf(handover.content),
+    record_length: writer.session.gate.ingested.length,
+    record_digest: digestOfRecord(writer.session.gate.ingested),
   })
 }
 
@@ -179,7 +212,7 @@ export function readHandover(
   if (stamp.member !== reader.member) return takeInTurn(reader.session, { source: 'checkout_file' })
 
   const predecessor = sessionFromRecord(stamp.predecessor_id, store.read(stamp.predecessor_id))
-  if (predecessor.record_missing) return lose(reader.session)
+  if (predecessor.record_missing || !recordStillHolds(stamp, predecessor.gate.ingested)) return lose(reader.session)
   return { ...reader.session, gate: recordIngestion(reader.session.gate, predecessor.gate.ingested) }
 }
 

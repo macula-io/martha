@@ -8,6 +8,7 @@
 // host asks it is an adapter detail — the answer is the core's.
 
 import {
+  WHAT_CLEARS_IT,
   refuseExecutionAfterUngatedText,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -30,7 +31,7 @@ export function answerToolCall({ tool, session, policy }: ToolCall): ToolCallAns
       ? {
           deny:
             'Nothing executes in this session: its record of what it has taken in cannot be read, so it is treated as ' +
-            'having taken in everything. Start a fresh session (/clear on the Claude Code host) to clear it.',
+            `having taken in everything. ${WHAT_CLEARS_IT}`,
         }
       : undefined
   }

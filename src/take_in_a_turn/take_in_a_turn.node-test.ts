@@ -13,7 +13,6 @@ import {
   beginSession,
   pathsWithoutARegistryRow,
   rememberSession,
-  replaceSession,
   resumeSession,
   sourcesThatMayCarryAnIdentity,
   takeInTurn,
@@ -145,18 +144,19 @@ test('a session whose record cannot be read is tainted, never fresh', () => {
   assert.equal(resumed.record_missing, true)
 })
 
-// --- only a real replacement clears the record --------------------------------
+// --- a session id is never started twice --------------------------------------
 
-test('a clear or a new session replaces the record', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
-  for (const replacement of ['clear', 'new_session'] as const) {
-    assert.deepEqual(replaceSession(tainted, replacement).gate.ingested, [], replacement)
-  }
+test('a fresh start on an id that already holds a record has lost it, and overwrites nothing', () => {
+  const records = store()
+  rememberSession(records, takeInTurn(beginSession(records, 's-1'), { source: 'ring' }))
+
+  const again = beginSession(records, 's-1')
+  assert.equal(again.record_missing, true)
+  assert.equal(records.read('s-1')?.ingested.length, 1)
 })
 
-test('a compaction or a resumed transcript keeps what the session took in', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
-  for (const replacement of ['compaction', 'resume'] as const) {
-    assert.equal(shellAllowed(replaceSession(tainted, replacement)), false, replacement)
-  }
+test('a resumed transcript keeps what the session took in', () => {
+  const records = store()
+  rememberSession(records, takeInTurn(beginSession(records, 's-1'), { source: 'ring' }))
+  assert.equal(shellAllowed(resumeSession(records, 's-1')), false)
 })
