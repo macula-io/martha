@@ -231,7 +231,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root: closed('relay') },
+      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root: closed('relay'), mesh_servers: closed('mesh-servers') },
       command: member,
       args: [],
       inherited: place.owner_env,

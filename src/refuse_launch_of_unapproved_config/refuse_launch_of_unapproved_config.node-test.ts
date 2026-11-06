@@ -446,6 +446,19 @@ test('an OpenCode launch keeps project config off whatever the inherited environ
   assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
 })
 
+test('a Claude Code launch drops an inherited CLAUDE_CODE_SHELL_PREFIX, which would run before every server (#65 r=3)', (t) => {
+  for (const approved of [false, true]) {
+    const place = scratch(t)
+    if (approved) put(place.checkout, SERVERS, server('echo one'))
+    const { prepared } = prepare('claude-code', place, approved ? approve('claude-code', place) : [])
+    assert.equal(prepared.allow, true)
+    if (!prepared.allow) return
+    const env = launchEnvironment({ CLAUDE_CODE_SHELL_PREFIX: join(place.checkout, 'wrap.sh'), PATH: '/usr/bin' }, prepared.switches)
+    assert.equal(Object.hasOwn(env, 'CLAUDE_CODE_SHELL_PREFIX'), false, approved ? 'with config carried' : 'with no config')
+    assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
+  }
+})
+
 test('a planned Claude Code launch starts only the servers it passes', (t) => {
   const place = scratch(t)
   const { prepared } = prepare('claude-code', place, [])

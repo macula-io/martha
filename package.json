@@ -28,6 +28,7 @@
     "hostAdapters": [
       "src/claude_code_host",
       "src/claude_code_relay",
+      "src/install_the_recorded_mesh_server",
       "src/launch_a_claude_code_member"
     ],
     "packageImports": {

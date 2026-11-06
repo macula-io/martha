@@ -22,8 +22,10 @@
 // package is started in the first shape, where npx picks its bin itself. Anything else is refused,
 // naming the server, a server that is not the mesh server included: there is
 // no list of servers exempt from the check. `env` may name only the variables
-// a server is allowed to be given (SERVER_ENV_ALLOWED: the mesh server's own
-// MACULA_* settings). Any other key is refused by name: a variable can change
+// a server is allowed to be given: the mesh server's own settings that someone
+// has reviewed (known_settings, read from the reviewed record of
+// ../prove_the_mesh_server_bytes; martha#65), not any MACULA_* name, since a
+// new setting can change what the server loads. Any other key is refused by name: a variable can change
 // what npx installs or what runs (NPM_CONFIG_REGISTRY, PREFIX, NODE_OPTIONS,
 // LD_PRELOAD, PATH, HOME and more), and a list of the bad ones is never
 // complete, so the pin would no longer say which code starts.
@@ -33,6 +35,7 @@
 // tools are still judged at run time by the gate's prefix and allow-list,
 // which refuse every mesh tool nobody decided.
 
+import { KNOWN_MESH_SERVER_SETTINGS } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { EXACT_VERSION, type MeshServerInstall } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 
 /** How the config's servers install the package, or why that cannot be told. */
@@ -47,8 +50,8 @@ export const PACKAGE_SWITCH = '-p'
 export const PINNED_TRANSPORT = 'stdio'
 /** The keys a pinned server entry may carry. */
 const PINNED_ENTRY_KEYS: ReadonlySet<string> = new Set(['type', 'command', 'args', 'env'])
-/** The only environment variables a server entry may set: the mesh server's own settings. */
-export const SERVER_ENV_ALLOWED = /^MACULA_[A-Z0-9_]+$/
+/** The only environment variables a server entry may set: the mesh server's reviewed settings. */
+const SERVER_ENV_ALLOWED: ReadonlySet<string> = new Set(KNOWN_MESH_SERVER_SETTINGS)
 /** A bin name: a plain command, no path, no switch. */
 const BIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 /** A package name the npm registry accepts, scoped or not. */
@@ -88,8 +91,8 @@ function pinOf(name: string, entry: unknown, mesh: string): Pin | { readonly ref
   if (bin !== undefined && pkg !== mesh) return refused(`names bin ${bin} of ${pkg}, whose bins nobody recorded, so what it runs is not proved`)
   if (entry.env !== undefined) {
     if (!isObject(entry.env)) return refused('gives an env that is not an object')
-    const unallowed = Object.keys(entry.env).filter((key) => !SERVER_ENV_ALLOWED.test(key))
-    if (unallowed.length > 0) return refused(`sets ${unallowed.join(', ')}, which no server may be given (only ${SERVER_ENV_ALLOWED.source})`)
+    const unallowed = Object.keys(entry.env).filter((key) => !SERVER_ENV_ALLOWED.has(key))
+    if (unallowed.length > 0) return refused(`sets ${unallowed.join(', ')}, which no server may be given (only the mesh server's reviewed settings, known_settings)`)
   }
   return bin === undefined ? { pkg, version } : { pkg, version, bin }
 }
