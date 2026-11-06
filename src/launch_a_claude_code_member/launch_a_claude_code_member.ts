@@ -12,12 +12,16 @@
 //      owner.
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
+//      Inside it, an empty 0500 directory: where the member's git looks for
+//      hooks and direnv for its config (../refuse_code_a_checkout_runs_itself).
 //   3. The relay's server on that socket, answering with memberRelay.
 //   4. `claude` in a process group of its own, so one SIGKILL reaches the host
 //      and its tool servers: the owner's arguments first, then the launch gate's
 //      switches and the relay plugin. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `launchEnvironment(inherited, switches)`, plus the
+//      environment is `launchEnvironment(inherited, switches)`, then the
+//      settings that keep a checkout from running its hooks, install scripts
+//      and .envrc through the member's own commands (martha#24), plus the
 //      socket's path.
 //   5. `recordMemberLaunch` with the writable store only the launcher holds
 //      (#42). A launch that cannot be recorded is stopped.
@@ -51,6 +55,10 @@ import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import {
+  makeEmptyDirectory,
+  switchesThatRunNothingFromACheckout,
+} from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   launchEnvironment,
@@ -65,6 +73,9 @@ import { sessionRecordsIn } from './session_records_in_rows.ts'
 
 /** The relay plugin's folder, as `--plugin-dir` names it. */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
+
+/** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
+export const EMPTY_DIRECTORY_NAME = 'nothing'
 
 /** The host this launcher starts. */
 export const CLAUDE_CODE = 'claude-code'
@@ -146,6 +157,13 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     removeSnapshot()
     return refuse(relayDirectory.refusal)
   }
+  const emptyDirectory = join(relayDirectory.directory, EMPTY_DIRECTORY_NAME)
+  const empty = makeEmptyDirectory(emptyDirectory)
+  if (!empty.made) {
+    relayDirectory.remove()
+    removeSnapshot()
+    return refuse(empty.refusal)
+  }
 
   let group: number | undefined
   const stop = (why: string): void => {
@@ -176,7 +194,11 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     return refuse(`${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`)
   }
 
-  const env = { ...launchEnvironment(launch.inherited, prepared.switches), [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path }
+  const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
+  const env = {
+    ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, emptyDirectory)),
+    [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path,
+  }
   const child = spawn(launch.command, [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR], {
     cwd: launch.place.launch_dir,
     env,
