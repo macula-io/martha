@@ -24,10 +24,10 @@
 //      The record is the reviewed one in the repository, never a digest kept
 //      beside the install, which whoever can edit the tree could rewrite too.
 //   3. START it by path: in the approved copy the host is given, the entry
-//      becomes `<this node> <root>/<version>/node_modules/<package>/<bin's file>`,
-//      with its own keys (its settings) kept. The bin is the one npx would take:
-//      the one after `-p`, or the package's only bin, or the bin named after the
-//      package; otherwise it is refused, as npx would fail.
+//      becomes `<this node> <root>/<version>/node_modules/<package>/<file>`, with
+//      its own keys (its settings) kept. The file is the one the version's
+//      record gives its server bin (`server_bin`, martha#49); an entry naming any
+//      other bin is refused, whatever the launch gate let through.
 //
 // What this does not close: a member's shell runs as the same user, so it can
 // edit the installed tree while a session runs. The next launch refuses that
@@ -41,7 +41,13 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { dirname, join, relative, sep } from 'node:path'
 import process from 'node:process'
 
-import { MESH_SERVER_PACKAGE, EXACT_VERSION, type PackageSource } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import {
+  EXACT_VERSION,
+  MESH_SERVER_PACKAGE,
+  RECORDED_MESH_SERVERS,
+  type PackageSource,
+  type RecordedMeshServer,
+} from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import {
   MESH_TREE_RECORDING,
   changesInTree,
@@ -178,20 +184,6 @@ function provedTreeOf(tree: RecordedMeshTree, root: string, registry: string): {
   return unlike === undefined ? { dir } : { refusal: unlike }
 }
 
-/** The bin npx would take from this manifest, or why it would take none. */
-function binOf(manifest: { name?: string; bin?: string | Record<string, string> }, asked: string | undefined): { readonly file: string } | { readonly refusal: string } {
-  const unscoped = (manifest.name ?? '').replace(/^@[^/]+\//, '')
-  const bins: Record<string, string> = typeof manifest.bin === 'string' ? { [unscoped]: manifest.bin } : (manifest.bin ?? {})
-  const named = Object.keys(bins).join(', ') || 'none'
-  if (asked !== undefined) {
-    const file = bins[asked]
-    return file === undefined ? { refusal: `it starts the bin ${asked}, and ${manifest.name} has ${named}` } : { file }
-  }
-  const files = new Set(Object.values(bins))
-  const only = files.size === 1 ? [...files][0] : bins[unscoped]
-  return only === undefined ? { refusal: `it names no bin, and ${manifest.name} has ${named}, none of which npx would choose` } : { file: only }
-}
-
 type Entry = Record<string, unknown> & { readonly args?: unknown }
 
 /** The package, version and bin a pinned entry asks npx for, or undefined when it is no such pin. */
@@ -212,6 +204,8 @@ export interface MeshServerPlacement {
   /** Where the recorded trees are installed: a directory only the launcher writes. */
   readonly root: string
   readonly recording?: MeshTreeRecording
+  /** The recorded versions, each naming its server bin; the reviewed records unless a test gives its own. */
+  readonly servers?: readonly RecordedMeshServer[]
 }
 
 /**
@@ -221,6 +215,7 @@ export interface MeshServerPlacement {
  */
 export function placeRecordedMeshServers(placement: MeshServerPlacement): { readonly config: string } | { readonly refusal: string } {
   const recording = placement.recording ?? MESH_TREE_RECORDING
+  const records = placement.servers ?? RECORDED_MESH_SERVERS
   let config: { mcpServers?: Record<string, Entry> }
   try {
     config = JSON.parse(placement.serverConfig) as typeof config
@@ -238,12 +233,19 @@ export function placeRecordedMeshServers(placement: MeshServerPlacement): { read
     if (tree === undefined) {
       return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose tree is not recorded: the bytes it would run are not proved. Record that version, or install a recorded one.` }
     }
+    const record = records.find((recorded) => recorded.server_version === pin.version)
+    if (record === undefined) {
+      return { refusal: `its server ${name} installs ${MESH_SERVER_PACKAGE} ${pin.version}, whose bins are not recorded, so its server bin is not known.` }
+    }
+    if (pin.bin !== undefined && pin.bin !== record.server_bin) {
+      return { refusal: `its server ${name} starts the bin ${pin.bin}, and the server bin recorded for ${MESH_SERVER_PACKAGE} ${pin.version} is ${record.server_bin}.` }
+    }
+    const binFile = record.bins[record.server_bin]
+    if (binFile === undefined) return { refusal: `the record of ${MESH_SERVER_PACKAGE} ${pin.version} names the server bin ${record.server_bin}, which is none of its bins.` }
     const proved = provedTreeOf(tree, placement.root, recording.registry)
     if ('refusal' in proved) return { refusal: `its server ${name}: ${proved.refusal}` }
     const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
-    const bin = binOf(JSON.parse(readFileSync(join(packageDir, PACKAGE_JSON), 'utf8')) as Parameters<typeof binOf>[0], pin.bin)
-    if ('refusal' in bin) return { refusal: `its server ${name}: ${bin.refusal}` }
-    const file = join(packageDir, bin.file)
+    const file = join(packageDir, binFile)
     if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
     servers[name] = { ...entry, command: process.execPath, args: [file] }
   }

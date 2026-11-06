@@ -1,8 +1,9 @@
-// Records what one version of the mesh server registers and installs, from its
-// published package, beside every version already recorded (martha#49, #65).
+// Records one version of the mesh server: its bins, the tools it registers and
+// the whole tree it installs, from its published package, beside every version
+// already recorded (martha#49, #65).
 //
 //   npm pack @macula-io/mcp@<version>
-//   npm run record:mesh-tools -- <the .tgz npm pack wrote>
+//   npm run record:mesh-tools -- <the .tgz npm pack wrote> <its server bin>
 //
 // It records the tools the package registers (martha#49) and the whole tree a
 // member runs (martha#65): the tarball's integrity, the settings its code
@@ -11,6 +12,11 @@
 // tools and the tree are of the same bytes. It fails, naming why, when the
 // tarball is not what the registry serves for its version, a setting is one
 // nobody reviewed, or the lock cannot pin the tree.
+//
+// The server bin is the one bin of the package that is the MCP server (for
+// @macula-io/mcp, macula-mcp); the others are its own tools, which no member
+// may start. It is named here by whoever records, never guessed, and shows in
+// the reviewed record.
 //
 // Run it for each version a member may install; the coverage check then names
 // any tool a recorded version registers that nobody has decided to allow or
@@ -31,9 +37,9 @@ const TOOLS = new URL('../read_a_room_through_its_gate/recorded_mesh_server_tool
 const TREES = new URL('../prove_the_mesh_server_bytes/recorded_mesh_server_trees.json', import.meta.url)
 const CODE = '.js'
 
-const [tarballPath] = argv.slice(2)
-if (tarballPath === undefined) {
-  stderr.write('usage: record_mesh_server_tools.ts <the .tgz npm pack wrote>\n')
+const [tarballPath, serverBin] = argv.slice(2)
+if (tarballPath === undefined || serverBin === undefined) {
+  stderr.write('usage: record_mesh_server_tools.ts <the .tgz npm pack wrote> <its server bin>\n')
   exit(2)
 }
 
@@ -42,13 +48,13 @@ try {
   const tree = recordMeshTree({ tarball: readFileSync(tarballPath), recording: MESH_TREE_RECORDING, scratch })
 
   const directory = join(scratch, 'extracted', 'package')
-  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { name: string; version: string }
+  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { name: string; version: string; bin?: string | Record<string, string> }
   const files = (readdirSync(directory, { recursive: true, encoding: 'utf8' }) as string[])
     .filter((file) => file.endsWith(CODE))
     .sort()
   const sources = files.map((file) => ({ path: relative(directory, join(directory, file)), text: readFileSync(join(directory, file), 'utf8') }))
   const current = JSON.parse(readFileSync(TOOLS, 'utf8')) as MeshServerRecording
-  writeFileSync(TOOLS, `${JSON.stringify(withRecordedVersion(current, manifest, registeredToolsIn(sources)), null, 2)}\n`)
+  writeFileSync(TOOLS, `${JSON.stringify(withRecordedVersion(current, manifest, registeredToolsIn(sources), serverBin), null, 2)}\n`)
   writeFileSync(TREES, `${JSON.stringify(withRecordedTree(MESH_TREE_RECORDING, tree), null, 2)}\n`)
 } catch (error) {
   stderr.write(`${(error as Error).message}\n`)

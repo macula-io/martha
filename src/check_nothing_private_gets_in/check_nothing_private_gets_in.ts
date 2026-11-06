@@ -9,6 +9,7 @@
 // resolver that asks whether that repository is public, so a private repository
 // is refused without this public tree having to name it.
 
+import { digestStartsFinder } from './public_digest.ts'
 import { PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
@@ -69,7 +70,13 @@ const GITHUB_ROUTES = new Set([
 ])
 
 const whole = (pattern: string) => new RegExp(pattern)
-const each = (pattern: string, text: string, flags = 'g') => [...text.matchAll(new RegExp(pattern, flags))].map((found) => found[0])
+// A match and where it starts in the line: a class may decide by its context.
+interface Found {
+  readonly value: string
+  readonly at: number
+}
+const each = (pattern: string, text: string, flags = 'g'): Found[] =>
+  [...text.matchAll(new RegExp(pattern, flags))].map((found) => ({ value: found[0], at: found.index }))
 // A host name has no case: the lab classes match it however it is written. The
 // patterns stay the shared definition's; the flag is this reader's.
 const anyCase = 'gi'
@@ -84,13 +91,15 @@ interface TextClass {
   readonly what: string
   // The value is printed only where printing it leaks nothing new.
   readonly shows: boolean
-  readonly matches: (text: string) => readonly string[]
-  readonly accepts: (value: string) => boolean
+  readonly matches: (text: string) => readonly Found[]
+  // The value, where it starts, and its line, for a class that reads its context.
+  readonly accepts: (value: string, at: number, text: string) => boolean
 }
 
 const textClasses = (rules: Rules): readonly TextClass[] => {
   const synthetic = (pattern: string, flags = '') => (value: string) => rules.allowSynthetic && new RegExp(pattern, flags).test(value)
   const machine = rules.labHosts.length === 0 ? '' : families(rules)
+  const digestStarts = digestStartsFinder(PUBLIC_TEXT_PATTERNS.hex_id)
   // A domain has no case: an allowed address passes however its domain is written.
   const allowEmail = new RegExp(
     `^(${PUBLIC_TEXT_PATTERNS.allow_email}${rules.publicEmails.map((domain) => `|[A-Za-z0-9._%+-]+@${domain.replace(/[.]/g, '\\.')}`).join('')}${rules.publicAddresses.map((address) => `|${address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('')})$`,
@@ -132,7 +141,10 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
       what: 'a 64-hex id',
       shows: true,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.hex_id, text),
-      accepts: synthetic(SYNTHETIC.hex_id),
+      // A public digest is accepted only where a declared form holds it
+      // (public_digest.ts); a bare 64-hex is a node id or a key until shown otherwise.
+      accepts: (value, at, text) =>
+        synthetic(SYNTHETIC.hex_id)(value) || digestStarts(text).has(at),
     },
   ]
 }
@@ -163,8 +175,8 @@ type Printing = ReturnType<typeof printing>
 const textHitsOf = (line: Line, classes: readonly TextClass[], print: Printing): Hit[] =>
   classes.flatMap((one) =>
     one.matches(line.text)
-      .filter((value) => !one.accepts(value))
-      .map((value) => ({ where: print.clean(line.where), what: print.shown(one, value) })),
+      .filter((found) => !one.accepts(found.value, found.at, line.text))
+      .map((found) => ({ where: print.clean(line.where), what: print.shown(one, found.value) })),
   )
 
 export interface RepoReference {

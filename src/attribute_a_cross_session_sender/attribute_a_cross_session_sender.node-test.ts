@@ -12,7 +12,7 @@ import {
 import type { Arrival } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
-import { specifiersOf } from '../host_contract/imports_beyond_the_core.ts'
+import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   binderOverLaunches,
@@ -235,7 +235,8 @@ test('the binder slice imports no Node module: the kernel and the files are the 
   assert.ok(sources.length > 0, 'the scan read the slice')
 
   const reaches = sources.flatMap((source) =>
-    specifiersOf(source.text)
+    moduleReferencesOf(source.text, source.path)
+      .flatMap(({ specifier }) => specifier ?? [])
       .filter((specifier) => specifier.startsWith('node:'))
       .map((specifier) => `${source.path}: ${specifier}`),
   )

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +15,7 @@ import {
   type Source,
   withoutLabNames,
 } from './check_nothing_private_gets_in.ts'
+import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from './public_digest.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 
 // Every value planted here is a synthetic form, because this file is in the
@@ -280,4 +282,90 @@ test('a declared public address passes as that exact string, and its domain does
   assert.deepEqual(await hitsOf('the key type ada@synthetic.invalid'), [])
   assert.deepEqual(await hitsOf('the key type xada@synthetic.invalid'), ['an email address (xada@synthetic.invalid)'])
   assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
+})
+
+// A public digest (martha#61). Real-shaped values are drawn at run time, so the
+// tree this file is in never holds one; the forms come from their one definition.
+const realShaped = () => randomBytes(32).toString('hex')
+const writtenDigests = Object.entries(PUBLIC_DIGEST_FORMS).flatMap(([name, form]) =>
+  form.written.map((written) => ({ name, written })),
+)
+const filled = (written: string, hex: string) => written.replaceAll(HEX_SLOT, hex)
+const hexHit = (hex: string) => `a 64-hex id (${hex})`
+
+test('every declared form holds at least one written example', () => {
+  for (const [name, form] of Object.entries(PUBLIC_DIGEST_FORMS)) {
+    assert.ok(form.written.length > 0, name)
+    for (const written of form.written) assert.ok(written.includes(HEX_SLOT), `${name}: ${written}`)
+  }
+})
+
+test('a real digest passes in every declared form, with no synthetic allowance', async () => {
+  for (const { name, written } of writtenDigests) {
+    assert.deepEqual(await hitsOf(filled(written, realShaped())), [], `${name}: ${written}`)
+  }
+})
+
+test('a real-shaped node id or key beside an accepted digest is still refused', async () => {
+  for (const { name, written } of writtenDigests) {
+    const digest = filled(written, realShaped())
+    for (const label of ['node', 'key']) {
+      const id = realShaped()
+      for (const text of [`${digest} ${label} ${id}`, `${digest}\t${id}`]) {
+        assert.deepEqual(await hitsOf(text), [hexHit(id)], `${name}: ${text}`)
+      }
+      // Before it, the id is refused; a sha256sum line then no longer opens the
+      // line, so its digest may be refused too, which errs on the closed side.
+      const before = `${label} ${id} ${digest}`
+      assert.ok((await hitsOf(before)).includes(hexHit(id)), `${name}: ${before}`)
+    }
+  }
+})
+
+test('a 64-hex string outside a declared form is refused', async () => {
+  const id = realShaped()
+  for (const text of [
+    id,
+    `node ${id}`,
+    `sha256 ${id}`,
+    `sha512:${id}`,
+    `node_sha256: ${id}`,
+    `sha256sum ${id}`,
+    `${id} release.tar.gz`,
+    `${id}  direnv`,
+    `${id}   .`,
+    `node ${id}  release.tar.gz`,
+    `key=${id}  release.tar.gz`,
+    // A listing of ids beside a host, an address, a version or a file, with no
+    // checksum check on the line, indented or in a table cell.
+    `${id}  station.example.org`,
+    `${id}  203.0.113.7`,
+    `${id}  0.51.0`,
+    `    ${id}  peer.example.org`,
+    `| ${id}  peer.json |`,
+    `{"node": "${id}  x.y"}`,
+    `${id} *keys.json`,
+    `${id}  direnv.linux-amd64`,
+    `echo "${id}  direnv.linux-amd64"`,
+    `echo "${id}  direnv.linux-amd64" | sha256sum`,
+    `echo "${id}  direnv.linux-amd64" | tee sums -c`,
+    `echo "${id} release.tar.gz" | sha256sum -c`,
+    `echo "${id}  release.tar.gz" | shasum -c`,
+    `echo "${id}  release.tar.gz' | sha256sum -c`,
+    `echo ${id}  release.tar.gz | sha256sum -c`,
+    // A label that does not stand alone.
+    `node-sha256: ${id}`,
+    `peer.sha256: ${id}`,
+    `NODE_SHA256=${id}`,
+    `https://example.org/?sha256=${id}`,
+    `https://example.org/?a=1&sha256=${id}`,
+  ]) {
+    assert.ok((await hitsOf(text)).includes(hexHit(id)), text)
+  }
+})
+
+test('a declared form vouches only for the digest it holds, never a second id on the line', async () => {
+  const [first, second] = [realShaped(), realShaped()]
+  assert.deepEqual(await hitsOf(`sha256: ${first} ${second}`), [hexHit(second)])
+  assert.deepEqual(await hitsOf(`echo "${first}  release.tar.gz" | sha256sum -c ${second}`), [hexHit(second)])
 })
