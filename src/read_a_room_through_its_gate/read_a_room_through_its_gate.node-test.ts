@@ -8,7 +8,10 @@ import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import { PATH_OF_SOURCE, beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
+  MESH_TOOLS_REFUSED,
   MESH_TOOLS_THAT_RUN,
   MESH_TOOL_PREFIX,
   gateOfRoom,
@@ -85,9 +88,10 @@ test('every raw mesh read is refused under every namespace, in a clean session',
   }
 })
 
-test('no raw read the threat model requires is on the allow-list', () => {
+test('no raw read the threat model requires is on the allow-list, and each is named as refused', () => {
   for (const raw of REQUIRED_RAW_READS) {
     assert.equal(MESH_TOOLS_THAT_RUN.includes(raw), false, raw)
+    assert.equal(MESH_TOOLS_REFUSED.includes(raw), true, raw)
     assert.equal(isRawMeshRead(`mcp__macula__${raw}`, {}, names), true, raw)
   }
 })
@@ -159,6 +163,16 @@ test("Claude Code's split does not read OpenCode's form: the split has to be the
   // OpenCode raw read is not recognised and runs (it only taints).
   assert.equal(isRawMeshRead('macula_mesh_read_inbox', {}, claudeCodeToolNames), false)
   assert.equal(isRawMeshRead('macula_mesh_read_inbox', {}, openCode), true)
+})
+
+// --- round 2: a mesh tool that runs hands its result to the shell gate (B2) --
+
+test('an allowed mesh_call runs, and once its result is taken in, Bash is refused', () => {
+  const clean = beginSession(store(), 's-1')
+  const tool = 'mcp__macula__mesh_call'
+  assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {} }), undefined)
+  const after = takeInTurn(clean, { source: 'mcp_result' }, bindNothing)
+  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: after, policy }), undefined)
 })
 
 test('a raw read is no longer on the list of tools a tainted session may call', () => {

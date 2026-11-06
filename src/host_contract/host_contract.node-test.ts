@@ -228,8 +228,16 @@ test("the test host names a called tool by the host's split it is given", () => 
   assert.equal(hostForTests({ toolNames: claudeCodeToolNames }).host.tools.ownNameOf('mcp__x__mesh_say'), 'mesh_say')
 })
 
-test('a test host given no split takes no name apart', () => {
-  assert.equal(hostForTests().host.tools.ownNameOf('mcp__macula__mesh_read_inbox'), 'mcp__macula__mesh_read_inbox')
+test("a test host given no split uses Claude Code's, so a core test cannot fail open by forgetting it", () => {
+  assert.equal(hostForTests().host.tools.ownNameOf('mcp__macula__mesh_read_inbox'), 'mesh_read_inbox')
+})
+
+test("OpenCode's split strips the longest server name that matches, in any order", () => {
+  for (const servers of [['macula', 'macula_mcp'], ['macula_mcp', 'macula']]) {
+    const names = openCodeToolNames(servers)
+    assert.equal(names.ownNameOf('macula_mcp_mesh_read_inbox'), 'mesh_read_inbox', servers.join())
+    assert.equal(names.ownNameOf('macula_mesh_read_inbox'), 'mesh_read_inbox', servers.join())
+  }
 })
 
 test('each split keeps a built-in tool its own name, and splits only its own form', () => {

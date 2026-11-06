@@ -9,7 +9,9 @@ import {
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_EMITTED_SESSION_EVENTS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { gapsInGateCoverage, gapsInSessionEvents } from './check_every_path_is_gated.ts'
+import { gapsInGateCoverage, gapsInMeshTools, gapsInSessionEvents } from './check_every_path_is_gated.ts'
+import { RECORDED_MESH_SERVER } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -166,4 +168,46 @@ test('a declared session event the host stops emitting turns the check red, by n
   const gaps = gapsInSessionEvents(undefined, emitted)
   assert.equal(gaps.length, 1)
   assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+})
+
+// --- every tool the mesh server registers is decided (martha#2, item 5 (c)) --
+
+const withTools = (tools: readonly string[]) => ({ ...RECORDED_MESH_SERVER, tools })
+
+test('every tool the recorded mesh server registers is either allowed or refused, and nothing else is named', () => {
+  assert.deepEqual(gapsInMeshTools(), [])
+})
+
+test('a tool the server adds, neither allowed nor refused, is named', () => {
+  const added = `${MESH_TOOL_PREFIX}read_everything_new`
+  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, added]))
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${added}`])
+  assert.match(gaps[0]?.why ?? '', /neither allowed nor refused/)
+})
+
+test('an allowed name the server does not register is named', () => {
+  const [gone] = MESH_TOOLS_THAT_RUN
+  const gaps = gapsInMeshTools(withTools(RECORDED_MESH_SERVER.tools.filter((tool) => tool !== gone)))
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${gone}`])
+  assert.match(gaps[0]?.why ?? '', /allowed, and the recorded server does not register it/)
+})
+
+test('a refused name the server does not register is named', () => {
+  const [gone] = MESH_TOOLS_REFUSED
+  const gaps = gapsInMeshTools(withTools(RECORDED_MESH_SERVER.tools.filter((tool) => tool !== gone)))
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${gone}`])
+  assert.match(gaps[0]?.why ?? '', /refused, and the recorded server does not register it/)
+})
+
+test('a recorded tool without the mesh prefix is named: the prefix is the run-time hinge', () => {
+  const unprefixed = 'read_everything_new'
+  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, unprefixed]))
+  assert.ok(gaps.some((gap) => gap.path === `mesh tool ${unprefixed}` && new RegExp(MESH_TOOL_PREFIX).test(gap.why)))
+})
+
+test('a name both allowed and refused is named', () => {
+  const [both] = MESH_TOOLS_REFUSED
+  const gaps = gapsInMeshTools(RECORDED_MESH_SERVER, [...MESH_TOOLS_THAT_RUN, both], MESH_TOOLS_REFUSED)
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${both}`])
+  assert.match(gaps[0]?.why ?? '', /both allowed and refused/)
 })
