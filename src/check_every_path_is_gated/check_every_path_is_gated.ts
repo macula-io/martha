@@ -27,7 +27,7 @@
 // does not name — and it must admit a rostered member, so a gate that refuses
 // everything is caught too.
 
-import { DELIVERY_GATES, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { DELIVERY_GATES, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
   fingerprintOf,
@@ -133,50 +133,69 @@ export function gapsInGateCoverage(
   const gaps: Gap[] = []
 
   for (const path of paths) {
-    const control: InboundPath['control'] | undefined = path.control
-
-    if (control === undefined) {
-      gaps.push({ path: path.id, why: 'no control is declared' })
-      continue
-    }
-
-    if (control.kind === 'none') {
-      gaps.push({ path: path.id, why: 'declared as having no control' })
-      continue
-    }
-
-    if (path.klass === 'launched' && control.kind !== 'launch-gate') {
-      gaps.push({ path: path.id, why: `is code the host starts by itself, and ${control.kind} does not stand in front of that` })
-      continue
-    }
-
-    if (control.kind === 'launch-gate') {
-      const gap = path.klass !== 'launched'
-        ? 'names a launch gate on a path the host does not start by itself'
-        : control.residual.trim() === ''
-          ? 'does not say what happens where Martha does not start the host'
-          : launchGateGap(control.gate, launch_gates[control.gate])
-      if (gap !== undefined) gaps.push({ path: path.id, why: gap })
-      continue
-    }
-
-    if (control.kind === 'shell-gate' && !gateRefuses(path.id)) {
-      gaps.push({ path: path.id, why: 'claims the shell gate, and the shell gate does not refuse it' })
-      continue
-    }
-
-    if (control.kind === 'delivery-gate') {
-      const gap = deliveryGateGap(control.gate, delivery_gates[control.gate])
-      if (gap !== undefined) gaps.push({ path: path.id, why: gap })
-      continue
-    }
-
-    if (control.kind === 'no-text-reaches-the-model' && control.why.trim() === '') {
-      gaps.push({ path: path.id, why: 'claims no text reaches the model and does not say why' })
-    }
+    const why = gapOfRow(path, gateRefuses, delivery_gates, launch_gates)
+    if (why !== undefined) gaps.push({ path: path.id, why })
   }
 
   return gaps
+}
+
+/**
+ * Why one row is a gap, or undefined when its control stands on it. Each kind
+ * of control is judged by its own rule, and the first rule that applies decides.
+ */
+function gapOfRow(
+  path: InboundPath,
+  gateRefuses: (path: string) => boolean,
+  delivery_gates: Readonly<Record<string, DeliveryGate>>,
+  launch_gates: Readonly<Record<string, LaunchGate>>,
+): string | undefined {
+  const control: InboundPath['control'] | undefined = path.control
+
+  if (control === undefined) return 'no control is declared'
+
+  if (control.kind === 'none') return 'declared as having no control'
+
+  if (path.klass === 'launched' && control.kind !== 'launch-gate') {
+    return `is code the host starts by itself, and ${control.kind} does not stand in front of that`
+  }
+
+  if (control.kind === 'launch-gate') return launchedRowGap(path, control, launch_gates)
+
+  return claimedControlGap(path, control, gateRefuses, delivery_gates)
+}
+
+/** Why a row naming a launch gate is a gap: it is not launched, says nothing of where Martha does not start the host, or its gate fails a question. */
+function launchedRowGap(
+  path: InboundPath,
+  control: Extract<Control, { kind: 'launch-gate' }>,
+  launch_gates: Readonly<Record<string, LaunchGate>>,
+): string | undefined {
+  return path.klass !== 'launched'
+    ? 'names a launch gate on a path the host does not start by itself'
+    : control.residual.trim() === ''
+      ? 'does not say what happens where Martha does not start the host'
+      : launchGateGap(control.gate, launch_gates[control.gate])
+}
+
+/** Why a row claiming the shell gate, a delivery gate or that no text reaches the model is a gap. */
+function claimedControlGap(
+  path: InboundPath,
+  control: Control,
+  gateRefuses: (path: string) => boolean,
+  delivery_gates: Readonly<Record<string, DeliveryGate>>,
+): string | undefined {
+  if (control.kind === 'shell-gate' && !gateRefuses(path.id)) {
+    return 'claims the shell gate, and the shell gate does not refuse it'
+  }
+
+  if (control.kind === 'delivery-gate') return deliveryGateGap(control.gate, delivery_gates[control.gate])
+
+  if (control.kind === 'no-text-reaches-the-model' && control.why.trim() === '') {
+    return 'claims no text reaches the model and does not say why'
+  }
+
+  return undefined
 }
 
 // A host the launch probes use, its first listed file, and a second one: the

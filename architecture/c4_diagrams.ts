@@ -218,6 +218,37 @@ export function context(): Diagram {
   return d
 }
 
+/** The systems outside Martha that its containers reach, down the right of the container diagram. */
+function systemsTheContainersReach(d: Diagram): void {
+  d.box({ kind: 'b-ext', x: 680, y: 76, w: 296, h: 96, name: 'A terminal', type: '[External system]',
+    desc: ['One tab per member'] })
+  d.box({ kind: 'b-ext', x: 680, y: 196, w: 296, h: 96, name: 'Claude Code', type: '[External: coding tool]',
+    desc: ['Loads the adapter as a plugin'] })
+  d.box({ kind: 'b-ext', x: 680, y: 316, w: 296, h: 96, name: 'OpenCode', type: '[External: coding tool]',
+    desc: ['Loads the adapter as a plugin'] })
+  d.box({ kind: 'b-ext', x: 680, y: 436, w: 296, h: 96, name: 'GitHub', type: '[External system]',
+    desc: ['gh and git: issues, pull requests, CI'] })
+  d.box({ kind: 'b-mac', x: 680, y: 556, w: 296, h: 96, name: 'Macula mesh and realm', type: '[team mode only]',
+    desc: ['The invite, the shared room'] })
+  d.box({ kind: 'b-ext', x: 680, y: 676, w: 296, h: 96, name: 'npm and ghcr.io', type: '[External system]',
+    desc: ['The signed release, by digest'] })
+}
+
+/** Which container reaches which, and which system, in the container diagram. */
+function containerEdges(d: Diagram): void {
+  d.edge('M332 131H300', { x: 316, y: 123, text: 'reads', middle: true })
+  d.edge('M600 110H680', { x: 640, y: 102, text: 'a tab', middle: true })
+  d.edge('M600 160H650V230H680', { x: 640, y: 196, text: 'starts', middle: true, rotate: 90 })
+  d.edge('M166 210V186', { x: 174, y: 202, text: 'settings, read once' })
+  d.edge('M432 275H400', { x: 416, y: 267, text: 'host', middle: true })
+  d.edge('M432 420H400', { x: 416, y: 412, text: 'host', middle: true })
+  d.edge('M680 250H600', { x: 640, y: 242, text: 'loads', middle: true })
+  d.edge('M680 380H600', { x: 640, y: 372, text: 'loads', middle: true })
+  d.edge('M216 480V507H660V484H680', { x: 438, y: 502, text: 'gh and git, through the host', middle: true })
+  d.edge('M166 644V674H660V604H680', { x: 438, y: 669, text: 'invite, room', middle: true }, true)
+  d.edge('M600 589H640V724H680', { x: 632, y: 616, text: 'signed release', middle: true, rotate: 90 })
+}
+
 /** Level 2: what Martha is made of, and which container reaches which system. */
 export function containers(): Diagram {
   const d = new Diagram('c4-container.svg', 'Martha containers', 1000, 900)
@@ -255,30 +286,8 @@ export function containers(): Diagram {
   d.box({ kind: 'b-cmp', x: 332, y: 534, w: 268, h: 110, name: 'release', type: '[pack, scan, sign]', code: true,
     desc: ['Packs what is committed,', 'refuses private text, and', 'signs it in CI'] })
 
-  d.box({ kind: 'b-ext', x: 680, y: 76, w: 296, h: 96, name: 'A terminal', type: '[External system]',
-    desc: ['One tab per member'] })
-  d.box({ kind: 'b-ext', x: 680, y: 196, w: 296, h: 96, name: 'Claude Code', type: '[External: coding tool]',
-    desc: ['Loads the adapter as a plugin'] })
-  d.box({ kind: 'b-ext', x: 680, y: 316, w: 296, h: 96, name: 'OpenCode', type: '[External: coding tool]',
-    desc: ['Loads the adapter as a plugin'] })
-  d.box({ kind: 'b-ext', x: 680, y: 436, w: 296, h: 96, name: 'GitHub', type: '[External system]',
-    desc: ['gh and git: issues, pull requests, CI'] })
-  d.box({ kind: 'b-mac', x: 680, y: 556, w: 296, h: 96, name: 'Macula mesh and realm', type: '[team mode only]',
-    desc: ['The invite, the shared room'] })
-  d.box({ kind: 'b-ext', x: 680, y: 676, w: 296, h: 96, name: 'npm and ghcr.io', type: '[External system]',
-    desc: ['The signed release, by digest'] })
-
-  d.edge('M332 131H300', { x: 316, y: 123, text: 'reads', middle: true })
-  d.edge('M600 110H680', { x: 640, y: 102, text: 'a tab', middle: true })
-  d.edge('M600 160H650V230H680', { x: 640, y: 196, text: 'starts', middle: true, rotate: 90 })
-  d.edge('M166 210V186', { x: 174, y: 202, text: 'settings, read once' })
-  d.edge('M432 275H400', { x: 416, y: 267, text: 'host', middle: true })
-  d.edge('M432 420H400', { x: 416, y: 412, text: 'host', middle: true })
-  d.edge('M680 250H600', { x: 640, y: 242, text: 'loads', middle: true })
-  d.edge('M680 380H600', { x: 640, y: 372, text: 'loads', middle: true })
-  d.edge('M216 480V507H660V484H680', { x: 438, y: 502, text: 'gh and git, through the host', middle: true })
-  d.edge('M166 644V674H660V604H680', { x: 438, y: 669, text: 'invite, room', middle: true }, true)
-  d.edge('M600 589H640V724H680', { x: 632, y: 616, text: 'signed release', middle: true, rotate: 90 })
+  systemsTheContainersReach(d)
+  containerEdges(d)
 
   d.notes(24, 806, [
     'One code path for both modes: the core reads the mode from the declaration and never branches on the coding tool. An adapter',
