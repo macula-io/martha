@@ -167,7 +167,8 @@ function checkLink (path, target) {
 /**
  * A link's target walked as the kernel walks it: part by part from the link's folder, following every link of the
  * plan it passes through. A '..' that would leave martha/ is refused at that step, so no detour outside counts as
- * inside; more than UNPACK_LIMITS.linkHops links followed is refused, which ends any cycle.
+ * inside; more than UNPACK_LIMITS.linkHops links followed, this one counted, is refused as the kernel refuses it
+ * (ELOOP), which also ends any cycle.
  * @param {Map<string, Entry>} plan
  * @param {Entry} link
  */
@@ -175,7 +176,8 @@ function walkLink (plan, link) {
   const outside = () => refuse(`the package links ${link.path} outside ${TOP}/ (${link.target}); refused`)
   let at = posix.dirname(link.path).split('/')
   const rest = link.target.split('/')
-  let hops = 0
+  // The link being walked is the first the kernel follows.
+  let hops = 1
   for (let part = rest.shift(); part !== undefined; part = rest.shift()) {
     if (part === '' || part === '.') continue
     if (part === '..') {
