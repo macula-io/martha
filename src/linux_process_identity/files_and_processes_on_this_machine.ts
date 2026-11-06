@@ -7,7 +7,7 @@
 // Nothing here decides anything. Which files to read, what a fingerprint covers
 // and which variables git must not inherit are the launch gate's
 // (src/refuse_launch_of_unapproved_config/); this file only does what it is told,
-// and refuses a scratch name that would leave its directory.
+// and refuses a scratch prefix or name that would leave its directory.
 
 import { spawnSync } from 'node:child_process'
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -51,6 +51,9 @@ export const filesOnThisMachine: FileTree = {
 /** Scratch directories on this machine's disk. */
 export const scratchOnThisMachine: ScratchDirectories = {
   make(root, prefix): ScratchDirectory {
+    if (prefix === '' || prefix === '.' || prefix === '..' || prefix.includes('/') || prefix.includes(sep)) {
+      throw Object.assign(new Error(`${prefix} is not one name to start a directory under ${root ?? tmpdir()}`), { code: 'EINVAL' })
+    }
     const under = root ?? tmpdir()
     mkdirSync(under, { recursive: true })
     const path = mkdtempSync(join(under, prefix))

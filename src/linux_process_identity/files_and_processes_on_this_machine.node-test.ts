@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -73,6 +73,17 @@ test('a name that would leave the scratch directory is refused, and nothing is w
     assert.throws(() => made.write(name, Buffer.from('x')), { code: 'EINVAL' }, JSON.stringify(name))
   }
   assert.equal(existsSync(join(root, 'escaped')), false)
+})
+
+test('a prefix that is not one name inside the root is refused, and nothing is made', (t) => {
+  const parent = place(t)
+  const root = join(parent, 'root')
+  mkdirSync(root)
+  for (const prefix of ['../x-', join('a', 'b-'), '/x-', join(root, 'x-'), '..', '.', '']) {
+    assert.throws(() => scratch.make(root, prefix), { code: 'EINVAL' }, JSON.stringify(prefix))
+  }
+  assert.deepEqual(readdirSync(parent), ['root'])
+  assert.deepEqual(readdirSync(root), [])
 })
 
 test('with no root, scratch goes where the machine keeps temporary files', () => {
