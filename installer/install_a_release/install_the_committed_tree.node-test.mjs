@@ -3,7 +3,8 @@
 // running it through the link answers with the version that tree's package.json carries.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { realpathSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
@@ -14,12 +15,21 @@ import { installRelease } from './install_a_release.mjs'
 const REPOSITORY = join(import.meta.dirname, '..', '..')
 const VERSION = '1.2.0'
 
-/** The committed tree as a release layer: what pack_a_release.sh copies into the image, export-ignore honoured. */
-const committedTree = () =>
-  gzipSync(execFileSync('git', ['archive', '--format=tar', '--prefix=martha/', 'HEAD'], { cwd: REPOSITORY, maxBuffer: 1 << 28 }))
+/**
+ * The committed tree as a release layer: what pack_a_release.sh copies into the image, export-ignore honoured. It is
+ * unpacked and packed again because git archive opens with a pax global header, which a COPY into an image never has.
+ * @param {string} scratch
+ */
+const committedTree = (scratch) => {
+  execFileSync('git', ['archive', '--format=tar', '--prefix=martha/', `--output=${join(scratch, 'tree.tar')}`, 'HEAD'], { cwd: REPOSITORY })
+  execFileSync('tar', ['-x', '-f', 'tree.tar'], { cwd: scratch })
+  return gzipSync(execFileSync('tar', ['--format=gnu', '-c', '-f', '-', 'martha'], { cwd: scratch, maxBuffer: 1 << 28 }))
+}
 
 test('the committed tree carries martha/bin/martha, and the command linked from it runs', async (t) => {
-  const r = release({ version: VERSION, gzipped: committedTree() })
+  const scratch = mkdtempSync(join(tmpdir(), 'martha-committed-tree-'))
+  t.after(() => rmSync(scratch, { recursive: true, force: true }))
+  const r = release({ version: VERSION, gzipped: committedTree(scratch) })
   const registry = await serveRegistry([r])
   const machine = scratchMachine()
   t.after(async () => { await registry.close(); machine.close() })
