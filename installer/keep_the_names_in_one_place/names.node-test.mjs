@@ -3,7 +3,7 @@
 // held to it: the tag globs and guard inputs each job passes, the signer sha every signing job calls, the version
 // files the guard reads, the installer's repository.url, and the install line a reader copies.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { basename, dirname, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -103,13 +103,20 @@ test('every signing call is to a sha the installer lists', () => {
   }
 })
 
-test('every action a release workflow runs is pinned by a full commit sha', () => {
-  // These jobs hold packages:write or id-token:write: a moved tag on an action would run with them.
-  for (const [name, text] of Object.entries(workflow)) {
-    for (const [, ref] of text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)) {
-      assert.match(ref ?? '', /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, `${name} runs ${ref}, not pinned by sha`)
-    }
-  }
+/** @param {string} text */
+const holdsWrite = (text) => /^\s*(packages|id-token):\s*write\b/m.test(text)
+/** @param {string} text */
+const unpinned = (text) => [...text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)].map((m) => m[1] ?? '').filter((ref) => !/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/.test(ref))
+
+test('every action in a workflow that can publish or sign is pinned by a full commit sha', () => {
+  // A job holding packages:write or id-token:write runs its actions with that power: a moved tag would too. The
+  // workflows are found by what they hold, so a new release workflow is held to this without being named here.
+  const found = readdirSync(`${ROOT}/.github/workflows`).filter((f) => /\.ya?ml$/.test(f)).map((f) => `.github/workflows/${f}`)
+  const writers = found.filter((f) => holdsWrite(read(f)))
+  for (const known of ['release.yml', 'installer.yml', 'release-dry-run.yml']) assert.ok(writers.includes(`.github/workflows/${known}`), `${known} is found by what it holds`)
+  for (const file of writers) assert.deepEqual(unpinned(read(file)), [], `${file} runs actions not pinned by sha`)
+  const planted = 'permissions:\n  id-token: write\nsteps:\n  - uses: actions/checkout@v7\n'
+  assert.ok(holdsWrite(planted) && unpinned(planted).length === 1, 'the scan bites on a planted workflow')
 })
 
 test('no workflow spells the image out; each reads it from the installer package.json', () => {
