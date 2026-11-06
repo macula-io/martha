@@ -85,14 +85,23 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   mkdirSync(markers)
   const marker = (door: Door): string => join(markers, door)
 
-  const repo = (dir: string): void => {
-    mkdirSync(dir)
-    git(dir, 'init', '-q', '.')
-    git(dir, 'config', 'user.name', 'martha-test')
-    git(dir, 'config', 'user.email', 'martha-test@example.invalid')
-    git(dir, 'config', 'commit.gpgsign', 'false')
-  }
+  const checkout = plantedCheckout(home, marker)
+  const husky = huskyCheckout(home, marker)
+  const owner_env = ownerEnvironment(home, checkout, direnv)
+  const member_commands = memberCommands(home, checkout, husky, direnv)
 
+  return { home, checkout, husky, markers, owner_env, member_commands }
+}
+
+function repo(dir: string): void {
+  mkdirSync(dir)
+  git(dir, 'init', '-q', '.')
+  git(dir, 'config', 'user.name', 'martha-test')
+  git(dir, 'config', 'user.email', 'martha-test@example.invalid')
+  git(dir, 'config', 'commit.gpgsign', 'false')
+}
+
+function plantedCheckout(home: string, marker: (door: Door) => string): string {
   // A git dependency, so that npm install runs git.
   const dependency = join(home, 'dependency')
   repo(dependency)
@@ -128,6 +137,11 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   script(join(checkout, '.git', 'fsmonitor'), marker('fsmonitor'))
   git(checkout, 'config', 'core.fsmonitor', join(checkout, '.git', 'fsmonitor'))
 
+  return checkout
+}
+
+/** A second checkout whose own config moves its hooks into a tracked directory. */
+function huskyCheckout(home: string, marker: (door: Door) => string): string {
   const husky = join(home, 'husky')
   repo(husky)
   mkdirSync(join(husky, '.husky'))
@@ -136,6 +150,10 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   git(husky, 'commit', '-q', '--no-verify', '-m', 'the author\'s hooks')
   git(husky, 'config', 'core.hooksPath', '.husky')
 
+  return husky
+}
+
+function ownerEnvironment(home: string, checkout: string, direnv: Direnv | undefined): Record<string, string | undefined> {
   // The owner's direnv trusts everything under the home, and every switch the
   // launcher sets is already set the other way. Its own command-scope git
   // settings name the same fsmonitor as the checkout's config, so ours must
@@ -144,7 +162,7 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   mkdirSync(direnv_config)
   // direnv matches the .envrc's real path against the prefix: a TMPDIR behind a link (macOS) needs the real one (martha#79).
   writeFileSync(join(direnv_config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(realpathSync(home))}]\n`)
-  const owner_env = {
+  return {
     ...process.env,
     PATH: direnv === undefined ? process.env.PATH : `${dirname(direnv.path)}${delimiter}${process.env.PATH ?? ''}`,
     DIRENV_CONFIG: direnv_config,
@@ -155,8 +173,11 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
     npm_config_git: './npm-git',
     GIT_CONFIG_PARAMETERS: "'core.fsmonitor'='" + join(checkout, '.git', 'fsmonitor') + "'",
   }
+}
 
-  const member_commands = [
+/** What a member types, as one sh script. */
+function memberCommands(home: string, checkout: string, husky: string, direnv: Direnv | undefined): string {
+  return [
     'set -eu',
     `cd '${checkout}'`,
     'git commit -q --allow-empty -m "a member commits"',
@@ -176,8 +197,6 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
     'git commit -q --allow-empty -m "a member commits"',
     '',
   ].join('\n')
-
-  return { home, checkout, husky, markers, owner_env, member_commands }
 }
 
 const expectedInControl = (direnv: Direnv | undefined): Door[] =>

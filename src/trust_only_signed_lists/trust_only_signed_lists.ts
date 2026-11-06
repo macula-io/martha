@@ -192,19 +192,34 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   if (document.kind !== input.kind) return `the document is a ${String(document.kind)}`
   if (document.crew !== input.crew) return 'the document is signed for another crew'
 
-  const issued = instantOf(document.issued_at)
-  if (Number.isNaN(issued)) return 'the issue date cannot be read'
-  const expires = instantOf(document.expires_at)
-  if (Number.isNaN(expires)) return 'the expiry cannot be read'
-  if (issued > input.now.getTime()) return 'the document is issued in the future'
-  if (input.now.getTime() >= expires) return 'the document has expired'
-  if (expires - issued > MAXIMUM_LIFETIME_DAYS * DAY_MS) {
-    return `the document lives more than ${MAXIMUM_LIFETIME_DAYS} days from its issue date`
-  }
+  const lifetime = lifetimeRefusal(document, input.now)
+  if (lifetime !== undefined) return lifetime
 
   const entries = entriesOf(input.kind, document.body)
   if (typeof entries === 'string') return entries
 
+  const opened = epochToOpen(input, document)
+  if (typeof opened === 'string') return opened
+
+  return { entries, members: membersOf(entries), epoch: opened.epoch, digest: opened.digest }
+}
+
+/** Why the document's signed issue date and expiry do not hold at `now` (rule 3), or undefined when they do. */
+function lifetimeRefusal(document: Record<string, unknown>, now: Date): string | undefined {
+  const issued = instantOf(document.issued_at)
+  if (Number.isNaN(issued)) return 'the issue date cannot be read'
+  const expires = instantOf(document.expires_at)
+  if (Number.isNaN(expires)) return 'the expiry cannot be read'
+  if (issued > now.getTime()) return 'the document is issued in the future'
+  if (now.getTime() >= expires) return 'the document has expired'
+  if (expires - issued > MAXIMUM_LIFETIME_DAYS * DAY_MS) {
+    return `the document lives more than ${MAXIMUM_LIFETIME_DAYS} days from its issue date`
+  }
+  return undefined
+}
+
+/** The document's epoch and digest when it is newer than, or the very list, this verifier last opened. */
+function epochToOpen(input: TrustListToOpen, document: Record<string, unknown>): string | OpenedEpoch {
   const epoch = document.epoch
   if (typeof epoch !== 'number' || !Number.isSafeInteger(epoch) || epoch < 0) return 'the epoch is not a whole number'
   const digest = createHash('sha256').update(JSON.stringify(document)).digest('hex')
@@ -213,8 +228,7 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   if (newest !== undefined && epoch === newest.epoch && digest !== newest.digest) {
     return `epoch ${epoch} was already opened for another list`
   }
-
-  return { entries, members: membersOf(entries), epoch, digest }
+  return { epoch, digest }
 }
 
 /**

@@ -73,119 +73,25 @@ type Body = Readonly<Record<string, unknown>>
 const isBody = (value: unknown): value is Body => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isText = (value: unknown): value is string => typeof value === 'string' && value !== ''
 
+/** What one member's answers share: its place, and every session it has taken a start of or refused. */
+interface RelayState {
+  readonly place: MemberRelayPlace
+  readonly sessions: Map<string, HostSession>
+  readonly broken: Map<string, string>
+}
+
 /** The launcher's answers for one member. */
 export function memberRelay(place: MemberRelayPlace): MemberRelay {
-  const sessions = new Map<string, HostSession>()
-  const broken = new Map<string, string>()
+  const state: RelayState = { place, sessions: new Map<string, HostSession>(), broken: new Map<string, string>() }
   let queue: Promise<unknown> = Promise.resolve()
 
-  const stop = (why: string): RelayReply => {
-    place.stopMember(why)
-    return { answered: false, stopping: why }
-  }
-
-  /** The session an event names, or why the launcher cannot vouch for it. */
-  const sessionNamed = (session_id: unknown): HostSession | string => {
-    if (!isText(session_id)) return 'the event names no session'
-    const lost = broken.get(session_id)
-    if (lost !== undefined) return lost
-    return sessions.get(session_id) ?? `no start of session ${session_id} was taken, so nothing it takes in can be recorded`
-  }
-
-  /** Keeps the session's record, or marks the session broken and says why. */
-  const keep = async (session: HostSession): Promise<string | undefined> => {
-    rememberSession(place.records.store, session)
-    try {
-      await place.records.flush(session.id)
-      sessions.set(session.id, session)
-      return undefined
-    } catch (error) {
-      const code = (error as { code?: unknown }).code
-      const why = `the record of session ${session.id} could not be kept (${typeof code === 'string' ? code : String(error)}), so nothing in it is answered for again`
-      sessions.delete(session.id)
-      broken.set(session.id, why)
-      return why
-    }
-  }
-
-  /** Checks the session's stored record is still the one kept, or marks it broken and says why. */
-  const vouchFor = async (session: HostSession): Promise<string | undefined> => {
-    try {
-      await place.records.check(session.id)
-      return undefined
-    } catch (error) {
-      const code = (error as { code?: unknown }).code
-      const why = `the record of session ${session.id} can no longer be vouched for (${typeof code === 'string' ? code : error instanceof Error ? error.message : String(error)}), so nothing in it is answered for again`
-      sessions.delete(session.id)
-      broken.set(session.id, why)
-      return why
-    }
-  }
-
-  const sessionStarted = async (body: Body): Promise<RelayReply> => {
-    if (!isText(body.session_id) || !isText(body.source)) return refused('the session start names no session or no source')
-    if (broken.has(body.session_id)) return refused(broken.get(body.session_id) ?? '')
-    const start = sessionStartOf(body as SessionStartHookInput)
-    await place.records.load(start.session_id)
-    const why = await keep(startSession(place.records.store, CLAUDE_CODE_SESSION_EVENTS, start))
-    return why === undefined ? answered(TAKEN) : refused(why)
-  }
-
-  const promptSubmitted = async (body: Body): Promise<RelayReply> => {
-    const session = sessionNamed(body.session_id)
-    if (typeof session === 'string') return refused(session)
-    const origin = body.origin
-    if (typeof body.text !== 'string' || !isBody(origin) || !isText(origin.kind)) {
-      return refused('the prompt carries no text or no origin the engine stamped')
-    }
-    const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind)
-    const why = await keep(takeInTurn(session, arrival, place.binder))
-    return why === undefined ? answered(TAKEN) : refused(why)
-  }
-
-  const callOf = (body: Body): { readonly tool: string; readonly input: Body } | undefined => {
-    const call = body.call
-    if (!isBody(call) || !isText(call.tool)) return undefined
-    const { tool, ...input } = call
-    return { tool, input }
-  }
-
-  const toolCalled = async (body: Body): Promise<RelayReply> => {
-    const session = sessionNamed(body.session_id)
-    if (typeof session === 'string') return denied(session)
-    const call = callOf(body)
-    if (call === undefined) return denied('the tool call names no tool')
-    const unvouched = await vouchFor(session)
-    if (unvouched !== undefined) return denied(unvouched)
-    const verdict = answerToolCall({
-      tool: call.tool,
-      session,
-      policy: place.policy,
-      input: call.input,
-      launch: place.launch,
-      names: place.names,
-      host: thisMachine,
-    })
-    return verdict === undefined ? answered(ALLOW) : denied(verdict.deny)
-  }
-
-  const toolAnswered = async (body: Body): Promise<RelayReply> => {
-    const session = sessionNamed(body.session_id)
-    if (typeof session === 'string') return stop(session)
-    const call = callOf(body)
-    if (call === undefined) return stop('a tool ran that the relay could not name')
-    const launched = recheckLaunch(place.launch, thisMachine)
-    if (!launched.allow) return stop(launched.refusal)
-    if (!isMcpToolCall(call.tool)) return answered(TAKEN)
-    const why = await keep(takeInTurn(session, { source: 'mcp_result' }, place.binder))
-    return why === undefined ? answered(TAKEN) : stop(why)
-  }
+  const stop = (why: string): RelayReply => stopMember(place, why)
 
   const handlers: Readonly<Record<RelayEvent, (body: Body) => Promise<RelayReply>>> = {
-    session_started: sessionStarted,
-    prompt_submitted: promptSubmitted,
-    tool_called: toolCalled,
-    tool_answered: toolAnswered,
+    session_started: async (body) => sessionStarted(state, body),
+    prompt_submitted: async (body) => promptSubmitted(state, body),
+    tool_called: async (body) => toolCalled(state, body),
+    tool_answered: async (body) => toolAnswered(state, body),
   }
 
   /** What an event gets when its body is no body, or its handler failed. */
@@ -210,4 +116,111 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       return next
     },
   }
+}
+
+function stopMember(place: MemberRelayPlace, why: string): RelayReply {
+  place.stopMember(why)
+  return { answered: false, stopping: why }
+}
+
+/** The session an event names, or why the launcher cannot vouch for it. */
+function sessionNamed(state: RelayState, session_id: unknown): HostSession | string {
+  if (!isText(session_id)) return 'the event names no session'
+  const lost = state.broken.get(session_id)
+  if (lost !== undefined) return lost
+  return state.sessions.get(session_id) ?? `no start of session ${session_id} was taken, so nothing it takes in can be recorded`
+}
+
+/** Marks the session broken for the rest of this process, and says why. */
+function breakSession(state: RelayState, session: HostSession, why: string): string {
+  state.sessions.delete(session.id)
+  state.broken.set(session.id, why)
+  return why
+}
+
+/** Keeps the session's record, or marks the session broken and says why. */
+async function keep(state: RelayState, session: HostSession): Promise<string | undefined> {
+  rememberSession(state.place.records.store, session)
+  try {
+    await state.place.records.flush(session.id)
+    state.sessions.set(session.id, session)
+    return undefined
+  } catch (error) {
+    const code = (error as { code?: unknown }).code
+    const why = `the record of session ${session.id} could not be kept (${typeof code === 'string' ? code : String(error)}), so nothing in it is answered for again`
+    return breakSession(state, session, why)
+  }
+}
+
+/** Checks the session's stored record is still the one kept, or marks it broken and says why. */
+async function vouchFor(state: RelayState, session: HostSession): Promise<string | undefined> {
+  try {
+    await state.place.records.check(session.id)
+    return undefined
+  } catch (error) {
+    const code = (error as { code?: unknown }).code
+    const why = `the record of session ${session.id} can no longer be vouched for (${typeof code === 'string' ? code : error instanceof Error ? error.message : String(error)}), so nothing in it is answered for again`
+    return breakSession(state, session, why)
+  }
+}
+
+async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply> {
+  if (!isText(body.session_id) || !isText(body.source)) return refused('the session start names no session or no source')
+  if (state.broken.has(body.session_id)) return refused(state.broken.get(body.session_id) ?? '')
+  const start = sessionStartOf(body as SessionStartHookInput)
+  await state.place.records.load(start.session_id)
+  const why = await keep(state, startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, start))
+  return why === undefined ? answered(TAKEN) : refused(why)
+}
+
+async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {
+  const session = sessionNamed(state, body.session_id)
+  if (typeof session === 'string') return refused(session)
+  const origin = body.origin
+  if (typeof body.text !== 'string' || !isBody(origin) || !isText(origin.kind)) {
+    return refused('the prompt carries no text or no origin the engine stamped')
+  }
+  const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind)
+  const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
+  return why === undefined ? answered(TAKEN) : refused(why)
+}
+
+function callOf(body: Body): { readonly tool: string; readonly input: Body } | undefined {
+  const call = body.call
+  if (!isBody(call) || !isText(call.tool)) return undefined
+  const { tool, ...input } = call
+  return { tool, input }
+}
+
+async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
+  const { place } = state
+  const session = sessionNamed(state, body.session_id)
+  if (typeof session === 'string') return denied(session)
+  const call = callOf(body)
+  if (call === undefined) return denied('the tool call names no tool')
+  const unvouched = await vouchFor(state, session)
+  if (unvouched !== undefined) return denied(unvouched)
+  const verdict = answerToolCall({
+    tool: call.tool,
+    session,
+    policy: place.policy,
+    input: call.input,
+    launch: place.launch,
+    names: place.names,
+    host: thisMachine,
+  })
+  return verdict === undefined ? answered(ALLOW) : denied(verdict.deny)
+}
+
+async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
+  const { place } = state
+  const session = sessionNamed(state, body.session_id)
+  if (typeof session === 'string') return stopMember(place, session)
+  const call = callOf(body)
+  if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
+  const launched = recheckLaunch(place.launch, thisMachine)
+  if (!launched.allow) return stopMember(place, launched.refusal)
+  if (!isMcpToolCall(call.tool)) return answered(TAKEN)
+  const why = await keep(state, takeInTurn(session, { source: 'mcp_result' }, place.binder))
+  return why === undefined ? answered(TAKEN) : stopMember(place, why)
 }

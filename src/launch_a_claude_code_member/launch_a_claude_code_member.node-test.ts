@@ -987,13 +987,7 @@ function killGroupsCarrying(relay_root: string): void {
   for (const entry of readdirSync('/proc')) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
-    let environment: string
-    try {
-      environment = readFileSync(`/proc/${pid}/environ`, 'utf8')
-    } catch {
-      continue
-    }
-    if (!environment.split('\0').some((line) => line.startsWith(`${RELAY_SOCKET_VARIABLE}=${relay_root}/`))) continue
+    if (!carriesRelayRoot(pid, relay_root)) continue
     const group = groupOf(pid)
     if (group === undefined || group <= 1 || group === own) continue
     try {
@@ -1002,6 +996,17 @@ function killGroupsCarrying(relay_root: string): void {
       // The group is gone already.
     }
   }
+}
+
+/** Whether the process's environment names a socket under this relay root; false when it cannot be read. */
+function carriesRelayRoot(pid: number, relay_root: string): boolean {
+  let environment: string
+  try {
+    environment = readFileSync(`/proc/${pid}/environ`, 'utf8')
+  } catch {
+    return false
+  }
+  return environment.split('\0').some((line) => line.startsWith(`${RELAY_SOCKET_VARIABLE}=${relay_root}/`))
 }
 
 /**

@@ -51,7 +51,7 @@
 // `$`. Nor does it read the approvals or the policy itself: the caller passes
 // them, until the crew's declaration (port map step 2) holds them.
 
-import { spawn, type StdioOptions } from 'node:child_process'
+import { type ChildProcess, spawn, type StdioOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -80,14 +80,15 @@ import {
   CLAUDE_SETTINGS,
   launchEnvironment,
   prepareLaunch,
+  type PreparedLaunch,
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, type MemberStart, startForegroundJob } from './member_on_the_owners_terminal.ts'
-import { makeRelayDirectory } from './relay_directory.ts'
-import { serveTheRelay } from './serve_the_relay.ts'
+import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
+import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
 
 /** The relay plugin's folder, as `--plugin-dir` names it. */
@@ -231,21 +232,34 @@ function settingsEnvironment(
   )
 }
 
-/** Starts one Claude Code member on its approved config, with its relay answered here. */
-export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
-  const refuse = (refusal: string): MemberStarted => {
-    launch.tellOwner(refusal)
-    return { started: false, refusal }
-  }
-  if (launch.place.host !== CLAUDE_CODE) return refuse(`${NOT_STARTED}: this launcher starts ${CLAUDE_CODE}, not ${launch.place.host}.`)
+/** A launch the gate allowed, with what the member's environment is built from. */
+interface ReadyLaunch {
+  readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
+  /** Removes the approved copies. */
+  removeSnapshot(): void
+  readonly hostEnv: Readonly<Record<string, string | undefined>>
+  /** What the settings files the host loads add to every server's environment. */
+  readonly settingsEnv: Readonly<Record<string, string>>
+}
+
+/** Everything a launch has made on disk and on its socket, up to the member's start. */
+interface LaunchMade extends ReadyLaunch {
+  readonly relayDirectory: Extract<RelayDirectory, { readonly made: true }>
+  readonly emptyDirectory: string
+  readonly server: RelayServer
+}
+
+/** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
+function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
+  if (launch.place.host !== CLAUDE_CODE) return `${NOT_STARTED}: this launcher starts ${CLAUDE_CODE}, not ${launch.place.host}.`
 
   const prepared = prepareLaunch(launch.place, thisMachine)
-  if (!prepared.allow) return refuse(prepared.refusal)
+  if (!prepared.allow) return prepared.refusal
   const removeSnapshot = (): void => rmSync(prepared.snapshot_dir, { recursive: true, force: true })
   const unproved = meshServerUnproved(prepared.carried_files[CLAUDE_SERVERS])
   if (unproved !== undefined) {
     removeSnapshot()
-    return refuse(`${NOT_STARTED}: ${unproved}`)
+    return `${NOT_STARTED}: ${unproved}`
   }
   const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
   const fromSettings = settingsEnvironment(
@@ -256,29 +270,34 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   )
   if ('refusal' in fromSettings) {
     removeSnapshot()
-    return refuse(`${NOT_STARTED}: ${fromSettings.refusal}`)
+    return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env }
+}
 
+/** Step 2: the relay socket's directory, and the empty directory inside it; or the refusal, with both gone. */
+function launchDirectories(
+  launch: ClaudeCodeMemberLaunch,
+  ready: ReadyLaunch,
+): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory'> | string {
   const relayDirectory = makeRelayDirectory(join(launch.places.relay_root, randomUUID()))
   if (!relayDirectory.made) {
-    removeSnapshot()
-    return refuse(relayDirectory.refusal)
+    ready.removeSnapshot()
+    return relayDirectory.refusal
   }
   const emptyDirectory = join(relayDirectory.directory, EMPTY_DIRECTORY_NAME)
   const empty = makeEmptyDirectory(emptyDirectory)
   if (!empty.made) {
     relayDirectory.remove()
-    removeSnapshot()
-    return refuse(empty.refusal)
+    ready.removeSnapshot()
+    return empty.refusal
   }
+  return { relayDirectory, emptyDirectory }
+}
 
-  let group: number | undefined
-  const stop = (why: string): void => {
-    launch.tellOwner(`${launch.member_name} is stopped: ${why}`)
-    if (group !== undefined) killGroup(group)
-  }
-
+/** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
+async function servedRelay(launch: ClaudeCodeMemberLaunch, socket_path: string, stop: (why: string) => void): Promise<RelayServer | string> {
   const relay = memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
     launch: {
@@ -293,27 +312,36 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     stopMember: stop,
   })
 
-  let server
   try {
-    server = await serveTheRelay(relay, relayDirectory.socket_path)
+    return await serveTheRelay(relay, socket_path)
   } catch (error) {
-    relayDirectory.remove()
-    removeSnapshot()
-    return refuse(`${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`)
+    return `${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`
   }
+}
 
+/** Closes the relay's server and removes the socket directory and the snapshot, in that order. */
+async function removeWhatTheLaunchMade(made: LaunchMade): Promise<void> {
+  await made.server.close()
+  made.relayDirectory.remove()
+  made.removeSnapshot()
+}
+
+/** Step 4: `claude` in a process group of its own; or why it did not start, with everything the launch made gone. */
+async function startedMember(
+  launch: ClaudeCodeMemberLaunch,
+  made: LaunchMade,
+): Promise<{ readonly child: ChildProcess; readonly pid: number } | string> {
+  const { prepared, hostEnv, relayDirectory } = made
   const env = {
-    ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, emptyDirectory)),
+    ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, made.emptyDirectory)),
     [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path,
   }
   // The host hands a server its own environment and then the settings files' env,
   // so the server's is built from both.
-  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, { ...env, ...fromSettings.env })
+  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, { ...env, ...made.settingsEnv })
   if (placed !== undefined) {
-    await server.close()
-    relayDirectory.remove()
-    removeSnapshot()
-    return refuse(`${NOT_STARTED}: ${placed}`)
+    await removeWhatTheLaunchMade(made)
+    return `${NOT_STARTED}: ${placed}`
   }
   const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR]
   const job = isOnTheOwnersTerminal(launch.stdio)
@@ -330,19 +358,21 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   const start = await memberStartOf(launch.command, spawned, job, child.pid)
   if ('refusal' in start) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-    await server.close()
-    relayDirectory.remove()
-    removeSnapshot()
-    return refuse(`${NOT_STARTED}: ${start.refusal}`)
+    await removeWhatTheLaunchMade(made)
+    return `${NOT_STARTED}: ${start.refusal}`
   }
-  group = start.pid
-  const pid = start.pid
+  return { child, pid: start.pid }
+}
 
-  const launchRecords = launchRecordsDirectory(launch.places.launch_records)
+/**
+ * Kills the member's group and removes both directories if the launcher exits
+ * first, or is ended by SIGTERM or SIGINT; returns what takes those handlers off.
+ */
+function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => void {
   const onLauncherExit = (): void => {
     killGroup(pid)
-    relayDirectory.remove()
-    removeSnapshot()
+    made.relayDirectory.remove()
+    made.removeSnapshot()
   }
   process.once('exit', onLauncherExit)
   // SIGTERM and SIGINT end the process without 'exit', so each cleans up too.
@@ -363,20 +393,68 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     for (const signal of LAUNCHER_END_SIGNALS) process.off(signal, onLauncherSignal)
   }
   for (const signal of LAUNCHER_END_SIGNALS) process.once(signal, onLauncherSignal)
+  return offLauncherEnd
+}
 
-  const stopped = new Promise<MemberStopped>((resolve) => {
+/**
+ * Settles once the member exited and everything the launch made is gone: its
+ * group killed, its launch record dropped, the server closed, both directories
+ * removed and the launcher's own end handlers off.
+ */
+function whenTheMemberStops(
+  child: ChildProcess,
+  pid: number,
+  launch: ClaudeCodeMemberLaunch,
+  launchRecords: ReturnType<typeof launchRecordsDirectory>,
+  made: LaunchMade,
+  offLauncherEnd: () => void,
+): Promise<MemberStopped> {
+  return new Promise<MemberStopped>((resolve) => {
     child.once('exit', (exit_code, signal) => {
       void (async () => {
         killGroup(pid)
         recordMemberStopped(launchRecords, launch.member_name)
-        await server.close()
-        relayDirectory.remove()
-        removeSnapshot()
+        await removeWhatTheLaunchMade(made)
         offLauncherEnd()
         resolve({ exit_code, signal })
       })()
     })
   })
+}
+
+/** Starts one Claude Code member on its approved config, with its relay answered here. */
+export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
+  const refuse = (refusal: string): MemberStarted => {
+    launch.tellOwner(refusal)
+    return { started: false, refusal }
+  }
+  const ready = readyLaunch(launch)
+  if (typeof ready === 'string') return refuse(ready)
+  const directories = launchDirectories(launch, ready)
+  if (typeof directories === 'string') return refuse(directories)
+
+  let group: number | undefined
+  const stop = (why: string): void => {
+    launch.tellOwner(`${launch.member_name} is stopped: ${why}`)
+    if (group !== undefined) killGroup(group)
+  }
+
+  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop)
+  if (typeof server === 'string') {
+    directories.relayDirectory.remove()
+    ready.removeSnapshot()
+    return refuse(server)
+  }
+  const made: LaunchMade = { ...ready, ...directories, server }
+
+  const started = await startedMember(launch, made)
+  if (typeof started === 'string') return refuse(started)
+  group = started.pid
+  const pid = started.pid
+
+  const launchRecords = launchRecordsDirectory(launch.places.launch_records)
+  const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
+  const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd)
 
   const recorded = recordMemberLaunch(launchRecords, linuxProcessIdentities, {
     member_name: launch.member_name,
