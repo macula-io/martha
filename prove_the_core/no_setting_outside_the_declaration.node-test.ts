@@ -8,17 +8,28 @@ import { settingsReadOutsideTheDeclaration, type Source } from './no_setting_out
 
 const repository = join(import.meta.dirname, '..')
 const src = join(repository, 'src')
-const scripts = (JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts
+const manifest = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as {
+  scripts: Record<string, string>
+  martha?: { hostGlue?: string[] }
+}
+const scripts = manifest.scripts
 
 // Which files under src/ are not slices, as package.json declares them: the test
-// files its test script runs, and the programs its other scripts run with node.
+// files its test script runs, the programs its other scripts run with node, and
+// the host glue it lists under martha.hostGlue.
 const testSuffixes = [...(scripts['test'] ?? '').matchAll(/'src\/\*\*\/\*([^']+)'/g)].map(match => match[1] ?? '')
 const programsRunByScripts = Object.entries(scripts)
   .filter(([name]) => name !== 'test')
   .flatMap(([, command]) => [...command.matchAll(/\bnode\s+src\/([^/\s]+)\//g)].map(match => match[1] ?? ''))
 
-const isSlice = (path: string) =>
-  !testSuffixes.some(suffix => path.endsWith(suffix)) && !programsRunByScripts.includes(path.split(sep)[0] ?? '')
+// The host glue: the code that implements the host contract on one machine. It is
+// declared as src/<directory>; it is not a slice, and reaching the machine is its job.
+const hostGlue = (manifest.martha?.hostGlue ?? []).map(entry => entry.replace(/^src\//, ''))
+
+const isSlice = (path: string) => {
+  const top = path.split(sep)[0] ?? ''
+  return !testSuffixes.some(suffix => path.endsWith(suffix)) && !programsRunByScripts.includes(top) && !hostGlue.includes(top)
+}
 
 interface Planted {
   readonly caught: Readonly<Record<string, readonly { readonly text: string; readonly lines: readonly number[] }[]>>
@@ -36,11 +47,19 @@ test('package.json names a test glob and at least one program, so the exemptions
   assert.notDeepEqual(programsRunByScripts, [])
 })
 
-test('a test file and a program a script runs are not slices; a directory that only starts like one is', () => {
+test('a test file, a program a script runs and host glue are not slices; a directory that only starts like one is', () => {
   for (const suffix of testSuffixes) assert.equal(isSlice(join('a', `a${suffix}`)), false)
-  for (const program of programsRunByScripts) {
-    assert.equal(isSlice(join(program, 'main.ts')), false)
-    assert.equal(isSlice(join(`${program}_too`, 'x.ts')), true)
+  for (const directory of [...programsRunByScripts, ...hostGlue]) {
+    assert.equal(isSlice(join(directory, 'main.ts')), false)
+    assert.equal(isSlice(join(`${directory}_too`, 'x.ts')), true)
+  }
+})
+
+test('every host glue entry is one directory under src/ that exists', () => {
+  const directories = new Set(coreSources(src).map(source => source.path.split(sep)[0]))
+  for (const entry of manifest.martha?.hostGlue ?? []) {
+    assert.match(entry, /^src\/[^/]+$/, entry)
+    assert.ok(directories.has(entry.replace(/^src\//, '')), entry)
   }
 })
 

@@ -23,8 +23,8 @@
 // - a file the parser cannot read is named, since nothing in it can be proved.
 //
 // Which files are slices is the caller's to say: the test derives the files that
-// are not (tests, and the programs CI runs) from package.json, where they are
-// declared.
+// are not (tests, the programs CI runs, and the host glue that implements the
+// contract on one machine) from package.json, where they are declared.
 
 import { dirname, join, normalize, sep } from 'node:path'
 
@@ -32,8 +32,8 @@ import ts from 'typescript'
 
 import { lineOf, moduleReferencesIn, nodesOf, parseSource } from './parse_a_source.ts'
 
-/** The Node modules a slice may import: pure functions that read no machine state. */
-export const NODE_MODULES_A_SLICE_MAY_IMPORT = ['node:path'] as const
+/** The Node modules a slice may import: pure computation that reads no setting and no machine state. */
+export const NODE_MODULES_A_SLICE_MAY_IMPORT = ['node:path', 'node:crypto'] as const
 
 /** The globals a slice may not use as a value. */
 export const GLOBALS_A_SLICE_MAY_NOT_USE = ['process', 'globalThis', 'global', 'require', 'eval', 'Function'] as const

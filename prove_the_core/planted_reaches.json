@@ -292,6 +292,7 @@
     "const { process: renamed } = record",
     "const o = { process: 1, global: 2 }",
     "interface Host { process: string }",
-    "function f(eval_text: string) { return eval_text }"
+    "function f(eval_text: string) { return eval_text }",
+    "import { createHash } from 'node:crypto'"
   ]
 }
