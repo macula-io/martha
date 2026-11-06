@@ -122,15 +122,32 @@ export function environmentFromSettings(
       refusals.push(read.refusal)
       continue
     }
-    const notString = Object.keys(read.env).filter((name) => typeof read.env[name] !== 'string')
-    const unallowed = Object.keys(read.env).filter((name) => !permitted.has(name))
-    if (notString.length > 0) refusals.push(`${file.path} gives ${notString.join(', ')} a value that is not a string`)
-    if (unallowed.length > 0) {
-      refusals.push(
-        `${file.path} sets ${unallowed.join(', ')} for every server Claude Code starts, the mesh server included, which no reviewer approved (only ${allowed.join(', ')} and Claude Code's own ${[...OWN].join(', ')}); remove it from that file's env`,
-      )
-    }
-    for (const [name, value] of Object.entries(read.env)) if (typeof value === 'string') env[name] = value
+    refusals.push(...refusalsOfEnv(file.path, read.env, permitted, allowed))
+    takeStrings(env, read.env)
   }
   return refusals.length > 0 ? { refusal: refusals.join('; ') } : { env }
+}
+
+/** Each refusal one settings file's env earns: values that are not strings, then variables no server may be given. */
+function refusalsOfEnv(
+  path: string,
+  file_env: Readonly<Record<string, unknown>>,
+  permitted: ReadonlySet<string>,
+  allowed: readonly string[],
+): string[] {
+  const refusals: string[] = []
+  const notString = Object.keys(file_env).filter((name) => typeof file_env[name] !== 'string')
+  const unallowed = Object.keys(file_env).filter((name) => !permitted.has(name))
+  if (notString.length > 0) refusals.push(`${path} gives ${notString.join(', ')} a value that is not a string`)
+  if (unallowed.length > 0) {
+    refusals.push(
+      `${path} sets ${unallowed.join(', ')} for every server Claude Code starts, the mesh server included, which no reviewer approved (only ${allowed.join(', ')} and Claude Code's own ${[...OWN].join(', ')}); remove it from that file's env`,
+    )
+  }
+  return refusals
+}
+
+/** Sets each string value of a file's env over what an earlier file set: a later file wins. */
+function takeStrings(env: Record<string, string>, file_env: Readonly<Record<string, unknown>>): void {
+  for (const [name, value] of Object.entries(file_env)) if (typeof value === 'string') env[name] = value
 }

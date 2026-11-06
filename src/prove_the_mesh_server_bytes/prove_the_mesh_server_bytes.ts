@@ -192,13 +192,16 @@ function environmentReadOf(text: string): { readonly names: readonly string[]; r
 export function settingsReadIn(sources: readonly PackageSource[], prefix: string = SETTING_PREFIX): readonly string[] {
   const read = new Set<string>()
   for (const { path, text } of sources) {
-    const { names, computed } = environmentReadOf(text)
-    if (computed) {
-      throw new Error(`${path} reads the environment by a key that is not a literal: the settings the server reads cannot be listed`)
-    }
-    for (const key of names) if (key.startsWith(prefix)) read.add(key)
+    for (const key of literalReadsIn(path, text).filter((literal) => literal.startsWith(prefix))) read.add(key)
   }
   return [...read].sort()
+}
+
+/** Every literal key one source reads; refuses a source that reads by a key that is no literal. */
+function literalReadsIn(path: string, text: string): readonly string[] {
+  const { names, computed } = environmentReadOf(text)
+  if (computed) throw new Error(`${path} reads the environment by a key that is not a literal: the settings the server reads cannot be listed`)
+  return names
 }
 
 const byName = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]): number => (a < b ? -1 : a > b ? 1 : 0)

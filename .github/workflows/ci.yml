@@ -129,6 +129,30 @@ jobs:
           ln -s "$PRIVATE_VAR" "$LINKED_VAR"
           TMPDIR="$LINKED_VAR/$MAC_SHAPED_TMP" npm test
 
+  # The structural floor (martha#87): no function nests deeper than two levels,
+  # branches past the complexity cap or runs past the length cap. The caps live
+  # in eslint.config.mjs; npm test proves they bite (prove_the_core/
+  # structure_stays_flat.node-test.ts) and this runs them over the whole tree.
+  # No baseline, no continue-on-error, and no warning allowed: an eslint-disable
+  # comment is ignored with a warning, so it fails here too.
+  structure:
+    name: structural floor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      # The installer is a project of its own (its own package.json, published
+      # as the signed package), so the floor is run in it as well, by the same
+      # eslint and the same eslint.config.mjs, which eslint finds above it.
+      - name: the structural floor in the installer
+        working-directory: installer
+        run: ../node_modules/.bin/eslint . --max-warnings=0
+
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects
   # never runs, and the only sign is a failed run with no jobs, which nobody reads.
   # The release workflows run on a tag or by hand only, so this is where a broken

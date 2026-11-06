@@ -36,14 +36,26 @@ export function callInputs (text, workflowFile) {
   const lines = text.split('\n')
   const at = lines.findIndex((l) => new RegExp(`^\\s*uses: \\S+/${workflowFile.replace('.', '\\.')}@`).test(l))
   assert.ok(at >= 0, `no call to ${workflowFile}`)
-  const indent = (/** @type {string} */ l) => (l.match(/^\s*/)?.[0] ?? '').length
   const withAt = lines.findIndex((l, i) => i > at && /^\s*with:\s*$/.test(l))
-  assert.ok(withAt > at && indent(lines[withAt] ?? '') === indent(lines[at] ?? ''), `the call to ${workflowFile} has no with:`)
+  assert.ok(withAt > at && indentOf(lines[withAt] ?? '') === indentOf(lines[at] ?? ''), `the call to ${workflowFile} has no with:`)
+  return inputsUnder(lines, withAt)
+}
+
+/** @param {string} line */
+const indentOf = (line) => (line.match(/^\s*/)?.[0] ?? '').length
+
+/**
+ * The key: value lines indented under the `with:` at `withAt`, up to the first line that is not, quotes dropped.
+ * @param {string[]} lines
+ * @param {number} withAt
+ */
+function inputsUnder (lines, withAt) {
+  const depth = indentOf(lines[withAt] ?? '')
   /** @type {Record<string, string>} */
   const inputs = {}
   for (const line of lines.slice(withAt + 1)) {
     if (line.trim() === '') continue
-    if (indent(line) <= indent(lines[withAt] ?? '')) break
+    if (indentOf(line) <= depth) break
     const m = line.match(/^\s*([\w-]+):\s*(.*?)\s*$/)
     if (m?.[1]) inputs[m[1]] = (m[2] ?? '').replace(/^['"]|['"]$/g, '')
   }
@@ -143,9 +155,26 @@ const PUSH = 'skopeo copy --preserve-digests'
  * @param {string} text
  */
 function ociFlaws (text) {
+  return [...buildFlaws(text), ...pushFlaws(text)]
+}
+
+/**
+ * Each `docker buildx build` (continuation lines joined) without one of OCI_FLAGS, or that there is none.
+ * @param {string} text
+ */
+function buildFlaws (text) {
   const builds = [...text.replace(/\\\n\s*/g, ' ').matchAll(/docker buildx build [^\n]*/g)].map((m) => m[0])
-  const flaws = builds.length ? [] : ['no build']
-  for (const build of builds) for (const flag of OCI_FLAGS) if (!build.includes(flag)) flaws.push(`a build without ${flag}`)
+  if (builds.length === 0) return ['no build']
+  return builds.flatMap((build) => OCI_FLAGS.filter((flag) => !build.includes(flag)).map((flag) => `a build without ${flag}`))
+}
+
+/**
+ * A push of anything but the checked layout, a push before the check, or no proof the pushed digest is the checked.
+ * @param {string} text
+ */
+function pushFlaws (text) {
+  /** @type {string[]} */
+  const flaws = []
   if (/push=true|docker push/.test(text)) flaws.push('a push that is not the checked layout')
   const checked = text.indexOf('application/vnd.oci.image.manifest.v1+json')
   const pushed = text.indexOf(PUSH)

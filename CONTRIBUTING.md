@@ -23,6 +23,7 @@ Node 24.18.1 or later, from the repository root:
 npm ci
 npm test               # every capability's tests
 npm run typecheck      # tsc --noEmit
+npm run lint           # the structural floor
 ```
 
 `npm test` ends on its own. A test that runs longer than the test script's
@@ -53,6 +54,14 @@ test passed. A test that starts a child which reports its environment captures
 that child's output (`stdio: 'pipe'`) and asserts on the names it needs; it
 never lets the output through, and never puts a whole environment in an
 assertion message.
+
+`npm run lint` holds every function to the structural floor: no block nested
+deeper than an `if` inside an `if`, a cyclomatic complexity of at most 9, and at
+most 60 lines, blank lines and comments aside. The caps are named once, in
+`eslint.config.mjs`, and `prove_the_core/structure_stays_flat.node-test.ts`
+plants a function over each to prove they bite. There is no baseline and no
+exception: an `eslint-disable` comment is ignored, with a warning, and the run
+allows none. A function over a cap is split into named steps.
 
 CI runs those, and three more: every link in every document must resolve, both
 logos must be valid SVG, and `npm run check:private` must find no private link,

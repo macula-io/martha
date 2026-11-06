@@ -226,20 +226,31 @@ const refersTo = (symbol: ts.Symbol | undefined, declarations: ReadonlySet<ts.De
  */
 function onlyReads(checker: ts.TypeChecker, name: ts.Node, readers: ReadonlySet<ts.Declaration>): boolean {
   const reached = name.parent
-  const reaches = (ts.isPropertyAccessExpression(reached) && reached.name === name) ||
-    (ts.isElementAccessExpression(reached) && reached.argumentExpression === name)
-  if (!reaches) return false
+  if (!reachesThrough(reached, name)) return false
 
   const use = reached.parent
-  if (ts.isPropertyAccessExpression(use) && use.expression === reached && use.name.text === READS) {
+  if (isTheReadOf(use, reached)) {
     return ts.isCallExpression(use.parent) && use.parent.expression === use
   }
-  if (ts.isCallExpression(use) && use.arguments.some((argument) => argument === reached)) {
+  if (isHandedTo(use, reached)) {
     const callee = ts.isPropertyAccessExpression(use.expression) ? use.expression.name : use.expression
     return refersTo(referredSymbol(checker, callee), readers)
   }
   return false
 }
+
+/** Whether `name` is what `reached` reaches for: `stores.launches` or `stores['launches']`. */
+const reachesThrough = (reached: ts.Node, name: ts.Node): boolean =>
+  (ts.isPropertyAccessExpression(reached) && reached.name === name) ||
+  (ts.isElementAccessExpression(reached) && reached.argumentExpression === name)
+
+/** Whether `use` is the store's `.all`, taken off `reached`. */
+const isTheReadOf = (use: ts.Node, reached: ts.Node): use is ts.PropertyAccessExpression =>
+  ts.isPropertyAccessExpression(use) && use.expression === reached && use.name.text === READS
+
+/** Whether `use` is a call that `reached` is handed to as an argument. */
+const isHandedTo = (use: ts.Node, reached: ts.Node): use is ts.CallExpression =>
+  ts.isCallExpression(use) && use.arguments.some((argument) => argument === reached)
 
 const sliceOf = (path: string): string => path.split(sep)[0] ?? ''
 

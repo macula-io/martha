@@ -80,14 +80,21 @@ export const isInAType = (node: ts.Node): boolean => {
 export function isUsedAsAValue(node: ts.Identifier): boolean {
   const parent = node.parent
   if (ts.isShorthandPropertyAssignment(parent)) return true
-  if (ts.isQualifiedName(parent) && parent.right === node) return false
-  if (ts.isBindingElement(parent) && parent.propertyName === node) return false
-  if (ts.isLabeledStatement(parent) || ts.isBreakOrContinueStatement(parent)) return false
-  if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return false
+  if (namesAPartOrALabel(node, parent) || namesAnImportOrExport(parent)) return false
   // A declaration, a property assignment or a member names its own name: not a use of a global.
   if ('name' in parent && parent.name === node) return false
   return !isInAType(node)
 }
+
+/** Whether the identifier is a qualified name's right side, a destructured property's name, or a label. */
+const namesAPartOrALabel = (node: ts.Identifier, parent: ts.Node): boolean =>
+  (ts.isQualifiedName(parent) && parent.right === node) ||
+  (ts.isBindingElement(parent) && parent.propertyName === node) ||
+  ts.isLabeledStatement(parent) || ts.isBreakOrContinueStatement(parent)
+
+/** Whether the identifier is a name an import or an export binds. */
+const namesAnImportOrExport = (parent: ts.Node): boolean =>
+  ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)
 
 /** Every node of a parsed source, in order. */
 export function nodesOf(file: ts.SourceFile): ts.Node[] {
@@ -103,9 +110,16 @@ export function nodesOf(file: ts.SourceFile): ts.Node[] {
 const literalText = (node: ts.Node | undefined): string | null =>
   node !== undefined && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) ? node.text : null
 
+/** A module reference made at the node being read. */
+type ReferenceAt = (specifier: string | null, kind: ModuleReferenceKind, type_only: boolean) => ModuleReference
+
 const referenceOf = (file: ts.SourceFile, node: ts.Node): ModuleReference | null => {
-  const at = (specifier: string | null, kind: ModuleReferenceKind, type_only: boolean): ModuleReference =>
-    ({ specifier, kind, type_only, line: lineOf(file, node) })
+  const at: ReferenceAt = (specifier, kind, type_only) => ({ specifier, kind, type_only, line: lineOf(file, node) })
+  return declaredReferenceOf(node, at) ?? typeOrCallReferenceOf(node, at)
+}
+
+// The statements that name a module: an import, an export from, an import equals.
+const declaredReferenceOf = (node: ts.Node, at: ReferenceAt): ModuleReference | null => {
   if (ts.isImportDeclaration(node)) {
     return at(literalText(node.moduleSpecifier), 'import', node.importClause?.isTypeOnly ?? false)
   }
@@ -115,6 +129,11 @@ const referenceOf = (file: ts.SourceFile, node: ts.Node): ModuleReference | null
   if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
     return at(literalText(node.moduleReference.expression), 'require', node.isTypeOnly)
   }
+  return null
+}
+
+// The rest that name a module: a JSDoc import, an import type, a dynamic import, a require call.
+const typeOrCallReferenceOf = (node: ts.Node, at: ReferenceAt): ModuleReference | null => {
   if (ts.isJSDocImportTag(node)) {
     return at(literalText(node.moduleSpecifier), 'import', true)
   }

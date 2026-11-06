@@ -55,22 +55,35 @@ export function testRunBoundOf(manifest: Manifest): TestRunBound {
   const script = manifest.scripts[TEST_SCRIPT]
   if (script === undefined) return { bounded: false, problems: [`package.json has no "${TEST_SCRIPT}" script`] }
   const words = wordsOf(script)
-  const timeouts = words.filter((word) => word === TIMEOUT_FLAG || word.startsWith(`${TIMEOUT_FLAG}=`))
-  const value = timeouts.length === 1 ? timeouts[0]?.slice(`${TIMEOUT_FLAG}=`.length) : undefined
-  const timeout_ms = value !== undefined && /^[1-9][0-9]*$/.test(value) ? Number(value) : undefined
-  const problems = [
-    ...(timeouts.length === 0 ? [`the test script has no ${TIMEOUT_FLAG}, so a test that hangs never fails`] : []),
-    ...(timeouts.length > 1 ? [`the test script passes ${TIMEOUT_FLAG} ${timeouts.length} times; it must say it once`] : []),
-    ...(timeouts.length === 1 && timeout_ms === undefined
-      ? [`the test script's ${TIMEOUT_FLAG} is not ${TIMEOUT_FLAG}=<a whole number of ms above 0>: ${timeouts[0]}`]
-      : []),
-    ...(words.includes(FORCE_EXIT_FLAG)
-      ? []
-      : [`the test script has no ${FORCE_EXIT_FLAG}, so a test file that holds a handle open never exits`]),
-    ...(words.includes(GUARD_FLAG)
-      ? []
-      : [`the test script has no ${GUARD_FLAG}, so a test file that leaves something running passes silently`]),
-  ]
+  const { timeouts, timeout_ms } = timeoutOf(words)
+  const problems = [...timeoutProblemsOf(timeouts, timeout_ms), ...exitAndGuardProblemsOf(words)]
   if (problems.length > 0 || timeout_ms === undefined) return { bounded: false, problems }
   return { bounded: true, timeout_ms, flags: testRunFlagsOf(manifest) }
 }
+
+/** The script's timeout flags, and the timeout when it says one, once, as a whole number of ms above 0. */
+function timeoutOf(words: readonly string[]): { timeouts: string[]; timeout_ms: number | undefined } {
+  const timeouts = words.filter((word) => word === TIMEOUT_FLAG || word.startsWith(`${TIMEOUT_FLAG}=`))
+  const value = timeouts.length === 1 ? timeouts[0]?.slice(`${TIMEOUT_FLAG}=`.length) : undefined
+  const timeout_ms = value !== undefined && /^[1-9][0-9]*$/.test(value) ? Number(value) : undefined
+  return { timeouts, timeout_ms }
+}
+
+/** What is wrong with the script's timeout: missing, said more than once, or not a whole number of ms. */
+const timeoutProblemsOf = (timeouts: readonly string[], timeout_ms: number | undefined): string[] => [
+  ...(timeouts.length === 0 ? [`the test script has no ${TIMEOUT_FLAG}, so a test that hangs never fails`] : []),
+  ...(timeouts.length > 1 ? [`the test script passes ${TIMEOUT_FLAG} ${timeouts.length} times; it must say it once`] : []),
+  ...(timeouts.length === 1 && timeout_ms === undefined
+    ? [`the test script's ${TIMEOUT_FLAG} is not ${TIMEOUT_FLAG}=<a whole number of ms above 0>: ${timeouts[0]}`]
+    : []),
+]
+
+/** What is wrong with the rest: no force-exit, or no guard that fails a file leaving something running. */
+const exitAndGuardProblemsOf = (words: readonly string[]): string[] => [
+  ...(words.includes(FORCE_EXIT_FLAG)
+    ? []
+    : [`the test script has no ${FORCE_EXIT_FLAG}, so a test file that holds a handle open never exits`]),
+  ...(words.includes(GUARD_FLAG)
+    ? []
+    : [`the test script has no ${GUARD_FLAG}, so a test file that leaves something running passes silently`]),
+]
