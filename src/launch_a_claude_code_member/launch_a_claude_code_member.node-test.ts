@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -692,7 +692,7 @@ test('an approved config that installs a recorded mesh server version starts the
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
-  assert.equal(entry.args.at(-1), join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
@@ -1234,7 +1234,7 @@ test('a member on the owner\'s terminal starts the recorded mesh server tree, by
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
-  assert.equal(entry.args.at(-1), join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   terminal.type(LEAVE_LINE)
   await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
 })

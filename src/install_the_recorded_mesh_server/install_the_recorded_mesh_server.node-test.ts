@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import process from 'node:process'
@@ -178,7 +178,8 @@ test('a recorded version is installed from its lock and started by path, with th
   const root = scratch(t, 'servers')
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(undefined, { [SETTING]: 'x' }), root, recording: recorded(t, good) }))
   assert.equal(entry.command, process.execPath)
-  assert.equal(entry.args.at(-1), join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  // The tree sits under the root's real path (a tmpdir may be a symlink, as /var is on macOS).
+  assert.equal(entry.args.at(-1), join(realpathSync(root), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   assert.deepEqual(entry.env, { ...HOST, [SETTING]: 'x' }, 'the entry keeps its own settings, and HOME and PATH from the host')
   assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
@@ -187,7 +188,7 @@ test('the bin started is the server bin the version\'s record names, and an entr
   const { good } = await registries(t)
   const recording = recorded(t, good)
   const root = scratch(t, 'servers')
-  const server = join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
+  const server = join(realpathSync(root), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
   // The launch gate decides which shapes may start; whichever passed, the server bin is what runs.
   const withoutBin = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(['-y', `${MESH_SERVER_PACKAGE}@${VERSION}`]), root, recording }))
   assert.equal(withoutBin.args.at(-1), server)
@@ -246,8 +247,8 @@ test('the server is started with the launcher\'s own confining hook, naming its 
   const hookFile = fileURLToPath(new URL(hookUrl.pathname, hookUrl))
   assert.equal(hookFile, CONFINING_HOOK)
   for (const outside of [root, home]) assert.ok(relative(outside, hookFile).startsWith('..'), `the hook ${hookFile} sits under ${outside}`)
-  assert.ok(decodeURIComponent(hookUrl.search).includes(pathToFileURL(join(root, VERSION, 'node_modules')).href), hookUrl.search)
-  assert.equal(server, join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.ok(decodeURIComponent(hookUrl.search).includes(pathToFileURL(join(realpathSync(root), VERSION, 'node_modules')).href), hookUrl.search)
+  assert.equal(server, join(realpathSync(root), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
 })
 
 test('a module the tree lacks is not loaded from a node_modules above it or from HOME, by require or by import (martha#73)', async (t) => {
@@ -282,6 +283,9 @@ test('a root reached through a symlink still starts the confined server: the tre
   const link = join(scratch(t, 'linked'), 'servers')
   symlinkSync(real, link)
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: link, recording }))
+  // The bin and the confined tree are named by the real path, as a test's expectations must name them.
+  assert.equal(entry.args.at(-1), join(realpathSync(link), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(real, VERSION, 'node_modules')).href), String(entry.args[1]))
   const run = spawnSync(entry.command, entry.args, { cwd: real, env: { ...HOST, ...entry.env }, encoding: 'utf8' })
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)
