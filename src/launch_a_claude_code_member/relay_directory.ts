@@ -14,7 +14,7 @@
 // can still connect to the socket and claim any origin (T13, under A13, closed
 // by the signed roster, martha#24).
 
-import { lstatSync, mkdirSync, rmSync } from 'node:fs'
+import { type Stats, lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import process, { getuid } from 'node:process'
 
@@ -51,16 +51,8 @@ const REFUSED = 'The member is not started: its relay socket has no safe place'
 /** Makes `directory`, which must not exist yet, for one launch's relay socket. */
 export function makeRelayDirectory(directory: string, owner_uid: number = getuid?.() ?? -1): RelayDirectory {
   const socket_path = join(directory, RELAY_SOCKET_NAME)
-  const bytes = Buffer.byteLength(socket_path)
-  const longest = longestSocketPath()
-  if (bytes > longest) {
-    return {
-      made: false,
-      refusal:
-        `${REFUSED}: ${socket_path} is ${String(bytes)} bytes, longer than the ${String(longest)} a socket address holds ` +
-        `on ${process.platform}; give the launcher a shorter relay root.`,
-    }
-  }
+  const tooLong = problemWithSocketLength(socket_path)
+  if (tooLong !== undefined) return { made: false, refusal: tooLong }
 
   const parent = dirname(directory)
   const parentProblem = problemWithParent(parent, owner_uid)
@@ -75,11 +67,26 @@ export function makeRelayDirectory(directory: string, owner_uid: number = getuid
 
   const made = lstatSync(directory)
   const remove = (): void => rmSync(directory, { recursive: true, force: true })
-  if (!made.isDirectory() || made.uid !== owner_uid || (made.mode & PERMISSION_BITS) !== RELAY_DIRECTORY_MODE) {
+  if (!isOnlyTheOwners(made, owner_uid)) {
     remove()
     return { made: false, refusal: `${REFUSED}: ${directory} was not made as a directory only this user may enter.` }
   }
   return { made: true, directory, socket_path, remove }
+}
+
+function problemWithSocketLength(socket_path: string): string | undefined {
+  const bytes = Buffer.byteLength(socket_path)
+  const longest = longestSocketPath()
+  if (bytes <= longest) return undefined
+  return (
+    `${REFUSED}: ${socket_path} is ${String(bytes)} bytes, longer than the ${String(longest)} a socket address holds ` +
+    `on ${process.platform}; give the launcher a shorter relay root.`
+  )
+}
+
+/** A real directory, owned by `owner_uid`, mode 0700 exactly. */
+function isOnlyTheOwners(made: Stats, owner_uid: number): boolean {
+  return made.isDirectory() && made.uid === owner_uid && (made.mode & PERMISSION_BITS) === RELAY_DIRECTORY_MODE
 }
 
 function problemWithParent(parent: string, owner_uid: number): string | undefined {

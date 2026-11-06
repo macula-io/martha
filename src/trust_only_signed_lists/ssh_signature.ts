@@ -113,10 +113,14 @@ function checkSignature(key: SshPublicKey, signature: Buffer, signed: Buffer): S
   if (type !== key.type || raw === undefined) return { valid: false, why: 'the signature type does not match its key' }
 
   if (key.type === ED25519) {
-    if (!reader.ok() || !reader.atEnd()) return { valid: false, why: 'the signature is malformed' }
+    if (!readToTheEnd(reader)) return { valid: false, why: 'the signature is malformed' }
     return verified(key, raw, signed, true)
   }
+  return checkHardwareKeySignature(key, raw, reader, signed)
+}
 
+/** A FIDO signature: the flags and counter follow the Ed25519 bytes, and the authenticator signed over them. */
+function checkHardwareKeySignature(key: SshPublicKey, raw: Buffer, reader: WireReader, signed: Buffer): SignatureCheck {
   const flags = reader.byte()
   const counter = reader.u32()
   if (!reader.ok() || !reader.atEnd() || flags === undefined || counter === undefined) {
@@ -133,6 +137,11 @@ function checkSignature(key: SshPublicKey, signature: Buffer, signed: Buffer): S
   return verified(key, raw, authenticated, (flags & USER_PRESENT) === USER_PRESENT)
 }
 
+/** The reader met no short read and has nothing left over. */
+function readToTheEnd(reader: WireReader): boolean {
+  return reader.ok() && reader.atEnd()
+}
+
 function verified(key: SshPublicKey, raw: Buffer, data: Buffer, user_present: boolean): SignatureCheck {
   const public_key = createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, key.ed25519]), format: 'der', type: 'spki' })
   return verify(null, data, public_key, raw)
@@ -147,9 +156,14 @@ function keyFromBlob(blob: Buffer): SshPublicKey | undefined {
   if (ed25519?.length !== 32) return undefined
   if (type === ED25519) return reader.atEnd() && reader.ok() ? { type, blob, ed25519 } : undefined
   if (type !== SK_ED25519) return undefined
+  return hardwareKeyFrom(reader, blob, ed25519)
+}
+
+/** A FIDO key's blob carries the application it is bound to after the Ed25519 bytes. */
+function hardwareKeyFrom(reader: WireReader, blob: Buffer, ed25519: Buffer): SshPublicKey | undefined {
   const application = reader.string()
   if (application === undefined || !reader.atEnd() || !reader.ok()) return undefined
-  return { type, blob, ed25519, application: application.toString() }
+  return { type: SK_ED25519, blob, ed25519, application: application.toString() }
 }
 
 function dearmor(armored: string): Buffer | undefined {
