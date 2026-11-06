@@ -3,8 +3,10 @@
 // held to it: the tag globs and guard inputs each job passes, the signer sha every signing job calls, the version
 // files the guard reads, the installer's repository.url, and the install line a reader copies.
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
-import { basename, dirname, relative } from 'node:path'
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -160,6 +162,21 @@ test('nothing reaches the registry until its manifest is checked locally, and wh
   assert.ok(ociFlaws(pushFirst).includes('a push before the media-type check'), 'the order pin bites')
   assert.ok(ociFlaws(workflow.release.replace('--digestfile', '--quiet')).includes('no proof the pushed digest is the checked one'), 'the digest pin bites')
   assert.ok(ociFlaws(workflow.release.replace('type=oci,', 'type=image,push=true,')).includes('a push that is not the checked layout'), 'a direct push is named')
+})
+
+test('a build that fails in the dry run is reported by the command that failed, not by a later check', (t) => {
+  // build() is run as the workflow defines it, with a docker that fails: the error must name buildx.
+  const fn = workflow.dryRun.match(/^( *)build\(\) \{\n[\s\S]*?\n\1\}$/m)?.[0]
+  assert.ok(fn, 'the dry run defines build()')
+  const dir = mkdtempSync(join(tmpdir(), 'martha-dry-run-build-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  writeFileSync(join(dir, 'docker'), '#!/bin/sh\necho "buildx said no" >&2\nexit 7\n')
+  chmodSync(join(dir, 'docker'), 0o755)
+  const script = `set -euo pipefail\nRUNNER_TEMP="${dir}"; RELEASE_CTX="${dir}"; IMAGE=example.invalid/x\n${fn}\nbuild t\necho "after the build"\n`
+  const run = spawnSync('bash', ['-c', script], { env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` }, encoding: 'utf8' })
+  assert.notEqual(run.status, 0, 'the step fails')
+  assert.match(run.stderr, /::error::docker buildx build failed for t/, run.stderr)
+  assert.ok(!run.stdout.includes('after the build'), 'nothing runs after a failed build')
 })
 
 test('every image is built by a docker-container builder and checked to be one OCI manifest before it is signed', () => {
