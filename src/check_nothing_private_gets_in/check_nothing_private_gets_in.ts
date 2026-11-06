@@ -9,7 +9,7 @@
 // resolver that asks whether that repository is public, so a private repository
 // is refused without this public tree having to name it.
 
-import { digestStartsIn } from './public_digest.ts'
+import { digestStartsFinder } from './public_digest.ts'
 import { PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
@@ -99,6 +99,7 @@ interface TextClass {
 const textClasses = (rules: Rules): readonly TextClass[] => {
   const synthetic = (pattern: string, flags = '') => (value: string) => rules.allowSynthetic && new RegExp(pattern, flags).test(value)
   const machine = rules.labHosts.length === 0 ? '' : families(rules)
+  const digestStarts = digestStartsFinder(PUBLIC_TEXT_PATTERNS.hex_id)
   // A domain has no case: an allowed address passes however its domain is written.
   const allowEmail = new RegExp(
     `^(${PUBLIC_TEXT_PATTERNS.allow_email}${rules.publicEmails.map((domain) => `|[A-Za-z0-9._%+-]+@${domain.replace(/[.]/g, '\\.')}`).join('')}${rules.publicAddresses.map((address) => `|${address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('')})$`,
@@ -143,7 +144,7 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
       // A public digest is accepted only where a declared form holds it
       // (public_digest.ts); a bare 64-hex is a node id or a key until shown otherwise.
       accepts: (value, at, text) =>
-        synthetic(SYNTHETIC.hex_id)(value) || digestStartsIn(text, PUBLIC_TEXT_PATTERNS.hex_id).has(at),
+        synthetic(SYNTHETIC.hex_id)(value) || digestStarts(text).has(at),
     },
   ]
 }

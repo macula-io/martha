@@ -336,6 +336,29 @@ test('a 64-hex string outside a declared form is refused', async () => {
     `${id}   .`,
     `node ${id}  release.tar.gz`,
     `key=${id}  release.tar.gz`,
+    // A listing of ids beside a host, an address, a version or a file, with no
+    // checksum check on the line, indented or in a table cell.
+    `${id}  station.example.org`,
+    `${id}  203.0.113.7`,
+    `${id}  0.51.0`,
+    `    ${id}  peer.example.org`,
+    `| ${id}  peer.json |`,
+    `{"node": "${id}  x.y"}`,
+    `${id} *keys.json`,
+    `${id}  direnv.linux-amd64`,
+    `echo "${id}  direnv.linux-amd64"`,
+    `echo "${id}  direnv.linux-amd64" | sha256sum`,
+    `echo "${id}  direnv.linux-amd64" | tee sums -c`,
+    `echo "${id} release.tar.gz" | sha256sum -c`,
+    `echo "${id}  release.tar.gz" | shasum -c`,
+    `echo "${id}  release.tar.gz' | sha256sum -c`,
+    `echo ${id}  release.tar.gz | sha256sum -c`,
+    // A label that does not stand alone.
+    `node-sha256: ${id}`,
+    `peer.sha256: ${id}`,
+    `NODE_SHA256=${id}`,
+    `https://example.org/?sha256=${id}`,
+    `https://example.org/?a=1&sha256=${id}`,
   ]) {
     assert.ok((await hitsOf(text)).includes(hexHit(id)), text)
   }
@@ -344,5 +367,5 @@ test('a 64-hex string outside a declared form is refused', async () => {
 test('a declared form vouches only for the digest it holds, never a second id on the line', async () => {
   const [first, second] = [realShaped(), realShaped()]
   assert.deepEqual(await hitsOf(`sha256: ${first} ${second}`), [hexHit(second)])
-  assert.deepEqual(await hitsOf(`${first}  release.tar.gz ${second}`), [hexHit(second)])
+  assert.deepEqual(await hitsOf(`echo "${first}  release.tar.gz" | sha256sum -c ${second}`), [hexHit(second)])
 })

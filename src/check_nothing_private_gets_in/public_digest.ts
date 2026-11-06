@@ -7,9 +7,13 @@
 // a 64-hex string passes only where one of these forms holds it. Anything else,
 // a bare id beside a digest included, is still refused.
 //
-// `%h` is the hex class's own pattern (PUBLIC_TEXT_PATTERNS.hex_id); the form's
-// first group is the digest. `written` lists how each form is written in this
-// repository, with `%h` for the digest: the docs show them, the tests plant them.
+// A form guards against an id pasted by accident, not one disguised on purpose:
+// no text rule can tell a deliberate `sha256:<id>` from a digest.
+//
+// `%h` marks the digest: the check fills it with the hex class's own pattern
+// (PUBLIC_TEXT_PATTERNS.hex_id). `written` lists how each form is written in
+// this repository, with `%h` for the digest: the docs show them, the tests
+// plant them.
 export const HEX_SLOT = '%h'
 
 export interface DigestForm {
@@ -19,40 +23,46 @@ export interface DigestForm {
 
 export const PUBLIC_DIGEST_FORMS: Readonly<Record<string, DigestForm>> = {
   // Labelled as a sha256: an image reference's `@sha256:`, an OCI `sha256:`
-  // digest, or a field named sha256 in YAML, JSON or TOML. The label is a word
-  // of its own: `node_sha256:` is not one.
+  // digest, or a field named sha256 in YAML, JSON or TOML. The label stands
+  // alone: it opens the line or follows a space, a quote, `@`, `{`, `,` or `[`,
+  // so `node-sha256:`, `peer.sha256:` and `?sha256=` are not one.
   labelled_sha256: {
-    pattern: String.raw`\b(?:sha256|SHA256)["']?[ \t]*[:=][ \t]*["']?(%h)`,
+    pattern: String.raw`(?:^|(?<=[\s"'@{,\[]))(?:sha256|SHA256)["']?[ \t]*[:=][ \t]*["']?%h`,
     written: [
       'example.org/image@sha256:%h',
       'sha256:%h',
-      'sha256: %h',
-      '"sha256": "%h"',
+      '  sha256: %h',
+      '{"sha256": "%h"}',
       'sha256 = "%h"',
     ],
   },
-  // A sha256sum line: the digest opens the line (after its indentation) or a
-  // quoted string, then the tool's own separator, two spaces or a space and a
-  // star, then the file it is the digest of. The file name has an extension, so
-  // a word after an id is not read as a file, and a word before one is not a line.
-  sha256sum_line: {
-    pattern: String.raw`(?:^[ \t]*|(?<=["']))(%h)(?:  | \*)[A-Za-z0-9_][A-Za-z0-9._+/-]*\.[A-Za-z0-9_+-]+`,
+  // A sha256sum line, checked where it is written: a quoted `<digest>  <file>`
+  // (or `<digest> *<file>`) piped on the same line to sha256sum, or shasum -a
+  // 256, with -c or --check. A table of ids beside host names, addresses or
+  // versions has the same shape and no check, so it is refused.
+  checked_sha256sum_line: {
+    pattern: String.raw`(["'])%h(?:  | \*)[A-Za-z0-9_./+-]+\1[ \t]*\|[ \t]*(?:sha256sum|shasum[ \t]+-a[ \t]*256)(?:[ \t]+-[-A-Za-z]*)*?[ \t]+(?:-c|--check)(?![-A-Za-z])`,
     written: [
-      '%h  direnv.linux-amd64',
-      '%h *release.tar.gz',
-      '  %h  release.tar.gz',
       'echo "%h  direnv.linux-amd64" | sha256sum -c',
+      "echo '%h *direnv' | shasum -a 256 --check",
+      'echo "%h  release.tar.gz" | sha256sum --strict --check -',
     ],
   },
 }
 
-// Where in a line a declared form holds a digest: the start of each digest it
-// holds. A 64-hex string passes only when it starts at one of these.
-export const digestStartsIn = (text: string, hexPattern: string): ReadonlySet<number> =>
-  new Set(
-    Object.values(PUBLIC_DIGEST_FORMS).flatMap((form) =>
-      [...text.matchAll(new RegExp(form.pattern.replaceAll(HEX_SLOT, hexPattern), 'gd'))].flatMap((found) =>
-        found.indices?.[1] === undefined ? [] : [found.indices[1][0]],
-      ),
-    ),
+// The finder over every form, built once: given a line, where each digest a form
+// holds starts. A 64-hex string passes only when it starts at one of these.
+export const digestStartsFinder = (hexPattern: string) => {
+  const forms = Object.values(PUBLIC_DIGEST_FORMS).map(
+    (form) => new RegExp(form.pattern.replaceAll(HEX_SLOT, `(?<digest>${hexPattern})`), 'gd'),
   )
+  return (text: string): ReadonlySet<number> =>
+    new Set(
+      forms.flatMap((form) =>
+        [...text.matchAll(form)].flatMap((found) => {
+          const at = found.indices?.groups?.['digest']
+          return at === undefined ? [] : [at[0]]
+        }),
+      ),
+    )
+}
