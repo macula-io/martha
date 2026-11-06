@@ -72,8 +72,11 @@ export async function runWithAPlantedSecret(command: readonly string[], env: Nod
   const value = plantedValue()
   const child = spawn(program, args, { env: { ...env, [PLANTED_VARIABLE]: value }, stdio: ['inherit', 'pipe', 'pipe'] })
   const counters = { stdout: plantedValueCounter(value), stderr: plantedValueCounter(value) }
-  const passThrough = (stream: StreamName) => (chunk: Buffer) => {
-    const text = chunk.toString('utf8')
+  // Decoded per stream, not per chunk: a character split across two chunks
+  // reaches the output whole, and the reporter's marks stay readable.
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  const passThrough = (stream: StreamName) => (text: string) => {
     counters[stream].scan(text)
     process[stream].write(text)
   }
