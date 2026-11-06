@@ -1,9 +1,10 @@
 {
-  "_why": "The bins and the tools of each version of the mesh server, read from its published package so the allowed and refused mesh tools are proved against every version a member may install, not a list typed by hand (martha#2, item 5; martha#49). A member whose approved config installs a version not recorded here, or starts a bin that version does not have, is not started. Record a version with: npm run record:mesh-tools -- <extracted package directory>. Retire one by removing its record.",
+  "_why": "The bins and the tools of each version of the mesh server, read from its published package so the allowed and refused mesh tools are proved against every version a member may install, not a list typed by hand (martha#2, item 5; martha#49). A member whose approved config installs a version not recorded here, or starts any bin but that version's server_bin, is not started. Record a version with: npm run record:mesh-tools -- <extracted package directory> <its server bin>; server_bin is the only bin a member may start. Retire one by removing its record.",
   "server": "@macula-io/mcp",
   "versions": [
     {
       "server_version": "0.51.0",
+      "server_bin": "macula-mcp",
       "bins": {
         "macula-mcp": "dist/index.js",
         "macula-mcp-register": "dist/bin/register.js",
@@ -53,6 +54,7 @@
     },
     {
       "server_version": "0.51.2",
+      "server_bin": "macula-mcp",
       "bins": {
         "macula-mcp": "dist/index.js",
         "macula-mcp-register": "dist/bin/register.js",

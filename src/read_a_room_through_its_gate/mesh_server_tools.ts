@@ -24,8 +24,12 @@
 // npx runs one of them: told none (`npx -y <pkg>@<v>`), it runs the only bin or
 // the one named after the package, and refuses when there are several and none
 // is (libnpmexec's getBinFromManifest); told one (`npx -y -p <pkg>@<v> <bin>`),
-// it runs that bin. So a launch is refused unless the bin it would run is one
-// the recorded version has (refusalOfInstalledMeshServers, binNpxRuns).
+// it runs that bin. Only one of the bins is the server; the others are the
+// package's own tools (a doctor that spawns the commands every MCP client
+// config names, a register that rewrites host configs). So each record names
+// its server bin (`server_bin`), chosen by whoever records the version and
+// visible in the reviewed record, and a launch is refused unless the bin it
+// would run is that one (refusalOfInstalledMeshServers, binNpxRuns).
 //
 // The records are read from the package's own code: every
 // `registerTool("<name>"` call in its JavaScript. A call whose name is not a
@@ -40,6 +44,8 @@ export interface RecordedMeshServer {
   /** The package's name, as its package.json gives it. */
   readonly server: string
   readonly server_version: string
+  /** The one bin that is the server: the only bin a member may start. */
+  readonly server_bin: string
   /** Its bins, as its package.json names them, each to the file it runs. */
   readonly bins: Readonly<Record<string, string>>
   /** Every tool name it registers, sorted. */
@@ -59,6 +65,7 @@ export interface MeshServerRecording {
   readonly server: string
   readonly versions: readonly {
     readonly server_version: string
+    readonly server_bin: string
     readonly bins: Readonly<Record<string, string>>
     readonly tools: readonly string[]
   }[]
@@ -106,8 +113,10 @@ export const RECORDED_MESH_SERVERS: readonly RecordedMeshServer[] = RECORDING.ve
 const unscoped = (pkg: string): string => pkg.slice(pkg.lastIndexOf('/') + 1)
 
 /**
- * The bin `npx -y <pkg>@<version>` runs when it is told none, as npx picks it:
- * the only one, or the one named after the package; undefined when it cannot pick.
+ * The bin `npx -y <pkg>@<version>` runs when it is told none: the only one, or
+ * the one named after the package; otherwise undefined. npm also runs the first
+ * name when several names point at one file; this returns undefined there too,
+ * so such a launch is refused: it fails closed, never open.
  */
 export function binNpxRuns(bins: Readonly<Record<string, string>>, pkg: string): string | undefined {
   const names = Object.keys(bins)
@@ -117,14 +126,14 @@ export function binNpxRuns(bins: Readonly<Record<string, string>>, pkg: string):
 
 /** Why one recorded version cannot be started the way it is installed, or undefined. */
 function refusalOfBin(install: MeshServerInstall, record: RecordedMeshServer): string | undefined {
-  const named = Object.keys(record.bins)
-  const bins = named.join(', ') || 'none'
+  const shape = `npx -y -p ${record.server}@${record.server_version} ${record.server_bin}`
   if (install.bin === undefined) {
-    if (binNpxRuns(record.bins, record.server) !== undefined) return undefined
-    return `its server ${install.server} starts ${record.server} ${record.server_version} without naming a bin, and npx cannot pick one of its bins (${bins}): name the one to run, as npx -y -p ${record.server}@${record.server_version} <bin>.`
+    if (binNpxRuns(record.bins, record.server) === record.server_bin) return undefined
+    return `its server ${install.server} starts ${record.server} ${record.server_version} without naming a bin, and npx would not run its server bin ${record.server_bin} from its bins (${Object.keys(record.bins).join(', ')}): start it as ${shape}.`
   }
-  if (named.includes(install.bin)) return undefined
-  return `its server ${install.server} starts bin ${install.bin} of ${record.server} ${record.server_version}, which has no such bin (it has ${bins}).`
+  if (install.bin === record.server_bin) return undefined
+  const what = install.bin in record.bins ? 'one of its tools, not the server' : 'no bin it has'
+  return `its server ${install.server} starts bin ${install.bin} of ${record.server} ${record.server_version}, which is ${what}: start it as ${shape}.`
 }
 
 /**
@@ -163,7 +172,7 @@ function olderFirst(a: string, b: string): number {
 }
 
 /**
- * The recording with one version's bins and tools recorded: added in version order, or
+ * The recording with one version's server bin, bins and tools recorded: added in version order, or
  * replacing that version's record, every other version kept. A package of
  * another name, or a version that names no single release, is refused.
  */
@@ -171,6 +180,7 @@ export function withRecordedVersion(
   current: MeshServerRecording,
   manifest: { readonly name: string; readonly version: string; readonly bin?: string | Readonly<Record<string, string>> },
   tools: readonly string[],
+  serverBin: string,
 ): MeshServerRecording {
   if (manifest.name !== current.server) {
     throw new Error(`The package is ${manifest.name}, and the recording is of ${current.server}: record ${current.server} only`)
@@ -182,7 +192,10 @@ export function withRecordedVersion(
   if (Object.keys(bins).length === 0) {
     throw new Error(`The package ${manifest.name} ${manifest.version} has no bin, so npx can start nothing from it: this is not the mesh server`)
   }
+  if (!Object.hasOwn(bins, serverBin)) {
+    throw new Error(`The package ${manifest.name} ${manifest.version} has no bin ${serverBin} (it has ${Object.keys(bins).join(', ')}): name its server bin`)
+  }
   const others = current.versions.filter((recorded) => recorded.server_version !== manifest.version)
-  const versions = [...others, { server_version: manifest.version, bins, tools }].sort((a, b) => olderFirst(a.server_version, b.server_version))
+  const versions = [...others, { server_version: manifest.version, server_bin: serverBin, bins, tools }].sort((a, b) => olderFirst(a.server_version, b.server_version))
   return { ...current, versions }
 }
