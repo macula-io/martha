@@ -192,7 +192,8 @@ export interface ArgumentProbe {
  * The questions every argument gate is asked, one per class of word the host
  * acts on after the launch gate: a prompt, config, a plugin, a permission, a
  * session brought back, a switch smuggled in as another's value, a switch the
- * gate has never heard of. The first is no arguments at all, so a gate that
+ * gate has never heard of, and the short and --switch=value spellings that
+ * reach the same switches. The first is no arguments at all, so a gate that
  * refuses everything is caught.
  */
 export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
@@ -208,6 +209,11 @@ export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
   { passes: false, what: 'a session brought back', args: ['--resume', 'a-session'] },
   { passes: false, what: 'a switch carried as another switch\'s value', args: ['--model', '--settings', '{}'] },
   { passes: false, what: 'a switch nobody has read', args: ['--a-switch-a-later-host-adds'] },
+  { passes: false, what: 'a prompt by its short switch', args: ['-p', 'a prompt'] },
+  { passes: false, what: 'the last session brought back by its short switch', args: ['-c'] },
+  { passes: false, what: 'a session brought back by its short switch', args: ['-r', 'a-session'] },
+  { passes: false, what: 'a settings file in the --switch=value spelling', args: ['--settings={}'] },
+  { passes: false, what: 'a passed switch in the --switch=value spelling', args: ['--model=a-model'] },
 ]
 
 /** Why a row naming a launch gate is a gap: it is not launched, says nothing of where Martha does not start the host, or its gate fails a question. */
