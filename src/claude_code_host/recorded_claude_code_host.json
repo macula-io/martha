@@ -1,0 +1,5 @@
+{
+  "_why": "What the Claude Code host itself says, recorded from its binary so the adapter derives from the host and not from a list typed by hand (#41). Re-record with: node src/claude_code_host/record_claude_code_host.ts <claude binary> <version>.",
+  "host_version": "2.1.318",
+  "session_start_schema": "hook_event_name:T(\"SessionStart\"),source:B([\"startup\",\"resume\",\"clear\",\"compact\",\"fork\"])"
+}
