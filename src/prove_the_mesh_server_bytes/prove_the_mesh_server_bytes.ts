@@ -20,6 +20,16 @@
 //   - `settings`: the MACULA_* settings the server's code reads. A version that
 //     reads one nobody reviewed is not recorded (refusalOfSettings): a new
 //     setting could load code, and a new pin must not let it in silently.
+//   - `environment_reads`: what every package of the tree reads from the
+//     environment, by package: each name read by a literal key with the files
+//     that read it, and the files that read by a key that is no literal
+//     (martha#72). A package reading a name the server is started with (HOME,
+//     PATH, an approved setting) is not recorded unless someone reviewed that
+//     read (refusalOfEnvironmentReads), since a new release of any dependency
+//     could otherwise act on a name nobody listed. A read by a computed key is
+//     listed, not refused: common dependencies make them (node-gyp-build reads
+//     `<NAME>_PREBUILD`), and every name the server is not started with is
+//     emptied for it anyway.
 //
 // The registry is recorded once: every tarball of every lock comes from it.
 // The host adapter that installs, compares and starts the tree is
@@ -56,6 +66,8 @@ export interface RecordedMeshTree {
   readonly server_version: string
   readonly integrity: string
   readonly settings: readonly string[]
+  /** What each package of the tree reads from the environment, by package name (martha#72). */
+  readonly environment_reads: Readonly<Record<string, PackageEnvironmentReads>>
   readonly lock: NpmLock
   /** Every installed file, by path under the install directory, with its sha512. */
   readonly files: Readonly<Record<string, string>>
@@ -68,7 +80,20 @@ export interface MeshTreeRecording {
   readonly registry: string
   /** The settings someone has reviewed: a version reading any other is not recorded. */
   readonly known_settings: readonly string[]
+  /**
+   * The reads of a name the server is started with that someone has reviewed,
+   * by package: a package reading another one is not recorded (martha#72).
+   */
+  readonly known_environment_reads: Readonly<Record<string, readonly string[]>>
   readonly versions: readonly RecordedMeshTree[]
+}
+
+/** What one package reads from the environment. */
+export interface PackageEnvironmentReads {
+  /** Each name read by a literal key, with the files that read it, sorted. */
+  readonly reads: Readonly<Record<string, readonly string[]>>
+  /** The files that read by a key that is no literal, so the name cannot be listed, sorted. */
+  readonly computed: readonly string[]
 }
 
 /** The hash every recorded file and tarball is named by. */
@@ -85,6 +110,7 @@ export const sriOf = (bytes: Uint8Array): string => `${TREE_HASH}-${createHash(T
 export const MESH_TREE_RECORDING = recording as MeshTreeRecording
 export const MESH_SERVER_REGISTRY: string = MESH_TREE_RECORDING.registry
 export const KNOWN_MESH_SERVER_SETTINGS: readonly string[] = MESH_TREE_RECORDING.known_settings
+export const KNOWN_ENVIRONMENT_READS: Readonly<Record<string, readonly string[]>> = MESH_TREE_RECORDING.known_environment_reads
 export const RECORDED_MESH_TREES: readonly RecordedMeshTree[] = MESH_TREE_RECORDING.versions
 
 /** A package's name from its key in the lock: the part after the last node_modules/. */
@@ -146,11 +172,21 @@ export function refusalOfLock(lock: NpmLock, pin: LockPin): string | undefined {
 // `process.env["X"]`, can be listed; so can a spread, `...process.env`, which
 // hands the whole environment to a child and reads no setting itself. Anything
 // else (a computed key, a destructure, the object kept under another name or
-// passed along) could read a setting nobody can list, so it is refused by file.
-const ANY_READ = /\bprocess\.env\b/g
+// passed along, the environment or the process named by a bracket) could read
+// a setting nobody can list, so it is refused by file.
+const ANY_READS = [/\bprocess\s*\.\s*env\b/g, /\bprocess\s*\[\s*(["'`])env\1\s*\]/g, /\bglobalThis\s*\[\s*(["'`])process\1\s*\]/g]
 const DOT_READ = /\bprocess\.env\.([A-Za-z_$][\w$]*)/g
 const BRACKET_READ = /\bprocess\.env\[\s*(["'])([^"'\\]+)\1\s*\]/g
 const SPREAD = /\.\.\.\s*process\.env\b(?!\s*[.[?])/g
+
+/** The names one file's code reads by a literal key, and whether it reads any by a key that is no literal. */
+function environmentReadOf(text: string): { readonly names: readonly string[]; readonly computed: boolean } {
+  const dotted = [...text.matchAll(DOT_READ)].map((match) => match[1] ?? '')
+  const bracketed = [...text.matchAll(BRACKET_READ)].map((match) => match[2] ?? '')
+  const spreads = [...text.matchAll(SPREAD)].length
+  const any = ANY_READS.reduce((count, read) => count + [...text.matchAll(read)].length, 0)
+  return { names: [...dotted, ...bracketed], computed: any !== dotted.length + bracketed.length + spreads }
+}
 
 /** Every setting the sources read, sorted; refuses a read whose key cannot be listed. */
 export function settingsReadIn(sources: readonly PackageSource[], prefix: string = SETTING_PREFIX): readonly string[] {
@@ -161,15 +197,104 @@ export function settingsReadIn(sources: readonly PackageSource[], prefix: string
   return [...read].sort()
 }
 
-/** Every literal key one source reads, dotted then bracketed; refuses a source with any other read. */
-function literalReadsIn(path: string, text: string): string[] {
-  const dotted = [...text.matchAll(DOT_READ)].map((match) => match[1] ?? '')
-  const bracketed = [...text.matchAll(BRACKET_READ)].map((match) => match[2] ?? '')
-  const spreads = [...text.matchAll(SPREAD)].length
-  if ([...text.matchAll(ANY_READ)].length !== dotted.length + bracketed.length + spreads) {
-    throw new Error(`${path} reads the environment by a key that is not a literal: the settings the server reads cannot be listed`)
+/** Every literal key one source reads; refuses a source that reads by a key that is no literal. */
+function literalReadsIn(path: string, text: string): readonly string[] {
+  const { names, computed } = environmentReadOf(text)
+  if (computed) throw new Error(`${path} reads the environment by a key that is not a literal: the settings the server reads cannot be listed`)
+  return names
+}
+
+const byName = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/** The package a file of the installed tree belongs to: the deepest package of the lock whose directory holds it. */
+function packageOfFile(path: string, lock: NpmLock): string {
+  const holders = Object.keys(lock.packages).filter((key) => key !== '' && path.startsWith(`${key}/`))
+  const deepest = holders.sort((a, b) => b.length - a.length)[0]
+  if (deepest === undefined) throw new Error(`${path} is in no package of the lock, so whose reads it holds cannot be told`)
+  return nameOfKey(deepest)
+}
+
+/**
+ * What every package of an installed tree reads from the environment, by
+ * package name: each name read by a literal key with its files, and the files
+ * that read by a key that is no literal. Only packages that read something are
+ * listed; names, packages and files are sorted, so a re-record shows exactly
+ * which read is new. The sources are the tree's code, by path under the
+ * install directory, as `files` names them.
+ */
+export function environmentReadsInTree(sources: readonly PackageSource[], lock: NpmLock): Record<string, PackageEnvironmentReads> {
+  const found = new Map<string, { reads: Map<string, Set<string>>; computed: Set<string> }>()
+  for (const { path, text } of sources) {
+    const { names, computed } = environmentReadOf(text)
+    if (names.length === 0 && !computed) continue
+    const name = packageOfFile(path, lock)
+    const of = found.get(name) ?? { reads: new Map<string, Set<string>>(), computed: new Set<string>() }
+    found.set(name, of)
+    for (const read of names) of.reads.set(read, (of.reads.get(read) ?? new Set<string>()).add(path))
+    if (computed) of.computed.add(path)
   }
-  return [...dotted, ...bracketed]
+  return Object.fromEntries(
+    [...found.entries()].sort(byName).map(([name, { reads, computed }]) => [
+      name,
+      { reads: Object.fromEntries([...reads.entries()].sort(byName).map(([read, files]) => [read, [...files].sort()])), computed: [...computed].sort() },
+    ]),
+  )
+}
+
+/** Each read of a list as one line: the package, the name or that it is computed, and the file. */
+function linesOfReads(reads: Readonly<Record<string, PackageEnvironmentReads>>): Set<string> {
+  return new Set(
+    Object.entries(reads).flatMap(([name, of]) => [
+      ...Object.entries(of.reads).flatMap(([read, files]) => files.map((file) => `${name} reads ${read} in ${file}`)),
+      ...of.computed.map((file) => `${name} reads by a key that is no literal in ${file}`),
+    ]),
+  )
+}
+
+/**
+ * How the reads a tree was recorded with differ from the reads its bytes hold,
+ * or undefined when they are the same: a record judged only against itself
+ * would pass a read struck from it. Names each read with package and file.
+ */
+export function changesInEnvironmentReads(
+  recorded: Readonly<Record<string, PackageEnvironmentReads>>,
+  derived: Readonly<Record<string, PackageEnvironmentReads>>,
+): string | undefined {
+  const inRecord = linesOfReads(recorded)
+  const inBytes = linesOfReads(derived)
+  const unrecorded = [...inBytes].filter((line) => !inRecord.has(line)).sort()
+  const gone = [...inRecord].filter((line) => !inBytes.has(line)).sort()
+  const changes = [...listed('the bytes hold reads the record leaves out:', unrecorded), ...listed('the record holds reads the bytes do not:', gone)]
+  return changes.length === 0 ? undefined : changes.join('; ')
+}
+
+/** What decides whether a tree's environment reads may be recorded and run. */
+export interface EnvironmentReview {
+  /** The server's own package, whose reads of its reviewed settings those settings already cover. */
+  readonly server: string
+  /** Every name the server is started with a value for: the ones it keeps from the host and its approved settings. */
+  readonly startedWith: readonly string[]
+  /** The server's reviewed settings (known_settings). */
+  readonly knownSettings: readonly string[]
+  /** The reviewed reads, by package (known_environment_reads). */
+  readonly knownReads: Readonly<Record<string, readonly string[]>>
+}
+
+/**
+ * Why a tree whose packages read these names may not be recorded or run, or
+ * undefined: every read of a name the server is started with is reviewed for
+ * that package. Names each unreviewed read with its package and files.
+ */
+export function refusalOfEnvironmentReads(reads: Readonly<Record<string, PackageEnvironmentReads>>, review: EnvironmentReview): string | undefined {
+  const unreviewed = Object.entries(reads).flatMap(([name, of]) =>
+    Object.entries(of.reads)
+      .filter(([read]) => review.startedWith.includes(read))
+      .filter(([read]) => !(name === review.server && review.knownSettings.includes(read)))
+      .filter(([read]) => !(review.knownReads[name] ?? []).includes(read))
+      .map(([read, files]) => `${name} reads ${read} in ${files.join(', ')}`),
+  )
+  if (unreviewed.length === 0) return undefined
+  return `${unreviewed.join('; ')}, and the server is started with that name, so nobody has reviewed what the package does with it. Review each read, then add the name under the package in known_environment_reads in a reviewed commit.`
 }
 
 /** Why a version reading these settings may not be recorded yet, or undefined when each is known. */

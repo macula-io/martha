@@ -11,7 +11,10 @@ import {
   MESH_SERVER_REGISTRY,
   RECORDED_MESH_TREES,
   SETTING_PREFIX,
+  changesInEnvironmentReads,
   changesInTree,
+  environmentReadsInTree,
+  refusalOfEnvironmentReads,
   refusalOfLock,
   refusalOfSettings,
   settingsReadIn,
@@ -99,6 +102,8 @@ const UNREADABLE_READS = {
   'a destructured read': 'const { MACULA_A } = process.env',
   'the environment kept under another name': 'const env = process.env; env.MACULA_A',
   'the environment handed to a function': 'readAll(process.env)',
+  'the environment named by a bracket': "const v = process['env'].MACULA_A",
+  'the process named by a bracket on globalThis': "const v = globalThis['process'].env.MACULA_A",
 }
 
 for (const [what, text] of Object.entries(UNREADABLE_READS)) {
@@ -118,6 +123,87 @@ test('the known settings are the prefix\'s own, sorted, and cover what every rec
   for (const setting of KNOWN_MESH_SERVER_SETTINGS) assert.ok(setting.startsWith(SETTING_PREFIX), setting)
   assert.deepEqual([...KNOWN_MESH_SERVER_SETTINGS].sort(), KNOWN_MESH_SERVER_SETTINGS)
   for (const tree of RECORDED_MESH_TREES) assert.equal(refusalOfSettings(tree.settings, KNOWN_MESH_SERVER_SETTINGS), undefined, tree.server_version)
+})
+
+// --- what every package of the tree reads (martha#72) --------------------------
+
+const NESTED = 'nested-dependency'
+const NESTED_KEY = `${DEPENDENCY_KEY}/node_modules/${NESTED}`
+const lockWithNested = (): NpmLock => ({ ...lockWith(), packages: { ...lockWith().packages, [NESTED_KEY]: { version: VERSION } } })
+const KEPT = 'HOME'
+const APPROVED = 'MACULA_A'
+const EMPTIED = 'SOME_OTHER_NAME'
+const review = (knownReads: Record<string, readonly string[]> = {}) => ({
+  server: MESH_SERVER_PACKAGE,
+  startedWith: [KEPT, APPROVED],
+  knownSettings: [APPROVED],
+  knownReads,
+})
+
+test('the reads of every package are listed by package, each name with its files, a nested package apart from the one holding it', () => {
+  const reads = environmentReadsInTree(
+    [
+      source(`const h = process.env.${KEPT}; const o = process.env['${EMPTIED}']`, `${DEPENDENCY_KEY}/b.js`),
+      source(`const h = process.env.${KEPT}`, `${DEPENDENCY_KEY}/a.js`),
+      source(`const a = process.env.${APPROVED}`, `${NESTED_KEY}/index.js`),
+      source(`const a = process.env.${APPROVED}`, `${SERVER_KEY}/dist/index.js`),
+      source('const nothing = 1', `${DEPENDENCY_KEY}/quiet.js`),
+    ],
+    lockWithNested(),
+  )
+  assert.deepEqual(reads, {
+    [MESH_SERVER_PACKAGE]: { reads: { [APPROVED]: [`${SERVER_KEY}/dist/index.js`] }, computed: [] },
+    [DEPENDENCY]: { reads: { [EMPTIED]: [`${DEPENDENCY_KEY}/b.js`], [KEPT]: [`${DEPENDENCY_KEY}/a.js`, `${DEPENDENCY_KEY}/b.js`] }, computed: [] },
+    [NESTED]: { reads: { [APPROVED]: [`${NESTED_KEY}/index.js`] }, computed: [] },
+  })
+})
+
+test('a dependency reading by a key that is no literal is listed by file, not refused', () => {
+  const reads = environmentReadsInTree([source("const p = process.env[name + '_PREBUILD']", `${DEPENDENCY_KEY}/build.js`)], lockWith())
+  assert.deepEqual(reads, { [DEPENDENCY]: { reads: {}, computed: [`${DEPENDENCY_KEY}/build.js`] } })
+  assert.equal(refusalOfEnvironmentReads(reads, review()), undefined)
+})
+
+test('a file in no package of the lock is refused, naming it', () => {
+  assert.throws(() => environmentReadsInTree([source(`process.env.${KEPT}`, 'node_modules/stray/index.js')], lockWith()), /node_modules\/stray\/index\.js/)
+})
+
+const readsOf = (name: string, read: string, file = `node_modules/${name}/index.js`) => ({ [name]: { reads: { [read]: [file] }, computed: [] } })
+
+for (const [what, read] of [['a name it keeps from the host', KEPT], ['an approved setting', APPROVED]] as const) {
+  test(`a dependency reading ${what} that nobody reviewed is refused, naming the package, the name and the file`, () => {
+    const refusal = refusalOfEnvironmentReads(readsOf(DEPENDENCY, read), review()) ?? ''
+    assert.ok(refusal.includes(`${DEPENDENCY} reads ${read} in node_modules/${DEPENDENCY}/index.js`), refusal)
+    assert.equal(refusalOfEnvironmentReads(readsOf(DEPENDENCY, read), review({ [DEPENDENCY]: [read] })), undefined)
+  })
+}
+
+test('a review of one package does not cover the same read in another', () => {
+  const refusal = refusalOfEnvironmentReads({ ...readsOf(DEPENDENCY, KEPT), ...readsOf(NESTED, KEPT) }, review({ [DEPENDENCY]: [KEPT] })) ?? ''
+  assert.ok(refusal.includes(NESTED) && !refusal.includes(`${DEPENDENCY} reads`), refusal)
+})
+
+test('the server reading its reviewed settings needs no other review; reading a kept name does', () => {
+  assert.equal(refusalOfEnvironmentReads(readsOf(MESH_SERVER_PACKAGE, APPROVED), review()), undefined)
+  assert.ok(refusalOfEnvironmentReads(readsOf(MESH_SERVER_PACKAGE, KEPT), review())?.includes(`${MESH_SERVER_PACKAGE} reads ${KEPT}`))
+})
+
+test('a read of a name the server is never started with is listed, not refused: it is emptied for the server', () => {
+  assert.equal(refusalOfEnvironmentReads(readsOf(DEPENDENCY, EMPTIED), review()), undefined)
+})
+
+test('a recorded list of reads equal to what the bytes read has no change', () => {
+  const reads = { ...readsOf(DEPENDENCY, KEPT), [NESTED]: { reads: {}, computed: [`${NESTED_KEY}/index.js`] } }
+  assert.equal(changesInEnvironmentReads(reads, structuredClone(reads)), undefined)
+})
+
+test('a read the bytes hold and the record leaves out, and one the record holds and the bytes do not, are each named with package, name and file', () => {
+  const recorded = readsOf(NESTED, APPROVED)
+  const derived = { ...readsOf(DEPENDENCY, KEPT), [NESTED]: { reads: {}, computed: [`${NESTED_KEY}/index.js`] } }
+  const changes = changesInEnvironmentReads(recorded, derived) ?? ''
+  assert.ok(changes.includes(`${DEPENDENCY} reads ${KEPT} in node_modules/${DEPENDENCY}/index.js`), changes)
+  assert.ok(changes.includes(`${NESTED} reads by a key that is no literal in ${NESTED_KEY}/index.js`), changes)
+  assert.ok(changes.includes(`${NESTED} reads ${APPROVED} in node_modules/${NESTED}/index.js`), changes)
 })
 
 // --- the tree a member runs ----------------------------------------------------
@@ -145,10 +231,11 @@ const treeAt = (server_version: string, files: Record<string, string> = FILES): 
   settings: [],
   lock: lockWith(),
   files,
+  environment_reads: {},
 })
 
 test('recording a tree keeps every other version, in version order, with its files sorted by path', () => {
-  const empty = { _why: '', registry: MESH_SERVER_REGISTRY, known_settings: [], versions: [] }
+  const empty = { _why: '', registry: MESH_SERVER_REGISTRY, known_settings: [], known_environment_reads: {}, versions: [] }
   const reversed = Object.fromEntries(Object.entries(FILES).reverse())
   const recorded = withRecordedTree(withRecordedTree(withRecordedTree(empty, treeAt('1.10.0')), treeAt('1.9.0', reversed)), treeAt('1.10.0'))
   assert.deepEqual(recorded.versions.map((tree) => tree.server_version), ['1.9.0', '1.10.0'])

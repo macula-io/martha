@@ -28,6 +28,7 @@ import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { POLL_MS, until } from './wait_until_the_event.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
@@ -560,14 +561,6 @@ function fakeClaude(place: Place): { command: string; argsFile: string; envFile:
   return { command, ...files }
 }
 
-async function until(what: string, holds: () => boolean, ms = 5000): Promise<void> {
-  const deadline = Date.now() + ms
-  while (!holds()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  }
-}
-
 const isAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0)
@@ -576,6 +569,103 @@ const isAlive = (pid: number): boolean => {
     return false
   }
 }
+
+/** Reads one file under /proc; throws when the process is gone. The tests of environmentOf plant their own. */
+type ProcRead = (path: string) => string
+const readProc: ProcRead = (path) => readFileSync(path, 'utf8')
+/** The kernel's thread daemon: it and every thread it parents have no environment at all. */
+const KERNEL_THREAD_PARENT = 2
+/** How long cleanup waits on one process's environment before passing it by. */
+const CLEANUP_SETTLE_MS = 500
+
+/** How a caller waits for an environment to settle: a test on its harness (martha#90), cleanup on its own bound. */
+type Settle = (what: string, holds: () => boolean) => Promise<void>
+
+/** A test waits for as long as the event takes; the harness's --test-timeout ends a wait that never does. */
+const inTest =
+  (t: TestContext): Settle =>
+  (what, holds) =>
+    until(what, holds, t)
+
+/**
+ * Cleanup waits at most `ms`, then passes on: it must end even for a process
+ * whose environment stays empty, which `env -i` starts, and a hung cleanup would
+ * only be reported as the harness's timeout.
+ */
+const withinCleanupBound =
+  (ms: number): Settle =>
+  async (_what, holds) => {
+    const deadline = Date.now() + ms
+    while (!holds() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+
+/**
+ * A process's environment as the kernel holds it (martha#85). While a process is
+ * inside exec the kernel reports an empty environment, so an empty answer from a
+ * live process is read again until it settles, as `settle` waits. Undefined for a
+ * process that has none to give: gone, a zombie, a kernel thread, or one whose
+ * environment did not settle before `settle` gave up.
+ */
+async function environmentOf(pid: number, settle: Settle, read: ProcRead = readProc): Promise<Record<string, string> | undefined> {
+  let text: string | undefined
+  await settle(`the environment of process ${pid} to settle`, () => {
+    try {
+      const stat = read(`/proc/${pid}/stat`)
+      const [state, parent] = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')
+      if (state === 'Z' || pid === KERNEL_THREAD_PARENT || Number(parent) === KERNEL_THREAD_PARENT) return true
+      text = read(`/proc/${pid}/environ`)
+      return text !== ''
+    } catch {
+      text = undefined
+      return true
+    }
+  })
+  if (text === undefined || text === '') return undefined
+  return Object.fromEntries(text.split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]))
+}
+
+/** A /proc of one process whose environ answers each read with the next of `answers`, the last one for good. */
+function plantedProc(pid: number, stat: string, answers: string[]): { read: ProcRead; reads: () => number } {
+  let reads = 0
+  return {
+    read: (path) => {
+      if (path === `/proc/${pid}/stat`) return stat
+      if (path === `/proc/${pid}/environ`) return answers[Math.min(reads++, answers.length - 1)] ?? ''
+      throw new Error(`no ${path}`)
+    },
+    reads: () => reads,
+  }
+}
+
+const PLANTED_PID = 4242
+const statOf = (state: string, parent: number) => `${PLANTED_PID} (sh) ${state} ${parent} ${PLANTED_PID} ${PLANTED_PID} 0 -1`
+
+test('an environment read while its process is inside exec is read again until the kernel has it (#85)', async (t) => {
+  const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), ['', '', 'NODE_OPTIONS=--require x\0HOME=/h\0'])
+  assert.deepEqual(await environmentOf(PLANTED_PID, inTest(t), proc.read), { NODE_OPTIONS: '--require x', HOME: '/h' })
+  assert.equal(proc.reads(), 3, 'both empty answers were read past')
+})
+
+test('a process with no environment to give is answered at once, never waited on (#85)', async (t) => {
+  for (const stat of [statOf('Z', process.pid), statOf('S', KERNEL_THREAD_PARENT)]) {
+    const proc = plantedProc(PLANTED_PID, stat, [''])
+    assert.equal(await environmentOf(PLANTED_PID, inTest(t), proc.read), undefined, stat)
+    assert.equal(proc.reads(), 0, `${stat}: its environment is never read`)
+  }
+  assert.equal(await environmentOf(PLANTED_PID, inTest(t), plantedProc(PLANTED_PID + 1, '', []).read), undefined, 'a process that is gone')
+})
+
+test('cleanup finds a process of the relay root it caught inside exec (#85)', async () => {
+  const root = '/relay/root'
+  const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), ['', `${RELAY_SOCKET_VARIABLE}=${root}/s\0`])
+  assert.equal(await carriesRelayRoot(PLANTED_PID, root, proc.read), true)
+})
+
+test('cleanup passes by a process whose environment stays empty, which `env -i` starts, and never hangs on it (#85)', async () => {
+  const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), [''])
+  assert.equal(await carriesRelayRoot(PLANTED_PID, '/relay/root', proc.read), false)
+  assert.ok(proc.reads() > 1, 'the empty environment was read again before cleanup passed it by')
+})
 
 const NODE_ID = 'ab'.repeat(32)
 
@@ -712,7 +802,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
   t.after(() => rmSync(scratch, { recursive: true, force: true }))
-  const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], versions: [] }
+  const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], known_environment_reads: {}, versions: [] }
   const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
   return { registry, recording: { ...recording, versions: [tree] } }
 }
@@ -733,7 +823,7 @@ test('an approved config that installs a recorded mesh server version starts the
   const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
   t.after(() => started.stop('the test is over'))
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
@@ -762,11 +852,9 @@ test('what the launcher\'s environment would load into the mesh server never rea
   const started = await launchClaudeCodeMember(planted)
   assert.ok(started.started, started.started ? '' : started.refusal)
   t.after(() => started.stop('the test is over'))
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
-  const hostEnv = Object.fromEntries(
-    readFileSync(`/proc/${started.pid}/environ`, 'utf8').split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]),
-  )
+  const hostEnv = (await environmentOf(started.pid, inTest(t))) ?? {}
   assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
   assert.equal(Object.hasOwn(hostEnv, 'CLAUDE_CODE_SHELL_PREFIX'), false, 'the host is never given a prefix it would run every server through (#65 r=3)')
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
@@ -855,7 +943,7 @@ test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, an
   const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
   t.after(() => started.stop('the test is over'))
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
   assert.ok(entry !== undefined)
   // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
@@ -906,7 +994,7 @@ test('an approved launch starts the host with the switches and the relay, and a 
       // already gone
     }
   })
-  await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '')
+  await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '', t)
 
   const args = readFileSync(fake.argsFile, 'utf8').trimEnd().split('\n')
   const snapshot = readdirSync(place.snapshot_root)
@@ -946,7 +1034,7 @@ test('an approved launch starts the host with the switches and the relay, and a 
 
   const stopped = await started.stopped
   assert.equal(stopped.signal, 'SIGKILL')
-  await until('the member\'s child to die with it', () => !isAlive(child))
+  await until('the member\'s child to die with it', () => !isAlive(child), t)
   assert.deepEqual(launchRecordsDirectory(place.launch_records).all(), [])
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
@@ -962,7 +1050,7 @@ test('a member that exits by itself leaves no record, socket or snapshot, and no
   const stopped = await started.stopped
   assert.equal(stopped.exit_code, 3)
   const child = Number(readFileSync(fake.childFile, 'utf8').trim())
-  await until('the child left in the group to be killed', () => !isAlive(child))
+  await until('the child left in the group to be killed', () => !isAlive(child), t)
   assert.deepEqual(launchRecordsDirectory(place.launch_records).all(), [])
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
@@ -978,16 +1066,26 @@ function groupOf(pid: number): number | undefined {
 }
 
 /**
+ * Whether a process's environment names this relay root. A process caught inside
+ * exec is waited on for a moment (#85); one whose environment stays empty past
+ * that, which `env -i` can start, carries no relay root.
+ */
+async function carriesRelayRoot(pid: number, relay_root: string, read: ProcRead = readProc): Promise<boolean> {
+  const environment = await environmentOf(pid, withinCleanupBound(CLEANUP_SETTLE_MS), read)
+  return environment?.[RELAY_SOCKET_VARIABLE]?.startsWith(`${relay_root}/`) ?? false
+}
+
+/**
  * Sends SIGKILL to the group of every process whose environment names this
  * relay root: the member and everything it started carry its socket's path,
  * whether or not it got as far as writing any file. Never this test's own group.
  */
-function killGroupsCarrying(relay_root: string): void {
+async function killGroupsCarrying(relay_root: string): Promise<void> {
   const own = groupOf(process.pid)
   for (const entry of readdirSync('/proc')) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
-    if (!carriesRelayRoot(pid, relay_root)) continue
+    if (!(await carriesRelayRoot(pid, relay_root))) continue
     const group = groupOf(pid)
     if (group === undefined || group <= 1 || group === own) continue
     try {
@@ -996,17 +1094,6 @@ function killGroupsCarrying(relay_root: string): void {
       // The group is gone already.
     }
   }
-}
-
-/** Whether the process's environment names a socket under this relay root; false when it cannot be read. */
-function carriesRelayRoot(pid: number, relay_root: string): boolean {
-  let environment: string
-  try {
-    environment = readFileSync(`/proc/${pid}/environ`, 'utf8')
-  } catch {
-    return false
-  }
-  return environment.split('\0').some((line) => line.startsWith(`${RELAY_SOCKET_VARIABLE}=${relay_root}/`))
 }
 
 /**
@@ -1061,11 +1148,11 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     t.after(async () => {
       if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
       await ended
-      killGroupsCarrying(place.relay_root)
+      await killGroupsCarrying(place.relay_root)
     })
     let said = ''
     launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
-    await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), 10000)
+    await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), t, () => said)
     assert.match(said, /^started \d+\n$/)
     assert.equal(readdirSync(place.relay_root).length, 1)
     assert.equal(readdirSync(place.snapshot_root).length, 1)
@@ -1078,7 +1165,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
 
     launcher.kill(signal)
     assert.equal(await ended, signal, 'the signal still ends the launcher')
-    await until('the member\'s group to be killed', () => !isAlive(child))
+    await until('the member\'s group to be killed', () => !isAlive(child), t)
     assert.deepEqual(readdirSync(place.relay_root), [])
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
@@ -1095,6 +1182,12 @@ const RESIZED_COLUMNS = 93
 /** The line on which the fake terminal member exits by itself, leaving the terminal as it set it. */
 const LEAVE_LINE = 'leave'
 
+/**
+ * Longer than the 5 s deadline this file held before martha#90, so the wait below
+ * fails here by name if a deadline measured against the clock ever comes back.
+ */
+const SLOWER_THAN_A_FIXED_DEADLINE_MS = 5500
+
 /** The keys a terminal turns into signals for its foreground group, as the owner types them. */
 const CTRL_C = '\x03'
 const CTRL_Z = '\x1a'
@@ -1104,9 +1197,10 @@ const CTRL_Z = '\x1a'
  * launcher reads its pid from, where it could write a pid of its choosing; then
  * sets the terminal non-canonical without echo (its keys still signal), says when
  * it is ready, reads a line, and notes each resize and each Ctrl-C. On LEAVE_LINE
- * it exits by itself; otherwise it waits with a child in its group.
+ * it exits by itself, after `exitsAfterMs` when a test asks it to be slow about
+ * it; otherwise it waits with a child in its group.
  */
-function fakeTerminalClaude(place: Place): {
+function fakeTerminalClaude(place: Place, exitsAfterMs = 0): {
   command: string
   readyFile: string
   gotFile: string
@@ -1139,6 +1233,7 @@ function fakeTerminalClaude(place: Place): {
       'stty -icanon -echo',
       `echo $$ > '${files.readyFile}'`,
       `IFS= read -r line; printf '%s' "$line" > '${files.gotFile}'`,
+      ...(exitsAfterMs === 0 ? [] : [`[ "$line" = '${LEAVE_LINE}' ] && sleep ${exitsAfterMs / 1000}`]),
       `[ "$line" = '${LEAVE_LINE}' ] && exit 0`,
       'sleep 600 &',
       `echo $! > '${files.childFile}'`,
@@ -1180,6 +1275,8 @@ interface TerminalLaunch {
   readonly stderrTo?: string
   /** The recorded mesh server trees the launch accepts. */
   readonly mesh_trees?: MeshTreeRecording
+  /** How long the fake terminal member waits before it exits on the leave line, for a slow host (martha#90). */
+  readonly exitsAfterMs?: number
 }
 
 /**
@@ -1190,17 +1287,15 @@ interface TerminalLaunch {
  */
 async function ownersTerminal(t: TestContext, place: Place, how: TerminalLaunch = {}): Promise<OwnersTerminal> {
   const terminal = terminalLaunch(t, place, how)
-  await until('the owner\'s terminal to launch the member', () => terminal.launcher() !== 0 && textIn(terminal.fake.readyFile) !== '', 10000).catch(
-    (error: Error) => {
-      throw new Error(`${error.message}; the terminal showed: ${JSON.stringify(terminal.shown())}`)
-    },
-  )
+  // What the terminal said goes into the wait's own diagnostic: on a hang the
+  // harness reports its timeout and drops anything thrown from here (martha#90 r=2).
+  await until('the owner\'s terminal to launch the member', () => terminal.launcher() !== 0 && textIn(terminal.fake.readyFile) !== '', t, () => terminal.shown())
   return { ...terminal, launcher: terminal.launcher() }
 }
 
 /** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
 function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
-  const fake = fakeTerminalClaude(place)
+  const fake = fakeTerminalClaude(place, how.exitsAfterMs)
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
@@ -1222,7 +1317,7 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   t.after(async () => {
     const launcherPid = Number(textIn(note('launcher')))
     if (launcherPid > 1 && isAlive(launcherPid)) process.kill(launcherPid, 'SIGKILL')
-    killGroupsCarrying(place.relay_root)
+    await killGroupsCarrying(place.relay_root)
     runner.kill('SIGKILL')
     await ended
   })
@@ -1259,19 +1354,19 @@ test('a member on the owner\'s terminal is its foreground job: it reads the owne
   assert.equal(groupOf(member), member, 'the member leads a group of its own, which the group kill relies on')
   assert.notEqual(groupOf(member), groupOf(terminal.launcher))
   assert.equal(foregroundOf(member), member, 'the member\'s group is the terminal\'s foreground')
-  await until('the launcher to say whom it started', () => /started \d+/.test(terminal.shown()))
+  await until('the launcher to say whom it started', () => /started \d+/.test(terminal.shown()), t, () => terminal.shown())
   assert.ok(terminal.shown().includes(`started ${member}`), 'the launcher holds the member\'s own pid')
   assert.equal(existsSync(terminal.fake.pidPipeFile), false, 'the member cannot write where the launcher reads its pid')
 
   const line = 'the owner types this'
   terminal.type(line)
-  await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === line)
+  await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === line, t, () => terminal.shown())
 
   execFileSync('stty', ['-F', terminal.tty, 'cols', String(RESIZED_COLUMNS)])
-  await until('the member to be told of the resize', () => existsSync(terminal.fake.resizedFile))
+  await until('the member to be told of the resize', () => existsSync(terminal.fake.resizedFile), t, () => terminal.shown())
 
   terminal.press(CTRL_C)
-  await until('the member to be told of the Ctrl-C', () => existsSync(terminal.fake.interruptedFile))
+  await until('the member to be told of the Ctrl-C', () => existsSync(terminal.fake.interruptedFile), t, () => terminal.shown())
   assert.ok(isAlive(terminal.launcher), 'the owner\'s Ctrl-C is the member\'s, not the launcher\'s')
 })
 
@@ -1287,7 +1382,7 @@ test('a member on the owner\'s terminal starts the recorded mesh server tree, by
   // Started by path, confined to its tree by the launcher's hook (martha#73).
   assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   terminal.type(LEAVE_LINE)
-  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
+  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t, () => terminal.shown())
 })
 
 test('a member on the owner\'s terminal that Ctrl-Z stops is resumed in the foreground and reads on', async (t) => {
@@ -1297,7 +1392,7 @@ test('a member on the owner\'s terminal that Ctrl-Z stops is resumed in the fore
   terminal.press(CTRL_Z)
   const line = 'typed after the Ctrl-Z'
   terminal.type(line)
-  await until('the stopped member to read on', () => textIn(terminal.fake.gotFile) === line)
+  await until('the stopped member to read on', () => textIn(terminal.fake.gotFile) === line, t, () => terminal.shown())
   assert.equal(foregroundOf(member), member, 'the member\'s group has the terminal again')
 })
 
@@ -1306,9 +1401,16 @@ test('a member on the owner\'s terminal that exits by itself leaves the terminal
   const terminal = await ownersTerminal(t, place)
   assert.notEqual(settingsOf(terminal.tty), terminal.before, 'the member changed the terminal\'s settings')
   terminal.type(LEAVE_LINE)
-  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
+  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t, () => terminal.shown())
   assert.equal(settingsOf(terminal.tty), terminal.before)
   assert.equal(foregroundOf(terminal.launcher), groupOf(terminal.launcher), 'the launcher\'s group has the terminal again')
+})
+
+test('a member on the owner\'s terminal that is slow to stop is waited for, not timed (martha#90)', async (t) => {
+  const place = placeFor(t)
+  const terminal = await ownersTerminal(t, place, { exitsAfterMs: SLOWER_THAN_A_FIXED_DEADLINE_MS })
+  terminal.type(LEAVE_LINE)
+  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t, () => terminal.shown())
 })
 
 test('a member on the owner\'s terminal that is stopped gives the terminal back: its settings and the launcher\'s foreground', async (t) => {
@@ -1317,14 +1419,14 @@ test('a member on the owner\'s terminal that is stopped gives the terminal back:
   const member = Number(textIn(terminal.fake.readyFile))
   assert.notEqual(settingsOf(terminal.tty), terminal.before, 'the member changed the terminal\'s settings')
   terminal.type('a line')
-  await until('the member to leave a child in its group', () => textIn(terminal.fake.childFile) !== '')
+  await until('the member to leave a child in its group', () => textIn(terminal.fake.childFile) !== '', t, () => terminal.shown())
   const child = Number(textIn(terminal.fake.childFile))
 
   process.kill(terminal.launcher, 'SIGUSR2')
-  await until('the member\'s group to be killed', () => !isAlive(member) && !isAlive(child))
-  await until('the terminal\'s settings to be restored', () => settingsOf(terminal.tty) === terminal.before)
+  await until('the member\'s group to be killed', () => !isAlive(member) && !isAlive(child), t)
+  await until('the terminal\'s settings to be restored', () => settingsOf(terminal.tty) === terminal.before, t, () => terminal.shown())
   assert.ok(isAlive(terminal.launcher), 'the launcher outlives its member')
-  await until('the launcher to say how its member stopped', () => terminal.shown().includes('stopped SIGKILL'))
+  await until('the launcher to say how its member stopped', () => terminal.shown().includes('stopped SIGKILL'), t, () => terminal.shown())
   assert.equal(foregroundOf(terminal.launcher), groupOf(terminal.launcher), 'the launcher\'s group has the terminal again')
 })
 
@@ -1333,14 +1435,14 @@ test('SIGTERM to a launcher whose member is on the owner\'s terminal kills the g
   const terminal = await ownersTerminal(t, place)
   const member = Number(textIn(terminal.fake.readyFile))
   terminal.type('a line')
-  await until('the member to leave a child in its group', () => textIn(terminal.fake.childFile) !== '')
+  await until('the member to leave a child in its group', () => textIn(terminal.fake.childFile) !== '', t, () => terminal.shown())
   const child = Number(textIn(terminal.fake.childFile))
 
   process.kill(terminal.launcher, 'SIGTERM')
-  await until('the launcher to end', () => !isAlive(terminal.launcher))
-  await until('the member\'s group to be killed', () => !isAlive(member) && !isAlive(child))
-  await until('the terminal\'s settings to be restored', () => settingsOf(terminal.tty) === terminal.before)
-  await until('the owner\'s shell to have the terminal', () => foregroundOf(terminal.owner_shell) === groupOf(terminal.owner_shell))
+  await until('the launcher to end', () => !isAlive(terminal.launcher), t, () => terminal.shown())
+  await until('the member\'s group to be killed', () => !isAlive(member) && !isAlive(child), t)
+  await until('the terminal\'s settings to be restored', () => settingsOf(terminal.tty) === terminal.before, t, () => terminal.shown())
+  await until('the owner\'s shell to have the terminal', () => foregroundOf(terminal.owner_shell) === groupOf(terminal.owner_shell), t, () => terminal.shown())
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
 })
@@ -1352,8 +1454,8 @@ test('a launcher whose stderr is not the terminal starts its member detached, an
   const member = Number(textIn(terminal.fake.readyFile))
   assert.notEqual(foregroundOf(member), member, 'bash hands a job the terminal through its stderr, so the member is not made the foreground job')
   terminal.type(LEAVE_LINE)
-  await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === LEAVE_LINE)
-  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
+  await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === LEAVE_LINE, t, () => terminal.shown())
+  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t, () => terminal.shown())
 })
 
 for (const [what, make] of [
@@ -1368,7 +1470,7 @@ for (const [what, make] of [
     const place = placeFor(t)
     const command = make(place.home)
     const terminal = terminalLaunch(t, place, { command })
-    await until('the launcher to refuse the launch', () => terminal.shown().includes('refused: '))
+    await until('the launcher to refuse the launch', () => terminal.shown().includes('refused: '), t, () => terminal.shown())
     assert.ok(terminal.shown().includes(`refused: ${NOT_STARTED}: ${notACommandThisTerminalCanRun(command)}`), terminal.shown())
     assert.deepEqual(readdirSync(place.relay_root), [])
     assert.deepEqual(readdirSync(place.snapshot_root), [])

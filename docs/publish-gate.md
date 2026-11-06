@@ -470,8 +470,26 @@ The rules the seam keeps, and a host must not work around:
   again. In the same way, the user settings file is read before the host
   starts and the host reads it again itself, so an edit by that user in
   between reaches the host unchecked. Both are the same class as the contact-policy file
-  (macula-io/macula-mcp#79). A dependency's own environment reads are not
-  listed by the recorder (martha#72). A module the tree lacks, such as an
+  (macula-io/macula-mcp#79). Each recorded version also lists what every
+  package of its tree reads from the environment (`environment_reads`,
+  martha#72): each name read by a literal `process.env` key with the files
+  that read it, and the files that read by a computed key (node-gyp-build's
+  `<NAME>_PREBUILD`, cross-spawn's PATH by `path-key`), which are listed, not
+  refused. A package reading a name the server is started with (HOME, PATH or
+  a reviewed setting; the server's own reads of its reviewed settings are
+  covered by `known_settings`) is not recorded, and a recorded tree holding
+  one is not started, until someone reviews that read and adds the name under
+  the package in `known_environment_reads`; the refusal names the package,
+  the name and the file, and CI checks every recorded version against the
+  same rule, so a name added to the kept list or the settings later fails by
+  name. Before a placed tree starts, its reads are taken again from the
+  installed bytes and must equal the recorded list, so a read struck from the
+  record is refused by package, name and file. The scan reads code text:
+  `process['env']` and `globalThis['process']` are listed as computed reads,
+  but a read that never names the environment (`os.homedir()`, a native
+  addon's `getenv`, the process kept under another name) is not seen, and
+  every name outside the kept list and the settings is emptied for the
+  server anyway. A module the tree lacks, such as an
   optional one, would be looked for in every `node_modules` above the tree and
   under HOME, which that user can write; so the server is started with the
   launcher's own resolve hook (`node --import`; the hook is the launcher's own

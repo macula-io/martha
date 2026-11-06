@@ -15,9 +15,15 @@ import { test, type TestContext } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { MESH_SERVER_PACKAGE, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import {
+  KNOWN_ENVIRONMENT_READS,
+  KNOWN_MESH_SERVER_SETTINGS,
+  RECORDED_MESH_TREES,
+  refusalOfEnvironmentReads,
+  type MeshTreeRecording,
+} from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fakeMeshRegistry, type FakePackage, type FakeRegistry } from './fake_mesh_registry.ts'
-import { placeRecordedMeshServers, recordMeshTree } from './install_the_recorded_mesh_server.ts'
+import { placeRecordedMeshServers, recordMeshTree, SERVER_NEEDS } from './install_the_recorded_mesh_server.ts'
 
 const VERSION = '7.8.9'
 const DEPENDENCY = 'mesh-dependency'
@@ -89,10 +95,15 @@ async function registries(t: TestContext): Promise<{ good: FakeRegistry; evil: F
   return { good, evil }
 }
 
-const recordingAt = (registry: string, known_settings: readonly string[] = [SETTING]): MeshTreeRecording => ({
+const recordingAt = (
+  registry: string,
+  known_settings: readonly string[] = [SETTING],
+  known_environment_reads: Readonly<Record<string, readonly string[]>> = {},
+): MeshTreeRecording => ({
   _why: 'test',
   registry,
   known_settings,
+  known_environment_reads,
   versions: [],
 })
 
@@ -183,6 +194,70 @@ test('recording a version that reads a setting nobody has reviewed fails, naming
     () => recordMeshTree({ tarball: good.tarballOf(MESH_SERVER_PACKAGE), recording: recordingAt(good.registry, []), scratch: scratch(t, 'record') }),
     new RegExp(SETTING),
   )
+})
+
+// --- what every package of the tree reads (martha#72) ----------------------------
+
+/** A name the server keeps from the host, which the dependency below reads. */
+const KEPT = SERVER_NEEDS[0] ?? ''
+const READING_FILE = 'reads.js'
+/** The dependency, now also reading a kept name and a name it puts together, as node-gyp-build does. */
+const readingDependency: FakePackage = {
+  ...dependencyOf(RECORDED_MARK),
+  files: { ...dependencyOf(RECORDED_MARK).files, [READING_FILE]: `const home = process.env.${KEPT}\nconst built = process.env[name + '_PREBUILD']\n` },
+}
+const READING_PATH = `node_modules/${DEPENDENCY}/${READING_FILE}`
+
+async function readingRegistry(t: TestContext): Promise<FakeRegistry> {
+  const registry = await fakeMeshRegistry([serverOf(RECORDED_MARK), readingDependency])
+  t.after(() => registry.stop())
+  return registry
+}
+
+test('recording a version whose dependency reads a kept name nobody reviewed fails, naming the package, the name and the file', async (t) => {
+  const registry = await readingRegistry(t)
+  assert.throws(
+    () => recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording: recordingAt(registry.registry), scratch: scratch(t, 'record') }),
+    (error: Error) => error.message.includes(`${DEPENDENCY} reads ${KEPT} in ${READING_PATH}`),
+  )
+})
+
+test('a reviewed read is recorded by package with its file, and a computed read is listed by file', async (t) => {
+  const registry = await readingRegistry(t)
+  const recording = recordingAt(registry.registry, [SETTING], { [DEPENDENCY]: [KEPT] })
+  const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch: scratch(t, 'record') })
+  assert.deepEqual(tree.environment_reads[DEPENDENCY], { reads: { [KEPT]: [READING_PATH] }, computed: [READING_PATH] })
+  assert.deepEqual(tree.environment_reads[MESH_SERVER_PACKAGE]?.reads[SETTING], [`node_modules/${MESH_SERVER_PACKAGE}/dist/index.js`])
+})
+
+test('a recorded tree whose read is no longer reviewed is not started, naming the package, the name and the file', async (t) => {
+  const registry = await readingRegistry(t)
+  const reviewed = recordingAt(registry.registry, [SETTING], { [DEPENDENCY]: [KEPT] })
+  const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording: reviewed, scratch: scratch(t, 'record') })
+  const root = scratch(t, 'servers')
+  const place = (recording: MeshTreeRecording) => placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording: { ...recording, versions: [tree] } })
+  placedEntry(place(reviewed))
+  const refusal = refusalOf(place({ ...reviewed, known_environment_reads: {} }))
+  assert.ok(refusal.includes(`${DEPENDENCY} reads ${KEPT} in ${READING_PATH}`), refusal)
+})
+
+test('a recording that leaves out a read the bytes hold is not started, naming the package, the name and the file', async (t) => {
+  const registry = await readingRegistry(t)
+  const reviewed = recordingAt(registry.registry, [SETTING], { [DEPENDENCY]: [KEPT] })
+  const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording: reviewed, scratch: scratch(t, 'record') })
+  // The dependency's reads struck from the record and its review removed: a record checked only against itself would pass.
+  const { [DEPENDENCY]: _struck, ...rest } = tree.environment_reads
+  const recording = { ...reviewed, known_environment_reads: {}, versions: [{ ...tree, environment_reads: rest }] }
+  const refusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: scratch(t, 'servers'), recording }))
+  assert.ok(refusal.includes(`${DEPENDENCY} reads ${KEPT} in ${READING_PATH}`), refusal)
+})
+
+test('every recorded version: each package\'s read of a name the server is started with is reviewed for that package', () => {
+  const review = { server: MESH_SERVER_PACKAGE, startedWith: [...SERVER_NEEDS, ...KNOWN_MESH_SERVER_SETTINGS], knownSettings: KNOWN_MESH_SERVER_SETTINGS, knownReads: KNOWN_ENVIRONMENT_READS }
+  for (const tree of RECORDED_MESH_TREES) {
+    assert.ok(Object.keys(tree.environment_reads).length > 0, `${tree.server_version} lists no package's environment reads`)
+    assert.equal(refusalOfEnvironmentReads(tree.environment_reads, review), undefined, tree.server_version)
+  }
 })
 
 // --- placing --------------------------------------------------------------------
