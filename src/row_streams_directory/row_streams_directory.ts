@@ -19,9 +19,12 @@
 //     to anyone else: the read rejects. A ledger that skipped a row would hide an
 //     act that was sent, and its successor would send it twice.
 //   - A ROW IS KEPT ONLY ONCE IT IS ON DISK (T11). The row's file is fsynced
-//     before it is linked, and after the link the stream's directory and the
-//     rows directory are fsynced too, so a crash after `append` resolves cannot
-//     lose the name of a row whose act then ran.
+//     before it is linked, and after the link the stream's directory, the rows
+//     directory and its parent are fsynced too, so a crash after `append`
+//     resolves cannot lose the name of a row whose act then ran. When a flush
+//     fails after the link, the row is in the stream: the append rejects with
+//     ROW_NOT_DURABLE and its position, and the stream takes no more appends in
+//     this process, so a retry cannot write the same row twice.
 //   - THE DIRECTORIES ARE CLOSED. The rows directory and every stream directory
 //     are real directories, owned by this user, that nobody else may write into.
 //
@@ -30,10 +33,10 @@
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { getuid } from 'node:process'
 
-import { ROW_STREAM_MOVED, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, ROW_STREAM_MOVED, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
 
 /** Only the owner may read or write a row, or enter a stream. */
 export const ROW_FILE_MODE = 0o600
@@ -68,6 +71,20 @@ export function rowFileNameOf(position: number): string {
   return `${position}${ROW_SUFFIX}`
 }
 
+/**
+ * The streams, by directory, that hold a row this process linked and could not
+ * make durable, and its position. Kept for the process, across store instances:
+ * no later append to such a stream is kept, so a retry cannot write the row twice.
+ */
+const STREAMS_NOT_DURABLE = new Map<string, number>()
+
+function notDurable(stream: string, position: number, cause?: unknown): Error {
+  return Object.assign(
+    new Error(`${stream} holds a row at ${position} that could not be made durable: nothing more is appended to it`, { cause }),
+    { code: ROW_NOT_DURABLE, position },
+  )
+}
+
 function moved(stream: string, length: number, expected: number): Error {
   return Object.assign(new Error(`${stream} holds ${length} rows, not ${expected}`), { code: ROW_STREAM_MOVED })
 }
@@ -77,6 +94,8 @@ function appendRow(directory: string, stream: string, row: Row, expected_length:
   if (typeof text !== 'string' || !isRow(JSON.parse(text))) throw new Error(`A row for ${stream} is not a JSON object.`)
 
   const stream_directory = openStreamDirectory(directory, stream)
+  const left = STREAMS_NOT_DURABLE.get(stream_directory)
+  if (left !== undefined) throw notDurable(stream, left)
   const staging = join(stream_directory, `${STAGING_PREFIX}${randomUUID()}`)
   writeWhole(staging, text)
   try {
@@ -84,16 +103,31 @@ function appendRow(directory: string, stream: string, row: Row, expected_length:
       const length = rowsIn(stream_directory, stream).length
       if (expected_length !== undefined && length !== expected_length) throw moved(stream, length, expected_length)
       if (linkedAt(staging, join(stream_directory, rowFileNameOf(length)))) {
-        // The row is kept only once both names are on disk: its position in the
-        // stream's directory, and the stream's directory in the rows directory.
-        syncDirectory(stream_directory)
-        syncDirectory(directory)
+        keepDurable(directory, stream_directory, stream, length)
         return length
       }
       if (expected_length !== undefined) throw moved(stream, length + 1, expected_length)
     }
   } finally {
     fs.rmSync(staging, { force: true })
+  }
+}
+
+/**
+ * Puts the names a linked row hangs from on disk: its position in the stream's
+ * directory, the stream's directory in the rows directory, and the rows
+ * directory in its parent, which the host may have made just before. When one
+ * cannot be flushed, the row is in the stream and not durable: the stream takes
+ * no more appends in this process, and the append rejects naming the position.
+ */
+function keepDurable(directory: string, stream_directory: string, stream: string, position: number): void {
+  try {
+    syncDirectory(stream_directory)
+    syncDirectory(directory)
+    syncDirectory(dirname(directory))
+  } catch (cause) {
+    STREAMS_NOT_DURABLE.set(stream_directory, position)
+    throw notDurable(stream, position, cause)
   }
 }
 

@@ -55,8 +55,11 @@ launcher's records and which process holds a pid.
   path, one file per row named by its position. A row is staged, then linked to
   its position, and a link never replaces a file, so two writers cannot both
   land at one position. An append resolves only once the row's file, its
-  position and the stream's directory are fsynced, so a crash cannot lose the
-  row of an act that then ran. A read refuses a gap, a link, an entry it never writes,
+  position, the stream's directory and the rows directory with its parent are
+  fsynced, so a crash cannot lose the row of an act that then ran. A flush that
+  fails after the link rejects with `ROW_NOT_DURABLE` and the row's position,
+  and the stream takes no more appends in that process, so a retry cannot keep
+  the row twice. A read refuses a gap, a link, an entry it never writes,
   a row that is not a JSON object, and a file anyone else may read or write; it
   never skips one.
 - **The launcher's records** reach slices only as `readingOnly(store)`.
@@ -103,7 +106,7 @@ append-only stream per work package:
 
   | Failure | What happened | May the caller send it again? |
   |---|---|---|
-  | `ACT_NOT_SENT` | the row was not kept, so the act never ran | yes |
+  | `ACT_NOT_SENT` | the row was not kept, so the act never ran | yes, unless `row_may_stand_at` is set: the store linked the row and could not make it durable (`ROW_NOT_DURABLE`), so it may stand as an act left awaiting, and the store takes no more rows on that stream in this process |
   | the act's own error | the act failed, and that is its kept outcome | as for any failed act |
   | `OUTCOME_NOT_KEPT` | the act ran, and its outcome is not in the ledger | never: check it first |
 

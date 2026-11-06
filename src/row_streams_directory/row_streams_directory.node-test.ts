@@ -6,10 +6,12 @@
 import assert from 'node:assert/strict'
 import fs, { chmodSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { ACT_NOT_SENT, ActNotSent, ledgerStreamOf, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { ROW_FILE_MODE, rowFileNameOf, rowStreamsDirectory, streamDirectoryNameOf } from './row_streams_directory.ts'
 
 const scratch = (t: TestContext): string => {
@@ -207,27 +209,88 @@ test('an append resolves only after the row, its position and its stream directo
   const link = events.indexOf(`link ${position}`)
   assert.ok(link > 0, events.join('\n'))
   assert.match(events[link - 1] ?? '', /^fsync .*\.staging-/, 'the row is on disk before it is linked')
-  assert.deepEqual(events.slice(link + 1), [`fsync ${stream_directory}`, `fsync ${directory}`])
+  assert.deepEqual(events.slice(link + 1), [`fsync ${stream_directory}`, `fsync ${directory}`, `fsync ${dirname(directory)}`])
 
   // A second row in a stream that exists: its position is flushed the same way.
   const again = await diskEvents(t, () => store.append('ledger', { act: 'b' }))
   assert.deepEqual(again.slice(again.indexOf(`link ${join(stream_directory, rowFileNameOf(1))}`) + 1), [
     `fsync ${stream_directory}`,
     `fsync ${directory}`,
+    `fsync ${dirname(directory)}`,
   ])
 })
 
-test('an append whose directory cannot be flushed rejects, so its act never runs', async (t) => {
-  const store = rowStreamsDirectory(rowsDirectory(t))
+/** Makes the nth fsync from now fail with EIO, as a dying disk does. */
+const failNthFsync = (t: TestContext, nth: number) => {
   const real_fsync = fs.fsyncSync
   let calls = 0
   t.mock.method(fs, 'fsyncSync', (descriptor: number) => {
     calls += 1
-    if (calls === 2) throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' })
+    if (calls === nth) throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' })
     real_fsync(descriptor)
   })
-  await assert.rejects(store.append('ledger', { act: 'a' }), /EIO/)
+}
+
+const rejectsNotDurableAt = async (promise: Promise<unknown>, position: number, what: string) =>
+  assert.rejects(
+    promise,
+    (error: unknown) => (error as { code?: unknown }).code === ROW_NOT_DURABLE && (error as { position?: unknown }).position === position,
+    what,
+  )
+
+test('an append whose directory cannot be flushed after the link rejects naming the row it left', async (t) => {
+  const store = rowStreamsDirectory(rowsDirectory(t))
+  // The first fsync is the row's file, the second its stream's directory.
+  failNthFsync(t, 2)
+  await rejectsNotDurableAt(store.append('ledger', { act: 'a' }), 0, 'the row is in the stream, not durable')
   t.mock.restoreAll()
+})
+
+test('a retry after a flush failed cannot keep the row twice, through any store in the process', async (t) => {
+  const directory = rowsDirectory(t)
+  const store = rowStreamsDirectory(directory)
+  await store.append('ledger', { act: 'before' })
+  failNthFsync(t, 2)
+  await rejectsNotDurableAt(store.append('ledger', { act: 'a' }), 1, 'the first try')
+  t.mock.restoreAll()
+
+  await rejectsNotDurableAt(store.append('ledger', { act: 'a' }), 1, 'the same row again')
+  await rejectsNotDurableAt(rowStreamsDirectory(directory).append('ledger', { act: 'a' }), 1, 'through a second store')
+  await rejectsNotDurableAt(store.append('ledger', { act: 'a' }, 2), 1, 'at the length after it')
+  assert.deepEqual(await rowStreamsDirectory(directory).read('ledger'), [
+    { position: 0, row: { act: 'before' } },
+    { position: 1, row: { act: 'a' } },
+  ])
+  // Another stream is not held by this one.
+  assert.equal(await store.append('other', { act: 'b' }), 0)
+})
+
+test('the ledger never sends an act twice when its row was linked and not made durable', async (t) => {
+  const directory = rowsDirectory(t)
+  const { host: base } = hostForTests()
+  const host: LedgerHost = { clock: base.clock, stores: { ...base.stores, rows: rowStreamsDirectory(directory) } }
+  // Synthetic only: this repository is public.
+  const work = { package: 'synthetic-owner/repo#7', member: 'member-one' }
+  const act = { kind: 'push', what: 'main 1111..2222' } as const
+  let sent = 0
+  const send = async () => {
+    sent += 1
+    return 'pushed'
+  }
+
+  failNthFsync(t, 2)
+  const first: unknown = await sendOutwardAct(host, { ...work, act }, send).catch((error: unknown) => error)
+  t.mock.restoreAll()
+  const again: unknown = await sendOutwardAct(host, { ...work, act }, send).catch((error: unknown) => error)
+
+  for (const failure of [first, again]) {
+    assert.ok(failure instanceof ActNotSent)
+    assert.equal(failure.code, ACT_NOT_SENT)
+    assert.equal(failure.row_may_stand_at, 0)
+  }
+  assert.equal(sent, 0, 'the act never ran')
+  const rows = await rowStreamsDirectory(directory).read(ledgerStreamOf(work.package))
+  assert.equal(rows.length, 1, 'one row for the act, however often it is tried')
 })
 
 test('a row file is only its owner\'s whatever the umask lets through', async (t) => {

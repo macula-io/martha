@@ -51,6 +51,12 @@ export interface RowStore {
    * With `expected_length`, the row is kept only if the stream holds exactly that
    * many rows; otherwise it rejects with an error whose `code` is
    * ROW_STREAM_MOVED, and the caller reads again before deciding again.
+   *
+   * One rejection does not mean the row was not kept: ROW_NOT_DURABLE, with the
+   * row's `position`, says the row is in the stream and the host could not make
+   * it durable, so it may be read and may be lost in a crash. The caller must
+   * not append it again; the store refuses every later append to that stream
+   * with the same code, so a retry cannot write a second copy.
    */
   append(stream: string, row: Row, expected_length?: number): Promise<number>
   /** Every row of a stream, oldest first; a stream never written to is empty. */
@@ -59,6 +65,9 @@ export interface RowStore {
 
 /** The code an append rejects with when the stream is not at the length it expected. */
 export const ROW_STREAM_MOVED = 'ROW_STREAM_MOVED'
+
+/** The code an append rejects with when its row is in the stream and not known to be durable. */
+export const ROW_NOT_DURABLE = 'ROW_NOT_DURABLE'
 
 /**
  * Documents read as UTF-8 text, by absolute path. A missing document rejects

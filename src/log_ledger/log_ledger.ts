@@ -29,7 +29,7 @@
 // rows, so it runs unchanged on every host.
 
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
-import { ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
 /** The milestones a member keeps on a package. */
 export const MILESTONES = [
@@ -265,13 +265,30 @@ export const ACT_NOT_SENT = 'ACT_NOT_SENT'
 /** The code of a failure after the act ran: it was sent, and its outcome is not in the ledger. */
 export const OUTCOME_NOT_KEPT = 'OUTCOME_NOT_KEPT'
 
-/** The act was never sent, because its row was not kept. The cause says why. */
+/** The position of a row the store left in the stream without making it durable, if that is why. */
+const positionLeftBy = (cause: unknown): number | undefined => {
+  const failure = cause as { code?: unknown; position?: unknown } | null
+  return typeof failure === 'object' && failure !== null && failure.code === ROW_NOT_DURABLE && typeof failure.position === 'number'
+    ? failure.position
+    : undefined
+}
+
+/**
+ * The act was never sent, because its row was not kept. The cause says why.
+ *
+ * `row_may_stand_at` is set when the store linked the row and could not make it
+ * durable (ROW_NOT_DURABLE): the row may be read, as an act left awaiting, and
+ * the store takes no more rows on that stream in this process. Do not send the
+ * act again; whoever checks awaiting acts finds it was not sent and concludes it.
+ */
 export class ActNotSent extends Error {
   readonly code = ACT_NOT_SENT
+  readonly row_may_stand_at: number | undefined
 
   constructor(act: OutwardAct, cause: unknown) {
     super(`the ${act.kind} was not sent: its row was not kept (${detailOf(cause)})`, { cause })
     this.name = 'ActNotSent'
+    this.row_may_stand_at = positionLeftBy(cause)
   }
 }
 
@@ -313,7 +330,8 @@ export class OutcomeNotKept extends Error {
  *
  * A caller can tell three failures apart, and each says what a retry may do:
  * - ActNotSent (ACT_NOT_SENT): the row was not kept, so `send` never ran.
- *   Sending again is safe.
+ *   Sending again is safe, unless `row_may_stand_at` is set: then the row may
+ *   stand as an act left awaiting, and the act is not sent again.
  * - the act's own error, unchanged: `send` failed, and that failure is the
  *   act's kept outcome.
  * - OutcomeNotKept (OUTCOME_NOT_KEPT): `send` ran and its outcome could not be
