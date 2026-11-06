@@ -10,7 +10,7 @@
 // is refused without this public tree having to name it.
 
 import { digestStartsFinder } from './public_digest.ts'
-import { PUBLIC_TEXT_PATTERNS } from './public_text.ts'
+import { HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
   // The families of the lab's machine names. Private: CI reads them from a secret.
@@ -56,7 +56,7 @@ export const SYNTHETIC = {
   home_dir: String.raw`^/(home|Users)/synthetic$`,
   private_address: String.raw`^192\.168\.255\.[0-9]{1,3}$`,
   email: String.raw`^[A-Za-z0-9._%+-]+@synthetic\.invalid$`,
-  hex_id: String.raw`^([0-9a-f])\1{63}$`,
+  hex_id: `^(${HEX_DIGIT})\\1{${ID_HEX_DIGITS - 1}}$`,
   repo_owner: String.raw`^synthetic-[a-z0-9-]+$`,
 }
 
@@ -100,6 +100,9 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
   const synthetic = (pattern: string, flags = '') => (value: string) => rules.allowSynthetic && new RegExp(pattern, flags).test(value)
   const machine = rules.labHosts.length === 0 ? '' : families(rules)
   const digestStarts = digestStartsFinder(PUBLIC_TEXT_PATTERNS.hex_id)
+  // The whole hex run an id sits in: what is refused, and what a form must hold.
+  const hexRun = `${HEX_DIGIT}*${PUBLIC_TEXT_PATTERNS.hex_id}${HEX_DIGIT}*`
+  const oneId = whole(`^${PUBLIC_TEXT_PATTERNS.hex_id}$`)
   // A domain has no case: an allowed address passes however its domain is written.
   const allowEmail = new RegExp(
     `^(${PUBLIC_TEXT_PATTERNS.allow_email}${rules.publicEmails.map((domain) => `|[A-Za-z0-9._%+-]+@${domain.replace(/[.]/g, '\\.')}`).join('')}${rules.publicAddresses.map((address) => `|${address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('')})$`,
@@ -138,13 +141,15 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
         allowEmail.test(value) || synthetic(SYNTHETIC.email)(value) || synthetic(SYNTHETIC.lab_fqdn)(value.slice(value.indexOf('@') + 1)),
     },
     {
-      what: 'a 64-hex id',
+      what: `a ${ID_HEX_DIGITS}-hex id`,
       shows: true,
-      matches: (text) => each(PUBLIC_TEXT_PATTERNS.hex_id, text),
+      matches: (text) => each(hexRun, text),
       // A public digest is accepted only where a declared form holds it
-      // (public_digest.ts); a bare 64-hex is a node id or a key until shown otherwise.
+      // (public_digest.ts), and only as a run of exactly one id's length: a longer
+      // run (two ids, a key with more after it, a sha512) is refused whole. A bare
+      // id is a node id or a key until shown otherwise.
       accepts: (value, at, text) =>
-        synthetic(SYNTHETIC.hex_id)(value) || digestStarts(text).has(at),
+        synthetic(SYNTHETIC.hex_id)(value) || (oneId.test(value) && digestStarts(text).has(at)),
     },
   ]
 }

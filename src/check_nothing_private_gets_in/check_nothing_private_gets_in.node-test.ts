@@ -16,6 +16,7 @@ import {
   withoutLabNames,
 } from './check_nothing_private_gets_in.ts'
 import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from './public_digest.ts'
+import { ID_HEX_DIGITS } from './public_text.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 
 // Every value planted here is a synthetic form, because this file is in the
@@ -147,8 +148,8 @@ test('the crew\'s other private-text classes are refused', async () => {
   assert.deepEqual(await hitsOf('see /home/synthetic/notes'), ['a home directory (/home/synthetic)'])
   assert.deepEqual(await hitsOf('dial 192.168.255.7'), ['a private address (192.168.255.7)'])
   assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
-  const id = 'a'.repeat(64)
-  assert.deepEqual(await hitsOf(`node ${id}`), [`a 64-hex id (${id})`])
+  const id = 'a'.repeat(ID_HEX_DIGITS)
+  assert.deepEqual(await hitsOf(`node ${id}`), [hexHit(id)])
 })
 
 test('each synthetic form passes a real scan, so the tests that state them can be public', async () => {
@@ -158,7 +159,7 @@ test('each synthetic form passes a real scan, so the tests that state them can b
     'see /home/synthetic/notes',
     'dial 192.168.255.7',
     'mail ada@synthetic.invalid',
-    `node ${'a'.repeat(64)}`,
+    `node ${'a'.repeat(ID_HEX_DIGITS)}`,
     'see synthetic-repo#12',
     `as decided in ${PRIVATE}#123`,
   ]) {
@@ -173,7 +174,7 @@ test('the synthetic allowance is the whole value, never a part of it', async () 
   // A real machine number beside the synthetic one is still refused.
   assert.deepEqual(await hitsOf('synth97 then synth03', scanning), ['a lab machine name (value withheld)'])
   // A 64-hex id is synthetic only when it is one digit repeated.
-  assert.deepEqual((await hitsOf(`${'a'.repeat(63)}b`, scanning)).length, 1)
+  assert.deepEqual((await hitsOf(`${'a'.repeat(ID_HEX_DIGITS - 1)}b`, scanning)).length, 1)
 })
 
 test('a lookup that cannot answer stops the check rather than passing it', async () => {
@@ -286,12 +287,12 @@ test('a declared public address passes as that exact string, and its domain does
 
 // A public digest (martha#61). Real-shaped values are drawn at run time, so the
 // tree this file is in never holds one; the forms come from their one definition.
-const realShaped = () => randomBytes(32).toString('hex')
+const realShaped = () => randomBytes(ID_HEX_DIGITS / 2).toString('hex')
 const writtenDigests = Object.entries(PUBLIC_DIGEST_FORMS).flatMap(([name, form]) =>
   form.written.map((written) => ({ name, written })),
 )
 const filled = (written: string, hex: string) => written.replaceAll(HEX_SLOT, hex)
-const hexHit = (hex: string) => `a 64-hex id (${hex})`
+const hexHit = (hex: string) => `a ${ID_HEX_DIGITS}-hex id (${hex})`
 
 test('every declared form holds at least one written example', () => {
   for (const [name, form] of Object.entries(PUBLIC_DIGEST_FORMS)) {
@@ -368,4 +369,50 @@ test('a declared form vouches only for the digest it holds, never a second id on
   const [first, second] = [realShaped(), realShaped()]
   assert.deepEqual(await hitsOf(`sha256: ${first} ${second}`), [hexHit(second)])
   assert.deepEqual(await hitsOf(`echo "${first}  release.tar.gz" | sha256sum -c ${second}`), [hexHit(second)])
+})
+
+// An id not standing alone (martha#64): glued to a word character, or inside a
+// longer hex run. Each is refused, and the hit names the whole hex run it sits in.
+test('a real-shaped id glued to a word character is refused, by the hex run it is in', async () => {
+  const id = realShaped()
+  const cases: [string, string][] = [
+    [`x${id}`, id],
+    [`${id}x`, id],
+    [`id_${id}`, id],
+    [`${id}_key`, id],
+    [`9${id}`, `9${id}`],
+    [`node${id}`, `de${id}`],
+    [`x${id}  release.tar.gz`, id],
+  ]
+  for (const [text, run] of cases) {
+    assert.deepEqual(await hitsOf(text), [hexHit(run)], text)
+  }
+})
+
+test('a real-shaped id inside a longer hex run is refused, the run whole', async () => {
+  const [first, second] = [realShaped(), realShaped()]
+  const tail = realShaped().slice(1)
+  for (const run of [`${first}${second}`, `${first}${tail}`, `${tail}${first}`, `${first}0`]) {
+    assert.deepEqual(await hitsOf(`key ${run}`), [hexHit(run)], run)
+  }
+})
+
+test('a declared digest form never vouches for a longer hex run', async () => {
+  const run = `${realShaped()}${realShaped().slice(1)}`
+  for (const { name, written } of writtenDigests) {
+    assert.deepEqual(await hitsOf(filled(written, run)), [hexHit(run)], `${name}: ${written}`)
+  }
+})
+
+test('a synthetic id passes only as a whole run, never glued to more hex', async () => {
+  const synthetic = 'a'.repeat(ID_HEX_DIGITS)
+  assert.deepEqual(await hitsOf(`node-${synthetic}x`, scanning), [])
+  assert.deepEqual(await hitsOf(`${synthetic}b`, scanning), [hexHit(`${synthetic}b`)])
+})
+
+// A git commit sha (sha1) is shorter than an id, so it stays outside this class.
+const SHA1_HEX_DIGITS = 40
+test('a hex run shorter than an id passes, a commit sha and a range of them included', async () => {
+  const sha = realShaped().slice(0, SHA1_HEX_DIGITS)
+  assert.deepEqual(await hitsOf(`${sha}..${realShaped().slice(0, SHA1_HEX_DIGITS)} at x${sha}`), [])
 })
