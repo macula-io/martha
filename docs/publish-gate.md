@@ -372,8 +372,8 @@ The rules the seam keeps, and a host must not work around:
   record, after which a member still on it is refused by name. Since the gate
   judges a mesh tool by its name from any server, the check fails closed:
   every server in the approved `.mcp.json`, the mesh server or not, must start
-  as `npx -y <package>@<x.y.z>` (stdio, an `env` that changes nothing npx
-  installs or runs, no other key), or the member is not started, naming the
+  as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
+  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or the member is not started, naming the
   server. A git or GitHub spec, a URL server, a shell wrapper, a package named
   in a variable or a bare bin is refused; there is no exempt list. Only the
   servers an installed plugin brings are not version-checked; their tools are

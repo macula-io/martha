@@ -86,6 +86,13 @@ test('one unpinned server refuses a config whose mesh server is pinned', () => {
   assert.ok('refusal' in read && read.refusal.includes(SERVER_NAME), JSON.stringify(read))
 })
 
+test('an env key outside the allowlist is refused by name, beside an allowed one', () => {
+  const entry = { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r', PREFIX: '/x', macula_lower: 'x' } }
+  const read = meshServerVersionsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
+  assert.ok('refusal' in read, JSON.stringify(read))
+  assert.ok(read.refusal.includes('PREFIX') && read.refusal.includes('macula_lower') && !read.refusal.includes('MACULA_MESH_REALMS,'), read.refusal)
+})
+
 test('a pin may name the stdio transport and an env that leaves the install alone', () => {
   const entry = { type: 'stdio', ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r' } }
   assert.deepEqual(meshServerVersionsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { versions: [VERSION] })

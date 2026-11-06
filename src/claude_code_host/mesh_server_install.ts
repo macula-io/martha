@@ -17,10 +17,12 @@
 //
 // with `"type": "stdio"` allowed and no other key. Anything else is refused,
 // naming the server, a server that is not the mesh server included: there is
-// no list of servers exempt from the check. `env` may not name a variable that
-// changes what npx installs or runs (NPM_CONFIG_REGISTRY, NODE_OPTIONS, PATH,
-// HOME and the like, ENV_THAT_CHANGES_THE_INSTALL), since the pin would then
-// no longer say which code starts.
+// no list of servers exempt from the check. `env` may name only the variables
+// a server is allowed to be given (SERVER_ENV_ALLOWED: the mesh server's own
+// MACULA_* settings). Any other key is refused by name: a variable can change
+// what npx installs or what runs (NPM_CONFIG_REGISTRY, PREFIX, NODE_OPTIONS,
+// LD_PRELOAD, PATH, HOME and more), and a list of the bad ones is never
+// complete, so the pin would no longer say which code starts.
 //
 // What this does not see: the servers of an installed plugin, whose version
 // sits in `node_modules`, which the launch fingerprint does not hash. Their
@@ -39,8 +41,8 @@ export const INSTALL_WITHOUT_ASKING = '-y'
 export const PINNED_TRANSPORT = 'stdio'
 /** The keys a pinned server entry may carry. */
 const PINNED_ENTRY_KEYS: ReadonlySet<string> = new Set(['type', 'command', 'args', 'env'])
-/** Environment variables that change what npx installs or what node runs. */
-export const ENV_THAT_CHANGES_THE_INSTALL = /^(npm_|node_|xdg_)|^(path|home)$/i
+/** The only environment variables a server entry may set: the mesh server's own settings. */
+export const SERVER_ENV_ALLOWED = /^MACULA_[A-Z0-9_]+$/
 /** A package name the npm registry accepts, scoped or not. */
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/
 
@@ -67,8 +69,8 @@ function pinOf(name: string, entry: unknown): { readonly pkg: string; readonly v
   if (!PACKAGE_NAME.test(pkg) || !EXACT_VERSION.test(version)) return refused(`installs ${spec}, which is no exact release`)
   if (entry.env !== undefined) {
     if (!isObject(entry.env)) return refused('gives an env that is not an object')
-    const changing = Object.keys(entry.env).filter((key) => ENV_THAT_CHANGES_THE_INSTALL.test(key))
-    if (changing.length > 0) return refused(`sets ${changing.join(', ')}, which changes what ${PINNED_INSTALLER} installs or runs`)
+    const unallowed = Object.keys(entry.env).filter((key) => !SERVER_ENV_ALLOWED.test(key))
+    if (unallowed.length > 0) return refused(`sets ${unallowed.join(', ')}, which no server may be given (only ${SERVER_ENV_ALLOWED.source})`)
   }
   return { pkg, version }
 }
