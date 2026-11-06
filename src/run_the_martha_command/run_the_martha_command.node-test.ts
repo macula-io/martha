@@ -13,7 +13,9 @@ import { test, type TestContext } from 'node:test'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { EXIT_REFUSED, EXIT_USAGE, USAGE } from './run_the_martha_command.ts'
+import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
+import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, USAGE } from './run_the_martha_command.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -36,13 +38,22 @@ function placeFor(t: TestContext, { checkout = true } = {}): Place {
 
 /** bin/martha run in the place's checkout, with its standard input a pipe, never a terminal. */
 function martha(place: Place, ...args: string[]) {
+  return marthaWith(place, {}, ...args)
+}
+
+function marthaWith(place: Place, env: Readonly<Record<string, string>>, ...args: string[]) {
   const run = spawnSync(process.execPath, [MARTHA, ...args], {
     cwd: place.root,
     encoding: 'utf8',
     input: '',
-    env: { PATH: process.env.PATH, HOME: place.home, XDG_STATE_HOME: join(place.home, 'state'), GIT_CONFIG_NOSYSTEM: '1' },
+    env: { PATH: process.env.PATH, HOME: place.home, XDG_STATE_HOME: join(place.home, 'state'), GIT_CONFIG_NOSYSTEM: '1', ...env },
   })
-  return { status: run.status, said: `${run.stdout}${run.stderr}` }
+  return { status: run.status, out: run.stdout, err: run.stderr, said: `${run.stdout}${run.stderr}` }
+}
+
+/** Every line on stderr is Martha's, prefixed as martha-install prefixes its own. */
+const allSaidByMartha = (err: string): void => {
+  for (const line of err.split('\n').filter((said) => said !== '')) assert.ok(line.startsWith(`${SAID_BY} `), line)
 }
 
 test('bin/martha is in the tree, executable, and starts with a node line', () => {
@@ -67,20 +78,23 @@ test('martha init writes the declaration once and refuses the second time', (t) 
   const place = placeFor(t)
   const first = martha(place, 'init')
   assert.equal(first.status, 0, first.said)
+  for (const member of SOLO_MEMBERS) assert.ok(first.out.includes(member.name), first.out)
   const file = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const written = readFileSync(file, 'utf8')
   assert.match(written, /Ada Owner/)
 
   const second = martha(place, 'init')
   assert.equal(second.status, EXIT_REFUSED)
-  assert.ok(second.said.includes(file), second.said)
+  assert.ok(second.err.includes(file), second.err)
+  allSaidByMartha(second.err)
   assert.equal(readFileSync(file, 'utf8'), written)
 })
 
 test('martha start with no declaration refuses, naming martha init', (t) => {
   const run = martha(placeFor(t), 'start', 'builder')
   assert.equal(run.status, EXIT_REFUSED)
-  assert.match(run.said, /martha init/)
+  assert.match(run.err, /martha init/)
+  allSaidByMartha(run.err)
 })
 
 test('martha start with no member named shows how it is used', (t) => {
@@ -94,5 +108,28 @@ test('martha approve whose input is no terminal refuses, so a member\'s shell ca
   writeFileSync(join(place.root, '.mcp.json'), '{"mcpServers":{}}')
   const run = martha(place, 'approve')
   assert.equal(run.status, EXIT_REFUSED)
-  assert.ok(run.said.includes(NOT_A_TERMINAL), run.said)
+  assert.ok(run.err.includes(NOT_A_TERMINAL), run.err)
+  allSaidByMartha(run.err)
+})
+
+test('martha --version prints the version package.json carries, and nothing else', (t) => {
+  const run = martha(placeFor(t, { checkout: false }), '--version')
+  assert.equal(run.status, 0)
+  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as { version: string }
+  assert.equal(run.out, `${manifest.version}\n`)
+})
+
+test('martha init then martha start runs the owner\'s claude, names the member and its pid, and ends as it did', (t) => {
+  const place = placeFor(t)
+  const bin = join(place.home, 'bin')
+  mkdirSync(bin)
+  const ran = join(place.home, 'ran')
+  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', `: > '${ran}'`, 'exit 7', ''].join('\n'), { mode: 0o700 })
+  const env = { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) }
+  assert.equal(marthaWith(place, env, 'init').status, 0)
+  const [builder] = SOLO_MEMBERS
+  const run = marthaWith(place, env, 'start', builder!.name)
+  assert.equal(run.status, 7, run.said)
+  assert.match(run.out, new RegExp(`^${builder!.name} started, pid [0-9]+\n$`))
+  assert.ok(existsSync(ran), 'the owner\'s claude ran')
 })
