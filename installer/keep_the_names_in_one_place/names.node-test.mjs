@@ -119,6 +119,19 @@ test('every action in a workflow that can publish or sign is pinned by a full co
   assert.ok(holdsWrite(planted) && unpinned(planted).length === 1, 'the scan bites on a planted workflow')
 })
 
+test('every image is built by a docker-container builder and checked to be one OCI manifest before it is signed', () => {
+  // The default docker driver ignores oci-mediatypes and pushes a Docker v2 manifest, which every install refuses
+  // (the first dry run, martha#21 r=4). Only a builder set up by setup-buildx-action honours it.
+  for (const name of /** @type {const} */ (['release', 'dryRun'])) {
+    const text = workflow[name]
+    const setup = text.indexOf('uses: docker/setup-buildx-action@')
+    const build = text.indexOf('docker buildx build')
+    assert.ok(setup >= 0 && setup < build, `${name} sets up a buildx builder before it builds`)
+    assert.ok(!/^\s*driver:\s*docker\s*$/m.test(text), `${name} keeps the docker-container driver`)
+    assert.ok(text.includes('application/vnd.oci.image.manifest.v1+json'), `${name} checks each pushed digest is one OCI manifest`)
+  }
+})
+
 test('no workflow spells the image out; each reads it from the installer package.json', () => {
   for (const [name, text] of Object.entries(workflow)) assert.ok(!text.includes(NAMES.image), `${name} names ${NAMES.image} as a literal`)
 })
