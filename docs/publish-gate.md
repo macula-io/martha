@@ -205,9 +205,10 @@ What the plan leaves out, stated rather than hidden:
   start, a script the snapshot runs can still be rewritten in the checkout, and
   a `SessionStart` hook runs it before the first tool call is checked.
 - **Inside a turn**, the snapshot's hooks run the checkout's scripts as they
-  are at that moment. `answerToolCall` checks the launch before every call, so
-  once a call changes the tree (a reviewer's own `gh pr checkout`) the next call
-  is refused and the launcher stops the member. What is left is the hooks of
+  are at that moment. The launch is checked before every call
+  (`answerToolCall`) and after it (`recheckLaunch`), so once a call changes the
+  tree (a reviewer's own `gh pr checkout`) the launcher stops the member before
+  the host fires another event, and any later call is refused. What is left is the hooks of
   the one call that changed the tree; it does not undo what they ran.
 - **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
   servers in their frontmatter. They start only when the model spawns that
@@ -280,7 +281,8 @@ A host does these things, and the core does the rest:
 | a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
 | before starting the coding tool in a checkout | `prepareLaunch({ host, launch_dir, stop_dir, snapshot_root, approved_fingerprints })` — on a refusal do not start it and show the refusal to the owner; otherwise start it with the returned `switches` (their `args`, and the environment `launchEnvironment(process.env, switches)`, which drops inherited variables that would bring config back), show the owner `not_carried`, and remove `snapshot_dir` when the member stops |
-| before running any tool | `answerToolCall({ tool, session, policy, input, launch })`, where `launch` is the place and approvals `prepareLaunch` was given — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. On that refusal the launcher stops the member, because a host keeps firing hooks on its own events when calls are refused. What is left is the hooks of the one call that changed the tree |
+| before running any tool | `answerToolCall({ tool, session, policy, input, launch })`, where `launch` is the place and approvals `prepareLaunch` was given — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
+| after every tool call | `recheckLaunch(launch)` — on a refusal the launcher stops the member at once: a host keeps firing hooks on its own events (the end of the turn, the next prompt) when calls are refused, and those would run the changed scripts before any later call is checked |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(store, processes, launched)`, `recordMemberStopped(store, member_name)` |

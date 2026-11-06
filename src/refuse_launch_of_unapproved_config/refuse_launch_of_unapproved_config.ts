@@ -220,6 +220,22 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints }: Lau
   }
 }
 
+/** Where a member was started and what the owner approved there, as `prepareLaunch` was given it. */
+export interface ApprovedLaunch extends LaunchPlace {
+  readonly approved_fingerprints: readonly string[]
+}
+
+/**
+ * The launch, checked again on a running member: before every tool call
+ * (../answer_a_tool_call) and after it. The approved hooks and servers run
+ * scripts from the live checkout, so a call that changes the tree is refused
+ * from then on, and on a refusal after a call the launcher stops the member
+ * before the host fires its next event.
+ */
+export function recheckLaunch(launch: ApprovedLaunch): LaunchDecision {
+  return decideLaunch({ ...readLaunchState(launch), host: launch.host, approved_fingerprints: launch.approved_fingerprints })
+}
+
 /** The launch gate the registry names. */
 export const admitsLaunch: LaunchGate = (request) => decideLaunch(request).allow
 
