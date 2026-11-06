@@ -30,6 +30,7 @@ import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import {
   recheckLaunch,
   type ApprovedLaunch,
@@ -64,6 +65,10 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
         'No tool runs in this session: the checkout it was started in no longer matches what the owner approved, ' +
         `and its hooks run the checkout's scripts as they are now. ${launched.refusal}`,
     }
+  }
+
+  if (widensMemberReach(tool, names)) {
+    return { deny: `${tool} is not called in a member's session: ${WHO_DECIDES_REACH}.` }
   }
 
   if (isRawMeshRead(tool, input, names)) {
