@@ -39,7 +39,7 @@
 // pid. The pid is dynamic and no owner can sign it; that binding stays martha#24.
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
-import type { AttestedSender } from '../host_contract/host_contract.ts'
+import type { AttestedSender, KeyedRowStore, KeyedRows, Processes } from '../host_contract/host_contract.ts'
 
 /** One member the owner signed for: the name and node id a launch record must pair. */
 export interface SignedMember {
@@ -49,7 +49,7 @@ export interface SignedMember {
 }
 
 /** What the launcher records when it starts a member. */
-export interface MemberLaunch {
+export type MemberLaunch = {
   readonly member_name: string
   /** The member's node id, lowercased. */
   readonly node_id: string
@@ -64,27 +64,21 @@ export interface MemberLaunch {
 }
 
 /**
- * Where the launcher's records live, one per member. Only the launcher writes
- * them. One record per member, so two launches at once never write over each
- * other's record: there is no shared list to read, change and write back.
+ * Where the launcher's records live: the launcher's seam (#42), one row per
+ * member, keyed by the member's name. Only the launcher writes them: every other
+ * slice reads them through the contract's `stores.launches`, which cannot write. One row
+ * per member, so two launches at once never write over each other's record: there
+ * is no shared list to read, change and write back. The host keeps the file-level
+ * promises (no links, checked where it is read, nothing it did not write); this
+ * slice decides what a row must say.
  */
-export interface MemberLaunchStore {
-  /** Every record, or none when the store cannot vouch for what it holds. */
-  launches(): readonly MemberLaunch[]
-  /** Keep this member's record, in place of any it had. */
-  keep(launch: MemberLaunch): void
-  /** Drop this member's record. */
-  drop(member_name: string): void
-}
+export type MemberLaunchStore = KeyedRowStore
 
-/** The kernel's view of a process. */
-export interface ProcessTable {
-  /**
-   * When the process with this pid started, boot included, or null when no
-   * process has it or the boot cannot be told.
-   */
-  startTimeOf(pid: number): string | null
-}
+/** The launcher's records as the binder reads them. */
+export type MemberLaunchRecords = KeyedRows
+
+/** The host's view of which process holds a pid, boot included. */
+export type ProcessTable = Pick<Processes, 'identityOf'>
 
 /** The node id a delivery's attested sender is bound to, or null for nobody. */
 export type Binder = (sender: AttestedSender | undefined) => string | null
@@ -123,7 +117,7 @@ export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessT
     return { recorded: false, refusal: `A launch of ${launched.member_name} is not recorded: ${launched.pid} is not a process id.` }
   }
 
-  const process_started_at = processes.startTimeOf(launched.pid)
+  const process_started_at = processes.identityOf(launched.pid)
   if (process_started_at === null) {
     return {
       recorded: false,
@@ -132,13 +126,14 @@ export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessT
   }
 
   const node_id = launched.node_id.toLowerCase()
-  for (const stale of store.launches()) {
+  for (const stale of launchesIn(store)) {
     if (stale.member_name !== launched.member_name && (stale.pid === launched.pid || stale.node_id === node_id)) {
       store.drop(stale.member_name)
     }
   }
 
-  store.keep({ member_name: launched.member_name, node_id, pid: launched.pid, process_started_at })
+  const launch: MemberLaunch = { member_name: launched.member_name, node_id, pid: launched.pid, process_started_at }
+  store.keep(launched.member_name, launch)
   return { recorded: true }
 }
 
@@ -156,19 +151,19 @@ export function recordMemberStopped(store: MemberLaunchStore, member_name: strin
  * (trustedMembers of openTrustList); a refused list is nobody, and binds nothing.
  */
 export function binderOverLaunches(
-  store: MemberLaunchStore,
+  store: MemberLaunchRecords,
   processes: ProcessTable,
   signedMembers: () => readonly SignedMember[],
 ): Binder {
   return (sender) => {
     if (sender === undefined || !isPid(sender.sending_pid)) return null
 
-    const matching = store.launches().filter((launch) => launch.pid === sender.sending_pid)
+    const matching = launchesIn(store).filter((launch) => launch.pid === sender.sending_pid)
     if (matching.length !== 1) return null
 
     const [launch] = matching
     if (launch === undefined) return null
-    if (processes.startTimeOf(launch.pid) !== launch.process_started_at) return null
+    if (processes.identityOf(launch.pid) !== launch.process_started_at) return null
     const signed = signedMembers().some(
       (member) => member.member_name === launch.member_name && member.node_id === launch.node_id,
     )
@@ -176,6 +171,36 @@ export function binderOverLaunches(
 
     return launch.node_id
   }
+}
+
+/**
+ * Every launch the store holds, or none when it cannot vouch for them all: a row
+ * that is not a launch, or one kept under another member's name than its own,
+ * means someone other than the launcher wrote there.
+ */
+export function launchesIn(store: MemberLaunchRecords): readonly MemberLaunch[] {
+  const launches: MemberLaunch[] = []
+  for (const { key, row } of store.all()) {
+    if (!isMemberLaunch(row) || row.member_name !== key) return []
+    launches.push(row)
+  }
+  return launches
+}
+
+function isMemberLaunch(value: unknown): value is MemberLaunch {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const { member_name, node_id, pid, process_started_at } = value as Record<string, unknown>
+  return (
+    typeof member_name === 'string' &&
+    MEMBER_NAME.test(member_name) &&
+    typeof node_id === 'string' &&
+    NODE_ID.test(node_id) &&
+    node_id === node_id.toLowerCase() &&
+    typeof pid === 'number' &&
+    isPid(pid) &&
+    typeof process_started_at === 'string' &&
+    process_started_at !== ''
+  )
 }
 
 function isPid(pid: number): boolean {

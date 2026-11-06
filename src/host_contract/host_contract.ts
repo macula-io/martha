@@ -5,8 +5,9 @@
 // (issue #1, "Host-neutral core, one host contract"; #15 finding 1):
 //
 //   - a clock;
-//   - stores: append-only rows, and documents read as text;
-//   - running a process;
+//   - stores: append-only rows, documents read as text, and the launcher's
+//     records kept one per key, which slices only read;
+//   - running a process, and telling which process holds a pid;
 //   - delivery in and out: a turn handed to the model, and the turns that
 //     arrive, with where each came from as far as the tool itself can say;
 //   - registering a tool.
@@ -69,9 +70,65 @@ export interface DocumentStore {
   read(path: string): Promise<string>
 }
 
+/** A row kept under a key, read back with its key. */
+export interface KeyedRow {
+  readonly key: string
+  readonly row: Row
+}
+
+/**
+ * The launcher's records as every slice sees them: read, never written
+ * (martha#14, #42). The launcher's records name which member a pid is, so a
+ * slice that could write one could have its own deliveries attributed to
+ * another member.
+ *
+ * This is all the contract hands a slice, and an adapter hands it as
+ * `readingOnly(store)`, so the object a slice holds has no writing member at run
+ * time either: reaching past the type (`Reflect.get`, `Object.values`, a cast)
+ * finds `all` and nothing else.
+ *
+ * Synchronous on purpose: the binder runs inside a synchronous turn, and with no
+ * await between reading a record and asking which process holds its pid, nothing
+ * else can run in between.
+ *
+ * The adapter must keep these promises, which its own tests prove:
+ *
+ *   - `all` returns no rows at all when the store cannot vouch for what it holds:
+ *     a place others may write into, an entry it did not write, a link, or a row
+ *     not readable as JSON;
+ *   - a row is read from the very thing that was checked, never checked by one
+ *     name and read by another;
+ *   - a reader never sees half of a row.
+ */
+export interface KeyedRows {
+  /** Every row with its key, or none when the store cannot vouch for what it holds. */
+  all(): readonly KeyedRow[]
+}
+
+/**
+ * The launcher's own seam: the records, written one per key, each in place of
+ * the last. It is not part of HostContract. The adapter that launches members
+ * holds it and passes it to the binder's writers (recordMemberLaunch,
+ * recordMemberStopped); every other slice gets only `readingOnly` of it. A
+ * check in prove_the_core names any other writer.
+ *
+ * A key is an opaque name, like a stream name: the adapter encodes it before it
+ * touches a path.
+ */
+export interface KeyedRowStore extends KeyedRows {
+  /** Keeps this row under this key, in place of any row it had. */
+  keep(key: string, row: Row): void
+  /** Drops the row under this key, if there is one. */
+  drop(key: string): void
+}
+
+/** The records as a slice may hold them: an object whose only member reads. */
+export const readingOnly = (store: KeyedRows): KeyedRows => Object.freeze({ all: () => store.all() })
+
 export interface Stores {
   readonly rows: RowStore
   readonly documents: DocumentStore
+  readonly launches: KeyedRows
 }
 
 /** A process to run: the command, its arguments and the directory it runs in. */
@@ -90,6 +147,14 @@ export interface ProcessOutcome {
 
 export interface Processes {
   run(request: ProcessRequest): Promise<ProcessOutcome>
+  /**
+   * Which process holds this pid now: an opaque text naming the boot and when in
+   * that boot the process started, or null when no process holds it or the boot
+   * cannot be told. A pid handed out again, or the same pid and start after a
+   * reboot, gives another text. Callers compare it for equality and never parse it.
+   * Synchronous for the reason KeyedRows gives.
+   */
+  identityOf(pid: number): string | null
 }
 
 // --- where a turn came from ---------------------------------------------------

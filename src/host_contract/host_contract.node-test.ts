@@ -3,7 +3,7 @@ import { dirname, join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { ROW_STREAM_MOVED } from './host_contract.ts'
+import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
 import { COMPUTED_SPECIFIER, SCANNED_EXTENSIONS, coreSources, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
 import { hostForTests } from './host_for_tests.ts'
 
@@ -23,8 +23,33 @@ test('the host contract has exactly the five parts decided on #1', () => {
   assert.deepEqual({ extra, missing }, { extra: [], missing: [] })
 })
 
-test('stores are rows and documents, nothing else', () => {
-  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'rows'])
+test('stores are rows, documents and the launcher\'s records (#42), nothing else', () => {
+  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'launches', 'rows'])
+})
+
+// The launcher's records name which member a pid is, so a slice that could write
+// one could have its own deliveries attributed to another member (#42). The type
+// gives slices `all` only; these prove the object they hold has nothing more.
+test('the launcher\'s records a slice is handed have no writing member, however it is reached', () => {
+  const { host, launcherRecords } = hostForTests({ launches: [{ key: 'Pluto', row: { member_name: 'Pluto' } }] })
+  const held: object = host.stores.launches
+
+  assert.deepEqual(Reflect.ownKeys(held), ['all'])
+  assert.equal(Reflect.get(held, 'keep'), undefined)
+  assert.equal(Reflect.get(held, 'drop'), undefined)
+  assert.equal(Object.values(held).length, 1)
+  assert.ok(Object.isFrozen(held))
+  assert.throws(() => Object.assign(held, { keep: launcherRecords.keep }))
+  assert.equal(Object.getPrototypeOf(held), Object.prototype)
+
+  // It reads the very records the launcher writes.
+  launcherRecords.keep('Neptunus', { member_name: 'Neptunus' })
+  assert.deepEqual(host.stores.launches.all().map(({ key }) => key).sort(), ['Neptunus', 'Pluto'])
+})
+
+test('readingOnly keeps only the reading member of whatever store it is given', () => {
+  const store = { all: () => [], keep: () => undefined, drop: () => undefined }
+  assert.deepEqual(Reflect.ownKeys(readingOnly(store)), ['all'])
 })
 
 // --- the core reaches a coding tool only through the contract -----------------

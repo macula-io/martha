@@ -1,0 +1,146 @@
+{
+  "_why": "Planted slice sources for prove_the_core/only_the_launcher_writes_launch_records. Each caught source lists the lines a finding must name, and may name the file kind it is planted as (.ts when it names none). They live in JSON so that no walk of the core's code reads them as code.",
+  "caught": {
+    "a direct keep": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) =>\n  host.stores.launches.keep('Pluto', { member_name: 'Pluto' })\n",
+      "lines": [
+        3
+      ]
+    },
+    "a drop through an alias": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const erase = (host: HostContract) => {\n  const records = host.stores.launches\n  records.drop('Pluto')\n}\n",
+      "lines": [
+        3
+      ]
+    },
+    "a destructured keep": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) => {\n  const { keep } = host.stores.launches\n  keep('Pluto', {})\n}\n",
+      "lines": [
+        3
+      ]
+    },
+    "a renamed destructured drop": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const erase = (host: HostContract) => {\n  const { drop: d } = host.stores.launches\n  d('Pluto')\n}\n",
+      "lines": [
+        3
+      ]
+    },
+    "the store destructured out of the stores": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) => {\n  const { launches } = host.stores\n  return launches\n}\n",
+      "lines": [
+        3
+      ]
+    },
+    "an element access": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) =>\n  host.stores.launches['keep']('Pluto', {})\n",
+      "lines": [
+        3
+      ]
+    },
+    "the store spread into another object": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) => {\n  const copy = { ...host.stores.launches }\n  copy.keep('Pluto', {})\n}\n",
+      "lines": [
+        3
+      ]
+    },
+    "an alias under a structural type of the slice's own": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\ninterface Sink { keep(key: string, row: object): void }\nexport const forge = (host: HostContract) => {\n  const s: Sink = host.stores.launches\n  s.keep('Pluto', {})\n}\n",
+      "lines": [
+        4
+      ]
+    },
+    "a computed key held as a constant": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) => {\n  const k = 'keep' as const\n  host.stores.launches[k]('Pluto', {})\n}\n",
+      "lines": [
+        4
+      ]
+    },
+    "Reflect.get": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) => {\n  const keep = Reflect.get(host.stores.launches, 'keep') as (key: string, row: object) => void\n  keep('Pluto', {})\n}\n",
+      "lines": [
+        3
+      ]
+    },
+    "Object.values": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) =>\n  Object.values(host.stores.launches)\n",
+      "lines": [
+        3
+      ]
+    },
+    "a cast to the launcher's seam": {
+      "text": "import type { HostContract, KeyedRowStore } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) =>\n  (host.stores.launches as unknown as KeyedRowStore).keep('Pluto', {})\n",
+      "lines": [
+        3
+      ]
+    },
+    "a writer in a .mts file": {
+      "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) =>\n  host.stores.launches.keep('Pluto', {})\n",
+      "lines": [
+        3
+      ],
+      "extension": ".mts"
+    },
+    "the binder's writer from a .mjs file": {
+      "text": "import { recordMemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nexport const forge = (store, processes) => recordMemberLaunch(store, processes, { member_name: 'Pluto', node_id: 'a', pid: 1 })\n",
+      "lines": [
+        1,
+        2
+      ],
+      "extension": ".mjs"
+    },
+    "the binder's writer, imported under another name": {
+      "text": "import { recordMemberLaunch as record } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract, store: Parameters<typeof record>[0]) =>\n  record(store, host.processes, { member_name: 'Pluto', node_id: 'a', pid: 1 })\n",
+      "lines": [
+        1,
+        3,
+        4
+      ]
+    },
+    "the binder's stop, called through its module": {
+      "text": "import * as binder from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport type { HostContract } from '../host_contract/host_contract.ts'\nexport const erase = (store: Parameters<typeof binder.recordMemberStopped>[0]) =>\n  binder.recordMemberStopped(store, 'Pluto')\n",
+      "lines": [
+        3,
+        4
+      ]
+    }
+  },
+  "quiet": [
+    "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const read = (host: HostContract) => host.stores.launches.all()\n",
+    "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const count = (host: HostContract) => host.stores.launches.all().length\n",
+    "import { binderOverLaunches } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport type { HostContract } from '../host_contract/host_contract.ts'\nexport const bind = (host: HostContract) => binderOverLaunches(host.stores.launches, host.processes)\n",
+    "import * as binder from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport type { HostContract } from '../host_contract/host_contract.ts'\nexport const bind = (host: HostContract) => binder.binderOverLaunches(host.stores.launches, host.processes)\n",
+    "import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport type { HostContract } from '../host_contract/host_contract.ts'\nexport const seen = (host: HostContract) => launchesIn(host.stores.launches).length\n",
+    "export const notes = { keep: (x: string) => x, drop: 'recordMemberLaunch' }\nnotes.keep('a')\n"
+  ],
+  "hostGlueImports": {
+    "_why": "Planted imports for hostGlueImportedBySlices: a slice that imported the host glue could build the writable store itself.",
+    "caught": [
+      {
+        "path": "planted_glue_0/planted.ts",
+        "text": "import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'\n"
+      },
+      {
+        "path": "planted_glue_1/planted.ts",
+        "text": "export * from '../linux_process_identity/launch_records_directory.ts'\n"
+      },
+      {
+        "path": "planted_glue_2/planted.ts",
+        "text": "export const load = () => import('../linux_process_identity/launch_records_directory.ts')\n"
+      },
+      {
+        "path": "planted_glue_3/deeper/planted.ts",
+        "text": "import type { KeyedRowStore } from '../../linux_process_identity/launch_records_directory.ts'\n"
+      }
+    ],
+    "quiet": [
+      {
+        "path": "quiet_glue_0/quiet.ts",
+        "text": "import { binderOverLaunches } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\n"
+      },
+      {
+        "path": "quiet_glue_1/quiet.ts",
+        "text": "import { notes } from './linux_process_identity_notes.ts'\n"
+      }
+    ]
+  }
+}

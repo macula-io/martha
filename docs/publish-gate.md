@@ -295,7 +295,7 @@ A host does these things, and the core does the rest:
 | after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
-| the launcher starts or stops a member | `recordMemberLaunch(store, processes, launched)`, `recordMemberStopped(store, member_name)` |
+| the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
 | after a turn | `rememberSession(store, session)` |
 
 `takeInTurn` records the arrival on the inbound path that names it, so the host
@@ -401,15 +401,37 @@ The rules it keeps, from the threat model on martha#14:
 - **Never silently widen.** No record, two records for one pid, or a records
   directory holding anything the launcher would not write: nobody.
 
-`memberLaunchesDirectory(directory)` keeps one file per member, so two launches
-at once never write over each other's record. Each file is written whole and
-renamed into place. Read back, the directory vouches for nothing unless it is a
-real directory owned by this user that nobody else may write into, holds only
+The binder reaches the machine only through the host contract (#42): the
+records are `host.stores.launches`, one row per member keyed by its name, and the
+process's start time and boot are `host.processes.identityOf(pid)`. The slice
+decides what a row must say (a launch, keyed by the member it names); the host
+keeps the file-level promises. Both seams are synchronous, so nothing runs
+between reading a record and asking which process holds its pid.
+
+Slices only read the records. The contract types `stores.launches` as
+`KeyedRows`, which has `all` and nothing else, and an adapter hands it as
+`readingOnly(store)`, so the object a slice holds has no writing member at run
+time either. The writable `KeyedRowStore` is the launcher's own seam: the adapter
+that launches members holds it and passes it to `recordMemberLaunch` and
+`recordMemberStopped`; it is not part of `HostContract`. As a second line,
+`prove_the_core/only_the_launcher_writes_launch_records.ts` names any slice but
+the binder's that writes the store or reaches `stores.launches` for anything but
+reading, names any slice that imports host glue, and refuses a `martha.hostGlue`
+entry that is not exactly `src/<one directory>`. A slice writing the records'
+files itself with `node:fs` is left to #26's allow-list of Node modules.
+
+On Linux both seams come from `src/linux_process_identity/`, host glue that is
+not a slice and that every host adapter on Linux composes (package.json
+`martha.hostGlue`). `launchRecordsDirectory(directory)` keeps one file per key,
+so two launches at once never write over each other's record; the key is encoded
+before it becomes a file name, so it is never a path. Each file is written whole
+and renamed into place. Read back, the directory vouches for nothing unless it is
+a real directory owned by this user that nobody else may write into, holds only
 records, and every record is opened without following a link and checked on the
-opened file itself (a regular file, owned by this user, mode `0600`, one row that
-names the member its file is named for) before that same file is read.
-`linuxProcessTable` reads a process's start time and the boot from `/proc`;
-where there is no `/proc`, every process reads as absent and nobody binds.
+opened file itself (a regular file, owned by this user, mode `0600`, a JSON row)
+before that same file is read. `linuxProcessIdentities` reads a process's start
+time and the boot from `/proc`; where there is no `/proc`, every process reads as
+absent and nobody binds.
 
 **The residual, accepted for now:** every member runs as the same OS user, so a
 member that already holds a shell can rewrite the records or read another
@@ -548,7 +570,8 @@ member, and a row excused without a reason. Each of those turns CI red.
 - **No host attests a cross-session sender yet.** The binder is built and
   tested; no adapter in this repository hands it a sender, so every
   cross-session message still taints. A host gains it by attesting the sending
-  process out of band and passing `binderOverLaunches(store, processes, signedMembers)`,
+  process out of band and passing
+  `binderOverLaunches(host.stores.launches, host.processes, signedMembers)`,
   where `signedMembers` returns `trustedMembers` of the opened `members` list.
 - **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
   rule; the room code that delivers messages is the crew's existing implementation,

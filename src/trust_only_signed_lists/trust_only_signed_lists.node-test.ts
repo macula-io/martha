@@ -22,7 +22,8 @@ import {
   trustedMembers,
   trustedSupervisors,
 } from './trust_only_signed_lists.ts'
-import { binderOverLaunches, recordMemberLaunch, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { binderOverLaunches, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { admitsInCrewRoom } from '../admit_a_room_message/admit_a_room_message.ts'
 import { refuseExecutionAfterUngatedText } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { actorFromCallingSession, refuseActionFromAnUnverifiedActor } from '../who_may_act/who_may_act.ts'
@@ -431,19 +432,21 @@ test('an upper-case node id in a signed policy matches the same sender in lower 
 })
 
 test('a signed members list binds a launched member, and a refused one binds nobody', () => {
-  const launch: Omit<MemberLaunch, 'process_started_at'> = { member_name: MEMBER_NAME_OF(member), node_id: member, pid: 4201 }
-  const processes = { startTimeOf: (pid: number) => (pid === launch.pid ? 'started' : null) }
-  const launches: MemberLaunch[] = []
-  const store = { launches: () => launches, keep: (l: MemberLaunch) => void launches.push(l), drop: () => undefined }
-  assert.deepEqual(recordMemberLaunch(store, processes, launch), { recorded: true })
+  // The launcher's record as the launcher would have kept it: only the launcher
+  // writes records (#42), so this slice's test starts with one rather than writing it.
+  const launch: MemberLaunch = { member_name: MEMBER_NAME_OF(member), node_id: member, pid: 4201, process_started_at: 'started' }
+  const { stores, processes } = hostForTests({
+    launches: [{ key: launch.member_name, row: launch }],
+    identityOf: (pid) => (pid === launch.pid ? launch.process_started_at : null),
+  }).host
 
   const document = documentOf('members', [member])
   const opened = open({ kind: 'members', document, signature: signed(document) })
   assert.deepEqual(trustedMembers(opened), [{ member_name: launch.member_name, node_id: member }])
-  assert.equal(binderOverLaunches(store, processes, () => trustedMembers(opened))({ sending_pid: launch.pid }), member)
+  assert.equal(binderOverLaunches(stores.launches, processes, () => trustedMembers(opened))({ sending_pid: launch.pid }), member)
 
   const unsigned = open({ kind: 'members', document, signature: undefined })
-  assert.equal(binderOverLaunches(store, processes, () => trustedMembers(unsigned))({ sending_pid: launch.pid }), null)
+  assert.equal(binderOverLaunches(stores.launches, processes, () => trustedMembers(unsigned))({ sending_pid: launch.pid }), null)
 })
 
 test('a members entry with another field, or a name a record cannot carry, refuses everyone', () => {
