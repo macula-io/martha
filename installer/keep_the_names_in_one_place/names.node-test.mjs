@@ -114,6 +114,7 @@ test('the dry run pushes into the release package itself, under a tag that is ne
   assert.match(workflow.dryRun, /jq -r \.martha\.dryRunTagPrefix installer\/package\.json/, 'the dry run reads its tag prefix from the installer package.json')
   assert.match(NAMES.dryRunTagPrefix, /^[a-z][a-z-]*-$/, 'the prefix starts with a letter, so no tag it makes is a version')
   assert.ok(!NAMES.dryRunTagPrefix.startsWith(NAMES.releaseTagPrefix) && !NAMES.dryRunTagPrefix.startsWith(NAMES.installerTagPrefix))
+  assert.ok(read(`${INSTALLER_DIR}/README.md`).includes(`\`${NAMES.dryRunTagPrefix}<run>-<attempt>\``), 'the README names the dry-run tag as the installer package.json does')
 })
 
 test('every install line names an exact installer version', () => {

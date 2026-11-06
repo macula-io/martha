@@ -32,6 +32,18 @@ Check the installer itself with `npm audit signatures`: it is published with pro
 martha-install [<version>] [--downgrade] [--digest sha256:<hex>]
 ```
 
+## How a release is made
+
+1. The release dry run (`release-dry-run.yml`, started by hand on a branch) pushes the packed tree into the release
+   package under a `dry-run-<run>-<attempt>` tag, which is never a version, so no install ever takes it. It signs it
+   through the same signing workflow, then checks that the signature verifies for that branch and is refused for
+   `refs/tags/v<version>`, that an unsigned image is refused, and that the layer is exactly the committed tree.
+2. The first dry run is what makes the release package. The maintainers then link it to this repository and make it
+   public, before any release tag: every install pulls anonymously, and a refused pull must never read as
+   "unsigned".
+3. `installer-v<version>` publishes this installer to npm, with provenance, through trusted publishing.
+4. `v<version>` publishes a signed Martha release into the package, pinning that installer.
+
 ## License
 
 Apache-2.0

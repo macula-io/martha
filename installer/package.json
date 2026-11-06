@@ -54,6 +54,7 @@
     "command": "martha",
     "releaseTagPrefix": "v",
     "installerTagPrefix": "installer-v",
-    "releaseFolder": "martha"
+    "releaseFolder": "martha",
+    "dryRunTagPrefix": "dry-run-"
   }
 }

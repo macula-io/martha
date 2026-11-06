@@ -19,6 +19,7 @@ const manifest = createRequire(import.meta.url)('../package.json')
  * @property {string} releaseFolder     the one top-level folder a release's layer holds
  * @property {string} releaseTagPrefix  what a release tag starts with
  * @property {string} installerTagPrefix what an installer tag starts with
+ * @property {string} dryRunTagPrefix  what a dry run's image tag starts with: never a version, never a release tag
  */
 
 /** @type {Readonly<Names>} */

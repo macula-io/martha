@@ -9,7 +9,7 @@
 // registry token, the network and an image the workflow pushed. Its one caller is release-dry-run.yml.
 //
 // Environment (all required): DRY_RUN_IMAGE, DRY_RUN_VERSION, DRY_RUN_DIGEST, DRY_RUN_UNSIGNED_DIGEST, DRY_RUN_REF,
-// GHCR_TOKEN (the run's token: the dry-run package is not public).
+// GHCR_TOKEN (the run's token: before the owner makes it public, the release package is not).
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'

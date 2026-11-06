@@ -4,9 +4,10 @@
 #
 #   gh workflow run release-dry-run.yml --ref <branch>
 #
-# It packs the tree, pushes one image to <image>-dry-run (never the release package) and an unsigned image beside
-# it, signs the first through attest-image.yml at the sha release.yml calls (its guard passes a ref that is no
-# tag), and then rehearses the install against the real Sigstore trust root:
+# It packs the tree, pushes one image into the release package under a dry-run tag (<dryRunTagPrefix><run>-<attempt>,
+# never a version, so no install ever takes it) and an unsigned image beside it, signs the first through
+# attest-image.yml at the sha release.yml calls (its guard passes a ref that is no tag), and then rehearses the
+# install against the real Sigstore trust root:
 #   - the signature verifies for THIS branch's ref, by a listed signer, for this repository;
 #   - the same signature is refused for refs/tags/v<version>, the ref every real install demands;
 #   - the unsigned digest is refused;
@@ -15,6 +16,9 @@
 # package does not ship: the installer itself has no way to name another ref.
 #
 # What it cannot rehearse: the guard on a v* tag and the published-once check; those run on the tag only.
+#
+# The first dry run is also what makes the release package: the owner links it to this repository and makes it
+# public after that run and before the first release tag (design section 5).
 
 name: release dry run
 
@@ -46,8 +50,9 @@ jobs:
       - name: The names
         id: names
         run: |
-          echo "image=$(jq -r .martha.image installer/package.json)-dry-run" >> "$GITHUB_OUTPUT"
+          echo "image=$(jq -r .martha.image installer/package.json)" >> "$GITHUB_OUTPUT"
           echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+          echo "tag=$(jq -r .martha.dryRunTagPrefix installer/package.json)${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
@@ -59,7 +64,7 @@ jobs:
         id: push
         env:
           IMAGE: ${{ steps.names.outputs.image }}
-          VERSION: ${{ steps.names.outputs.version }}
+          TAG: ${{ steps.names.outputs.tag }}
         run: |
           set -euo pipefail
           build() {
@@ -67,10 +72,10 @@ jobs:
               --output "type=image,name=$IMAGE:$1,push=true,oci-mediatypes=true,compression=gzip" \
               --metadata-file "$RUNNER_TEMP/metadata-$1.json" "$RELEASE_CTX"
           }
-          build "$VERSION"
-          build "$VERSION-unsigned" --label dev.macula.dry-run=unsigned
-          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$VERSION.json")"
-          unsigned="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$VERSION-unsigned.json")"
+          build "$TAG"
+          build "$TAG-unsigned" --label dev.macula.dry-run=unsigned
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$TAG.json")"
+          unsigned="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata-$TAG-unsigned.json")"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build"; exit 1; }
           [[ "$unsigned" =~ ^sha256:[0-9a-f]{64}$ && "$unsigned" != "$digest" ]] || { echo "::error::the unsigned image is not a second digest"; exit 1; }
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
