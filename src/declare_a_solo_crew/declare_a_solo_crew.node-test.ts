@@ -3,7 +3,7 @@
 // Real directories under a temporary home. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -65,4 +65,24 @@ test('init with no owner name refuses, saying how to set one, and writes nothing
   assert.equal(declared.declared, false)
   assert.match(declared.declared ? '' : declared.refusal, /git config user\.name/)
   assert.equal(existsSync(join(root, DECLARATION_DIRECTORY)), false)
+})
+
+test('init refuses a declaration directory that is a link, naming it, and writes nothing where it points', async (t) => {
+  const { root, state } = placeFor(t)
+  const elsewhere = join(root, '..', 'elsewhere')
+  mkdirSync(elsewhere)
+  symlinkSync(elsewhere, join(root, DECLARATION_DIRECTORY))
+  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  assert.equal(outcome.declared, false)
+  const refusal = outcome.declared ? '' : outcome.refusal
+  assert.ok(refusal.includes(join(root, DECLARATION_DIRECTORY)), refusal)
+  assert.deepEqual(readdirSync(elsewhere), [])
+})
+
+test('init refuses a declaration path that is a file, naming it, rather than throwing', async (t) => {
+  const { root, state } = placeFor(t)
+  writeFileSync(join(root, DECLARATION_DIRECTORY), 'not a directory\n')
+  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  assert.equal(outcome.declared, false)
+  assert.ok(!outcome.declared && outcome.refusal.includes(join(root, DECLARATION_DIRECTORY)), outcome.declared ? '' : outcome.refusal)
 })

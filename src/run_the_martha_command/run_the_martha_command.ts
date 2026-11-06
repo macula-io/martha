@@ -8,7 +8,8 @@
 // this user's own). Every act is a slice of its own that takes those places as arguments.
 //
 // What it says: a refusal, and every line an act tells the owner, goes to stderr prefixed `martha:`, as
-// martha-install does. `--version` prints the release's version on stdout; `init` prints the members it
+// martha-install does. Every line it shows has its terminal controls written out as escapes first (shownSafely),
+// since a path, a member's name or a kept approval may hold bytes a terminal would act on. `--version` prints the release's version on stdout; `init` prints the members it
 // declared; `start` prints one line naming the member and its pid once it is up, then holds the terminal until
 // the member ends, and ends the way the member did. Exit 0 is done, 1 refused, 2 not a way the command is used.
 
@@ -38,6 +39,9 @@ export const USAGE = 'usage: martha init | martha approve | martha start <member
 
 /** What starts every line Martha shows the owner on stderr. */
 export const SAID_BY = 'martha:'
+
+/** The directory under the XDG state home that holds Martha's state, one directory per project. */
+export const STATE_ROOT_NAME = 'martha'
 
 /** The host the owner has installed, found on their PATH. */
 const CLAUDE = 'claude'
@@ -83,7 +87,7 @@ function placesOf(io: CommandIo): Places | string {
   if (home === undefined) return 'HOME is not set to an absolute path, so Martha cannot tell where your home is.'
   const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel')
   if (root === undefined) return `${io.cwd} is not inside a git checkout. Run martha in the checkout your crew works in.`
-  const state_root = join(absolute(io.env['XDG_STATE_HOME']) ?? join(home, '.local', 'state'), 'martha')
+  const state_root = join(absolute(io.env['XDG_STATE_HOME']) ?? join(home, '.local', 'state'), STATE_ROOT_NAME)
   const state = openState(state_root, root)
   return 'refusal' in state ? state.refusal : { root, home, state }
 }
@@ -125,6 +129,7 @@ async function start(io: CommandIo, places: Places, member: string, args: readon
     ...places,
     member,
     args,
+    is_terminal: io.terminal.is_terminal,
     places: launcher,
     command: CLAUDE,
     inherited: io.env,
@@ -148,8 +153,27 @@ function actOf(argv: readonly string[]): { readonly act: string; readonly member
   return separator === '--' ? { act, member, args: rest } : undefined
 }
 
+/** What a terminal would act on rather than show: C0 and C1 controls, DEL, and the bidirectional overrides and isolates. */
+const TERMINAL_CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu
+
+/** `line` with every terminal control written out as an escape, so nothing Martha shows can move, erase or reorder what the owner reads. */
+export function shownSafely(line: string): string {
+  return line.replace(TERMINAL_CONTROL, (control) => {
+    const code = control.codePointAt(0)!
+    return code <= 0xff ? `\\x${code.toString(16).padStart(2, '0')}` : `\\u${code.toString(16).padStart(4, '0')}`
+  })
+}
+
+/** The io with every line it shows escaped: a path, a member's name or a kept approval may hold anything. */
+const showingSafely = (io: CommandIo): CommandIo => ({
+  ...io,
+  out: (line) => io.out(shownSafely(line)),
+  err: (line) => io.err(shownSafely(line)),
+})
+
 /** Runs the command `argv` names; resolves to the status it ends with. */
-export async function runMarthaCommand(argv: readonly string[], io: CommandIo): Promise<number> {
+export async function runMarthaCommand(argv: readonly string[], unescaped: CommandIo): Promise<number> {
+  const io = showingSafely(unescaped)
   const asked = actOf(argv)
   if (asked === undefined) {
     io.err(USAGE)

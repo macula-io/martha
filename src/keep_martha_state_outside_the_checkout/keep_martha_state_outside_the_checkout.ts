@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import { getuid } from 'node:process'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
-import type { ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** Only the owner may enter, list or write a state directory. */
 export const STATE_DIRECTORY_MODE = 0o700
@@ -151,14 +151,40 @@ export function nodeIdsFor(state: MarthaState, names: readonly string[]): { read
   return { ids }
 }
 
+/** A sha256 in hex, as the launch gate writes a file's. */
+const SHA256_HEX = /^[0-9a-f]{64}$/
+
+/** A git object id, sha1 or sha256, as git names the checkout's tree. */
+const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+
+/** The fields of an approval, and of each entry kind approve can keep: the gate refuses a symlink or an unreadable entry whatever was approved. */
+const APPROVAL_FIELDS = ['approved_at', 'entries', 'fingerprint', 'tree']
+const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  absent: ['kind', 'path'],
+  directory: ['kind', 'path'],
+  file: ['kind', 'path', 'sha256'],
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
+  JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
+
+const isEntry = (value: unknown): value is ConfigEntry => {
+  const fields = isRecord(value) && typeof value['kind'] === 'string' ? ENTRY_FIELDS[value['kind']] : undefined
+  if (fields === undefined || !isRecord(value) || !hasExactly(value, fields) || typeof value['path'] !== 'string') return false
+  return value['kind'] !== 'file' || (typeof value['sha256'] === 'string' && SHA256_HEX.test(value['sha256']))
+}
+
+/** True when `text` is the instant toISOString writes for it, as approve keeps one. */
+const isInstant = (text: unknown): boolean => typeof text === 'string' && !Number.isNaN(Date.parse(text)) && new Date(text).toISOString() === text
+
+/** An approval only as approve keeps one: its exact fields, an instant, entries the gate writes, and the gate's own fingerprint over them. */
 const isApproval = (value: unknown): value is Approval => {
-  const approval = value as Partial<Approval> | null
-  return (
-    typeof approval?.fingerprint === 'string' &&
-    typeof approval.approved_at === 'string' &&
-    Array.isArray(approval.entries) &&
-    (approval.tree === null || typeof approval.tree === 'string')
-  )
+  if (!isRecord(value) || !hasExactly(value, APPROVAL_FIELDS) || !isInstant(value['approved_at'])) return false
+  const { entries, tree, fingerprint } = value
+  if (!Array.isArray(entries) || !entries.every(isEntry)) return false
+  if (tree !== null && !(typeof tree === 'string' && GIT_OBJECT_ID.test(tree))) return false
+  return fingerprint === fingerprintOf({ entries, tree })
 }
 
 function approvalOf(line: string): Approval | undefined {
@@ -184,18 +210,29 @@ export function readApprovals(state: MarthaState): { readonly approvals: readonl
 
 const APPEND = fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
 
+/** The approvals file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
+function openForAppend(path: string): { readonly descriptor: number } | Refused {
+  let descriptor: number
+  try {
+    descriptor = fs.openSync(path, APPEND, STATE_FILE_MODE)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return { refusal: `${path} could not be opened to keep an approval (${code ?? String(error)}), so Martha keeps none in it.` }
+  }
+  const found = fs.fstatSync(descriptor)
+  if (found.isFile() && found.uid === getuid?.() && (found.mode & OPEN_TO_OTHERS) === 0) return { descriptor }
+  fs.closeSync(descriptor)
+  return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no approval in it.` }
+}
+
 /** Keeps one more approval, as one line at the end of the file; or why it could not be kept. */
 export function appendApproval(state: MarthaState, approval: Approval): Refused | undefined {
-  const path = join(state.directory, APPROVALS_FILE)
-  const descriptor = fs.openSync(path, APPEND, STATE_FILE_MODE)
+  const opened = openForAppend(join(state.directory, APPROVALS_FILE))
+  if ('refusal' in opened) return opened
   try {
-    const found = fs.fstatSync(descriptor)
-    if (!found.isFile() || found.uid !== getuid?.() || (found.mode & OPEN_TO_OTHERS) !== 0) {
-      return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no approval in it.` }
-    }
-    fs.writeSync(descriptor, `${JSON.stringify(approval)}\n`)
+    fs.writeSync(opened.descriptor, `${JSON.stringify(approval)}\n`)
     return undefined
   } finally {
-    fs.closeSync(descriptor)
+    fs.closeSync(opened.descriptor)
   }
 }
