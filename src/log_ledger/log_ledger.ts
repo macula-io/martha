@@ -185,7 +185,9 @@ export async function actsAwaitingOutcome(
 
 // --- writing --------------------------------------------------------------------
 
-const keep = (host: LedgerHost, row: LedgerRow, expected_length?: number): Promise<number> =>
+// Async on purpose: a package name ledgerStreamOf refuses becomes a rejection
+// of this promise, never a throw before the caller's handler is attached.
+const keep = async (host: LedgerHost, row: LedgerRow, expected_length?: number): Promise<number> =>
   host.stores.rows.append(ledgerStreamOf(row.package), row, expected_length)
 
 /** Keeps a milestone of a package. */
@@ -278,7 +280,9 @@ export class ActNotSent extends Error {
  * check what happened, then record it with concludeAct.
  *
  * When the act itself failed, that failure is the cause, so it is not lost; the
- * reason the outcome was not kept is `keeping_error` either way.
+ * reason the outcome was not kept is `keeping_error` either way. Read
+ * `sent.succeeded` to know which `cause` holds: false, the act's own failure;
+ * true, the same error as `keeping_error`.
  */
 export class OutcomeNotKept extends Error {
   readonly code = OUTCOME_NOT_KEPT
