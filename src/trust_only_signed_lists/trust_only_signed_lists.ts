@@ -50,7 +50,7 @@ import type { Roster } from '../who_may_act/who_may_act.ts'
 import { SK_ED25519, parseSshPublicKey, verifySshSignature } from './ssh_signature.ts'
 
 /** The namespace the owner signs trust lists in: `ssh-keygen -Y sign -n <this>`. */
-export const TRUST_LIST_NAMESPACE = 'trust-list@martha.macula.io'
+export const TRUST_LIST_NAMESPACE = 'martha-trust-list'
 
 /** Each list a gate trusts, and the field its node ids live in. */
 export const LIST_FIELD = {

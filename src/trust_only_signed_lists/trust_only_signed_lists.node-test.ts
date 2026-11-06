@@ -206,7 +206,7 @@ test('ssh-keygen -Y verify accepts the hardware key signature the fixtures write
       ['-Y', 'verify', '-f', join(dir, 'allowed_signers'), '-I', 'owner', '-n', TRUST_LIST_NAMESPACE, '-s', join(dir, 'roster.json.sig')],
       { input: document, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
     )
-    assert.match(out, /Good "trust-list@martha\.macula\.io" signature for owner/)
+    assert.ok(out.includes(`Good "${TRUST_LIST_NAMESPACE}" signature for owner`), out)
   })
 })
 
