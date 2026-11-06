@@ -107,6 +107,15 @@ test('no workflow spells the image out; each reads it from the installer package
   for (const [name, text] of Object.entries(workflow)) assert.ok(!text.includes(NAMES.image), `${name} names ${NAMES.image} as a literal`)
 })
 
+test('the dry run pushes into the release package itself, under a tag that is never a version', () => {
+  // The package must exist, linked and public, before the first release tag; the dry run is what makes it
+  // (design section 5). Its tags start with the dry-run prefix, which no version and no release tag starts with.
+  assert.match(workflow.dryRun, /echo "image=\$\(jq -r \.martha\.image installer\/package\.json\)" >> "\$GITHUB_OUTPUT"/, 'the dry run pushes to the release image, no suffix')
+  assert.match(workflow.dryRun, /jq -r \.martha\.dryRunTagPrefix installer\/package\.json/, 'the dry run reads its tag prefix from the installer package.json')
+  assert.match(NAMES.dryRunTagPrefix, /^[a-z][a-z-]*-$/, 'the prefix starts with a letter, so no tag it makes is a version')
+  assert.ok(!NAMES.dryRunTagPrefix.startsWith(NAMES.releaseTagPrefix) && !NAMES.dryRunTagPrefix.startsWith(NAMES.installerTagPrefix))
+})
+
 test('every install line names an exact installer version', () => {
   for (const readme of ['README.md', `${INSTALLER_DIR}/README.md`]) {
     const lines = read(readme).split('\n').filter((l) => /\bnpx\b/.test(l) && l.includes(NAMES.npmName))

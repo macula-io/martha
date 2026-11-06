@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { NAMES } from '../keep_the_names_in_one_place/names.mjs'
 import { CouldNotCheck, Refused } from '../refuse_in_words/refuse_in_words.mjs'
 import { release, serveRegistry } from '../serve_a_release_locally/serve_a_release_locally.mjs'
-import { LIMITS, layerOf, registry } from './read_the_release_registry.mjs'
+import { LIMITS, isVersion, layerOf, registry } from './read_the_release_registry.mjs'
 
 /**
  * @param {Promise<unknown>} promise
@@ -36,6 +36,14 @@ const opened = async (t, ...args) => {
 test('the highest X.Y.Z tag is taken; signature tags and names that are no version are passed over', async (t) => {
   const { reg } = await opened(t, [release({ version: '1.2.0' }), release({ version: '1.10.0' }), release({ version: '1.9.1' })], { extraTags: ['latest', 'main'] })
   assert.equal(await reg.highestVersion(), '1.10.0')
+})
+
+test('a dry run\'s tags, pushed into the release package before any release, are never taken for a version', async (t) => {
+  assert.equal(typeof NAMES.dryRunTagPrefix, 'string', 'the dry-run tag prefix is one of the names')
+  const dryRun = `${NAMES.dryRunTagPrefix}42-1`
+  const { reg } = await opened(t, [release({ version: '1.2.0' })], { extraTags: [dryRun, `${dryRun}-unsigned`] })
+  assert.equal(isVersion(dryRun), false)
+  assert.equal(await reg.highestVersion(), '1.2.0')
 })
 
 test('refused: a tag list over 1 MiB', async (t) => {
