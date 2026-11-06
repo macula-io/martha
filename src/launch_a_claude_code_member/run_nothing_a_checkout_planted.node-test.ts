@@ -18,7 +18,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
@@ -142,7 +142,8 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   // come after the owner's to win.
   const direnv_config = join(home, 'direnv-config')
   mkdirSync(direnv_config)
-  writeFileSync(join(direnv_config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(home)}]\n`)
+  // direnv matches the .envrc's real path against the prefix: a TMPDIR behind a link (macOS) needs the real one (martha#79).
+  writeFileSync(join(direnv_config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(realpathSync(home))}]\n`)
   const owner_env = {
     ...process.env,
     PATH: direnv === undefined ? process.env.PATH : `${dirname(direnv.path)}${delimiter}${process.env.PATH ?? ''}`,
