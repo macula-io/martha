@@ -22,10 +22,14 @@
 //   2. AN UNKNOWN KIND FAILS CLOSED. A kind no declaration lists (a host newer
 //      than its recording) is taken as another session's message, unattributed:
 //      never as the owner's.
-//   3. ONLY THE OWNER'S OWN GESTURES ARE THE OWNER'S. The engine stamps those
-//      itself (Enter at the terminal, Remote Control, the owner's Slack ping, a
-//      follow-up to the owner's click, the SDK host's own turn). Text a plugin,
-//      a channel server, a schedule or another agent put there is not.
+//   3. ONLY THE OWNER'S OWN GESTURES ARE THE OWNER'S: Enter at the terminal
+//      and a follow-up to the owner's own click, which the engine stamps itself.
+//      A kind that can carry anyone else's text is not the owner's, even where
+//      the engine often fills it from the owner: Remote Control's `bridge` also
+//      carries relayed human turns (a Slack user, an email sender, a project
+//      member), the engine itself groups `slack-ping` with peer messages, and
+//      `sdk` is whatever the program driving the host pipes in. Those fail closed
+//      under rule 2, as another session's message.
 //   4. NOTHING IN AN ORIGIN IS IDENTITY. An arrival from here never carries a
 //      `sender` or a `from_identity`: the binder alone names a cross-session
 //      sender (A6, ../attribute_a_cross_session_sender).
@@ -50,10 +54,16 @@ export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
   sources: {
     // The owner's own gestures, stamped by the engine (rule 3).
     composer: 'owner_paste',
-    bridge: 'owner_paste',
-    'slack-ping': 'owner_paste',
     'auto-continuation': 'owner_paste',
-    sdk: 'owner_paste',
+    // Often the owner, and able to carry anyone (rule 3): fail closed.
+    bridge: 'cross_session',
+    'slack-ping': 'cross_session',
+    sdk: 'cross_session',
+    // An unpromoted task notification: besides a background task finishing, the
+    // engine stamps it on a GitHub webhook, a PR steward, a signal subscription,
+    // other triggers and the session inbox from any sender. A stranger's GitHub
+    // comment must not read as a subagent's result.
+    'task-notification': 'cross_session',
     // Another session's model wrote it.
     peer: 'cross_session',
     'peer-send-message': 'cross_session',
@@ -63,16 +73,14 @@ export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
     'observer-activity': 'cross_session',
     // No provenance the engine can name, a same-user socket among them (rule 2).
     unclassified: 'cross_session',
-    // An agent's own report coming back in: an observer's report, a background
-    // task's notification (a subagent finishing, a background command, the
-    // session inbox), a schedule firing text stored earlier, mostly by a model.
-    // The schedule attests storage, not authorship.
+    // An agent's own report coming back in: an observer's report, or a schedule
+    // firing text stored earlier, mostly by a model. The schedule attests
+    // storage, not authorship.
     observer: 'subagent',
-    'task-notification': 'subagent',
     'scheduled-trigger': 'subagent',
-    // Text a package put there: a channel server relaying a chat, a plugin's own
-    // prompt (Martha's handToModel included, whose turn its slice already
-    // recorded on its own path).
+    // Text a package put there: a channel server relaying a chat, and every
+    // plugin's injected prompt, a crew mod's and Martha's own handToModel
+    // included (whose turn its slice already recorded on its own path).
     channel: 'mcp_result',
     plugin: 'mcp_result',
   },

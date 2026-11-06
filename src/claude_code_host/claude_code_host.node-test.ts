@@ -181,7 +181,7 @@ test('a prompt the engine raised is recorded by its origin kind, and its text ca
 })
 
 test('every kind the recorded host stamps reaches a path, and only the owner\'s gestures reach A10', (t) => {
-  const owners = new Set(['composer', 'bridge', 'slack-ping', 'auto-continuation', 'sdk'])
+  const owners = new Set(['composer', 'auto-continuation'])
   for (const kind of CLAUDE_CODE_PROMPT_ORIGIN_KINDS) {
     const [ingested] = pathThroughTheAdapter(t, { kind })
     assert.ok(ingested !== undefined, kind)
@@ -194,9 +194,10 @@ test('the shapes the host sends: a channel, a plugin, a promoted subkind, an unp
   assert.deepEqual(pathThroughTheAdapter(t, { kind: 'plugin', name: 'martha', asUser: true }), [{ path: 'B2', from_node_id: null }])
   assert.deepEqual(pathThroughTheAdapter(t, { kind: 'peer-send-message' }), [{ path: 'A6', from_node_id: null }])
   assert.deepEqual(pathThroughTheAdapter(t, { kind: 'scheduled-trigger' }), [{ path: 'B7', from_node_id: null }])
-  // session-inbox is never promoted: it arrives as a task-notification.
+  // session-inbox, a webhook and the other triggers are never promoted: they arrive as a task-notification.
   assert.equal(CLAUDE_CODE_PROMPT_ORIGIN_KINDS.includes('session-inbox'), false)
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'task-notification' }), [{ path: 'B7', from_node_id: null }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'task-notification' }), [{ path: 'A6', from_node_id: null }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'bridge' }), [{ path: 'A6', from_node_id: null }])
 })
 
 test('no field of a delivery\'s text or origin ever reaches sender', (t) => {

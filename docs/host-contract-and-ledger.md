@@ -66,11 +66,13 @@ launcher's records and which process holds a pid.
   queued the prompt and no hook may set. Its kind maps to a turn source through
   the declaration in
   [`src/name_the_source_of_a_prompt/`](../src/name_the_source_of_a_prompt/):
-  only the owner's own gestures (Enter, Remote Control, a Slack ping, a
-  follow-up to a click, the SDK host's own turn) are `owner_paste`; another
-  session's message is `cross_session`; an agent's report, a background task's
-  notification or a schedule's stored text is `subagent`; a channel server's or
-  a plugin's prompt is `mcp_result`. A kind no declaration lists is another
+  only the owner's own gestures (Enter at the terminal, a follow-up to the
+  owner's click) are `owner_paste`; a kind that can carry anyone's text
+  (Remote Control's bridge, a Slack ping, the SDK driver's input, an unpromoted
+  task notification such as a GitHub webhook) and another session's message
+  are `cross_session`; an observer's report or a schedule's stored text is
+  `subagent`; a channel server's prompt and every plugin's injected prompt, a
+  crew mod's included, are `mcp_result`. A kind no declaration lists is another
   session's message. The kinds are parsed from the engine's own origin code as
   recorded from its binary, and `gapsInPromptOrigins` fails CI on a kind the
   declaration does not map. Text never sets a source.

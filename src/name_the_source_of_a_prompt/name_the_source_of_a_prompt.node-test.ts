@@ -31,10 +31,11 @@ const pathOfKind = (kind: string): string | undefined =>
 // The oracle, written out: what each kind is, as the engine documents it.
 const EXPECTED_PATH: Readonly<Record<string, string>> = {
   composer: 'A10', // Enter at the terminal
-  bridge: 'A10', // the owner through Remote Control
-  'slack-ping': 'A10', // the owner pinging from Slack
   'auto-continuation': 'A10', // a follow-up to the owner's own click
-  sdk: 'A10', // the SDK host's own turn
+  bridge: 'A6', // Remote Control, which also relays a Slack user, an email sender, a project member
+  'slack-ping': 'A6', // grouped with peer messages by the engine itself
+  sdk: 'A6', // whatever the driving program pipes in
+  'task-notification': 'A6', // a GitHub webhook, a PR steward, the session inbox from any sender
   peer: 'A6',
   'peer-send-message': 'A6',
   'projects-relay': 'A6',
@@ -42,7 +43,6 @@ const EXPECTED_PATH: Readonly<Record<string, string>> = {
   'observer-activity': 'A6',
   unclassified: 'A6',
   observer: 'B7',
-  'task-notification': 'B7',
   'scheduled-trigger': 'B7',
   channel: 'B2',
   plugin: 'B2',
@@ -54,7 +54,7 @@ test('every kind the declaration lists is recorded on the path it really came in
 })
 
 test('a channel, a plugin, a schedule, a notification or another agent is never recorded as the owner\'s paste', () => {
-  const owners = new Set(['composer', 'bridge', 'slack-ping', 'auto-continuation', 'sdk'])
+  const owners = new Set(['composer', 'auto-continuation'])
   for (const kind of Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources).filter((kind) => !owners.has(kind))) {
     assert.notEqual(pathOfKind(kind), PATH_OF_SOURCE.owner_paste, kind)
   }
@@ -84,4 +84,13 @@ test('undeclaredPromptOrigins names each kind the host stamps that the declarati
     'session-inbox',
     'toString',
   ])
+})
+
+test('an unpromoted task notification is never a subagent\'s result: a stranger\'s GitHub comment arrives as one', () => {
+  assert.equal(pathOfKind('task-notification'), PATH_OF_SOURCE.cross_session)
+  assert.notEqual(pathOfKind('task-notification'), PATH_OF_SOURCE.subagent)
+})
+
+test('a kind that can carry anyone\'s text is never the owner\'s, however often the owner fills it', () => {
+  for (const kind of ['bridge', 'slack-ping', 'sdk']) assert.equal(pathOfKind(kind), PATH_OF_SOURCE.cross_session, kind)
 })
