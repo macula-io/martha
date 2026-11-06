@@ -201,6 +201,24 @@ function glueFindingsIn(source: Source, contract: string): Finding[] {
   ].sort((a, b) => a.line - b.line)
 }
 
+/**
+ * Every import from a slice into a directory holding a program package.json
+ * runs (`programs`, directories under src/). A directory is a slice or a
+ * program, never both: a program reaches the machine as it likes, so a slice
+ * that shares its directory, or imports from it, is judged by the wrong rule.
+ */
+export function slicesImportingPrograms(slices: readonly Source[], programs: readonly string[]): Finding[] {
+  return slices.flatMap(source => {
+    const { file } = parseSource(source.text, source.path)
+    return moduleReferencesIn(file).flatMap(({ specifier, line }) => {
+      const top = specifier !== null && isRelative(specifier) ? targetOf(source.path, specifier)?.split(sep)[0] : undefined
+      return top !== undefined && programs.includes(top)
+        ? [{ path: source.path, line, why: `imports ${specifier}, from ${top}, a directory package.json runs as a program` }]
+        : []
+    })
+  })
+}
+
 /** Every import in this host glue beyond the host contract (`contract`, a directory under src/) and Node's own modules. */
 export function glueReachesBeyondTheContract(glue: readonly Source[], contract: string): Finding[] {
   return glue.flatMap(source => glueFindingsIn(source, contract))

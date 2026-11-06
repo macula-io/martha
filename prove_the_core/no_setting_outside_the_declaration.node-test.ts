@@ -4,23 +4,18 @@ import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
 import { coreSources } from './core_sources.ts'
+import { CORE, escaped, isTestFile, manifestOf, programsRunByScriptsOf, testSuffixesOf } from './declared_in_package_json.ts'
 import {
   glueReachesBeyondTheContract,
   settingsReadOutsideTheDeclaration,
+  slicesImportingPrograms,
   type Source,
 } from './no_setting_outside_the_declaration.ts'
 
-/** The core's directory, relative to the repository. */
-const CORE = 'src'
 const repository = join(import.meta.dirname, '..')
 const src = join(repository, CORE)
-const manifest = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as {
-  scripts: Record<string, string>
-  martha?: { hostContract?: string; hostGlue?: string[] }
-}
-const scripts = manifest.scripts
+const manifest = manifestOf(repository)
 
-const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const underTheCore = new RegExp(`^${escaped(CORE)}/`)
 // An entry of the manifest's martha section, declared as <core>/<directory>.
 const directoryUnderTheCore = (entry: string) => entry.replace(underTheCore, '')
@@ -28,12 +23,8 @@ const directoryUnderTheCore = (entry: string) => entry.replace(underTheCore, '')
 // Which files under src/ are not slices, as package.json declares them: the test
 // files its test script runs, the programs its other scripts run with node, and
 // the host glue it lists under martha.hostGlue.
-const testGlob = new RegExp(`'${escaped(CORE)}/\\*\\*/\\*([^']+)'`, 'g')
-const programRun = new RegExp(`\\bnode\\s+${escaped(CORE)}/([^/\\s]+)/`, 'g')
-const testSuffixes = [...(scripts['test'] ?? '').matchAll(testGlob)].map(match => match[1] ?? '')
-const programsRunByScripts = Object.entries(scripts)
-  .filter(([name]) => name !== 'test')
-  .flatMap(([, command]) => [...command.matchAll(programRun)].map(match => match[1] ?? ''))
+const testSuffixes = testSuffixesOf(manifest)
+const programsRunByScripts = programsRunByScriptsOf(manifest)
 
 // The host glue: the code that implements the host contract on one machine. It is
 // declared as <core>/<directory>; it is not a slice, and reaching the machine is its job.
@@ -43,7 +34,7 @@ const hostContract = directoryUnderTheCore(manifest.martha?.hostContract ?? '')
 
 const isSlice = (path: string) => {
   const top = path.split(sep)[0] ?? ''
-  return !testSuffixes.some(suffix => path.endsWith(suffix)) && !programsRunByScripts.includes(top) && !hostGlue.includes(top)
+  return !isTestFile(testSuffixes, path) && !programsRunByScripts.includes(top) && !hostGlue.includes(top)
 }
 
 interface PlantedCase { readonly text: string; readonly lines: readonly number[] }
@@ -142,10 +133,24 @@ test('no slice in this repository reads a setting from anywhere but the declarat
   assert.deepEqual(settingsReadOutsideTheDeclaration(slices, isSlice), [])
 })
 
+test('no directory package.json runs as a program is one a slice imports from', () => {
+  const slices: Source[] = coreSources(src).filter(source => isSlice(source.path))
+  assert.deepEqual(slicesImportingPrograms(slices, programsRunByScripts), [])
+})
+
+test('caught: a program script pointing into a directory a slice imports (review r=5)', () => {
+  assert.notDeepEqual(programsRunByScripts, [])
+  for (const program of programsRunByScripts) {
+    const slice = { path: PLANTED_PATH, text: `${importOf(`../${program}/shared.ts`)}\n` }
+    assert.deepEqual(linesOf(slicesImportingPrograms([slice], programsRunByScripts)), [1], program)
+    assert.deepEqual(slicesImportingPrograms([slice], []), [], program)
+  }
+})
+
 test('the host glue in this repository imports only the host contract and node:*', () => {
   const glue: Source[] = coreSources(src).filter(source => {
     const top = source.path.split(sep)[0] ?? ''
-    return hostGlue.includes(top) && !testSuffixes.some(suffix => source.path.endsWith(suffix))
+    return hostGlue.includes(top) && !isTestFile(testSuffixes, source.path)
   })
   assert.ok(glue.length > 0, 'the walk read the glue')
   assert.deepEqual(glueReachesBeyondTheContract(glue, hostContract), [])

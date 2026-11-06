@@ -113,7 +113,7 @@
     "export const notes = { keep: (x: string) => x, drop: 'recordMemberLaunch' }\nnotes.keep('a')\n"
   ],
   "hostGlueImports": {
-    "_why": "Planted imports for hostGlueImportedBySlices: a slice that imported the host glue could build the writable store itself.",
+    "_why": "Planted imports for hostGlueImportedBySlices: a slice that imported the host glue could build the writable store itself. A test file, by package.json's test glob, is no slice and may import glue (#26); a file that only looks like one is still a slice.",
     "caught": [
       {
         "path": "planted_glue_0/planted.ts",
@@ -130,6 +130,10 @@
       {
         "path": "planted_glue_3/deeper/planted.ts",
         "text": "import type { KeyedRowStore } from '../../linux_process_identity/launch_records_directory.ts'\n"
+      },
+      {
+        "path": "planted_glue_4/planted.node-test-helper.ts",
+        "text": "import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'\n"
       }
     ],
     "quiet": [
@@ -140,6 +144,10 @@
       {
         "path": "quiet_glue_1/quiet.ts",
         "text": "import { notes } from './linux_process_identity_notes.ts'\n"
+      },
+      {
+        "path": "quiet_glue_2/quiet.node-test.ts",
+        "text": "import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'\n"
       }
     ]
   }

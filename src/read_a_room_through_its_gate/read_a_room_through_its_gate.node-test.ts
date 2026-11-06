@@ -20,6 +20,7 @@ import {
   type ReadableRoom,
   type RoomEnvelope,
 } from './read_a_room_through_its_gate.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
 // A member started in a directory holding no launch config: the launch check
 // passes, so these tests see only the rules they are about. Removed at the end.
@@ -65,7 +66,7 @@ const read = (room: ReadableRoom, envelopes: readonly RoomEnvelope[]) =>
   readRoomThroughItsGate({ session: beginSession(store(), 's-1'), room, envelopes, rosters, self_node_id: self })
 
 const executes = (session: ReturnType<typeof read>['session']) =>
-  answerToolCall({ tool: 'Bash', session, policy, launch }) === undefined
+  answerToolCall({ tool: 'Bash', session, policy, launch, host: thisMachine }) === undefined
 
 // --- the raw reads are refused, under any namespace, tainted or not -----------
 
@@ -76,7 +77,7 @@ test('every raw mesh read is refused under every namespace, in a clean session',
   for (const prefix of NAMESPACES) {
     for (const raw of RAW_MESH_READS) {
       const tool = `${prefix}${raw}`
-      assert.notEqual(answerToolCall({ tool, session: clean, policy, launch }), undefined, tool)
+      assert.notEqual(answerToolCall({ tool, session: clean, policy, launch, host: thisMachine }), undefined, tool)
     }
   }
 })
@@ -119,7 +120,7 @@ test('a raw read is no longer on the list of tools a tainted session may call', 
 })
 
 test('the refusal points at the gated read', () => {
-  const answer = answerToolCall({ tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy, launch })
+  const answer = answerToolCall({ tool: 'mcp__macula__mesh_read_inbox', session: beginSession(store(), 's'), policy, launch, host: thisMachine })
   assert.match(answer?.deny ?? '', /through its gate/)
 })
 

@@ -7,6 +7,9 @@
 // clock, make the next append fail, see which documents were read, watch what
 // was handed to the model, and make a turn arrive. It runs no process of its
 // own: a test that needs one passes the runner, and without one a run is refused.
+// Nor does it hold files on a disk or make scratch directories: a test that
+// needs them passes them, and without them every read and every scratch
+// directory is refused.
 //
 // It fails closed where the core trusts the host (#42): with nothing given, the
 // launcher's records are empty and no pid is held by any process, so a binder
@@ -16,12 +19,15 @@
 
 import type {
   ArrivingTurn,
+  FileTree,
   HostContract,
   KeyedRow,
   KeyedRowStore,
   ProcessOutcome,
   ProcessRequest,
+  ProcessRequestNow,
   Row,
+  ScratchDirectories,
   StoredRow,
   Tool,
 } from './host_contract.ts'
@@ -34,6 +40,12 @@ export interface HostForTestsOptions {
   readonly documents?: Readonly<Record<string, string>>
   /** Runs a process for the test. */
   readonly run?: (request: ProcessRequest) => Promise<ProcessOutcome>
+  /** Runs a process now, for the test. */
+  readonly runNow?: (request: ProcessRequestNow) => ProcessOutcome
+  /** The files the test lets the host read. */
+  readonly files?: FileTree
+  /** Where the test lets the host make scratch directories. */
+  readonly scratch?: ScratchDirectories
   /** The launcher's records the store starts with. */
   readonly launches?: readonly KeyedRow[]
   /** Which process holds a pid; asked afresh every time. */
@@ -56,6 +68,19 @@ export interface HostForTests {
 // copy can change what the store holds, and a row that would not survive a real
 // store (a function, a cycle) fails here as it would there.
 const kept = (row: Row): string => JSON.stringify(row)
+
+const notGiven = (what: string, detail: string): never => {
+  throw new Error(`no ${what} was given to this test host: ${detail}`)
+}
+
+const NO_FILES: FileTree = {
+  kindOf: (path) => notGiven('file tree', path),
+  bytesOf: (path) => notGiven('file tree', path),
+  childrenOf: (path) => notGiven('file tree', path),
+  realPathOf: (path) => notGiven('file tree', path),
+}
+
+const NO_SCRATCH: ScratchDirectories = { make: (root, prefix) => notGiven('scratch place', `${root ?? ''} ${prefix}`) }
 
 const missingDocument = (path: string): Error =>
   Object.assign(new Error(`ENOENT: no such document: ${path}`), { code: 'ENOENT' })
@@ -110,12 +135,15 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
         },
       },
       launches: readingOnly(launcherRecords),
+      files: options.files ?? NO_FILES,
+      scratch: options.scratch ?? NO_SCRATCH,
     },
     processes: {
       run: async (request) => {
         if (options.run === undefined) throw new Error(`no process runner was given to this test host: ${request.command}`)
         return options.run(request)
       },
+      runNow: (request) => (options.runNow ?? ((r: ProcessRequestNow) => notGiven('process runner', r.command)))(request),
       identityOf: (pid) => options.identityOf?.(pid) ?? null,
     },
     delivery: {

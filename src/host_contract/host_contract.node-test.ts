@@ -24,8 +24,8 @@ test('the host contract has exactly the five parts decided on #1', () => {
   assert.deepEqual({ extra, missing }, { extra: [], missing: [] })
 })
 
-test('stores are rows, documents and the launcher\'s records (#42), nothing else', () => {
-  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'launches', 'rows'])
+test('stores are rows, documents, the launcher\'s records (#42), files and scratch (#26), nothing else', () => {
+  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'files', 'launches', 'rows', 'scratch'])
 })
 
 // The launcher's records name which member a pid is, so a slice that could write
@@ -214,4 +214,28 @@ test('a tool is registered once; a second tool by the same name is refused', asy
     /already registered: note_milestone/,
   )
   assert.equal(await registeredTool('note_milestone')?.answer({}), 'kept')
+})
+
+test('with no files, scratch or runner given, the test host refuses every read, directory and run (#26)', () => {
+  const { host } = hostForTests()
+  assert.throws(() => host.stores.files.kindOf('/work'), /no file tree/)
+  assert.throws(() => host.stores.files.bytesOf('/work'), /no file tree/)
+  assert.throws(() => host.stores.files.childrenOf('/work'), /no file tree/)
+  assert.throws(() => host.stores.files.realPathOf('/work'), /no file tree/)
+  assert.throws(() => host.stores.scratch.make(null, 'x-'), /no scratch place/)
+  assert.throws(() => host.processes.runNow({ command: 'git', args: [], cwd: '/work' }), /no process runner/)
+})
+
+test('the files, scratch and runner a test gives are the ones the host uses (#26)', () => {
+  const outcome = { exit_code: 0, stdout: 'ran', stderr: '' }
+  const { host } = hostForTests({
+    files: { kindOf: () => ({ kind: 'absent' }), bytesOf: () => new Uint8Array(), childrenOf: () => ['a'], realPathOf: () => '/real' },
+    scratch: { make: (root, prefix) => ({ path: `${root ?? '/tmp'}/${prefix}1`, write: (name) => name, remove: () => undefined }) },
+    runNow: () => outcome,
+  })
+  assert.deepEqual(host.stores.files.kindOf('/work'), { kind: 'absent' })
+  assert.deepEqual(host.stores.files.childrenOf('/work'), ['a'])
+  assert.equal(host.stores.files.realPathOf('/work'), '/real')
+  assert.equal(host.stores.scratch.make(null, 'x-').path, '/tmp/x-1')
+  assert.equal(host.processes.runNow({ command: 'git', args: [], cwd: '/work' }), outcome)
 })

@@ -24,7 +24,8 @@ import {
   readLaunchState,
   type Host,
   type HostSwitches,
-} from './refuse_launch_of_unapproved_config.ts'
+} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -231,8 +232,8 @@ function switchesFor(probe: Probe, place: Place): HostSwitches | string {
   const prepared = prepareLaunch({
     ...where,
     snapshot_root: join(place.scratch, 'snapshots'),
-    approved_fingerprints: [fingerprintOf(readLaunchState(where))],
-  })
+    approved_fingerprints: [fingerprintOf(readLaunchState(where, thisMachine))],
+  }, thisMachine)
   if (!prepared.allow) return prepared.refusal
   probe.planted(place)
   return prepared.switches

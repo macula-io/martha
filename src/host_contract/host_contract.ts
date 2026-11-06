@@ -5,9 +5,10 @@
 // (issue #1, "Host-neutral core, one host contract"; #15 finding 1):
 //
 //   - a clock;
-//   - stores: append-only rows, documents read as text, and the launcher's
-//     records kept one per key, which slices only read;
-//   - running a process, and telling which process holds a pid;
+//   - stores: append-only rows, documents read as text, the launcher's
+//     records kept one per key, which slices only read, the files on disk as
+//     they are, and scratch directories a slice makes and writes only inside;
+//   - running a process (now, or later), and telling which process holds a pid;
 //   - delivery in and out: a turn handed to the model, and the turns that
 //     arrive, with where each came from as far as the tool itself can say;
 //   - registering a tool.
@@ -125,10 +126,68 @@ export interface KeyedRowStore extends KeyedRows {
 /** The records as a slice may hold them: an object whose only member reads. */
 export const readingOnly = (store: KeyedRows): KeyedRows => Object.freeze({ all: () => store.all() })
 
+/**
+ * One path on disk as it is, the path itself never followed when it is a link.
+ * `other` is anything that is not a plain file, a directory or a link (a socket,
+ * a device, a pipe).
+ */
+export type FileKind =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'file' }
+  | { readonly kind: 'directory' }
+  | { readonly kind: 'symlink'; readonly target: string }
+  | { readonly kind: 'other' }
+
+/**
+ * The files on disk, read as they are, by absolute path (martha#16's launch gate
+ * reads a checkout's config and fingerprints it). Nothing here writes.
+ *
+ * Synchronous for the reason KeyedRows gives: the launch is checked again inside
+ * a host's synchronous tool-call hook. A failure other than the path being
+ * absent throws an error whose `code` is the system's own (EACCES, ENOTDIR...),
+ * so the caller can name it.
+ */
+export interface FileTree {
+  /** What is at this path; `absent` when nothing is. */
+  kindOf(path: string): FileKind
+  /** A plain file's bytes. */
+  bytesOf(path: string): Uint8Array
+  /** The names in a directory, in no particular order. */
+  childrenOf(path: string): readonly string[]
+  /** The path with every link resolved, or null when it cannot be resolved. */
+  realPathOf(path: string): string | null
+}
+
+/**
+ * A directory just made, new and empty, that a slice may write into and remove,
+ * and nowhere else. A name that would leave the directory (absolute, or with
+ * `..` reaching above it) is refused by the adapter, whatever the slice checked.
+ */
+export interface ScratchDirectory {
+  /** Its absolute path. */
+  readonly path: string
+  /** Writes these bytes at `name`, inside the directory, making the directories between; resolves to the absolute path written. */
+  write(name: string, bytes: Uint8Array): string
+  /** Removes the directory and all it holds; removing it twice is not an error. */
+  remove(): void
+}
+
+/** Where a slice may make scratch directories. */
+export interface ScratchDirectories {
+  /**
+   * A new directory whose name starts with `prefix`, under `root` (made first if
+   * it is missing), or under the machine's own place for temporary files when
+   * `root` is null.
+   */
+  make(root: string | null, prefix: string): ScratchDirectory
+}
+
 export interface Stores {
   readonly rows: RowStore
   readonly documents: DocumentStore
   readonly launches: KeyedRows
+  readonly files: FileTree
+  readonly scratch: ScratchDirectories
 }
 
 /** A process to run: the command, its arguments and the directory it runs in. */
@@ -145,8 +204,30 @@ export interface ProcessOutcome {
   readonly stderr: string
 }
 
+/**
+ * How a process's environment differs from the one the host itself runs with:
+ * every variable whose name starts with one of `drop_prefixes` is left out, then
+ * `set` is added on top. A slice never reads the host's environment; it says
+ * only what to change.
+ */
+export interface EnvironmentChange {
+  readonly drop_prefixes: readonly string[]
+  readonly set: Readonly<Record<string, string>>
+}
+
+/** A process to run now, and how its environment differs from the host's. */
+export interface ProcessRequestNow extends ProcessRequest {
+  readonly environment?: EnvironmentChange
+}
+
 export interface Processes {
   run(request: ProcessRequest): Promise<ProcessOutcome>
+  /**
+   * Runs a process and waits for it, with its output as UTF-8 text. A command
+   * that cannot be started ends with `exit_code` null. Synchronous for the
+   * reason FileTree gives.
+   */
+  runNow(request: ProcessRequestNow): ProcessOutcome
   /**
    * Which process holds this pid now: an opaque text naming the boot and when in
    * that boot the process started, or null when no process holds it or the boot

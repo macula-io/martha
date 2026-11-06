@@ -128,8 +128,8 @@ checking out a pull request to run its tests.
 
 These are the `launched` rows: C1 for a checkout's tool-server config, C2 for
 its hooks and plugins. What was seen on the two hosts, in a fresh checkout whose
-config only touched a marker file (`npm run probe:launch`, which exits non-zero
-when a host does anything else):
+config only touched a marker file (`npm run probe:launch`, the program in
+`src/probe_launch_hosts/`, which exits non-zero when a host does anything else):
 
 | Host, and how it was started | What starts with nobody asked |
 |---|---|

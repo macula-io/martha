@@ -32,9 +32,10 @@ import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_throu
 import {
   recheckLaunch,
   type ApprovedLaunch,
+  type LaunchHost,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
-export type { ApprovedLaunch }
+export type { ApprovedLaunch, LaunchHost }
 
 /** A host refusal, or nothing to say. */
 export type ToolCallAnswer = { readonly deny: string } | undefined
@@ -47,11 +48,13 @@ export interface ToolCall {
   readonly input?: Readonly<Record<string, unknown>>
   /** The member's launch, checked again before this call runs. */
   readonly launch: ApprovedLaunch
+  /** The host the launch is read again through: its files, scratch and git. */
+  readonly host: LaunchHost
 }
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch }: ToolCall): ToolCallAnswer {
-  const launched = recheckLaunch(launch)
+export function answerToolCall({ tool, session, policy, input, launch, host }: ToolCall): ToolCallAnswer {
+  const launched = recheckLaunch(launch, host)
   if (!launched.allow) {
     return {
       deny:

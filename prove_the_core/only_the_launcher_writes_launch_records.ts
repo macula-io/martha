@@ -48,6 +48,7 @@ import ts from 'typescript'
 
 import { specifiersOf } from '../src/host_contract/imports_beyond_the_core.ts'
 import { coreSources } from './core_sources.ts'
+import { isTestFile } from './declared_in_package_json.ts'
 
 /** The slices under src/ that may write launch records, besides the host glue. */
 export const LAUNCH_RECORD_WRITERS = ['attribute_a_cross_session_sender', 'host_contract'] as const
@@ -284,11 +285,15 @@ export function launchRecordWritesOutsideTheLauncher(
 export function hostGlueImportedBySlices(
   repository: string,
   host_glue: readonly string[],
+  test_suffixes: readonly string[],
+  programs: readonly string[],
   planted: readonly PlantedSource[] = [],
 ): HostGlueImport[] {
   const src = join(repository, 'src')
   return [...coreSources(src), ...planted]
     .filter((source) => !host_glue.includes(sliceOf(source.path)))
+    // A test or a program package.json runs is no slice: it may drive the real glue (#26).
+    .filter((source) => !isTestFile(test_suffixes, source.path) && !programs.includes(sliceOf(source.path)))
     .flatMap((source) =>
       specifiersOf(source.text)
         .filter((specifier) => specifier.startsWith('./') || specifier.startsWith('../'))
