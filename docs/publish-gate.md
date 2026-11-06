@@ -232,6 +232,43 @@ the roster question comes before anything the body says.
 The rule does not cap or fence the body — that is the room's — and it trusts the
 roster's contents, which is the anchor weakness named separately.
 
+## Every list a gate trusts is signed
+
+Every gate compares against a list: the crew room's roster and the shared
+room's, the policy that names whose text a session may act on, and the
+supervisors who may act. Kept as plain files, one command run as a member's
+user adds a node id to any of them, and the gate then admits whoever was added.
+So each list is a document the owner signs, opened by `openTrustList`
+(`src/trust_only_signed_lists/`) from the signed bytes on every read.
+
+- **Nothing signed, nobody trusted.** A missing, unsigned, edited or malformed
+  list opens empty, and the gate built on it admits nobody. `trustedRoomRosters`,
+  `trustedPolicy` and `trustedSupervisors` turn an opened list into what each
+  gate reads, so a refused list reaches the gate as nobody, never as the file.
+- **Only a hardware key, touched.** The owner signs on their own machine with
+  `ssh-keygen -Y sign`, a FIDO key (`sk-ssh-ed25519@openssh.com`), and the
+  namespace `TRUST_LIST_NAMESPACE`. The signature is OpenSSH's SSHSIG format,
+  verified here without any other tool. A pinned key of any other type is
+  refused, so a key file a member's user can read is never the anchor, and the
+  signature must carry the user-presence flag that a touch sets.
+- **Bound, numbered, expiring.** A document names its `crew` and `kind` and has
+  an `epoch` and an `expires_at`, and no other field: a document cannot carry a
+  key of its own. A list for another crew or kind, an expired one, and one older
+  than the newest epoch the verifier has opened are refused.
+- **The verifying key is the host's to pin**, from where it installed it,
+  outside the directory the lists live in. The key inside a signature counts
+  only when it is pinned.
+- **Nothing shipped signs.** The test fixtures sign with keys held in memory,
+  and real `ssh-keygen -Y verify` accepts what they write. A test fails if
+  shipped code imports them or if a private key is tracked in this repository.
+
+Not signed: the session record store, which the host writes on every turn and
+no owner could sign. It keeps the fail-closed rule instead (a missing or
+unreadable record taints). The binder's rows (martha#14) join these lists when
+the binder lands. Code running as the member's own user can still replace a
+pinned key the host installed where that user can write, which is the OS
+boundary of martha#24.
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding
