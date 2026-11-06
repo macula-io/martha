@@ -32,14 +32,15 @@
 // checkout: the launcher cannot tell a checkout the crew wrote from one it did
 // not, because a crew checkout pulls other people's commits.
 //
+// This slice only computes the settings. The launcher makes the empty directory
+// they name (../launch_a_claude_code_member/empty_directory.ts), since making
+// one is machine work a slice does not do.
+//
 // This is a partial measure, not a boundary. It closes the common doors; it
 // does not stop code the member runs on purpose (`npm test`, `make`, a test
 // runner), other tools that load a directory's files, or anything that already
 // ran as this user, which can undo every setting here (A13). The pull request
 // for martha#24 has the threat model.
-
-import { lstatSync, mkdirSync, readdirSync } from 'node:fs'
-import { getuid } from 'node:process'
 
 import type { HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
@@ -138,34 +139,4 @@ export function switchesThatRunNothingFromACheckout(
     },
     env_dropped: Object.keys(inherited).filter((name) => forced.has(npmSettingOf(name))),
   }
-}
-
-/** Only the owner may enter or list it, and nobody may write into it. */
-export const EMPTY_DIRECTORY_MODE = 0o500
-
-const PERMISSION_BITS = 0o777
-
-export type EmptyDirectory = { readonly made: true } | { readonly made: false; readonly refusal: string }
-
-/**
- * Makes `directory`, which must not exist yet, as the empty directory git looks
- * for hooks in and direnv for its config: a real directory, owned by this user,
- * mode 0500 exactly, holding nothing.
- */
-export function makeEmptyDirectory(directory: string, owner_uid: number = getuid?.() ?? -1): EmptyDirectory {
-  const refused = (why: string): EmptyDirectory => ({
-    made: false,
-    refusal: `The member is not started: the empty directory that switches off a checkout's hooks ${why}.`,
-  })
-  try {
-    mkdirSync(directory, { mode: EMPTY_DIRECTORY_MODE })
-  } catch (error) {
-    return refused(`could not be made new at ${directory} (${(error as NodeJS.ErrnoException).code ?? String(error)})`)
-  }
-  const made = lstatSync(directory)
-  if (!made.isDirectory() || made.uid !== owner_uid || (made.mode & PERMISSION_BITS) !== EMPTY_DIRECTORY_MODE) {
-    return refused(`at ${directory} is not a directory only this user may read`)
-  }
-  if (readdirSync(directory).length !== 0) return refused(`at ${directory} is not empty`)
-  return { made: true }
 }
