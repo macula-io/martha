@@ -15,7 +15,7 @@ export interface ParsedSource {
   readonly errors: readonly { readonly line: number; readonly message: string }[]
 }
 
-export type ModuleReferenceKind = 'import' | 'export_from' | 'dynamic_import' | 'require'
+export type ModuleReferenceKind = 'import' | 'export_from' | 'dynamic_import' | 'require' | 'type_reference'
 
 export interface ModuleReference {
   /** The module as written; null when its name is computed and no check can know it. */
@@ -67,6 +67,28 @@ export function parseSource(text: string, path: string): ParsedSource {
   return { file, errors }
 }
 
+/** Whether a node sits inside a type, where a name is never a value. */
+export const isInAType = (node: ts.Node): boolean => {
+  for (let at: ts.Node = node.parent; !ts.isSourceFile(at); at = at.parent) if (ts.isTypeNode(at)) return true
+  return false
+}
+
+/**
+ * Whether an identifier names a value here, rather than a property, a
+ * declaration, a label or a type.
+ */
+export function isUsedAsAValue(node: ts.Identifier): boolean {
+  const parent = node.parent
+  if (ts.isShorthandPropertyAssignment(parent)) return true
+  if (ts.isQualifiedName(parent) && parent.right === node) return false
+  if (ts.isBindingElement(parent) && parent.propertyName === node) return false
+  if (ts.isLabeledStatement(parent) || ts.isBreakOrContinueStatement(parent)) return false
+  if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) return false
+  // A declaration, a property assignment or a member names its own name: not a use of a global.
+  if ('name' in parent && parent.name === node) return false
+  return !isInAType(node)
+}
+
 /** Every node of a parsed source, in order. */
 export function nodesOf(file: ts.SourceFile): ts.Node[] {
   const nodes: ts.Node[] = []
@@ -93,6 +115,9 @@ const referenceOf = (file: ts.SourceFile, node: ts.Node): ModuleReference | null
   if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
     return at(literalText(node.moduleReference.expression), 'require', node.isTypeOnly)
   }
+  if (ts.isJSDocImportTag(node)) {
+    return at(literalText(node.moduleSpecifier), 'import', true)
+  }
   if (ts.isImportTypeNode(node)) {
     return at(ts.isLiteralTypeNode(node.argument) ? literalText(node.argument.literal) : null, 'import', true)
   }
@@ -110,7 +135,37 @@ export function moduleReferencesOf(text: string, path: string): readonly ModuleR
   return moduleReferencesIn(parseSource(text, path).file)
 }
 
-/** The module references of an already parsed source. */
+// Every node inside the JSDoc comments of a source: `@type {import('x').T}` and
+// `@import { T } from 'x'` name modules there, which the walk of the code skips.
+function jsDocNodesOf(file: ts.SourceFile): ts.Node[] {
+  const seen = new Set<ts.Node>()
+  const visit = (node: ts.Node): void => {
+    if (seen.has(node)) return
+    seen.add(node)
+    ts.forEachChild(node, visit)
+  }
+  // A node's own jsDoc holds every JSDoc block before it; the public
+  // getJSDocCommentsAndTags keeps only the last, which would hide an `@import`
+  // above a `@param`. The planted test of an `@import` followed by another block
+  // fails by name if a compiler release moves this property.
+  const blocksOf = (node: ts.Node): readonly ts.JSDoc[] => (node as { jsDoc?: readonly ts.JSDoc[] }).jsDoc ?? []
+  for (const node of nodesOf(file)) blocksOf(node).forEach(visit)
+  return [...seen]
+}
+
+// `/// <reference types="x" />`: a package's types, named in a comment the tree keeps apart.
+const typeReferencesOf = (file: ts.SourceFile): ModuleReference[] =>
+  file.typeReferenceDirectives.map(directive => ({
+    specifier: directive.fileName,
+    kind: 'type_reference',
+    type_only: true,
+    line: file.getLineAndCharacterOfPosition(directive.pos).line + 1,
+  }))
+
+/** The module references of an already parsed source: its code, its JSDoc and its type reference directives. */
 export function moduleReferencesIn(file: ts.SourceFile): readonly ModuleReference[] {
-  return nodesOf(file).flatMap(node => referenceOf(file, node) ?? [])
+  return [
+    ...typeReferencesOf(file),
+    ...[...nodesOf(file), ...jsDocNodesOf(file)].flatMap(node => referenceOf(file, node) ?? []),
+  ].sort((a, b) => a.line - b.line)
 }

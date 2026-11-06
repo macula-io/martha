@@ -22,6 +22,7 @@ import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } fro
 import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -53,16 +54,18 @@ function git(cwd: string, ...args: string[]): string {
   ).trim()
 }
 
-const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'true', args: [] } } })
+// A tool server pinned to one release: the only shape the launcher starts (martha#49).
+// The fake host never starts it.
+const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 
-function placeFor(t: TestContext): Place {
+function placeFor(t: TestContext, servers = SERVERS): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-cc-launch-'))
   t.after(() => rmSync(home, { recursive: true, force: true }))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '.')
   writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
-  writeFileSync(join(checkout, '.mcp.json'), SERVERS)
+  writeFileSync(join(checkout, '.mcp.json'), servers)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
 
@@ -544,6 +547,111 @@ test('a refused launch starts no process and leaves nothing behind', async (t) =
   assert.deepEqual(readdirSync(place.relay_root), [])
   assert.deepEqual(readdirSync(place.snapshot_root), [])
   assert.equal(lines.length, 1, 'the refusal is shown to the owner')
+})
+
+// --- the mesh server it installs is a recorded one (martha#49) ------------------
+
+// The shape members' configs really start (PR 59 r=3, Uranus): the package has
+// several bins and none named after it, so npx is told which one to run.
+const MEMBER_BIN = 'macula-mcp'
+const memberShapeAt = (version: string) => ({ command: 'npx', args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${version}`, MEMBER_BIN] })
+const meshServerAt = (version: string) => JSON.stringify({ mcpServers: { macula: memberShapeAt(version) } })
+
+test('an approved config that installs a mesh server version nobody recorded starts nothing, naming both versions', async (t) => {
+  const unrecorded = '999.0.0'
+  const place = placeFor(t, meshServerAt(unrecorded))
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  // A launch that wrongly starts is stopped whole, so a failing run leaves no member behind.
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(`${MESH_SERVER_PACKAGE} ${unrecorded}`), refusal)
+  for (const recorded of RECORDED_MESH_SERVERS) assert.ok(refusal.includes(recorded.server_version), refusal)
+  assert.equal(existsSync(fake.ranFile), false)
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+  assert.deepEqual(lines, [refusal])
+})
+
+// The shapes Neptunus's probe let through at PR 59 r=1: each starts code no
+// exact release names, so each starts nothing, naming the server.
+const SERVER_NAME = 'macula'
+const unpinnedServer = (entry: unknown) => JSON.stringify({ mcpServers: { [SERVER_NAME]: entry } })
+const UNPINNED_SHAPES: Record<string, unknown> = {
+  'a GitHub spec': { command: 'npx', args: ['-y', 'github:macula-io/macula-mcp'] },
+  'a git+https spec': { command: 'npx', args: ['-y', 'git+https://github.com/macula-io/macula-mcp.git'] },
+  'an http server': { type: 'http', url: 'https://mesh.example.invalid/mcp' },
+  'an sse server': { type: 'sse', url: 'https://mesh.example.invalid/sse' },
+  'a shell wrapper': { command: 'sh', args: ['-c', `npx -y "${MESH_SERVER_PACKAGE}"@latest`] },
+  'a package named in a variable': { command: 'sh', args: ['-c', 'npx -y "$P"'], env: { P: `${MESH_SERVER_PACKAGE}@latest` } },
+  'a global bin': { command: 'macula-mcp', args: [] },
+  'the package at latest': { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@latest`] },
+}
+
+// The pin itself is recorded; only its env changes what runs (PR 59 r=2).
+const pinnedAt = (env: Record<string, string>) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  return { ...memberShapeAt(recorded.server_version), env }
+}
+UNPINNED_SHAPES['a recorded pin with a library preloaded'] = pinnedAt({ LD_PRELOAD: '/x.so' })
+UNPINNED_SHAPES['a recorded pin with its global prefix changed'] = pinnedAt({ PREFIX: '/x' })
+
+// npx cannot run these: the recorded package has no bin of that name, or
+// several bins and none it would pick, so each is refused by name before start.
+for (const recorded of RECORDED_MESH_SERVERS) {
+  UNPINNED_SHAPES[`${recorded.server_version} with no bin named`] = { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`] }
+  UNPINNED_SHAPES[`${recorded.server_version} with a bin it does not have`] = {
+    command: 'npx',
+    args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`, `${MEMBER_BIN}-not-there`],
+  }
+}
+
+// The package's other bins are tools, not the server (PR 59 r=4, Neptunus): the
+// doctor spawns the commands every MCP client config names, register and
+// uninstall rewrite host configs. Each is refused by name.
+for (const recorded of RECORDED_MESH_SERVERS) {
+  for (const tool of [`${MEMBER_BIN}-doctor`, `${MEMBER_BIN}-register`]) {
+    UNPINNED_SHAPES[`${recorded.server_version} started as its tool ${tool}`] = {
+      command: 'npx',
+      args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`, tool],
+    }
+  }
+}
+
+for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
+  test(`an approved config whose server is ${shape} starts nothing, naming the server`, async (t) => {
+    const place = placeFor(t, unpinnedServer(entry))
+    const fake = fakeClaude(place)
+    const lines: string[] = []
+    const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+    // A launch that wrongly starts is stopped whole, so a failing run leaves no member behind.
+    if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+    assert.equal(started.started, false)
+    const refusal = started.started ? '' : started.refusal
+    assert.ok(refusal.includes(`server ${SERVER_NAME}`), refusal)
+    const bin = (entry as { args?: unknown[] }).args?.[3]
+    if (typeof bin === 'string' && bin !== MEMBER_BIN) assert.ok(refusal.includes(bin), refusal)
+    assert.equal(existsSync(fake.ranFile), false)
+    assert.deepEqual(readdirSync(place.relay_root), [])
+    assert.deepEqual(readdirSync(place.snapshot_root), [])
+    assert.deepEqual(lines, [refusal])
+  })
+}
+
+test('an approved config that installs a recorded mesh server version starts the member', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(() => started.stop('the test is over'))
+  await until('the fake host to start', () => existsSync(fake.ranFile))
+  started.stop('the test is over')
+  await started.stopped
 })
 
 test('an approved launch starts the host with the switches and the relay, and a refusal after a call kills its whole group', async (t) => {

@@ -231,6 +231,47 @@ Martha runs. Each launched row says so in its `residual`, and the check fails a
 row that does not. The adapter must then refuse that session a place in the
 crew: the machine is already reached, the crew is not.
 
+### Code a checkout runs through the member's own commands
+
+[Issue #24](https://github.com/macula-io/martha/issues/24), option 3, as a
+partial measure. A member commits, installs or runs a shell in a checkout, and
+the checkout's own files start code with the member's full rights: a git hook,
+an npm install script, an `.envrc`. No model is asked, so no gate sees it (row
+A13). The launcher shuts those doors for every member it starts, in one place
+(`src/refuse_code_a_checkout_runs_itself/`), through the environment the host
+and everything under it inherit:
+
+| Door | What the launcher sets | Why it wins |
+|---|---|---|
+| git hooks: `.git/hooks`, a `core.hooksPath` the checkout's config names, hooks named in config (git 2.54+), `core.fsmonitor` | `core.hooksPath` = an empty 0500 directory made for this launch, `hook.<event>.enabled=false` for every event git documents, `core.fsmonitor=false` | appended to `GIT_CONFIG_PARAMETERS`, which git reads after every config file and after `GIT_CONFIG_COUNT`; the owner's own settings there are kept |
+| npm install scripts, `pre`/`post` scripts included | `npm_config_ignore_scripts=true` | npm ranks its environment above every `.npmrc`; every inherited spelling of the setting is dropped |
+| the program a tracked `.npmrc` names as `git`, which `npm install` runs to fetch a git dependency, scripts off or not | `npm_config_git=git`, the member's own git from its `PATH` | the same |
+| `.envrc` and `.env` through direnv | `DIRENV_DISABLE=1`, and `DIRENV_CONFIG` = the same empty directory | direnv 2.38+ stops outright; an older one finds no `direnv.toml`, so no whitelist trusts a directory wholesale |
+
+These apply whoever wrote the checkout: the launcher cannot tell a crew
+checkout from another, since a crew checkout pulls other people's commits.
+
+What option 3 does **not** close, stated rather than hidden:
+
+- **Code the member runs on purpose.** `npm test`, `npm run`, `make`, a test
+  runner, a build script: running the checkout's code is what those commands
+  are for. Only a boundary (option 1 or 2 on #24) holds there.
+- **Other tools that load a directory's files**: pnpm, yarn and bun scripts,
+  mise, a shell's own directory hooks. Not tested here, so not claimed.
+- **An `.envrc` the owner allowed by its exact content**, on a direnv older
+  than 2.38.
+- **A git hook event newer than the documented list**, when named in config;
+  a hook file for it is still off through `core.hooksPath`. A test reads the
+  installed git's githooks(5) page and fails on an event the list lacks.
+- **The other `.npmrc` settings that name a program.** `script-shell` runs
+  scripts and `node-gyp` builds native addons; under `ignore-scripts` an
+  install runs neither, and `npm run` or `npm test` is code run on purpose.
+  `shell` serves `npm exec` and `npm explore`, `editor` serves `npm edit` and
+  `npm config edit`. `npm install` reaches none of them.
+- **Anything that has already run as this user**, which can undo every
+  setting here, rewrite the roster or read another member's key (A13). The
+  owner accepted that for now (martha#1 decision 1).
+
 ## Only framed envelopes are believed
 
 The crew learns two things from a cross-session message: whose a socket is, and
@@ -360,10 +401,32 @@ The rules the seam keeps, and a host must not work around:
   `mcp__<server>__<tool>`, OpenCode `<server>_<tool>`, and only the host knows
   its form and its servers. The two lists, `MESH_TOOLS_THAT_RUN` and
   `MESH_TOOLS_REFUSED`, are proved against the tools the mesh server's published
-  package registers (`recorded_mesh_server_tools.json`, re-recorded by
-  `npm run record:mesh-tools`, the program in `src/record_mesh_server_tools/`): the coverage check fails CI by name on a tool
-  nobody decided, a decided name the server no longer registers, or a tool
-  outside `MESH_TOOL_PREFIX`. The one read that remains returns
+  package registers, one record per version a member may install
+  (`recorded_mesh_server_tools.json`; `npm run record:mesh-tools`, the program
+  in `src/record_mesh_server_tools/`, adds or replaces one version's record): the
+  coverage check fails CI by name on a tool any recorded version registers that
+  nobody decided, a decided name no recorded version registers, or a tool
+  outside `MESH_TOOL_PREFIX`. The records are tied to what members run
+  (martha#49): the launcher reads the version the approved `.mcp.json` pins
+  (`<package>@<version>`, nothing looser) and refuses to start a member whose
+  version is not recorded, naming both. A version is retired by removing its
+  record, after which a member still on it is refused by name. Since the gate
+  judges a mesh tool by its name from any server, the check fails closed:
+  every server in the approved `.mcp.json`, the mesh server or not, must start
+  as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
+  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or
+  the member is not started, naming the server. The mesh server may also start
+  as `npx -y -p <package>@<x.y.z> <bin>`, the shape members use. Each record
+  holds that version's bins and names the one that is the server
+  (`server_bin`, chosen by whoever records it and visible in the reviewed
+  record); the bin named must be that one, since the package's other bins are
+  its own tools (a doctor that spawns the commands every MCP client config
+  names, a register that rewrites host configs). The shorter shape is accepted
+  only where npx would pick the server bin itself (one bin, or one named after
+  the package), which the mesh server's seven bins do not allow. A git or GitHub spec, a URL server, a shell wrapper, a package named
+  in a variable or a bare bin is refused; there is no exempt list. Only the
+  servers an installed plugin brings are not version-checked; their tools are
+  still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
   binds to that room, and says how many envelopes it withheld, never their
   text, sender or kind. Each admitted envelope is an ingestion with its
