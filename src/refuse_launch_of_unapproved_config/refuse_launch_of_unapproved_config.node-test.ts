@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -262,7 +262,14 @@ test('a symlinked config directory is refused, not followed', (t) => {
 
 test('a config path that is not a plain file or directory is refused', (t) => {
   const place = scratch(t)
-  execFileSync('mkfifo', [join(place.checkout, SERVERS)])
+  const fifo = join(place.checkout, SERVERS)
+  execFileSync('mkfifo', [fifo])
+  // A gate that reads the FIFO as a file blocks in a synchronous read, which no
+  // test timeout can interrupt. A writer opens and closes it after a moment, so
+  // that read ends and this test fails by name; a gate that never opens it
+  // leaves the writer waiting, and it is killed when the test ends.
+  const writer = spawn('sh', ['-c', 'sleep 2; : > "$0"', fifo], { stdio: 'ignore', timeout: 30_000 })
+  t.after(() => writer.kill('SIGKILL'))
 
   const { state, decision } = decide('claude-code', place)
   assert.ok(state.entries.some((entry) => entry.path === SERVERS && entry.kind === 'unreadable'))
