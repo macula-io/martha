@@ -23,6 +23,11 @@
 // variable, called through .call, a comma or parentheses, or as module.require). A
 // file that does not parse is named, since nothing in it can be judged.
 //
+// One file may import such a module when package.json names that file and that
+// module (martha.loaderImports): the mesh server's confining hook needs
+// node:module for registerHooks (martha#73). It is a decision per file, so a
+// second file importing the same module is still named.
+//
 // What it catches is mistakes and plain reaches, not code written to get past it;
 // review guards against that. A key built at run time (`process[name]` where name
 // spells getBuiltinModule) never appears in the tree.
@@ -71,10 +76,19 @@ const loadsByName = (specifier: string): boolean =>
 
 const folderOf = (path: string): string => path.split(sep)[0] ?? ''
 
-function referenceFinding(path: string, packages: Readonly<Record<string, string>>, reference: ModuleReference): ImportBeyondTheCore[] {
+/** What a scan allows beyond the repository's own code and Node's. */
+export interface AllowedImports {
+  /** Each package, with the one folder whose files may import it. */
+  readonly packages: Readonly<Record<string, string>>
+  /** Each file that may import a module that loads others by name, with that module. */
+  readonly loaders?: Readonly<Record<string, string>>
+}
+
+function referenceFinding(path: string, allowed: AllowedImports, reference: ModuleReference): ImportBeyondTheCore[] {
   const { specifier, line } = reference
+  const { packages, loaders = {} } = allowed
   if (specifier === null) return [{ path, line, specifier, why: COMPUTED }]
-  if (loadsByName(specifier)) return [{ path, line, specifier, why: `imports ${specifier}, ${LOADS_BY_NAME}` }]
+  if (loadsByName(specifier)) return loaders[path] === specifier ? [] : [{ path, line, specifier, why: `imports ${specifier}, ${LOADS_BY_NAME}` }]
   if (isOwnOrNode(specifier) || packages[specifier] === folderOf(path)) return []
   return [{ path, line, specifier, why: `imports ${specifier}` }]
 }
@@ -113,12 +127,12 @@ function loaderWhy(node: ts.Node): string | null {
   return null
 }
 
-function findingsIn(source: CoreSource, packages: Readonly<Record<string, string>>): ImportBeyondTheCore[] {
+function findingsIn(source: CoreSource, allowed: AllowedImports): ImportBeyondTheCore[] {
   const { path } = source
   const { file, errors } = parseSource(source.text, path)
   return [
     ...errors.map(({ line, message }) => ({ path, line, specifier: null, why: `does not parse: ${message}` })),
-    ...moduleReferencesIn(file).flatMap(reference => referenceFinding(path, packages, reference)),
+    ...moduleReferencesIn(file).flatMap(reference => referenceFinding(path, allowed, reference)),
     ...nodesOf(file).flatMap(node => {
       const why = loaderWhy(node)
       return why === null ? [] : [{ path, line: lineOf(file, node), specifier: null, why }]
@@ -129,11 +143,13 @@ function findingsIn(source: CoreSource, packages: Readonly<Record<string, string
 /**
  * Every import in these sources (paths relative to the repository) that is not
  * the repository's own code, not Node's, and not a package `packages` allows in
- * the source's folder, and every load of a module by a name that cannot be read.
+ * the source's folder, and every load of a module by a name that cannot be read,
+ * but for a loader module `loaders` allows that one file.
  */
 export function importsBeyondTheCore(
   sources: readonly CoreSource[],
   packages: Readonly<Record<string, string>>,
+  loaders: Readonly<Record<string, string>> = {},
 ): ImportBeyondTheCore[] {
-  return sources.flatMap(source => findingsIn(source, packages))
+  return sources.flatMap(source => findingsIn(source, { packages, loaders }))
 }

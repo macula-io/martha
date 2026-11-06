@@ -235,7 +235,9 @@ function plantModule(dir: string, marker: string): void {
 test('the server is started with the launcher\'s own confining hook, naming its tree: the hook is never taken from the tree or HOME (martha#73)', async (t) => {
   const { good } = await registries(t)
   const root = scratch(t, 'servers')
-  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording: recorded(t, good) }))
+  // The HOME the host hands the server; the launcher's own checkout may sit under the owner's real one.
+  const home = scratch(t, 'home')
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: { ...HOST, HOME: home }, serverConfig: pinnedConfig(), root, recording: recorded(t, good) }))
   assert.equal(entry.command, process.execPath)
   assert.equal(entry.args.length, 3, JSON.stringify(entry.args))
   const [preload, hook, server] = entry.args as [string, string, string]
@@ -243,7 +245,7 @@ test('the server is started with the launcher\'s own confining hook, naming its 
   const hookUrl = new URL(hook)
   const hookFile = fileURLToPath(new URL(hookUrl.pathname, hookUrl))
   assert.equal(hookFile, CONFINING_HOOK)
-  for (const outside of [root, process.env.HOME ?? '']) assert.ok(relative(outside, hookFile).startsWith('..'), `the hook ${hookFile} sits under ${outside}`)
+  for (const outside of [root, home]) assert.ok(relative(outside, hookFile).startsWith('..'), `the hook ${hookFile} sits under ${outside}`)
   assert.ok(decodeURIComponent(hookUrl.search).includes(pathToFileURL(join(root, VERSION, 'node_modules')).href), hookUrl.search)
   assert.equal(server, join(root, VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
 })

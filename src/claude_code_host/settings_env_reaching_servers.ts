@@ -54,10 +54,11 @@ const DEFAULT_CONFIG_DIR = '.claude'
 
 /**
  * The user settings file the host started with this environment reads; or a
- * refusal when CLAUDE_CONFIG_DIR is set but empty or not absolute. Such a value
- * may resolve one way here and another way in the host (an empty one, or one
- * against a different working directory), so the file checked would not be
- * the file loaded (martha#65 r=4).
+ * refusal when CLAUDE_CONFIG_DIR is set but empty, not absolute, or with white
+ * space around it. Such a value may resolve one way here and another way in
+ * the host (an empty one, one against a different working directory, or one
+ * the host trims), so the file checked would not be the file loaded
+ * (martha#65 r=4, martha#75).
  */
 export function userSettingsPath(env: Readonly<Record<string, string | undefined>>): { readonly path: string } | { readonly refusal: string } {
   const configDir = env.CLAUDE_CONFIG_DIR
@@ -65,6 +66,13 @@ export function userSettingsPath(env: Readonly<Record<string, string | undefined
   if (!isAbsolute(configDir)) {
     return {
       refusal: `CLAUDE_CONFIG_DIR is ${JSON.stringify(configDir)}, not an absolute directory, so which user settings file Claude Code reads cannot be told; set it to an absolute path or unset it`,
+    }
+  }
+  // Claude Code trims the value before it uses it (martha#75). Refusing is
+  // simpler and safer than copying a trim rule this does not own.
+  if (configDir.trim() !== configDir) {
+    return {
+      refusal: `CLAUDE_CONFIG_DIR is ${JSON.stringify(configDir)}, with white space around it, which Claude Code trims, so it and the launcher could read different user settings files; set it without the white space`,
     }
   }
   return { path: join(configDir, USER_SETTINGS_FILE) }

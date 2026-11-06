@@ -192,7 +192,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'B1',
-    what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment reads, which the recorder does not list (martha#72); and a module the tree lacks, which node looks for above it and under HOME (martha#73)",
+    what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment reads, which the recorder does not list (martha#72); and a process.dlopen on an absolute path or a node child the server starts with its own arguments, which the hook does not see and only the tree's own code can name",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',

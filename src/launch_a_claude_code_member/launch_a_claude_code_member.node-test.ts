@@ -690,7 +690,8 @@ test('an approved config that installs a recorded mesh server version starts the
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
-  assert.deepEqual(entry.args, [join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
+  // Started by path, confined to its tree by the launcher's hook (martha#73).
+  assert.equal(entry.args.at(-1), join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
