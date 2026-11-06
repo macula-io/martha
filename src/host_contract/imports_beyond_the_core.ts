@@ -47,8 +47,9 @@ const QUOTED = [
 /** The prefix of every specifier the scan reports for a computed import. */
 export const COMPUTED_SPECIFIER = '(computed: '
 
-// A dynamic import or require whose argument starts with no quote at all.
-const COMPUTED = /\b(?:import|require)\s*\(\s*([^'"`\s)][^)\n]*)\)/g
+// A dynamic import or require whose argument starts with no quote at all. The
+// argument may sit on lines of its own; the expression itself stays on one.
+const COMPUTED = /\b(?:import|require)\s*\(\s*([^'"`\s)][^)\n]*?)\s*\)/g
 
 const isWithinTheCore = (specifier: string): boolean =>
   specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('node:')

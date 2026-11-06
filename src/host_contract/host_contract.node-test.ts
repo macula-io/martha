@@ -51,6 +51,8 @@ test('a planted import of a coding tool is named, with its file', () => {
     { path: 'a/reexport.ts', text: "export * from 'host-api'" },
     { path: 'a/template.ts', text: 'const sdk = await import(`@opencode-ai/sdk`)' },
     { path: 'a/computed.ts', text: 'const sdk = await import(name)' },
+    { path: 'a/computed_split.ts', text: 'const sdk = await import(\n  name\n)' },
+    { path: 'a/required_split.ts', text: 'const sdk = require(\n  name\n)' },
     { path: 'a/fine.ts', text: "import { join } from 'node:path'\nimport { x } from '../b/b.ts'" },
     { path: 'a/prose.ts', text: "lines.filter((line) => line.startsWith('import '))\nassert(x, ['y'])" },
   ]
@@ -63,6 +65,8 @@ test('a planted import of a coding tool is named, with its file', () => {
     { path: 'a/reexport.ts', specifier: 'host-api' },
     { path: 'a/template.ts', specifier: '@opencode-ai/sdk' },
     { path: 'a/computed.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
+    { path: 'a/computed_split.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
+    { path: 'a/required_split.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
   ])
 })
 
