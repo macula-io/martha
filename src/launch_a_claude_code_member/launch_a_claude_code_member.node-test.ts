@@ -609,6 +609,18 @@ for (const recorded of RECORDED_MESH_SERVERS) {
   }
 }
 
+// The package's other bins are tools, not the server (PR 59 r=4, Neptunus): the
+// doctor spawns the commands every MCP client config names, register and
+// uninstall rewrite host configs. Each is refused by name.
+for (const recorded of RECORDED_MESH_SERVERS) {
+  for (const tool of [`${MEMBER_BIN}-doctor`, `${MEMBER_BIN}-register`]) {
+    UNPINNED_SHAPES[`${recorded.server_version} started as its tool ${tool}`] = {
+      command: 'npx',
+      args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`, tool],
+    }
+  }
+}
+
 for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
   test(`an approved config whose server is ${shape} starts nothing, naming the server`, async (t) => {
     const place = placeFor(t, unpinnedServer(entry))
@@ -620,6 +632,8 @@ for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
     assert.equal(started.started, false)
     const refusal = started.started ? '' : started.refusal
     assert.ok(refusal.includes(`server ${SERVER_NAME}`), refusal)
+    const bin = (entry as { args?: unknown[] }).args?.[3]
+    if (typeof bin === 'string' && bin !== MEMBER_BIN) assert.ok(refusal.includes(bin), refusal)
     assert.equal(existsSync(fake.ranFile), false)
     assert.deepEqual(readdirSync(place.relay_root), [])
     assert.deepEqual(readdirSync(place.snapshot_root), [])
