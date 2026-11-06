@@ -17,7 +17,11 @@
 //      hooks and direnv for its config (../refuse_code_a_checkout_runs_itself).
 //   3. The relay's server on that socket, answering with memberRelay.
 //   4. `claude` in a process group of its own, so one SIGKILL reaches the host
-//      and its tool servers: the owner's arguments first, then the launch gate's
+//      and its tool servers. On the owner's own terminal (inherited stdio) it is
+//      that terminal's foreground job, which gets the terminal back to the
+//      launcher as it was once the member ends (member_on_the_owners_terminal.ts);
+//      otherwise it is also in a session of its own (`detached`). In both, the
+//      owner's arguments go first, then the launch gate's
 //      switches and the relay plugin. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
 //      environment is `launchEnvironment(inherited, switches)`, then the
@@ -69,6 +73,7 @@ import {
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
+import { isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
@@ -105,6 +110,7 @@ export interface ClaudeCodeMemberLaunch {
   readonly args: readonly string[]
   /** The environment the member inherits, before the launch gate drops what would bring config back. */
   readonly inherited: Readonly<Record<string, string | undefined>>
+  /** `'inherit'` from a terminal makes the member that terminal's foreground job. */
   readonly stdio: StdioOptions
   /** Shows the owner a line: a refusal, what was not carried, why a member was stopped. */
   tellOwner(line: string): void
@@ -217,25 +223,28 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, emptyDirectory)),
     [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path,
   }
-  const child = spawn(launch.command, [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR], {
-    cwd: launch.place.launch_dir,
-    env,
-    detached: true,
-    stdio: launch.stdio,
-  })
+  const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR]
+  const job = isOnTheOwnersTerminal(launch.stdio)
+    ? startForegroundJob(launch.command, memberArgs, { cwd: launch.place.launch_dir, env })
+    : undefined
+  // On the owner's terminal `child` is the job-control shell: it exits once the
+  // member has and the terminal is given back, so its exit is the member's.
+  const child = job?.shell ?? spawn(launch.command, memberArgs, { cwd: launch.place.launch_dir, env, detached: true, stdio: launch.stdio })
 
   const spawned = await new Promise<Error | undefined>((resolve) => {
     child.once('spawn', () => resolve(undefined))
     child.once('error', resolve)
   })
-  if (spawned !== undefined || child.pid === undefined) {
+  const memberPid = spawned === undefined ? await (job?.member ?? child.pid) : undefined
+  if (spawned !== undefined || memberPid === undefined) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
     await server.close()
     relayDirectory.remove()
     removeSnapshot()
     return refuse(`${NOT_STARTED}: ${launch.command} could not be started (${spawned?.message ?? 'no pid'}).`)
   }
-  group = child.pid
-  const pid = child.pid
+  group = memberPid
+  const pid = memberPid
 
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const onLauncherExit = (): void => {

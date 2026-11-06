@@ -28,6 +28,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
+import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
@@ -765,8 +766,17 @@ function killGroupsCarrying(relay_root: string): void {
   }
 }
 
-/** A launcher in a process of its own, started on this place, that says when its member runs. */
-function launcherProcess(place: Place, command: string): string {
+/**
+ * A launcher in a process of its own, started on this place, that says when its
+ * member runs, and stops it on SIGUSR2 the way a refusal does. It stays up after
+ * its member has stopped, until it is ended.
+ */
+function launcherProcess(
+  place: Place,
+  command: string,
+  stdio: 'ignore' | 'inherit' = 'ignore',
+  inherited: Readonly<Record<string, string>> = {},
+): string {
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
   writeFileSync(
@@ -782,11 +792,14 @@ function launcherProcess(place: Place, command: string): string {
       '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root },',
       `  command: ${JSON.stringify(command)},`,
       "  args: ['-p', 'the owner prompt'],",
-      '  inherited: { PATH: process.env.PATH },',
-      "  stdio: 'ignore',",
+      `  inherited: { PATH: process.env.PATH, ...${JSON.stringify(inherited)} },`,
+      `  stdio: ${JSON.stringify(stdio)},`,
       '  tellOwner: () => undefined,',
       '})',
-      "process.stdout.write(started.started ? 'started\\n' : 'refused\\n')",
+      "if (started.started) process.once('SIGUSR2', () => started.stop('the test said so'))",
+      "process.stdout.write(started.started ? `started ${started.pid}\\n` : 'refused\\n')",
+      "if (started.started) process.stdout.write(`stopped ${(await started.stopped).signal ?? 'by itself'}\\n`)",
+      'setInterval(() => undefined, 1 << 30)',
       '',
     ].join('\n'),
   )
@@ -808,7 +821,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     let said = ''
     launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
     await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), 10000)
-    assert.equal(said, 'started\n')
+    assert.match(said, /^started \d+\n$/)
     assert.equal(readdirSync(place.relay_root).length, 1)
     assert.equal(readdirSync(place.snapshot_root).length, 1)
     const child = Number(readFileSync(fake.childFile, 'utf8').trim())
@@ -825,3 +838,221 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+// --- a member on the owner's own terminal (martha#54) ---------------------------
+
+/** The pseudo-terminal the owner's terminal is played on: util-linux's script. */
+const PTY_RUNNER = 'script'
+
+/** The column count a test resizes the owner's terminal to. */
+const RESIZED_COLUMNS = 93
+
+/** The line on which the fake terminal member exits by itself, leaving the terminal as it set it. */
+const LEAVE_LINE = 'leave'
+
+/** The keys a terminal turns into signals for its foreground group, as the owner types them. */
+const CTRL_C = '\x03'
+const CTRL_Z = '\x1a'
+
+/**
+ * A fake `claude` for a terminal: first notes whether it holds the descriptor the
+ * launcher reads its pid from, where it could write a pid of its choosing; then
+ * sets the terminal non-canonical without echo (its keys still signal), says when
+ * it is ready, reads a line, and notes each resize and each Ctrl-C. On LEAVE_LINE
+ * it exits by itself; otherwise it waits with a child in its group.
+ */
+function fakeTerminalClaude(place: Place): {
+  command: string
+  readyFile: string
+  gotFile: string
+  resizedFile: string
+  interruptedFile: string
+  childFile: string
+  pidPipeFile: string
+} {
+  const dir = join(place.home, 'fake-tty')
+  mkdirSync(dir)
+  const files = {
+    readyFile: join(dir, 'ready'),
+    gotFile: join(dir, 'got'),
+    resizedFile: join(dir, 'resized'),
+    interruptedFile: join(dir, 'interrupted'),
+    childFile: join(dir, 'child'),
+    pidPipeFile: join(dir, 'held-the-pid-pipe'),
+  }
+  const command = join(dir, 'claude')
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      `if { true >&${MEMBER_PID_FD}; } 2> /dev/null; then : > '${files.pidPipeFile}'; fi`,
+      `trap ": > '${files.resizedFile}'" WINCH`,
+      `trap ": > '${files.interruptedFile}'" INT`,
+      'stty -icanon -echo',
+      `echo $$ > '${files.readyFile}'`,
+      `IFS= read -r line; printf '%s' "$line" > '${files.gotFile}'`,
+      `[ "$line" = '${LEAVE_LINE}' ] && exit 0`,
+      'sleep 600 &',
+      `echo $! > '${files.childFile}'`,
+      'while :; do wait; done',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, ...files }
+}
+
+/** The settings of a terminal, as `stty -g` prints them. */
+const settingsOf = (tty: string): string => execFileSync('stty', ['-F', tty, '-g'], { encoding: 'utf8' }).trim()
+
+/** The foreground process group of the terminal a process is on. */
+const foregroundOf = (pid: number): number => Number(execFileSync('ps', ['-o', 'tpgid=', '-p', String(pid)], { encoding: 'utf8' }).trim())
+
+const textIn = (file: string): string => (existsSync(file) ? readFileSync(file, 'utf8').trim() : '')
+
+interface OwnersTerminal {
+  readonly launcher: number
+  readonly tty: string
+  readonly before: string
+  readonly owner_shell: number
+  readonly fake: ReturnType<typeof fakeTerminalClaude>
+  type(line: string): void
+  /** Types keys with no newline after them. */
+  press(keys: string): void
+  /** What the terminal has shown so far. */
+  shown(): string
+}
+
+/**
+ * The owner's terminal: a pseudo-terminal whose session leader is a shell that
+ * outlives the launcher, as the owner's shell does. The shell notes the
+ * terminal, its settings and the launcher's pid before the launch.
+ */
+async function ownersTerminal(t: TestContext, place: Place, inherited: Readonly<Record<string, string>> = {}): Promise<OwnersTerminal> {
+  const fake = fakeTerminalClaude(place)
+  const notes = join(place.home, 'terminal')
+  mkdirSync(notes)
+  const note = (name: string) => join(notes, name)
+  const launcher = launcherProcess(place, fake.command, 'inherit', inherited)
+  const shell = [
+    `echo $$ > '${note('shell')}'`,
+    `readlink /proc/$$/fd/0 > '${note('tty')}'`,
+    `stty -g > '${note('before')}'`,
+    // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
+    `'${process.execPath}' '${launcher}' < /dev/tty & echo $! > '${note('launcher')}'; wait`,
+    'read finished',
+  ].join('; ')
+  const runner = spawn(PTY_RUNNER, ['-qec', shell, '/dev/null'], { stdio: ['pipe', 'pipe', 'inherit'] })
+  let shown = ''
+  runner.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString()))
+  const ended = new Promise<void>((resolve) => runner.once('exit', () => resolve()))
+  // Before any assertion: a test that fails must not leave the member, its launcher or the terminal running.
+  t.after(async () => {
+    const launcherPid = Number(textIn(note('launcher')))
+    if (launcherPid > 1 && isAlive(launcherPid)) process.kill(launcherPid, 'SIGKILL')
+    killGroupsCarrying(place.relay_root)
+    runner.kill('SIGKILL')
+    await ended
+  })
+  await until('the owner\'s terminal to launch the member', () => textIn(note('launcher')) !== '' && textIn(fake.readyFile) !== '', 10000).catch(
+    (error: Error) => {
+      throw new Error(`${error.message}; the terminal showed: ${JSON.stringify(shown)}`)
+    },
+  )
+  return {
+    launcher: Number(textIn(note('launcher'))),
+    tty: textIn(note('tty')),
+    before: textIn(note('before')),
+    owner_shell: Number(textIn(note('shell'))),
+    fake,
+    type: (line: string) => void runner.stdin.write(`${line}\n`),
+    press: (keys: string) => void runner.stdin.write(keys),
+    shown: () => shown,
+  }
+}
+
+test('a member on the owner\'s terminal is its foreground job: it reads the owner\'s line and gets each resize and Ctrl-C', async (t) => {
+  const place = placeFor(t)
+  // What the owner's environment could run in the job-control shell: a BASH_ENV
+  // file, and an exported function that would stand in for its fg.
+  const startupRan = join(place.home, 'bash-env-ran')
+  const fgRan = join(place.home, 'exported-fg-ran')
+  const startup = join(place.home, 'bash-env')
+  writeFileSync(startup, `: > '${startupRan}'\n`)
+  const terminal = await ownersTerminal(t, place, { BASH_ENV: startup, 'BASH_FUNC_fg%%': `() { : > '${fgRan}'; }` })
+  assert.equal(existsSync(startupRan), false, 'no BASH_ENV ran in the job-control shell')
+  assert.equal(existsSync(fgRan), false, 'no exported function stood in for fg')
+  const member = Number(textIn(terminal.fake.readyFile))
+  assert.equal(groupOf(member), member, 'the member leads a group of its own, which the group kill relies on')
+  assert.notEqual(groupOf(member), groupOf(terminal.launcher))
+  assert.equal(foregroundOf(member), member, 'the member\'s group is the terminal\'s foreground')
+  await until('the launcher to say whom it started', () => /started \d+/.test(terminal.shown()))
+  assert.ok(terminal.shown().includes(`started ${member}`), 'the launcher holds the member\'s own pid')
+  assert.equal(existsSync(terminal.fake.pidPipeFile), false, 'the member cannot write where the launcher reads its pid')
+
+  const line = 'the owner types this'
+  terminal.type(line)
+  await until('the member to read the owner\'s line', () => textIn(terminal.fake.gotFile) === line)
+
+  execFileSync('stty', ['-F', terminal.tty, 'cols', String(RESIZED_COLUMNS)])
+  await until('the member to be told of the resize', () => existsSync(terminal.fake.resizedFile))
+
+  terminal.press(CTRL_C)
+  await until('the member to be told of the Ctrl-C', () => existsSync(terminal.fake.interruptedFile))
+  assert.ok(isAlive(terminal.launcher), 'the owner\'s Ctrl-C is the member\'s, not the launcher\'s')
+})
+
+test('a member on the owner\'s terminal that Ctrl-Z stops is resumed in the foreground and reads on', async (t) => {
+  const place = placeFor(t)
+  const terminal = await ownersTerminal(t, place)
+  const member = Number(textIn(terminal.fake.readyFile))
+  terminal.press(CTRL_Z)
+  const line = 'typed after the Ctrl-Z'
+  terminal.type(line)
+  await until('the stopped member to read on', () => textIn(terminal.fake.gotFile) === line)
+  assert.equal(foregroundOf(member), member, 'the member\'s group has the terminal again')
+})
+
+test('a member on the owner\'s terminal that exits by itself leaves the terminal\'s settings as they were', async (t) => {
+  const place = placeFor(t)
+  const terminal = await ownersTerminal(t, place)
+  assert.notEqual(settingsOf(terminal.tty), terminal.before, 'the member changed the terminal\'s settings')
+  terminal.type(LEAVE_LINE)
+  await until('the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'))
+  assert.equal(settingsOf(terminal.tty), terminal.before)
+  assert.equal(foregroundOf(terminal.launcher), groupOf(terminal.launcher), 'the launcher\'s group has the terminal again')
+})
+
+test('a member on the owner\'s terminal that is stopped gives the terminal back: its settings and the launcher\'s foreground', async (t) => {
+  const place = placeFor(t)
+  const terminal = await ownersTerminal(t, place)
+  const member = Number(textIn(terminal.fake.readyFile))
+  assert.notEqual(settingsOf(terminal.tty), terminal.before, 'the member changed the terminal\'s settings')
+  terminal.type('a line')
+  await until('the member to leave a child in its group', () => textIn(terminal.fake.childFile) !== '')
+  const child = Number(textIn(terminal.fake.childFile))
+
+  process.kill(terminal.launcher, 'SIGUSR2')
+  await until('the member\'s group to be killed', () => !isAlive(member) && !isAlive(child))
+  await until('the terminal\'s settings to be restored', () => settingsOf(terminal.tty) === terminal.before)
+  assert.ok(isAlive(terminal.launcher), 'the launcher outlives its member')
+  await until('the launcher to say how its member stopped', () => terminal.shown().includes('stopped SIGKILL'))
+  assert.equal(foregroundOf(terminal.launcher), groupOf(terminal.launcher), 'the launcher\'s group has the terminal again')
+})
+
+test('SIGTERM to a launcher whose member is on the owner\'s terminal kills the group and gives the owner\'s shell the terminal as it was', async (t) => {
+  const place = placeFor(t)
+  const terminal = await ownersTerminal(t, place)
+  const member = Number(textIn(terminal.fake.readyFile))
+  terminal.type('a line')
+  await until('the member to leave a child in its group', () => textIn(terminal.fake.childFile) !== '')
+  const child = Number(textIn(terminal.fake.childFile))
+
+  process.kill(terminal.launcher, 'SIGTERM')
+  await until('the launcher to end', () => !isAlive(terminal.launcher))
+  await until('the member\'s group to be killed', () => !isAlive(member) && !isAlive(child))
+  await until('the terminal\'s settings to be restored', () => settingsOf(terminal.tty) === terminal.before)
+  await until('the owner\'s shell to have the terminal', () => foregroundOf(terminal.owner_shell) === groupOf(terminal.owner_shell))
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+})
