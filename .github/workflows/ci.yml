@@ -81,6 +81,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      # A checkout's .envrc is one of the doors martha#24 shuts; the test plants
+      # one, and its control needs a real direnv to show the door bites.
+      - run: sudo apt-get install -y --no-install-recommends direnv && direnv version && git --version
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
