@@ -5,7 +5,7 @@
 import type { TestContext } from 'node:test'
 
 /** How long the polling interval is: short enough that a test notices an event at once. */
-const POLL_MS = 20
+export const POLL_MS = 20
 
 /**
  * Waits for the event a test means: the process started, the file written, the

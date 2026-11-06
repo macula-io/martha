@@ -28,7 +28,7 @@ import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { until } from './wait_until_the_event.ts'
+import { POLL_MS, until } from './wait_until_the_event.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
@@ -578,15 +578,37 @@ const KERNEL_THREAD_PARENT = 2
 /** How long cleanup waits on one process's environment before passing it by. */
 const CLEANUP_SETTLE_MS = 500
 
+/** How a caller waits for an environment to settle: a test on its harness (martha#90), cleanup on its own bound. */
+type Settle = (what: string, holds: () => boolean) => Promise<void>
+
+/** A test waits for as long as the event takes; the harness's --test-timeout ends a wait that never does. */
+const inTest =
+  (t: TestContext): Settle =>
+  (what, holds) =>
+    until(what, holds, t)
+
+/**
+ * Cleanup waits at most `ms`, then passes on: it must end even for a process
+ * whose environment stays empty, which `env -i` starts, and a hung cleanup would
+ * only be reported as the harness's timeout.
+ */
+const withinCleanupBound =
+  (ms: number): Settle =>
+  async (_what, holds) => {
+    const deadline = Date.now() + ms
+    while (!holds() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+
 /**
  * A process's environment as the kernel holds it (martha#85). While a process is
  * inside exec the kernel reports an empty environment, so an empty answer from a
- * live process is read again until it settles. Undefined for a process that has
- * none to give: gone, a zombie, or a kernel thread.
+ * live process is read again until it settles, as `settle` waits. Undefined for a
+ * process that has none to give: gone, a zombie, a kernel thread, or one whose
+ * environment did not settle before `settle` gave up.
  */
-async function environmentOf(pid: number, read: ProcRead = readProc, ms?: number): Promise<Record<string, string> | undefined> {
+async function environmentOf(pid: number, settle: Settle, read: ProcRead = readProc): Promise<Record<string, string> | undefined> {
   let text: string | undefined
-  await until(`the environment of process ${pid} to settle`, () => {
+  await settle(`the environment of process ${pid} to settle`, () => {
     try {
       const stat = read(`/proc/${pid}/stat`)
       const [state, parent] = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')
@@ -597,7 +619,7 @@ async function environmentOf(pid: number, read: ProcRead = readProc, ms?: number
       text = undefined
       return true
     }
-  }, ms)
+  })
   if (text === undefined || text === '') return undefined
   return Object.fromEntries(text.split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]))
 }
@@ -618,18 +640,19 @@ function plantedProc(pid: number, stat: string, answers: string[]): { read: Proc
 const PLANTED_PID = 4242
 const statOf = (state: string, parent: number) => `${PLANTED_PID} (sh) ${state} ${parent} ${PLANTED_PID} ${PLANTED_PID} 0 -1`
 
-test('an environment read while its process is inside exec is read again until the kernel has it (#85)', async () => {
+test('an environment read while its process is inside exec is read again until the kernel has it (#85)', async (t) => {
   const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), ['', '', 'NODE_OPTIONS=--require x\0HOME=/h\0'])
-  assert.deepEqual(await environmentOf(PLANTED_PID, proc.read), { NODE_OPTIONS: '--require x', HOME: '/h' })
+  assert.deepEqual(await environmentOf(PLANTED_PID, inTest(t), proc.read), { NODE_OPTIONS: '--require x', HOME: '/h' })
   assert.equal(proc.reads(), 3, 'both empty answers were read past')
 })
 
-test('a process with no environment to give is answered at once, never waited on (#85)', async () => {
+test('a process with no environment to give is answered at once, never waited on (#85)', async (t) => {
   for (const stat of [statOf('Z', process.pid), statOf('S', KERNEL_THREAD_PARENT)]) {
     const proc = plantedProc(PLANTED_PID, stat, [''])
-    assert.equal(await environmentOf(PLANTED_PID, proc.read, 0), undefined, stat)
+    assert.equal(await environmentOf(PLANTED_PID, inTest(t), proc.read), undefined, stat)
+    assert.equal(proc.reads(), 0, `${stat}: its environment is never read`)
   }
-  assert.equal(await environmentOf(PLANTED_PID, plantedProc(PLANTED_PID + 1, '', []).read, 0), undefined, 'a process that is gone')
+  assert.equal(await environmentOf(PLANTED_PID, inTest(t), plantedProc(PLANTED_PID + 1, '', []).read), undefined, 'a process that is gone')
 })
 
 test('cleanup finds a process of the relay root it caught inside exec (#85)', async () => {
@@ -831,7 +854,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
   t.after(() => started.stop('the test is over'))
   await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
-  const hostEnv = (await environmentOf(started.pid)) ?? {}
+  const hostEnv = (await environmentOf(started.pid, inTest(t))) ?? {}
   assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
   assert.equal(Object.hasOwn(hostEnv, 'CLAUDE_CODE_SHELL_PREFIX'), false, 'the host is never given a prefix it would run every server through (#65 r=3)')
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
@@ -1048,12 +1071,7 @@ function groupOf(pid: number): number | undefined {
  * that, which `env -i` can start, carries no relay root.
  */
 async function carriesRelayRoot(pid: number, relay_root: string, read: ProcRead = readProc): Promise<boolean> {
-  let environment: Record<string, string> | undefined
-  try {
-    environment = await environmentOf(pid, read, CLEANUP_SETTLE_MS)
-  } catch {
-    return false
-  }
+  const environment = await environmentOf(pid, withinCleanupBound(CLEANUP_SETTLE_MS), read)
   return environment?.[RELAY_SOCKET_VARIABLE]?.startsWith(`${relay_root}/`) ?? false
 }
 
