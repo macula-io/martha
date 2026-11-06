@@ -16,6 +16,9 @@ export interface Rules {
   readonly labHosts: readonly string[]
   // Email domains this repository may name.
   readonly publicEmails: readonly string[]
+  // Exact identifiers that are shaped like an email address and are not one,
+  // such as a protocol's algorithm name. Only that string passes, never its domain.
+  readonly publicAddresses: readonly string[]
   // Owners whose bare `owner/repo` slugs are resolved even without a URL.
   readonly owners: readonly string[]
   // This repository's own name: `martha#n` is the one shorthand reference allowed.
@@ -90,7 +93,7 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
   const machine = rules.labHosts.length === 0 ? '' : families(rules)
   // A domain has no case: an allowed address passes however its domain is written.
   const allowEmail = new RegExp(
-    `^(${PUBLIC_TEXT_PATTERNS.allow_email}${rules.publicEmails.map((domain) => `|[A-Za-z0-9._%+-]+@${domain.replace(/[.]/g, '\\.')}`).join('')})$`,
+    `^(${PUBLIC_TEXT_PATTERNS.allow_email}${rules.publicEmails.map((domain) => `|[A-Za-z0-9._%+-]+@${domain.replace(/[.]/g, '\\.')}`).join('')}${rules.publicAddresses.map((address) => `|${address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('')})$`,
     'i',
   )
   return [

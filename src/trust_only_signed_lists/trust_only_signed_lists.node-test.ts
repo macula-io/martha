@@ -273,3 +273,28 @@ test('a refused supervisor list lets nobody act as supervisor', () => {
   assert.equal(decide(open({ kind: 'supervisors', document, signature: signed(document) })), true)
   assert.equal(decide(open({ kind: 'supervisors', document, signature: undefined })), false)
 })
+
+// --- round 2: one epoch, one list; one byte string, one reading ---------------
+
+test('a different list signed at the epoch already opened refuses everyone', () => {
+  const epochs = epochStore()
+  const first = documentOf('crew_roster', [member], { epoch: 5 })
+  assert.equal(open({ document: first, signature: signed(first), epochs }).trusted, true)
+
+  const other = documentOf('crew_roster', [member, attacker], { epoch: 5 })
+  refusesEveryone(open({ document: other, signature: signed(other), epochs }), /epoch 5 .*another list/)
+})
+
+test('a duplicate key at any depth refuses everyone: the owner signed one reading, not two', () => {
+  const approved = `"body":{"member_node_ids":["${member}"]}`
+  const shadow = `"body":{"member_node_ids":["${attacker}"]}`
+  const top = Buffer.from(`{"crew":"${crew}","kind":"crew_roster","epoch":1,"expires_at":"${later}",${approved},${shadow}}`)
+  const inner = Buffer.from(
+    `{"crew":"${crew}","kind":"crew_roster","epoch":1,"expires_at":"${later}","body":{"member_node_ids":["${member}"],"member_node_ids":["${attacker}"]}}`,
+  )
+  for (const document of [top, inner]) {
+    const opened = open({ document, signature: signed(document) })
+    assert.equal(opened.trusted, false)
+    assert.deepEqual(opened.node_ids, [])
+  }
+})
