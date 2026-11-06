@@ -84,6 +84,19 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   reach of any text rule. The forms, with how each is written, are one definition in
   `src/check_nothing_private_gets_in/public_digest.ts`, and the tests plant
   every written form with a real-shaped digest drawn at run time.
+- **An id is seen wherever it is written, not only standing alone.** The hex
+  class is 64 lowercase hex digits in a row, with no word boundary. So an id
+  glued to a letter, a digit or `_` (`x<id>`, `id_<id>`, `<id>_key`) is
+  refused, and so is any hex run longer than 64: two ids back to back, an id
+  with more hex after it, a 128-hex Ed25519 secret key or signature. The hit
+  names the whole hex run the id sits in. A run longer than 64 is refused even
+  where a digest form holds it, because a digest form vouches only for a run of
+  exactly 64. A sha512 written in hex is therefore refused, labelled or not;
+  a crew that must publish one declares a form for it first. A run shorter
+  than 64, such as a 40-hex git commit sha or a range of them, is outside this
+  class. The length and the digit set are defined once (`HEX_DIGIT`,
+  `ID_HEX_DIGITS` in `public_text.ts`), and the shared pattern stays POSIX ERE,
+  so a `grep -E` reader refuses any line that holds such a run.
 - **The text classes are one definition.** The patterns are the crew's own
   public-text classes, the same ones its note check and release scan hold to.
 

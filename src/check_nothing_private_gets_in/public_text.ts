@@ -16,7 +16,8 @@
 // boundary: an id glued to a letter, a digit or `_`, or inside a longer hex run,
 // is still in the text, so a line holding that many hex digits in a row is
 // refused. A grep -E reader refuses that line; this repository's reader refuses
-// the whole hex run (check_nothing_private_gets_in.ts).
+// the whole hex run (check_nothing_private_gets_in.ts). This class was widened
+// here first (martha#64); the crew's copy takes the same string in its own change.
 export const HEX_DIGIT = String.raw`[0-9a-f]`
 export const ID_HEX_DIGITS = 64
 export const PUBLIC_TEXT_PATTERNS = {
