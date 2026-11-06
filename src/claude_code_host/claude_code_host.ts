@@ -68,7 +68,7 @@ import {
 } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
-import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
 
@@ -87,10 +87,15 @@ export interface ClaudeCodePlaces {
   readonly launch_records: string
 }
 
-/** A prompt as the engine raises it: its text, and the origin the engine stamped. */
+/**
+ * A prompt as the engine raises it: its text, the origin the engine stamped, and
+ * the command and meta mark it raises beside them (martha#51).
+ */
 export interface EnginePrompt {
   readonly text: string
   readonly origin: { readonly kind: string }
+  readonly command?: unknown
+  readonly isMeta?: unknown
 }
 
 /** A SessionStart hook input, as the host sends it; only two fields are read. */
@@ -163,7 +168,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
     host,
     binder: bindNothing,
     prompted: (prompt) => {
-      const turn: ArrivingTurn = { text: prompt.text, arrival: arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, prompt.origin.kind) }
+      const turn: ArrivingTurn = { text: prompt.text, arrival: arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, prompt.origin.kind, whatAPromptCarries(prompt)) }
       for (const take of listeners) take(turn)
     },
     answerToolCall: async (name, args) => {
