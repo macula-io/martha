@@ -154,9 +154,9 @@ test('a clear or a new session replaces the record', () => {
   }
 })
 
-test('a compaction, a handover or a resumed transcript keeps what the session took in', () => {
+test('a compaction or a resumed transcript keeps what the session took in', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
-  for (const replacement of ['compaction', 'handover', 'resume'] as const) {
+  for (const replacement of ['compaction', 'resume'] as const) {
     assert.equal(shellAllowed(replaceSession(tainted, replacement)), false, replacement)
   }
 })

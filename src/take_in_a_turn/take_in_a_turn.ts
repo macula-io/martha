@@ -21,19 +21,26 @@
 //      record and cannot read one is TAINTED, never fresh.
 //
 //   3. ONLY A REAL REPLACEMENT CLEARS THE RECORD. `clear` and `new_session` start
-//      afresh. `compaction`, `handover` and `resume` keep it — they carry the old
-//      text forward, and a restart that resumes a transcript is `resume`, not
-//      `new_session`.
+//      afresh. `compaction` and `resume` keep it — they carry the old text
+//      forward, and a restart that resumes a transcript is `resume`, not
+//      `new_session`. A start under a NEW session id — a crew refresh, a forked
+//      resume — is ../carry_taint_across_a_refresh's, which inherits by id.
 //
 //   4. COMPACTION AND A HANDOVER ARE NOT ARRIVALS. They inherit the predecessor's
 //      record from the store; they are not new text to record. A handover is
-//      written from the predecessor's own context, so the record it inherits is
-//      the honest summary of what that context held.
+//      written and stamped by the host and read through
+//      ../carry_taint_across_a_refresh, so the record it inherits is the
+//      predecessor's own, from the store, and never the file's word for it.
+//
+//   5. A LOST RECORD STAYS LOST. A session whose record could not be read is
+//      remembered as lost, never as empty, so a second restart does not turn it
+//      fresh.
 
 import { INBOUND_PATHS, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
 import {
   recordIngestion,
   startFreshSession,
+  type Ingestion,
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { framedDeliveryOf, type TurnOrigin } from '../trust_only_framed_envelopes/trust_only_framed_envelopes.ts'
@@ -95,7 +102,7 @@ export type Arrival =
     }
 
 /** A replacement of the session, in the words a host would use for it. */
-export type Replacement = 'clear' | 'new_session' | 'compaction' | 'handover' | 'resume'
+export type Replacement = 'clear' | 'new_session' | 'compaction' | 'resume'
 
 const REPLACES_THE_SESSION: readonly Replacement[] = ['clear', 'new_session']
 
@@ -121,20 +128,39 @@ export function beginSession(store: SessionRecordStore, session_id: string): Hos
 }
 
 /**
+ * What the store keeps for a session whose record could not be read.
+ *
+ * Writing an empty record instead would fail open: the next start would read it
+ * as a session that took in nothing. Its path is one the registry does not know,
+ * so the gate refuses on it even where `record_missing` is not consulted.
+ */
+export const RECORD_LOST: Ingestion = { path: 'record-lost', from_node_id: null }
+
+/** A session whose record cannot be read: tainted, never fresh. */
+export function sessionWithLostRecord(session_id: string): HostSession {
+  return { id: session_id, gate: startFreshSession(), record_missing: true }
+}
+
+/** The host's view of a record read from the store. */
+export function sessionFromRecord(session_id: string, gate: Session | undefined): HostSession {
+  if (gate === undefined || gate.ingested.some((ingest) => ingest.path === RECORD_LOST.path)) {
+    return sessionWithLostRecord(session_id)
+  }
+  return { id: session_id, gate, record_missing: false }
+}
+
+/**
  * A session that is expected to have a record — a restart, a resume, a mod
  * reload. If the record cannot be read, the session is tainted: an empty record
  * is the one thing that must never be assumed.
  */
 export function resumeSession(store: SessionRecordStore, session_id: string): HostSession {
-  const gate = store.read(session_id)
-  return gate === undefined
-    ? { id: session_id, gate: startFreshSession(), record_missing: true }
-    : { id: session_id, gate, record_missing: false }
+  return sessionFromRecord(session_id, store.read(session_id))
 }
 
-/** Keep the record, so the next process can load it. */
+/** Keep the record, so the next process can load it. A lost record stays lost. */
 export function rememberSession(store: SessionRecordStore, session: HostSession): void {
-  store.write(session.id, session.gate)
+  store.write(session.id, session.record_missing ? recordIngestion(session.gate, [RECORD_LOST]) : session.gate)
 }
 
 /**
@@ -154,8 +180,8 @@ export function takeInTurn(session: HostSession, arrival: Arrival): HostSession 
 /**
  * The session after a replacement.
  *
- * Only a real replacement clears what the session took in. A compaction, a
- * handover or a resumed transcript keeps it.
+ * Only a real replacement clears what the session took in. A compaction or a
+ * resumed transcript keeps it.
  */
 export function replaceSession(session: HostSession, replacement: Replacement): HostSession {
   if (!REPLACES_THE_SESSION.includes(replacement)) return session
