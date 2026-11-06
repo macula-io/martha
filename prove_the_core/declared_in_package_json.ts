@@ -16,6 +16,7 @@ export interface Manifest {
     readonly hostContract?: string
     readonly hostGlue?: readonly string[]
     readonly hostAdapters?: readonly string[]
+    readonly packageImports?: Readonly<Record<string, string>>
   }
 }
 
@@ -41,6 +42,16 @@ export function programsRunByScriptsOf(manifest: Manifest): string[] {
     .filter(([name]) => name !== TEST_SCRIPT)
     .flatMap(([, command]) => [...command.matchAll(run)].map((match) => match[1] ?? ''))
 }
+
+/** The folders whose code the test script runs, such as the core and the checks on it. */
+export function codeFoldersOf(manifest: Manifest): string[] {
+  const glob = /'([^'/*]+)\/\*\*\/[^']*'/g
+  return [...(manifest.scripts[TEST_SCRIPT] ?? '').matchAll(glob)].map((match) => match[1] ?? '')
+}
+
+/** Each package code may import, with the one folder whose files may import it. */
+export const packageImportsOf = (manifest: Manifest): Readonly<Record<string, string>> =>
+  manifest.martha?.packageImports ?? {}
 
 /** Whether a path under the core is a test file the test script runs. */
 export const isTestFile = (test_suffixes: readonly string[], path: string): boolean =>

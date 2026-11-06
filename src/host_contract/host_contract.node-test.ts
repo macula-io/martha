@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
-import { COMPUTED_SPECIFIER, SCANNED_EXTENSIONS, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
+import { SCANNED_EXTENSIONS, isScannedSource } from './imports_beyond_the_core.ts'
+import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
 import { hostForTests } from './host_for_tests.ts'
 import { claudeCodeToolNames, openCodeToolNames } from './tool_names_for_tests.ts'
 
@@ -58,44 +59,8 @@ test('readingOnly keeps only the reading member of whatever store it is given', 
 
 const sourcesUnder = coreSources
 
-// This file plants imports in strings below, so it is the one file the scan
-// leaves out, found by its own path rather than by a name written here.
-const THIS_FILE = relative(SRC, fileURLToPath(import.meta.url))
-
-test('no file in the core imports anything but its own slices and Node', () => {
-  const core = sourcesUnder(SRC).filter((source) => source.path !== THIS_FILE)
-  assert.ok(core.length > 1, 'the scan read the core')
-  assert.deepEqual(importsBeyondTheCore(core), [])
-})
-
-test('a planted import of a coding tool is named, with its file', () => {
-  const planted = [
-    { path: 'a/static.ts', text: "import { tool } from '@opencode-ai/plugin'" },
-    { path: 'a/type_only.ts', text: "import type { Hooks } from '@anthropic-ai/claude-code'" },
-    { path: 'a/bare.ts', text: "import 'some-host-runtime'" },
-    { path: 'a/dynamic.ts', text: "const sdk = await import('@opencode-ai/sdk')" },
-    { path: 'a/required.ts', text: "const sdk = require('some-host-sdk')" },
-    { path: 'a/reexport.ts', text: "export * from 'host-api'" },
-    { path: 'a/template.ts', text: 'const sdk = await import(`@opencode-ai/sdk`)' },
-    { path: 'a/computed.ts', text: 'const sdk = await import(name)' },
-    { path: 'a/computed_split.ts', text: 'const sdk = await import(\n  name\n)' },
-    { path: 'a/required_split.ts', text: 'const sdk = require(\n  name\n)' },
-    { path: 'a/fine.ts', text: "import { join } from 'node:path'\nimport { x } from '../b/b.ts'" },
-    { path: 'a/prose.ts', text: "lines.filter((line) => line.startsWith('import '))\nassert(x, ['y'])" },
-  ]
-  assert.deepEqual(importsBeyondTheCore(planted), [
-    { path: 'a/static.ts', specifier: '@opencode-ai/plugin' },
-    { path: 'a/type_only.ts', specifier: '@anthropic-ai/claude-code' },
-    { path: 'a/bare.ts', specifier: 'some-host-runtime' },
-    { path: 'a/dynamic.ts', specifier: '@opencode-ai/sdk' },
-    { path: 'a/required.ts', specifier: 'some-host-sdk' },
-    { path: 'a/reexport.ts', specifier: 'host-api' },
-    { path: 'a/template.ts', specifier: '@opencode-ai/sdk' },
-    { path: 'a/computed.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
-    { path: 'a/computed_split.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
-    { path: 'a/required_split.ts', specifier: `${COMPUTED_SPECIFIER}name)` },
-  ])
-})
+// Which imports the core may make is judged in prove_the_core/imports_beyond_the_core.ts,
+// from the syntax tree; what is pinned here is the walk and the contract's own imports.
 
 test('the scan reads every kind of script file, not only .ts', () => {
   const names = sourcesUnder(SRC).map((source) => source.path)
@@ -109,7 +74,7 @@ test('the scan reads every kind of script file, not only .ts', () => {
 test('the contract itself imports nothing: every slice depends on it, never the reverse', () => {
   const contract = sourcesUnder(SRC).find((source) => source.path === join('host_contract', 'host_contract.ts'))
   assert.ok(contract, 'the contract was read')
-  assert.doesNotMatch(contract.text, /^\s*import\b/m)
+  assert.deepEqual(moduleReferencesOf(contract.text, contract.path), [])
 })
 
 // --- rows are append only -----------------------------------------------------
