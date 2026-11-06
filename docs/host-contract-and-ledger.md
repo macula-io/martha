@@ -41,6 +41,43 @@ Every slice is tested against
 [`host_for_tests.ts`](../src/host_contract/host_for_tests.ts), a host that
 lives in memory and keeps the same promises.
 
+### On Claude Code
+
+[`src/claude_code_host/`](../src/claude_code_host/) implements the contract on
+Claude Code (#41). It is host glue, declared in package.json `martha.hostGlue`,
+and it decides nothing: it composes the engine's clock, prompt submission and
+tool registration with two pieces of glue any POSIX host can use,
+[`src/row_streams_directory/`](../src/row_streams_directory/) for the rows and
+[`src/linux_process_identity/`](../src/linux_process_identity/) for the
+launcher's records and which process holds a pid.
+
+- **Rows** live one directory per stream, the name encoded so it is never a
+  path, one file per row named by its position. A row is staged, then linked to
+  its position, and a link never replaces a file, so two writers cannot both
+  land at one position. A read refuses a gap, a link, an entry it never writes,
+  a row that is not a JSON object, and a file anyone else may read or write; it
+  never skips one.
+- **The launcher's records** reach slices only as `readingOnly(store)`.
+- **A process** runs directly with no shell, so a signal reads as a null exit
+  code.
+- **Where a turn came from** is the engine's `origin`, which it stamps where it
+  queued the prompt and no hook may set: a peer's message is `cross_session`,
+  the owner's own Enter is `owner_paste`, and anything else is text the harness
+  delivered, for the envelope rule to read. Text never sets a source.
+- **No sender yet.** The host knows which process sent a cross-session message
+  and does not pass it to plugins (anthropics/claude-code#107216), so the
+  adapter's binder is `bindNothing` and every cross-session message stays
+  unattributed. The adapter reads no transcript.
+- **A session start** maps the hook input's `source` and `session_id`, and
+  nothing else. A source the host does not send, the crew's refresh among them,
+  maps to an event no declaration lists and fails closed. The emitted events
+  are parsed from the host's SessionStart schema as recorded from its binary
+  (`recorded_claude_code_host.json`; `record_claude_code_host.ts` takes it
+  again after an upgrade), plus the crew's refresh.
+- **A tool name** is refused a second time before the engine sees it.
+
+The launcher's wiring (who writes the records) waits for #16's launch gate.
+
 ## The ledger
 
 [`src/log_ledger/log_ledger.ts`](../src/log_ledger/log_ledger.ts) keeps one

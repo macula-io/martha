@@ -24,8 +24,8 @@ interface Planted {
 }
 const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_launch_record_writes.json'), 'utf8')) as Planted
 
-test('package.json declares the Linux host glue, so the check knows what is not a slice', () => {
-  assert.deepEqual(hostGlue, ['linux_process_identity'])
+test('package.json declares the host glue, so the check knows what is not a slice', () => {
+  assert.deepEqual(hostGlue, ['claude_code_host', 'linux_process_identity', 'row_streams_directory'])
 })
 
 test('a hostGlue entry that is not exactly src/<one directory> is refused, with the entry it names', () => {

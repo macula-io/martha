@@ -18,7 +18,9 @@
   },
   "martha": {
     "hostGlue": [
-      "src/linux_process_identity"
+      "src/claude_code_host",
+      "src/linux_process_identity",
+      "src/row_streams_directory"
     ]
   }
 }

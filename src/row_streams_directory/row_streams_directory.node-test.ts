@@ -111,7 +111,7 @@ test('an append without an expected length takes the next free position, even af
 
 test('a gap, an unparsable row, a symlinked row or a group-writable row file is refused on read, never skipped', async (t) => {
   const planted: Readonly<Record<string, (stream: string) => void>> = {
-    'a gap': (stream) => writeFileSync(join(stream, rowFileNameOf(2)), '{"n":2}', { mode: ROW_FILE_MODE }),
+    'a gap': (stream) => writeFileSync(join(stream, rowFileNameOf(3)), '{"n":2}', { mode: ROW_FILE_MODE }),
     'an unparsable row': (stream) => writeFileSync(join(stream, rowFileNameOf(2)), '{"n":', { mode: ROW_FILE_MODE }),
     'a row that is not an object': (stream) => writeFileSync(join(stream, rowFileNameOf(2)), '[2]', { mode: ROW_FILE_MODE }),
     'a symlinked row': (stream) => {
