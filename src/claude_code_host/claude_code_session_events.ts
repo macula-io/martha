@@ -5,7 +5,7 @@
 // lists. A list typed by hand cannot see the host add one: `fork` arrived in
 // 2.1.318 and the hand list missed it. So the schema text is recorded from the
 // host binary (recorded_claude_code_host.json, re-recorded by
-// record_claude_code_host.ts) and the list is parsed from that record
+// npm run record:claude-code-host) and the list is parsed from that record
 // (recorded_claude_code_host.ts). The crew adds one event the host never sends,
 // the refresh its own mod runs.
 //

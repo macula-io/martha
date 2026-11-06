@@ -7,6 +7,7 @@ import { after, test } from 'node:test'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -51,12 +52,12 @@ const sessionsOfBothKinds = () => {
 
 test('the tools that widen a member reach are refused in a clean and in a tainted session, under every namespace', () => {
   const { clean, tainted } = sessionsOfBothKinds()
-  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch }), undefined, 'the session is tainted')
+  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch, host: thisMachine }), undefined, 'the session is tainted')
   for (const prefix of NAMESPACES) {
     for (const own of REQUIRED_REACH_TOOLS) {
       const tool = `${prefix}${own}`
       for (const [kind, session] of [['clean', clean], ['tainted', tainted]] as const) {
-        const answer = answerToolCall({ names, tool, session, policy, input: {}, launch })
+        const answer = answerToolCall({ names, tool, session, policy, input: {}, launch, host: thisMachine })
         assert.notEqual(answer, undefined, `${tool} in a ${kind} session`)
         assert.match(answer?.deny ?? '', /owner/, `${tool} in a ${kind} session`)
       }
@@ -70,7 +71,7 @@ test('on OpenCode, the tools that widen a member reach are refused in its own se
     for (const own of REQUIRED_REACH_TOOLS) {
       const tool = `${server}_${own}`
       for (const session of [clean, tainted]) {
-        assert.notEqual(answerToolCall({ names: openCode, tool, session, policy, input: {}, launch }), undefined, tool)
+        assert.notEqual(answerToolCall({ names: openCode, tool, session, policy, input: {}, launch, host: thisMachine }), undefined, tool)
       }
     }
   }
@@ -86,7 +87,7 @@ test('no tool that widens a member reach is on the allow-list, and each is named
 test('a refused reach tool is not told to read a room through its gate: that is not why it is refused', () => {
   const { clean } = sessionsOfBothKinds()
   for (const own of REQUIRED_REACH_TOOLS) {
-    const answer = answerToolCall({ names, tool: `mcp__macula__${own}`, session: clean, policy, input: {}, launch })
+    const answer = answerToolCall({ names, tool: `mcp__macula__${own}`, session: clean, policy, input: {}, launch, host: thisMachine })
     assert.doesNotMatch(answer?.deny ?? '', /through its gate/, own)
   }
 })

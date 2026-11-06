@@ -11,7 +11,8 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import type { Arrival } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { coreSources, specifiersOf } from '../host_contract/imports_beyond_the_core.ts'
+import { coreSources } from '../../prove_the_core/core_sources.ts'
+import { specifiersOf } from '../host_contract/imports_beyond_the_core.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   binderOverLaunches,

@@ -1,0 +1,454 @@
+{
+  "_why": "Planted slice sources for prove_the_core/no_setting_outside_the_declaration. Each caught case lists the lines a finding must name. They live in JSON so that no walk of the core's code reads them as code.",
+  "caught": {
+    "the plain reads (review r=1)": [
+      {
+        "text": "const limit = process.env['CREW_LIMIT']\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const { env } = process\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "importing the process module, under every spelling (review r=1)": [
+      {
+        "text": "import { env } from 'node:process'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import * as proc from 'node:process'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import proc from 'process'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const proc = require('process')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const proc = await import('node:process')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const name = 'node:' + 'process'\nconst proc = await import(name)\n",
+        "lines": [
+          2
+        ]
+      },
+      {
+        "text": "const proc = require(['pro', 'cess'].join(''))\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "export { env } from 'node:process'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import proc = require('node:process')\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "a computed key, an alias, a line break or the global object (review r=1)": [
+      {
+        "text": "const at = process['env']\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const at = globalThis['process'].env\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const g = globalThis\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const g = global\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const p = process\nconst at = p.env\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const {\n  env,\n} = process\n",
+        "lines": [
+          3
+        ]
+      },
+      {
+        "text": "const at = `${process.env.HOME}/x`\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const holder = { process }\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "the home directory, through the os module or as a path (review r=1)": [
+      {
+        "text": "import { homedir } from 'node:os'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import * as os from 'os'\nconst at = os['home' + 'dir']()\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const dir = join('~', '.config')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const dir = '~/.config/crew'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const dir = \"~/.config/crew\"\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const dir = `~/.config/crew`\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const dir = `~/${name}`\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "code a hand lexer would hide (review r=2)": [
+      {
+        "text": "function f(t: string) { return /'/.test(t); const e = process.env.X }\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const n = typeof /'/\nconst e = process.env.X\n",
+        "lines": [
+          2
+        ]
+      },
+      {
+        "text": "switch (x) { case /'/.source: break }\nconst e = process.env.X\n",
+        "lines": [
+          2
+        ]
+      },
+      {
+        "text": "let i = 0\ni++ / 2\nconst e = process.env.X\nconst t = '`'\n",
+        "lines": [
+          3
+        ]
+      },
+      {
+        "text": "const a = 1 // a backtick ` in a comment\nconst e = process.env.X\nconst b = `x`\n",
+        "lines": [
+          2
+        ]
+      }
+    ],
+    "a way in a deny-list misses (review r=2)": [
+      {
+        "text": "import { createRequire } from 'node:module'\nconst load = createRequire(import.meta.url)\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import { readFileSync } from 'node:fs'\nconst all = readFileSync('/proc/self/environ', 'utf8')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import { execSync } from 'node:child_process'\nconst home = execSync('echo $HOME')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import fs from 'fs'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import { x } from '../../prove_the_core/core_sources.ts'\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "text run as code": [
+      {
+        "text": "const value = eval('process.env.X')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const read = new Function('return process.env.X')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const read = Function('return 1')\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "a file that does not parse": [
+      {
+        "text": "const = process\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const ok = 1\nfunction (\n",
+        "lines": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "class A {\n  #constructor = 1\n}\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "each finding at its own line": [
+      {
+        "text": "const a = 1\nconst e = process.env.X\nconst b = 2\nimport { homedir } from 'node:os'\nconst d = '~/x'\n",
+        "lines": [
+          2,
+          4,
+          5
+        ]
+      }
+    ],
+    "Function reached through constructor (review r=3)": [
+      {
+        "text": "const env = [].constructor.constructor('return process.env')()\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const env = ({})['constructor']['constructor']('return process')().env\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor\nconst run = new AsyncFunction('return process.env')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const { constructor: make } = () => {}\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const make = (() => {})[`constructor`]\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "class Box {\n  constructor() {}\n}\nconst make = new Box().constructor\n",
+        "lines": [
+          4
+        ]
+      }
+    ],
+    "the network, as a global (review r=3)": [
+      {
+        "text": "const reply = await fetch('https://example.org/settings')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const socket = new WebSocket('wss://example.org')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const events = new EventSource('https://example.org/stream')\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const get = globalThis.fetch\n",
+        "lines": [
+          1
+        ]
+      }
+    ]
+  },
+  "quiet": [
+    "// a process restart, from process.env, at ~/x",
+    "/* globalThis */",
+    "const why = 'no process runner was given'",
+    "const why = `no process runner: ${request.command}`",
+    "const pattern = /process\\.env|globalThis/",
+    "const ok = /['\"`]~\\//.test(x)",
+    "host.processes.run(request)",
+    "const result = await host?.process",
+    "const text = 'a ~ in the middle, and ~user'",
+    "import { join } from 'node:path'",
+    "import type { Stats } from 'node:fs'",
+    "import { declareCrew } from '../declare_crew/declare_crew.ts'",
+    "type Callable = Function",
+    "const { process: renamed } = record",
+    "const o = { process: 1, global: 2 }",
+    "interface Host { process: string }",
+    "function f(eval_text: string) { return eval_text }",
+    "import { createHash } from 'node:crypto'",
+    "class Box {\n  constructor(readonly size: number) {}\n}\nconst box = new Box(1)",
+    "const words = 'a constructor of boxes'\ntype Maker = { constructor: Function }"
+  ],
+  "glue": {
+    "_why": "Planted machine glue sources for glueReachesBeyondTheContract, judged at <a host glue directory>/planted.ts. {contract} is replaced with the host contract's directory from package.json. Glue importing a slice or other glue is refused; its own directory is not.",
+    "caught": [
+      {
+        "text": "import { settingsFrom } from '../declare_crew/declare_crew.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import type { Settings } from '../declare_crew/declare_crew.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import ts from 'typescript'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import fs from 'fs'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const name = 'node:' + 'fs'\nconst fs = await import(name)\n",
+        "lines": [
+          2
+        ]
+      },
+      {
+        "text": "import { x } from '../../outside.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "export { x } from '../declare_crew/declare_crew.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import { linuxProcessIdentities } from '../some_other_glue/process_identity_from_proc.ts'\n",
+        "lines": [
+          1
+        ]
+      }
+    ],
+    "quiet": [
+      "import fs from 'node:fs'\nimport { join } from 'node:path'\nimport type { Processes } from '../{contract}/host_contract.ts'",
+      "const env = process.env\nconst fs = await import('node:fs')",
+      "import { helper } from './a_sibling.ts'\nimport type { Row } from './rows/row.ts'"
+    ]
+  },
+  "adapter": {
+    "_why": "Planted host adapter sources for adapterReachesBeyondItsKind, judged at <a host adapter directory>/planted.ts. Imports of each program and each kind of test file are generated from package.json; these add the rest. {contract} is replaced with the host contract's directory.",
+    "caught": [
+      {
+        "text": "import ts from 'typescript'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import { x } from '../../outside.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const name = '../declare_crew/' + 'declare_crew.ts'\nconst m = await import(name)\n",
+        "lines": [
+          2
+        ]
+      }
+    ],
+    "quiet": [
+      "import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport { readFile } from 'node:fs/promises'\nimport type { HostContract } from '../{contract}/host_contract.ts'\nimport { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'"
+    ]
+  }
+}

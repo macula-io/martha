@@ -79,7 +79,8 @@ const turnsOf = (adapter: ReturnType<typeof claudeCodeHost>): ArrivingTurn[] => 
 test('the adapter implements the five parts of the host contract', (t) => {
   const { adapter } = adapterIn(t)
   assert.deepEqual(Object.keys(adapter.host).sort(), ['clock', 'delivery', 'processes', 'stores', 'tools'])
-  assert.deepEqual(Object.keys(adapter.host.stores).sort(), ['documents', 'launches', 'rows'])
+  assert.deepEqual(Object.keys(adapter.host.stores).sort(), ['documents', 'files', 'launches', 'rows', 'scratch'])
+  assert.deepEqual(Object.keys(adapter.host.processes).sort(), ['identityOf', 'run', 'runNow'])
   assert.equal(adapter.host.clock.now(), 1_700_000_000_000)
 })
 
@@ -183,6 +184,7 @@ test('the core judges a Claude Code mesh tool by its own name when the hook pass
       input: {},
       launch,
       names,
+      host: adapter.host,
     })
   const call = (names: { ownNameOf(called: string): string }) => callOf('mcp__plugin_macula-mcp_macula__mesh_read_inbox', names)
   assert.match((call(adapter.host.tools) as { deny?: string } | undefined)?.deny ?? '', /no gate has seen/)

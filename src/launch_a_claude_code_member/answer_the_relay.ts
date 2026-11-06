@@ -36,6 +36,7 @@ import { isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../cl
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { ALLOW, TAKEN, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -163,6 +164,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       input: call.input,
       launch: place.launch,
       names: place.names,
+      host: thisMachine,
     })
     return verdict === undefined ? answered(ALLOW) : denied(verdict.deny)
   }
@@ -172,7 +174,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
     if (typeof session === 'string') return stop(session)
     const call = callOf(body)
     if (call === undefined) return stop('a tool ran that the relay could not name')
-    const launched = recheckLaunch(place.launch)
+    const launched = recheckLaunch(place.launch, thisMachine)
     if (!launched.allow) return stop(launched.refusal)
     if (!isMcpToolCall(call.tool)) return answered(TAKEN)
     const why = await keep(takeInTurn(session, { source: 'mcp_result' }, place.binder))

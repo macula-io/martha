@@ -1,6 +1,6 @@
 // Re-records what the Claude Code host says about itself, from its binary.
 //
-//   node src/claude_code_host/record_claude_code_host.ts <claude binary> <version>
+//   npm run record:claude-code-host -- <claude binary> <version>
 //
 // Run it when the host is upgraded; the coverage check then names any session
 // start source and any prompt origin kind the new host sends that its
@@ -9,11 +9,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { argv, exit, stderr } from 'node:process'
 
-import { promptOriginsIn } from './claude_code_prompt_origins.ts'
-import { sessionStartSchemaIn } from './claude_code_session_events.ts'
-import type { RecordedHost } from './recorded_claude_code_host.ts'
+import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
+import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
+import type { RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
 
-const RECORDING = new URL('./recorded_claude_code_host.json', import.meta.url)
+const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
 
 const [binary, host_version] = argv.slice(2)

@@ -21,6 +21,7 @@ import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../
 import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -70,7 +71,7 @@ function placeFor(t: TestContext): Place {
     mkdirSync(dir, { mode: 0o700 })
     return dir
   }
-  const approved = [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home }))]
+  const approved = [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home }, thisMachine))]
   return {
     home,
     checkout,

@@ -128,8 +128,8 @@ checking out a pull request to run its tests.
 
 These are the `launched` rows: C1 for a checkout's tool-server config, C2 for
 its hooks and plugins. What was seen on the two hosts, in a fresh checkout whose
-config only touched a marker file (`npm run probe:launch`, which exits non-zero
-when a host does anything else):
+config only touched a marker file (`npm run probe:launch`, the program in
+`src/probe_launch_hosts/`, which exits non-zero when a host does anything else):
 
 | Host, and how it was started | What starts with nobody asked |
 |---|---|
@@ -402,7 +402,7 @@ The rules the seam keeps, and a host must not work around:
   its form and its servers. The two lists, `MESH_TOOLS_THAT_RUN` and
   `MESH_TOOLS_REFUSED`, are proved against the tools the mesh server's published
   package registers (`recorded_mesh_server_tools.json`, re-recorded by
-  `record_mesh_server_tools.ts`): the coverage check fails CI by name on a tool
+  `npm run record:mesh-tools`, the program in `src/record_mesh_server_tools/`): the coverage check fails CI by name on a tool
   nobody decided, a decided name the server no longer registers, or a tool
   outside `MESH_TOOL_PREFIX`. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry

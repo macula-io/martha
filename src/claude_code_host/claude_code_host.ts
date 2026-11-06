@@ -11,10 +11,11 @@
 //   - stores: rows in ../row_streams_directory, documents read from disk, and
 //     the launcher's records from ../linux_process_identity, handed to slices
 //     only as `readingOnly` (#42): the writable store is the launcher's seam and
-//     never leaves the launcher;
+//     never leaves the launcher; and the disk's files and scratch directories,
+//     also from ../linux_process_identity (#26);
 //   - processes: a child process run directly, so a signal reads as a null exit
-//     code (the engine's own runner reports it as 1), and which process holds a
-//     pid from the kernel, boot included;
+//     code (the engine's own runner reports it as 1), one run now and waited for
+//     (#26), and which process holds a pid from the kernel, boot included;
 //   - delivery: the engine's prompt submission, and every prompt the engine
 //     raises, with where it came from read only from the engine's `origin`;
 //   - tools: the engine's registration, behind a registry of the adapter's own
@@ -60,6 +61,11 @@ import {
   type ProcessRequest,
   type Tool,
 } from '../host_contract/host_contract.ts'
+import {
+  filesOnThisMachine,
+  runNowOnThisMachine,
+  scratchOnThisMachine,
+} from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
@@ -127,9 +133,12 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
       rows: rowStreamsDirectory(places.rows),
       documents: { read: async (path) => readFile(path, 'utf8') },
       launches: readingOnly(launchRecordsDirectory(places.launch_records)),
+      files: filesOnThisMachine,
+      scratch: scratchOnThisMachine,
     },
     processes: {
       run: runProcess,
+      runNow: runNowOnThisMachine,
       identityOf: (pid) => linuxProcessIdentities.identityOf(pid),
     },
     delivery: {

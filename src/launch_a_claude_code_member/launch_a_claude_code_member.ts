@@ -54,6 +54,7 @@ import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   makeEmptyDirectory,
   switchesThatRunNothingFromACheckout,
@@ -146,7 +147,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   if (launch.place.host !== CLAUDE_CODE) return refuse(`${NOT_STARTED}: this launcher starts ${CLAUDE_CODE}, not ${launch.place.host}.`)
 
-  const prepared = prepareLaunch(launch.place)
+  const prepared = prepareLaunch(launch.place, thisMachine)
   if (!prepared.allow) return refuse(prepared.refusal)
   const removeSnapshot = (): void => rmSync(prepared.snapshot_dir, { recursive: true, force: true })
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)

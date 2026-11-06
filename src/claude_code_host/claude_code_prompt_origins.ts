@@ -8,7 +8,7 @@
 // one set is promoted to that subkind), and a fallback for a prompt with no
 // ingress origin (`sdk`, `scheduled-trigger`, `unclassified`). Both are recorded
 // from the binary, with the subkind set, into recorded_claude_code_host.json
-// (record_claude_code_host.ts), and the kinds are parsed from that record
+// (npm run record:claude-code-host), and the kinds are parsed from that record
 // (recorded_claude_code_host.ts).
 //
 // The coverage check (../check_every_path_is_gated, gapsInPromptOrigins) runs
