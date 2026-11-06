@@ -40,6 +40,9 @@ export const USAGE = 'usage: martha init | martha approve | martha start <member
 /** What starts every line Martha shows the owner on stderr. */
 export const SAID_BY = 'martha:'
 
+/** The directory under the XDG state home that holds Martha's state, one directory per project. */
+export const STATE_ROOT_NAME = 'martha'
+
 /** The host the owner has installed, found on their PATH. */
 const CLAUDE = 'claude'
 
@@ -84,7 +87,7 @@ function placesOf(io: CommandIo): Places | string {
   if (home === undefined) return 'HOME is not set to an absolute path, so Martha cannot tell where your home is.'
   const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel')
   if (root === undefined) return `${io.cwd} is not inside a git checkout. Run martha in the checkout your crew works in.`
-  const state_root = join(absolute(io.env['XDG_STATE_HOME']) ?? join(home, '.local', 'state'), 'martha')
+  const state_root = join(absolute(io.env['XDG_STATE_HOME']) ?? join(home, '.local', 'state'), STATE_ROOT_NAME)
   const state = openState(state_root, root)
   return 'refusal' in state ? state.refusal : { root, home, state }
 }

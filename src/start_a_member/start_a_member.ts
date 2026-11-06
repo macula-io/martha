@@ -84,7 +84,10 @@ export function refusedOwnerArgument(args: readonly string[]): string | undefine
 export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string }
 
 /** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
-const STATE_PLACES = ['rows', 'launches', 'snapshots', 'mesh-servers'] as const
+/** The directory inside Martha's state that holds the launcher's launch records. */
+export const LAUNCH_RECORDS_PLACE = 'launches'
+
+const STATE_PLACES = ['rows', LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers'] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
