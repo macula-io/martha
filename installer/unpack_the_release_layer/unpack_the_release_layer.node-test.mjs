@@ -72,6 +72,8 @@ const linkThroughLink = [
 ]
 hostile.push(
   ['a link that escapes through another link', linkThroughLink, /links martha\/esc outside martha\//],
+  // The smallest such chain: s is martha/ itself, so s/.. is the stage, one level out (martha#21 code review r=1).
+  ['a link that escapes through a link to its own folder', [{ name: 'martha/', type: '5' }, { name: 'martha/s', type: '2', target: '.' }, { name: 'martha/a', type: '2', target: 's/../x' }], /links martha\/a outside martha\//],
   ['a link that leaves martha/ and comes back', [{ name: 'martha/', type: '5' }, { name: 'martha/back', type: '2', target: '../martha/README.md' }], /links martha\/back outside martha\//],
   ['a cycle of links', [{ name: 'martha/', type: '5' }, { name: 'martha/p', type: '2', target: 'q' }, { name: 'martha/q', type: '2', target: 'p' }], new RegExp(`through more than ${UNPACK_LIMITS.linkHops} links`)]
 )
