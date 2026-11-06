@@ -186,6 +186,16 @@ test("a checkout whose top is the owner's home is no checkout: its config is ref
   assert.equal(readCheckoutTree(place.checkout, join(place.checkout, 'below'), thisMachine), null)
 })
 
+test('a stop directory not made yet, reached through a symlink, still stops: the checkout above it is no checkout (martha#79)', (t) => {
+  const place = scratch(t)
+  const linked = `${place.home}-link`
+  symlinkSync(place.home, linked)
+  t.after(() => rmSync(linked, { force: true }))
+  const checkout = join(linked, 'work', 'checkout')
+  assert.equal(readCheckoutTree(checkout, join(checkout, 'not', 'made'), thisMachine), null)
+  assert.equal(readCheckoutTree(checkout, join(linked, 'not-made'), thisMachine), git(place.checkout, 'rev-parse', 'HEAD^{tree}'))
+})
+
 test('a checkout outside the stop directory altogether still has its tree read', (t) => {
   const place = scratch(t)
   const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))

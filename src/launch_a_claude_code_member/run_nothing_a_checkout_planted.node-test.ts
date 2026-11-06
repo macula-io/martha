@@ -28,6 +28,7 @@ import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { EMPTY_DIRECTORY_MODE } from './empty_directory.ts'
 import { CLAUDE_CODE, EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
+import { shortRelayRoot } from './short_relay_root.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
 const CONFIG_HOOKS_SINCE: readonly [number, number] = [2, 54]
@@ -231,7 +232,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root: closed('relay'), mesh_servers: closed('mesh-servers') },
+      places: { rows: closed('rows'), launch_records: closed('launches'), relay_root: shortRelayRoot(t), mesh_servers: closed('mesh-servers') },
       command: member,
       args: [],
       inherited: place.owner_env,

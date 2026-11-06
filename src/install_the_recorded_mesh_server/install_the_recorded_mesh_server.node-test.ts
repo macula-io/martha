@@ -155,6 +155,20 @@ test('a recorded tree names the server\'s integrity, the settings it reads and e
   for (const path of paths) assert.match(tree.files[path] ?? '', /^sha512-[A-Za-z0-9+/]+=*$/, path)
 })
 
+test('a scratch reached through a symlink records the same tree, as under the macOS default TMPDIR (martha#79)', async (t) => {
+  const { good } = await registries(t)
+  const real = scratch(t, 'linked-real')
+  const linked = `${real}-link`
+  symlinkSync(real, linked)
+  t.after(() => rmSync(linked, { force: true }))
+  const recording = recordingAt(good.registry)
+  const through_link = recordMeshTree({ tarball: good.tarballOf(MESH_SERVER_PACKAGE), recording, scratch: linked })
+  const [direct] = recorded(t, good).versions
+  assert.ok(direct !== undefined)
+  assert.equal(through_link.integrity, direct.integrity)
+  assert.deepEqual(through_link.files, direct.files)
+})
+
 test('recording a tarball that is not what the registry serves for that version fails, naming both integrities', async (t) => {
   const { good, evil } = await registries(t)
   assert.throws(

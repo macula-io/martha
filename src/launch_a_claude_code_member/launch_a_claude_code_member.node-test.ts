@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
-import { connect } from 'node:net'
+import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -32,8 +32,9 @@ import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD, notACommandThisTerminalCanRun } from './member_on_the_owners_terminal.ts'
-import { makeRelayDirectory, RELAY_DIRECTORY_MODE } from './relay_directory.ts'
+import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
+import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 
 // --- a member's places ----------------------------------------------------------
@@ -90,7 +91,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     checkout,
     rows: closed('rows'),
     launch_records: closed('launches'),
-    relay_root: closed('relay'),
+    relay_root: shortRelayRoot(t),
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
     approved,
@@ -363,6 +364,42 @@ test('a relay directory that already exists, a link, a parent others may write o
   assert.ok(refused(join(place.relay_root, 'group')), 'a parent the group may write')
   chmodSync(place.relay_root, 0o700)
   assert.deepEqual(readdirSync(place.relay_root).sort(), ['link', 'taken'], 'no refusal left a directory behind')
+})
+
+/** Whether this kernel binds a Unix socket at `path`. */
+async function binds(path: string): Promise<boolean> {
+  const server = createServer()
+  const bound = await new Promise<boolean>((resolve) => {
+    server.once('error', () => resolve(false))
+    server.listen(path, () => resolve(true))
+  })
+  if (bound) await new Promise<void>((resolve) => server.close(() => resolve()))
+  return bound
+}
+
+test("a relay socket as long as this kernel binds is made; a byte longer is refused, naming both lengths (martha#79)", async (t) => {
+  const root = shortRelayRoot(t)
+  const room = Buffer.byteLength(join(root, 'x', RELAY_SOCKET_NAME)) - 1
+  const directoryFor = (socket_bytes: number): string => join(root, 'd'.repeat(socket_bytes - room))
+  const probe = join(root, 'probe')
+  mkdirSync(probe)
+  // The kernel's own answer, measured: the longest socket path it binds, found by binding.
+  let longest = Buffer.byteLength(join(probe, 's'))
+  const probed = (bytes: number): string => join(probe, 's'.repeat(bytes - Buffer.byteLength(probe) - 1))
+  while (await binds(probed(longest + 1))) longest += 1
+  rmSync(probe, { recursive: true, force: true })
+
+  const fits = makeRelayDirectory(directoryFor(longest))
+  assert.ok(fits.made, fits.made ? '' : fits.refusal)
+  assert.equal(Buffer.byteLength(fits.socket_path), longest)
+  assert.ok(await binds(fits.socket_path), 'the socket at that length binds')
+  fits.remove()
+
+  const over = makeRelayDirectory(directoryFor(longest + 1))
+  assert.equal(over.made, false)
+  if (over.made) return
+  assert.match(over.refusal, new RegExp(`is ${String(longest + 1)} bytes, longer than the ${String(longest)} `))
+  assert.deepEqual(readdirSync(root), [], 'no refusal left a directory behind')
 })
 
 // --- the relay and the launcher, over the socket --------------------------------
