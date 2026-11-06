@@ -156,15 +156,20 @@ const SPREAD = /\.\.\.\s*process\.env\b(?!\s*[.[?])/g
 export function settingsReadIn(sources: readonly PackageSource[], prefix: string = SETTING_PREFIX): readonly string[] {
   const read = new Set<string>()
   for (const { path, text } of sources) {
-    const dotted = [...text.matchAll(DOT_READ)].map((match) => match[1] ?? '')
-    const bracketed = [...text.matchAll(BRACKET_READ)].map((match) => match[2] ?? '')
-    const spreads = [...text.matchAll(SPREAD)].length
-    if ([...text.matchAll(ANY_READ)].length !== dotted.length + bracketed.length + spreads) {
-      throw new Error(`${path} reads the environment by a key that is not a literal: the settings the server reads cannot be listed`)
-    }
-    for (const key of [...dotted, ...bracketed]) if (key.startsWith(prefix)) read.add(key)
+    for (const key of literalReadsIn(path, text).filter((literal) => literal.startsWith(prefix))) read.add(key)
   }
   return [...read].sort()
+}
+
+/** Every literal key one source reads, dotted then bracketed; refuses a source with any other read. */
+function literalReadsIn(path: string, text: string): string[] {
+  const dotted = [...text.matchAll(DOT_READ)].map((match) => match[1] ?? '')
+  const bracketed = [...text.matchAll(BRACKET_READ)].map((match) => match[2] ?? '')
+  const spreads = [...text.matchAll(SPREAD)].length
+  if ([...text.matchAll(ANY_READ)].length !== dotted.length + bracketed.length + spreads) {
+    throw new Error(`${path} reads the environment by a key that is not a literal: the settings the server reads cannot be listed`)
+  }
+  return [...dotted, ...bracketed]
 }
 
 /** Why a version reading these settings may not be recorded yet, or undefined when each is known. */

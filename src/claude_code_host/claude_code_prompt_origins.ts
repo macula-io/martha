@@ -68,22 +68,48 @@ export function promptOriginsIn(text: string): RecordedPromptOrigins {
 
 /** Every origin kind the recorded code can hand a `prompt.submit` hook. */
 export function promptOriginKindsOf(recorded: RecordedPromptOrigins): readonly string[] {
-  const mapper = new RegExp(MAPPER.source).exec(recorded.prompt_origin_mapper)?.[0]
-  const fallback = new RegExp(FALLBACK.source).exec(recorded.prompt_origin_fallback)?.[0]
-  const subkinds_list = new RegExp(SUBKINDS.source).exec(recorded.prompt_origin_subkinds)?.[1]
-  const passed = mapper === undefined ? undefined : PASSED_THROUGH.exec(mapper)?.[1]
-  if (mapper === undefined || fallback === undefined || subkinds_list === undefined || passed === undefined || !PROMOTION.test(mapper)) {
-    throw new Error('Not a recording of the engine\'s prompt origins: the mapper, its promotion, the fallback or the subkind set is missing.')
-  }
-  const subkinds: unknown = JSON.parse(subkinds_list)
-  if (!Array.isArray(subkinds) || subkinds.length === 0 || !subkinds.every((kind) => typeof kind === 'string' && kind !== '')) {
-    throw new Error(`Not a set of subkinds: ${recorded.prompt_origin_subkinds}`)
-  }
+  const { mapper, fallback, subkinds_list, passed } = recordedParts(recorded)
+  const subkinds = subkindsIn(subkinds_list, recorded.prompt_origin_subkinds)
   const kinds = [
     ...[...mapper.matchAll(KIND_LITERAL)].map((match) => match[1] ?? ''),
     ...[...passed.matchAll(/case"([a-z-]+)":/g)].map((match) => match[1] ?? ''),
-    ...(subkinds as string[]),
+    ...subkinds,
     ...[...fallback.matchAll(KIND_LITERAL)].map((match) => match[1] ?? ''),
   ]
   return [...new Set(kinds)]
+}
+
+/** The mapper, the fallback, the subkind list and the passed-through cases of a recording; refuses one missing. */
+function recordedParts(recorded: RecordedPromptOrigins): { mapper: string; fallback: string; subkinds_list: string; passed: string } {
+  const mapper = firstMatch(MAPPER, recorded.prompt_origin_mapper, 0)
+  const fallback = firstMatch(FALLBACK, recorded.prompt_origin_fallback, 0)
+  const subkinds_list = firstMatch(SUBKINDS, recorded.prompt_origin_subkinds, 1)
+  const passed = passedThroughIn(mapper)
+  if (mapper === undefined || fallback === undefined || subkinds_list === undefined || passed === undefined || !PROMOTION.test(mapper)) {
+    throw new Error('Not a recording of the engine\'s prompt origins: the mapper, its promotion, the fallback or the subkind set is missing.')
+  }
+  return { mapper, fallback, subkinds_list, passed }
+}
+
+/** One group of the first match of a pattern, matched afresh so a global pattern's position is never shared. */
+function firstMatch(pattern: RegExp, text: string, group: number): string | undefined {
+  return new RegExp(pattern.source).exec(text)?.[group]
+}
+
+/** The cases the mapper passes through unchanged, when there is a mapper. */
+function passedThroughIn(mapper: string | undefined): string | undefined {
+  return mapper === undefined ? undefined : PASSED_THROUGH.exec(mapper)?.[1]
+}
+
+/** The promoted subkinds in their recorded list; refuses anything but non-empty strings, at least one. */
+function subkindsIn(subkinds_list: string, recorded_subkinds: string): string[] {
+  const subkinds: unknown = JSON.parse(subkinds_list)
+  if (!Array.isArray(subkinds) || subkinds.length === 0 || !subkinds.every(isSubkind)) {
+    throw new Error(`Not a set of subkinds: ${recorded_subkinds}`)
+  }
+  return subkinds as string[]
+}
+
+function isSubkind(kind: unknown): boolean {
+  return typeof kind === 'string' && kind !== ''
 }

@@ -91,8 +91,7 @@ const missingDocument = (path: string): Error =>
 
 export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
   let now = options.now ?? 0
-  let refusal: string | undefined
-  const streams = new Map<string, string[]>()
+  const rows = rowsInMemory()
   const handed: string[] = []
   const reads: string[] = []
   const listeners: ((turn: ArrivingTurn) => void)[] = []
@@ -105,6 +104,56 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
     keep: (key, row) => void launches.set(key, kept(row)),
     drop: (key) => void launches.delete(key),
   }
+
+  const host: HostContract = {
+    clock: { now: () => now },
+    stores: {
+      rows: rows.store,
+      documents: {
+        read: async (path) => {
+          reads.push(path)
+          const text = documents[path]
+          if (text === undefined) throw missingDocument(path)
+          return text
+        },
+      },
+      launches: readingOnly(launcherRecords),
+      files: options.files ?? NO_FILES,
+      scratch: options.scratch ?? NO_SCRATCH,
+    },
+    processes: processesFor(options),
+    delivery: {
+      handToModel: async (text) => void handed.push(text),
+      onTurn: (take) => void listeners.push(take),
+    },
+    tools: {
+      register: (tool) => {
+        if (tools.has(tool.name)) throw new Error(`a tool is already registered: ${tool.name}`)
+        tools.set(tool.name, tool)
+      },
+      ownNameOf: (called) => (options.toolNames ?? claudeCodeToolNames).ownNameOf(called),
+    },
+  }
+
+  return {
+    host,
+    launcherRecords,
+    advanceClock: (milliseconds) => void (now += milliseconds),
+    refuseNextAppend: rows.refuseNextAppend,
+    turnsHandedToModel: () => [...handed],
+    documentsRead: () => [...reads],
+    arrive: (turn) => listeners.forEach((take) => take(turn)),
+    registeredTool: (name) => tools.get(name),
+  }
+}
+
+/**
+ * The row streams, in memory: rows only append, an append that expects a length
+ * lands only at it, and a test can make the next append fail.
+ */
+function rowsInMemory(): { readonly store: HostContract['stores']['rows']; refuseNextAppend(reason: string): void } {
+  let refusal: string | undefined
+  const streams = new Map<string, string[]>()
 
   const append = async (stream: string, row: Row, expected_length?: number): Promise<number> => {
     if (refusal !== undefined) {
@@ -126,51 +175,17 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
   const read = async (stream: string): Promise<readonly StoredRow[]> =>
     (streams.get(stream) ?? []).map((text, position) => ({ position, row: JSON.parse(text) as Row }))
 
-  const host: HostContract = {
-    clock: { now: () => now },
-    stores: {
-      rows: { append, read },
-      documents: {
-        read: async (path) => {
-          reads.push(path)
-          const text = documents[path]
-          if (text === undefined) throw missingDocument(path)
-          return text
-        },
-      },
-      launches: readingOnly(launcherRecords),
-      files: options.files ?? NO_FILES,
-      scratch: options.scratch ?? NO_SCRATCH,
-    },
-    processes: {
-      run: async (request) => {
-        if (options.run === undefined) throw new Error(`no process runner was given to this test host: ${request.command}`)
-        return options.run(request)
-      },
-      runNow: (request) => (options.runNow ?? ((r: ProcessRequestNow) => notGiven('process runner', r.command)))(request),
-      identityOf: (pid) => options.identityOf?.(pid) ?? null,
-    },
-    delivery: {
-      handToModel: async (text) => void handed.push(text),
-      onTurn: (take) => void listeners.push(take),
-    },
-    tools: {
-      register: (tool) => {
-        if (tools.has(tool.name)) throw new Error(`a tool is already registered: ${tool.name}`)
-        tools.set(tool.name, tool)
-      },
-      ownNameOf: (called) => (options.toolNames ?? claudeCodeToolNames).ownNameOf(called),
-    },
-  }
+  return { store: { append, read }, refuseNextAppend: (reason) => void (refusal = reason) }
+}
 
+/** The processes a test gives; with none, every run is refused and no pid is held. */
+function processesFor(options: HostForTestsOptions): HostContract['processes'] {
   return {
-    host,
-    launcherRecords,
-    advanceClock: (milliseconds) => void (now += milliseconds),
-    refuseNextAppend: (reason) => void (refusal = reason),
-    turnsHandedToModel: () => [...handed],
-    documentsRead: () => [...reads],
-    arrive: (turn) => listeners.forEach((take) => take(turn)),
-    registeredTool: (name) => tools.get(name),
+    run: async (request) => {
+      if (options.run === undefined) throw new Error(`no process runner was given to this test host: ${request.command}`)
+      return options.run(request)
+    },
+    runNow: (request) => (options.runNow ?? ((r: ProcessRequestNow) => notGiven('process runner', r.command)))(request),
+    identityOf: (pid) => options.identityOf?.(pid) ?? null,
   }
 }
