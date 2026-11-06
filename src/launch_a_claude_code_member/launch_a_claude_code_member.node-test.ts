@@ -6,7 +6,7 @@
 // stand in for the engine's calls. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect } from 'node:net'
@@ -23,6 +23,9 @@ import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
+import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -43,6 +46,8 @@ interface Place {
   readonly launch_records: string
   readonly relay_root: string
   readonly snapshot_root: string
+  /** Where the launcher installs the recorded mesh server trees (martha#65). */
+  readonly mesh_servers: string
   readonly approved: readonly string[]
 }
 
@@ -58,7 +63,7 @@ function git(cwd: string, ...args: string[]): string {
 // The fake host never starts it.
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 
-function placeFor(t: TestContext, servers = SERVERS): Place {
+function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<string, string>> = {}): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-cc-launch-'))
   t.after(() => rmSync(home, { recursive: true, force: true }))
   const checkout = join(home, 'checkout')
@@ -66,6 +71,10 @@ function placeFor(t: TestContext, servers = SERVERS): Place {
   git(checkout, 'init', '-q', '.')
   writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
   writeFileSync(join(checkout, '.mcp.json'), servers)
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(checkout, path)), { recursive: true })
+    writeFileSync(join(checkout, path), text)
+  }
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
 
@@ -82,6 +91,7 @@ function placeFor(t: TestContext, servers = SERVERS): Place {
     launch_records: closed('launches'),
     relay_root: closed('relay'),
     snapshot_root: closed('snapshots'),
+    mesh_servers: closed('mesh-servers'),
     approved,
   }
 }
@@ -522,16 +532,18 @@ const isAlive = (pid: number): boolean => {
 
 const NODE_ID = 'ab'.repeat(32)
 
-function memberLaunch(place: Place, command: string, approved = place.approved, lines: string[] = []) {
+function memberLaunch(place: Place, command: string, approved = place.approved, lines: string[] = [], mesh_trees?: MeshTreeRecording) {
   return {
     member_name: 'Mercury',
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root },
+    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },
+    ...(mesh_trees === undefined ? {} : { mesh_trees }),
     command,
     args: ['-p', 'the owner prompt'],
-    inherited: { PATH: process.env.PATH, OPENCODE_CONFIG_DIR: '/elsewhere' },
+    // HOME is the place's own, so the owner's user settings file the launcher reads is the test's.
+    inherited: { PATH: process.env.PATH, HOME: place.home, OPENCODE_CONFIG_DIR: '/elsewhere' },
     stdio: 'ignore' as const,
     tellOwner: (line: string) => void lines.push(line),
   }
@@ -641,17 +653,196 @@ for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
   })
 }
 
-test('an approved config that installs a recorded mesh server version starts the member', async (t) => {
+// --- the mesh server it starts is the recorded tree (martha#65) -----------------
+// A stand-in of a recorded version, with one bin as npx would pick it, served
+// on the loopback: the launcher must not reach the real registry in a test.
+const RECORDED_MARK = 'the recorded mesh server'
+
+async function recordedTreeOf(t: TestContext, version: string): Promise<{ registry: FakeRegistry; recording: MeshTreeRecording }> {
+  const registry = await fakeMeshRegistry([
+    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\nprocess.stderr.write(JSON.stringify({ ...process.env }))\n` } },
+  ])
+  t.after(() => registry.stop())
+  const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
+  t.after(() => rmSync(scratch, { recursive: true, force: true }))
+  const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], versions: [] }
+  const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
+  return { registry, recording: { ...recording, versions: [tree] } }
+}
+
+const serverConfigIn = (argsFile: string) => {
+  const args = readFileSync(argsFile, 'utf8').split('\n')
+  const path = args[args.indexOf('--mcp-config') + 1]
+  assert.ok(path !== undefined)
+  return JSON.parse(readFileSync(path, 'utf8')) as { mcpServers: Record<string, { command: string; args: string[] }> }
+}
+
+test('an approved config that installs a recorded mesh server version starts the member on the recorded tree, by path', async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
   const place = placeFor(t, meshServerAt(recorded.server_version))
   const fake = fakeClaude(place)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
   t.after(() => started.stop('the test is over'))
-  await until('the fake host to start', () => existsSync(fake.ranFile))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  const entry = serverConfigIn(fake.argsFile).mcpServers.macula
+  assert.ok(entry !== undefined)
+  assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
+  assert.deepEqual(entry.args, [join(place.mesh_servers, recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')])
+  assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
+})
+
+test('what the launcher\'s environment would load into the mesh server never reaches it (#65 r=2)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const ran = join(place.home, 'preload-ran')
+  const preload = join(place.home, 'preload.cjs')
+  writeFileSync(preload, `require('node:fs').appendFileSync(${JSON.stringify(ran)}, 'x')\n`)
+  const launch = memberLaunch(place, fake.command, place.approved, [], recording)
+  const shellPrefix = join(place.home, 'wrap.sh')
+  const planted = {
+    ...launch,
+    inherited: { ...launch.inherited, NODE_OPTIONS: `--require ${preload}`, SOME_ADDON_PREBUILD: place.home, CLAUDE_CODE_SHELL_PREFIX: shellPrefix },
+  }
+  const started = await launchClaudeCodeMember(planted)
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(() => started.stop('the test is over'))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
+  const hostEnv = Object.fromEntries(
+    readFileSync(`/proc/${started.pid}/environ`, 'utf8').split('\0').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]),
+  )
+  assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
+  assert.equal(Object.hasOwn(hostEnv, 'CLAUDE_CODE_SHELL_PREFIX'), false, 'the host is never given a prefix it would run every server through (#65 r=3)')
+  const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
+  assert.ok(entry !== undefined)
+  const run = spawnSync(entry.command, entry.args, { env: { ...hostEnv, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
+  assert.equal(existsSync(ran), false, 'the preload never ran in the server')
+  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
+  for (const name of ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RELAY_SOCKET_VARIABLE]) assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
+  started.stop('the test is over')
+  await started.stopped
+})
+
+// --- what Claude Code's settings files add to a server's environment (#65 r=3) ---
+// The host gives every server its own environment, then the env of each settings
+// file it loaded: the owner's user settings and the approved --settings copy.
+
+const USER_SETTINGS = join('.claude', 'settings.json')
+const settingsWithEnv = (env: Record<string, string>) => JSON.stringify({ env })
+
+function ownerSettings(place: Place, env: Record<string, string>): string {
+  const path = join(place.home, USER_SETTINGS)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, settingsWithEnv(env))
+  return path
+}
+
+async function refusedLeavingNothing(t: TestContext, place: Place, launch: Parameters<typeof launchClaudeCodeMember>[0], ranFile: string): Promise<string> {
+  const lines: string[] = []
+  const started = await launchClaudeCodeMember({ ...launch, tellOwner: (line) => void lines.push(line) })
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.equal(existsSync(ranFile), false)
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+  assert.deepEqual(lines, [refusal])
+  return refusal
+}
+
+test("a name in the owner's user settings env nobody approved starts nothing, naming the file and the name", async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const file = ownerSettings(place, { FROM_SETTINGS: 'x' })
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
+  assert.ok(refusal.includes(file) && refusal.includes('FROM_SETTINGS'), refusal)
+})
+
+test('a name in the approved --settings env nobody approved starts nothing, naming it', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version), { [USER_SETTINGS]: settingsWithEnv({ FROM_SETTINGS: 'x' }) })
+  const fake = fakeClaude(place)
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
+  assert.ok(refusal.includes(USER_SETTINGS) && refusal.includes('FROM_SETTINGS'), refusal)
+})
+
+for (const [shape, configDir] of [
+  ['empty', ''],
+  ['relative', '.claude'],
+] as const) {
+  test(`a CLAUDE_CONFIG_DIR that is ${shape} starts nothing, naming the variable (#65 r=4)`, async (t) => {
+    const recorded = RECORDED_MESH_SERVERS[0]
+    assert.ok(recorded !== undefined)
+    const { recording } = await recordedTreeOf(t, recorded.server_version)
+    const place = placeFor(t, meshServerAt(recorded.server_version))
+    const fake = fakeClaude(place)
+    const launch = memberLaunch(place, fake.command, place.approved, [], recording)
+    const refusal = await refusedLeavingNothing(t, place, { ...launch, inherited: { ...launch.inherited, CLAUDE_CONFIG_DIR: configDir } }, fake.ranFile)
+    assert.ok(refusal.includes('CLAUDE_CONFIG_DIR'), refusal)
+  })
+}
+
+test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, and the mesh server is given it empty", async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const fromSettings = { CLAUDE_CODE_PLUGIN_DIRS: join(place.home, 'plugins') }
+  ownerSettings(place, fromSettings)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(() => started.stop('the test is over'))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'))
+  const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
+  assert.ok(entry !== undefined)
+  // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
+  const run = spawnSync(entry.command, entry.args, { env: { ...process.env, ...fromSettings, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
+  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
+  assert.equal(seen.CLAUDE_CODE_PLUGIN_DIRS, '', `it reached the server as ${seen.CLAUDE_CODE_PLUGIN_DIRS}`)
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const first = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
+  assert.ok(first.started, first.started ? '' : first.refusal)
+  first.stop('the test is over')
+  await first.stopped
+  rmSync(fake.ranFile, { force: true })
+
+  const changed = join('node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
+  writeFileSync(join(place.mesh_servers, recorded.server_version, changed), "console.log('planted')\n")
+  const lines: string[] = []
+  const second = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines, recording))
+  if (second.started) t.after(async () => (second.stop('the test is over'), await second.stopped))
+  assert.equal(second.started, false)
+  const refusal = second.started ? '' : second.refusal
+  assert.ok(refusal.includes(changed), refusal)
+  assert.equal(existsSync(fake.ranFile), false)
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+  assert.deepEqual(lines, [refusal])
 })
 
 test('an approved launch starts the host with the switches and the relay, and a refusal after a call kills its whole group', async (t) => {

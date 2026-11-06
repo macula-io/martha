@@ -94,6 +94,14 @@ test('an env key outside the allowlist is refused by name, beside an allowed one
   assert.ok(read.refusal.includes('PREFIX') && read.refusal.includes('macula_lower') && !read.refusal.includes('MACULA_MESH_REALMS,'), read.refusal)
 })
 
+test('a MACULA_* setting nobody has reviewed is refused by name: the allow-list is the reviewed settings, not the prefix (#65)', () => {
+  const unreviewed = 'MACULA_MCP_PLUGIN_DIR'
+  const entry = { ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r', [unreviewed]: '/x' } }
+  const read = meshServerInstallsIn(config({ [SERVER_NAME]: entry }), MESH_SERVER_PACKAGE)
+  assert.ok('refusal' in read, JSON.stringify(read))
+  assert.ok(read.refusal.includes(unreviewed) && !read.refusal.includes('MACULA_MESH_REALMS,'), read.refusal)
+})
+
 test('a pin that names the bin to run reads as that version and that bin', () => {
   const entry = { command: 'npx', args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${VERSION}`, BIN] }
   assert.deepEqual(meshServerInstallsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { installs: [{ server: 'macula', version: VERSION, bin: BIN }] })

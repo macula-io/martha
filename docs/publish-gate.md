@@ -414,7 +414,7 @@ The rules the seam keeps, and a host must not work around:
   judges a mesh tool by its name from any server, the check fails closed:
   every server in the approved `.mcp.json`, the mesh server or not, must start
   as `npx -y <package>@<x.y.z>` (stdio, an `env` holding only the
-  mesh server's own `MACULA_*` settings, `SERVER_ENV_ALLOWED`, no other key), or
+  mesh server's own settings that someone reviewed, `known_settings`, no other key), or
   the member is not started, naming the server. The mesh server may also start
   as `npx -y -p <package>@<x.y.z> <bin>`, the shape members use. Each record
   holds that version's bins and names the one that is the server
@@ -424,7 +424,54 @@ The rules the seam keeps, and a host must not work around:
   names, a register that rewrites host configs). The shorter shape is accepted
   only where npx would pick the server bin itself (one bin, or one named after
   the package), which the mesh server's seven bins do not allow. A git or GitHub spec, a URL server, a shell wrapper, a package named
-  in a variable or a bare bin is refused; there is no exempt list. Only the
+  in a variable or a bare bin is refused; there is no exempt list. The version
+  does not prove the bytes by itself (martha#65): npx would take them from
+  whatever registry, project `.npmrc`, `node_modules` or global prefix it
+  finds, and the server's caret dependencies drift under one version. So each
+  recorded version also carries its whole tree
+  (`src/prove_the_mesh_server_bytes/recorded_mesh_server_trees.json`): the
+  tarball's integrity, npm's lock for that version alone with a sha512 for
+  every package, the `MACULA_*` settings its code reads (a version reading one
+  nobody reviewed is not recorded), and every installed file with its sha512.
+  The launcher installs the lock with `npm ci --ignore-scripts` and no outside
+  npm config or environment, compares the tree file by file before every
+  launch, refusing a changed, missing or added file by path, and the approved
+  copy starts the record's server bin by path with the launcher's own node,
+  never through npx (`src/install_the_recorded_mesh_server/`). A host starts
+  a server with its own environment under the entry's `env`, so the
+  launcher's environment would reach the server: a `NODE_OPTIONS` preload, a
+  library for libc to preload, a `<NAME>_PREBUILD` directory a dependency
+  loads a native addon from. So the placed entry's `env` names every variable
+  the host is given: HOME and PATH keep their values, the entry's reviewed
+  settings keep theirs, and every other one is emptied. Claude Code adds two
+  sources of its own. It starts every server as `<prefix> "<command>"` when
+  its environment holds `CLAUDE_CODE_SHELL_PREFIX`, so the launcher drops that
+  variable before the host starts. And it gives every server the `env` of each
+  settings file it loads, which under `--setting-sources user` is the owner's
+  user settings (`$CLAUDE_CONFIG_DIR/settings.json`, else
+  `~/.claude/settings.json`; a `CLAUDE_CONFIG_DIR` that is set but empty or
+  not absolute refuses the launch, since the launcher and the host could
+  resolve it to different files) and the approved `--settings` copy: a launch is
+  refused, naming the file and the variable, when either sets a name other
+  than HOME, PATH or a reviewed setting, except Claude Code's own variables
+  that no file of a recorded tree reads (`CLAUDE_CODE_OWN_VARIABLES`, today
+  `CLAUDE_CODE_PLUGIN_DIRS`), which the server is given empty
+  (`src/claude_code_host/settings_env_reaching_servers.ts`). With those, what
+  the launcher and the settings files hand a mesh server is an allow-list.
+  Claude Code also sets `CLAUDE_PROJECT_DIR`, `CLAUDE_CODE_SESSION_ID`,
+  `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` for a server by itself; the server
+  reads only the session id, to scope what it keeps per session, and none of
+  them changes what code it loads. Admin-managed settings
+  (`/etc/claude-code/managed-settings.json`) are root's and are not read. What
+  this does not close: a
+  member's shell runs as the same user and can edit the installed tree during
+  a session; the next launch refuses it, but the running server is not checked
+  again. In the same way, the user settings file is read before the host
+  starts and the host reads it again itself, so an edit by that user in
+  between reaches the host unchecked. Both are the same class as the contact-policy file
+  (macula-io/macula-mcp#79). A dependency's own environment reads are not
+  listed by the recorder (martha#72), and a module the tree lacks is looked
+  for in the `node_modules` above it and under HOME (martha#73). Only the
   servers an installed plugin brings are not version-checked; their tools are
   still refused at run time unless decided. The one read that remains returns
   only what the room's own delivery gate admits, with the roster the registry
