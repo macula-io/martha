@@ -48,8 +48,11 @@ async function throughTheRunner(t: TestContext, command: readonly string[]): Pro
     }
   })
   let output = ''
-  runner.stdout.on('data', (chunk: Buffer) => void (output += chunk.toString('utf8')))
-  runner.stderr.on('data', (chunk: Buffer) => void (output += chunk.toString('utf8')))
+  // Decoded per stream, not per chunk: a character split across two chunks arrives whole.
+  runner.stdout.setEncoding('utf8')
+  runner.stderr.setEncoding('utf8')
+  runner.stdout.on('data', (chunk: string) => void (output += chunk))
+  runner.stderr.on('data', (chunk: string) => void (output += chunk))
   const code = await new Promise<Run['code']>((resolve) => {
     const deadline = setTimeout(() => resolve('hung'), RUN_DEADLINE_MS)
     runner.on('close', (ended) => {
@@ -93,6 +96,17 @@ test('a test file that captures what its child prints passes the run', async (t)
 test("the runner ends with the command's own exit code when nothing was planted in the output", async (t) => {
   const run = await throughTheRunner(t, [process.execPath, '-e', 'process.stdout.write("ok"); process.exit(3)'])
   assert.deepEqual(run, { code: 3, output: 'ok' })
+})
+
+test('a character the command writes in two pieces reaches the output whole', async (t) => {
+  const tick = Buffer.from('✔')
+  const writer = [
+    `const tick = Buffer.from(${JSON.stringify([...tick])})`,
+    'process.stdout.write(tick.subarray(0, 1))',
+    'setTimeout(() => process.stdout.write(tick.subarray(1)), 50)',
+  ].join('; ')
+  const run = await throughTheRunner(t, [process.execPath, '-e', writer])
+  assert.deepEqual(run, { code: 0, output: '✔' })
 })
 
 test('the planted value is counted wherever the stream splits it, and a fresh one is planted each run', () => {

@@ -44,14 +44,18 @@ const IMPORTED_ABOVE_THE_TREE = 'mesh-optional-imported'
 const UNDER_HOME = 'mesh-optional-home'
 /** The launcher's own hook that confines what the server loads to its tree. */
 const CONFINING_HOOK = fileURLToPath(new URL('./confine_to_the_recorded_tree.ts', import.meta.url))
+/** What the host is handed that must never reach the server: the stand-in is asked about each. */
+const NEVER_REACHES_THE_SERVER = ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', 'LD_PRELOAD', 'MACULA_MCP_MODEL'] as const
 /**
  * The only variables the stand-in server answers with: the ones a test asks
  * whether they reached it. Never its whole environment, which can be whatever
  * the person running the suite has, secrets included (martha#92).
  * It copies the environment by a spread, the one whole-environment read the
  * recorder lists (prove_the_mesh_server_bytes.ts), and picks from the copy.
+ * It answers every name it is asked, null for one it was not started with, so a
+ * check on a name it was never asked about fails instead of reading it as absent.
  */
-const ASKED_OF_THE_SERVER = ['HOME', 'PATH', 'NODE_OPTIONS', 'SOME_ADDON_PREBUILD', 'LD_PRELOAD', 'MACULA_MCP_MODEL', SETTING] as const
+const ASKED_OF_THE_SERVER = ['HOME', 'PATH', ...NEVER_REACHES_THE_SERVER, SETTING] as const
 
 const serverOf = (mark: string, setting = SETTING): FakePackage => ({
   name: MESH_SERVER_PACKAGE,
@@ -70,7 +74,7 @@ const serverOf = (mark: string, setting = SETTING): FakePackage => ({
       // What the server was started with, for the tests on its environment: only the names they ask about.
       `const asked = ${JSON.stringify(ASKED_OF_THE_SERVER)}`,
       'const started = { ...process.env }',
-      'process.stderr.write(JSON.stringify(Object.fromEntries(asked.filter((name) => name in started).map((name) => [name, started[name]]))))',
+      'process.stderr.write(JSON.stringify(Object.fromEntries(asked.map((name) => [name, started[name] ?? null]))))',
       '',
     ].join('\n'),
     'dist/realm.js': 'console.log("realm")\n',
@@ -323,10 +327,14 @@ test('the server starts with HOME, PATH and its approved settings: every other v
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: host, serverConfig: pinnedConfig(undefined, { [SETTING]: 'approved' }), root, recording }))
   // The host starts a server with its own environment under the entry's env, as Claude Code does.
   const run = spawnSync(entry.command, entry.args, { cwd: root, env: { ...host, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)
   assert.throws(() => execFileSync('ls', [ran], { stdio: 'ignore' }), 'the preload never ran')
-  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
-  for (const name of ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', 'LD_PRELOAD', 'MACULA_MCP_MODEL']) assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
+  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string | null>
+  for (const name of NEVER_REACHES_THE_SERVER) {
+    assert.ok(Object.hasOwn(seen, name), `the stand-in was never asked about ${name}`)
+    assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
+  }
   assert.equal(seen[SETTING], 'approved')
   assert.equal(seen.HOME, planted)
   assert.equal(seen.PATH, process.env.PATH)
