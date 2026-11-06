@@ -10,11 +10,9 @@
 // A dynamic import whose specifier is computed cannot be checked, so it is named
 // too: the core has no reason to load a module by a name it builds at runtime.
 //
-// Every check that reads the core's code reads it through coreSources and
-// specifiersOf here, so no check walks fewer files or parses imports another way.
-
-import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+// Every check that reads the core's code walks it with coreSources, which lives
+// outside the core in prove_the_core/core_sources.ts (it reads the disk, which a
+// slice may not), so no check walks fewer files than another.
 
 export interface CoreSource {
   readonly path: string
@@ -57,14 +55,6 @@ export const specifiersOf = (text: string): string[] => [
   ...QUOTED.flatMap((pattern) => [...text.matchAll(pattern)].map((match) => match[1] ?? '')),
   ...[...text.matchAll(COMPUTED)].map((match) => `${COMPUTED_SPECIFIER}${(match[1] ?? '').trim()})`),
 ]
-
-/** Every script file under `root`, with its path relative to `root`. */
-export function coreSources(root: string): CoreSource[] {
-  return readdirSync(root, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && isScannedSource(entry.name))
-    .map((entry) => join(entry.parentPath, entry.name))
-    .map((path) => ({ path: relative(root, path), text: readFileSync(path, 'utf8') }))
-}
 
 /** Every import in these sources that is neither another slice nor Node's own. */
 export function importsBeyondTheCore(sources: readonly CoreSource[]): ImportBeyondTheCore[] {

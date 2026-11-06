@@ -4,7 +4,8 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { ROW_STREAM_MOVED } from './host_contract.ts'
-import { COMPUTED_SPECIFIER, SCANNED_EXTENSIONS, coreSources, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
+import { coreSources } from '../../prove_the_core/core_sources.ts'
+import { COMPUTED_SPECIFIER, SCANNED_EXTENSIONS, importsBeyondTheCore, isScannedSource } from './imports_beyond_the_core.ts'
 import { hostForTests } from './host_for_tests.ts'
 
 const SRC = dirname(dirname(fileURLToPath(import.meta.url)))

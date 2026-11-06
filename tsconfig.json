@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "architecture/**/*.ts"]
+  "include": ["src/**/*.ts", "architecture/**/*.ts", "prove_the_core/**/*.ts"]
 }

@@ -1,0 +1,159 @@
+{
+  "_why": "Planted sources for prove_the_core/parse_a_source's module references, in JSON so no walk of the core's code reads them as imports.",
+  "references": [
+    {
+      "text": "import { a } from './a.ts'\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "./a.ts",
+          "kind": "import",
+          "type_only": false,
+          "line": 1
+        }
+      ]
+    },
+    {
+      "text": "import type { A } from './a.ts'\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "./a.ts",
+          "kind": "import",
+          "type_only": true,
+          "line": 1
+        }
+      ]
+    },
+    {
+      "text": "import './effect.ts'\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "./effect.ts",
+          "kind": "import",
+          "type_only": false,
+          "line": 1
+        }
+      ]
+    },
+    {
+      "text": "export { a } from './a.ts'\nexport type { B } from './b.ts'\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "./a.ts",
+          "kind": "export_from",
+          "type_only": false,
+          "line": 1
+        },
+        {
+          "specifier": "./b.ts",
+          "kind": "export_from",
+          "type_only": true,
+          "line": 2
+        }
+      ]
+    },
+    {
+      "text": "export const a = 1\n",
+      "path": "x.ts",
+      "expect": []
+    },
+    {
+      "text": "const m = await import('node:path')\nconst t = await import(`node:path`)\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "node:path",
+          "kind": "dynamic_import",
+          "type_only": false,
+          "line": 1
+        },
+        {
+          "specifier": "node:path",
+          "kind": "dynamic_import",
+          "type_only": false,
+          "line": 2
+        }
+      ]
+    },
+    {
+      "text": "const m = await import(name)\nconst t = await import(`node:${part}`)\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": null,
+          "kind": "dynamic_import",
+          "type_only": false,
+          "line": 1
+        },
+        {
+          "specifier": null,
+          "kind": "dynamic_import",
+          "type_only": false,
+          "line": 2
+        }
+      ]
+    },
+    {
+      "text": "const fs = require('fs')\nconst x = require(name)\n",
+      "path": "x.js",
+      "expect": [
+        {
+          "specifier": "fs",
+          "kind": "require",
+          "type_only": false,
+          "line": 1
+        },
+        {
+          "specifier": null,
+          "kind": "require",
+          "type_only": false,
+          "line": 2
+        }
+      ]
+    },
+    {
+      "text": "import fs = require('fs')\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "fs",
+          "kind": "require",
+          "type_only": false,
+          "line": 1
+        }
+      ]
+    },
+    {
+      "text": "type T = import('./a.ts').A\n",
+      "path": "x.ts",
+      "expect": [
+        {
+          "specifier": "./a.ts",
+          "kind": "import",
+          "type_only": true,
+          "line": 1
+        }
+      ]
+    },
+    {
+      "text": "// import x from 'commented'\nconst s = \"import y from 'quoted'\"\n",
+      "path": "x.ts",
+      "expect": []
+    },
+    {
+      "text": "const view = <div />\nimport { a } from './a.ts'\n",
+      "path": "x.tsx",
+      "expect": [
+        {
+          "specifier": "./a.ts",
+          "kind": "import",
+          "type_only": false,
+          "line": 2
+        }
+      ]
+    }
+  ]
+}
