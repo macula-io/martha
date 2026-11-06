@@ -29,6 +29,9 @@ const PLUTO = { member_name: 'Pluto', node_id: 'a'.repeat(64), pid: 4101 }
 const NEPTUNUS = { member_name: 'Neptunus', node_id: 'b'.repeat(64), pid: 4102 }
 const STARTED = '900100'
 
+/** The members list the owner signed, as openTrustList hands it to the binder. */
+const signedMembers = () => [PLUTO, NEPTUNUS].map(({ member_name, node_id }) => ({ member_name, node_id }))
+
 const policy: Policy = { may_send_executable_text: [PLUTO.node_id, NEPTUNUS.node_id] }
 
 const memoryStore = (launches: readonly MemberLaunch[] = []): MemberLaunchStore => {
@@ -62,7 +65,7 @@ const plutoIsRunning = (): Binder => {
   const store = memoryStore()
   const processes = kernel({ [PLUTO.pid]: STARTED })
   assert.deepEqual(recordMemberLaunch(store, processes, PLUTO), { recorded: true })
-  return binderOverLaunches(store, processes)
+  return binderOverLaunches(store, processes, signedMembers)
 }
 
 const taken = (arrival: Arrival, binder: Binder) => takeInTurn(beginSession(sessions(), 's-1'), arrival, binder)
@@ -116,7 +119,7 @@ test('two records for one pid bind nobody', () => {
     { ...NEPTUNUS, pid: PLUTO.pid, process_started_at: STARTED },
   ])
 
-  assert.equal(binderOverLaunches(twice, processes)({ sending_pid: PLUTO.pid }), null)
+  assert.equal(binderOverLaunches(twice, processes, signedMembers)({ sending_pid: PLUTO.pid }), null)
 })
 
 // --- planted case 2: nothing in the text reaches from_identity ----------------
@@ -163,7 +166,7 @@ test('a record whose process is gone binds nobody', () => {
   const store = memoryStore()
   assert.deepEqual(recordMemberLaunch(store, kernel({ [PLUTO.pid]: STARTED }), PLUTO), { recorded: true })
 
-  const exited = binderOverLaunches(store, kernel({}))
+  const exited = binderOverLaunches(store, kernel({}), signedMembers)
   assert.equal(exited({ sending_pid: PLUTO.pid }), null)
 })
 
@@ -171,7 +174,7 @@ test('a record whose pid now belongs to a process that started at another time b
   const store = memoryStore()
   assert.deepEqual(recordMemberLaunch(store, kernel({ [PLUTO.pid]: STARTED }), PLUTO), { recorded: true })
 
-  const reused = binderOverLaunches(store, kernel({ [PLUTO.pid]: `${STARTED}1` }))
+  const reused = binderOverLaunches(store, kernel({ [PLUTO.pid]: `${STARTED}1` }), signedMembers)
   assert.equal(reused({ sending_pid: PLUTO.pid }), null)
 })
 
@@ -185,8 +188,8 @@ test('a relaunch replaces the old record, and a stop removes it', () => {
   recordMemberLaunch(store, second, { ...PLUTO, pid: relaunched_pid })
 
   assert.equal(store.launches().length, 1)
-  assert.equal(binderOverLaunches(store, second)({ sending_pid: PLUTO.pid }), null)
-  assert.equal(binderOverLaunches(store, second)({ sending_pid: relaunched_pid }), PLUTO.node_id)
+  assert.equal(binderOverLaunches(store, second, signedMembers)({ sending_pid: PLUTO.pid }), null)
+  assert.equal(binderOverLaunches(store, second, signedMembers)({ sending_pid: relaunched_pid }), PLUTO.node_id)
 
   recordMemberStopped(store, PLUTO.member_name)
   assert.deepEqual(store.launches(), [])
@@ -247,7 +250,7 @@ const plantRecord = (path: string, row: unknown) =>
   writeFileSync(path, typeof row === 'string' ? row : JSON.stringify(row), { mode: MEMBER_LAUNCH_FILE_MODE })
 
 const bindsPluto = (directory: string) =>
-  binderOverLaunches(memberLaunchesDirectory(directory), kernel({ [PLUTO.pid]: STARTED }))({ sending_pid: PLUTO.pid })
+  binderOverLaunches(memberLaunchesDirectory(directory), kernel({ [PLUTO.pid]: STARTED }), signedMembers)({ sending_pid: PLUTO.pid })
 
 test('the launcher writes one record per member, only its owner may touch it, and the binder reads it back', (t) => {
   const directory = recordsDirectory(t)
@@ -385,10 +388,10 @@ test('the same pid with the same start ticks under another boot binds nobody', (
   const proc = fakeProc(t, BOOT)
   const store = memoryStore()
   assert.deepEqual(recordMemberLaunch(store, proc.processes, PLUTO), { recorded: true })
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), PLUTO.node_id)
+  assert.equal(binderOverLaunches(store, proc.processes, signedMembers)({ sending_pid: PLUTO.pid }), PLUTO.node_id)
 
   proc.setBoot(NEXT_BOOT)
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), null)
+  assert.equal(binderOverLaunches(store, proc.processes, signedMembers)({ sending_pid: PLUTO.pid }), null)
 })
 
 test('a boot that cannot be told is no boot: nothing is recorded and nobody binds', (t) => {
@@ -402,7 +405,7 @@ test('a boot that cannot be told is no boot: nothing is recorded and nobody bind
   const store = memoryStore()
   recordMemberLaunch(store, proc.processes, PLUTO)
   proc.setBoot(undefined)
-  assert.equal(binderOverLaunches(store, proc.processes)({ sending_pid: PLUTO.pid }), null)
+  assert.equal(binderOverLaunches(store, proc.processes, signedMembers)({ sending_pid: PLUTO.pid }), null)
 })
 
 const hasProc = linuxProcessTable.startTimeOf(process.pid) !== null
@@ -420,7 +423,31 @@ test('end to end on Linux: this process launched as a member binds, through the 
   const store = memberLaunchesDirectory(recordsDirectory(t))
   assert.deepEqual(recordMemberLaunch(store, linuxProcessTable, { ...PLUTO, pid: process.pid }), { recorded: true })
 
-  const binder = binderOverLaunches(store, linuxProcessTable)
+  const binder = binderOverLaunches(store, linuxProcessTable, signedMembers)
   const session = taken({ source: 'cross_session', sender: { sending_pid: process.pid } }, binder)
   assert.equal(shellAllowed(session), true)
+})
+
+// --- only a pair the owner signed binds (martha#2 item 7) ---------------------
+
+test('a launch record for a node id the owner never signed binds nobody', () => {
+  const stranger = { member_name: 'Stranger', node_id: 'c'.repeat(64), pid: 4103 }
+  const store = memoryStore()
+  const processes = kernel({ [stranger.pid]: STARTED })
+  assert.deepEqual(recordMemberLaunch(store, processes, stranger), { recorded: true })
+  assert.equal(binderOverLaunches(store, processes, signedMembers)({ sending_pid: stranger.pid }), null)
+})
+
+test('a signed node id recorded under another member name binds nobody', () => {
+  const store = memoryStore()
+  const processes = kernel({ [PLUTO.pid]: STARTED })
+  assert.deepEqual(recordMemberLaunch(store, processes, { ...PLUTO, member_name: NEPTUNUS.member_name }), { recorded: true })
+  assert.equal(binderOverLaunches(store, processes, signedMembers)({ sending_pid: PLUTO.pid }), null)
+})
+
+test('a members list that opened to nobody binds nobody, a launched member included', () => {
+  const store = memoryStore()
+  const processes = kernel({ [PLUTO.pid]: STARTED })
+  recordMemberLaunch(store, processes, PLUTO)
+  assert.equal(binderOverLaunches(store, processes, () => [])({ sending_pid: PLUTO.pid }), null)
 })

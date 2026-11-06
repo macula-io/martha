@@ -9,15 +9,20 @@ import { fixtureKey, signLikeAHardwareKey, type FixtureKey } from './sign_like_a
 import { ED25519, verifySshSignature } from './ssh_signature.ts'
 import {
   LIST_FIELD,
+  MAXIMUM_LIFETIME_DAYS,
+  PRETTY_INDENT,
   TRUST_LIST_NAMESPACE,
   openTrustList,
   type EpochStore,
+  type OpenedEpoch,
   type TrustListKind,
   type TrustListToOpen,
   trustedPolicy,
   trustedRoomRosters,
+  trustedMembers,
   trustedSupervisors,
 } from './trust_only_signed_lists.ts'
+import { binderOverLaunches, recordMemberLaunch, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { admitsInCrewRoom } from '../admit_a_room_message/admit_a_room_message.ts'
 import { refuseExecutionAfterUngatedText } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { actorFromCallingSession, refuseActionFromAnUnverifiedActor } from '../who_may_act/who_may_act.ts'
@@ -31,18 +36,31 @@ const later = '2026-12-01T00:00:00Z'
 
 const owner = fixtureKey()
 
+// In memory for the tests only: a real store persists across processes.
 const epochStore = (): EpochStore => {
-  const seen = new Map<string, number>()
+  const seen = new Map<string, OpenedEpoch>()
   return {
-    highest: (c, k) => seen.get(`${c}/${k}`),
-    raise: (c, k, epoch) => void seen.set(`${c}/${k}`, Math.max(epoch, seen.get(`${c}/${k}`) ?? epoch)),
+    newest: (c, k) => seen.get(`${c}/${k}`),
+    keep: (c, k, opened) => void seen.set(`${c}/${k}`, opened),
   }
 }
 
+const MEMBER_NAME_OF = (node_id: string) => `m-${node_id.slice(0, 8)}`
+
+const entriesFor = (kind: TrustListKind, node_ids: readonly string[]) =>
+  kind === 'members' ? node_ids.map((node_id) => ({ member_name: MEMBER_NAME_OF(node_id), node_id })) : node_ids
+
+const documentValue = (kind: TrustListKind, node_ids: readonly string[], overrides: Record<string, unknown> = {}) => ({
+  crew,
+  kind,
+  epoch: 1,
+  expires_at: later,
+  body: { [LIST_FIELD[kind]]: entriesFor(kind, node_ids) },
+  ...overrides,
+})
+
 const documentOf = (kind: TrustListKind, node_ids: readonly string[], overrides: Record<string, unknown> = {}) =>
-  Buffer.from(
-    JSON.stringify({ crew, kind, epoch: 1, expires_at: later, body: { [LIST_FIELD[kind]]: node_ids }, ...overrides }),
-  )
+  Buffer.from(JSON.stringify(documentValue(kind, node_ids, overrides)))
 
 const signed = (document: Buffer, key: FixtureKey = owner, flags?: number) =>
   signLikeAHardwareKey(key, document, { namespace: TRUST_LIST_NAMESPACE, ...(flags === undefined ? {} : { flags }) })
@@ -125,7 +143,7 @@ test('a refused list does not raise the epoch', () => {
   const epochs = epochStore()
   const expired = documentOf('crew_roster', [member], { epoch: 9, expires_at: '2026-11-01T00:00:00Z' })
   open({ document: expired, signature: signed(expired), epochs })
-  assert.equal(epochs.highest(crew, 'crew_roster'), undefined)
+  assert.equal(epochs.newest(crew, 'crew_roster'), undefined)
 })
 
 test('a list signed by a key that is not pinned refuses everyone, even with its key inside the signature', () => {
@@ -296,5 +314,65 @@ test('a duplicate key at any depth refuses everyone: the owner signed one readin
     const opened = open({ document, signature: signed(document) })
     assert.equal(opened.trusted, false)
     assert.deepEqual(opened.node_ids, [])
+  }
+})
+
+test('the same list at the same epoch, in the other layout, opens again: one list, not another', () => {
+  const epochs = epochStore()
+  const value = documentValue('crew_roster', [member], { epoch: 5 })
+  const compact = Buffer.from(JSON.stringify(value))
+  const pretty = Buffer.from(`${JSON.stringify(value, null, PRETTY_INDENT)}\n`)
+  assert.equal(open({ document: compact, signature: signed(compact), epochs }).trusted, true)
+  assert.equal(open({ document: pretty, signature: signed(pretty), epochs }).trusted, true)
+})
+
+test('a key spelled with escapes, or any other layout, refuses everyone', () => {
+  const value = documentValue('crew_roster', [member])
+  const escaped = Buffer.from(JSON.stringify(value).replace('"crew":', '"\\u0063rew":'))
+  const spaced = Buffer.from(JSON.stringify(value, null, PRETTY_INDENT + 1))
+  const two_newlines = Buffer.from(`${JSON.stringify(value)}\n\n`)
+  for (const document of [escaped, spaced, two_newlines]) {
+    refusesEveryone(open({ document, signature: signed(document) }), /one reading/)
+  }
+})
+
+test(`a list that expires more than ${MAXIMUM_LIFETIME_DAYS} days ahead refuses everyone, and one at the limit opens`, () => {
+  const dayMs = 24 * 60 * 60 * 1000
+  const at = (days: number) => new Date(now.getTime() + days * dayMs).toISOString()
+  const too_far = documentOf('crew_roster', [member], { expires_at: at(MAXIMUM_LIFETIME_DAYS + 1) })
+  refusesEveryone(open({ document: too_far, signature: signed(too_far) }), new RegExp(`more than ${MAXIMUM_LIFETIME_DAYS} days`))
+  const limit = documentOf('crew_roster', [member], { expires_at: at(MAXIMUM_LIFETIME_DAYS) })
+  assert.equal(open({ document: limit, signature: signed(limit) }).trusted, true)
+})
+
+test('an upper-case node id in a signed policy matches the same sender in lower case', () => {
+  const document = documentOf('policy', [member.replace(/1/g, 'A')])
+  const sender = 'a'.repeat(64)
+  const opened = open({ kind: 'policy', document, signature: signed(document) })
+  assert.deepEqual(opened.node_ids, [sender])
+  const session = { ingested: [{ path: 'A1', from_node_id: sender }] }
+  assert.equal(refuseExecutionAfterUngatedText({ tool: 'Bash', session, policy: trustedPolicy(opened) }).allow, true)
+})
+
+test('a signed members list binds a launched member, and a refused one binds nobody', () => {
+  const launch: Omit<MemberLaunch, 'process_started_at'> = { member_name: MEMBER_NAME_OF(member), node_id: member, pid: 4201 }
+  const processes = { startTimeOf: (pid: number) => (pid === launch.pid ? 'started' : null) }
+  const launches: MemberLaunch[] = []
+  const store = { launches: () => launches, keep: (l: MemberLaunch) => void launches.push(l), drop: () => undefined }
+  assert.deepEqual(recordMemberLaunch(store, processes, launch), { recorded: true })
+
+  const document = documentOf('members', [member])
+  const opened = open({ kind: 'members', document, signature: signed(document) })
+  assert.deepEqual(trustedMembers(opened), [{ member_name: launch.member_name, node_id: member }])
+  assert.equal(binderOverLaunches(store, processes, () => trustedMembers(opened))({ sending_pid: launch.pid }), member)
+
+  const unsigned = open({ kind: 'members', document, signature: undefined })
+  assert.equal(binderOverLaunches(store, processes, () => trustedMembers(unsigned))({ sending_pid: launch.pid }), null)
+})
+
+test('a members entry with another field, or a name a record cannot carry, refuses everyone', () => {
+  for (const entry of [{ member_name: 'Pluto', node_id: member, pid: 1 }, { member_name: 'no spaces allowed', node_id: member }, member]) {
+    const document = documentOf('members', [], { body: { members: [entry] } })
+    refusesEveryone(open({ kind: 'members', document, signature: signed(document) }), /not a member/)
   }
 })

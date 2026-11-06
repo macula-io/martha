@@ -207,7 +207,9 @@ The rules the seam keeps, and a host must not work around:
   (`CLAUDE_CODE_SESSION_EVENTS`): the `/clear` the crew's mod ran itself is
   `crew_refresh`, an inheritance from the predecessor's id, which the mod knows
   and the model never supplies. A forked resume arrives as `resume` under a new
-  id with no record, and has lost it. Only `startup` and an owner's own
+  id with no record, and has lost it; so does a `fork`, which the host sends as
+its own SessionStart `source` and which carries its parent's context under a
+new id. Only `startup` and an owner's own
   `/clear` are fresh, and only until the session reads a handover. The events
   the host emits are listed separately (`CLAUDE_CODE_EMITTED_SESSION_EVENTS`),
   and `gapsInSessionEvents` fails CI on one the declaration does not cover.
@@ -329,8 +331,8 @@ roster's contents, which is the anchor weakness named separately.
 ## Every list a gate trusts is signed
 
 Every gate compares against a list: the crew room's roster and the shared
-room's, the policy that names whose text a session may act on, and the
-supervisors who may act. Kept as plain files, one command run as a member's
+room's, the policy that names whose text a session may act on, the
+supervisors who may act, and the members the binder may attribute a sender to. Kept as plain files, one command run as a member's
 user adds a node id to any of them, and the gate then admits whoever was added.
 So each list is a document the owner signs, opened by `openTrustList`
 (`src/trust_only_signed_lists/`) from the signed bytes on every read.
@@ -347,8 +349,19 @@ So each list is a document the owner signs, opened by `openTrustList`
   signature must carry the user-presence flag that a touch sets.
 - **Bound, numbered, expiring.** A document names its `crew` and `kind` and has
   an `epoch` and an `expires_at`, and no other field: a document cannot carry a
-  key of its own. A list for another crew or kind, an expired one, and one older
-  than the newest epoch the verifier has opened are refused.
+  key of its own. A list for another crew or kind, an expired one, one that
+  expires more than `MAXIMUM_LIFETIME_DAYS` ahead, one older than the newest
+  epoch the verifier has opened, and a different list at that same epoch are
+  refused. The verifier's `EpochStore` keeps the epoch and a digest of the list
+  it opened, and it must persist across processes where the member's user
+  cannot write: a store in memory forgets on restart and lets an old list back.
+- **One byte string, one reading.** The signed bytes must be exactly what
+  `JSON.stringify` writes for the value they parse to, compact or indented by
+  `PRETTY_INDENT`, with or without one final newline. A duplicate key at any
+  depth, or a key spelled with escapes, serialises differently and is refused,
+  so no parser can read a list the owner did not review.
+- **Node ids compare without case.** Every node id is lowercased when a list is
+  opened, as the gates lowercase the senders they compare.
 - **The verifying key is the host's to pin**, from where it installed it,
   outside the directory the lists live in. The key inside a signature counts
   only when it is pinned.
@@ -358,8 +371,12 @@ So each list is a document the owner signs, opened by `openTrustList`
 
 Not signed: the session record store, which the host writes on every turn and
 no owner could sign. It keeps the fail-closed rule instead (a missing or
-unreadable record taints). The binder's rows (martha#14) join these lists when
-the binder lands. Code running as the member's own user can still replace a
+unreadable record taints). The binder's rows (martha#14) are bound by the
+signed `members` list: a launch record binds only when its `member_name` and
+`node_id` pair is in that list, so a planted record for a stranger, or a signed
+node id under another member's name, binds nothing. The pid in a record is
+dynamic and no owner can sign it, so pointing a signed member's record at
+another process stays martha#24's residual. Code running as the member's own user can still replace a
 pinned key the host installed where that user can write, which is the OS
 boundary of martha#24.
 
@@ -392,7 +409,8 @@ member, and a row excused without a reason. Each of those turns CI red.
 - **No host attests a cross-session sender yet.** The binder is built and
   tested; no adapter in this repository hands it a sender, so every
   cross-session message still taints. A host gains it by attesting the sending
-  process out of band and passing `binderOverLaunches(store, processes)`.
+  process out of band and passing `binderOverLaunches(store, processes, signedMembers)`,
+  where `signedMembers` returns `trustedMembers` of the opened `members` list.
 - **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
   rule; the room code that delivers messages is the crew's existing implementation,
   so nothing in this repository calls it. A host must call it before it turns a

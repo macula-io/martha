@@ -24,10 +24,20 @@
 //      cannot be the anchor. The signature must carry the user-presence flag.
 //
 //   3. BOUND, NUMBERED, EXPIRING. The document names its crew and its kind, has
-//      an epoch, and has an expiry. A list signed for another crew or kind, an
-//      expired one, and one older than the newest this verifier has opened are
-//      all refused. Otherwise a valid old roster that still lists a removed
-//      member could be put back.
+//      an epoch, and has an expiry no more than MAXIMUM_LIFETIME_DAYS away. A
+//      list signed for another crew or kind, an expired one, one older than the
+//      newest this verifier has opened, and a different list at the epoch
+//      already opened are all refused. Otherwise a valid old roster that still
+//      lists a removed member could be put back, or a second list signed at the
+//      same epoch could be swapped in for the first.
+//
+//   3a. ONE BYTE STRING, ONE READING. The signed bytes must be exactly how
+//      JSON.stringify writes the value they parse to (compact, or indented by
+//      PRETTY_INDENT, with or without one final newline). A duplicate key, at any
+//      depth, or a key spelled with escapes, parses to a value that serialises
+//      differently, so it is refused: the owner reviewed one reading of the
+//      document, and a parser that keeps the other duplicate must not see a
+//      list the owner never read.
 //
 //   4. THE VERIFYING KEY IS PINNED BY THE HOST, NOT BY THE DOCUMENT. The key
 //      comes from where the host installed it, outside the directory the lists
@@ -44,7 +54,10 @@
 // out of that user's reach is an OS boundary, filed separately; this module
 // moves the anchor out of reach of every path that goes through a model.
 
+import { createHash } from 'node:crypto'
+
 import { isNodeId, type RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
+import { MEMBER_NAME, type SignedMember } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import type { Roster } from '../who_may_act/who_may_act.ts'
 import { SK_ED25519, parseSshPublicKey, verifySshSignature } from './ssh_signature.ts'
@@ -58,6 +71,7 @@ export const LIST_FIELD = {
   shared_roster: 'member_node_ids',
   policy: 'may_send_executable_text',
   supervisors: 'supervisor_node_ids',
+  members: 'members',
 } as const
 
 export type TrustListKind = keyof typeof LIST_FIELD
@@ -65,15 +79,45 @@ export type TrustListKind = keyof typeof LIST_FIELD
 /** Every field a trust list document has, and nothing else. */
 const DOCUMENT_FIELDS = ['body', 'crew', 'epoch', 'expires_at', 'kind'] as const
 
-/** The newest epoch this verifier has opened, per crew and kind. */
+/** The kind whose entries pair a member's name with its node id, not bare node ids. */
+const MEMBERS_KIND = 'members' satisfies TrustListKind
+
+/** The furthest ahead an expiry may be: a list lives at most this long. */
+export const MAXIMUM_LIFETIME_DAYS = 366
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** The indent of the one non-compact form a signed document may take. */
+export const PRETTY_INDENT = 2
+const FINAL_NEWLINE = '\n'
+
+/** The list a verifier last opened for a crew and kind: its epoch, and which list it was. */
+export interface OpenedEpoch {
+  readonly epoch: number
+  /** sha256, in hex, of the document's value as JSON.stringify writes it compactly. */
+  readonly digest: string
+}
+
+/**
+ * The newest list this verifier has opened, per crew and kind.
+ *
+ * It MUST persist across processes, kept where the member's user cannot write.
+ * A store held in memory forgets on every restart, and a restarted verifier then
+ * opens an old epoch, or another list at the newest epoch, as if new.
+ */
 export interface EpochStore {
-  highest(crew: string, kind: TrustListKind): number | undefined
-  raise(crew: string, kind: TrustListKind, epoch: number): void
+  newest(crew: string, kind: TrustListKind): OpenedEpoch | undefined
+  /** Keep this as the newest; only a trusted open calls it. */
+  keep(crew: string, kind: TrustListKind, opened: OpenedEpoch): void
 }
 
 export type OpenedList =
-  | { readonly trusted: true; readonly node_ids: readonly string[]; readonly epoch: number }
-  | { readonly trusted: false; readonly why: string; readonly node_ids: readonly string[] }
+  | {
+      readonly trusted: true
+      readonly node_ids: readonly string[]
+      readonly members: readonly SignedMember[]
+      readonly epoch: number
+    }
+  | { readonly trusted: false; readonly why: string; readonly node_ids: readonly string[]; readonly members: readonly SignedMember[] }
 
 export interface TrustListToOpen {
   readonly kind: TrustListKind
@@ -89,18 +133,29 @@ export interface TrustListToOpen {
 }
 
 const NOBODY: readonly string[] = []
+const NO_MEMBERS: readonly SignedMember[] = []
 
 /** Open one trust list: its node ids when everything holds, and nobody otherwise. */
 export function openTrustList(input: TrustListToOpen): OpenedList {
   const why = refusalOf(input)
-  if (typeof why === 'string') return { trusted: false, why: `the ${input.kind} trusts nobody: ${why}`, node_ids: NOBODY }
-  input.epochs.raise(input.crew, input.kind, why.epoch)
-  return { trusted: true, node_ids: why.node_ids, epoch: why.epoch }
+  if (typeof why === 'string') {
+    return { trusted: false, why: `the ${input.kind} trusts nobody: ${why}`, node_ids: NOBODY, members: NO_MEMBERS }
+  }
+  input.epochs.keep(input.crew, input.kind, { epoch: why.epoch, digest: why.digest })
+  return { trusted: true, node_ids: why.entries.map((entry) => entry.node_id), members: why.members, epoch: why.epoch }
+}
+
+interface Entry {
+  /** Lowercased: node ids compare without regard to case everywhere a gate reads them. */
+  readonly node_id: string
+  readonly member_name?: string
 }
 
 interface Accepted {
-  readonly node_ids: readonly string[]
+  readonly entries: readonly Entry[]
+  readonly members: readonly SignedMember[]
   readonly epoch: number
+  readonly digest: string
 }
 
 function refusalOf(input: TrustListToOpen): string | Accepted {
@@ -132,26 +187,41 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   if (document.kind !== input.kind) return `the document is a ${String(document.kind)}`
   if (document.crew !== input.crew) return 'the document is signed for another crew'
 
-  const epoch = document.epoch
-  if (typeof epoch !== 'number' || !Number.isSafeInteger(epoch) || epoch < 0) return 'the epoch is not a whole number'
-  const highest = input.epochs.highest(input.crew, input.kind)
-  if (highest !== undefined && epoch < highest) return `epoch ${epoch} is older than epoch ${highest}, already opened`
-
   const expires = typeof document.expires_at === 'string' ? Date.parse(document.expires_at) : Number.NaN
   if (Number.isNaN(expires)) return 'the expiry cannot be read'
   if (input.now.getTime() >= expires) return 'the document has expired'
+  if (expires - input.now.getTime() > MAXIMUM_LIFETIME_DAYS * DAY_MS) {
+    return `the document expires more than ${MAXIMUM_LIFETIME_DAYS} days from now`
+  }
 
-  const node_ids = nodeIdsOf(document.body, LIST_FIELD[input.kind])
-  if (typeof node_ids === 'string') return node_ids
-  return { node_ids, epoch }
+  const entries = entriesOf(input.kind, document.body)
+  if (typeof entries === 'string') return entries
+
+  const epoch = document.epoch
+  if (typeof epoch !== 'number' || !Number.isSafeInteger(epoch) || epoch < 0) return 'the epoch is not a whole number'
+  const digest = createHash('sha256').update(JSON.stringify(document)).digest('hex')
+  const newest = input.epochs.newest(input.crew, input.kind)
+  if (newest !== undefined && epoch < newest.epoch) return `epoch ${epoch} is older than epoch ${newest.epoch}, already opened`
+  if (newest !== undefined && epoch === newest.epoch && digest !== newest.digest) {
+    return `epoch ${epoch} was already opened for another list`
+  }
+
+  return { entries, members: membersOf(entries), epoch, digest }
 }
 
 function parsed(document: Buffer | undefined): Record<string, unknown> | string {
-  const value: unknown = parseJson(document?.toString('utf8') ?? '')
+  const text = document?.toString('utf8') ?? ''
+  const value: unknown = parseJson(text)
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'the document is not an object'
+  if (!isCanonical(text, value)) return 'the bytes are not one reading of the document (a duplicate or escaped key, or another layout)'
   const fields = Object.keys(value).sort()
   if (fields.join() !== [...DOCUMENT_FIELDS].join()) return `the document's fields are ${fields.join(', ')}`
   return value as Record<string, unknown>
+}
+
+function isCanonical(text: string, value: unknown): boolean {
+  const layouts = [JSON.stringify(value), JSON.stringify(value, null, PRETTY_INDENT)]
+  return layouts.some((layout) => text === layout || text === `${layout}${FINAL_NEWLINE}`)
 }
 
 function parseJson(text: string): unknown {
@@ -162,13 +232,36 @@ function parseJson(text: string): unknown {
   }
 }
 
-function nodeIdsOf(body: unknown, field: string): readonly string[] | string {
+function entriesOf(kind: TrustListKind, body: unknown): readonly Entry[] | string {
+  const field = LIST_FIELD[kind]
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return 'the body is not an object'
   if (Object.keys(body).join() !== field) return `the body must hold ${field} and nothing else`
   const list: unknown = (body as Record<string, unknown>)[field]
   if (!Array.isArray(list)) return `${field} is not a list`
-  if (!list.every((entry) => typeof entry === 'string' && isNodeId(entry))) return `${field} holds something that is not a node id`
-  return list as string[]
+  const read = kind === MEMBERS_KIND ? memberEntry : nodeIdEntry
+  const entries = list.map(read)
+  if (entries.some((entry) => entry === undefined)) return `${field} holds something that is not ${kind === MEMBERS_KIND ? 'a member' : 'a node id'}`
+  return entries.flatMap((entry) => (entry === undefined ? [] : [entry]))
+}
+
+function nodeIdEntry(entry: unknown): Entry | undefined {
+  return typeof entry === 'string' && isNodeId(entry) ? { node_id: entry.toLowerCase() } : undefined
+}
+
+/** The fields of one entry in a members list, and nothing else. */
+const MEMBER_FIELDS = ['member_name', 'node_id'] as const
+
+function memberEntry(entry: unknown): Entry | undefined {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return undefined
+  if (Object.keys(entry).sort().join() !== [...MEMBER_FIELDS].join()) return undefined
+  const { member_name, node_id } = entry as Record<string, unknown>
+  if (typeof member_name !== 'string' || !MEMBER_NAME.test(member_name)) return undefined
+  if (typeof node_id !== 'string' || !isNodeId(node_id)) return undefined
+  return { member_name, node_id: node_id.toLowerCase() }
+}
+
+function membersOf(entries: readonly Entry[]): readonly SignedMember[] {
+  return entries.flatMap(({ member_name, node_id }) => (member_name === undefined ? [] : [{ member_name, node_id }]))
 }
 
 /** The two room rosters a delivery gate reads, from their opened lists. */
@@ -184,4 +277,9 @@ export function trustedPolicy(policy: OpenedList): Policy {
 /** The supervisors who may act, from their opened list. */
 export function trustedSupervisors(supervisors: OpenedList): Roster {
   return { supervisor_node_ids: supervisors.node_ids }
+}
+
+/** The members the launcher may bind a sender to, from their opened list. */
+export function trustedMembers(members: OpenedList): readonly SignedMember[] {
+  return members.members
 }
