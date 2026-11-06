@@ -551,8 +551,11 @@ test('a refused launch starts no process and leaves nothing behind', async (t) =
 
 // --- the mesh server it installs is a recorded one (martha#49) ------------------
 
-const meshServerAt = (version: string) =>
-  JSON.stringify({ mcpServers: { macula: { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@${version}`] } } })
+// The shape members' configs really start (PR 59 r=3, Uranus): the package has
+// several bins and none named after it, so npx is told which one to run.
+const MEMBER_BIN = 'macula-mcp'
+const memberShapeAt = (version: string) => ({ command: 'npx', args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${version}`, MEMBER_BIN] })
+const meshServerAt = (version: string) => JSON.stringify({ mcpServers: { macula: memberShapeAt(version) } })
 
 test('an approved config that installs a mesh server version nobody recorded starts nothing, naming both versions', async (t) => {
   const unrecorded = '999.0.0'
@@ -591,10 +594,20 @@ const UNPINNED_SHAPES: Record<string, unknown> = {
 const pinnedAt = (env: Record<string, string>) => {
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
-  return { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`], env }
+  return { ...memberShapeAt(recorded.server_version), env }
 }
 UNPINNED_SHAPES['a recorded pin with a library preloaded'] = pinnedAt({ LD_PRELOAD: '/x.so' })
 UNPINNED_SHAPES['a recorded pin with its global prefix changed'] = pinnedAt({ PREFIX: '/x' })
+
+// npx cannot run these: the recorded package has no bin of that name, or
+// several bins and none it would pick, so each is refused by name before start.
+for (const recorded of RECORDED_MESH_SERVERS) {
+  UNPINNED_SHAPES[`${recorded.server_version} with no bin named`] = { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`] }
+  UNPINNED_SHAPES[`${recorded.server_version} with a bin it does not have`] = {
+    command: 'npx',
+    args: ['-y', '-p', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`, `${MEMBER_BIN}-not-there`],
+  }
+}
 
 for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
   test(`an approved config whose server is ${shape} starts nothing, naming the server`, async (t) => {
