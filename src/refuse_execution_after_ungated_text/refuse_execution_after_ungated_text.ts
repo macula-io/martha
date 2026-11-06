@@ -61,6 +61,14 @@ export interface GateInput {
   readonly policy: Policy
 }
 
+/**
+ * What clears a taint, said in every refusal. A `/clear` the crew's mod runs
+ * for a refresh does not, because the successor inherits the record; only a
+ * fresh start that reads no handover does.
+ */
+export const WHAT_CLEARS_IT =
+  'Only a fresh start that reads no handover clears it: a crew refresh carries it to the successor.'
+
 const PATHS_BY_ID = new Map<string, InboundPath>(INBOUND_PATHS.map((path) => [path.id, path]))
 
 /** A session that has taken in nothing. The only state in which everything is allowed. */
@@ -96,16 +104,16 @@ function refusalFor(ingest: Ingestion, path: InboundPath | undefined, policy: Po
   const tool = 'Nothing executes in this session'
 
   if (path === undefined) {
-    return `${tool}: text arrived on path ${ingest.path}, which this gate does not know. Start a fresh session (/clear on the Claude Code host) to clear it.`
+    return `${tool}: text arrived on path ${ingest.path}, which this gate does not know. ${WHAT_CLEARS_IT}`
   }
 
   if (ingest.from_node_id === null) {
-    return `${tool}: text from an unattributed sender arrived on path ${path.id} (${path.what}) and is still readable here. Start a fresh session (/clear on the Claude Code host) to clear it.`
+    return `${tool}: text from an unattributed sender arrived on path ${path.id} (${path.what}) and is still readable here. ${WHAT_CLEARS_IT}`
   }
 
   const sender = ingest.from_node_id.toLowerCase()
   if (!policy.may_send_executable_text.some((node_id) => node_id.toLowerCase() === sender)) {
-    return `${tool}: the sender of the text on path ${path.id} (${path.what}) is not named by the policy table. Start a fresh session (/clear on the Claude Code host) to clear it.`
+    return `${tool}: the sender of the text on path ${path.id} (${path.what}) is not named by the policy table. ${WHAT_CLEARS_IT}`
   }
 
   return undefined
