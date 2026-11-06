@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   beginSession,
@@ -31,17 +32,17 @@ const denied = (answer: ToolCallAnswer): string => {
 // --- the host's whole loop ----------------------------------------------------
 
 test('a session that took in a stranger may not run a shell, this turn or the next', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session', from_identity: stranger_identity })
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session' }, bindNothing)
 
   const first = denied(answerToolCall({ tool: 'Bash', session: tainted, policy }))
   assert.match(first, /nothing executes/i)
 
-  const nextTurn = takeInTurn(tainted, { source: 'mesh_read' })
+  const nextTurn = takeInTurn(tainted, { source: 'mesh_read' }, bindNothing)
   denied(answerToolCall({ tool: 'Bash', session: nextTurn, policy }))
 })
 
 test('a real replacement lets the crew work again', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session', from_identity: stranger_identity })
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session' }, bindNothing)
   denied(answerToolCall({ tool: 'Bash', session: tainted, policy }))
 
   const fresh = replaceSession(tainted, 'clear')
@@ -49,7 +50,7 @@ test('a real replacement lets the crew work again', () => {
 })
 
 test('a compaction does not let the crew work again', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   const compacted = replaceSession(tainted, 'compaction')
   denied(answerToolCall({ tool: 'Bash', session: compacted, policy }))
 })
@@ -70,14 +71,14 @@ test('an unreadable record still lets the member read', () => {
 
 test('a record kept across a restart carries the taint with it', () => {
   const records = store()
-  const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'ring' })
+  const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'ring' }, bindNothing)
   rememberSession(records, tainted)
 
   denied(answerToolCall({ tool: 'Bash', session: resumeSession(records, 's-1'), policy }))
 })
 
 test('the refusal a host returns names what to do', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   const answer = answerToolCall({ tool: 'Write', session: tainted, policy })
 
   assert.equal(typeof (answer as { deny: unknown }).deny, 'string')
@@ -87,7 +88,7 @@ test('the refusal a host returns names what to do', () => {
 // --- reading is still allowed -------------------------------------------------
 
 test('the member may still read the text it is not allowed to act on', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   for (const tool of ['Read', 'Grep', 'Glob']) {
     assert.equal(answerToolCall({ tool, session: tainted, policy }), undefined, tool)
   }
@@ -99,12 +100,12 @@ test('a turn the policy names may run a shell straight away', () => {
   const session = takeInTurn(beginSession(store(), 's-1'), {
     source: 'crew_room',
     from_identity: supervisor_identity,
-  })
+  }, bindNothing)
   assert.equal(answerToolCall({ tool: 'Bash', session, policy }), undefined)
 })
 
 test('every tool that executes is refused, by whatever name the host uses', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' })
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   for (const tool of ['Bash', 'bash', 'patch', 'MultiEdit', 'Agent', 'SendMessage', 'NeverSeenTool']) {
     denied(answerToolCall({ tool, session: tainted, policy }))
   }

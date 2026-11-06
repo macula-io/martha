@@ -56,7 +56,7 @@ export const TALK_KINDS: readonly string[] = [
 ]
 
 /** A node id as the mesh writes it: 64 hex characters. */
-const NODE_ID = /^[0-9a-f]{64}$/i
+export const NODE_ID = /^[0-9a-f]{64}$/i
 
 /** A delivery gate: may this message in? */
 export type DeliveryGate = (input: {
