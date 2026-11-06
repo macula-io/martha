@@ -1,5 +1,5 @@
 {
-  "_why": "The whole tree each recorded version of the mesh server installs, so the bytes a member runs are proved, not only the version number (martha#65): the tarball integrity its tools were read from, the settings its code reads, npm's lock for that version alone (every tarball from the registry below, each with its sha512), and every installed file with its sha512, sorted by path. The launcher installs a version from its lock with no outside npm config and refuses a tree that differs from this, naming the file. Record a version with: npm run record:mesh-tools -- <the version's .tgz>. A version that reads a setting not in known_settings is not recorded until someone reviews it and adds it here.",
+  "_why": "The whole tree each recorded version of the mesh server installs, so the bytes a member runs are proved, not only the version number (martha#65): the tarball integrity its tools were read from, the settings its code reads, npm's lock for that version alone (every tarball from the registry below, each with its sha512), and every installed file with its sha512, sorted by path. The launcher installs a version from its lock with no outside npm config and refuses a tree that differs from this, naming the file. Record a version with: npm run record:mesh-tools -- <the version's .tgz>. A version that reads a setting not in known_settings is not recorded until someone reviews it and adds it here. Each version also lists what every package of its tree reads from the environment (environment_reads, martha#72); a package reading a name the server is started with (HOME, PATH, a known setting) is not recorded or started until someone reviews that read and adds the name under the package in known_environment_reads.",
   "registry": "https://registry.npmjs.org/",
   "known_settings": [
     "MACULA_MCP_AGENT",
@@ -26,6 +26,11 @@
     "MACULA_MESH_REALMS",
     "MACULA_MESH_STATIONS"
   ],
+  "known_environment_reads": {
+    "which": [
+      "PATH"
+    ]
+  },
   "versions": [
     {
       "server_version": "0.51.0",
@@ -6154,6 +6159,317 @@
         "node_modules/zod/v4/mini/schemas.d.ts": "sha512-KORhRKq6B5+luF89RYTpMZeVoHrdcIZGLjB3K/As3uWkhw59cVyWe0c4paLfuYWhQIbhJ7deBvRRHHiQcANVtQ==",
         "node_modules/zod/v4/mini/schemas.js": "sha512-cHKldNYSrOiksghuejr2H5UGBfdgyGifYGhgoSCf9uevNAwlqGaPHwOtQGd/lbsNj3Rmnoz1cV8ceHNguAldJw==",
         "node_modules/zod/v4/package.json": "sha512-V6as/7Vbov7i7Dm7v92A4gxi66laUN5bQ8Hs5e4529r888P5n2dV5ZK4IXqqJ1t3rxzFHjnBGuBuLRRWUVZ4DA=="
+      },
+      "environment_reads": {
+        "@macula-io/mcp": {
+          "reads": {
+            "APPDATA": [
+              "node_modules/@macula-io/mcp/dist/install/mcp_clients/claude_desktop.js"
+            ],
+            "CLAUDE_CODE_SESSION_ID": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ],
+            "MACULA_MCP_AGENT": [
+              "node_modules/@macula-io/mcp/dist/connect_to_mesh.js",
+              "node_modules/@macula-io/mcp/dist/mesh_config.js",
+              "node_modules/@macula-io/mcp/dist/mesh_join_realm.js"
+            ],
+            "MACULA_MCP_AUTOJOIN_REALM": [
+              "node_modules/@macula-io/mcp/dist/be_present/device_membership.js"
+            ],
+            "MACULA_MCP_BANNER_FILE": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js"
+            ],
+            "MACULA_MCP_CITIZEN_DISPLAY_NAME": [
+              "node_modules/@macula-io/mcp/dist/be_present/citizenship.js"
+            ],
+            "MACULA_MCP_CONTACT_POLICY": [
+              "node_modules/@macula-io/mcp/dist/mesh_trust_agent.js",
+              "node_modules/@macula-io/mcp/dist/policy.js"
+            ],
+            "MACULA_MCP_CONTACT_POLICY_FILE": [
+              "node_modules/@macula-io/mcp/dist/policy.js"
+            ],
+            "MACULA_MCP_HELLO_MESSAGE": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_IDENTITY": [
+              "node_modules/@macula-io/mcp/dist/connect_to_mesh.js",
+              "node_modules/@macula-io/mcp/dist/mesh_config.js",
+              "node_modules/@macula-io/mcp/dist/mesh_join_realm.js"
+            ],
+            "MACULA_MCP_KEM_ADVERTISE": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ],
+            "MACULA_MCP_LOBBY_TRANSCRIPT_DB": [
+              "node_modules/@macula-io/mcp/dist/converse_in_rooms/lobby_transcript.js"
+            ],
+            "MACULA_MCP_MODEL": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_NO_CITIZENSHIP": [
+              "node_modules/@macula-io/mcp/dist/be_present/citizenship.js"
+            ],
+            "MACULA_MCP_NO_RING": [
+              "node_modules/@macula-io/mcp/dist/ring_agents/serve_rings.js"
+            ],
+            "MACULA_MCP_OPERATOR_NAME": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_REALM_DIR": [
+              "node_modules/@macula-io/mcp/dist/realm.js"
+            ],
+            "MACULA_MCP_REALM_LOCK_TIMEOUT_MS": [
+              "node_modules/@macula-io/mcp/dist/realm_lock.js"
+            ],
+            "MACULA_MCP_REALM_URL": [
+              "node_modules/@macula-io/mcp/dist/realm.js"
+            ],
+            "MACULA_MCP_RINGS_DB": [
+              "node_modules/@macula-io/mcp/dist/machine_transcript.js"
+            ],
+            "MACULA_MCP_ROSTER_DB": [
+              "node_modules/@macula-io/mcp/dist/be_present/roster.js"
+            ],
+            "MACULA_MCP_SESSION_NAME": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_TERSE_TOOLS": [
+              "node_modules/@macula-io/mcp/dist/tool_description.js"
+            ],
+            "MACULA_MESH_REALMS": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ],
+            "MACULA_MESH_STATIONS": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ]
+          },
+          "computed": []
+        },
+        "@modelcontextprotocol/sdk": {
+          "reads": {
+            "MCP_AUTH_PORT": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/simpleStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleStreamableHttp.js"
+            ],
+            "MCP_CLIENT_ALGORITHM": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_CLIENT_ID": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_CLIENT_PRIVATE_KEY_PEM": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_CLIENT_SECRET": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/server/auth/router.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/server/auth/router.js"
+            ],
+            "MCP_EXPECTED_ISSUER": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_PORT": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/honoWebStandardStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/simpleStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/honoWebStandardStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleStreamableHttp.js"
+            ],
+            "MCP_SERVER_URL": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "PORT": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/elicitationFormExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/simpleTaskInteractive.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/elicitationFormExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleTaskInteractive.js"
+            ]
+          },
+          "computed": [
+            "node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js"
+          ]
+        },
+        "cross-spawn": {
+          "reads": {
+            "comspec": [
+              "node_modules/cross-spawn/lib/parse.js"
+            ]
+          },
+          "computed": [
+            "node_modules/cross-spawn/lib/util/resolveCommand.js"
+          ]
+        },
+        "debug": {
+          "reads": {
+            "DEBUG": [
+              "node_modules/debug/src/browser.js",
+              "node_modules/debug/src/node.js"
+            ]
+          },
+          "computed": [
+            "node_modules/debug/src/node.js"
+          ]
+        },
+        "depd": {
+          "reads": {
+            "NO_DEPRECATION": [
+              "node_modules/depd/index.js"
+            ],
+            "TRACE_DEPRECATION": [
+              "node_modules/depd/index.js"
+            ]
+          },
+          "computed": []
+        },
+        "express": {
+          "reads": {
+            "NODE_ENV": [
+              "node_modules/express/lib/application.js"
+            ]
+          },
+          "computed": []
+        },
+        "finalhandler": {
+          "reads": {
+            "NODE_ENV": [
+              "node_modules/finalhandler/index.js"
+            ]
+          },
+          "computed": []
+        },
+        "isexe": {
+          "reads": {
+            "PATHEXT": [
+              "node_modules/isexe/test/basic.js",
+              "node_modules/isexe/windows.js"
+            ]
+          },
+          "computed": []
+        },
+        "node-addon-api": {
+          "reads": {
+            "FORMAT_START": [
+              "node_modules/node-addon-api/tools/clang-format.js"
+            ]
+          },
+          "computed": []
+        },
+        "node-gyp-build": {
+          "reads": {
+            "ARM_VERSION": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "ELECTRON_RUN_AS_NODE": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "LIBC": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "NODE_ENV": [
+              "node_modules/node-gyp-build/build-test.js"
+            ],
+            "PREBUILDS_ONLY": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "npm_config_arch": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "npm_config_argv": [
+              "node_modules/node-gyp-build/bin.js"
+            ],
+            "npm_config_build_from_source": [
+              "node_modules/node-gyp-build/bin.js"
+            ],
+            "npm_config_loglevel": [
+              "node_modules/node-gyp-build/bin.js"
+            ],
+            "npm_config_platform": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ]
+          },
+          "computed": [
+            "node_modules/node-gyp-build/build-test.js",
+            "node_modules/node-gyp-build/node-gyp-build.js"
+          ]
+        },
+        "path-key": {
+          "reads": {},
+          "computed": [
+            "node_modules/path-key/index.js"
+          ]
+        },
+        "pngjs": {
+          "reads": {
+            "NODE_DEBUG": [
+              "node_modules/pngjs/browser.js"
+            ]
+          },
+          "computed": [
+            "node_modules/pngjs/browser.js"
+          ]
+        },
+        "which": {
+          "reads": {
+            "OSTYPE": [
+              "node_modules/which/which.js"
+            ],
+            "PATH": [
+              "node_modules/which/which.js"
+            ],
+            "PATHEXT": [
+              "node_modules/which/which.js"
+            ]
+          },
+          "computed": []
+        },
+        "yargs": {
+          "reads": {
+            "LANG": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "LANGUAGE": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "LC_ALL": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "LC_MESSAGES": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "SHELL": [
+              "node_modules/yargs/build/lib/completion.js"
+            ],
+            "ZSH_NAME": [
+              "node_modules/yargs/build/lib/completion.js"
+            ],
+            "_": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ]
+          },
+          "computed": []
+        },
+        "yargs-parser": {
+          "reads": {},
+          "computed": [
+            "node_modules/yargs-parser/index.js"
+          ]
+        }
       }
     },
     {
@@ -12283,6 +12599,317 @@
         "node_modules/zod/v4/mini/schemas.d.ts": "sha512-KORhRKq6B5+luF89RYTpMZeVoHrdcIZGLjB3K/As3uWkhw59cVyWe0c4paLfuYWhQIbhJ7deBvRRHHiQcANVtQ==",
         "node_modules/zod/v4/mini/schemas.js": "sha512-cHKldNYSrOiksghuejr2H5UGBfdgyGifYGhgoSCf9uevNAwlqGaPHwOtQGd/lbsNj3Rmnoz1cV8ceHNguAldJw==",
         "node_modules/zod/v4/package.json": "sha512-V6as/7Vbov7i7Dm7v92A4gxi66laUN5bQ8Hs5e4529r888P5n2dV5ZK4IXqqJ1t3rxzFHjnBGuBuLRRWUVZ4DA=="
+      },
+      "environment_reads": {
+        "@macula-io/mcp": {
+          "reads": {
+            "APPDATA": [
+              "node_modules/@macula-io/mcp/dist/install/mcp_clients/claude_desktop.js"
+            ],
+            "CLAUDE_CODE_SESSION_ID": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ],
+            "MACULA_MCP_AGENT": [
+              "node_modules/@macula-io/mcp/dist/connect_to_mesh.js",
+              "node_modules/@macula-io/mcp/dist/mesh_config.js",
+              "node_modules/@macula-io/mcp/dist/mesh_join_realm.js"
+            ],
+            "MACULA_MCP_AUTOJOIN_REALM": [
+              "node_modules/@macula-io/mcp/dist/be_present/device_membership.js"
+            ],
+            "MACULA_MCP_BANNER_FILE": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js"
+            ],
+            "MACULA_MCP_CITIZEN_DISPLAY_NAME": [
+              "node_modules/@macula-io/mcp/dist/be_present/citizenship.js"
+            ],
+            "MACULA_MCP_CONTACT_POLICY": [
+              "node_modules/@macula-io/mcp/dist/mesh_trust_agent.js",
+              "node_modules/@macula-io/mcp/dist/policy.js"
+            ],
+            "MACULA_MCP_CONTACT_POLICY_FILE": [
+              "node_modules/@macula-io/mcp/dist/policy.js"
+            ],
+            "MACULA_MCP_HELLO_MESSAGE": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_IDENTITY": [
+              "node_modules/@macula-io/mcp/dist/connect_to_mesh.js",
+              "node_modules/@macula-io/mcp/dist/mesh_config.js",
+              "node_modules/@macula-io/mcp/dist/mesh_join_realm.js"
+            ],
+            "MACULA_MCP_KEM_ADVERTISE": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ],
+            "MACULA_MCP_LOBBY_TRANSCRIPT_DB": [
+              "node_modules/@macula-io/mcp/dist/converse_in_rooms/lobby_transcript.js"
+            ],
+            "MACULA_MCP_MODEL": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_NO_CITIZENSHIP": [
+              "node_modules/@macula-io/mcp/dist/be_present/citizenship.js"
+            ],
+            "MACULA_MCP_NO_RING": [
+              "node_modules/@macula-io/mcp/dist/ring_agents/serve_rings.js"
+            ],
+            "MACULA_MCP_OPERATOR_NAME": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_REALM_DIR": [
+              "node_modules/@macula-io/mcp/dist/realm.js"
+            ],
+            "MACULA_MCP_REALM_LOCK_TIMEOUT_MS": [
+              "node_modules/@macula-io/mcp/dist/realm_lock.js"
+            ],
+            "MACULA_MCP_REALM_URL": [
+              "node_modules/@macula-io/mcp/dist/realm.js"
+            ],
+            "MACULA_MCP_RINGS_DB": [
+              "node_modules/@macula-io/mcp/dist/machine_transcript.js"
+            ],
+            "MACULA_MCP_ROSTER_DB": [
+              "node_modules/@macula-io/mcp/dist/be_present/roster.js"
+            ],
+            "MACULA_MCP_SESSION_NAME": [
+              "node_modules/@macula-io/mcp/dist/be_present/mesh_hello.js",
+              "node_modules/@macula-io/mcp/dist/be_present/presence.js"
+            ],
+            "MACULA_MCP_TERSE_TOOLS": [
+              "node_modules/@macula-io/mcp/dist/tool_description.js"
+            ],
+            "MACULA_MESH_REALMS": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ],
+            "MACULA_MESH_STATIONS": [
+              "node_modules/@macula-io/mcp/dist/mesh_config.js"
+            ]
+          },
+          "computed": []
+        },
+        "@modelcontextprotocol/sdk": {
+          "reads": {
+            "MCP_AUTH_PORT": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/simpleStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleStreamableHttp.js"
+            ],
+            "MCP_CLIENT_ALGORITHM": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_CLIENT_ID": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_CLIENT_PRIVATE_KEY_PEM": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_CLIENT_SECRET": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/server/auth/router.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/server/auth/router.js"
+            ],
+            "MCP_EXPECTED_ISSUER": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "MCP_PORT": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/honoWebStandardStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/simpleStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/elicitationUrlExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/honoWebStandardStreamableHttp.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleStreamableHttp.js"
+            ],
+            "MCP_SERVER_URL": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleClientCredentials.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleClientCredentials.js"
+            ],
+            "PORT": [
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/elicitationFormExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/server/simpleTaskInteractive.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/elicitationFormExample.js",
+              "node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleTaskInteractive.js"
+            ]
+          },
+          "computed": [
+            "node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js"
+          ]
+        },
+        "cross-spawn": {
+          "reads": {
+            "comspec": [
+              "node_modules/cross-spawn/lib/parse.js"
+            ]
+          },
+          "computed": [
+            "node_modules/cross-spawn/lib/util/resolveCommand.js"
+          ]
+        },
+        "debug": {
+          "reads": {
+            "DEBUG": [
+              "node_modules/debug/src/browser.js",
+              "node_modules/debug/src/node.js"
+            ]
+          },
+          "computed": [
+            "node_modules/debug/src/node.js"
+          ]
+        },
+        "depd": {
+          "reads": {
+            "NO_DEPRECATION": [
+              "node_modules/depd/index.js"
+            ],
+            "TRACE_DEPRECATION": [
+              "node_modules/depd/index.js"
+            ]
+          },
+          "computed": []
+        },
+        "express": {
+          "reads": {
+            "NODE_ENV": [
+              "node_modules/express/lib/application.js"
+            ]
+          },
+          "computed": []
+        },
+        "finalhandler": {
+          "reads": {
+            "NODE_ENV": [
+              "node_modules/finalhandler/index.js"
+            ]
+          },
+          "computed": []
+        },
+        "isexe": {
+          "reads": {
+            "PATHEXT": [
+              "node_modules/isexe/test/basic.js",
+              "node_modules/isexe/windows.js"
+            ]
+          },
+          "computed": []
+        },
+        "node-addon-api": {
+          "reads": {
+            "FORMAT_START": [
+              "node_modules/node-addon-api/tools/clang-format.js"
+            ]
+          },
+          "computed": []
+        },
+        "node-gyp-build": {
+          "reads": {
+            "ARM_VERSION": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "ELECTRON_RUN_AS_NODE": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "LIBC": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "NODE_ENV": [
+              "node_modules/node-gyp-build/build-test.js"
+            ],
+            "PREBUILDS_ONLY": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "npm_config_arch": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ],
+            "npm_config_argv": [
+              "node_modules/node-gyp-build/bin.js"
+            ],
+            "npm_config_build_from_source": [
+              "node_modules/node-gyp-build/bin.js"
+            ],
+            "npm_config_loglevel": [
+              "node_modules/node-gyp-build/bin.js"
+            ],
+            "npm_config_platform": [
+              "node_modules/node-gyp-build/node-gyp-build.js"
+            ]
+          },
+          "computed": [
+            "node_modules/node-gyp-build/build-test.js",
+            "node_modules/node-gyp-build/node-gyp-build.js"
+          ]
+        },
+        "path-key": {
+          "reads": {},
+          "computed": [
+            "node_modules/path-key/index.js"
+          ]
+        },
+        "pngjs": {
+          "reads": {
+            "NODE_DEBUG": [
+              "node_modules/pngjs/browser.js"
+            ]
+          },
+          "computed": [
+            "node_modules/pngjs/browser.js"
+          ]
+        },
+        "which": {
+          "reads": {
+            "OSTYPE": [
+              "node_modules/which/which.js"
+            ],
+            "PATH": [
+              "node_modules/which/which.js"
+            ],
+            "PATHEXT": [
+              "node_modules/which/which.js"
+            ]
+          },
+          "computed": []
+        },
+        "yargs": {
+          "reads": {
+            "LANG": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "LANGUAGE": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "LC_ALL": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "LC_MESSAGES": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ],
+            "SHELL": [
+              "node_modules/yargs/build/lib/completion.js"
+            ],
+            "ZSH_NAME": [
+              "node_modules/yargs/build/lib/completion.js"
+            ],
+            "_": [
+              "node_modules/yargs/build/lib/yargs.js"
+            ]
+          },
+          "computed": []
+        },
+        "yargs-parser": {
+          "reads": {},
+          "computed": [
+            "node_modules/yargs-parser/index.js"
+          ]
+        }
       }
     }
   ]
