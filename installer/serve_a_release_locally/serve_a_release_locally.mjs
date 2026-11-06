@@ -130,11 +130,13 @@ export function release ({ version = '1.2.0', entries = goodEntries(), layerByte
 /**
  * A registry serving `releases` (tag -> release), anonymously, on 127.0.0.1. `tags` overrides what a tag names
  * (a moved tag), `extraTags` adds names to the list, `tagListPadding` pads the list's bytes, `nextPage` adds a Link
- * header, `unsigned` serves no signature for those digests. hits[] records every path asked for.
+ * header, `unsigned` serves no signature for those digests. `signatureEntries` lists each signature that many times
+ * in its index, `bundlePadding` pads each bundle by that many bytes, and `bundleLayer` overrides what its manifest
+ * says of the bundle's layer. hits[] records every path asked for.
  * @param {Release[]} releases
- * @param {{ tags?: Record<string, Release>, extraTags?: string[], tagListPadding?: number, nextPage?: boolean, unsigned?: string[] }} [options]
+ * @param {{ tags?: Record<string, Release>, extraTags?: string[], tagListPadding?: number, nextPage?: boolean, unsigned?: string[], signatureEntries?: number, bundlePadding?: number, bundleLayer?: { mediaType?: string, size?: number } }} [options]
  */
-export async function serveRegistry (releases, { tags: moved = {}, extraTags = [], tagListPadding = 0, nextPage = false, unsigned = [] } = {}) {
+export async function serveRegistry (releases, { tags: moved = {}, extraTags = [], tagListPadding = 0, nextPage = false, unsigned = [], signatureEntries = 1, bundlePadding = 0, bundleLayer = {} } = {}) {
   /** @type {string[]} */
   const hits = []
   /** @type {Map<string, Buffer>} */
@@ -147,16 +149,16 @@ export async function serveRegistry (releases, { tags: moved = {}, extraTags = [
     tags.set(r.version, r.manifest)
     manifests.set(r.digest, r.manifest)
     if (unsigned.includes(r.digest)) continue
-    const bundleBytes = Buffer.from(JSON.stringify(r.bundle))
+    const bundleBytes = Buffer.from(JSON.stringify(bundlePadding ? { ...r.bundle, padding: 'x'.repeat(bundlePadding) } : r.bundle))
     blobs.set(sha256(bundleBytes), bundleBytes)
     const bundleManifest = Buffer.from(JSON.stringify({
       schemaVersion: 2, mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: 'application/vnd.dev.sigstore.bundle.v0.3+json',
       annotations: { 'dev.sigstore.bundle.predicateType': 'https://sigstore.dev/cosign/sign/v1' },
-      layers: [{ mediaType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleBytes), size: bundleBytes.length }]
+      layers: [{ mediaType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleBytes), size: bundleBytes.length, ...bundleLayer }]
     }))
     manifests.set(sha256(bundleManifest), bundleManifest)
     const entry = { mediaType: 'application/vnd.oci.image.manifest.v1+json', artifactType: 'application/vnd.dev.sigstore.bundle.v0.3+json', digest: sha256(bundleManifest), size: bundleManifest.length }
-    tags.set(r.digest.replace(':', '-'), Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: 'application/vnd.oci.image.index.v1+json', manifests: [entry] })))
+    tags.set(r.digest.replace(':', '-'), Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: 'application/vnd.oci.image.index.v1+json', manifests: Array(signatureEntries).fill(entry) })))
   }
   for (const [tag, r] of Object.entries(moved)) tags.set(tag, r.manifest)
   // A layer served for its manifest's layer digest, whatever bytes the release carries (a tampered layer).

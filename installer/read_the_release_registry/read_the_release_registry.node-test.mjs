@@ -89,6 +89,34 @@ test('refused: a layer served longer than its manifest says, cut off at the size
   await refusedWith(reg.blob(layerOf(manifest.json, 'the release'), 'the layer'), /over the \d+ a release may carry/)
 })
 
+test('signature entries: 16 are read, 17 are refused before one is fetched', async (t) => {
+  const r = release()
+  const atCap = await opened(t, [r], { signatureEntries: LIMITS.bundles })
+  assert.equal((await atCap.reg.bundles(r.digest)).length, LIMITS.bundles)
+  const over = await opened(t, [r], { signatureEntries: LIMITS.bundles + 1 })
+  await refusedWith(over.reg.bundles(r.digest), new RegExp(`carries ${LIMITS.bundles + 1} signature entries, over the ${LIMITS.bundles} read`))
+  assert.ok(!over.served.hits.some((h) => h.includes('/blobs/')), 'no bundle was fetched')
+})
+
+test('refused: a signature bundle over 64 KiB, named in its manifest before it is fetched', async (t) => {
+  const r = release()
+  const { reg, served } = await opened(t, [r], { bundlePadding: LIMITS.bundleBytes })
+  await refusedWith(reg.bundles(r.digest), new RegExp(`is not one sigstore bundle of at most ${LIMITS.bundleBytes} bytes`))
+  assert.ok(!served.hits.some((h) => h.includes('/blobs/')), 'no bundle was fetched')
+})
+
+test('refused: a signature manifest whose layer is not a sigstore bundle', async (t) => {
+  const r = release()
+  const { reg } = await opened(t, [r], { bundleLayer: { mediaType: 'application/json' } })
+  await refusedWith(reg.bundles(r.digest), new RegExp(`is not one sigstore bundle of at most ${LIMITS.bundleBytes} bytes`))
+})
+
+test('refused: a signature bundle served longer than its manifest says', async (t) => {
+  const r = release()
+  const { reg } = await opened(t, [r], { bundleLayer: { size: 16 } })
+  await refusedWith(reg.bundles(r.digest), /signature bundle sha256:[0-9a-f]{64}/)
+})
+
 test('a registry that does not answer is a check that could not be made, not a refusal of the release', async () => {
   const reg = registry({ image: NAMES.image, base: 'http://127.0.0.1:9', fetch: async () => { throw new TypeError('fetch failed') } })
   await refusedWith(reg.authorize(), /^could not check: an anonymous pull token .* did not answer/, CouldNotCheck)
