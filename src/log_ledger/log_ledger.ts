@@ -276,10 +276,14 @@ const positionLeftBy = (cause: unknown): number | undefined => {
 /**
  * The act was never sent, because its row was not kept. The cause says why.
  *
- * `row_may_stand_at` is set when the store linked the row and could not make it
- * durable (ROW_NOT_DURABLE): the row may be read, as an act left awaiting, and
- * the store takes no more rows on that stream in this process. Do not send the
- * act again; whoever checks awaiting acts finds it was not sent and concludes it.
+ * `row_may_stand_at` is set when the store refused with ROW_NOT_DURABLE: a row
+ * on this stream was linked and could not be made durable, and the store takes
+ * no more rows on it in this process. The row at that position may be this
+ * act's, or another act's whose append failed earlier: every later append to
+ * the stream, of any act, is refused naming that same position. It may be read,
+ * as an act left awaiting. Do not send this act again on this stream in this
+ * process; whoever checks awaiting acts finds that one was not sent and
+ * concludes it.
  */
 export class ActNotSent extends Error {
   readonly code = ACT_NOT_SENT
@@ -330,8 +334,9 @@ export class OutcomeNotKept extends Error {
  *
  * A caller can tell three failures apart, and each says what a retry may do:
  * - ActNotSent (ACT_NOT_SENT): the row was not kept, so `send` never ran.
- *   Sending again is safe, unless `row_may_stand_at` is set: then the row may
- *   stand as an act left awaiting, and the act is not sent again.
+ *   Sending again is safe, unless `row_may_stand_at` is set: then a row, this
+ *   act's or another act's on the same stream, may stand as an act left
+ *   awaiting, and the store refuses the stream for the rest of the process.
  * - the act's own error, unchanged: `send` failed, and that failure is the
  *   act's kept outcome.
  * - OutcomeNotKept (OUTCOME_NOT_KEPT): `send` ran and its outcome could not be

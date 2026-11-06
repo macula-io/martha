@@ -106,7 +106,7 @@ append-only stream per work package:
 
   | Failure | What happened | May the caller send it again? |
   |---|---|---|
-  | `ACT_NOT_SENT` | the row was not kept, so the act never ran | yes, unless `row_may_stand_at` is set: the store linked the row and could not make it durable (`ROW_NOT_DURABLE`), so it may stand as an act left awaiting, and the store takes no more rows on that stream in this process |
+  | `ACT_NOT_SENT` | the row was not kept, so the act never ran | yes, unless `row_may_stand_at` is set: a row on that stream was linked and could not be made durable (`ROW_NOT_DURABLE`), this act's or another act's whose append failed earlier, so it may stand as an act left awaiting, and the store takes no more rows on that stream in this process |
   | the act's own error | the act failed, and that is its kept outcome | as for any failed act |
   | `OUTCOME_NOT_KEPT` | the act ran, and its outcome is not in the ledger | never: check it first |
 

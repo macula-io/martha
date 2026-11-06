@@ -291,6 +291,12 @@ test('the ledger never sends an act twice when its row was linked and not made d
   assert.equal(sent, 0, 'the act never ran')
   const rows = await rowStreamsDirectory(directory).read(ledgerStreamOf(work.package))
   assert.equal(rows.length, 1, 'one row for the act, however often it is tried')
+
+  // A different act on the same stream is refused naming the earlier act's row.
+  const other: unknown = await sendOutwardAct(host, { ...work, act: { kind: 'tag', what: 'v1.0.0' } }, send).catch((error: unknown) => error)
+  assert.ok(other instanceof ActNotSent)
+  assert.equal(other.row_may_stand_at, 0, 'the row standing there is the push, not the tag')
+  assert.equal(sent, 0)
 })
 
 test('a row file is only its owner\'s whatever the umask lets through', async (t) => {
