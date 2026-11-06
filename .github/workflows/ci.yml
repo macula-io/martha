@@ -129,6 +129,24 @@ jobs:
           ln -s "$PRIVATE_VAR" "$LINKED_VAR"
           TMPDIR="$LINKED_VAR/$MAC_SHAPED_TMP" npm test
 
+  # The structural floor (martha#87): no function nests deeper than two levels,
+  # branches past the complexity cap or runs past the length cap. The caps live
+  # in eslint.config.mjs; npm test proves they bite (prove_the_core/
+  # structure_stays_flat.node-test.ts) and this runs them over the whole tree.
+  # No baseline, no continue-on-error, and no warning allowed: an eslint-disable
+  # comment is ignored with a warning, so it fails here too.
+  structure:
+    name: structural floor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
   # Nothing private gets in (docs/nothing-private-gets-in.md): no private issue
   # link, internal host name or private remote, in the tree or in any commit of
   # the range. The lab's machine families are a secret and are never printed.
