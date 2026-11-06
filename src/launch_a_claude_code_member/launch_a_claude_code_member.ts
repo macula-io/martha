@@ -37,7 +37,11 @@
 //      the settings files' env emptied but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
 //      a refusal starts nothing.
 //   5. `recordMemberLaunch` with the writable store only the launcher holds
-//      (#42). A launch that cannot be recorded is stopped.
+//      (#42), while the kernel still answers for the member's pid: on the
+//      owner's terminal the member is held until it is recorded and runs only
+//      then (martha#94); detached, it is recorded on its spawn, before this
+//      process can reap it. A launch that cannot be recorded is stopped, and on
+//      the owner's terminal its member never runs.
 //
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
 // tool server outlives it, its launch record is dropped, the server closes, and
@@ -60,6 +64,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   bindNothing,
+  type LaunchRecorded,
   recordMemberLaunch,
   recordMemberStopped,
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -85,7 +90,7 @@ import {
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
-import { type ForegroundJob, isOnTheOwnersTerminal, type MemberStart, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
@@ -169,11 +174,31 @@ function killGroup(group: number): void {
  * or why there is none. On the owner's terminal the job-control shell says it
  * (member_on_the_owners_terminal.ts); detached, the member is the spawned child.
  */
-async function memberStartOf(command: string, spawned: Error | undefined, job: ForegroundJob | undefined, childPid: number | undefined): Promise<MemberStart> {
+async function memberStartOf(
+  command: string,
+  spawned: Error | undefined,
+  job: ForegroundJob<RecordedWhileHeld> | undefined,
+  childPid: number | undefined,
+  record: (pid: number) => LaunchRecorded,
+): Promise<RecordedStart> {
   if (spawned !== undefined) return { refusal: `${command} could not be started (${spawned.message}).` }
-  if (job !== undefined) return job.member
-  return childPid === undefined ? { refusal: `${command} could not be started (no pid).` } : { pid: childPid }
+  if (job !== undefined) {
+    const held = await job.member
+    return 'refusal' in held ? held : { pid: held.pid, recorded: held.admission.recorded }
+  }
+  // Read on the spawn, with no turn of the event loop since, so this process
+  // has not reaped the child yet and the kernel still answers for its pid.
+  return childPid === undefined ? { refusal: `${command} could not be started (no pid).` } : { pid: childPid, recorded: record(childPid) }
 }
+
+/** A member held on the owner's terminal, recorded before it may run: it runs only when the record holds. */
+interface RecordedWhileHeld {
+  readonly admitted: boolean
+  readonly recorded: LaunchRecorded
+}
+
+/** How a member's start ends: its pid, which is also its group's id, and its launch record; or why it did not start. */
+type RecordedStart = { readonly pid: number; readonly recorded: LaunchRecorded } | { readonly refusal: string }
 
 /**
  * Why the mesh server the approved server config installs is not proved, or
@@ -316,8 +341,14 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     return refuse(`${NOT_STARTED}: ${placed}`)
   }
   const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR]
+  const launchRecords = launchRecordsDirectory(launch.places.launch_records)
+  const record = (pid: number): LaunchRecorded =>
+    recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
   const job = isOnTheOwnersTerminal(launch.stdio)
-    ? startForegroundJob(launch.command, memberArgs, { cwd: launch.place.launch_dir, env })
+    ? startForegroundJob(launch.command, memberArgs, { cwd: launch.place.launch_dir, env }, (pid): RecordedWhileHeld => {
+        const recorded = record(pid)
+        return { admitted: recorded.recorded, recorded }
+      })
     : undefined
   // On the owner's terminal `child` is the job-control shell: it exits once the
   // member has and the terminal is given back, so its exit is the member's.
@@ -327,7 +358,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     child.once('spawn', () => resolve(undefined))
     child.once('error', resolve)
   })
-  const start = await memberStartOf(launch.command, spawned, job, child.pid)
+  const start = await memberStartOf(launch.command, spawned, job, child.pid, record)
   if ('refusal' in start) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
     await server.close()
@@ -338,7 +369,6 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   group = start.pid
   const pid = start.pid
 
-  const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const onLauncherExit = (): void => {
     killGroup(pid)
     relayDirectory.remove()
@@ -378,11 +408,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     })
   })
 
-  const recorded = recordMemberLaunch(launchRecords, linuxProcessIdentities, {
-    member_name: launch.member_name,
-    node_id: launch.node_id,
-    pid,
-  })
+  const { recorded } = start
   if (!recorded.recorded) {
     stop(recorded.refusal)
     await stopped

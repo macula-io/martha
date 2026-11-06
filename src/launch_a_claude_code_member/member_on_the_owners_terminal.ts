@@ -29,11 +29,19 @@
 //      be spawned: nothing is said on MEMBER_PID_FD, and the shell's exit status
 //      says why;
 //   1. turns job control on (set -m);
-//   2. starts the member as a job, without the launcher's pipe, so no member
-//      can write a pid of its choosing where the launcher reads the group to
-//      kill: a group of its own whose id is its pid, in the owner's session;
-//   3. writes that pid to the launcher on MEMBER_PID_FD and closes it, so the
-//      launcher records the member's own pid and kills its group. The shell's
+//   2. starts the member as a job, held: a group of its own whose id is its
+//      pid, in the owner's session, that first waits on ADMIT_FD for the
+//      launcher's word and only then becomes the member (exec, so the pid and
+//      the process's start time are the member's). Without the launcher's pid
+//      pipe, so no member can write a pid of its choosing where the launcher
+//      reads the group to kill, and without ADMIT_FD once it runs. With no word
+//      (the launcher closed ADMIT_FD) the job ends with NOT_ADMITTED and the
+//      member never runs;
+//   3. writes that pid to the launcher on MEMBER_PID_FD and closes it and its
+//      own ADMIT_FD, so the launcher records the member's own pid while the
+//      member cannot have exited, and kills its group (martha#94: started at
+//      once, a member could read its line and exit before the launcher had
+//      read who held its pid, and was refused as not running). The shell's
 //      stderr stays the terminal: a non-interactive job-control shell hands
 //      the terminal over through it, so fg fails with it redirected, and a
 //      member killed by a signal shows the shell's one-line job notice;
@@ -67,6 +75,7 @@
 // group whenever it stops or exits (launch_a_claude_code_member.ts).
 
 import { spawn, type ChildProcess, type StdioOptions } from 'node:child_process'
+import { Writable } from 'node:stream'
 import { isatty } from 'node:tty'
 
 /** The job-control shell: a fixed path, never looked up through the member's PATH. */
@@ -77,6 +86,16 @@ const NOTHING_FROM_THE_ENVIRONMENT = '-p'
 
 /** The descriptor on which the script tells the launcher the member's pid. */
 export const MEMBER_PID_FD = 3
+
+/** The descriptor on which the launcher admits the held member: a line to run it, closed to never. */
+export const ADMIT_FD = 4
+
+/**
+ * The status a held member's job ends with when the launcher does not admit it.
+ * Below 126, so no shell reads it as a command that could not run or was not
+ * found, and below 128, so none reads it as a signal.
+ */
+export const NOT_ADMITTED = 125
 
 /** The name the script runs under ($0), as `ps` shows it. */
 export const JOB_SHELL_NAME = 'martha-member-job'
@@ -91,9 +110,9 @@ export const NOT_A_COMMAND = 127
 export const FOREGROUND_JOB_SCRIPT = [
   `type -P -- "$1" > /dev/null || exit ${NOT_A_COMMAND}`,
   'set -m',
-  `"$@" ${MEMBER_PID_FD}>&- &`,
+  `{ read -r _ <&${ADMIT_FD} || exit ${NOT_ADMITTED}; exec ${ADMIT_FD}<&- "$@"; } ${MEMBER_PID_FD}>&- &`,
   `echo "$!" >&${MEMBER_PID_FD}`,
-  `exec ${MEMBER_PID_FD}>&-`,
+  `exec ${MEMBER_PID_FD}>&- ${ADMIT_FD}<&-`,
   // fg prints the job's command line; only that goes nowhere. A job stopped by
   // SIGTSTP (Ctrl-Z) makes bash break out of every loop it is in, and a stop
   // abandons the rest of the list fg is in, so the resuming is a function that
@@ -120,37 +139,70 @@ export function isOnTheOwnersTerminal(stdio: StdioOptions): boolean {
 /** How a member's start ends: its pid, which is also its group's id, or why it did not start. */
 export type MemberStart = { readonly pid: number } | { readonly refusal: string }
 
-export interface ForegroundJob {
-  /** The job-control shell; it exits once the member has and the terminal is given back. */
-  readonly shell: ChildProcess
-  /** The member's pid, or why it never started. */
-  readonly member: Promise<MemberStart>
+/** What the launcher decided about a held member: whether it runs. */
+export interface Admission {
+  readonly admitted: boolean
 }
 
-/** Starts a member as the foreground job of the owner's terminal, which the launcher inherits. */
-export function startForegroundJob(
+/** How a held member's start ends: its pid and what the launcher decided while it was held, or why it did not start. */
+export type HeldMemberStart<A extends Admission> = { readonly pid: number; readonly admission: A } | { readonly refusal: string }
+
+export interface ForegroundJob<A extends Admission> {
+  /** The job-control shell; it exits once the member has and the terminal is given back. */
+  readonly shell: ChildProcess
+  /** The member's pid and its admission, or why it never started. */
+  readonly member: Promise<HeldMemberStart<A>>
+}
+
+/**
+ * Starts a member as the foreground job of the owner's terminal, which the
+ * launcher inherits. `admit` is asked once, with the member's pid, while the
+ * member is held and so cannot have exited; the member runs only when it says
+ * so. One that throws admits nobody, and the start ends with why.
+ */
+export function startForegroundJob<A extends Admission>(
   command: string,
   args: readonly string[],
   options: { readonly cwd: string; readonly env: NodeJS.ProcessEnv },
-): ForegroundJob {
-  const stdio: StdioOptions = ['inherit', 'inherit', 'inherit', 'pipe']
+  admit: (pid: number) => A,
+): ForegroundJob<A> {
+  const stdio: StdioOptions = ['inherit', 'inherit', 'inherit', 'pipe', 'pipe']
   const shell = spawn(JOB_SHELL, [NOTHING_FROM_THE_ENVIRONMENT, '-c', FOREGROUND_JOB_SCRIPT, JOB_SHELL_NAME, command, ...args], { ...options, stdio })
   const said = shell.stdio[MEMBER_PID_FD]
+  // A 'pipe' descriptor past the first three is a socket, which writes.
+  const admitFd = shell.stdio[ADMIT_FD]
+  const gate = admitFd instanceof Writable ? admitFd : undefined
+  // The held member's word: a line runs it; closing the gate unsaid never does.
+  const decide = (pid: number): HeldMemberStart<A> => {
+    try {
+      const admission = admit(pid)
+      if (admission.admitted) gate?.end('\n')
+      else gate?.destroy()
+      return { pid, admission }
+    } catch (error) {
+      gate?.destroy()
+      return { refusal: `${command} was not admitted (${error instanceof Error ? error.message : String(error)}).` }
+    }
+  }
   const exited = new Promise<number | null>((resolve) => shell.once('exit', (code) => resolve(code)))
   const noPid = `${command} could not be started (no pid).`
   // A shell that said no pid ends on its own: its status says whether its command was one it could not run.
-  const whyNot = async (): Promise<MemberStart> => ({ refusal: (await exited) === NOT_A_COMMAND ? notACommandThisTerminalCanRun(command) : noPid })
-  const member = new Promise<MemberStart>((resolve) => {
+  const whyNot = async (): Promise<HeldMemberStart<A>> => ({ refusal: (await exited) === NOT_A_COMMAND ? notACommandThisTerminalCanRun(command) : noPid })
+  const member = new Promise<HeldMemberStart<A>>((resolve) => {
     if (said === null || said === undefined) return resolve({ refusal: noPid })
-    // The first line is the pid.
+    // The first line is the pid; the launcher decides on it once.
     let text = ''
-    said.on('data', (chunk: Buffer) => {
+    const onData = (chunk: Buffer): void => {
       text += chunk.toString()
       const end = text.indexOf('\n')
       if (end === -1) return
+      said.off('data', onData)
       const pid = Number(text.slice(0, end))
-      resolve(Number.isInteger(pid) && pid > 1 ? { pid } : { refusal: noPid })
-    })
+      if (Number.isInteger(pid) && pid > 1) return resolve(decide(pid))
+      gate?.destroy()
+      resolve({ refusal: noPid })
+    }
+    said.on('data', onData)
     said.once('close', () => void whyNot().then(resolve))
     shell.once('error', (error) => resolve({ refusal: `${command} could not be started (${error.message}).` }))
   })
