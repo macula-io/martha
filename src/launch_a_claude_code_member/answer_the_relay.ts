@@ -11,7 +11,7 @@
 // | Event the relay posts | What the launcher does |
 // |---|---|
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then keeps the record |
-// | prompt_submitted (`text`, the engine's `origin`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind), binder)`, then keeps the record |
+// | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
 // | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
 //
@@ -34,7 +34,7 @@ import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answe
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
-import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -180,7 +180,7 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   if (typeof body.text !== 'string' || !isBody(origin) || !isText(origin.kind)) {
     return refused('the prompt carries no text or no origin the engine stamped')
   }
-  const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind)
+  const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   return why === undefined ? answered(TAKEN) : refused(why)
 }

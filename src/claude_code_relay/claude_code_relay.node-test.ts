@@ -151,6 +151,16 @@ test('the relay sends the engine fields unchanged: the start whole, the origin w
   )
 })
 
+test('the relay sends a prompt\'s command and meta mark unchanged, so the launcher can tell typing from an expansion (#51)', async () => {
+  const fake = fakeEngine(sayYes)
+  const expanded = { text: '/review', origin: { kind: 'composer' }, command: { name: 'review' }, isMeta: false }
+  const { fn } = next<typeof expanded>({ text: expanded.text })
+  await hooksOfTheRelay().get('prompt.submit')?.hook(fake.$, expanded, fn)
+  assert.deepEqual(fake.posted.map(({ body }) => body), [
+    { session_id: SESSION, text: expanded.text, origin: expanded.origin, command: expanded.command, isMeta: expanded.isMeta },
+  ])
+})
+
 /** Every way the launcher can fail to say yes, as the relay sees it. */
 const NOT_A_YES: readonly { readonly what: string; readonly launcher: Launcher }[] = [
   { what: 'the socket is refused', launcher: async () => Promise.reject(new Error('ECONNREFUSED')) },

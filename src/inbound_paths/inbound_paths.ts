@@ -39,9 +39,14 @@ export type PathClass = 'delivered' | 'fetched' | 'launched'
  *   (../attribute_a_cross_session_sender, martha#14) resolves it to a node id
  *   through the launcher's record. A host that attests no sender binds nothing,
  *   and a delivery on this path then carries no identity.
+ * - `host-engine` — the host's engine stamped the turn as typed at the
+ *   member's own terminal, where it queued it and where no hook may set it, so
+ *   the sender is the owner (Raf's ruling on martha#51). The identity on such a
+ *   row is the owner's mark, never a node id: the owner signs the policy, so
+ *   the owner is its root and not an entry in it.
  * - `none` — nobody attests the sender.
  */
-export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'none'
+export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'host-engine' | 'none'
 
 /**
  * The delivery gates, by the name a row may use. A row may only name one of
@@ -189,6 +194,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'none',
+  },
+  {
+    id: 'A14',
+    what: "a turn the owner typed at the member's own terminal, stamped as typed by the host's engine: no command expanded into it and not written by the engine (martha#51). The owner's mark is admitted here and nowhere else; a pasted text is the owner's act. Not closed: a process of the same OS user can claim this origin on the launcher's socket (T13, accepted under A13 until the signed roster, martha#24)",
+    klass: 'delivered',
+    control: { kind: 'shell-gate' },
+    attestation: 'host-engine',
   },
   {
     id: 'B1',
