@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
@@ -47,7 +48,7 @@ const handover = { file: 'handover-of-a-member.md', content: 'where the work sta
 function taintedPredecessor(store: SessionRecordStore, stamps: HandoverStampStore): HostSession {
   const predecessor = takeInTurn(startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'old' }), {
     source: 'ring',
-  })
+  }, bindNothing)
   rememberSession(store, predecessor)
   stampHandover(stamps, { member, session: predecessor }, handover)
   return predecessor
@@ -201,7 +202,7 @@ test('a handover edited after it was stamped taints the reader', () => {
 test('a forged stamp naming a predecessor the store never saw taints the reader', () => {
   const store = sessions()
   const stamps = stampStore()
-  const forger = takeInTurn(beginSession(store, 'forger'), { source: 'ring' })
+  const forger = takeInTurn(beginSession(store, 'forger'), { source: 'ring' }, bindNothing)
   stampHandover(stamps, { member, session: { ...forger, id: 'a-session-the-store-never-saw' } }, handover)
 
   const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
@@ -299,7 +300,7 @@ test('a predecessor that kept working after the stamp still hands over what it h
   const store = sessions()
   const stamps = stampStore()
   const predecessor = taintedPredecessor(store, stamps)
-  rememberSession(store, takeInTurn(predecessor, { source: 'web' }))
+  rememberSession(store, takeInTurn(predecessor, { source: 'web' }, bindNothing))
 
   const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
   const read = readHandover(store, stamps, { member, session: cleared }, handover)
@@ -314,7 +315,7 @@ test('a predecessor record rewritten to a clean one of the same length still tai
   const rewritten = takeInTurn(beginSession(sessions(), 'scratch'), {
     source: 'crew_room',
     from_identity: supervisor_identity,
-  })
+  }, bindNothing)
   assert.equal(rewritten.gate.ingested.length, predecessor.gate.ingested.length)
   rememberSession(store, { ...predecessor, gate: rewritten.gate })
 

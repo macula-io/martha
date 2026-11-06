@@ -14,6 +14,9 @@
 //      whatever the text claims: a git commit author, a `gh` login, an envelope's
 //      `from` attribute and a name in a message are written by whoever wrote the
 //      text. A commit authored under the supervisor's node id gets no shell.
+//      On the binder's path the host hands over no identity at all, only the
+//      sending process it attests, and the binder alone turns that into a node
+//      id (../attribute_a_cross_session_sender).
 //
 //   2. THE RECORD IS PERSISTED PER SESSION ID AND RELOADED ON START. Holding it
 //      only in memory fails open on every process restart, because a resumed
@@ -37,7 +40,8 @@
 //      remembered as lost, never as empty, so a second restart does not turn it
 //      fresh.
 
-import { INBOUND_PATHS, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
+import type { AttestedSender, Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
 import {
   recordIngestion,
   startFreshSession,
@@ -87,19 +91,29 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   subagent: 'B7',
 }
 
+/** The source whose sender only the binder may name. */
+type BoundSource = 'cross_session'
+
 /** Something a session took in, as the host describes it. */
 export type Arrival =
   | {
       /** The host knows what it was. */
-      readonly source: TurnSource
+      readonly source: Exclude<TurnSource, BoundSource>
       /** The identity the host holds for the sender; omitted or null means it holds none. */
       readonly from_identity?: string | null
+    }
+  | {
+      /** The host knows it was a cross-session delivery. */
+      readonly source: BoundSource
+      /** The sending process, as the host attests it out of band; omitted when it cannot. */
+      readonly sender?: AttestedSender
     }
   | {
       /** The host has only the turn's text, as the Claude Code host does. */
       readonly text: string
       readonly origin?: TurnOrigin
-      readonly from_identity?: string | null
+      /** The sending process, as the host attests it out of band; omitted when it cannot. */
+      readonly sender?: AttestedSender
     }
 
 /** A session, with the record the gate reads and whether that record could be read. */
@@ -168,11 +182,13 @@ export function rememberSession(store: SessionRecordStore, session: HostSession)
  *
  * The identity is carried only where the registry says something attested the
  * sender. Everywhere else it is dropped, even when the host offers one, because a
- * path nobody attests cannot make a stranger a member.
+ * path nobody attests cannot make a stranger a member. On the binder's path the
+ * identity is the binder's answer for the sender the host attests, and nothing
+ * else: a host whose binder binds nothing records the delivery unattributed.
  */
-export function takeInTurn(session: HostSession, arrival: Arrival): HostSession {
+export function takeInTurn(session: HostSession, arrival: Arrival, binder: Binder): HostSession {
   const path = pathOf(arrival)
-  const identity = senderIsAttested(path) ? (arrival.from_identity ?? null) : null
+  const identity = identityOf(path, arrival, binder)
 
   return { ...session, gate: recordIngestion(session.gate, [{ path, from_node_id: identity }]) }
 }
@@ -198,6 +214,24 @@ export function sourcesThatMayCarryAnIdentity(): readonly string[] {
   return Object.entries(PATH_OF_SOURCE)
     .filter(([, path]) => senderIsAttested(path))
     .map(([source]) => source)
+}
+
+function identityOf(path: string, arrival: Arrival, binder: Binder): string | null {
+  if (!senderIsAttested(path)) return null
+  if (attestationOf(path) === 'host-binder') return binder(attestedSenderOf(arrival))
+  return 'from_identity' in arrival ? (arrival.from_identity ?? null) : null
+}
+
+/**
+ * The sender the host attests for a delivery, or undefined.
+ *
+ * A text-only turn names its sender only where the host also says the harness
+ * delivered it: a whole envelope the owner pasted is otherwise indistinguishable
+ * from a delivery, and must stay unattributed.
+ */
+function attestedSenderOf(arrival: Arrival): AttestedSender | undefined {
+  if ('source' in arrival) return arrival.source === 'cross_session' ? arrival.sender : undefined
+  return arrival.origin === 'harness_delivery' ? arrival.sender : undefined
 }
 
 function pathOf(arrival: Arrival): string {

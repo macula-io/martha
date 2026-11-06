@@ -64,6 +64,7 @@ import {
   type HostSession,
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
+import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 /** What an event that starts a session does to the record. */
@@ -209,7 +210,7 @@ export function readHandover(
 ): HostSession {
   const stamp = stamps.read(handover.file)
   if (stamp === undefined || stamp.digest !== digestOf(handover.content)) return lose(reader.session)
-  if (stamp.member !== reader.member) return takeInTurn(reader.session, { source: 'checkout_file' })
+  if (stamp.member !== reader.member) return takeInTurn(reader.session, { source: 'checkout_file' }, bindNothing)
 
   const predecessor = sessionFromRecord(stamp.predecessor_id, store.read(stamp.predecessor_id))
   if (predecessor.record_missing || !recordStillHolds(stamp, predecessor.gate.ingested)) return lose(reader.session)

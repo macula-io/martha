@@ -34,6 +34,7 @@
 // anchor, item 7). B2 (`mesh_get`, `mesh_recall`, board cards) stays on the
 // shell gate, because those results have no sender to admit.
 
+import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { PATH_OF_SOURCE, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -107,7 +108,7 @@ export function readRoomThroughItsGate(input: {
     gate({ message, rosters: input.rosters, self_node_id: input.self_node_id }),
   )
   const session = admitted.reduce(
-    (taken, envelope) => takeInTurn(taken, { source: input.room, from_identity: envelope.from_node_id }),
+    (taken, envelope) => takeInTurn(taken, { source: input.room, from_identity: envelope.from_node_id }, bindNothing),
     input.session,
   )
   return { session, admitted, withheld: input.envelopes.length - admitted.length }

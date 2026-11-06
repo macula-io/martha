@@ -172,14 +172,15 @@ A host does these things, and the core does the rest:
 | a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
 | before running any tool | `answerToolCall({ tool, session, policy, input })` — return the `{ deny }` as the hook's answer |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
-| a turn arrives, from any source | `takeInTurn(session, arrival)` |
+| a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
+| the launcher starts or stops a member | `recordMemberLaunch(store, processes, launched)`, `recordMemberStopped(store, member_name)` |
 | after a turn | `rememberSession(store, session)` |
 
 `takeInTurn` records the arrival on the inbound path that names it, so the host
 and the registry cannot drift apart: the test derives the expected set from the
 registry, and a source with no registry row is named by the check.
 
-Four rules the seam keeps, and a host must not work around:
+The rules the seam keeps, and a host must not work around:
 
 - **An identity is carried only where something attested the sender.** The
   registry says, per path, who attests a sender — a crew roster (A1–A3), the mesh
@@ -238,6 +239,59 @@ Four rules the seam keeps, and a host must not work around:
 Every refusal a host returns says what clears the taint in the words of one
 constant, `WHAT_CLEARS_IT` in `src/refuse_execution_after_ungated_text/`, so
 the text cannot drift from the rule.
+
+### Who sent a cross-session message
+
+`src/attribute_a_cross_session_sender/` is the binder on the A6 row. It exists so
+that a crew member's message keeps the receiving session's shell because the
+host, not the text or a socket, says which node id sent it.
+
+The chain has three links:
+
+1. **the host** attests the process that sent the delivery, out of band (on a Unix
+   socket the kernel knows the connecting pid). This is `arrival.sender`, never
+   anything parsed from the turn's text;
+2. **the launcher's record**, written by `recordMemberLaunch` when it starts a
+   member, pairs that pid, and the time the kernel says that process started,
+   with the member it launched;
+3. that record names **the member's node id**, which is what the shell gate reads.
+
+The rules it keeps, from the threat model on martha#14:
+
+- **Bind nothing until a host attests the sender.** A host that cannot say which
+  process sent a delivery passes `bindNothing`, and every cross-session message
+  stays unattributed and taints. On the Claude Code host today that is every
+  delivery: the plugin is handed the turn's text and nothing else. A text-only
+  turn binds only where the host also reports `origin: 'harness_delivery'`; a
+  whole envelope the owner pasted stays unattributed even with a sender beside it.
+- **Never from text.** On this path `takeInTurn` ignores any `from_identity` the
+  host offers; the binder's answer is the only identity. An envelope's `from`,
+  its `from-name`, a socket path and a name in the body buy nothing.
+- **A record is valid for one process.** A record whose process is gone, or whose
+  pid now belongs to a process that started at another time, is dead: a reused
+  pid or a socket bound at a dead member's path inherits nothing. A relaunch
+  replaces the member's record.
+- **A record is valid for one boot.** A pid and its start ticks repeat after a
+  reboot, so the start time also names the boot (the kernel's `boot_id`). A
+  record from another boot, or a boot that cannot be read, is dead.
+- **Never silently widen.** No record, two records for one pid, or a records
+  directory holding anything the launcher would not write: nobody.
+
+`memberLaunchesDirectory(directory)` keeps one file per member, so two launches
+at once never write over each other's record. Each file is written whole and
+renamed into place. Read back, the directory vouches for nothing unless it is a
+real directory owned by this user that nobody else may write into, holds only
+records, and every record is opened without following a link and checked on the
+opened file itself (a regular file, owned by this user, mode `0600`, one row that
+names the member its file is named for) before that same file is read.
+`linuxProcessTable` reads a process's start time and the boot from `/proc`;
+where there is no `/proc`, every process reads as absent and nobody binds.
+
+**The residual, accepted for now:** every member runs as the same OS user, so a
+member that already holds a shell can rewrite the records or read another
+member's mesh key. The modes and owners checked are speed bumps, not a boundary. The signed
+roster (#2 item 7) closes it; running untrusted checkout code under a member is
+[#24](https://github.com/macula-io/martha/issues/24).
 
 ### What this repository does not contain
 
@@ -298,6 +352,10 @@ member, and a row excused without a reason. Each of those turns CI red.
   the refusal from a host's tool call is the adapter's job, and no adapter is in
   this repository yet. `src/refuse_execution_after_ungated_text/` is a rule with
   tests and no caller — deliberately, and the reason nothing here is published.
+- **No host attests a cross-session sender yet.** The binder is built and
+  tested; no adapter in this repository hands it a sender, so every
+  cross-session message still taints. A host gains it by attesting the sending
+  process out of band and passing `binderOverLaunches(store, processes)`.
 - **The delivery gate has no caller yet.** `src/admit_a_room_message/` is the
   rule; the room code that delivers messages is the crew's existing implementation,
   so nothing in this repository calls it. A host must call it before it turns a
