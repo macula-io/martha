@@ -587,6 +587,15 @@ const UNPINNED_SHAPES: Record<string, unknown> = {
   'the package at latest': { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@latest`] },
 }
 
+// The pin itself is recorded; only its env changes what runs (PR 59 r=2).
+const pinnedAt = (env: Record<string, string>) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  return { command: 'npx', args: ['-y', `${MESH_SERVER_PACKAGE}@${recorded.server_version}`], env }
+}
+UNPINNED_SHAPES['a recorded pin with a library preloaded'] = pinnedAt({ LD_PRELOAD: '/x.so' })
+UNPINNED_SHAPES['a recorded pin with its global prefix changed'] = pinnedAt({ PREFIX: '/x' })
+
 for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
   test(`an approved config whose server is ${shape} starts nothing, naming the server`, async (t) => {
     const place = placeFor(t, unpinnedServer(entry))
