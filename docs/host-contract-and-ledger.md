@@ -41,6 +41,59 @@ Every slice is tested against
 [`host_for_tests.ts`](../src/host_contract/host_for_tests.ts), a host that
 lives in memory and keeps the same promises.
 
+### On Claude Code
+
+[`src/claude_code_host/`](../src/claude_code_host/) implements the contract on
+Claude Code (#41). It is host glue, declared in package.json `martha.hostGlue`,
+and it decides nothing: it composes the engine's clock, prompt submission and
+tool registration with two pieces of glue any POSIX host can use,
+[`src/row_streams_directory/`](../src/row_streams_directory/) for the rows and
+[`src/linux_process_identity/`](../src/linux_process_identity/) for the
+launcher's records and which process holds a pid.
+
+- **Rows** live one directory per stream, the name encoded so it is never a
+  path, one file per row named by its position. A row is staged, then linked to
+  its position, and a link never replaces a file, so two writers cannot both
+  land at one position. An append resolves only once the row's file, its
+  position, the stream's directory and the rows directory with its parent are
+  fsynced, so a crash cannot lose the row of an act that then ran. A flush that
+  fails after the link rejects with `ROW_NOT_DURABLE` and the row's position,
+  and the stream takes no more appends in that process, so a retry cannot keep
+  the row twice. A read refuses a gap, a link, an entry it never writes,
+  a row that is not a JSON object, and a file anyone else may read or write; it
+  never skips one.
+- **The launcher's records** reach slices only as `readingOnly(store)`.
+- **A process** runs directly with no shell, so a signal reads as a null exit
+  code.
+- **Where a turn came from** is the engine's `origin`, which it stamps where it
+  queued the prompt and no hook may set. Its kind maps to a turn source through
+  the declaration in
+  [`src/name_the_source_of_a_prompt/`](../src/name_the_source_of_a_prompt/):
+  only the owner's own gestures (Enter at the terminal, a follow-up to the
+  owner's click) are `owner_paste`; a kind that can carry anyone's text
+  (Remote Control's bridge, a Slack ping, the SDK driver's input, an unpromoted
+  task notification such as a GitHub webhook) and another session's message
+  are `cross_session`; an observer's report or a schedule's stored text is
+  `subagent`; a channel server's prompt and every plugin's injected prompt, a
+  crew mod's included, are `mcp_result`. A kind no declaration lists is another
+  session's message. The kinds are parsed from the engine's own origin code as
+  recorded from its binary, and `gapsInPromptOrigins` fails CI on a kind the
+  declaration does not map. Text never sets a source.
+- **No sender yet.** The host knows which process sent a cross-session message
+  and does not pass it to plugins (anthropics/claude-code#107216), so the
+  adapter's binder is `bindNothing` and every cross-session message stays
+  unattributed. The adapter reads no transcript.
+- **A session start** maps the hook input's `source` and `session_id`, and
+  nothing else. A source the host does not send, the crew's refresh among them,
+  maps to an event no declaration lists and fails closed. The emitted events
+  are parsed from the host's SessionStart schema as recorded from its binary
+  (`recorded_claude_code_host.json`; `npm run record:claude-code-host`, the
+  program in `src/record_claude_code_host/`, takes it again after an upgrade),
+  plus the crew's refresh.
+- **A tool name** is refused a second time before the engine sees it.
+
+The launcher's wiring (who writes the records) waits for #16's launch gate.
+
 ## The ledger
 
 [`src/log_ledger/log_ledger.ts`](../src/log_ledger/log_ledger.ts) keeps one
@@ -54,7 +107,7 @@ append-only stream per work package:
 
   | Failure | What happened | May the caller send it again? |
   |---|---|---|
-  | `ACT_NOT_SENT` | the row was not kept, so the act never ran | yes |
+  | `ACT_NOT_SENT` | the row was not kept, so the act never ran | yes, unless `row_may_stand_at` is set: a row on that stream was linked and could not be made durable (`ROW_NOT_DURABLE`), this act's or another act's whose append failed earlier, so it may stand as an act left awaiting, and the store takes no more rows on that stream in this process |
   | the act's own error | the act failed, and that is its kept outcome | as for any failed act |
   | `OUTCOME_NOT_KEPT` | the act ran, and its outcome is not in the ledger | never: check it first |
 

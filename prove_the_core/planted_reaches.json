@@ -368,7 +368,7 @@
     "const words = 'a constructor of boxes'\ntype Maker = { constructor: Function }"
   ],
   "glue": {
-    "_why": "Planted host glue sources for glueReachesBeyondTheContract, judged at <a host glue directory>/planted.ts. {contract} is replaced with the host contract's directory from package.json.",
+    "_why": "Planted machine glue sources for glueReachesBeyondTheContract, judged at <a host glue directory>/planted.ts. {contract} is replaced with the host contract's directory from package.json. Glue importing a slice or other glue is refused; its own directory is not.",
     "caught": [
       {
         "text": "import { settingsFrom } from '../declare_crew/declare_crew.ts'\n",
@@ -411,11 +411,44 @@
         "lines": [
           1
         ]
+      },
+      {
+        "text": "import { linuxProcessIdentities } from '../some_other_glue/process_identity_from_proc.ts'\n",
+        "lines": [
+          1
+        ]
       }
     ],
     "quiet": [
       "import fs from 'node:fs'\nimport { join } from 'node:path'\nimport type { Processes } from '../{contract}/host_contract.ts'",
-      "const env = process.env\nconst fs = await import('node:fs')"
+      "const env = process.env\nconst fs = await import('node:fs')",
+      "import { helper } from './a_sibling.ts'\nimport type { Row } from './rows/row.ts'"
+    ]
+  },
+  "adapter": {
+    "_why": "Planted host adapter sources for adapterReachesBeyondItsKind, judged at <a host adapter directory>/planted.ts. Imports of each program and each kind of test file are generated from package.json; these add the rest. {contract} is replaced with the host contract's directory.",
+    "caught": [
+      {
+        "text": "import ts from 'typescript'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "import { x } from '../../outside.ts'\n",
+        "lines": [
+          1
+        ]
+      },
+      {
+        "text": "const name = '../declare_crew/' + 'declare_crew.ts'\nconst m = await import(name)\n",
+        "lines": [
+          2
+        ]
+      }
+    ],
+    "quiet": [
+      "import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'\nimport { readFile } from 'node:fs/promises'\nimport type { HostContract } from '../{contract}/host_contract.ts'\nimport { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'"
     ]
   }
 }

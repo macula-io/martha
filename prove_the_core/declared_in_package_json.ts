@@ -12,7 +12,11 @@ export const CORE = 'src'
 
 export interface Manifest {
   readonly scripts: Readonly<Record<string, string>>
-  readonly martha?: { readonly hostContract?: string; readonly hostGlue?: readonly string[] }
+  readonly martha?: {
+    readonly hostContract?: string
+    readonly hostGlue?: readonly string[]
+    readonly hostAdapters?: readonly string[]
+  }
 }
 
 /** The repository's package.json. */

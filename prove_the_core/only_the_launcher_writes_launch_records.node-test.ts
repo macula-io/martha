@@ -16,7 +16,7 @@ const repository = join(import.meta.dirname, '..')
 
 // The host glue package.json declares: directories under src/ that implement the
 // contract on a real machine, so they are not slices (#42).
-const hostGlue = declaredHostGlue(repository)
+const hostGlue = [...declaredHostGlue(repository), ...declaredHostGlue(repository, 'hostAdapters')]
 // The test files and the programs package.json runs: no slices, so they may import glue.
 const testSuffixes = testSuffixesOf(manifestOf(repository))
 const programs = programsRunByScriptsOf(manifestOf(repository))
@@ -28,8 +28,9 @@ interface Planted {
 }
 const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_launch_record_writes.json'), 'utf8')) as Planted
 
-test('package.json declares the Linux host glue, so the check knows what is not a slice', () => {
-  assert.deepEqual(hostGlue, ['linux_process_identity'])
+test('package.json declares the host glue and the host adapter, so the check knows what is not a slice', () => {
+  assert.deepEqual(declaredHostGlue(repository), ['linux_process_identity', 'row_streams_directory'])
+  assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), ['claude_code_host'])
 })
 
 test('a hostGlue entry that is not exactly src/<one directory> is refused, with the entry it names', () => {
@@ -57,6 +58,7 @@ test('a hostGlue entry that is not exactly src/<one directory> is refused, with 
   ]
   for (const declared of refused) {
     assert.throws(() => hostGlueOf(declared, real), /martha\.hostGlue/, JSON.stringify(declared))
+    assert.throws(() => hostGlueOf(declared, real, 'hostAdapters'), /martha\.hostAdapters/, JSON.stringify(declared))
   }
 })
 

@@ -42,9 +42,14 @@
 // are not (tests, the programs CI runs, and the host glue that implements the
 // contract on one machine) from package.json, where they are declared.
 //
-// The host glue gets the reverse rule (glueReachesBeyondTheContract): it may
-// import the host contract it implements and Node's own modules, and nothing
-// else, so it cannot become the door through which a slice's code runs.
+// Two kinds of code that are no slice get their own rules, both declared in
+// package.json. Machine glue (martha.hostGlue) implements parts of the contract
+// on one machine; it may import the host contract, Node's own modules and files
+// in its own directory, and nothing else, so it cannot become the door through
+// which a slice's code runs (glueReachesBeyondTheContract). A host adapter
+// (martha.hostAdapters) composes the contract for one coding tool from glue and
+// slices; it may import those, the contract and Node's own modules, but never a
+// test or a program (adapterReachesBeyondItsKind).
 
 import { dirname, join, normalize, sep } from 'node:path'
 
@@ -183,20 +188,22 @@ export function settingsReadOutsideTheDeclaration(slices: readonly Source[], isS
   return slices.flatMap(source => findingsIn(source, isSlice))
 }
 
-// Host glue may import the contract (a relative path into `contract`, a
-// directory under src/) and Node's own modules. Types count too: glue that leans
-// on a slice's types is coupled to it.
-function glueFindingsIn(source: Source, contract: string): Finding[] {
+const topOf = (path: string) => path.split(sep)[0]
+
+// Every import of one source, judged: `admits` says whether a relative target
+// (relative to src/) may be imported, and `rule` names the rule in a finding.
+// Types count too: code that leans on another's types is coupled to it.
+function judgedImports(source: Source, admits: (target: string) => boolean, rule: string): Finding[] {
   const { file, errors } = parseSource(source.text, source.path)
   const path = source.path
-  const intoTheContract = (specifier: string) => targetOf(path, specifier)?.split(sep)[0] === contract
   return [
     ...parseFindings(path, errors),
     ...moduleReferencesIn(file).flatMap(({ specifier, line }) => {
       if (specifier === null) return [{ path, line, why: 'imports a module whose name is computed' }]
       if (specifier.startsWith(NODE_MODULE_PREFIX)) return []
-      if (isRelative(specifier) && intoTheContract(specifier)) return []
-      return [{ path, line, why: `imports ${specifier}; host glue may import only the host contract and node:*` }]
+      const target = isRelative(specifier) ? targetOf(path, specifier) : null
+      if (target !== null && admits(target)) return []
+      return [{ path, line, why: `imports ${specifier}; ${rule}` }]
     }),
   ].sort((a, b) => a.line - b.line)
 }
@@ -219,7 +226,28 @@ export function slicesImportingPrograms(slices: readonly Source[], programs: rea
   })
 }
 
-/** Every import in this host glue beyond the host contract (`contract`, a directory under src/) and Node's own modules. */
+/**
+ * Every import in this machine glue beyond the host contract (`contract`, a
+ * directory under src/), Node's own modules and files in the glue's own directory.
+ */
 export function glueReachesBeyondTheContract(glue: readonly Source[], contract: string): Finding[] {
-  return glue.flatMap(source => glueFindingsIn(source, contract))
+  return glue.flatMap(source => {
+    const own = topOf(source.path)
+    return judgedImports(
+      source,
+      target => [contract, own].includes(topOf(target)),
+      'machine glue may import only the host contract, node:* and its own directory',
+    )
+  })
+}
+
+/**
+ * Every import in these host adapters of what an adapter may not compose: a test
+ * or a program (`isTestOrProgram`, a path under src/), anything outside src/, or
+ * a package that is not Node's own.
+ */
+export function adapterReachesBeyondItsKind(adapters: readonly Source[], isTestOrProgram: (path: string) => boolean): Finding[] {
+  return adapters.flatMap(source =>
+    judgedImports(source, target => !isTestOrProgram(target), 'a host adapter may not import a test, a program or a package'),
+  )
 }

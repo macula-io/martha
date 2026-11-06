@@ -11,7 +11,8 @@
 //   - running a process (now, or later), and telling which process holds a pid;
 //   - delivery in and out: a turn handed to the model, and the turns that
 //     arrive, with where each came from as far as the tool itself can say;
-//   - registering a tool.
+//   - registering a tool, and taking apart the name a called tool has on
+//     this host.
 //
 // Nothing that decides anything lives here. A behaviour one host needs and
 // another does not is a slice, never a branch in an adapter. Settings are not
@@ -52,6 +53,12 @@ export interface RowStore {
    * With `expected_length`, the row is kept only if the stream holds exactly that
    * many rows; otherwise it rejects with an error whose `code` is
    * ROW_STREAM_MOVED, and the caller reads again before deciding again.
+   *
+   * One rejection does not mean the row was not kept: ROW_NOT_DURABLE, with the
+   * row's `position`, says the row is in the stream and the host could not make
+   * it durable, so it may be read and may be lost in a crash. The caller must
+   * not append it again; the store refuses every later append to that stream
+   * with the same code, so a retry cannot write a second copy.
    */
   append(stream: string, row: Row, expected_length?: number): Promise<number>
   /** Every row of a stream, oldest first; a stream never written to is empty. */
@@ -60,6 +67,9 @@ export interface RowStore {
 
 /** The code an append rejects with when the stream is not at the length it expected. */
 export const ROW_STREAM_MOVED = 'ROW_STREAM_MOVED'
+
+/** The code an append rejects with when its row is in the stream and not known to be durable. */
+export const ROW_NOT_DURABLE = 'ROW_NOT_DURABLE'
 
 /**
  * Documents read as UTF-8 text, by absolute path. A missing document rejects
@@ -320,7 +330,20 @@ export interface Tool {
   answer(args: Readonly<Record<string, unknown>>): Promise<string>
 }
 
-export interface Tools {
+/**
+ * How this host names a tool its model calls. A host composes an MCP tool's
+ * name from the server it was installed under and the tool's own name, each
+ * host its own way (Claude Code `mcp__<server>__<tool>`, OpenCode
+ * `<server>_<tool>`, where `_` also occurs inside both names). Only the host
+ * knows its form and its installed servers, so the core never takes a called
+ * name apart itself (martha#2, item 5 (b)).
+ */
+export interface ToolNames {
+  /** The name a called tool's own server gave it; a tool built into the host is its own name. */
+  ownNameOf(called: string): string
+}
+
+export interface Tools extends ToolNames {
   /** Registers a tool; a second tool by a name already registered is refused. */
   register(tool: Tool): void
 }
