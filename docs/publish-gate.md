@@ -449,7 +449,9 @@ The rules the seam keeps, and a host must not work around:
   variable before the host starts. And it gives every server the `env` of each
   settings file it loads, which under `--setting-sources user` is the owner's
   user settings (`$CLAUDE_CONFIG_DIR/settings.json`, else
-  `~/.claude/settings.json`) and the approved `--settings` copy: a launch is
+  `~/.claude/settings.json`; a `CLAUDE_CONFIG_DIR` that is set but empty or
+  not absolute refuses the launch, since the launcher and the host could
+  resolve it to different files) and the approved `--settings` copy: a launch is
   refused, naming the file and the variable, when either sets a name other
   than HOME, PATH or a reviewed setting, except Claude Code's own variables
   that no file of a recorded tree reads (`CLAUDE_CODE_OWN_VARIABLES`, today
@@ -464,7 +466,9 @@ The rules the seam keeps, and a host must not work around:
   this does not close: a
   member's shell runs as the same user and can edit the installed tree during
   a session; the next launch refuses it, but the running server is not checked
-  again. This is the same class as the contact-policy file
+  again. In the same way, the user settings file is read before the host
+  starts and the host reads it again itself, so an edit by that user in
+  between reaches the host unchecked. Both are the same class as the contact-policy file
   (macula-io/macula-mcp#79). A dependency's own environment reads are not
   listed by the recorder (martha#72), and a module the tree lacks is looked
   for in the `node_modules` above it and under HOME (martha#73). Only the

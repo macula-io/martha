@@ -202,9 +202,10 @@ function settingsEnvironment(
   knownSettings: readonly string[],
 ): { readonly env: Readonly<Record<string, string>> } | { readonly refusal: string } {
   const user = userSettingsPath(hostEnv)
+  if ('refusal' in user) return user
   return environmentFromSettings(
     [
-      { path: user, text: existsSync(user) ? readFileSync(user, 'utf8') : undefined },
+      { path: user.path, text: existsSync(user.path) ? readFileSync(user.path, 'utf8') : undefined },
       { path: join(snapshotDir, CLAUDE_SETTINGS), text: approvedSettings === undefined ? undefined : new TextDecoder().decode(approvedSettings) },
     ],
     [...SERVER_NEEDS, ...knownSettings],

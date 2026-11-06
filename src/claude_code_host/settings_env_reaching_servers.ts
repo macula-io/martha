@@ -25,7 +25,7 @@
 // here.
 
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 /** One of Claude Code's own variables, which its settings may carry and the mesh server never reads. */
 export interface ClaudeCodeOwnVariable {
@@ -52,10 +52,22 @@ export const CLAUDE_CODE_OWN_VARIABLES: readonly ClaudeCodeOwnVariable[] = [
 export const USER_SETTINGS_FILE = 'settings.json'
 const DEFAULT_CONFIG_DIR = '.claude'
 
-/** The user settings file the host started with this environment reads. */
-export function userSettingsPath(env: Readonly<Record<string, string | undefined>>): string {
-  const configDir = env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? homedir(), DEFAULT_CONFIG_DIR)
-  return join(configDir, USER_SETTINGS_FILE)
+/**
+ * The user settings file the host started with this environment reads; or a
+ * refusal when CLAUDE_CONFIG_DIR is set but empty or not absolute. Such a value
+ * may resolve one way here and another way in the host (an empty one, or one
+ * against a different working directory), so the file checked would not be
+ * the file loaded (martha#65 r=4).
+ */
+export function userSettingsPath(env: Readonly<Record<string, string | undefined>>): { readonly path: string } | { readonly refusal: string } {
+  const configDir = env.CLAUDE_CONFIG_DIR
+  if (configDir === undefined) return { path: join(env.HOME ?? homedir(), DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE) }
+  if (!isAbsolute(configDir)) {
+    return {
+      refusal: `CLAUDE_CONFIG_DIR is ${JSON.stringify(configDir)}, not an absolute directory, so which user settings file Claude Code reads cannot be told; set it to an absolute path or unset it`,
+    }
+  }
+  return { path: join(configDir, USER_SETTINGS_FILE) }
 }
 
 /** A settings file the host loads; `text` is undefined when there is no such file. */
