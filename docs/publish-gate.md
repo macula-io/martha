@@ -541,6 +541,15 @@ host, a **relay** (`src/claude_code_relay/`, a plugin the launcher loads with
 with the engine's own fields unchanged, and acts on the answer. The relay
 decides nothing.
 
+A relay the host refuses to load runs no gate at all ([#104](https://github.com/macula-io/martha/issues/104)).
+So before a member starts, the launcher resolves the host's command once and
+asks that binary's own loader (`plugin validate`) whether it takes the relay,
+and starts nothing if it does not. A host of another version than the one the
+adapter was recorded from is told to the owner in one line. After the start, a
+member whose relay does not report its session's start within
+`RELAY_DEADLINE_MS` is stopped. CI runs the loader of the recorded version
+over the relay (`prove_the_relay_loads/`).
+
 | Host event (the relay) | The launcher's call |
 |---|---|
 | settings `SessionStart` (`classic.SessionStart`: the host's `source` and `session_id`) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`; the mod's own `session.start` carries neither field |

@@ -31,10 +31,11 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
-import { MEMBER_PID_FD, notACommandThisTerminalCanRun } from './member_on_the_owners_terminal.ts'
+import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
@@ -1598,7 +1599,7 @@ for (const [what, make] of [
     const command = make(place.home)
     const terminal = terminalLaunch(t, place, { command })
     await until('the launcher to refuse the launch', () => terminal.shown().includes('refused: '), t, () => terminal.shown())
-    assert.ok(terminal.shown().includes(`refused: ${NOT_STARTED}: ${notACommandThisTerminalCanRun(command)}`), terminal.shown())
+    assert.ok(terminal.shown().includes(`refused: ${NOT_STARTED}: ${notACommandThisLauncherCanRun(command)}`), terminal.shown())
     assert.deepEqual(readdirSync(place.relay_root), [])
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })

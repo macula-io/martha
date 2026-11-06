@@ -14,6 +14,10 @@
 //      approved --settings copy, which may name only what the mesh server may
 //      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
 //      on a refusal of any nothing starts, and the refusal goes to the owner.
+//      Then the host's command, resolved once to the file it runs, must load
+//      the relay by the host's own loader, or nothing starts; a host of another
+//      version than the recording is told to the owner in one line
+//      (host_runs_the_relay.ts, martha#104).
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
 //      Inside it, an empty 0500 directory: where the member's git looks for
@@ -38,6 +42,9 @@
 //      a refusal starts nothing.
 //   5. `recordMemberLaunch` with the writable store only the launcher holds
 //      (#42). A launch that cannot be recorded is stopped.
+//   6. The backstop (martha#104): a member whose relay does not report its
+//      session's start within RELAY_DEADLINE_MS is stopped, and its stop says
+//      why, since a host that does not run the relay runs no gate at all.
 //
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
 // tool server outlives it, its launch record is dropped, the server closes, and
@@ -66,7 +73,7 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -84,7 +91,8 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { memberRelay } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
+import { hostVersionLine, refusalToLoadTheRelay, resolvedHostCommand } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, type MemberStart, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
@@ -131,12 +139,16 @@ export interface ClaudeCodeMemberLaunch {
   readonly stdio: StdioOptions
   /** Shows the owner a line: a refusal, what was not carried, why a member was stopped. */
   tellOwner(line: string): void
+  /** How long the relay has to report the session's start before the member is stopped; RELAY_DEADLINE_MS unless a test gives its own. */
+  readonly relay_deadline_ms?: number
 }
 
 /** How a member's process ended. */
 export interface MemberStopped {
   readonly exit_code: number | null
   readonly signal: string | null
+  /** Why the launcher stopped the member, or null when it ended by itself. */
+  readonly stopped_because: string | null
 }
 
 export type MemberStarted =
@@ -244,6 +256,8 @@ interface ReadyLaunch {
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
 interface LaunchMade extends ReadyLaunch {
+  /** The file the host's command resolved to: what the checks ran, and what the member runs (host_runs_the_relay.ts). */
+  readonly binary: string
   readonly relayDirectory: Extract<RelayDirectory, { readonly made: true }>
   readonly emptyDirectory: string
   readonly server: RelayServer
@@ -276,6 +290,23 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env }
 }
 
+/**
+ * Step 1b: the file the host's command resolves to, which must load the relay;
+ * or the refusal. A host of another version than the recording is told to the
+ * owner and refuses nothing (host_runs_the_relay.ts).
+ */
+async function hostThatRunsTheRelay(launch: ClaudeCodeMemberLaunch, ready: ReadyLaunch): Promise<{ readonly binary: string } | string> {
+  const cwd = launch.place.launch_dir
+  const resolved = resolvedHostCommand(launch.command, ready.hostEnv.PATH, cwd)
+  if ('refusal' in resolved) return `${NOT_STARTED}: ${resolved.refusal}`
+  const env = ready.hostEnv
+  const refused = await refusalToLoadTheRelay(resolved.binary, RELAY_PLUGIN_DIR, env, cwd)
+  if (refused !== undefined) return `${NOT_STARTED}: ${refused}`
+  const drift = await hostVersionLine(resolved.binary, env, cwd)
+  if (drift !== undefined) launch.tellOwner(drift)
+  return resolved
+}
+
 /** Step 2: the relay socket's directory, and the empty directory inside it; or the refusal, with both gone. */
 function launchDirectories(
   launch: ClaudeCodeMemberLaunch,
@@ -297,8 +328,13 @@ function launchDirectories(
 }
 
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
-async function servedRelay(launch: ClaudeCodeMemberLaunch, socket_path: string, stop: (why: string) => void): Promise<RelayServer | string> {
-  const relay = memberRelay({
+async function servedRelay(
+  launch: ClaudeCodeMemberLaunch,
+  socket_path: string,
+  stop: (why: string) => void,
+  sessionReported: () => void,
+): Promise<RelayServer | string> {
+  const answering = memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
     launch: {
       host: launch.place.host,
@@ -311,6 +347,13 @@ async function servedRelay(launch: ClaudeCodeMemberLaunch, socket_path: string, 
     binder: bindNothing,
     stopMember: stop,
   })
+  // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
+  const relay: MemberRelay = {
+    answer: (event, body) => {
+      if (event === 'session_started') sessionReported()
+      return answering.answer(event, body)
+    },
+  }
 
   try {
     return await serveTheRelay(relay, socket_path)
@@ -345,11 +388,11 @@ async function startedMember(
   }
   const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR]
   const job = isOnTheOwnersTerminal(launch.stdio)
-    ? startForegroundJob(launch.command, memberArgs, { cwd: launch.place.launch_dir, env })
+    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env })
     : undefined
   // On the owner's terminal `child` is the job-control shell: it exits once the
   // member has and the terminal is given back, so its exit is the member's.
-  const child = job?.shell ?? spawn(launch.command, memberArgs, { cwd: launch.place.launch_dir, env, detached: true, stdio: launch.stdio })
+  const child = job?.shell ?? spawn(made.binary, memberArgs, { cwd: launch.place.launch_dir, env, detached: true, stdio: launch.stdio })
 
   const spawned = await new Promise<Error | undefined>((resolve) => {
     child.once('spawn', () => resolve(undefined))
@@ -408,18 +451,38 @@ function whenTheMemberStops(
   launchRecords: ReturnType<typeof launchRecordsDirectory>,
   made: LaunchMade,
   offLauncherEnd: () => void,
+  ended: () => string | null,
 ): Promise<MemberStopped> {
   return new Promise<MemberStopped>((resolve) => {
     child.once('exit', (exit_code, signal) => {
       void (async () => {
+        const stopped_because = ended()
         killGroup(pid)
         recordMemberStopped(launchRecords, launch.member_name)
         await removeWhatTheLaunchMade(made)
         offLauncherEnd()
-        resolve({ exit_code, signal })
+        resolve({ exit_code, signal, stopped_because })
       })()
     })
   })
+}
+
+/**
+ * The backstop (#104): a host that runs the relay reports the session's start;
+ * a member whose relay has not, `deadline` ms after it was armed, is stopped.
+ */
+function relayBackstop(deadline: number, stop: (why: string) => void): { reported(): void; arm(): void; disarm(): void } {
+  let reported = false
+  let unheard: NodeJS.Timeout | undefined
+  const disarm = (): void => clearTimeout(unheard)
+  return {
+    reported: () => ((reported = true), disarm()),
+    arm: () => {
+      if (reported) return
+      unheard = setTimeout(() => stop(`its relay did not report the session's start within ${deadline} ms, so the host is not running Martha's gates`), deadline)
+    },
+    disarm,
+  }
 }
 
 /** Starts one Claude Code member on its approved config, with its relay answered here. */
@@ -430,22 +493,30 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const ready = readyLaunch(launch)
   if (typeof ready === 'string') return refuse(ready)
+  const host = await hostThatRunsTheRelay(launch, ready)
+  if (typeof host === 'string') {
+    ready.removeSnapshot()
+    return refuse(host)
+  }
   const directories = launchDirectories(launch, ready)
   if (typeof directories === 'string') return refuse(directories)
 
   let group: number | undefined
+  let stoppedBecause: string | null = null
   const stop = (why: string): void => {
+    stoppedBecause ??= why
     launch.tellOwner(`${launch.member_name} is stopped: ${why}`)
     if (group !== undefined) killGroup(group)
   }
+  const backstop = relayBackstop(launch.relay_deadline_ms ?? RELAY_DEADLINE_MS, stop)
 
-  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop)
+  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()
     return refuse(server)
   }
-  const made: LaunchMade = { ...ready, ...directories, server }
+  const made: LaunchMade = { ...ready, ...directories, server, binary: host.binary }
 
   const started = await startedMember(launch, made)
   if (typeof started === 'string') return refuse(started)
@@ -454,7 +525,9 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
 
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
-  const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd)
+  const ended = (): string | null => (backstop.disarm(), stoppedBecause)
+  const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
+  backstop.arm()
 
   const recorded = recordMemberLaunch(launchRecords, linuxProcessIdentities, {
     member_name: launch.member_name,
