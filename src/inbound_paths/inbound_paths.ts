@@ -1,16 +1,29 @@
-// Every way text can reach a member's session, and what control stands on it.
+// Every way text can reach a member's session, and every way a checkout can get
+// code started on a member's machine, and what control stands on each.
 //
 // This is the machine-readable copy of the table in issue #2, read from
-// crew-code at macula-sponsors cf5e5a3. The issue table is its review; this is
-// what ../check_every_path_is_gated drives and what CI fails on.
+// crew-code at macula-sponsors cf5e5a3; the C rows come from issue #16. The issue
+// tables are its review; this is what ../check_every_path_is_gated drives and
+// what CI fails on.
 //
-// A row is here for one reason: text arrived and something must decide whether
-// the session may act on it. A path is never removed from this list — a path
-// that stops delivering text gets a control that says so, in words.
+// A row is here for one reason: text arrived, or code is about to start, and
+// something must decide whether that may go ahead. A path is never removed from
+// this list — a path that stops delivering text gets a control that says so, in
+// words.
 
 import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
+import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
-export type PathClass = 'delivered' | 'fetched'
+/**
+ * How the path reaches the member.
+ *
+ * - `delivered` — text put into a turn for the model.
+ * - `fetched` — text the model's own tool brought back.
+ * - `launched` — code the host starts by itself, from files in a checkout. No
+ *   tool is called and no model runs, so neither the shell gate nor a delivery
+ *   gate stands in front of it: only a launch gate does.
+ */
+export type PathClass = 'delivered' | 'fetched' | 'launched'
 
 /**
  * Who, if anyone, attests the sender of text arriving on this path.
@@ -44,6 +57,16 @@ export const DELIVERY_GATES = {
 export type KnownDeliveryGate = keyof typeof DELIVERY_GATES
 
 /**
+ * The launch gates, by the name a row may use. As with the delivery gates, the
+ * coverage check drives the function behind the name, once per question.
+ */
+export const LAUNCH_GATES = {
+  'owner-approved-launch-config': admitsLaunch,
+} as const satisfies Record<string, LaunchGate>
+
+export type KnownLaunchGate = keyof typeof LAUNCH_GATES
+
+/**
  * What stops outsider text on this path from being acted on.
  *
  * - `delivery-gate` — a deterministic check on the sender runs before the text
@@ -53,12 +76,18 @@ export type KnownDeliveryGate = keyof typeof DELIVERY_GATES
  *   long as the text is readable.
  * - `no-text-reaches-the-model` — the path is listed so it is not forgotten,
  *   and carries no body text. It must say why.
+ * - `launch-gate` — the host is not started in a checkout whose launch config
+ *   the owner has not approved by content
+ *   (../refuse_launch_of_unapproved_config). The only control a `launched` row
+ *   may declare. `residual` says, in words, what happens where Martha does not
+ *   start the host itself and so cannot run the gate first.
  * - `none` — no control. A row in this state fails CI on purpose.
  */
 export type Control =
   | { readonly kind: 'delivery-gate'; readonly gate: KnownDeliveryGate }
   | { readonly kind: 'shell-gate' }
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
+  | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'none' }
 
 export interface InboundPath {
@@ -114,7 +143,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A7',
-    what: "a checkout's own hooks, and its auto-injected CLAUDE.md or AGENTS.md",
+    what: "text a checkout puts into the session: its auto-injected CLAUDE.md or AGENTS.md, what an approved hook prints, and the agents a checkout defines (.claude/agents), whose frontmatter may name hooks and tool servers that start only when the model spawns that agent, a tool call",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'none',
@@ -217,6 +246,30 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     control: {
       kind: 'no-text-reaches-the-model',
       why: 'only headRefOid, headRefName and a #n match are read, as a stale-handoff flag; no body text is delivered',
+    },
+    attestation: 'none',
+  },
+  {
+    id: 'C1',
+    what: "a checkout's own tool-server config, which the host starts by itself (each host's files are listed in LAUNCH_FILES_OF_HOST)",
+    klass: 'launched',
+    control: {
+      kind: 'launch-gate',
+      gate: 'owner-approved-launch-config',
+      residual:
+        'Martha starts the host on an approved snapshot of this config, with the checkout\'s own config switched off (prepareLaunch; npm run probe:launch). What is left: a host the owner starts by hand starts these servers before any of Martha runs (observed: interactive Claude Code 2.1.318 holds a project server for approval but records it by server name only, so a later change to its command is not asked again; headless claude -p and OpenCode 2.2.5, even for opencode debug config, start it unasked), so the adapter must refuse that session a place in the crew; a server the host restarts after a call changed the tree runs the script as it is then, until the launcher stops the member (the launch is checked before every tool call, by answerToolCall, and after it, by recheckLaunch, whose hook does not return until the launcher has sent SIGKILL to the member\'s process group); and a file git ignores and does not track is outside the approval.',
+    },
+    attestation: 'none',
+  },
+  {
+    id: 'C2',
+    what: "a checkout's own hooks and plugins, which the host runs by itself (each host's files are listed in LAUNCH_FILES_OF_HOST)",
+    klass: 'launched',
+    control: {
+      kind: 'launch-gate',
+      gate: 'owner-approved-launch-config',
+      residual:
+        "Martha starts the host on an approved snapshot of this config, with the checkout's own config switched off (prepareLaunch; npm run probe:launch); a checkout's .claude/settings.local.json and its .opencode plugins are never carried, and prepareLaunch names them as not_carried for the launcher to show the owner. What is left: a host the owner starts by hand runs these before any of Martha runs (observed: headless claude -p 2.1.318 runs a checkout's SessionStart hook unasked; OpenCode 2.2.5 loads its plugin unasked, even for opencode debug config), so the adapter must refuse that session a place in the crew; the hooks of the one call that changed the tree, which run in parallel with Martha's own (PreToolUse/PostToolUse): the launch is checked before every tool call (answerToolCall) and after it (recheckLaunch), and on a refusal after the call Martha's hook does not return until the launcher has sent SIGKILL to the member's whole process group, so no Stop or SessionEnd hook runs (npm run probe:launch); and a file git ignores and does not track is outside the approval.",
     },
     attestation: 'none',
   },
