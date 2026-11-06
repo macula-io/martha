@@ -241,6 +241,17 @@ test('a recorded tree whose read is no longer reviewed is not started, naming th
   assert.ok(refusal.includes(`${DEPENDENCY} reads ${KEPT} in ${READING_PATH}`), refusal)
 })
 
+test('a recording that leaves out a read the bytes hold is not started, naming the package, the name and the file', async (t) => {
+  const registry = await readingRegistry(t)
+  const reviewed = recordingAt(registry.registry, [SETTING], { [DEPENDENCY]: [KEPT] })
+  const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording: reviewed, scratch: scratch(t, 'record') })
+  // The dependency's reads struck from the record and its review removed: a record checked only against itself would pass.
+  const { [DEPENDENCY]: _struck, ...rest } = tree.environment_reads
+  const recording = { ...reviewed, known_environment_reads: {}, versions: [{ ...tree, environment_reads: rest }] }
+  const refusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: scratch(t, 'servers'), recording }))
+  assert.ok(refusal.includes(`${DEPENDENCY} reads ${KEPT} in ${READING_PATH}`), refusal)
+})
+
 test('every recorded version: each package\'s read of a name the server is started with is reviewed for that package', () => {
   const review = { server: MESH_SERVER_PACKAGE, startedWith: [...SERVER_NEEDS, ...KNOWN_MESH_SERVER_SETTINGS], knownSettings: KNOWN_MESH_SERVER_SETTINGS, knownReads: KNOWN_ENVIRONMENT_READS }
   for (const tree of RECORDED_MESH_TREES) {

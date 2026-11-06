@@ -11,6 +11,7 @@ import {
   MESH_SERVER_REGISTRY,
   RECORDED_MESH_TREES,
   SETTING_PREFIX,
+  changesInEnvironmentReads,
   changesInTree,
   environmentReadsInTree,
   refusalOfEnvironmentReads,
@@ -101,6 +102,8 @@ const UNREADABLE_READS = {
   'a destructured read': 'const { MACULA_A } = process.env',
   'the environment kept under another name': 'const env = process.env; env.MACULA_A',
   'the environment handed to a function': 'readAll(process.env)',
+  'the environment named by a bracket': "const v = process['env'].MACULA_A",
+  'the process named by a bracket on globalThis': "const v = globalThis['process'].env.MACULA_A",
 }
 
 for (const [what, text] of Object.entries(UNREADABLE_READS)) {
@@ -187,6 +190,20 @@ test('the server reading its reviewed settings needs no other review; reading a 
 
 test('a read of a name the server is never started with is listed, not refused: it is emptied for the server', () => {
   assert.equal(refusalOfEnvironmentReads(readsOf(DEPENDENCY, EMPTIED), review()), undefined)
+})
+
+test('a recorded list of reads equal to what the bytes read has no change', () => {
+  const reads = { ...readsOf(DEPENDENCY, KEPT), [NESTED]: { reads: {}, computed: [`${NESTED_KEY}/index.js`] } }
+  assert.equal(changesInEnvironmentReads(reads, structuredClone(reads)), undefined)
+})
+
+test('a read the bytes hold and the record leaves out, and one the record holds and the bytes do not, are each named with package, name and file', () => {
+  const recorded = readsOf(NESTED, APPROVED)
+  const derived = { ...readsOf(DEPENDENCY, KEPT), [NESTED]: { reads: {}, computed: [`${NESTED_KEY}/index.js`] } }
+  const changes = changesInEnvironmentReads(recorded, derived) ?? ''
+  assert.ok(changes.includes(`${DEPENDENCY} reads ${KEPT} in node_modules/${DEPENDENCY}/index.js`), changes)
+  assert.ok(changes.includes(`${NESTED} reads by a key that is no literal in ${NESTED_KEY}/index.js`), changes)
+  assert.ok(changes.includes(`${NESTED} reads ${APPROVED} in node_modules/${NESTED}/index.js`), changes)
 })
 
 // --- the tree a member runs ----------------------------------------------------
