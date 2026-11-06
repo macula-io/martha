@@ -10,19 +10,22 @@
 //
 // It fails closed where the core trusts the host (#42): with nothing given, the
 // launcher's records are empty and no pid is held by any process, so a binder
-// over this host binds nobody unless a test says otherwise.
+// over this host binds nobody unless a test says otherwise. Like a real adapter,
+// it hands slices the records as `readingOnly`, and keeps the writable store
+// apart as the launcher's seam, `launcherRecords`.
 
 import type {
   ArrivingTurn,
   HostContract,
   KeyedRow,
+  KeyedRowStore,
   ProcessOutcome,
   ProcessRequest,
   Row,
   StoredRow,
   Tool,
 } from './host_contract.ts'
-import { ROW_STREAM_MOVED } from './host_contract.ts'
+import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
 
 export interface HostForTestsOptions {
   /** The clock's start, in milliseconds since the epoch. */
@@ -39,6 +42,8 @@ export interface HostForTestsOptions {
 
 export interface HostForTests {
   readonly host: HostContract
+  /** The launcher's seam over the same records `host.stores.launches` reads. */
+  readonly launcherRecords: KeyedRowStore
   advanceClock(milliseconds: number): void
   refuseNextAppend(reason: string): void
   turnsHandedToModel(): readonly string[]
@@ -65,6 +70,12 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
   const tools = new Map<string, Tool>()
   const documents = options.documents ?? {}
   const launches = new Map((options.launches ?? []).map(({ key, row }) => [key, kept(row)]))
+
+  const launcherRecords: KeyedRowStore = {
+    all: () => [...launches].map(([key, text]) => ({ key, row: JSON.parse(text) as Row })),
+    keep: (key, row) => void launches.set(key, kept(row)),
+    drop: (key) => void launches.delete(key),
+  }
 
   const append = async (stream: string, row: Row, expected_length?: number): Promise<number> => {
     if (refusal !== undefined) {
@@ -98,11 +109,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
           return text
         },
       },
-      launches: {
-        all: () => [...launches].map(([key, text]) => ({ key, row: JSON.parse(text) as Row })),
-        keep: (key, row) => void launches.set(key, kept(row)),
-        drop: (key) => void launches.delete(key),
-      },
+      launches: readingOnly(launcherRecords),
     },
     processes: {
       run: async (request) => {
@@ -125,6 +132,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
 
   return {
     host,
+    launcherRecords,
     advanceClock: (milliseconds) => void (now += milliseconds),
     refuseNextAppend: (reason) => void (refusal = reason),
     turnsHandedToModel: () => [...handed],

@@ -32,7 +32,7 @@
 // can rewrite the launcher's file. The signed roster (martha#2 item 7) closes it.
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
-import type { AttestedSender, KeyedRowStore, Processes } from '../host_contract/host_contract.ts'
+import type { AttestedSender, KeyedRowStore, KeyedRows, Processes } from '../host_contract/host_contract.ts'
 
 /** What the launcher records when it starts a member. */
 export type MemberLaunch = {
@@ -50,14 +50,18 @@ export type MemberLaunch = {
 }
 
 /**
- * Where the launcher's records live: the host's launches store (#42), one row
- * per member, keyed by the member's name. Only the launcher writes them. One row
+ * Where the launcher's records live: the launcher's seam (#42), one row per
+ * member, keyed by the member's name. Only the launcher writes them: every other
+ * slice reads them through the contract's `stores.launches`, which cannot write. One row
  * per member, so two launches at once never write over each other's record: there
  * is no shared list to read, change and write back. The host keeps the file-level
  * promises (no links, checked where it is read, nothing it did not write); this
  * slice decides what a row must say.
  */
 export type MemberLaunchStore = KeyedRowStore
+
+/** The launcher's records as the binder reads them. */
+export type MemberLaunchRecords = KeyedRows
 
 /** The host's view of which process holds a pid, boot included. */
 export type ProcessTable = Pick<Processes, 'identityOf'>
@@ -130,7 +134,7 @@ export function recordMemberStopped(store: MemberLaunchStore, member_name: strin
  * It reads the records and the kernel on every delivery, so a member that exited
  * since the last delivery is already dead here.
  */
-export function binderOverLaunches(store: MemberLaunchStore, processes: ProcessTable): Binder {
+export function binderOverLaunches(store: MemberLaunchRecords, processes: ProcessTable): Binder {
   return (sender) => {
     if (sender === undefined || !isPid(sender.sending_pid)) return null
 
@@ -150,7 +154,7 @@ export function binderOverLaunches(store: MemberLaunchStore, processes: ProcessT
  * that is not a launch, or one kept under another member's name than its own,
  * means someone other than the launcher wrote there.
  */
-export function launchesIn(store: MemberLaunchStore): readonly MemberLaunch[] {
+export function launchesIn(store: MemberLaunchRecords): readonly MemberLaunch[] {
   const launches: MemberLaunch[] = []
   for (const { key, row } of store.all()) {
     if (!isMemberLaunch(row) || row.member_name !== key) return []

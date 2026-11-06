@@ -1,6 +1,8 @@
-// The launcher's records as files in one directory: the host contract's
-// `stores.launches` (#42). Host-neutral host glue: a Linux directory, not a
-// coding tool's store, so every host adapter on Linux composes this one.
+// The launcher's records as files in one directory: the launcher's seam (#42),
+// which an adapter keeps for the launcher and hands slices only as
+// `readingOnly(store)`, the contract's `stores.launches`. Host-neutral host glue:
+// a Linux directory, not a coding tool's store, so every host adapter on Linux
+// composes this one. No slice imports it (prove_the_core checks).
 //
 // One file per key, `<key>.launch.json`, so two launches at once never read,
 // change and write back the same list. A file is written whole under a staging

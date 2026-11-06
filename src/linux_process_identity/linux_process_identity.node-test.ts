@@ -218,8 +218,8 @@ const fakeProc = (t: TestContext, boot_id: string | undefined) => {
 const BOOT = 'aaaaaaaa-2222-3333-4444-bbbbbbbbbbbb'
 const NEXT_BOOT = '66666666-7777-8888-9999-000000000000'
 
-/** The test host's launches store: these tests are about the kernel, not the files. */
-const memoryStore = () => hostForTests().host.stores.launches
+/** The test host's launcher seam: these tests are about the kernel, not the files. */
+const memoryStore = () => hostForTests().launcherRecords
 
 test('the same pid with the same start ticks under another boot binds nobody', (t) => {
   const proc = fakeProc(t, BOOT)

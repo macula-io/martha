@@ -21,6 +21,7 @@ import {
   recordMemberStopped,
   type Binder,
   type MemberLaunch,
+  type MemberLaunchRecords,
   type MemberLaunchStore,
   type ProcessTable,
 } from './attribute_a_cross_session_sender.ts'
@@ -32,9 +33,9 @@ const STARTED = '900100'
 
 const policy: Policy = { may_send_executable_text: [PLUTO.node_id, NEPTUNUS.node_id] }
 
-/** The test host's launches store, holding these launches under their members' names. */
+/** The test host's launcher seam, holding these launches under their members' names. */
 const memoryStore = (launches: readonly MemberLaunch[] = []): MemberLaunchStore =>
-  hostForTests({ launches: launches.map((launch) => ({ key: launch.member_name, row: launch })) }).host.stores.launches
+  hostForTests({ launches: launches.map((launch) => ({ key: launch.member_name, row: launch })) }).launcherRecords
 
 const kernel = (running: Readonly<Record<number, string>>): ProcessTable => ({
   identityOf: (pid) => running[pid] ?? null,
@@ -142,7 +143,7 @@ test('the binder module reads no text: it imports nothing that parses an envelop
   // The host contract's types only: the contract parses nothing and imports nothing.
   assert.deepEqual(imports, [
     "import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'",
-    "import type { AttestedSender, KeyedRowStore, Processes } from '../host_contract/host_contract.ts'",
+    "import type { AttestedSender, KeyedRowStore, KeyedRows, Processes } from '../host_contract/host_contract.ts'",
   ])
 })
 
@@ -238,11 +239,11 @@ test('the binder slice imports no Node module: the kernel and the files are the 
 })
 
 test('a test host given nothing binds nobody: no records, and no pid held by any process', () => {
-  const { host } = hostForTests()
+  const { host, launcherRecords } = hostForTests()
   assert.deepEqual(host.stores.launches.all(), [])
   assert.equal(host.processes.identityOf(PLUTO.pid), null)
 
-  assert.equal(recordMemberLaunch(host.stores.launches, host.processes, PLUTO).recorded, false)
+  assert.equal(recordMemberLaunch(launcherRecords, host.processes, PLUTO).recorded, false)
   assert.equal(binderOverLaunches(host.stores.launches, host.processes)({ sending_pid: PLUTO.pid }), null)
 })
 
@@ -271,8 +272,7 @@ test('a pid handed to another process after its record was read binds nobody: th
     launches: [{ key: PLUTO.member_name, row: ROW }],
     identityOf: (pid) => (pid === PLUTO.pid ? (reused ? `${STARTED}1` : STARTED) : null),
   }).host
-  const store: MemberLaunchStore = {
-    ...running.stores.launches,
+  const store: MemberLaunchRecords = {
     all: () => {
       const rows = running.stores.launches.all()
       reused = true

@@ -173,7 +173,7 @@ A host does these things, and the core does the rest:
 | before running any tool | `answerToolCall({ tool, session, policy, input })` — return the `{ deny }` as the hook's answer |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
-| the launcher starts or stops a member | `recordMemberLaunch(host.stores.launches, host.processes, launched)`, `recordMemberStopped(host.stores.launches, member_name)`; no other slice writes the launches store (#42) |
+| the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
 | after a turn | `rememberSession(store, session)` |
 
 `takeInTurn` records the arrival on the inbound path that names it, so the host
@@ -283,8 +283,18 @@ process's start time and boot are `host.processes.identityOf(pid)`. The slice
 decides what a row must say (a launch, keyed by the member it names); the host
 keeps the file-level promises. Both seams are synchronous, so nothing runs
 between reading a record and asking which process holds its pid.
+
+Slices only read the records. The contract types `stores.launches` as
+`KeyedRows`, which has `all` and nothing else, and an adapter hands it as
+`readingOnly(store)`, so the object a slice holds has no writing member at run
+time either. The writable `KeyedRowStore` is the launcher's own seam: the adapter
+that launches members holds it and passes it to `recordMemberLaunch` and
+`recordMemberStopped`; it is not part of `HostContract`. As a second line,
 `prove_the_core/only_the_launcher_writes_launch_records.ts` names any slice but
-the binder's that writes the store, however the write is reached.
+the binder's that writes the store or reaches `stores.launches` for anything but
+reading, names any slice that imports host glue, and refuses a `martha.hostGlue`
+entry that is not exactly `src/<one directory>`. A slice writing the records'
+files itself with `node:fs` is left to #26's allow-list of Node modules.
 
 On Linux both seams come from `src/linux_process_identity/`, host glue that is
 not a slice and that every host adapter on Linux composes (package.json
