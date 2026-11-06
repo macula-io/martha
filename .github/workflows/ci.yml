@@ -81,9 +81,36 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      # A checkout's .envrc is one of the doors martha#24 shuts; the test plants
-      # one, and its control needs a real direnv to show the door bites.
+      # A checkout's .envrc is one of the doors martha#24 shuts, in two ways:
+      # DIRENV_DISABLE for direnv 2.38 and later, and the DIRENV_CONFIG fallback
+      # for older ones. Ubuntu's direnv is older, so it proves the fallback; a
+      # pinned release proves DIRENV_DISABLE. MARTHA_TESTS_DIRENV names both, and
+      # a test fails by name when either is missing, so CI never drops the door.
+      #
+      # The pinned direnv is built from its tag with go install, which checks the
+      # module against Go's public checksum database (sum.golang.org): a tag that
+      # moved, or a source that differs from what everyone else got, is refused.
+      # That keeps the pin without writing a digest here, which the nothing-private
+      # check would take for a node id.
       - run: sudo apt-get install -y --no-install-recommends direnv && direnv version && git --version
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: false
+      - name: a pinned direnv that knows DIRENV_DISABLE
+        env:
+          DIRENV_MODULE: github.com/direnv/direnv/v2@v2.38.2
+          GOBIN: ${{ runner.temp }}/direnv-pinned
+          GOPROXY: https://proxy.golang.org
+          GOSUMDB: sum.golang.org
+          GONOSUMDB: ''
+          GOPRIVATE: ''
+          GOINSECURE: ''
+          GOFLAGS: ''
+        run: |
+          go install "$DIRENV_MODULE"
+          "$GOBIN/direnv" version
+          echo "MARTHA_TESTS_DIRENV=$(command -v direnv):$GOBIN/direnv" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test

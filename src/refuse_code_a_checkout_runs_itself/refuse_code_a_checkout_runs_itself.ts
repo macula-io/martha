@@ -17,9 +17,11 @@
 //     all but name. They are appended to GIT_CONFIG_PARAMETERS, which git reads
 //     after GIT_CONFIG_COUNT and after every file, so the last word is ours and
 //     the owner's own command-scope settings are kept.
-//   - NPM INSTALL SCRIPTS. `npm_config_ignore_scripts=true`. npm ranks its
-//     environment above every .npmrc, a checkout's included, and every inherited
-//     spelling of the same setting is dropped so none can come after ours.
+//   - NPM INSTALL. `npm_config_ignore_scripts=true`, and `npm_config_git=git`
+//     so a checkout's .npmrc cannot name the program npm runs as git when it
+//     fetches a git dependency. npm ranks its environment above every .npmrc, a
+//     checkout's included, and every inherited spelling of either setting is
+//     dropped so none can come after ours.
 //   - .ENVRC. `DIRENV_DISABLE=1` stops direnv 2.38 and later outright. Older
 //     direnv does not know it, so `DIRENV_CONFIG` also points at the empty
 //     directory: no `direnv.toml`, so no whitelist trusts a directory wholesale
@@ -41,7 +43,7 @@ import { getuid } from 'node:process'
 
 import type { HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
-/** Every hook event git documents (githooks(5), git 2.56). */
+/** Every hook event git documents in githooks(5). A test reads the installed git's page and fails on one missing here. */
 export const GIT_HOOK_EVENTS = [
   'applypatch-msg',
   'pre-applypatch',
@@ -61,7 +63,6 @@ export const GIT_HOOK_EVENTS = [
   'post-receive',
   'post-update',
   'reference-transaction',
-  'receive-report',
   'push-to-checkout',
   'pre-auto-gc',
   'post-rewrite',
@@ -77,11 +78,19 @@ export const GIT_HOOK_EVENTS = [
 /** The variable git reads its command-scope settings from last. */
 export const GIT_SETTINGS_VARIABLE = 'GIT_CONFIG_PARAMETERS'
 
-/** npm's setting, as its environment spells it. */
+/** npm's settings, as its environment spells them. */
 export const NPM_SCRIPTS_OFF_VARIABLE = 'npm_config_ignore_scripts'
 export const NPM_GIT_VARIABLE = 'npm_config_git'
-const NPM_SETTING = 'ignore-scripts'
 const NPM_PREFIX = /^npm_config_/i
+
+/** The program npm runs as git, found on the member's own PATH. */
+const GIT_PROGRAM = 'git'
+
+/** What the launcher sets, by the variable npm reads it from. */
+const NPM_SETTINGS: Readonly<Record<string, string>> = {
+  [NPM_SCRIPTS_OFF_VARIABLE]: 'true',
+  [NPM_GIT_VARIABLE]: GIT_PROGRAM,
+}
 
 export const DIRENV_OFF_VARIABLE = 'DIRENV_DISABLE'
 export const DIRENV_CONFIG_VARIABLE = 'DIRENV_CONFIG'
@@ -118,15 +127,16 @@ export function switchesThatRunNothingFromACheckout(
     .map(([key, value]) => `${gitQuoted(key)}=${gitQuoted(value)}`)
     .join(' ')
   const before = inherited[GIT_SETTINGS_VARIABLE]
+  const forced = new Set(Object.keys(NPM_SETTINGS).map(npmSettingOf))
   return {
     args: [],
     env: {
       [GIT_SETTINGS_VARIABLE]: before === undefined || before === '' ? ours : `${before} ${ours}`,
-      [NPM_SCRIPTS_OFF_VARIABLE]: 'true',
+      ...NPM_SETTINGS,
       [DIRENV_OFF_VARIABLE]: '1',
       [DIRENV_CONFIG_VARIABLE]: empty_directory,
     },
-    env_dropped: Object.keys(inherited).filter((name) => npmSettingOf(name) === NPM_SETTING),
+    env_dropped: Object.keys(inherited).filter((name) => forced.has(npmSettingOf(name))),
   }
 }
 

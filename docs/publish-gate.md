@@ -245,6 +245,7 @@ and everything under it inherit:
 |---|---|---|
 | git hooks: `.git/hooks`, a `core.hooksPath` the checkout's config names, hooks named in config (git 2.54+), `core.fsmonitor` | `core.hooksPath` = an empty 0500 directory made for this launch, `hook.<event>.enabled=false` for every event git documents, `core.fsmonitor=false` | appended to `GIT_CONFIG_PARAMETERS`, which git reads after every config file and after `GIT_CONFIG_COUNT`; the owner's own settings there are kept |
 | npm install scripts, `pre`/`post` scripts included | `npm_config_ignore_scripts=true` | npm ranks its environment above every `.npmrc`; every inherited spelling of the setting is dropped |
+| the program a tracked `.npmrc` names as `git`, which `npm install` runs to fetch a git dependency, scripts off or not | `npm_config_git=git`, the member's own git from its `PATH` | the same |
 | `.envrc` and `.env` through direnv | `DIRENV_DISABLE=1`, and `DIRENV_CONFIG` = the same empty directory | direnv 2.38+ stops outright; an older one finds no `direnv.toml`, so no whitelist trusts a directory wholesale |
 
 These apply whoever wrote the checkout: the launcher cannot tell a crew
@@ -260,7 +261,13 @@ What option 3 does **not** close, stated rather than hidden:
 - **An `.envrc` the owner allowed by its exact content**, on a direnv older
   than 2.38.
 - **A git hook event newer than the documented list**, when named in config;
-  a hook file for it is still off through `core.hooksPath`.
+  a hook file for it is still off through `core.hooksPath`. A test reads the
+  installed git's githooks(5) page and fails on an event the list lacks.
+- **The other `.npmrc` settings that name a program.** `script-shell` runs
+  scripts and `node-gyp` builds native addons; under `ignore-scripts` an
+  install runs neither, and `npm run` or `npm test` is code run on purpose.
+  `shell` serves `npm exec` and `npm explore`, `editor` serves `npm edit` and
+  `npm config edit`. `npm install` reaches none of them.
 - **Anything that has already run as this user**, which can undo every
   setting here, rewrite the roster or read another member's key (A13). The
   owner accepted that for now (martha#1 decision 1).
