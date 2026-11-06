@@ -17,6 +17,12 @@
 
 import { DELIVERY_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
+import {
+  CLAUDE_CODE_EMITTED_SESSION_EVENTS,
+  CLAUDE_CODE_SESSION_EVENTS,
+  undeclaredSessionEvents,
+  type HostSessionEvents,
+} from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 
 export interface Gap {
   readonly path: string
@@ -133,6 +139,30 @@ export function gapsInGateCoverage(
   }
 
   return gaps
+}
+
+/**
+ * Every event a host emits when a session starts that its declaration does not
+ * cover, and every declared event the host never emits. An undeclared event
+ * fails closed at run time; this makes it fail CI first, so a new host event is
+ * decided rather than discovered. A declared event nobody emits is a decision
+ * that protects nothing, such as a refresh the mod no longer reports as one.
+ */
+export function gapsInSessionEvents(
+  declared: HostSessionEvents = CLAUDE_CODE_SESSION_EVENTS,
+  emitted: readonly string[] = CLAUDE_CODE_EMITTED_SESSION_EVENTS,
+): readonly Gap[] {
+  const undeclared = undeclaredSessionEvents(declared, emitted).map((event) => ({
+    path: `session event ${event} on ${declared.host}`,
+    why: 'the host emits it and its declaration does not say what it does to the record',
+  }))
+  const never_emitted = Object.keys(declared.events)
+    .filter((event) => !emitted.includes(event))
+    .map((event) => ({
+      path: `session event ${event} on ${declared.host}`,
+      why: 'it is declared and the host never emits it',
+    }))
+  return [...undeclared, ...never_emitted]
 }
 
 function deliveryGateGap(name: string, gate: DeliveryGate | undefined): string | undefined {

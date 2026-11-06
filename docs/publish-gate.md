@@ -165,12 +165,14 @@ A host does these things, and the core does the rest:
 
 | When | Call |
 |---|---|
-| a session starts new | `beginSession(store, session_id)` — writes the empty record before anything arrives |
+| a session starts, by any host event | `startSession(store, events, { event, session_id, predecessor_id })` — the host's declared events say whether the id stays, a new id inherits the predecessor's record, or a new id starts fresh; an undeclared event has **lost its record** |
+| a session starts new, outside the declared events | `beginSession(store, session_id)` — writes the empty record before anything arrives; an id that already holds a record has **lost its record** and nothing is overwritten |
 | a session starts again (restart, resume, mod reload) | `resumeSession(store, session_id)` — no readable record means the session is **tainted**, never fresh |
+| a member hands over | the host writes the file, then `stampHandover(stamps, { member, session }, { file, content })` — never the model's `Write` |
+| a session reads a file the stamp store knows | `readHandover(store, stamps, { member, session }, { file, content })` — on **every** file read, the model's own `Read` included: the host looks the path up in the stamp store, because a plain `Read` of a handover file would otherwise take the text in without the record |
 | before running any tool | `answerToolCall({ tool, session, policy, input })` — return the `{ deny }` as the hook's answer |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
 | a turn arrives, from any source | `takeInTurn(session, arrival)` |
-| the session is replaced | `replaceSession(session, 'clear' \| 'new_session' \| 'compaction' \| 'handover' \| 'resume')` |
 | after a turn | `rememberSession(store, session)` |
 
 `takeInTurn` records the arrival on the inbound path that names it, so the host
@@ -189,14 +191,38 @@ Four rules the seam keeps, and a host must not work around:
   memory, it fails open on every process restart: a resumed transcript would come
   back to an empty record. A session that expects a record and cannot read one is
   tainted.
-- **Only a real replacement clears the record.** `clear` and `new_session` start
-  afresh. `compaction`, `handover` and `resume` keep it. A restart that resumes a
-  transcript is `resume`, not `new_session`.
+- **A session id is never started twice.** Only a start under a new id with an
+  event declared `fresh` begins with no record. `compact` and `resume` keep the
+  id and the record. A fresh start on an id that already holds a record has
+  lost its record and overwrites nothing. A lost record is remembered as lost,
+  so a second restart does not turn it fresh.
 - **A compaction and a handover are inheritances, not arrivals.** They carry the
   predecessor's record forward through the store; `takeInTurn` has no source for
-  them. A handover is written from the predecessor's own context, so the record it
-  inherits is the honest summary of that context.
-
+  them.
+- **A refresh is not a clear.** On the Claude Code host a crew refresh is a
+  handover, then `/clear`, which starts a **new session id**. Keyed by id alone,
+  the successor would start clean and read what its tainted predecessor wrote.
+  So the host declares every event that starts a session
+  (`CLAUDE_CODE_SESSION_EVENTS`): the `/clear` the crew's mod ran itself is
+  `crew_refresh`, an inheritance from the predecessor's id, which the mod knows
+  and the model never supplies. A forked resume arrives as `resume` under a new
+  id with no record, and has lost it. Only `startup` and an owner's own
+  `/clear` are fresh, and only until the session reads a handover. The events
+  the host emits are listed separately (`CLAUDE_CODE_EMITTED_SESSION_EVENTS`),
+  and `gapsInSessionEvents` fails CI on one the declaration does not cover.
+- **A handover is stamped by the host.** A tainted session cannot run `Write`,
+  so the host writes the handover for the member and stamps it with the member,
+  the predecessor's session id, a digest of the content, and the length and a
+  digest of the predecessor's record as it was at stamping. Reading it inherits
+  the predecessor's record **from the session store**, never from the file, and
+  only if that record still begins with what was stamped. No stamp, a digest
+  that does not match, a predecessor whose record is gone, or one reset since
+  the stamp: the reader has lost its record. Another member's handover is a checkout file
+  (B4), unattributed, and taints.
+- **There is no release.** A member tainted once stays tainted through every
+  refresh until a fresh start that reads no handover. An owner release would be
+  the owner's own signed act, never a model's; it is not built (martha#2, the
+  open question under item 6).
 - **A room is read through its gate, never raw (B1).** The raw mesh reads
   (`RAW_MESH_READS`, plus `mesh_say` when it waits for a reply) are refused in
   every session, tainted or not, under every server namespace: the match is on
@@ -209,8 +235,9 @@ Four rules the seam keeps, and a host must not work around:
   a raw tool. A host that registers the read under its own tool name must also
   allow that name while tainted, or a tainted member cannot read its room.
 
-The refusal text a host returns names the command that clears it — `/clear` on
-the Claude Code host.
+Every refusal a host returns says what clears the taint in the words of one
+constant, `WHAT_CLEARS_IT` in `src/refuse_execution_after_ungated_text/`, so
+the text cannot drift from the rule.
 
 ### What this repository does not contain
 
