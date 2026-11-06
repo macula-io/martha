@@ -14,8 +14,9 @@ import {
   startFreshSession,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { CLAUDE_CODE_EMITTED_SESSION_EVENTS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { gapsInGateCoverage, gapsInMeshTools, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
 import { RECORDED_MESH_SERVER } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
@@ -352,21 +353,43 @@ test('a gate that takes an empty read for an empty checkout is caught', () => {
 
 // --- every session event the host emits is declared ---------------------------
 
-test('every session event the Claude Code host emits is declared', () => {
-  assert.deepEqual(gapsInSessionEvents(), [])
+// The Claude Code host's own list is derived and checked in ../claude_code_host;
+// these plant a host whose emitted events are exactly what its declaration lists.
+const EMITTED = Object.keys(CLAUDE_CODE_SESSION_EVENTS.events)
+
+test('a host that emits exactly what it declares has no gaps', () => {
+  assert.deepEqual(gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, EMITTED), [])
 })
 
 test('a planted session event the declaration does not list turns the check red, by name', () => {
-  const gaps = gapsInSessionEvents(undefined, [...CLAUDE_CODE_EMITTED_SESSION_EVENTS, 'resume_fork'])
+  const gaps = gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, [...EMITTED, 'resume_fork'])
   assert.equal(gaps.length, 1)
   assert.match(gaps[0]?.path ?? '', /resume_fork/)
 })
 
 test('a declared session event the host stops emitting turns the check red, by name', () => {
-  const emitted = CLAUDE_CODE_EMITTED_SESSION_EVENTS.filter((event) => event !== 'crew_refresh')
-  const gaps = gapsInSessionEvents(undefined, emitted)
+  const emitted = EMITTED.filter((event) => event !== CREW_REFRESH)
+  const gaps = gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, emitted)
   assert.equal(gaps.length, 1)
   assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+})
+
+const STAMPED = Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources)
+
+test('a host that stamps exactly the origin kinds it declares has no gaps', () => {
+  assert.deepEqual(gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, STAMPED), [])
+})
+
+test('a planted origin kind the declaration does not map turns the check red, by name', () => {
+  const gaps = gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, [...STAMPED, 'session-inbox'])
+  assert.deepEqual(gaps.map((gap) => gap.path), ['prompt origin session-inbox on claude-code'])
+  assert.match(gaps[0]?.why ?? '', /does not say which source/)
+})
+
+test('a declared origin kind the host stops stamping turns the check red, by name', () => {
+  const gaps = gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, STAMPED.filter((kind) => kind !== 'bridge'))
+  assert.deepEqual(gaps.map((gap) => gap.path), ['prompt origin bridge on claude-code'])
+  assert.match(gaps[0]?.why ?? '', /never stamps it/)
 })
 
 // --- every tool the mesh server registers is decided (martha#2, item 5 (c)) --
@@ -402,6 +425,13 @@ test('a recorded tool without the mesh prefix is named: the prefix is the run-ti
   const unprefixed = 'read_everything_new'
   const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, unprefixed]))
   assert.ok(gaps.some((gap) => gap.path === `mesh tool ${unprefixed}` && new RegExp(MESH_TOOL_PREFIX).test(gap.why)))
+})
+
+test('a recorded mesh tool whose name holds __ is named: the last-__ split would judge only its tail', () => {
+  const joined = `${MESH_TOOL_PREFIX}read__inbox`
+  const gaps = gapsInMeshTools(withTools([...RECORDED_MESH_SERVER.tools, joined]), [...MESH_TOOLS_THAT_RUN], [...MESH_TOOLS_REFUSED, joined])
+  assert.deepEqual(gaps.map((gap) => gap.path), [`mesh tool ${joined}`])
+  assert.match(gaps[0]?.why ?? '', /holds __/)
 })
 
 test('a name both allowed and refused is named', () => {

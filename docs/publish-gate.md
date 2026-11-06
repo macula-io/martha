@@ -329,13 +329,15 @@ The rules the seam keeps, and a host must not work around:
   So the host declares every event that starts a session
   (`CLAUDE_CODE_SESSION_EVENTS`): the `/clear` the crew's mod ran itself is
   `crew_refresh`, an inheritance from the predecessor's id, which the mod knows
-  and the model never supplies. A forked resume arrives as `resume` under a new
-  id with no record, and has lost it; so does a `fork`, which the host sends as
-its own SessionStart `source` and which carries its parent's context under a
-new id. Only `startup` and an owner's own
-  `/clear` are fresh, and only until the session reads a handover. The events
-  the host emits are listed separately (`CLAUDE_CODE_EMITTED_SESSION_EVENTS`),
-  and `gapsInSessionEvents` fails CI on one the declaration does not cover.
+  and the model never supplies. A `resume` under a new id has no record, and
+  has lost it; so does a `fork`, which the host sends as its own SessionStart
+  `source` and which carries its parent's context under a new id. Only
+  `startup` and an owner's own `/clear` are fresh, and only until the session
+  reads a handover. The events the host emits
+  (`CLAUDE_CODE_EMITTED_SESSION_EVENTS`) are derived by the Claude Code adapter
+  from the host's own SessionStart schema, recorded from its binary
+  (`src/claude_code_host/`), and `gapsInSessionEvents` fails CI on one the
+  declaration does not cover.
 - **A handover is stamped by the host.** A tainted session cannot run `Write`,
   so the host writes the handover for the member and stamps it with the member,
   the predecessor's session id, a digest of the content, and the length and a

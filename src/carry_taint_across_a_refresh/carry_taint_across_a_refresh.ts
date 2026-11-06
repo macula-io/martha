@@ -17,8 +17,9 @@
 //      record (`inherits`), or a new id starts with no context (`fresh`). An
 //      event the declaration does not list fails closed: the session is held as
 //      having lost its record, never as fresh. The events the host EMITS are a
-//      second list, and ../check_every_path_is_gated fails CI on any emitted
-//      event the declaration does not cover.
+//      second list, which the host's adapter derives from the host's own schema
+//      (../claude_code_host for Claude Code), and ../check_every_path_is_gated
+//      fails CI on any emitted event the declaration does not cover.
 //
 //   2. A REFRESH IS AN INHERITANCE, MADE BY THE HOST. The host's mod knows both
 //      ids — it ran the refresh — so it hands the predecessor's id to the seam.
@@ -72,6 +73,9 @@ export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
 
 export const SESSION_START_OUTCOMES: readonly SessionStartOutcome[] = ['same_id', 'inherits', 'fresh']
 
+/** The refresh the crew's mod runs itself: a start no host sends, with the predecessor's id. */
+export const CREW_REFRESH = 'crew_refresh'
+
 /** Every event a host can start a session with, and what each does to the record. */
 export interface HostSessionEvents {
   readonly host: string
@@ -82,13 +86,14 @@ export interface HostSessionEvents {
  * The Claude Code host's session events.
  *
  * `compact` and `resume` keep the session id, so the store already carries the
- * record. A forked resume arrives as `resume` under a new id, which has no
- * record, and so has lost it: fail closed. `fork` is the same: it carries the
- * parent's context under a new id, so it is declared `same_id`, finds no record
- * under that id, and has lost it. It is never `fresh`. `crew_refresh` is the `/clear` the
- * crew's mod ran itself, after the member's handover: the mod reports it as a
- * refresh, with the predecessor's id, because it is one. Only `startup` and a
- * `/clear` the mod did not run start with no context.
+ * record; a `resume` under a new id has no record there, and so has lost it:
+ * fail closed. `fork` carries the parent's context under a new id, so it is
+ * declared `same_id`, finds no record under that id, and has lost it. It is never
+ * `fresh`. `crew_refresh` is the `/clear` the crew's mod ran itself, after the
+ * member's handover: the mod reports it as a refresh, with the predecessor's id,
+ * because it is one. Only `startup` and a `/clear` the mod did not run start with
+ * no context. The events the host emits are derived from its schema by its
+ * adapter (../claude_code_host).
  */
 export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
   host: 'claude-code',
@@ -98,25 +103,9 @@ export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
     compact: 'same_id',
     resume: 'same_id',
     fork: 'same_id',
-    crew_refresh: 'inherits',
+    [CREW_REFRESH]: 'inherits',
   },
 }
-
-/**
- * Every event the Claude Code host emits when a session starts: the values of
- * its SessionStart hook input's `source` field, plus the refresh the crew's mod
- * reports. The coverage check runs this list against the declaration above.
- * Kept by hand until the host adapter derives it from the host's hook schema
- * (martha#41); `fork` was added when the host (2.1.318) began to send it.
- */
-export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [
-  'startup',
-  'resume',
-  'clear',
-  'compact',
-  'fork',
-  'crew_refresh',
-]
 
 /** A session starting, as the host reports it. */
 export interface SessionStart {
