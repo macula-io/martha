@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import process from 'node:process'
@@ -273,6 +273,18 @@ test('a module the tree lacks is not loaded from a node_modules above it or from
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)
   assert.ok(!existsSync(loaded), `loaded from outside the tree: ${existsSync(loaded) ? readFileSync(loaded, 'utf8') : ''}`)
+})
+
+test('a root reached through a symlink still starts the confined server: the tree is named as node resolves it (martha#73 r=2)', async (t) => {
+  const { good } = await registries(t)
+  const recording = recorded(t, good)
+  const real = scratch(t, 'real-root')
+  const link = join(scratch(t, 'linked'), 'servers')
+  symlinkSync(real, link)
+  const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: link, recording }))
+  const run = spawnSync(entry.command, entry.args, { cwd: real, env: { ...HOST, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)
 })
 
 test('a version whose tree is not recorded is refused, naming it', async (t) => {
