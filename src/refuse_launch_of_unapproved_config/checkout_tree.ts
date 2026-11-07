@@ -164,6 +164,15 @@ export function checkoutTopOf(dir: string, host: LaunchHost): string | undefined
   return git(host, dir, ['rev-parse', '--show-toplevel'])
 }
 
+/**
+ * The blob id `git add` would give the file at `path` now, in the checkout whose top is `top`: its attributes, clean
+ * filters and line-end settings applied as they are when the tree is read, by the same git. `undefined` when git
+ * cannot hash it.
+ */
+export function blobAsGitAdds(top: string, path: string, host: LaunchHost): string | undefined {
+  return git(host, top, ['hash-object', `--path=${relative(top, path)}`, '--', path])
+}
+
 /** The object format the checkout holding `dir` names its objects in (sha1 or sha256), or `undefined`. */
 export function objectFormatOf(dir: string, host: LaunchHost): string | undefined {
   return git(host, dir, ['rev-parse', '--show-object-format'])
