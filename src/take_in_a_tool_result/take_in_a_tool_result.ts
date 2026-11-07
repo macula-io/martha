@@ -65,10 +65,10 @@ export type ToolResultRows = Readonly<Record<string, ToolResultReading>>
 export const UNPLACED_TOOL_RESULT: Ingestion = { path: 'tool-result-unplaced', from_node_id: null }
 
 /** The command whose first word names the GitHub CLI: its output is B3's. */
-const GITHUB_CLI = 'gh'
-const GIT = 'git'
+export const GITHUB_CLI = 'gh'
+export const GIT = 'git'
 /** Git subcommands that print history: commit messages and authors, B5's. */
-const HISTORY_SUBCOMMANDS: readonly string[] = ['log', 'show', 'blame', 'reflog', 'shortlog']
+export const HISTORY_SUBCOMMANDS: readonly string[] = ['log', 'show', 'blame', 'reflog', 'shortlog']
 
 const SPAN_OF: Readonly<Record<'a_file' | 'a_search', ReadSpan>> = { a_file: 'one_file', a_search: 'every_file_below' }
 
