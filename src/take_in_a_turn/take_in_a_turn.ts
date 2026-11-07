@@ -67,7 +67,6 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   owner_typed: 'A14',
   server_instructions: 'A11',
   checkout_run: 'A13',
-  mesh_read: 'B1',
   mcp_result: 'B2',
   gh: 'B3',
   checkout_file: 'B4',

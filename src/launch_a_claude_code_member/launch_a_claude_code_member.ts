@@ -82,6 +82,7 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -372,6 +373,7 @@ async function servedRelay(
   socket_path: string,
   stop: (why: string) => void,
   sessionReported: () => void,
+  ready: ReadyLaunch,
 ): Promise<RelayServer | string> {
   const answering = memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
@@ -384,6 +386,7 @@ async function servedRelay(
     policy: launch.policy,
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
     stopMember: stop,
   })
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
@@ -576,7 +579,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported)
+  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported, ready)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()

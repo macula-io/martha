@@ -10,10 +10,10 @@
 //
 // | Event the relay posts | What the launcher does |
 // |---|---|
-// | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then keeps the record |
+// | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
+// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, and for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, any other result on B2 |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -33,7 +33,8 @@ import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
-import type { ToolNames } from '../host_contract/host_contract.ts'
+import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -60,6 +61,12 @@ export interface MemberRelayPlace {
   readonly names: ToolNames
   /** `bindNothing` until the host attests a sender (A6, anthropics/claude-code#107216). */
   readonly binder: Binder
+  /**
+   * What the launch puts into every session it starts by itself, which the
+   * owner's approval does not bind: an approved hook's output (A7), a server's
+   * instruction block (A11). The adapter's `sourcesALaunchHandsTheModel`.
+   */
+  readonly handed_at_start: readonly TurnSource[]
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -169,7 +176,12 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
   if (state.broken.has(body.session_id)) return refused(state.broken.get(body.session_id) ?? '')
   const start = sessionStartOf(body as SessionStartHookInput)
   await state.place.records.load(start.session_id)
-  const why = await keep(state, startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, start))
+  const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, start)
+  const handed = state.place.handed_at_start.reduce(
+    (session, source) => takeInTurn(session, { source }, state.place.binder),
+    started,
+  )
+  const why = await keep(state, handed)
   return why === undefined ? answered(TAKEN) : refused(why)
 }
 
@@ -221,6 +233,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   const launched = recheckLaunch(place.launch, thisMachine)
   if (!launched.allow) return stopMember(place, launched.refusal)
   if (!isMcpToolCall(call.tool)) return answered(TAKEN)
-  const why = await keep(state, takeInTurn(session, { source: 'mcp_result' }, place.binder))
+  const source = sourceOfAMeshToolResult(place.names.ownNameOf(call.tool))
+  const why = await keep(state, takeInTurn(session, { source }, place.binder))
   return why === undefined ? answered(TAKEN) : stopMember(place, why)
 }

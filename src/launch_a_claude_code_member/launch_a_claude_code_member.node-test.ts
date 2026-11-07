@@ -19,7 +19,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
@@ -116,7 +116,11 @@ interface Answering {
   readonly rows: RowStore
 }
 
-function answering(place: Place, rows: RowStore = rowStreamsDirectory(place.rows)): Answering {
+function answering(
+  place: Place,
+  rows: RowStore = rowStreamsDirectory(place.rows),
+  handed_at_start: readonly TurnSource[] = [],
+): Answering {
   const stops: string[] = []
   const relay = memberRelay({
     records: sessionRecordsIn(rows),
@@ -124,6 +128,7 @@ function answering(place: Place, rows: RowStore = rowStreamsDirectory(place.rows
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    handed_at_start,
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -230,6 +235,39 @@ test('an MCP tool result taints the session; a built-in tool result does not', a
   assert.deepEqual(await relay.answer('tool_answered', call('mcp__probe__fetch_page')), TAKEN_REPLY)
   assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B2/))
   assert.deepEqual(await recordedPaths(rows), ['B2:null'])
+})
+
+test('what the launch hands the model is recorded at every start, and takes the shell away (A7, A11, martha#121)', async (t) => {
+  for (const source of ['checkout_hook', 'server_instructions'] as const) {
+    const row = PATH_OF_SOURCE[source]
+    const { relay, rows } = answering(placeFor(t), undefined, [source])
+    assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY, source)
+    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), new RegExp(row)), source)
+    // The owner's typed turn does not give the shell back.
+    assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer')), TAKEN_REPLY, source)
+    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), source)
+    assert.deepEqual(await recordedPaths(rows), [`${row}:null`, OWNER_TYPED], source)
+
+    // A /clear starts a fresh session, and the hooks and servers start again with it.
+    await relay.answer('session_started', start('clear', 'after-clear'))
+    assert.deepEqual(await recordedPaths(rows, 'after-clear'), [`${row}:null`], source)
+  }
+})
+
+test('a ring\'s answer is recorded on A5, answering a ring on A4, any other MCP result on B2', async (t) => {
+  for (const [tool, row] of [
+    ['mcp__macula__mesh_ring', PATH_OF_SOURCE.ring_answer],
+    ['mcp__macula__mesh_answer_ring', PATH_OF_SOURCE.ring],
+    ['mcp__plugin_x_macula__mesh_ring', PATH_OF_SOURCE.ring_answer],
+    ['mcp__macula__mesh_get', PATH_OF_SOURCE.mcp_result],
+    ['mcp__probe__ring', PATH_OF_SOURCE.mcp_result],
+  ] as const) {
+    const { relay, rows } = answering(placeFor(t))
+    await relay.answer('session_started', start('startup'))
+    assert.deepEqual(await relay.answer('tool_answered', call(tool)), TAKEN_REPLY, tool)
+    assert.deepEqual(await recordedPaths(rows), [`${row}:null`], tool)
+    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), tool)
+  }
 })
 
 test('nothing the relay adds to a body widens a verdict', async (t) => {
@@ -987,6 +1025,44 @@ test('an approved config that installs a recorded mesh server version starts the
   assert.equal(run.stdout.trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
+})
+
+/** Starts a member on the fake host, posts its session start over the relay socket, and returns what the record holds. */
+async function pathsRecordedAtStart(t: TestContext, place: Place, mesh_trees?: MeshTreeRecording): Promise<string[]> {
+  const fake = fakeClaude(place)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], mesh_trees))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  if (!started.started) return []
+  t.after(() => started.stop('the test is over'))
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const reply = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(start('startup')),
+    socketPath: readFileSync(fake.envFile, 'utf8'),
+  })
+  assert.equal(reply.text, '{"taken":1}')
+  const paths = await recordedPaths(rowStreamsDirectory(place.rows))
+  started.stop('the test is over')
+  await started.stopped
+  return paths
+}
+
+test('the launcher records an approved hook\'s output and a non-mesh server\'s block at the session start (A7, A11, martha#121)', async (t) => {
+  const hook = JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'echo from the checkout' }] }] } })
+  const place = placeFor(t, SERVERS, { '.claude/settings.json': hook })
+  assert.deepEqual(
+    (await pathsRecordedAtStart(t, place)).sort(),
+    [`${PATH_OF_SOURCE.checkout_hook}:null`, `${PATH_OF_SOURCE.server_instructions}:null`].sort(),
+  )
+})
+
+test('a launch whose only server is the recorded mesh server, and no hook, records nothing at the start (martha#121)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  assert.deepEqual(await pathsRecordedAtStart(t, place, recording), [])
 })
 
 test('what the launcher\'s environment would load into the mesh server never reaches it (#65 r=2)', async (t) => {

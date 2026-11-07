@@ -111,6 +111,70 @@ const ONE_CALL_PROMPT = 'Run the shell command `true` with the Bash tool, then r
 // The prompt goes before `--allowedTools`, which takes every argument up to the next option.
 const ONE_CALL_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', ONE_CALL_PROMPT, '--allowedTools', 'Bash(true)']
 
+// --- a checkout's fixed text: CLAUDE.md files and agents (A16, martha#121) ------
+
+const NESTED_DIR = 'sub'
+const NESTED_FILE = join(NESTED_DIR, 'notes.txt')
+const INSTRUCTIONS = 'CLAUDE.md'
+const AGENT = 'probe-agent'
+/** A prompt that reads a file below the top, which is when the host loads that directory's CLAUDE.md. */
+const READ_BELOW_PROMPT = `Use the Read tool on ${NESTED_FILE}, then reply with the single word ok.`
+const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', READ_BELOW_PROMPT, '--allowedTools', 'Read']
+
+/** The checkout's fixed text: a CLAUDE.md at the top, one below it, and an agent. */
+function plantFixedText(place: Place): void {
+  put(place.checkout, INSTRUCTIONS, 'Probe instructions at the top.\n')
+  put(place.checkout, join(NESTED_DIR, INSTRUCTIONS), 'Probe instructions below the top.\n')
+  put(place.checkout, NESTED_FILE, 'a file below the top\n')
+  put(place.checkout, join('.claude', 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
+}
+
+/**
+ * Settings whose InstructionsLoaded hook marks each of the checkout's two
+ * CLAUDE.md files the host loads, by the path the host reports. A file the
+ * owner keeps elsewhere marks nothing.
+ */
+function instructionsHook(place: Place): string {
+  const script = join(place.scratch, 'mark_instructions.mjs')
+  const marks = {
+    [join(place.checkout, INSTRUCTIONS)]: place.marker('TOP_CLAUDE_MD'),
+    [join(place.checkout, NESTED_DIR, INSTRUCTIONS)]: place.marker('NESTED_CLAUDE_MD'),
+  }
+  writeFileSync(
+    script,
+    `import { readFileSync, writeFileSync } from 'node:fs'\n` +
+      `const marks = ${JSON.stringify(marks)}\n` +
+      `const loaded = JSON.parse(readFileSync(0, 'utf8')).file_path\n` +
+      `if (Object.hasOwn(marks, loaded)) writeFileSync(marks[loaded], '')\n`,
+  )
+  return JSON.stringify({
+    hooks: {
+      InstructionsLoaded: [{ hooks: [{ type: 'command', command: `node ${script}` }] }],
+      SessionStart: [{ hooks: [{ type: 'command', command: `touch ${place.marker('SETTINGS_HOOK')}` }] }],
+    },
+  })
+}
+
+/**
+ * Claude Code started as the checkout's agent. The markers sit beside the
+ * checkout (../ from where the host runs): AGENT_LOADED when the host ran it,
+ * AGENT_NOT_FOUND when the host said it has no such agent.
+ */
+const claudeAsTheAgent = (...extra: readonly string[]): Command => (switches) => ({
+  command: 'sh',
+  args: [
+    '-c',
+    '"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -q "not found" ../agent.err && touch ../AGENT_NOT_FOUND; true',
+    'claude-as-agent',
+    'claude',
+    ...extra,
+    '--agent',
+    AGENT,
+    PROMPT,
+    ...switches.args,
+  ],
+})
+
 const claude = (...extra: readonly string[]): Command => (switches) => ({
   command: 'claude',
   args: [...extra, ...switches.args],
@@ -121,6 +185,42 @@ const opencode = (...extra: readonly string[]): Command => (switches) => ({
 })
 
 const PROBES: readonly Probe[] = [
+  {
+    what: "Claude Code by hand, headless: a checkout's CLAUDE.md at the top and below it",
+    host: 'claude-code',
+    command: claude(...READ_BELOW_CLAUDE),
+    planted: (place) => {
+      plantFixedText(place)
+      put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place))
+    },
+    expected: { SETTINGS_HOOK: true, TOP_CLAUDE_MD: true, NESTED_CLAUDE_MD: true },
+    planned: false,
+  },
+  {
+    what: "Claude Code as Martha starts it, headless: a checkout's CLAUDE.md at the top and below it (A16)",
+    host: 'claude-code',
+    command: claude(...READ_BELOW_CLAUDE),
+    approved: (place) => put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place)),
+    planted: plantFixedText,
+    expected: { SETTINGS_HOOK: true, TOP_CLAUDE_MD: false, NESTED_CLAUDE_MD: false },
+    planned: true,
+  },
+  {
+    what: "Claude Code by hand, headless: started as a checkout's agent",
+    host: 'claude-code',
+    command: claudeAsTheAgent(...HEADLESS_CLAUDE),
+    planted: plantFixedText,
+    expected: { AGENT_LOADED: true, AGENT_NOT_FOUND: false },
+    planned: false,
+  },
+  {
+    what: "Claude Code as Martha starts it, headless: started as a checkout's agent (A16)",
+    host: 'claude-code',
+    command: claudeAsTheAgent(...HEADLESS_CLAUDE),
+    planted: plantFixedText,
+    expected: { AGENT_LOADED: false, AGENT_NOT_FOUND: true },
+    planned: true,
+  },
   {
     what: 'Claude Code by hand, interactive health check: a project tool server',
     host: 'claude-code',
