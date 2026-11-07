@@ -29,7 +29,7 @@ import type { PackageFile } from './read_the_checkout_once.ts'
 
 /** Where the run sees its copy of the tree, and its home. */
 export const RUN_TREE = '/work'
-export const RUN_HOME = '/home/martha'
+export const RUN_HOME = '/home'
 /** The system directories the sandbox shows, read-only. */
 export const SYSTEM_DIRECTORIES = ['/usr', '/lib', '/lib64', '/bin'] as const
 /** How long a run may take before it is killed. */
