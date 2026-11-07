@@ -21,6 +21,7 @@ import { test, type TestContext } from 'node:test'
 import {
   linuxProcessIdentities,
   procProcessIdentities,
+  type NamespaceOfAProcess,
   type ProcessLookup,
 } from '../linux_process_identity/process_identity_from_proc.ts'
 import {
@@ -93,14 +94,30 @@ async function endIt(child: ChildProcess): Promise<void> {
   await once(child, 'exit')
 }
 
-/** The record of a process that has ended, under this boot's name. */
-function deadRecord(pid: number): LaunchRecord {
-  return { launcher: { pid, process_started_at: 'this-boot/1' } }
+/** The pid namespace this test process runs in, which the live kernel names. */
+function thisNamespace(): string {
+  const named = linuxProcessIdentities.pidNamespace()
+  assert.ok(named !== undefined, 'the live kernel names the pid namespace this test is in')
+  return named
 }
 
-/** A /proc of this test's own, holding one process; the boot id can be taken away or put back. */
-function fakeProc(t: TestContext, pid: number, boot: string | undefined): {
+/** The record of a process that has ended, under this boot's name, in this pid namespace. */
+function deadRecord(pid: number): LaunchRecord {
+  return { launcher: { pid, process_started_at: 'this-boot/1' }, namespace: thisNamespace() }
+}
+
+/**
+ * A /proc of this test's own, holding one process; the boot id can be taken
+ * away or put back, and it names its own pid namespace (or cannot).
+ */
+function fakeProc(
+  t: TestContext,
+  pid: number,
+  boot: string | undefined,
+  namespace: string | undefined = THIS_NAMESPACE,
+): {
   lookupOf: (of_pid: number) => ProcessLookup
+  pidNamespace: NamespaceOfAProcess
   setBoot: (id: string | undefined) => void
 } {
   const root = mkdtempSync(join(tmpdir(), 'martha-124-proc-'))
@@ -111,6 +128,10 @@ function fakeProc(t: TestContext, pid: number, boot: string | undefined): {
   writeFileSync(join(root, String(pid), 'stat'), `${pid} (claude) ${fields_after_command.join(' ')} 0 0\n`)
   mkdirSync(join(root, 'sys', 'kernel', 'random'), { recursive: true })
 
+  // `readlink` answers for a link whatever it points at, so the namespace needs no file behind it.
+  mkdirSync(join(root, 'self', 'ns'), { recursive: true })
+  if (namespace !== undefined) symlinkSync(namespace, join(root, 'self', 'ns', 'pid'))
+
   const bootFile = join(root, 'sys', 'kernel', 'random', 'boot_id')
   const setBoot = (id: string | undefined): void => {
     if (id === undefined) rmSync(bootFile, { force: true })
@@ -119,12 +140,16 @@ function fakeProc(t: TestContext, pid: number, boot: string | undefined): {
   setBoot(boot)
 
   const processes = procProcessIdentities(root)
-  return { lookupOf: (of_pid) => processes.lookupOf(of_pid), setBoot }
+  return { lookupOf: (of_pid) => processes.lookupOf(of_pid), pidNamespace: processes.pidNamespace, setBoot }
 }
 
 const BOOT = 'aaaaaaaa-2222-3333-4444-bbbbbbbbbbbb'
 const A_PID_IN_A_FAKE_PROC = 4242
 const STARTED = '22'
+
+/** As `readlink /proc/self/ns/pid` writes them: a pid namespace for the fake kernel, and another beside it. */
+const THIS_NAMESPACE = 'pid:[4026531836]'
+const ANOTHER_NAMESPACE = 'pid:[4026531999]'
 
 test('a launch records the processes that hold its directory: the launcher, then its member', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'martha-124-launch-'))
@@ -132,7 +157,10 @@ test('a launch records the processes that hold its directory: the launcher, then
   const launcher = { pid: process.pid, process_started_at: linuxProcessIdentities.identityOf(process.pid) }
 
   assert.equal(recordTheLauncher(directory), undefined, 'the record is written')
-  assert.deepEqual(JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')), { launcher })
+  assert.deepEqual(JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')), {
+    launcher,
+    namespace: thisNamespace(),
+  })
   assert.equal(lstatSync(join(directory, LAUNCHER_RECORD_NAME)).mode & 0o777, LAUNCHER_RECORD_MODE, 'with the mode a sweep reads it by, whatever the umask')
 
   const member = await aLiveProcess(t)
@@ -140,6 +168,7 @@ test('a launch records the processes that hold its directory: the launcher, then
   assert.deepEqual(JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')), {
     launcher,
     member: { pid: member.pid, process_started_at: linuxProcessIdentities.identityOf(member.pid ?? 0) },
+    namespace: thisNamespace(),
   })
 })
 
@@ -166,6 +195,50 @@ test("a sweep leaves another session's live launch alone, and takes it once that
 
   await endIt(other)
   assert.deepEqual(sweepLeftoverLaunchDirectories(root), [live], 'and takes it once that session is dead')
+})
+
+test('a sweep acts on its own pid namespace and on no other (#124 r=3)', async (t) => {
+  const root = relayRoot(t)
+  const gone = await aProcessThatHasEnded()
+  // These pids are gone in this namespace. A container sharing this runtime dir
+  // -- a Wayland or PipeWire bind mount is enough -- numbers its pids elsewhere,
+  // so the same record there can be a live launch this sweep cannot see.
+  const elsewhere = launchShapedDirectory(root, 'a-launch-in-another-pid-namespace', {
+    launcher: { pid: gone, process_started_at: 'this-boot/1' },
+    namespace: ANOTHER_NAMESPACE,
+  })
+  const here = launchShapedDirectory(root, 'a-leftover-of-this-namespace', deadRecord(gone))
+
+  assert.deepEqual(sweepLeftoverLaunchDirectories(root), [here], 'a pid is evidence only inside the namespace it was read in')
+  assert.equal(existsSync(elsewhere), true, 'the other namespace writes into this root too, and its live launch looks exactly like this')
+})
+
+test('a sweep leaves alone a record that names no pid namespace, or no namespace at all (#124 r=3)', async (t) => {
+  const root = relayRoot(t)
+  const gone = await aProcessThatHasEnded()
+  const launcher = { pid: gone, process_started_at: 'this-boot/1' }
+  // A record an earlier Martha wrote, with the namespace field to come later.
+  const older = launchShapedDirectory(root, 'a-record-from-before-the-namespace', undefined)
+  writeFileSync(join(older, LAUNCHER_RECORD_NAME), JSON.stringify({ launcher }), { mode: LAUNCHER_RECORD_MODE })
+  // A record whose namespace is not one the kernel could have written.
+  const nonsense = launchShapedDirectory(root, 'a-record-that-names-no-namespace', { launcher, namespace: 'not-a-namespace' })
+
+  assert.deepEqual(sweepLeftoverLaunchDirectories(root), [], 'a record a sweep cannot place in a namespace is not one it can vouch for')
+  for (const kept of [older, nonsense]) assert.equal(existsSync(kept), true, kept)
+})
+
+test('a sweep of a process that cannot name its own pid namespace sweeps nothing (#124 r=3)', async (t) => {
+  const root = relayRoot(t)
+  const gone = await aProcessThatHasEnded()
+  const dead = launchShapedDirectory(root, 'a-leftover', deadRecord(gone))
+
+  assert.deepEqual(
+    sweepLeftoverLaunchDirectories(root, linuxProcessIdentities.lookupOf, () => undefined),
+    [],
+    'without a namespace of its own, a sweep cannot place any record',
+  )
+  assert.equal(existsSync(dead), true)
+  assert.deepEqual(sweepLeftoverLaunchDirectories(root), [dead], 'and with it, the same leftover goes')
 })
 
 test('a directory stays while the member of a killed launcher lives, and goes once the member does (#124)', async (t) => {
@@ -216,12 +289,39 @@ test('a sweep of the same kernel leaves a process it can name, and takes one tha
   const proc = fakeProc(t, A_PID_IN_A_FAKE_PROC, BOOT)
   const held = launchShapedDirectory(root, 'a-held-pid', {
     launcher: { pid: A_PID_IN_A_FAKE_PROC, process_started_at: `${BOOT}/${STARTED}` },
+    namespace: thisNamespace(),
   })
   const gone = await aProcessThatHasEnded()
   const dead = launchShapedDirectory(root, 'a-gone-pid', deadRecord(gone))
 
   assert.deepEqual(sweepLeftoverLaunchDirectories(root, proc.lookupOf), [dead], 'the pid the kernel holds stays, the one it does not goes')
   assert.equal(existsSync(held), true)
+})
+
+test('a sweep reads a record by the namespace the kernel itself names, not by the record alone (#124 r=3)', (t) => {
+  const root = relayRoot(t)
+  const proc = fakeProc(t, A_PID_IN_A_FAKE_PROC, BOOT)
+  const mine = launchShapedDirectory(root, 'a-gone-pid-of-this-namespace', {
+    launcher: { pid: 999_999, process_started_at: `${BOOT}/1` },
+    namespace: THIS_NAMESPACE,
+  })
+  const theirs = launchShapedDirectory(root, 'a-gone-pid-of-another-namespace', {
+    launcher: { pid: 999_998, process_started_at: `${BOOT}/1` },
+    namespace: ANOTHER_NAMESPACE,
+  })
+  const unreadable = fakeProc(t, A_PID_IN_A_FAKE_PROC, BOOT, undefined)
+
+  assert.deepEqual(
+    sweepLeftoverLaunchDirectories(root, proc.lookupOf, proc.pidNamespace),
+    [mine],
+    'the kernel names its namespace, so only the record of that namespace goes',
+  )
+  assert.equal(existsSync(theirs), true)
+  assert.deepEqual(
+    sweepLeftoverLaunchDirectories(root, unreadable.lookupOf, unreadable.pidNamespace),
+    [],
+    'a kernel that will not name its own namespace leaves every directory',
+  )
 })
 
 test('a sweep leaves alone what it cannot vouch for: no record, and what is not a directory', (t) => {

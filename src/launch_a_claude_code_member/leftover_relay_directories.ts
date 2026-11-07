@@ -28,11 +28,24 @@
 // wrote with the mode it writes, is left alone, never guessed at. Better a
 // leftover than another launch's live directory.
 //
-// The one case a pid cannot tell apart is a launcher in another pid namespace --
-// in a container sharing this user's runtime dir -- whose pid this namespace
-// does not hold, so its record reads as gone. Martha's launcher runs on the
-// owner's own host, in this namespace; a launcher run inside a container would
-// need a lock the kernel holds instead of a pid.
+// The namespace. A pid means nothing outside the pid namespace it was read in.
+// A desktop container commonly shares this user's runtime dir -- a Wayland or
+// PipeWire bind mount is enough -- and then both sides write into one relay
+// root while neither can name the other's pids: a live container launch reads
+// as gone here, and this namespace's live launch reads as gone there. So the
+// record carries the writer's pid namespace (`readlink /proc/self/ns/pid`), and
+// a sweep acts only on a record whose namespace is its own. A record from
+// another namespace, one that names none, and a sweep that cannot say which
+// namespace it is itself, all leave the directory where it is.
+//
+// The window between a member starting and its place in the record being
+// written. On the owner's terminal the member is held until its launcher says
+// yes, and that hold now writes the member too, so a launcher killed at any
+// point after the member exists leaves a record that names it
+// (launch_a_claude_code_member.ts). Detached, there is no hold: the record is
+// written a few instructions after the spawn, and a launcher killed inside them
+// leaves a directory nothing has recorded as held. That path closing needs a
+// lock, not a faster sequence.
 //
 // The sweep is hygiene, not correctness: a new launch uses a fresh uuid, so
 // nothing depends on a leftover going. What it must never do is take away a
@@ -48,6 +61,7 @@ import process, { getuid } from 'node:process'
 
 import {
   linuxProcessIdentities,
+  PID_NAMESPACE_FORM,
   type ProcessIdentity,
   type ProcessLookup,
 } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -70,10 +84,18 @@ export interface LaunchRecord {
   readonly launcher: ProcessIdentity
   /** The member the launcher started in it, once it has started. */
   readonly member?: ProcessIdentity
+  /**
+   * The pid namespace the launch ran in, `pid:[4026531836]`. The pids above mean
+   * nothing outside it, so a sweep acts only on a record from its own.
+   */
+  readonly namespace: string
 }
 
 /** How a caller reads the kernel: the lookup, never the bare identity (see 'unknown' above). */
 export type LookupsOfProcesses = (pid: number) => ProcessLookup
+
+/** How a caller reads its own pid namespace (see 'the namespace' above). */
+export type NamespaceOfThisProcess = () => string | undefined
 
 /**
  * Writes `pid`'s record into `directory`, the launch directory it has just made;
@@ -82,10 +104,13 @@ export type LookupsOfProcesses = (pid: number) => ProcessLookup
  */
 export function recordTheLauncher(directory: string, pid: number = process.pid): string | undefined {
   const launcher = identityOfRunning(pid)
-  if (launcher === undefined) return undefined
+  const namespace = linuxProcessIdentities.pidNamespace()
+  // A process this kernel cannot name, or a launch that cannot say which pid
+  // namespace it is in, leaves no record -- and no sweep then acts on it.
+  if (launcher === undefined || namespace === undefined) return undefined
   const path = join(directory, LAUNCHER_RECORD_NAME)
   try {
-    writeFileSync(path, JSON.stringify({ launcher }), { mode: LAUNCHER_RECORD_MODE, flag: 'wx' })
+    writeFileSync(path, JSON.stringify({ launcher, namespace }), { mode: LAUNCHER_RECORD_MODE, flag: 'wx' })
     // The mode a write asks for is cut down by the umask; the record is read
     // only when it carries the exact one, so make it exact here.
     chmodSync(path, LAUNCHER_RECORD_MODE)
@@ -122,13 +147,21 @@ export function recordTheMember(directory: string, pid: number): string | undefi
 export function sweepLeftoverLaunchDirectories(
   relay_root: string,
   lookupOf: LookupsOfProcesses = linuxProcessIdentities.lookupOf,
+  namespaceOf: NamespaceOfThisProcess = linuxProcessIdentities.pidNamespace,
 ): readonly string[] {
+  const here = namespaceOf()
+  // A process that cannot say which pid namespace it is in can prove nothing
+  // about another one, and the pids in every record are read from this one.
+  if (here === undefined) return []
   const removed: string[] = []
   for (const name of namesIn(relay_root)) {
     const directory = join(relay_root, name)
     if (isNotADirectory(directory)) continue
     const record = launcherRecordIn(directory)
     if (record === undefined) continue
+    // The record's pids are read from its own namespace, not this one: a
+    // container sharing this runtime dir would read as gone here.
+    if (record.namespace !== here) continue
     if (!everyRecordedProcessIsGone(record, lookupOf)) continue
     removeTheTree(directory)
     removed.push(directory)
@@ -206,12 +239,14 @@ function isOwnRecord(stat: Stats): boolean {
 
 function asRecord(parsed: unknown): LaunchRecord | undefined {
   if (typeof parsed !== 'object' || parsed === null) return undefined
-  const { launcher, member } = parsed as Partial<LaunchRecord>
+  const { launcher, member, namespace } = parsed as Partial<LaunchRecord>
   const the_launcher = asIdentity(launcher)
-  if (the_launcher === undefined) return undefined
-  if (member === undefined) return { launcher: the_launcher }
+  // A record from before a launch wrote its namespace -- or one whose namespace
+  // is not a namespace -- is not one a sweep can vouch for: it stays.
+  if (the_launcher === undefined || typeof namespace !== 'string' || !PID_NAMESPACE_FORM.test(namespace)) return undefined
+  if (member === undefined) return { launcher: the_launcher, namespace }
   const the_member = asIdentity(member)
-  return the_member === undefined ? undefined : { launcher: the_launcher, member: the_member }
+  return the_member === undefined ? undefined : { launcher: the_launcher, member: the_member, namespace }
 }
 
 function asIdentity(named: unknown): ProcessIdentity | undefined {

@@ -23,8 +23,13 @@
 // things it found -- the process a pid holds now, that this kernel no longer
 // holds the pid, or that it could not say and why -- and only the second is
 // ever proof that a process is gone.
+//
+// A pid means nothing outside the pid namespace it was read in: the same number
+// names another process, or none, in a namespace beside this one. So the
+// namespace is read here too (`readlink /proc/self/ns/pid`), and a caller that
+// acts across processes compares it before it trusts any pid (martha#124).
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { Processes } from '../host_contract/host_contract.ts'
@@ -48,8 +53,19 @@ export type ProcessLookup =
   | { readonly found: 'gone' }
   | { readonly found: 'unknown'; readonly why: string }
 
-/** The part of the contract this file provides, and the lookup beside it. */
-export type ProcessLookups = ProcessIdentities & { readonly lookupOf: (pid: number) => ProcessLookup }
+/** The part of the contract this file provides, the lookup beside it, and the pid namespace it answers from. */
+export type ProcessLookups = ProcessIdentities & {
+  readonly lookupOf: (pid: number) => ProcessLookup
+  readonly pidNamespace: NamespaceOfAProcess
+}
+
+/**
+ * The pid namespace a process runs in, as `readlink /proc/self/ns/pid` gives it
+ * (`pid:[4026531836]`), or undefined when this kernel will not say. Two
+ * processes in different pid namespaces cannot name each other's pids at all,
+ * so a pid is only evidence inside the namespace it was read in (martha#124).
+ */
+export type NamespaceOfAProcess = () => string | undefined
 
 /** The start time's place among the fields that follow the command name (field 3 onwards). */
 const START_TIME_AFTER_COMMAND = 22 - 3
@@ -59,6 +75,9 @@ const BOOT_ID = join('sys', 'kernel', 'random', 'boot_id')
 
 /** A boot id as the kernel writes it. */
 const BOOT_ID_FORM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** A pid namespace as `readlink /proc/self/ns/pid` writes it. */
+export const PID_NAMESPACE_FORM = /^pid:\[\d+\]$/
 
 /** Process identities under a /proc root; the live kernel's are `linuxProcessIdentities`. */
 export function procProcessIdentities(proc_root: string): ProcessLookups {
@@ -88,6 +107,17 @@ export function procProcessIdentities(proc_root: string): ProcessLookups {
       return lookup.found === 'held' ? lookup.identity.process_started_at : null
     },
     lookupOf,
+    pidNamespace: () => namespaceIn(proc_root),
+  }
+}
+
+/** The pid namespace this process is in, under `proc_root`; undefined when the kernel will not name it. */
+function namespaceIn(proc_root: string): string | undefined {
+  try {
+    const named = readlinkSync(join(proc_root, 'self', 'ns', 'pid')).trim()
+    return PID_NAMESPACE_FORM.test(named) ? named : undefined
+  } catch {
+    return undefined
   }
 }
 
