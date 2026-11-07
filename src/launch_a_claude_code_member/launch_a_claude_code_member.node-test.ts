@@ -1198,6 +1198,69 @@ test("a call after which the owner's user settings carry a hook-killing key stop
   assert.ok(stops[0]?.includes(file) && stops[0].includes(HOOKS_OFF), stops[0] ?? 'no stop')
 })
 
+test("a hook-killing key written while the member runs stops it, with no tool call after the write", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(start('startup')),
+    socketPath: readFileSync(fake.envFile, 'utf8'),
+  })
+  assert.equal(posted.text, '{"taken":1}')
+  // The host may drop its hooks once it reloads the file, so no hook asks again: the launcher must.
+  const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
+  const stopped = await started.stopped
+  const why = stopped.stopped_because ?? ''
+  assert.ok(why.includes(file) && why.includes(HOOKS_OFF), why)
+})
+
+/** The recorded host's safe mode switches, read when a test asks. */
+const safeMode = () => CLAUDE_CODE_HOOK_SWITCHES.safe_mode
+
+/** A launch changed by `change` is refused, starts nothing, leaves nothing behind, and names each of `named`. */
+async function safeModeLaunchRefused(
+  t: TestContext,
+  change: (launch: ReturnType<typeof memberLaunch>, place: Place) => ReturnType<typeof memberLaunch>,
+  named: (place: Place) => readonly string[],
+): Promise<void> {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const refusal = await refusedLeavingNothing(t, place, change(memberLaunch(place, fake.command, place.approved, [], recording), place), fake.ranFile)
+  for (const name of named(place)) assert.ok(refusal.includes(name), `${name} not in: ${refusal}`)
+  assert.ok(refusal.includes('turns off the hooks'), refusal)
+}
+
+test("safe mode in the owner's user settings env starts nothing, naming the file and the variable, whatever the server environment rule allows", async (t) => {
+  const [SAFE_MODE_VARIABLE] = safeMode().variables
+  assert.ok(SAFE_MODE_VARIABLE !== undefined)
+  await safeModeLaunchRefused(
+    t,
+    (launch, place) => (writeSettings(join(place.home, USER_SETTINGS), { env: { [SAFE_MODE_VARIABLE]: '1' } }), launch),
+    (place) => [join(place.home, USER_SETTINGS), SAFE_MODE_VARIABLE],
+  )
+})
+
+test("safe mode in the launcher's own environment starts nothing, naming the variable", async (t) => {
+  const [SAFE_MODE_VARIABLE] = safeMode().variables
+  assert.ok(SAFE_MODE_VARIABLE !== undefined)
+  await safeModeLaunchRefused(t, (launch) => ({ ...launch, inherited: { ...launch.inherited, [SAFE_MODE_VARIABLE]: '1' } }), () => [SAFE_MODE_VARIABLE])
+})
+
+test("safe mode among the owner's arguments starts nothing, naming the argument", async (t) => {
+  const [SAFE_MODE_FLAG] = safeMode().flags
+  assert.ok(SAFE_MODE_FLAG !== undefined)
+  await safeModeLaunchRefused(t, (launch) => ({ ...launch, args: [...launch.args, SAFE_MODE_FLAG] }), () => [SAFE_MODE_FLAG])
+})
+
 test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
