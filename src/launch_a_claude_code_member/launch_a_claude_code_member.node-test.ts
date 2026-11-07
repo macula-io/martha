@@ -44,7 +44,7 @@ import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './r
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
-import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 // --- a member's places ----------------------------------------------------------
 
@@ -1220,6 +1220,59 @@ test("a member's file tool call that writes any project's memory, or the owner's
   assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
 })
 
+/** The settings file the fake host was started with by --settings, read while it runs. */
+async function settingsTheHostStartedWith(t: TestContext, place: Place, fake: ReturnType<typeof fakeClaude>, launch: Parameters<typeof launchClaudeCodeMember>[0]): Promise<Record<string, unknown>> {
+  const started = await launchClaudeCodeMember(launch)
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--plugin-dir'), t)
+  const args = readFileSync(fake.argsFile, 'utf8').split('\n')
+  const at = args.flatMap((arg, index) => (arg === '--settings' ? [index] : []))
+  assert.equal(at.length, 1, `--settings appears ${at.length} times: ${args.join(' ')}`)
+  const path = args[(at[0] ?? 0) + 1] ?? ''
+  assert.ok(path.startsWith(place.snapshot_root), `the settings ${path} are not the launch's copy`)
+  return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+}
+
+for (const [shape, carried, kept] of [
+  ['no settings file is carried', undefined, []],
+  ['the approved settings file is carried', JSON.stringify({ model: 'x', permissions: { deny: ['Bash(rm:*)'], allow: ['Read'] } }), ['Bash(rm:*)']],
+] as const) {
+  test(`when ${shape}, the host starts with a deny rule for exactly each place the gate refuses a member's memory write (#136)`, async (t) => {
+    const recorded = RECORDED_MESH_SERVERS[0]
+    assert.ok(recorded !== undefined)
+    const { recording } = await recordedTreeOf(t, recorded.server_version)
+    const place = placeFor(t, meshServerAt(recorded.server_version), carried === undefined ? {} : { [USER_SETTINGS]: carried })
+    const fake = fakeClaude(place)
+    const launch = memberLaunch(place, fake.command, place.approved, [], recording)
+    const settings = await settingsTheHostStartedWith(t, place, fake, launch)
+    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, settings_files: [] })
+    const permissions = settings.permissions as { deny: string[]; allow?: string[] }
+    assert.deepEqual(permissions.deny, [...kept, ...memoryDenyRules(places)])
+    if (carried !== undefined) {
+      assert.equal(settings.model, 'x')
+      assert.deepEqual(permissions.allow, ['Read'])
+    }
+    // The other way: every rule's place is one the gate refuses a member's write into.
+    for (const rule of memoryDenyRules(places)) {
+      const glob = /^(?:Write|Edit)\(\/(.*)\)$/.exec(rule)?.[1]
+      assert.ok(glob !== undefined, rule)
+      const inside = glob.replace('/*/', '/some-project/').replace(/\/\*\*$/, '/note.md')
+      assert.ok(writesTheOwnersMemory('Write', { file_path: inside }, places, place.checkout, place.home) !== undefined, `${rule}: ${inside}`)
+    }
+  })
+}
+
+test('a carried settings file whose permissions.deny is not a list starts nothing, naming it (#136)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version), { [USER_SETTINGS]: JSON.stringify({ permissions: { deny: 'Bash' } }) })
+  const fake = fakeClaude(place)
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
+  assert.ok(refusal.includes(USER_SETTINGS) && refusal.includes('permissions.deny'), refusal)
+})
+
 test("a call after which the owner's user settings carry a hook-killing key stops the member, naming the file and the key", async (t) => {
   assert.ok(HOOKS_OFF !== undefined)
   const place = placeFor(t)
@@ -1366,6 +1419,9 @@ test('an approved launch starts the host with the switches and the relay, and a 
     '--strict-mcp-config',
     '--mcp-config',
     join(place.snapshot_root, snapshot[0] ?? '', '.mcp.json'),
+    // Written by the launch when none is carried: the rules that keep the host's own writes out of the owner's memory (martha#136).
+    '--settings',
+    join(place.snapshot_root, snapshot[0] ?? '', '.claude', 'settings.json'),
     '--plugin-dir',
     plugin_dir,
   ])

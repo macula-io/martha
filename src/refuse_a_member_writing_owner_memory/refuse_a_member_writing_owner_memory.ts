@@ -163,3 +163,25 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
   ]
   return globs.flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * The settings the host is started with: the approved copy, or none, with
+ * `rules` added to its `permissions.deny` after the rules it already has; or
+ * why it cannot be, naming `name`. Every other key is kept as approved.
+ */
+export function settingsWithMemoryDenied(approved: string | undefined, rules: readonly string[], name: string): { readonly text: string } | { readonly refusal: string } {
+  let settings: unknown = {}
+  try {
+    if (approved !== undefined) settings = JSON.parse(approved)
+  } catch {
+    return { refusal: `${name} is not JSON, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
+  }
+  if (!isRecord(settings)) return { refusal: `${name} is not a JSON object, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
+  const permissions = settings.permissions ?? {}
+  if (!isRecord(permissions)) return { refusal: `${name} has a permissions that is not an object, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
+  const deny = permissions.deny ?? []
+  if (!Array.isArray(deny)) return { refusal: `${name} has a permissions.deny that is not a list, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
+  return { text: JSON.stringify({ ...settings, permissions: { ...permissions, deny: [...(deny as unknown[]), ...rules] } }) }
+}

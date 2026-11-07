@@ -144,6 +144,9 @@ export const CLAUDE_MEMORY_ELSEWHERE = [
 export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
 
+/** The switches that hand Claude Code a settings file: the carried copy, or the one a launch writes (martha#136). */
+export const claudeSettingsSwitches = (path: string): HostSwitches => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED })
+
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
   'claude-code': {
     // --strict-mcp-config: only the servers passed by --mcp-config start.
@@ -154,7 +157,7 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
     },
     carried: {
       [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
-      [CLAUDE_SETTINGS]: (path) => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
+      [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
   },
   opencode: {
