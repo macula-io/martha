@@ -9,17 +9,29 @@
 //
 // So:
 //   - the keys are never typed here: the recorder cuts that one function out
-//     of the host binary (recorded_claude_code_host.json, hooks_switches) and
+//     of the host binary (recorded_claude_code_host.json, hooks_switches), and
+//     every function an exit of it calls (hooks_switch_calls).
 //     `hookSwitchesOf` reads which keys it tests as `=== true`, and on which
 //     settings: the managed ones alone, or the merged ones every file feeds;
+//     and what each called function tests: safe mode (a variable or a flag),
+//     or a key of the policy settings. Every statement and every exit of the
+//     function must have a shape this module knows, so a host that adds a way
+//     to drop hooks fails the recording instead of passing it (Pluto's r=1);
 //   - a launch is refused while a settings file the host reads sets one: the
 //     owner's user settings, the approved --settings copy, and the managed file
 //     and drop-in folder, whose place the recorder also takes from the host;
+//   - a launch is refused while safe mode is on: its variable in the
+//     launcher's environment or in a settings file's env, or its flag among
+//     the owner's arguments (`safeModeIn`, `switchesSetIn`);
 //   - a member's file tool call that names the owner's user settings file is
-//     denied (`namesTheOwnersSettings`);
-//   - a shell can write that file in ways its text does not show, so after
-//     every call the files are read again (`hookSettingsWatch`) and the member
-//     is stopped when one now sets a switch.
+//     denied, the path resolved the way the host resolves it: trimmed, with a
+//     leading `~` against the host's home (`namesTheOwnersSettings`). Reads are
+//     denied too; that is no secrecy control, since a shell can still read it;
+//   - a shell can write that file in ways its text does not show, and the host
+//     may drop its hooks as soon as it reloads the file, so the launcher reads
+//     the files again on a timer of its own for the member's whole life, as
+//     well as after every call (`hookSettingsWatch`), and stops the member when
+//     one now sets a switch.
 //
 // Only `false` (or `null`) leaves a switch off here: the host reads some other
 // values as on, and a value it would read as off costs the owner only a
@@ -28,12 +40,20 @@
 import { readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
-/** The keys that turn Martha's relay off, by where the host honours them. */
+/** How safe mode is switched on: by a variable in the host's environment, or by a flag on its command line. */
+export interface SafeMode {
+  readonly variables: readonly string[]
+  readonly flags: readonly string[]
+}
+
+/** The keys that turn Martha's relay off, by where the host honours them, and safe mode. */
 export interface HookSwitches {
   /** Honoured from managed settings: what the policy settings are tested for, and what every source is. */
   readonly managed: readonly string[]
   /** Honoured from any settings file the session loaded. */
   readonly every_source: readonly string[]
+  /** Safe mode, which keeps managed hooks only. */
+  readonly safe_mode: SafeMode
 }
 
 /** Where the host reads managed settings on Linux: a folder, the file in it, and a drop-in folder in it. */
@@ -47,11 +67,30 @@ export interface ManagedSettingsPlace {
 // a local, and returns no hooks at all when the first key it tests is true. The
 // minifier's names change between builds, so only their shape is matched.
 const HOOK_SET_START = /function [\w$]+\(\)\{let ([\w$]+)=[\w$]+\("policySettings"\);if\(\1\?\.[\w$]+===!0\)return\{\};/g
-const POLICY_LOCAL = /let ([\w$]+)=[\w$]+\("policySettings"\)/
-const TESTED_TRUE = /([\w$]+)\??\.([\w$]+)===!0/g
 
-/** The index just past the brace that closes the one opened at `open`, skipping string literals. */
+// The statements the hook-set function is made of, by shape: it reads the
+// policy settings and the merged settings into locals, tests them, and returns
+// the merged hooks through one function.
+const POLICY_READ = /^let ([\w$]+)=[\w$]+\("policySettings"\)$/
+const MERGED_READ = /^let ([\w$]+)=[\w$]+\(\)$/
+const MERGED_RETURN = /^return [\w$]+\(([\w$]+)\.hooks\?\?\{\}\)$/
+// What an exit's condition may test: a settings key as true, or a call.
+const TESTED_TRUE = /^([\w$]+)\??\.([\w$]+)===!0$/
+const CALLED = /^([\w$]+)\((?:"[^"]*")?\)$/
+
+// The functions an exit may call, by shape. Safe mode: a variable of the
+// host's environment, or a flag of its command line.
+const SAFE_MODE_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(process\.env\.([A-Z0-9_]+)\)\|\|[\w$]+\("(--[a-z-]+)"\)\}$/
+// A key of the policy settings: true, or a list naming what was asked for.
+const POLICY_KEY_SHAPE =
+  /^function ([\w$]+)\(([\w$]+)\)\{let ([\w$]+)=[\w$]+\("policySettings"\)\?\.([\w$]+);if\(\3===!0\)return!0;if\(Array\.isArray\(\3\)\)return \3\.includes\(\2\);return!1\}$/
+
+const CLOSER: Readonly<Record<string, string>> = { '{': '}', '(': ')', '[': ']' }
+
+/** The index just past the bracket that closes the one opened at `open`, skipping string literals. */
 function closingBrace(text: string, open: number): number {
+  const opener = text[open] ?? ''
+  const closer = CLOSER[opener]
   let depth = 0
   for (let at = open; at < text.length; at += 1) {
     const char = text[at]
@@ -59,11 +98,129 @@ function closingBrace(text: string, open: number): number {
       at = endOfString(text, at)
       continue
     }
-    if (char === '{') depth += 1
-    if (char === '}') depth -= 1
+    if (char === opener) depth += 1
+    if (char === closer) depth -= 1
     if (depth === 0) return at + 1
   }
-  throw new Error('The function that builds the hook set never closes in the host text.')
+  throw new Error('A function of the hook set never closes in the host text.')
+}
+
+/** How a character changes the bracket depth: an opener deepens it, a closer lifts it. */
+function depthChangeOf(char: string): number {
+  if (char in CLOSER) return 1
+  return char === ')' || char === '}' || char === ']' ? -1 : 0
+}
+
+/** The index of the first `;` at `at` or after it, outside brackets and strings; or the end. */
+function endOfStatement(text: string, at: number): number {
+  let depth = 0
+  for (let next = at; next < text.length; next += 1) {
+    const char = text[next] ?? ''
+    if (char === '"' || char === "'" || char === '`') next = endOfString(text, next)
+    else if (char === ';' && depth === 0) return next
+    else depth += depthChangeOf(char)
+  }
+  return text.length
+}
+
+/** One top-level statement of a function's body; an `if` keeps the condition apart from what it guards. */
+type Statement = { readonly text: string; readonly condition?: string }
+
+/** The statement that starts at `at`, and the index just past it. */
+function statementAt(body: string, at: number): { readonly statement: Statement; readonly end: number } {
+  if (!body.startsWith('if(', at)) {
+    const end = endOfStatement(body, at)
+    return { statement: { text: body.slice(at, end) }, end }
+  }
+  const closed = closingBrace(body, at + 2)
+  const end = body[closed] === '{' ? closingBrace(body, closed) : endOfStatement(body, closed)
+  return { statement: { text: body.slice(at, end), condition: body.slice(at + 3, closed - 1) }, end }
+}
+
+/** The top-level statements of a function's body, in order. */
+function statementsOf(source: string): Statement[] {
+  const open = source.indexOf('{')
+  const body = source.slice(open + 1, closingBrace(source, open) - 1)
+  const statements: Statement[] = []
+  for (let at = 0; at < body.length; ) {
+    const { statement, end } = statementAt(body, at)
+    statements.push(statement)
+    at = end
+    while (body[at] === ';') at += 1
+  }
+  return statements
+}
+
+/** The parts of a condition joined by `||` or `&&` outside brackets. */
+function partsOf(condition: string): string[] {
+  const parts: string[] = []
+  let start = 0
+  for (let at = 0; at < condition.length; at += 1) {
+    const char = condition[at] ?? ''
+    if (char in CLOSER) at = closingBrace(condition, at) - 1
+    else if ((char === '|' || char === '&') && condition[at + 1] === char) {
+      parts.push(condition.slice(start, at))
+      start = at + 2
+      at += 1
+    }
+  }
+  return [...parts, condition.slice(start)]
+}
+
+/** What one part of an exit's condition tests: a key of a local as true, or a call. */
+type Tested = { readonly local: string; readonly key: string } | { readonly call: string }
+
+/** The tests of the hook-set function's exits; refuses a statement or a test of no known shape. */
+function exitsOf(source: string): { readonly policy: string; readonly tested: readonly Tested[] } {
+  let policy: string | undefined
+  const tested: Tested[] = []
+  for (const { text, condition } of statementsOf(source)) {
+    if (condition !== undefined) tested.push(...partsOf(condition).map(testedBy))
+    else if (POLICY_READ.test(text)) policy = POLICY_READ.exec(text)?.[1]
+    else if (!MERGED_READ.test(text) && !MERGED_RETURN.test(text)) {
+      throw new Error(`The hook-set function holds a statement of no known shape, so what it drops hooks on cannot be told: ${text}`)
+    }
+  }
+  if (policy === undefined) throw new Error(`The hook-set function reads no policy settings: ${source}`)
+  return { policy, tested }
+}
+
+/** One part of an exit's condition, by its shape; refuses any other. */
+function testedBy(part: string): Tested {
+  const key = TESTED_TRUE.exec(part)
+  if (key?.[1] !== undefined && key[2] !== undefined) return { local: key[1], key: key[2] }
+  const call = CALLED.exec(part)?.[1]
+  if (call !== undefined) return { call }
+  throw new Error(`An exit of the hook-set function tests ${part}, of no known shape, so when it drops hooks cannot be told.`)
+}
+
+/** What a function an exit calls switches hooks off by, from its definition; undefined for no known shape. */
+function exitCallOf(definition: string): { readonly name: string; readonly safe_mode?: SafeMode; readonly policy_key?: string } | undefined {
+  const safe = SAFE_MODE_SHAPE.exec(definition)
+  if (safe?.[1] !== undefined && safe[2] !== undefined && safe[3] !== undefined) {
+    return { name: safe[1], safe_mode: { variables: [safe[2]], flags: [safe[3]] } }
+  }
+  const key = POLICY_KEY_SHAPE.exec(definition)
+  if (key?.[1] !== undefined && key[4] !== undefined) return { name: key[1], policy_key: key[4] }
+  return undefined
+}
+
+const callsOf = (tested: readonly Tested[]): string[] => [...new Set(tested.flatMap((test) => ('call' in test ? [test.call] : [])))]
+
+const noKnownShape = (call: string): Error =>
+  new Error(`An exit of the hook-set function calls ${call}(), a function of no known shape, so when it drops hooks cannot be told.`)
+
+/** Each function the hook-set function's exits call, cut whole from the host text, in the order first called; refuses one of no known shape. */
+export function hookExitCallsIn(text: string, source: string): string[] {
+  return callsOf(exitsOf(source).tested).map((call) => {
+    const known = new Set<string>()
+    for (const match of text.matchAll(new RegExp(`function ${escaped(call)}\\(`, 'g'))) {
+      const definition = text.slice(match.index, closingBrace(text, text.indexOf('{', match.index)))
+      if (exitCallOf(definition)?.name === call) known.add(definition)
+    }
+    if (known.size !== 1) throw noKnownShape(call)
+    return [...known][0] ?? ''
+  })
 }
 
 /** The index of the quote that ends the string literal opened at `open`. */
@@ -90,21 +247,34 @@ export function hookSwitchesSourceIn(text: string): string {
 
 const sortedUnique = (keys: Iterable<string>): string[] => [...new Set(keys)].sort()
 
-/** The keys a recorded hook-set function tests as true, by the settings it reads them from. */
-export function hookSwitchesOf(source: string): HookSwitches {
-  const policy = POLICY_LOCAL.exec(source)?.[1]
-  const onPolicy: string[] = []
-  const onMerged: string[] = []
-  for (const [, local, key] of source.matchAll(TESTED_TRUE)) {
-    if (key === undefined) continue
-    if (local === policy) onPolicy.push(key)
-    else onMerged.push(key)
+/** What the functions the exits call switch on: keys of the policy settings, and safe mode. */
+function switchedByCalls(tested: readonly Tested[], calls: readonly string[]): { readonly policy_keys: string[]; readonly safe_mode: SafeMode } {
+  const known = calls.map(exitCallOf)
+  const found = callsOf(tested).map((call) => known.find((candidate) => candidate?.name === call) ?? call)
+  const unknown = found.find((call) => typeof call === 'string')
+  if (unknown !== undefined) throw noKnownShape(unknown)
+  const shaped = found.filter((call) => typeof call !== 'string')
+  return {
+    policy_keys: shaped.flatMap((call) => (call.policy_key === undefined ? [] : [call.policy_key])),
+    safe_mode: {
+      variables: sortedUnique(shaped.flatMap((call) => call.safe_mode?.variables ?? [])),
+      flags: sortedUnique(shaped.flatMap((call) => call.safe_mode?.flags ?? [])),
+    },
   }
-  if (policy === undefined || onPolicy.length + onMerged.length === 0) {
+}
+
+/** The keys a recorded hook-set function tests as true, by the settings it reads them from, and what the functions its exits call switch on. */
+export function hookSwitchesOf(source: string, calls: readonly string[]): HookSwitches {
+  const { policy, tested } = exitsOf(source)
+  const keys = tested.flatMap((test) => ('key' in test ? [test] : []))
+  const { policy_keys, safe_mode } = switchedByCalls(tested, calls)
+  const onPolicy = [...keys.filter((test) => test.local === policy).map((test) => test.key), ...policy_keys]
+  const onMerged = keys.filter((test) => test.local !== policy).map((test) => test.key)
+  if (onPolicy.length + onMerged.length === 0) {
     throw new Error(`The recorded hook-set function tests no settings key as true: ${source}`)
   }
   // The merged settings the host tests include the managed ones.
-  return { managed: sortedUnique([...onPolicy, ...onMerged]), every_source: sortedUnique(onMerged) }
+  return { managed: sortedUnique([...onPolicy, ...onMerged]), every_source: sortedUnique(onMerged), safe_mode }
 }
 
 const escaped = (name: string): string => name.replaceAll('$', '\\$')
@@ -155,9 +325,24 @@ function switchesSetIn(file: HookSettingsFile, switches: HookSwitches): string |
     return `${file.path} is not JSON, so whether it turns off the hooks Martha's gates run in cannot be told`
   }
   if (!isObject(parsed)) return `${file.path} is not a JSON object, so whether it turns off the hooks Martha's gates run in cannot be told`
-  const on = (file.managed ? switches.managed : switches.every_source).filter((key) => !isOff(parsed[key]))
+  const env = parsed.env
+  const safe = isObject(env) ? switches.safe_mode.variables.filter((name) => env[name] !== undefined) : []
+  const on = [...(file.managed ? switches.managed : switches.every_source).filter((key) => !isOff(parsed[key])), ...safe.map((name) => `env.${name}`)]
   if (on.length === 0) return undefined
   return `${file.path} sets ${on.join(', ')}, which turns off the hooks Martha's gates run in, so a member would run ungated; remove it from that file`
+}
+
+/**
+ * Why the host's environment or the owner's arguments switch safe mode on,
+ * which keeps managed hooks only; or undefined. Any value of the variable
+ * counts: the host reads some as on, and the cost is a refusal naming it.
+ */
+export function safeModeIn(environment: Readonly<Record<string, string | undefined>>, args: readonly string[], safe: SafeMode): string | undefined {
+  const variables = safe.variables.filter((name) => environment[name] !== undefined)
+  const flags = args.filter((arg) => safe.flags.some((flag) => arg === flag || arg.startsWith(`${flag}=`)))
+  const on = [...variables.map((name) => `the launcher's environment sets ${name}`), ...flags.map((flag) => `the owner's arguments carry ${flag}`)]
+  if (on.length === 0) return undefined
+  return `${on.join(' and ')}, which switches the host's safe mode on and turns off the hooks Martha's gates run in, so a member would run ungated; remove it`
 }
 
 /** Why the settings files the host reads turn Martha's relay off, each file and key named; or undefined. */
@@ -193,6 +378,8 @@ function dropInFiles(folder: string): string[] {
 export interface HookSettingsWatch {
   /** The owner's user settings file. */
   readonly owners_file: string
+  /** The host's home, which a leading `~` in a path the host is given resolves against. */
+  readonly home: string
   /** Why the files now turn Martha's relay off, or undefined. */
   check(): string | undefined
 }
@@ -200,6 +387,8 @@ export interface HookSettingsWatch {
 export interface HookSettingsPlaces {
   /** The owner's user settings file (userSettingsPath). */
   readonly user: string
+  /** The host's home: its HOME, as userSettingsPath reads it. */
+  readonly home: string
   /** The approved copy the host is given by --settings, if any. */
   readonly approved: string | undefined
   readonly managed: ManagedSettingsPlace
@@ -207,7 +396,7 @@ export interface HookSettingsPlaces {
 }
 
 /** Watches the settings files a member's host reads for a switch that turns Martha's relay off. */
-export function hookSettingsWatch({ user, approved, managed, switches }: HookSettingsPlaces): HookSettingsWatch {
+export function hookSettingsWatch({ user, home, approved, managed, switches }: HookSettingsPlaces): HookSettingsWatch {
   const check = (): string | undefined => {
     const places = [
       { path: user, managed: false },
@@ -225,7 +414,7 @@ export function hookSettingsWatch({ user, approved, managed, switches }: HookSet
     const reasons = [...unread, settingsTurningHooksOff(files, switches)].filter((reason) => reason !== undefined)
     return reasons.length > 0 ? reasons.join('; ') : undefined
   }
-  return { owners_file: user, check }
+  return { owners_file: user, home, check }
 }
 
 /** A path as the file system resolves it: links followed as far as the path exists. */
@@ -241,13 +430,21 @@ function realPathOf(path: string): string {
 /** The tool call arguments that name the file a file tool reads or writes. */
 const FILE_ARGUMENTS = ['file_path', 'notebook_path'] as const
 
+/** The file a path names as the host resolves it: trimmed, a leading `~` against its home, the rest against `cwd`. */
+function asTheHostResolves(value: string, cwd: string, home: string): string {
+  const trimmed = value.trim()
+  if (trimmed === '~') return home
+  if (trimmed.startsWith('~/')) return join(home, trimmed.slice(2))
+  return resolve(cwd, trimmed)
+}
+
 /** Why a tool call names the owner's user settings file, or undefined. */
-export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string): string | undefined {
+export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string, home: string): string | undefined {
   const owners = realPathOf(owners_file)
   for (const argument of FILE_ARGUMENTS) {
     const value = input[argument]
-    if (typeof value !== 'string' || value === '') continue
-    if (realPathOf(resolve(cwd, value)) === owners) {
+    if (typeof value !== 'string' || value.trim() === '') continue
+    if (realPathOf(asTheHostResolves(value, cwd, home)) === owners) {
       return `${value} is the owner's Claude Code user settings file (${owners_file}), which a member does not touch: a key in it can turn off the hooks Martha's gates run in, for this member and every member after it`
     }
   }

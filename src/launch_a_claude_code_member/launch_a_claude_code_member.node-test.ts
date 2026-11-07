@@ -130,6 +130,7 @@ function answering(place: Place, rows: RowStore = rowStreamsDirectory(place.rows
     binder: bindNothing,
     hookSettings: hookSettingsWatch({
       user: join(place.home, USER_SETTINGS),
+      home: place.home,
       approved: undefined,
       managed: managedSettingsOf(place),
       switches: CLAUDE_CODE_HOOK_SWITCHES,

@@ -203,7 +203,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (call === undefined) return denied('the tool call names no tool')
   const unvouched = await vouchFor(state, session)
   if (unvouched !== undefined) return denied(unvouched)
-  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir)
+  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
   if (settings !== undefined) return denied(settings)
   const verdict = answerToolCall({
     tool: call.tool,

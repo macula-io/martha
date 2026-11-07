@@ -89,7 +89,8 @@ test('a recorded function that reads a new key turns that key into a switch, wit
     every_source: ['disableAllHooks', 'noHooksAtAll'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
   })
-  assert.throws(() => hookSwitchesOf('function r(){return{}}', []), /no settings key/)
+  assert.throws(() => hookSwitchesOf('function r(){let o=Se("policySettings");return a(o.hooks??{})}', []), /no settings key/)
+  assert.throws(() => hookSwitchesOf('function r(){let t=br();if(t.noHooks===!0)return{};return a(t.hooks??{})}', []), /reads no policy settings/)
 })
 
 test('the recorded managed settings place is the folder, file and drop-in folder the host reads on Linux', () => {
@@ -156,6 +157,7 @@ test('the watch reads the user file, the approved copy, the managed file and eac
   const approved = join(root, 'approved.json')
   const watch = hookSettingsWatch({
     user,
+    home: root,
     approved,
     managed: { dir: managedDir, file: 'managed.json', drop_in: 'drop-in' },
     switches: SWITCHES,
@@ -181,15 +183,15 @@ test("a file tool call naming the owner's user settings file is named, directly,
   symlinkSync(config, join(root, 'linked'))
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)
-  assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd))
-  assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', 'settings.json') }, owners, cwd))
-  assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', 'settings.json') }, owners, cwd))
-  assert.ok(namesTheOwnersSettings({ file_path: '../config/settings.json' }, owners, cwd))
+  assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', 'settings.json') }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', 'settings.json') }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ file_path: '../config/settings.json' }, owners, cwd, root))
   writeFileSync(owners, '{}')
   symlinkSync(owners, join(cwd, 'innocent.json'))
-  assert.ok(namesTheOwnersSettings({ file_path: join(cwd, 'innocent.json') }, owners, cwd))
-  assert.equal(namesTheOwnersSettings({ file_path: join(config, 'other.json') }, owners, cwd), undefined)
-  assert.equal(namesTheOwnersSettings({ command: `echo > ${owners}` }, owners, cwd), undefined)
+  assert.ok(namesTheOwnersSettings({ file_path: join(cwd, 'innocent.json') }, owners, cwd, root))
+  assert.equal(namesTheOwnersSettings({ file_path: join(config, 'other.json') }, owners, cwd, root), undefined)
+  assert.equal(namesTheOwnersSettings({ command: `echo > ${owners}` }, owners, cwd, root), undefined)
 })
 
 test("a file tool call naming the owner's file the way the host spells it is named: ~/ against the host's home, and white space around the path", (t) => {
