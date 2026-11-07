@@ -53,11 +53,11 @@
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>
 <rect class="b-sys" x="32" y="70" width="300" height="128" rx="10"/>
 <text class="t-code" x="48" y="98">run_the_martha_command</text>
-<text class="t-type" x="48" y="116">[the four acts]</text>
-<text class="t-desc" x="48" y="140">init, approve, start &lt;member&gt;, --version:</text>
-<text class="t-desc" x="48" y="156">the words checked before anything runs,</text>
-<text class="t-desc" x="48" y="172">a refusal on stderr with the command that</text>
-<text class="t-desc" x="48" y="188">fixes it, 0 done / 1 refused / 2 usage</text>
+<text class="t-type" x="48" y="116">[the acts]</text>
+<text class="t-desc" x="48" y="140">init, approve, start &lt;member&gt;, run &lt;shape&gt;,</text>
+<text class="t-desc" x="48" y="156">pin-key, keep-shapes, --version: the words</text>
+<text class="t-desc" x="48" y="172">checked first, a refusal on stderr with</text>
+<text class="t-desc" x="48" y="188">the command that fixes it, 0 / 1 / 2</text>
 <rect class="b-cmp" x="348" y="70" width="300" height="128" rx="10"/>
 <text class="t-code" x="364" y="98">declare_a_solo_crew, declare_crew</text>
 <text class="t-type" x="364" y="116">[the declaration]</text>
@@ -83,24 +83,26 @@
 <rect class="b-cmp" x="348" y="214" width="300" height="146" rx="10"/>
 <text class="t-code" x="364" y="242">launch_a_claude_code_member</text>
 <text class="t-type" x="364" y="260">[the launcher]</text>
-<text class="t-desc" x="364" y="284">The places in Martha's state, a</text>
-<text class="t-desc" x="364" y="300">snapshot of what was approved, a launch</text>
-<text class="t-desc" x="364" y="316">record written before the host starts,</text>
-<text class="t-desc" x="364" y="332">and the host's command and arguments</text>
+<text class="t-desc" x="364" y="284">Martha's places, the approved snapshot,</text>
+<text class="t-desc" x="364" y="300">a launch record before the host starts;</text>
+<text class="t-desc" x="364" y="316">run_an_owner_signed_command runs a</text>
+<text class="t-desc" x="364" y="332">shape the owner signed on a verified</text>
+<text class="t-desc" x="364" y="348">copy, in a sandbox</text>
 <rect class="b-cmp" x="664" y="214" width="300" height="146" rx="10"/>
 <text class="t-code" x="680" y="242">refuse_launch_of_unapproved_config</text>
 <text class="t-type" x="680" y="260">[the launch gate]</text>
 <text class="t-desc" x="680" y="284">Fingerprints the config and the tree</text>
 <text class="t-desc" x="680" y="300">id at start, and allows only what was</text>
-<text class="t-desc" x="680" y="316">approved; refuse_code_a_checkout_runs_</text>
-<text class="t-desc" x="680" y="332">itself closes a checkout's own scripts</text>
+<text class="t-desc" x="680" y="316">approved, plus remember_a_members_</text>
+<text class="t-desc" x="680" y="332">own_writes; refuse_code_a_checkout_</text>
+<text class="t-desc" x="680" y="348">runs_itself closes a checkout's scripts</text>
 <rect class="b-dat" x="32" y="376" width="300" height="150" rx="10"/>
 <text class="t-code" x="48" y="404">keep_martha_state_</text>
 <text class="t-code" x="48" y="422">outside_the_checkout</text>
 <text class="t-type" x="48" y="440">[Martha's state]</text>
 <text class="t-desc" x="48" y="464">One directory per project, named by a</text>
-<text class="t-desc" x="48" y="480">hash of its path: node ids, approvals,</text>
-<text class="t-desc" x="48" y="496">launches, snapshots. row_streams_</text>
+<text class="t-desc" x="48" y="480">hash of its path: approvals, launches,</text>
+<text class="t-desc" x="48" y="496">keep_what_the_owner_signed; row_streams_</text>
 <text class="t-desc" x="48" y="512">directory appends rows as files</text>
 <rect class="b-cmp" x="348" y="376" width="300" height="150" rx="10"/>
 <text class="t-code" x="364" y="404">host_contract,</text>
@@ -130,9 +132,9 @@
 <text class="t-type" x="364" y="606">[the shell gate]</text>
 <text class="t-desc" x="364" y="630">What a host calls when a turn or a tool's</text>
 <text class="t-desc" x="364" y="646">result (take_in_a_tool_result) came in,</text>
-<text class="t-desc" x="364" y="662">and what may run after: refuse_execution_</text>
-<text class="t-desc" x="364" y="678">after_ungated_text stops it all; trust_only_</text>
-<text class="t-desc" x="364" y="694">framed_envelopes believes a framed one only</text>
+<text class="t-desc" x="364" y="662">and what may run after; a signed run's</text>
+<text class="t-desc" x="364" y="678">result keeps the shell (keep_the_shell_</text>
+<text class="t-desc" x="364" y="694">for_an_owner_signed_command)</text>
 <rect class="b-cmp" x="664" y="542" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="570">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="588">[whose text it was]</text>

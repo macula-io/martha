@@ -36,6 +36,19 @@ export const RELAY_PATHS = {
 
 export type RelayEvent = keyof typeof RELAY_PATHS
 
+/**
+ * Where `martha run <name>` asks the launcher to run a shape the owner signed (martha#129). Not a hook event: the
+ * member's shell posts it, and the launcher runs it only for the one `martha run <name>` call its relay saw.
+ */
+export const RUN_PATH = '/run-a-signed-shape'
+
+/** A signed shape ran: its exit status, and its merged output, base64. */
+export interface Ran {
+  readonly ran: 1
+  readonly status: number
+  readonly output: string
+}
+
 /** The launcher took the event in. */
 export interface Taken {
   readonly taken: 1
@@ -93,4 +106,22 @@ export function heardVerdict(status: number, text: string): Heard {
   if (exactKeys(value, ['allow']) && value.allow === 1) return YES
   if (exactKeys(value, ['deny']) && isReason(value.deny)) return NO(value.deny)
   return NO(MALFORMED)
+}
+
+/** What `martha run` acts on: the run's status and output, base64, or why there was none. */
+export type HeardRun = { readonly ran: true; readonly status: number; readonly output: string } | { readonly ran: false; readonly why: string }
+
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
+
+const isRan = (value: Record<string, unknown>): value is Record<string, unknown> & Ran =>
+  exactKeys(value, ['ran', 'status', 'output']) && value.ran === 1 && Number.isSafeInteger(value.status) && typeof value.output === 'string' && BASE64.test(value.output)
+
+/** A run's answer, as `martha run` hears it: exactly a Ran, or a refusal with its reason. */
+export function heardRan(status: number, text: string): HeardRun {
+  if (status !== 200) return { ran: false, why: `the launcher answered with status ${status}` }
+  const value = jsonObjectOf(text)
+  if (value === undefined) return { ran: false, why: MALFORMED }
+  if (isRan(value)) return { ran: true, status: value.status, output: value.output }
+  if (exactKeys(value, ['refused']) && isReason(value.refused)) return { ran: false, why: value.refused }
+  return { ran: false, why: MALFORMED }
 }

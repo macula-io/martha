@@ -19,7 +19,7 @@ import { test, type TestContext } from 'node:test'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
-import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -34,7 +34,10 @@ import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
+import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
+import { RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -130,6 +133,7 @@ function answering(
   place: Place,
   rows: RowStore = rowStreamsDirectory(place.rows),
   handed_at_start: readonly TurnSource[] = [],
+  signed_runs?: SignedRuns,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -146,6 +150,7 @@ function answering(
       managed: managedSettingsOf(place),
       switches: CLAUDE_CODE_HOOK_SWITCHES,
     }),
+    ...(signed_runs === undefined ? {} : { signed_runs }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -2449,3 +2454,54 @@ test(
     assert.deepEqual(readdirSync(place.relay_root), [])
   },
 )
+
+// martha#129: a `martha run <name>` the launcher allowed is the one call a run binds to; the client asks on
+// RUN_PATH; the receipt is taken once, at tool_answered.
+const RUN_OUTPUT = 'ok 1 - the suite passed\n'
+
+async function runOverSocket(socket_path: string, body: unknown) {
+  const answer = await fetchOverSocket(`${RELAY_ORIGIN}${RUN_PATH}`, { method: 'POST', headers: {}, body: JSON.stringify(body), socketPath: socket_path })
+  return heardRan(answer.status, answer.text)
+}
+
+test('a martha run call the launcher allowed binds one run, served on its path, and its receipt is taken at the answer (martha#129)', async (t) => {
+  const place = placeFor(t)
+  const ran: string[] = []
+  const receipts = receiptsInMemory()
+  const runs = signedRunsOf(receipts, async (name) => (ran.push(name), { output: Buffer.from(RUN_OUTPUT), status: 1 }))
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], runs)
+  const directory = makeRelayDirectory(join(place.relay_root, 'runs'))
+  assert.ok(directory.made)
+  if (!directory.made) return
+  const server = await serveTheRelay(relay, directory.socket_path)
+  t.after(() => (void server.close(), directory.remove()))
+
+  assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY)
+  assert.deepEqual(await runOverSocket(directory.socket_path, { name: 'test' }), { ran: false, why: 'no martha run test call is pending' })
+  const bash = call('Bash', { command: `${RUN_COMMAND_PREFIX}test`, tool_use_id: 'toolu_9' })
+  assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
+  assert.deepEqual(await runOverSocket(directory.socket_path, { name: 'test' }), { ran: true, status: 1, output: Buffer.from(RUN_OUTPUT).toString('base64') })
+  assert.deepEqual(ran, ['test'])
+  assert.deepEqual(await relay.answer('tool_answered', bash), TAKEN_REPLY)
+  // Taken at the answer: nothing is left for the call, and no second run binds to it.
+  assert.equal(receipts.take('toolu_9'), undefined)
+  assert.deepEqual(await runOverSocket(directory.socket_path, { name: 'test' }), { ran: false, why: 'no martha run test call is pending' })
+  assert.equal(sha256Of(RUN_OUTPUT).length, 64)
+})
+
+test('a martha run call the launcher denied binds no run (martha#129)', async (t) => {
+  const place = placeFor(t)
+  const ran: string[] = []
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsOf(receiptsInMemory(), async (name) => (ran.push(name), { output: Buffer.alloc(0), status: 0 })))
+  await relay.answer('session_started', start('startup'))
+  await relay.answer('tool_called', call('mcp__probe__fetch_page'))
+  await relay.answer('tool_answered', call('mcp__probe__fetch_page'))
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: `${RUN_COMMAND_PREFIX}test`, tool_use_id: 'toolu_9' })), /B2/))
+  assert.deepEqual(await relay.run({ name: 'test' }), { refused: 'no martha run test call is pending' })
+  assert.deepEqual(ran, [])
+})
+
+test('a member launched without signed runs runs no shape (martha#129)', async (t) => {
+  const { relay } = answering(placeFor(t))
+  assert.deepEqual(await relay.run({ name: 'test' }), { refused: NO_SIGNED_RUNS })
+})
