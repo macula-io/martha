@@ -1,23 +1,26 @@
 {
   "name": "martha",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "A crew of coding agents. Core first; hosts are thin adapters.",
   "engines": {
     "node": ">=24.18.1"
   },
   "scripts": {
-    "test": "node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts'",
+    "test": "node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts'",
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
-    "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts"
+    "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
+    "lint": "eslint . --max-warnings=0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
-    "typescript": "^5.9.3"
+    "eslint": "^10.14.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
   },
   "martha": {
     "hostContract": "src/host_contract",
@@ -26,16 +29,25 @@
       "src/row_streams_directory"
     ],
     "hostAdapters": [
+      "src/approve_a_checkouts_config",
       "src/claude_code_host",
       "src/claude_code_relay",
+      "src/declare_a_solo_crew",
       "src/install_the_recorded_mesh_server",
-      "src/launch_a_claude_code_member"
+      "src/keep_martha_state_outside_the_checkout",
+      "src/launch_a_claude_code_member",
+      "src/run_the_martha_command",
+      "src/start_a_member"
     ],
     "packageImports": {
-      "typescript": "prove_the_core"
+      "typescript": "prove_the_core",
+      "eslint": "prove_the_core"
     },
     "loaderImports": {
       "src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts": "node:module"
     }
+  },
+  "overrides": {
+    "minimatch": "^11.0.5"
   }
 }

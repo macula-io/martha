@@ -99,17 +99,32 @@ function appendRow(directory: string, stream: string, row: Row, expected_length:
   const staging = join(stream_directory, `${STAGING_PREFIX}${randomUUID()}`)
   writeWhole(staging, text)
   try {
-    for (;;) {
-      const length = rowsIn(stream_directory, stream).length
-      if (expected_length !== undefined && length !== expected_length) throw moved(stream, length, expected_length)
-      if (linkedAt(staging, join(stream_directory, rowFileNameOf(length)))) {
-        keepDurable(directory, stream_directory, stream, length)
-        return length
-      }
-      if (expected_length !== undefined) throw moved(stream, length + 1, expected_length)
-    }
+    return linkAtNextPosition(directory, stream_directory, stream, staging, expected_length)
   } finally {
     fs.rmSync(staging, { force: true })
+  }
+}
+
+/**
+ * Links the staged row at the stream's next position and makes it durable,
+ * trying the next position again when another append took this one, unless the
+ * caller expected a length, which the taken position has now moved.
+ */
+function linkAtNextPosition(
+  directory: string,
+  stream_directory: string,
+  stream: string,
+  staging: string,
+  expected_length: number | undefined,
+): number {
+  for (;;) {
+    const length = rowsIn(stream_directory, stream).length
+    if (expected_length !== undefined && length !== expected_length) throw moved(stream, length, expected_length)
+    if (linkedAt(staging, join(stream_directory, rowFileNameOf(length)))) {
+      keepDurable(directory, stream_directory, stream, length)
+      return length
+    }
+    if (expected_length !== undefined) throw moved(stream, length + 1, expected_length)
   }
 }
 

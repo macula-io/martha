@@ -97,14 +97,18 @@ const isVerdict = (error) => error instanceof VerificationError || error instanc
  *   sigstore's createVerifier; a test passes its own.
  */
 
+/** @param {unknown} error */
+const wordsOf = (error) => error instanceof Error ? error.message : String(error)
+
 /**
- * Why the bundle does not verify under signer `sha` for `ref`, or '' when it does.
- * @param {{ bundle: any, sha: string, ref: string, source: string, makeVerifier: MakeVerifier, tufCachePath?: string | undefined }} request
+ * sigstore's verifier for signer `sha`; a trust root that did not arrive is no check at all (CouldNotCheck).
+ * @param {string} sha
+ * @param {MakeVerifier} makeVerifier
+ * @param {string | undefined} tufCachePath
  */
-async function failure ({ bundle, sha, ref, source, makeVerifier, tufCachePath }) {
-  let verifier
+async function verifierFor (sha, makeVerifier, tufCachePath) {
   try {
-    verifier = await makeVerifier({
+    return await makeVerifier({
       certificateIssuer: NAMES.issuer,
       certificateIdentityURI: identityPattern(sha),
       tlogThreshold: 1,
@@ -112,14 +116,35 @@ async function failure ({ bundle, sha, ref, source, makeVerifier, tufCachePath }
       ...(tufCachePath ? { tufCachePath } : {})
     })
   } catch (error) {
-    return couldNotCheck(`the Sigstore trust root did not arrive (${error instanceof Error ? error.message : String(error)}); nothing was installed`)
+    return couldNotCheck(`the Sigstore trust root did not arrive (${wordsOf(error)}); nothing was installed`)
   }
-  let signer
-  try { signer = verifier.verify(bundle) } catch (error) {
-    if (!isVerdict(error)) couldNotCheck(`the signature check failed to run (${error instanceof Error ? error.message : String(error)}); nothing was installed`)
-    return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * The signer the bundle verifies as, or sigstore's refusal in its words. A check that failed to run is no
+ * verdict (CouldNotCheck).
+ * @param {{ verify: (bundle: any) => any }} verifier
+ * @param {any} bundle
+ * @returns {{ signer: any } | { refused: string }}
+ */
+function verdictOf (verifier, bundle) {
+  try {
+    return { signer: verifier.verify(bundle) }
+  } catch (error) {
+    if (!isVerdict(error)) couldNotCheck(`the signature check failed to run (${wordsOf(error)}); nothing was installed`)
+    return { refused: wordsOf(error) }
   }
-  const oids = signer?.identity?.oids
+}
+
+/**
+ * Why the bundle does not verify under signer `sha` for `ref`, or '' when it does.
+ * @param {{ bundle: any, sha: string, ref: string, source: string, makeVerifier: MakeVerifier, tufCachePath?: string | undefined }} request
+ */
+async function failure ({ bundle, sha, ref, source, makeVerifier, tufCachePath }) {
+  const verifier = await verifierFor(sha, makeVerifier, tufCachePath)
+  const verified = verdictOf(verifier, bundle)
+  if ('refused' in verified) return verified.refused
+  const oids = verified.signer?.identity?.oids
   const repository = utf8Extension(oids, OID_SOURCE_REPOSITORY)
   const signedRef = utf8Extension(oids, OID_SOURCE_REF)
   if (repository !== source) return `signed for repository ${repository}, not ${source}`
@@ -139,12 +164,11 @@ export async function signedBy ({ bundles, digest, version, signers, source = NA
   const signing = bundles.filter((b) => signsDigest(b, digest))
   if (signing.length === 0) reasons.add(`no cosign signature over ${digest}`)
   if (signers.length === 0) reasons.add('this installer lists no signer')
-  for (const bundle of signing) {
-    for (const sha of signers) {
-      const failed = await failure({ bundle, sha, ref, source, makeVerifier, tufCachePath })
-      if (!failed) return { sha }
-      reasons.add(failed)
-    }
+  // Every bundle under every listed signer, bundle by bundle.
+  for (const { bundle, sha } of signing.flatMap((b) => signers.map((s) => ({ bundle: b, sha: s })))) {
+    const failed = await failure({ bundle, sha, ref, source, makeVerifier, tufCachePath })
+    if (!failed) return { sha }
+    reasons.add(failed)
   }
   return { reasons: [...reasons] }
 }

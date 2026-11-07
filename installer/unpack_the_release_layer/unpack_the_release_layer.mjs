@@ -165,6 +165,16 @@ function checkLink (path, target) {
 }
 
 /**
+ * The folder above `at`; `outside` refuses a step above martha/ itself.
+ * @param {string[]} at
+ * @param {() => never} outside
+ */
+function parentWithin (at, outside) {
+  if (at.length === 1) outside()
+  return at.slice(0, -1)
+}
+
+/**
  * A link's target walked as the kernel walks it: part by part from the link's folder, following every link of the
  * plan it passes through. A '..' that would leave martha/ is refused at that step, so no detour outside counts as
  * inside; more than UNPACK_LIMITS.linkHops links followed, this one counted, is refused as the kernel refuses it
@@ -181,8 +191,7 @@ function walkLink (plan, link) {
   for (let part = rest.shift(); part !== undefined; part = rest.shift()) {
     if (part === '' || part === '.') continue
     if (part === '..') {
-      if (at.length === 1) outside()
-      at = at.slice(0, -1)
+      at = parentWithin(at, outside)
       continue
     }
     at = [...at, part]
@@ -196,10 +205,11 @@ function walkLink (plan, link) {
 }
 
 /**
- * The entries to write, every one checked: the plan, before anything touches the disk.
+ * Each entry under its clean path, once: a path held twice, or a link to no relative path, is refused.
  * @param {Entry[]} entries
+ * @returns {Map<string, Entry>}
  */
-export function planEntries (entries) {
+function plannedByPath (entries) {
   /** @type {Map<string, Entry>} */
   const plan = new Map()
   for (const entry of entries) {
@@ -209,6 +219,15 @@ export function planEntries (entries) {
     if (entry.kind === 'symlink') checkLink(path, entry.target)
     plan.set(path, { ...entry, path })
   }
+  return plan
+}
+
+/**
+ * The entries to write, every one checked: the plan, before anything touches the disk.
+ * @param {Entry[]} entries
+ */
+export function planEntries (entries) {
+  const plan = plannedByPath(entries)
   if (plan.get(TOP)?.kind === 'symlink') refuse(`the package's ${TOP} is a link; refused`)
   for (const link of plan.values()) if (link.kind === 'symlink') walkLink(plan, link)
   for (const path of plan.keys()) {

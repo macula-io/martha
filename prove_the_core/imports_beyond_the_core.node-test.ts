@@ -45,8 +45,10 @@ test('a loader module allowed for one file is still named in any other file, and
   ])
 })
 
-test('tripwire: package.json allows exactly typescript, and only in prove_the_core; a new package is a decision, not a drift', () => {
-  assert.deepEqual(packages, { typescript: 'prove_the_core' })
+// eslint joined in martha#87: prove_the_core/structure_stays_flat.node-test.ts reads the structural floor's caps
+// from eslint's resolved config and lints planted functions with them.
+test('tripwire: package.json allows exactly typescript and eslint, and only in prove_the_core; a new package is a decision, not a drift', () => {
+  assert.deepEqual(packages, { typescript: 'prove_the_core', eslint: 'prove_the_core' })
 })
 
 test('a planted import of a coding tool is named, with its file and line', () => {
@@ -241,6 +243,11 @@ test('every glob form the test script uses is read, and one naming no folder fai
   assert.deepEqual(
     codeFoldersOf(testing("node --test --test-reporter=spec 'src/**/*.node-test.ts' architecture/*.node-test.ts \"checks/x.node-test.ts\"")),
     ['src', 'architecture', 'checks'],
+  )
+  assert.deepEqual(
+    codeFoldersOf(testing("node ./runs/through.ts node --test 'src/**/*.node-test.ts'")),
+    ['runs', 'src'],
+    'a runner node --test is started through is code the script runs',
   )
   assert.throws(() => codeFoldersOf(testing("node --test 'src/**/*.ts' '*.node-test.ts'")), /'\*\.node-test\.ts'/)
   assert.throws(() => codeFoldersOf(testing('node --test lone.node-test.ts')), /'lone\.node-test\.ts'/)

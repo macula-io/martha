@@ -191,16 +191,22 @@ function isMemberLaunch(value: unknown): value is MemberLaunch {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const { member_name, node_id, pid, process_started_at } = value as Record<string, unknown>
   return (
-    typeof member_name === 'string' &&
-    MEMBER_NAME.test(member_name) &&
-    typeof node_id === 'string' &&
-    NODE_ID.test(node_id) &&
-    node_id === node_id.toLowerCase() &&
+    isMemberName(member_name) &&
+    isLowercaseNodeId(node_id) &&
     typeof pid === 'number' &&
     isPid(pid) &&
     typeof process_started_at === 'string' &&
     process_started_at !== ''
   )
+}
+
+function isMemberName(value: unknown): value is string {
+  return typeof value === 'string' && MEMBER_NAME.test(value)
+}
+
+/** A node id, written in lower case as the launcher writes it. */
+function isLowercaseNodeId(value: unknown): value is string {
+  return typeof value === 'string' && NODE_ID.test(value) && value === value.toLowerCase()
 }
 
 function isPid(pid: number): boolean {

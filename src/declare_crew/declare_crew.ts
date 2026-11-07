@@ -215,20 +215,26 @@ function mayOf(refuse: Refuse, value: unknown, roles: readonly string[]): Record
 function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Member[] {
   if (!Array.isArray(value)) return refuse.at('members', 'is not a list of members')
   const seen = new Set<string>()
-  return value.map((member: unknown, i) => {
-    const at = `members[${i}]`
-    if (!isObject(member)) return refuse.at(at, `is not ${shapeOf(REQUIRED_MEMBER_KEYS, OPTIONAL_MEMBER_KEYS)}`)
-    refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
-    const { name, role, model } = member
-    if (typeof name !== 'string' || !MEMBER_NAME.test(name)) refuse.at(`${at}.name`, `is not a name matching ${MEMBER_NAME}`)
-    // Names are compared case-folded: Terra and terra would share branches and a mailbox.
-    const folded = name.toLowerCase()
-    if (seen.has(folded)) refuse.at(`${at}.name`, 'is on the crew twice (names are compared ignoring case)')
-    seen.add(folded)
-    if (typeof role !== 'string' || !roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${roles.join(', ')})`)
-    if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
-    return { name, role, model: model ?? null }
-  })
+  return value.map((member: unknown, i) => memberOf(refuse, member, `members[${i}]`, roles, seen))
+}
+
+function memberOf(refuse: Refuse, member: unknown, at: string, roles: readonly string[], seen: Set<string>): Member {
+  if (!isObject(member)) return refuse.at(at, `is not ${shapeOf(REQUIRED_MEMBER_KEYS, OPTIONAL_MEMBER_KEYS)}`)
+  refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
+  const { role, model } = member
+  const name = memberNameOf(refuse, member.name, at, seen)
+  if (typeof role !== 'string' || !roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${roles.join(', ')})`)
+  if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
+  return { name, role, model: model ?? null }
+}
+
+function memberNameOf(refuse: Refuse, name: unknown, at: string, seen: Set<string>): string {
+  if (typeof name !== 'string' || !MEMBER_NAME.test(name)) refuse.at(`${at}.name`, `is not a name matching ${MEMBER_NAME}`)
+  // Names are compared case-folded: Terra and terra would share branches and a mailbox.
+  const folded = name.toLowerCase()
+  if (seen.has(folded)) refuse.at(`${at}.name`, 'is on the crew twice (names are compared ignoring case)')
+  seen.add(folded)
+  return name
 }
 
 function houseRulesOf(refuse: Refuse, value: unknown): HouseRules {

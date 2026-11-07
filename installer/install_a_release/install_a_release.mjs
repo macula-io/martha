@@ -72,28 +72,88 @@ function refuseUnsigned ({ image, version, digest, named, reasons }) {
   return refuse(`the highest version on ${image}, ${version} (${digest}), carries no signature from Martha's release workflow${why}; refused. Name a version: ${NAMES.command}-install <version>`)
 }
 
-/** @param {InstallRequest} request */
+/**
+ * The steps in the order the top of this file lists them; nothing is linked until every one has passed.
+ * @param {InstallRequest} request
+ */
 export async function installRelease (request) {
-  const log = request.log ?? console.log
   checkNodeVersion(request.nodeVersion ?? process.versions.node)
   checkRequest(request)
   const image = request.image ?? NAMES.image
-  const named = request.version !== undefined
   const reg = registry({ image, ...(request.base && { base: request.base }), ...(request.fetch && { fetch: request.fetch }) })
+  const chosen = await chosenRelease(request, reg, image)
+  const signer = await signerOf(request, reg, chosen)
+  const { release, command } = await placedRelease(request, reg, chosen)
+  const log = request.log ?? console.log
+  log(`martha: ${chosen.version}, ${image}@${chosen.digest}`)
+  log(`martha: signed by attest-image.yml@${signer} for ${NAMES.sourceRepository} ${releaseRef(chosen.version)}`)
+  log(`martha: ${request.places.current} -> ${release}`)
+  log(`martha: ${command}`)
+  return { version: chosen.version, digest: chosen.digest, signer, release, command }
+}
+
+/**
+ * @typedef {ReturnType<typeof registry>} Registry
+ * @typedef {{ image: string, version: string, digest: string, named: boolean, manifest: Awaited<ReturnType<Registry['manifest']>> }} ChosenRelease
+ */
+
+/**
+ * Steps 2 and 3: the version and its manifest, whose digest is the release from here on; the digest the user
+ * verified, when given, and the one downgrade rule.
+ * @param {InstallRequest} request
+ * @param {Registry} reg
+ * @param {string} image
+ * @returns {Promise<ChosenRelease>}
+ */
+async function chosenRelease (request, reg, image) {
+  const named = request.version !== undefined
   await reg.authorize()
   const version = request.version ?? await reg.highestVersion()
   const manifest = await reg.manifest(version)
   const digest = manifest.digest
   if (request.digest && request.digest !== digest) refuse(`${image}:${version} is ${digest} now, not the ${request.digest} you verified; refused`)
   await checkAgainstInstalled({ version, digest, downgrade: request.downgrade ?? false, named, places: request.places })
+  return { image, version, digest, named, manifest }
+}
+
+/**
+ * Step 4: the signature on the release's digest, by a listed signer; the signing workflow's commit, or a refusal.
+ * @param {InstallRequest} request
+ * @param {Registry} reg
+ * @param {ChosenRelease} chosen
+ */
+async function signerOf (request, reg, chosen) {
+  const { version, digest } = chosen
   const signers = request.signers ?? await listedSigners()
-  let bundles
-  try { bundles = await reg.bundles(digest) } catch (error) {
-    if (error instanceof CouldNotCheck) throw error
-    refuseUnsigned({ image, version, digest, named, reasons: [error instanceof Error ? error.message : String(error)] })
-  }
+  const bundles = await bundlesOf(reg, chosen)
   const verdict = await signedBy({ bundles, digest, version, signers, ...(request.makeVerifier && { makeVerifier: request.makeVerifier }), tufCachePath: request.tufCachePath })
-  if (!('sha' in verdict)) refuseUnsigned({ image, version, digest, named, reasons: verdict.reasons })
+  if (!('sha' in verdict)) refuseUnsigned({ ...chosen, reasons: verdict.reasons })
+  return verdict.sha
+}
+
+/**
+ * The signature bundles stored for the release's digest. A registry that could not be asked stays that fault;
+ * anything else it says is a release with no signature, refused.
+ * @param {Registry} reg
+ * @param {ChosenRelease} chosen
+ */
+async function bundlesOf (reg, chosen) {
+  try {
+    return await reg.bundles(chosen.digest)
+  } catch (error) {
+    if (error instanceof CouldNotCheck) throw error
+    return refuseUnsigned({ ...chosen, reasons: [error instanceof Error ? error.message : String(error)] })
+  }
+}
+
+/**
+ * Steps 5 to 7: the one layer by digest, unpacked into its own read-only directory, current swapped to it, the
+ * command linked through current.
+ * @param {InstallRequest} request
+ * @param {Registry} reg
+ * @param {ChosenRelease} chosen
+ */
+async function placedRelease (request, reg, { image, version, digest, manifest }) {
   const layer = layerOf(manifest.json, `${image}@${digest}`)
   const release = await placeRelease({
     releases: request.places.releases,
@@ -102,9 +162,5 @@ export async function installRelease (request) {
   })
   await swapLink(release, request.places.current)
   const command = await linkCommand({ release, places: request.places })
-  log(`martha: ${version}, ${image}@${digest}`)
-  log(`martha: signed by attest-image.yml@${verdict.sha} for ${NAMES.sourceRepository} ${releaseRef(version)}`)
-  log(`martha: ${request.places.current} -> ${release}`)
-  log(`martha: ${command}`)
-  return { version, digest, signer: verdict.sha, release, command }
+  return { release, command }
 }

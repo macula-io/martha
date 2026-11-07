@@ -794,10 +794,27 @@ for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
 // A stand-in of a recorded version, with one bin as npx would pick it, served
 // on the loopback: the launcher must not reach the real registry in a test.
 const RECORDED_MARK = 'the recorded mesh server'
+/** What the launcher's environment would load into the mesh server: the stand-in is asked about each. */
+const NEVER_REACHES_THE_MESH_SERVER = ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RELAY_SOCKET_VARIABLE] as const
+/**
+ * The only variables the stand-in answers with: the ones a test asks whether
+ * they reached the server. Never its whole environment, which is whatever the
+ * person running the suite has, secrets included (martha#92).
+ * It copies the environment by a spread, the one whole-environment read the
+ * recorder lists (prove_the_mesh_server_bytes.ts), and picks from the copy.
+ * It answers every name it is asked, null for one it was not started with, so a
+ * check on a name it was never asked about fails instead of reading it as absent.
+ */
+const ASKED_OF_THE_STAND_IN = [...NEVER_REACHES_THE_MESH_SERVER, 'CLAUDE_CODE_PLUGIN_DIRS'] as const
+const STAND_IN_ANSWER = [
+  `const asked = ${JSON.stringify(ASKED_OF_THE_STAND_IN)}`,
+  'const started = { ...process.env }',
+  'process.stderr.write(JSON.stringify(Object.fromEntries(asked.map((name) => [name, started[name] ?? null]))))',
+].join('\n')
 
 async function recordedTreeOf(t: TestContext, version: string): Promise<{ registry: FakeRegistry; recording: MeshTreeRecording }> {
   const registry = await fakeMeshRegistry([
-    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\nprocess.stderr.write(JSON.stringify({ ...process.env }))\n` } },
+    { name: MESH_SERVER_PACKAGE, version, bin: { 'macula-mcp': 'dist/index.js' }, files: { 'dist/index.js': `console.log('${RECORDED_MARK}')\n${STAND_IN_ANSWER}\n` } },
   ])
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
@@ -829,7 +846,10 @@ test('an approved config that installs a recorded mesh server version starts the
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
   assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
-  assert.equal(execFileSync(entry.command, entry.args, { encoding: 'utf8' }).trim(), RECORDED_MARK)
+  // What the stand-in writes is captured, never let through into the run (martha#92).
+  const run = spawnSync(entry.command, entry.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(run.stdout.trim(), RECORDED_MARK)
   started.stop('the test is over')
   await started.stopped
 })
@@ -860,10 +880,14 @@ test('what the launcher\'s environment would load into the mesh server never rea
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
   assert.ok(entry !== undefined)
   const run = spawnSync(entry.command, entry.args, { env: { ...hostEnv, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
   assert.equal(existsSync(ran), false, 'the preload never ran in the server')
-  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
-  for (const name of ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RELAY_SOCKET_VARIABLE]) assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
+  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string | null>
+  for (const name of NEVER_REACHES_THE_MESH_SERVER) {
+    assert.ok(Object.hasOwn(seen, name), `the stand-in was never asked about ${name}`)
+    assert.ok(!seen[name], `${name} reached the server as ${seen[name]}`)
+  }
   started.stop('the test is over')
   await started.stopped
 })
@@ -948,6 +972,7 @@ test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, an
   assert.ok(entry !== undefined)
   // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
   const run = spawnSync(entry.command, entry.args, { env: { ...process.env, ...fromSettings, ...entry.env }, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
   const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
   assert.equal(seen.CLAUDE_CODE_PLUGIN_DIRS, '', `it reached the server as ${seen.CLAUDE_CODE_PLUGIN_DIRS}`)

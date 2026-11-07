@@ -6,7 +6,7 @@
 // this user, mode 0500, inside the launch's own relay directory, and gone with
 // it. A path that already exists, a link included, refuses the launch.
 
-import { lstatSync, mkdirSync, readdirSync } from 'node:fs'
+import { type Stats, lstatSync, mkdirSync, readdirSync } from 'node:fs'
 import { getuid } from 'node:process'
 
 /** Only the owner may enter or list it, and nobody may write into it. */
@@ -31,10 +31,14 @@ export function makeEmptyDirectory(directory: string, owner_uid: number = getuid
   } catch (error) {
     return refused(`could not be made new at ${directory} (${(error as NodeJS.ErrnoException).code ?? String(error)})`)
   }
-  const made = lstatSync(directory)
-  if (!made.isDirectory() || made.uid !== owner_uid || (made.mode & PERMISSION_BITS) !== EMPTY_DIRECTORY_MODE) {
+  if (!isOnlyTheOwners(lstatSync(directory), owner_uid)) {
     return refused(`at ${directory} is not a directory only this user may read`)
   }
   if (readdirSync(directory).length !== 0) return refused(`at ${directory} is not empty`)
   return { made: true }
+}
+
+/** A real directory, owned by `owner_uid`, mode 0500 exactly. */
+function isOnlyTheOwners(made: Stats, owner_uid: number): boolean {
+  return made.isDirectory() && made.uid === owner_uid && (made.mode & PERMISSION_BITS) === EMPTY_DIRECTORY_MODE
 }

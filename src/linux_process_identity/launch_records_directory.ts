@@ -132,15 +132,20 @@ function readRecord(path: string): Row | undefined {
   }
 
   try {
-    const stat = fs.fstatSync(fd)
-    if (!stat.isFile() || stat.uid !== getuid?.() || (stat.mode & PERMISSION_BITS) !== LAUNCH_RECORD_FILE_MODE) {
-      return undefined
-    }
-    const row: unknown = JSON.parse(fs.readFileSync(fd, 'utf8'))
-    return typeof row === 'object' && row !== null && !Array.isArray(row) ? (row as Row) : undefined
+    if (!isOwnRecordFile(fs.fstatSync(fd))) return undefined
+    return asRow(JSON.parse(fs.readFileSync(fd, 'utf8')))
   } catch {
     return undefined
   } finally {
     fs.closeSync(fd)
   }
+}
+
+/** A regular file, owned by this user, with exactly the mode the launcher writes records with. */
+function isOwnRecordFile(stat: fs.Stats): boolean {
+  return stat.isFile() && stat.uid === getuid?.() && (stat.mode & PERMISSION_BITS) === LAUNCH_RECORD_FILE_MODE
+}
+
+function asRow(row: unknown): Row | undefined {
+  return typeof row === 'object' && row !== null && !Array.isArray(row) ? (row as Row) : undefined
 }

@@ -245,16 +245,22 @@ export async function concludeAct(
       announced_at: input.announced_at,
       outcome: input.outcome,
     }
-    try {
-      await keep(host, row, rows.length)
-      return
-    } catch (error) {
-      if (!streamMoved(error)) throw error
-    }
+    if (await keptUnlessMoved(host, row, rows.length)) return
   }
   throw new Error(
     `the outcome of the act at row ${input.announced_at} was not kept: ${input.package} kept moving for ${CONCLUDE_ATTEMPTS} attempts`,
   )
+}
+
+/** Keeps the outcome row at `length`: true when kept, false when a row landed first; any other failure throws. */
+async function keptUnlessMoved(host: LedgerHost, row: ActConcludedRow, length: number): Promise<boolean> {
+  try {
+    await keep(host, row, length)
+    return true
+  } catch (error) {
+    if (!streamMoved(error)) throw error
+    return false
+  }
 }
 
 const detailOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
