@@ -15,6 +15,8 @@
 # The ref check only ever runs against a branch ref here, from installer/rehearse_a_release/, a script the npm
 # package does not ship: the installer itself has no way to name another ref.
 #
+# Like the release, it waits on the dependency advisory scan (advisories.yml, martha#110).
+#
 # What it cannot rehearse: the guard on a v* tag and the published-once check; those run on the tag only.
 #
 # The first dry run is also what makes the release package: the owner links it to this repository and makes it
@@ -33,7 +35,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The release waits on the advisory scan (martha#110), so its rehearsal does too: nothing is pushed or signed while a
+  # dependency carries a known published advisory.
+  advisories:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/advisories.yml
+
   push:
+    needs: advisories
     runs-on: ubuntu-latest
     permissions:
       contents: read

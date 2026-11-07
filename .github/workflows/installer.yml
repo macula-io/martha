@@ -3,7 +3,8 @@
 # registry refuses the provenance unless installer/package.json's repository.url names this repository.
 #
 # Nothing is published while the guard refuses (the tag is off main, or names another version than
-# installer/package.json), the installer's suite fails, or a production dependency carries a known advisory.
+# installer/package.json), the installer's suite fails, or a dependency carries a known published advisory
+# (advisories.yml, martha#110: both projects, dev included, waivers dated in .github/advisories-waivers.txt).
 #
 # The tag glob installer-v* never matches a release tag (v*), and release.yml's glob never matches this one.
 
@@ -29,8 +30,14 @@ jobs:
       versions: check
       require-tag: true
 
+  # A dependency with a known published advisory stops the publish (martha#110).
+  advisories:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/advisories.yml
+
   publish:
-    needs: guard
+    needs: [guard, advisories]
     # npm trusted publishing takes its token from a GitHub-hosted runner only.
     runs-on: ubuntu-latest
     permissions:
