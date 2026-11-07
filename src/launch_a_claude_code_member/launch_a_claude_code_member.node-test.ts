@@ -772,18 +772,19 @@ test('the member, its load check and its version check all run the one file its 
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
 })
 
-test('a member whose relay never reports its session start is stopped once the deadline passes, saying why', async (t) => {
+test('a member with no owner to answer its host, whose relay never reports its session start, is stopped once its deadline passes, saying why', async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
   const lines: string[] = []
-  const relay_deadline_ms = 300
-  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command, place.approved, lines), relay_deadline_ms })
+  const session_start_deadline_ms = 300
+  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: 60_000 })
   if (!started.started) assert.fail(started.refusal)
   t.after(async () => (started.stop('the test is over'), await started.stopped))
   const stopped = await started.stopped
   assert.equal(stopped.signal, 'SIGKILL')
   const why = (stopped as { stopped_because?: string }).stopped_because ?? ''
-  assert.ok(why.includes(`${relay_deadline_ms} ms`), why)
+  assert.ok(why.includes(`within ${session_start_deadline_ms / 1000} s`), why)
+  assert.ok(!why.includes('trust'), 'no owner could have been asked a trust question')
   assert.ok(lines.some((line) => line.includes(why)), lines.join('\n'))
   assert.deepEqual(readdirSync(place.relay_root), [])
 })
@@ -791,8 +792,8 @@ test('a member whose relay never reports its session start is stopped once the d
 test('a member whose relay reports its session start in time is not stopped by the deadline', async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
-  const relay_deadline_ms = 1_000
-  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command), relay_deadline_ms })
+  const session_start_deadline_ms = 1_000
+  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command), session_start_deadline_ms })
   if (!started.started) assert.fail(started.refusal)
   t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
@@ -804,7 +805,7 @@ test('a member whose relay reports its session start in time is not stopped by t
     socketPath,
   })
   assert.equal(posted.text, '{"taken":1}')
-  await new Promise((resolve) => setTimeout(resolve, 2 * relay_deadline_ms))
+  await new Promise((resolve) => setTimeout(resolve, 2 * session_start_deadline_ms))
   assert.equal(isAlive(started.pid), true, 'the member still runs')
 })
 
@@ -1234,6 +1235,7 @@ function launcherProcess(
   stdio: 'ignore' | 'inherit' = 'ignore',
   inherited: Readonly<Record<string, string>> = {},
   mesh_trees?: MeshTreeRecording,
+  deadlines: SessionStartDeadlines = {},
 ): string {
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
@@ -1249,6 +1251,7 @@ function launcherProcess(
       '  policy: { may_send_executable_text: [] },',
       '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
+      ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,
       "  args: ['-p', 'the owner prompt'],",
       `  inherited: { PATH: process.env.PATH, ...${JSON.stringify(inherited)} },`,
@@ -1257,7 +1260,7 @@ function launcherProcess(
       '})',
       "if (started.started) process.once('SIGUSR2', () => started.stop('the test said so'))",
       "process.stdout.write(started.started ? `started ${started.pid}\\n` : `refused: ${started.refusal}\\n`)",
-      "if (started.started) process.stdout.write(`stopped ${(await started.stopped).signal ?? 'by itself'}\\n`)",
+      "if (started.started) { const stopped = await started.stopped; process.stdout.write(`stopped ${stopped.signal ?? 'by itself'}\\n${stopped.stopped_because === null ? '' : `because ${stopped.stopped_because}\\n`}`) }",
       'setInterval(() => undefined, 1 << 30)',
       '',
     ].join('\n'),
@@ -1405,6 +1408,14 @@ interface TerminalLaunch {
   readonly mesh_trees?: MeshTreeRecording
   /** How long the fake terminal member waits before it exits on the leave line, for a slow host (martha#90). */
   readonly exitsAfterMs?: number
+  /** The launch's own session start deadlines (#104 r=2). */
+  readonly deadlines?: SessionStartDeadlines
+}
+
+/** The deadlines a test gives a launch in place of the launcher's own. */
+interface SessionStartDeadlines {
+  readonly session_start_deadline_ms?: number
+  readonly trust_answer_deadline_ms?: number
 }
 
 /**
@@ -1427,7 +1438,7 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
-  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees)
+  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines)
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
@@ -1522,6 +1533,26 @@ test('a member on the owner\'s terminal that Ctrl-Z stops is resumed in the fore
   terminal.type(line)
   await until('the stopped member to read on', () => textIn(terminal.fake.gotFile) === line, t, () => terminal.shown())
   assert.equal(foregroundOf(member), member, 'the member\'s group has the terminal again')
+})
+
+test('a member on the owner\'s terminal is not held to the deadline of a member no owner can answer for: the host may first ask the owner whether to trust the folder (#104 r=2)', async (t) => {
+  const place = placeFor(t)
+  const session_start_deadline_ms = 300
+  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms } })
+  const member = Number(textIn(terminal.fake.readyFile))
+  await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
+  assert.equal(isAlive(member), true, 'the member still runs')
+  assert.ok(!terminal.shown().includes('stopped'), terminal.shown())
+})
+
+test('a member on the owner\'s terminal whose relay never reports its session start is stopped at the trust answer deadline, saying the host may still have been asking (#104 r=2)', async (t) => {
+  const place = placeFor(t)
+  const trust_answer_deadline_ms = 500
+  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms: 60_000, trust_answer_deadline_ms } })
+  await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
+  const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
+  assert.ok(why.includes(`within ${trust_answer_deadline_ms / 1000} s`), why)
+  assert.ok(why.includes('trust'), why)
 })
 
 test('a member on the owner\'s terminal that exits by itself leaves the terminal\'s settings as they were', async (t) => {
