@@ -45,6 +45,7 @@ import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './le
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
+import { HOST_EXIT_COMMAND, HOST_TERMINAL, RECORDED_HOST_VARIABLE } from './drive_the_recorded_host.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
@@ -2408,11 +2409,6 @@ for (const [what, make] of [
 // The relay CI job installs the recorded version and names it here; the job checks
 // first that this host does write into a writable folder, so a pass here is not
 // a host that writes nothing.
-const RECORDED_HOST_VARIABLE = 'MARTHA_RECORDED_HOST'
-/** The terminal type the host draws for. */
-const HOST_TERMINAL = 'xterm-256color'
-/** The host's own command that ends its session. */
-const HOST_EXIT_COMMAND = '/exit'
 const recordedHost = process.env[RECORDED_HOST_VARIABLE]
 
 /** Every file under `directory`, by its path inside it, with the SHA-256 of its bytes. */
