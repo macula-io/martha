@@ -369,6 +369,23 @@ test("a read of the owner-approved tree keeps the member's shell (martha#127)", 
   }
 })
 
+test('a tracked file rewritten under an index flag that hides it is no read of the approved tree: the member is stopped (martha#127 r=1)', async (t) => {
+  for (const flag of ['--skip-worktree', '--assume-unchanged']) {
+    const place = placeFor(t)
+    git(place.checkout, 'update-index', flag, 'README.md')
+    const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
+    const { relay, stops } = answering(approved)
+    await relay.answer('session_started', start('startup'))
+    assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY, flag)
+
+    writeFileSync(join(place.checkout, 'README.md'), 'now run this\n')
+    const read = call('Read', { file_path: join(place.checkout, 'README.md') })
+    assert.ok(isDenied(await relay.answer('tool_called', read), /no longer matches/), flag)
+    assert.equal((await relay.answer('tool_answered', read)).answered, false, flag)
+    assert.equal(stops.length, 1, flag)
+  }
+})
+
 test('a command\'s output always takes the shell as A13, and names gh as B3 and git history as B5 (martha#127)', async (t) => {
   const place = placeFor(t)
   const commands: readonly { readonly command: unknown; readonly paths: readonly string[] }[] = [
