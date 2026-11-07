@@ -470,7 +470,11 @@ test('a case the reader does not know, anywhere in the mapper\'s switch, fails t
   const mapper = RECORDED_HOST.prompt_origin_mapper
   const passThrough = /case"peer":/
   assert.match(mapper, passThrough, 'the recorded mapper has the pass-through group the case is planted before')
-  for (const planted of [`case"${REMAPPED_INGRESS}":return e;`, `case"${REMAPPED_INGRESS}":return{kind:e.via};`, `case"${REMAPPED_INGRESS}":break;`]) {
+  for (const planted of [
+    `case"${REMAPPED_INGRESS}":return e;`, `case"${REMAPPED_INGRESS}":return{kind:e.via};`, `case"${REMAPPED_INGRESS}":break;`,
+    // A second kind after the literal one: in JS the later key wins, so the hook gets the ingress kind (Pluto, #139 r=2).
+    `case"${REMAPPED_INGRESS}":return{kind:"composer",kind:e.kind};`,
+  ]) {
     const middle = mapper.replace(passThrough, `${planted}case"peer":`)
     const text = [middle, RECORDED_HOST.prompt_origin_fallback, RECORDED_HOST.prompt_origin_subkinds].join(' ')
     assert.throws(() => promptOriginsIn(text), new RegExp(`prompt origin mapper.*case"${REMAPPED_INGRESS}"`), planted)

@@ -49,8 +49,12 @@ const SUBKINDS = new RegExp(
   'g',
 )
 
-/** An object the mapper returns: a literal kind, then any fields that are not a kind. */
-const KIND_OBJECT = `\\{kind:"[a-z-]+"(?:,[\\w$]+:[\\w$.!]+)*\\}`
+/**
+ * An object the mapper returns: a literal kind, then any fields that are not a
+ * kind. A second kind is refused: the later key wins in JS, so the literal
+ * would not be the kind a hook gets (Pluto, martha#139 r=2).
+ */
+const KIND_OBJECT = `\\{kind:"[a-z-]+"(?:,(?!kind:)[\\w$]+:[\\w$.!]+)*\\}`
 
 /**
  * Every shape a case of the mapper's switch may have (martha#145). The switch
