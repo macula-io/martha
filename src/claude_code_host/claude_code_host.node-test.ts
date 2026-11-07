@@ -414,10 +414,10 @@ test('the origin code is read from the host\'s own text: one of each part, or no
 
 // --- martha#139: a host remaps an ingress kind after its pass-through cases ---------------
 
-/** The recorded mapper's last statement: the cases that pass the ingress kind through. */
-const PASS_THROUGH_END = /return\{kind:([\w$]+)\.kind\}\}\}$/
+/** The recorded mapper's end: the cases that pass the ingress kind through, then any literal remaps. */
+const PASS_THROUGH_END = /return\{kind:([\w$]+)\.kind\}(?:;case"[a-z-]+":return\{kind:"[a-z-]+"\})*\}\}$/
 
-/** The recorded mapper with `tail` after its pass-through cases, as Claude Code 2.1.319 adds one. */
+/** The recorded mapper with `tail`, and nothing else, after its pass-through cases, as Claude Code 2.1.319 adds one. */
 function mapperEndingWith(tail: string): string {
   const mapper = RECORDED_HOST.prompt_origin_mapper
   assert.match(mapper, PASS_THROUGH_END, 'the recorded mapper ends on its pass-through cases')
