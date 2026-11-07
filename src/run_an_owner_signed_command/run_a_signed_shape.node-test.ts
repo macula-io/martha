@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, ownWritesKeptIn } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { appendOwnWrite, gitBlobIdOf, OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { gitBlobIdOf, OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
 import { sandboxRefusal } from './run_in_a_sandbox.ts'
 
@@ -87,7 +87,7 @@ test('a file neither base nor own write runs nothing, and is named; written thro
   const p = place(t)
   writeFileSync(join(p.checkout, 'planted.txt'), MARKER)
   assert.match(String(await runASignedShape(p.run)), /nothing ran: planted\.txt/)
-  const refused = appendOwnWrite(p.state, {
+  const refused = ownWritesKeptIn(p.state).append({
     path: join(p.checkout, 'planted.txt'),
     blob: gitBlobIdOf(Buffer.from(MARKER), 'sha1'),
     mode: REGULAR,
@@ -107,7 +107,7 @@ test('an own write of another checkout does not vouch for a file at the same pat
   const p = place(t)
   writeFileSync(join(p.checkout, 'planted.txt'), MARKER)
   const elsewhere = { path: join(p.top, 'elsewhere', 'planted.txt'), blob: gitBlobIdOf(Buffer.from(MARKER), 'sha1'), mode: REGULAR, tool: 'Write', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() } as const
-  assert.equal(appendOwnWrite(p.state, elsewhere), undefined)
+  assert.equal(ownWritesKeptIn(p.state).append(elsewhere), undefined)
   assert.match(String(await runASignedShape(p.run)), /nothing ran: planted\.txt/)
 })
 
@@ -115,7 +115,7 @@ test('a test script redefined in the checkout runs nothing, even written by the 
   const p = place(t)
   const manifest = JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: `echo ${MARKER}` } })
   writeFileSync(join(p.checkout, MANIFEST), manifest)
-  assert.equal(appendOwnWrite(p.state, { path: join(p.checkout, MANIFEST), blob: gitBlobIdOf(Buffer.from(manifest), 'sha1'), mode: REGULAR, tool: 'Edit', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
+  assert.equal(ownWritesKeptIn(p.state).append({ path: join(p.checkout, MANIFEST), blob: gitBlobIdOf(Buffer.from(manifest), 'sha1'), mode: REGULAR, tool: 'Edit', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
   const ended = await runASignedShape(p.run)
   assert.equal(typeof ended, 'string')
   assert.match(String(ended), new RegExp(MANIFEST.replace('.', '\\.')))

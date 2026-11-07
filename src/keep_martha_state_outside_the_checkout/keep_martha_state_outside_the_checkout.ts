@@ -101,7 +101,7 @@ export function stateSubdirectory(state: MarthaState, name: string): { readonly 
 }
 
 /** A state file's text, '' when it is missing, or why it may not be read. */
-function readStateFile(path: string): { readonly text: string } | Refused {
+export function readStateFile(path: string): { readonly text: string } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
@@ -175,8 +175,8 @@ const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   file: ['kind', 'path', 'sha256'],
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
+export const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
 
 const isEntry = (value: unknown): value is ConfigEntry => {
@@ -236,7 +236,7 @@ function openForAppend(path: string, what: string): { readonly descriptor: numbe
 }
 
 /** Keeps `line` at the end of the state file `name`; or why it could not be kept. `what` names what one line holds. */
-function appendStateLine(state: MarthaState, name: string, line: string, what: string): Refused | undefined {
+export function appendStateLine(state: MarthaState, name: string, line: string, what: string): Refused | undefined {
   const opened = openForAppend(join(state.directory, name), what)
   if ('refusal' in opened) return opened
   try {

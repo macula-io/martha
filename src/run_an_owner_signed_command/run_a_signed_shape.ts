@@ -10,11 +10,11 @@
 import { realpathSync, rmSync } from 'node:fs'
 import { relative, sep } from 'node:path'
 
-import { stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { ownWritesKeptIn, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import type { CommandShape, SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import { dependenciesTheRunMaySee, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { treeTheRunMaySee, type BaseEntry, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
-import { allOwnWrites, GIT_OBJECT_FORMATS, type GitObjectFormat, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { GIT_OBJECT_FORMATS, type GitObjectFormat, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { installedLockOf, namesUnder, readPackageOnce, readTheCheckoutOnce, type CheckoutRead, type PackageFile } from './read_the_checkout_once.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type FileToWrite, type RunEnded } from './run_in_a_sandbox.ts'
 import { objectFormatOf, openSignedBase, type OpenedBase } from './signed_base.ts'
@@ -65,7 +65,7 @@ function judgeTheCheckout(run: ShapeToRun): Judged | string {
   if (typeof base === 'string') return base
   const read = readTheCheckoutOnce(run.checkout, format, run.inherited)
   if (typeof read === 'string') return read
-  const own = allOwnWrites(run.state)
+  const own = ownWritesKeptIn(run.state).all()
   if ('refusal' in own) return own.refusal
   const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live })
   const dependencies = judgeTheDependencies(run.checkout, base, read)

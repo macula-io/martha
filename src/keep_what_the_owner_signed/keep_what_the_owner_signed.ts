@@ -48,7 +48,7 @@ export function pinOwnerKey(state: MarthaState, line: string): Refused | undefin
   const pinned = pinnedOwnerKeys(state)
   if ('refusal' in pinned) return pinned
   if (pinned.keys.some((kept) => parseSshPublicKey(kept)?.blob.equals(key.blob) === true)) return { refusal: 'that key is pinned already' }
-  return appendStateLine(state, OWNER_KEYS_FILE, { key: line.trim() }, 'pinned key')
+  return appendStateLine(state, OWNER_KEYS_FILE, JSON.stringify({ key: line.trim() }), 'pinned key')
 }
 
 /** The owner's pinned keys, as OpenSSH lines; or why the file is not trusted. */
