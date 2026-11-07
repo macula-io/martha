@@ -43,8 +43,8 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "glob": "7.2.3",
-    "minimatch": "3.1.2"
+    "glob": "14.0.4",
+    "minimatch": "11.0.5"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
