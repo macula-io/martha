@@ -8,11 +8,12 @@ import { join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { escaped, manifestOf, type Manifest } from './declared_in_package_json.ts'
+import { escaped, manifestOf, PACKAGES, type Manifest } from './declared_in_package_json.ts'
 import { leakReportOf, leftRunning } from './every_test_file_cleans_up.ts'
 import {
   FORCE_EXIT_FLAG,
   GUARD_FLAG,
+  guardFlagFrom,
   HUNG_TEST_NAME,
   TEST_SCRIPT,
   TIMEOUT_FLAG,
@@ -25,9 +26,20 @@ const repository = join(import.meta.dirname, '..')
 /** A manifest whose test script is `script`. */
 const scripted = (script: string): Manifest => ({ scripts: { [TEST_SCRIPT]: script } })
 
-test(`npm test fails a hung test by name, ends its file and fails a leaking file: ${TIMEOUT_FLAG}, ${FORCE_EXIT_FLAG}, ${GUARD_FLAG}`, () => {
-  const bound = testRunBoundOf(manifestOf(repository))
-  assert.deepEqual(bound.bounded ? [] : bound.problems, [], 'what the test script lacks')
+for (const folder of PACKAGES) {
+  test(`npm test in ${folder} fails a hung test by name, ends its file and fails a leaking file: ${TIMEOUT_FLAG}, ${FORCE_EXIT_FLAG}, ${guardFlagFrom(folder)}`, () => {
+    const bound = testRunBoundOf(manifestOf(join(repository, folder)), folder)
+    assert.deepEqual(bound.bounded ? [] : bound.problems, [], `what ${folder}'s test script lacks`)
+  })
+}
+
+test('the guard is imported by its path from the package that runs it', () => {
+  assert.equal(GUARD_FLAG, guardFlagFrom('.'))
+  assert.equal(guardFlagFrom('.'), '--import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts')
+  assert.equal(guardFlagFrom('installer'), '--import=../prove_the_core/fail_a_test_file_that_leaves_something_running.ts')
+  const elsewhere = `node --test ${TIMEOUT_FLAG}=60000 ${FORCE_EXIT_FLAG} ${GUARD_FLAG} 'x'`
+  const bound = testRunBoundOf(scripted(elsewhere), 'installer')
+  assert.equal(bound.bounded, false, 'the root path does not load the guard from the installer')
 })
 
 test('a test script that does not bound its run is named, each way it falls short', () => {
@@ -66,22 +78,22 @@ const SHORT_TIMEOUT_MS = 1000
 /** How long the whole run may take before the check calls it hung and stops it. */
 const RUN_DEADLINE_MS = 30_000
 
-/** A planted file's path from the repository, as the runner names it when run from there. */
-const plantedPath = (file: string): string => join(relative(repository, import.meta.dirname), file)
+/** A planted file's path from `folder`, as the runner names it when run from there. */
+const plantedPath = (file: string, folder: string): string => join(relative(join(repository, folder), import.meta.dirname), file)
 
 type Run = { readonly ended: { code: number | null } | 'hung'; readonly output: string; readonly flags: readonly string[]; readonly group: number }
 
 /**
- * Runs `files` as npm test runs its files, with the test script's own flags (the
- * timeout shortened so the check does not wait the full bound), in a process
- * group of its own that `t` kills after itself, whatever happens.
+ * Runs `files` as npm test in `folder` runs its files, from there, with that test
+ * script's own flags (the timeout shortened so the check does not wait the full
+ * bound), in a process group of its own that `t` kills after itself, whatever happens.
  */
-async function runWithTheScriptsFlags(t: TestContext, files: readonly string[]): Promise<Run> {
-  const flags = testRunFlagsOf(manifestOf(repository)).map((flag) =>
+async function runWithTheScriptsFlags(t: TestContext, folder: string, files: readonly string[]): Promise<Run> {
+  const flags = testRunFlagsOf(manifestOf(join(repository, folder))).map((flag) =>
     flag.startsWith(`${TIMEOUT_FLAG}=`) ? `${TIMEOUT_FLAG}=${SHORT_TIMEOUT_MS}` : flag,
   )
-  const runner = spawn(process.execPath, ['--test', ...flags, ...files.map(plantedPath)], {
-    cwd: repository,
+  const runner = spawn(process.execPath, ['--test', ...flags, ...files.map((file) => plantedPath(file, folder))], {
+    cwd: join(repository, folder),
     // Without the variable node --test sets in each file's process: with it, a
     // nested node --test reports to this run instead of running as npm test does.
     env: Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== TEST_CONTEXT_VARIABLE)),
@@ -112,42 +124,46 @@ async function runWithTheScriptsFlags(t: TestContext, files: readonly string[]):
   return { ended, output, flags, group }
 }
 
-test("with the test script's own flags, a file that hangs holding a socket fails by name and its processes end", async (t) => {
-  const { ended, output, flags, group } = await runWithTheScriptsFlags(t, ['a_test_that_hangs_holding_a_socket.ts'])
+for (const folder of PACKAGES) {
+  test(`with the test script's own flags in ${folder}, a file that hangs holding a socket fails by name and its processes end`, async (t) => {
+    const { ended, output, flags, group } = await runWithTheScriptsFlags(t, folder, ['a_test_that_hangs_holding_a_socket.ts'])
 
-  assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
-  if (ended === 'hung') return
-  assert.notEqual(ended.code, 0, 'the run fails')
-  assert.match(output, new RegExp(`✖ ${HUNG_TEST_NAME}`), 'the hung test is named as failed')
-  assert.match(output, /timed out after/, 'because it timed out')
-  assert.throws(() => process.kill(-group, 0), { code: 'ESRCH' }, 'no process of the run is left, the file\'s own child included')
-})
+    assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
+    if (ended === 'hung') return
+    assert.notEqual(ended.code, 0, 'the run fails')
+    assert.match(output, new RegExp(`✖ ${HUNG_TEST_NAME}`), 'the hung test is named as failed')
+    assert.match(output, /timed out after/, 'because it timed out')
+    assert.throws(() => process.kill(-group, 0), { code: 'ESRCH' }, 'no process of the run is left, the file\'s own child included')
+  })
+}
 
 /** The planted files: two whose tests pass but leave something running, and one that cleans up. */
 const LEAKS_A_SERVER = 'a_test_file_that_leaks_a_listening_server.ts'
 const LEAKS_AN_INTERVAL = 'a_test_file_that_leaks_an_interval.ts'
 const CLOSES_ITS_SERVER = 'a_test_file_that_closes_its_server.ts'
 
-test("with the test script's own flags, a file that leaves a server or an interval running fails by name, and one that cleans up passes", async (t) => {
-  const { ended, output, flags } = await runWithTheScriptsFlags(t, [LEAKS_A_SERVER, LEAKS_AN_INTERVAL, CLOSES_ITS_SERVER])
+for (const folder of PACKAGES) {
+  test(`with the test script's own flags in ${folder}, a file that leaves a server or an interval running fails by name, and one that cleans up passes`, async (t) => {
+    const { ended, output, flags } = await runWithTheScriptsFlags(t, folder, [LEAKS_A_SERVER, LEAKS_AN_INTERVAL, CLOSES_ITS_SERVER])
 
-  assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
-  if (ended === 'hung') return
-  assert.notEqual(ended.code, 0, 'the run fails')
-  assert.ok(
-    output.includes(leakReportOf(plantedPath(LEAKS_A_SERVER), ['TCPServerWrap'])),
-    `the file that leaks a server is named with what it left:\n${output}`,
-  )
-  assert.ok(
-    output.includes(leakReportOf(plantedPath(LEAKS_AN_INTERVAL), ['Timeout'])),
-    `the file that leaks an interval is named with what it left:\n${output}`,
-  )
-  assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAKS_A_SERVER))}`), 'the leaking server file is failed')
-  assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAKS_AN_INTERVAL))}`), 'the leaking interval file is failed')
-  assert.doesNotMatch(output, new RegExp(escaped(CLOSES_ITS_SERVER)), 'the file that closes its server is neither failed nor blamed')
-  assert.match(output, /✔ a test that closes its server after itself/, 'and its test passes')
-  assert.match(output, /ℹ fail 2\n/, 'two files fail, no more')
-})
+    assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
+    if (ended === 'hung') return
+    assert.notEqual(ended.code, 0, 'the run fails')
+    assert.ok(
+      output.includes(leakReportOf(plantedPath(LEAKS_A_SERVER, folder), ['TCPServerWrap'])),
+      `the file that leaks a server is named with what it left:\n${output}`,
+    )
+    assert.ok(
+      output.includes(leakReportOf(plantedPath(LEAKS_AN_INTERVAL, folder), ['Timeout'])),
+      `the file that leaks an interval is named with what it left:\n${output}`,
+    )
+    assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAKS_A_SERVER, folder))}`), 'the leaking server file is failed')
+    assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAKS_AN_INTERVAL, folder))}`), 'the leaking interval file is failed')
+    assert.doesNotMatch(output, new RegExp(escaped(CLOSES_ITS_SERVER)), 'the file that closes its server is neither failed nor blamed')
+    assert.match(output, /✔ a test that closes its server after itself/, 'and its test passes')
+    assert.match(output, /ℹ fail 2\n/, 'two files fail, no more')
+  })
+}
 
 test('what a file leaves running is what it holds beyond what its process held before it ran, each kind counted', () => {
   assert.deepEqual(leftRunning(['PipeWrap', 'PipeWrap'], ['PipeWrap', 'PipeWrap']), [])
