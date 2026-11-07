@@ -54,7 +54,9 @@ const INTERRUPTS = /** @type {const} */ (['SIGINT', 'SIGTERM'])
 const MEMBER_WAIT_MS = 30_000
 // How often a wait for a member looks again.
 const POLL_MS = 50
-// How long the stand-in host stays up unless it is stopped: far longer than any run.
+// How long the stand-in host stays up unless it is stopped: far longer than any run. The stand-in never reports its
+// session's start, so on a terminal the launcher's backstop would stop it after TRUST_ANSWER_DEADLINE_MS (ten minutes,
+// host_runs_the_relay.ts); a run stops every member long before, so the backstop never fires here and is no part of it.
 const HOST_HOLDS_SECONDS = 600
 // The stand-in host's mode: its owner may run it.
 const RUNNABLE = 0o700
@@ -64,6 +66,8 @@ const OWNER = 'clean install'
 const ON_A_TERMINAL = ['--quiet', '--return', '--command']
 // What script writes as a terminal's line end.
 const TERMINAL_LINE_END = /\r\n/g
+// Where the pid goes when the release's own started line is turned into a pattern.
+const PID_AT = '\u0000'
 
 /** What the run's work folder under TMPDIR is named after. */
 export const WORK_PREFIX = 'martha-clean-install-'
@@ -193,11 +197,12 @@ async function runTheSteps ({ run, signedFor, plant, running }) {
 }
 
 /**
- * Where the box and the registry were, for a caller to check they are gone; empty when the run never made them.
+ * Where the box, the registry and the relay root were, for a caller to check they are gone; empty when the run never
+ * made them.
  * @param {Running} running
  */
-function whereTheyWere ({ work, registry }) {
-  return { box: work ? join(work, 'box') : '', registry: registry?.base ?? '' }
+function whereTheyWere ({ work, registry, relayRoot }) {
+  return { box: work ? join(work, 'box') : '', registry: registry?.base ?? '', relayRoot: relayRoot ?? '' }
 }
 
 /**
@@ -241,6 +246,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   const { hostAnswers } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'host_stand_in.ts')
   const { newShortRelayRoot } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'short_relay_root.ts')
   const { RELAY_PLUGIN_DIR } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'launch_a_claude_code_member.ts')
+  const { startedLine } = await fromTheRelease(installed, 'run_the_martha_command', 'run_the_martha_command.ts')
   const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string }> }} */ (await fromTheRelease(installed, 'declare_a_solo_crew', 'declare_a_solo_crew.ts'))
   running.relayRoot = newShortRelayRoot()
   const host = standInHost(join(work, 'host'), hostAnswers(), plant)
@@ -248,7 +254,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   await step(run, 'init', () => said(owner.run('init')))
   await step(run, 'approve', () => said(owner.onATerminal('approve')))
   for (const { name } of SOLO_MEMBERS) {
-    await step(run, `start ${name}`, () => startMember({ owner, name, host, relay: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, running, signal: run.signal }))
+    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, relay: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, running, signal: run.signal }))
   }
   for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member))
 }
@@ -331,22 +337,35 @@ function alive (pid) {
   }
 }
 
+/** @param {string} text */
+const literally = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * The release's own started line for `name` as a pattern whose one group is the pid.
+ * @param {(member: string, pid: string) => string} startedLine
+ * @param {string} name
+ */
+function startedPattern (startedLine, name) {
+  const [before, after] = startedLine(name, PID_AT).split(PID_AT)
+  return new RegExp(`^${literally(before ?? '')}([0-9]+)${literally(after ?? '')}$`, 'm')
+}
+
 /**
  * `martha start <name>` on its terminal, kept in `running` at once; up once it names the member's pid, the pid is
  * alive and its host was started with the release's relay.
- * @param {{ owner: ReturnType<typeof theOwner>, name: string, host: ReturnType<typeof standInHost>, relay: string, running: Running, signal?: AbortSignal }} start
+ * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, relay: string, running: Running, signal?: AbortSignal }} start
  */
-async function startMember ({ owner, name, host, relay, running, signal }) {
+async function startMember ({ owner, name, startedLine, host, relay, running, signal }) {
   const member = runningMember(name, owner.startOnATerminal('start', name))
   running.members.push(member)
-  const started = new RegExp(`^${name} started, pid ([0-9]+)$`, 'm')
+  const started = startedPattern(startedLine, name)
   const named = await waitFor(`${name} to be named started`, () => member.said.replace(TERMINAL_LINE_END, '\n').match(started), member, signal)
   member.pid = Number(named[1])
   const args = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
   if (!alive(member.pid)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
   const at = args.indexOf(relay)
   if (at < 1) throw new Error(`${name}'s host was not started with Martha's relay ${relay}: ${args.join(' ')}`)
-  return { value: undefined, detail: `${name} started, pid ${member.pid}, alive; its host was started with ${args[at - 1]} ${relay}` }
+  return { value: undefined, detail: `${startedLine(name, member.pid)}, alive; its host was started with ${args[at - 1]} ${relay}` }
 }
 
 /**
@@ -420,7 +439,8 @@ async function tearDown (log, { work, registry, relayRoot, members }, plant) {
       const refusals = [...await killEveryMember(members), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
       if (refusals.length) throw new Error(refusals.join('; '))
       const crew = members.length ? `${members.length} members ended, ` : ''
-      return { value: undefined, detail: `${crew}${registry ? 'registry stopped, ' : ''}${work ? 'box removed' : 'no box was made'}` }
+      const relay = relayRoot ? `, relay root ${relayRoot} removed` : ''
+      return { value: undefined, detail: `${crew}${registry ? 'registry stopped, ' : ''}${work ? 'box removed' : 'no box was made'}${relay}` }
     })
     return true
   } catch {

@@ -52,6 +52,31 @@ const alive = (pid) => {
   }
 }
 
+/**
+ * Every member the run named a pid for has ended, and the relay root it made is gone. `named`: at least this many
+ * members must have been named, so a run that never got that far cannot pass the check by having nothing to check.
+ * @param {{ members: ReadonlyArray<{ name: string, pid: number }>, relayRoot: string }} left
+ * @param {number} named
+ * @param {string} said what the run logged, shown when the check fails
+ */
+const nothingLeftOfTheCrew = ({ members, relayRoot }, named, said) => {
+  const pids = members.filter(({ pid }) => pid > 0)
+  assert.ok(pids.length >= named, `at least ${named} members were named with a pid\n${said}`)
+  for (const { name, pid } of pids) assert.equal(alive(pid), false, `the tear-down ended ${name}, pid ${pid}\n${said}`)
+  assert.notEqual(relayRoot, '', `the run made a relay root\n${said}`)
+  assert.equal(existsSync(relayRoot), false, `the tear-down removed the relay root ${relayRoot}\n${said}`)
+}
+
+/**
+ * The members and the relay root a run as a command logged: each passed start names its pid, and the tear-down names
+ * the relay root it removed.
+ * @param {string} said
+ */
+const leftAsLogged = (said) => ({
+  members: [...said.matchAll(/^ok start (\S+): \S+ started, pid ([0-9]+),/gm)].map(([, name, pid]) => ({ name: String(name), pid: Number(pid) })),
+  relayRoot: said.match(/^ok tear down: .*relay root (\S+) removed/m)?.[1] ?? ''
+})
+
 /** @param {import('node:test').TestContext} t */
 const scratch = (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-clean-install-test-'))
@@ -72,7 +97,7 @@ test('installs the committed tree on an empty box, checks the disk, then removes
   for (const step of ['pack', 'serve', 'install', 'on disk', 'init', 'approve', ...memberSteps, 'tear down']) {
     assert.ok(lines.some((l) => l.includes(`ok ${step}:`)), `the log has a passed "${step}" step\n${lines.join('\n')}`)
   }
-  for (const { name, pid } of result.members) assert.equal(alive(pid), false, `${name}, pid ${pid}, has ended`)
+  nothingLeftOfTheCrew(result, SOLO_MEMBERS.length, lines.join('\n'))
   assert.match(lines.join('\n'), /--plugin-dir/, 'the log shows each member started with Martha\'s relay')
   assert.match(lines.join('\n'), /stood in/, 'the log says the signature check was stood in')
   assert.match(lines.at(-1) ?? '', /^passed; .*stood in/, 'the final line repeats that the signature check was stood in')
@@ -142,6 +167,7 @@ test('a member that does not stay up fails its start step, and the run still tea
   assert.ok(lines.some((l) => l.includes('ok tear down:')), lines.join('\n'))
   assert.equal(lines.at(-1), 'failed')
   assert.ok(!existsSync(result.box), 'the box is gone')
+  nothingLeftOfTheCrew(result, 0, lines.join('\n'))
 })
 
 test('a member whose host was not started with the installed release\'s relay fails its start step', async () => {
@@ -152,28 +178,43 @@ test('a member whose host was not started with the installed release\'s relay fa
   assert.ok(lines.some((l) => /^FAIL start \S+: .*was not started with Martha's relay .*-elsewhere/.test(l)), lines.join('\n'))
   assert.ok(lines.some((l) => l.includes('ok tear down:')), lines.join('\n'))
   assert.ok(!existsSync(result.box), 'the box is gone')
+  // The first member came up before its relay was found wrong, so only the tear-down can end it.
+  nothingLeftOfTheCrew(result, 1, lines.join('\n'))
 })
 
+// Where a run as a command is interrupted: early, before anything of the crew exists, and once the first member is
+// up and only the tear-down can end it; `named` is how many members must then have been named with a pid.
+const [FIRST] = SOLO_MEMBERS
+/** @type {Array<{ at: string, reached: RegExp, named: number }>} */
+const INTERRUPT_POINTS = [
+  { at: 'once the registry serves', reached: /^ok serve:/m, named: 0 },
+  { at: `once ${FIRST?.name} is up`, reached: new RegExp(`^ok start ${FIRST?.name}:`, 'm'), named: 1 }
+]
+
 for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
-  test(`run as a command, ${signal} mid-run fails the run and still tears down: no work folder is left`, async (t) => {
-    const tmp = scratch(t)
-    const run = spawn(process.execPath, [SCRIPT], { env: { ...process.env, TMPDIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] })
-    let out = ''
-    const served = new Promise((resolve) => run.stdout.on('data', (chunk) => { out += chunk; if (/^ok serve:/m.test(out)) resolve(undefined) }))
-    const ended = new Promise((resolve) => run.once('exit', (code, sig) => resolve({ code, sig })))
-    const timer = setTimeout(() => run.kill('SIGKILL'), COMMAND_TIMEOUT_MS)
-    t.after(() => clearTimeout(timer))
-    await Promise.race([served, ended])
-    run.kill(signal)
-    const { code, sig } = /** @type {{ code: number | null, sig: string | null }} */ (await ended)
-    assert.equal(sig, null, `the run ended by itself, not by ${sig}\n${out}`)
-    assert.equal(code, 1, out)
-    assert.match(out, new RegExp(`^FAIL .*interrupted by ${signal}`, 'm'))
-    assert.match(out, /^ok tear down:/m)
-    assert.match(out, /failed\n$/)
-    const left = readdirSync(tmp).filter((name) => name.startsWith(WORK_PREFIX))
-    assert.deepEqual(left, [], 'no work folder is left behind')
-  })
+  for (const { at, reached, named } of INTERRUPT_POINTS) {
+    test(`run as a command, ${signal} ${at} fails the run and still tears down: nothing is left`, async (t) => {
+      const tmp = scratch(t)
+      const run = spawn(process.execPath, [SCRIPT], { env: { ...process.env, TMPDIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] })
+      let out = ''
+      const there = new Promise((resolve) => run.stdout.on('data', (chunk) => { out += chunk; if (reached.test(out)) resolve(undefined) }))
+      const ended = new Promise((resolve) => run.once('exit', (code, sig) => resolve({ code, sig })))
+      const timer = setTimeout(() => run.kill('SIGKILL'), COMMAND_TIMEOUT_MS)
+      t.after(() => clearTimeout(timer))
+      await Promise.race([there, ended])
+      assert.match(out, reached, `the run got there before it was interrupted\n${out}`)
+      run.kill(signal)
+      const { code, sig } = /** @type {{ code: number | null, sig: string | null }} */ (await ended)
+      assert.equal(sig, null, `the run ended by itself, not by ${sig}\n${out}`)
+      assert.equal(code, 1, out)
+      assert.match(out, new RegExp(`^FAIL .*interrupted by ${signal}`, 'm'))
+      assert.match(out, /^ok tear down:/m)
+      assert.match(out, /failed\n$/)
+      const left = readdirSync(tmp).filter((name) => name.startsWith(WORK_PREFIX))
+      assert.deepEqual(left, [], 'no work folder is left behind')
+      if (named) nothingLeftOfTheCrew(leftAsLogged(out), named, out)
+    })
+  }
 }
 
 test('a refused install fails the run and still leaves nothing behind', async () => {
@@ -195,6 +236,7 @@ test('run as a command, it writes the log where it is told and exits 0 on a pass
   const written = readFileSync(log, 'utf8')
   assert.match(written, /^ok tear down:/m)
   assert.match(written, /^passed; /m)
+  nothingLeftOfTheCrew(leftAsLogged(written), SOLO_MEMBERS.length, written)
 })
 
 test('run as a command, a failing step exits 1 and the log ends failed', (t) => {
