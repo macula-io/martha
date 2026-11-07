@@ -53,7 +53,7 @@ test('a version is read only from the start of what --version prints', () => {
   assert.equal(versionIn(''), undefined)
 })
 
-test('a command resolves once, to the file its link names: first runnable on PATH, empty entry is the directory, a path is that path', (t) => {
+test('a command resolves once, to the file its link names: first runnable on PATH, a path is that path', (t) => {
   const dir = placeFor(t)
   const real = standIn(dir, [], 'real-claude')
   const notRunnable = join(dir, 'a')
@@ -63,11 +63,26 @@ test('a command resolves once, to the file its link names: first runnable on PAT
   mkdirSync(linked)
   symlinkSync(real, join(linked, 'claude'))
   assert.deepEqual(resolvedHostCommand('claude', `${notRunnable}:${linked}`, dir), { binary: realpathSync(real) })
-  assert.deepEqual(resolvedHostCommand('claude', `:${linked}`, linked), { binary: realpathSync(real) })
   assert.deepEqual(resolvedHostCommand('./real-claude', undefined, dir), { binary: realpathSync(real) })
   assert.deepEqual(resolvedHostCommand('claude', notRunnable, dir), { refusal: notACommandThisLauncherCanRun('claude') })
   assert.deepEqual(resolvedHostCommand('claude', undefined, dir), { refusal: notACommandThisLauncherCanRun('claude') })
   assert.deepEqual(resolvedHostCommand(notRunnable, undefined, dir), { refusal: notACommandThisLauncherCanRun(notRunnable) })
+})
+
+test('a PATH entry that is empty or relative names a folder under the checkout, and is skipped: a planted claude is never what runs', (t) => {
+  const checkout = placeFor(t)
+  standIn(checkout, [], 'claude')
+  const planted = join(checkout, 'bin')
+  mkdirSync(planted)
+  standIn(planted, [], 'claude')
+  const owners = join(checkout, 'owners')
+  mkdirSync(owners)
+  const real = standIn(owners, [], 'claude')
+  for (const path of ['', ':', '.', 'bin', './bin', `:${owners}`, `.:${owners}`, `bin:${owners}`, `${owners}:`]) {
+    const resolved = resolvedHostCommand('claude', path, checkout)
+    const expected = path.includes(owners) ? { binary: realpathSync(real) } : { refusal: notACommandThisLauncherCanRun('claude') }
+    assert.deepEqual(resolved, expected, `PATH=${JSON.stringify(path)}`)
+  }
 })
 
 test('only a report of success with exit 0 loads the relay; every other answer refuses, naming the relay', async (t) => {
