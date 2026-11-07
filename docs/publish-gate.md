@@ -562,10 +562,11 @@ anything but the folder marked trusted keeps the long deadline, and a wrong
 "trusted" only stops a member sooner. CI runs the loader of the recorded
 version over the relay (`prove_the_relay_loads/`).
 
-**Residual: up to ten minutes ungated on a folder's first start.** With an
+**Residual: ungated, for up to `TRUST_ANSWER_DEADLINE_MS`, on a folder's first
+start.** With an
 owner at the terminal, in a folder the host does not yet trust, a host that
 loads the relay when the launcher checks it but then runs no hooks gives up to
-`TRUST_ANSWER_DEADLINE_MS` (10 minutes) of a member with no prompt gate and no
+`TRUST_ANSWER_DEADLINE_MS` of a member with no prompt gate and no
 tool call gate, with nothing on screen to say so. The routes to such a host are
 managed settings, or a `disableAllHooks` a member writes into the owner's user
 settings; the settings route is row A13, tracked in
@@ -937,7 +938,7 @@ crew with a shell:
   of its own that serves. Signing that file is macula-io/macula-mcp#79.
 - **A procedure the owner signs ([#50](https://github.com/macula-io/martha/issues/50))**
   is a proposal, not built: no member serves anything.
-- **Up to ten minutes ungated on a folder's first start
+- **Ungated, for up to `TRUST_ANSWER_DEADLINE_MS`, on a folder's first start
   ([#104](https://github.com/macula-io/martha/issues/104)).** In a folder the
   host does not yet trust, a host that loads the relay but runs no hooks leaves
   a member with no prompt gate and no tool call gate for up to
