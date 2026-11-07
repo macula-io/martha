@@ -258,6 +258,22 @@ interface RecordedWhileHeld {
   readonly inTheLaunchRecord: boolean
 }
 
+/**
+ * The member's place in its launch directory's record, written while the hold
+ * still holds it (#124). A launcher killed at any point after the member exists
+ * then leaves a record that names it, and a sweep cannot take away a running
+ * member's directory. The member is admitted only when this says it is recorded,
+ * so a write that fails refuses the member instead of leaving its directory
+ * unrecorded; a launch record that could not be kept refuses it just the same.
+ */
+export function recordedInsideTheHold(directory: string, pid: number, recorded: LaunchRecorded): RecordedWhileHeld {
+  if (!recorded.recorded) return { admitted: false, recorded, inTheLaunchRecord: false }
+  const whyNotRecorded = recordTheMember(directory, pid)
+  return whyNotRecorded === undefined
+    ? { admitted: true, recorded, inTheLaunchRecord: true }
+    : { admitted: false, recorded: { recorded: false, refusal: whyNotRecorded }, inTheLaunchRecord: false }
+}
+
 /** How a member's start ends: its pid, which is also its group's id, and its launch record; or why it did not start. */
 type RecordedStart =
   | { readonly pid: number; readonly recorded: LaunchRecorded; readonly inTheLaunchRecord: boolean }
@@ -532,18 +548,13 @@ async function startedMember(
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
     recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
+  // The member is held until its callback says yes, so its place in the launch
+  // directory's record is written inside the same hold: a launcher killed in
+  // between then leaves a record that already names its member (#124).
   const job = isOnTheOwnersTerminal(launch.stdio)
-    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid): RecordedWhileHeld => {
-        const recorded = record(pid)
-        if (!recorded.recorded) return { admitted: false, recorded, inTheLaunchRecord: false }
-        // The member is held until this says yes, so its place in the launch
-        // directory's record is written inside the same hold: a launcher killed
-        // in between then leaves a record that already names its member (#124).
-        const whyNotRecorded = recordTheMember(relayDirectory.directory, pid)
-        return whyNotRecorded === undefined
-          ? { admitted: true, recorded, inTheLaunchRecord: true }
-          : { admitted: false, recorded: { recorded: false, refusal: whyNotRecorded }, inTheLaunchRecord: false }
-      })
+    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid) =>
+        recordedInsideTheHold(relayDirectory.directory, pid, record(pid)),
+      )
     : undefined
   // On the owner's terminal `child` is the job-control shell: it exits once the
   // member has and the terminal is given back, so its exit is the member's.

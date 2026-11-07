@@ -51,9 +51,14 @@
 // nothing depends on a leftover going. What it must never do is take away a
 // directory whose launcher or member is still running.
 //
-// Where there is no /proc (another kernel) no identity can be read, so no record
-// is written, and a sweep leaves every directory alone: leftovers then stay what
-// they were before this file, and the owner's `rm -rf` clears them.
+// The record is a precondition of the launch, not a side effect of it. A launch
+// that cannot leave one -- no /proc, a process the kernel will not name, a pid
+// namespace it will not name -- is refused before its member is spawned. Started
+// anyway, the member would be refused or killed a few instructions later with
+// "launcher.json could not be read back", which names a cause that is not the
+// cause, and a member that survived the launcher would hold a directory no sweep
+// could vouch for. Directories an earlier Martha left are still left alone by a
+// sweep that cannot place them in a namespace.
 
 import { chmodSync, closeSync, constants, type Stats, fstatSync, lstatSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -99,18 +104,32 @@ export type NamespaceOfThisProcess = () => string | undefined
 
 /**
  * Writes `pid`'s record into `directory`, the launch directory it has just made;
- * or why the record could not be written. No record is written where this
- * kernel cannot name the process, and no sweep then touches the directory.
+ * or why the launch cannot leave the record a later sweep reads. Every path that
+ * leaves no record is a refusal, because the member's own place in it and the
+ * proof a sweep needs are both lost without one: the caller refuses the launch
+ * there, before the member is spawned.
  */
-export function recordTheLauncher(directory: string, pid: number = process.pid): string | undefined {
-  const launcher = identityOfRunning(pid)
-  const namespace = linuxProcessIdentities.pidNamespace()
-  // A process this kernel cannot name, or a launch that cannot say which pid
-  // namespace it is in, leaves no record -- and no sweep then acts on it.
-  if (launcher === undefined || namespace === undefined) return undefined
+export function recordTheLauncher(
+  directory: string,
+  pid: number = process.pid,
+  namespaceOf: NamespaceOfThisProcess = linuxProcessIdentities.pidNamespace,
+): string | undefined {
+  const lookup = linuxProcessIdentities.lookupOf(pid)
+  // A process this kernel cannot name leaves nothing to record: no /proc, or a
+  // pid it does not answer for.
+  if (lookup.found !== 'held') {
+    const why = lookup.found === 'unknown' ? lookup.why : 'it holds no such process'
+    return `${pid} could not be named by this kernel (${why}), so a launch would leave a directory no later sweep could vouch for`
+  }
+  // A record without a namespace is one no sweep may act on, so a launch that
+  // cannot say which namespace it is in has no record to leave either.
+  const namespace = namespaceOf()
+  if (namespace === undefined) {
+    return 'this kernel will not name the pid namespace the launch is in, so a launch would leave a directory no later sweep could vouch for'
+  }
   const path = join(directory, LAUNCHER_RECORD_NAME)
   try {
-    writeFileSync(path, JSON.stringify({ launcher, namespace }), { mode: LAUNCHER_RECORD_MODE, flag: 'wx' })
+    writeFileSync(path, JSON.stringify({ launcher: lookup.identity, namespace }), { mode: LAUNCHER_RECORD_MODE, flag: 'wx' })
     // The mode a write asks for is cut down by the umask; the record is read
     // only when it carries the exact one, so make it exact here.
     chmodSync(path, LAUNCHER_RECORD_MODE)
@@ -183,12 +202,6 @@ function isProvablyGone(lookup: ProcessLookup, recorded: ProcessIdentity): boole
   // The pid is held still, but by another process: another start time, or
   // another boot, which the identity names as well.
   return lookup.found === 'held' && lookup.identity.process_started_at !== recorded.process_started_at
-}
-
-/** The identity of a process running now, or undefined when this kernel cannot name it. */
-function identityOfRunning(pid: number): ProcessIdentity | undefined {
-  const lookup = linuxProcessIdentities.lookupOf(pid)
-  return lookup.found === 'held' ? lookup.identity : undefined
 }
 
 /**

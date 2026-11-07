@@ -38,8 +38,8 @@ import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
-import { LAUNCHER_RECORD_NAME, type LaunchRecord } from './leftover_relay_directories.ts'
+import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
+import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './leftover_relay_directories.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
@@ -1504,6 +1504,36 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+test("a member is written into its launch directory's record inside the hold, and a write that fails refuses it (#124 r=4)", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-124-held-'))
+  t.after(() => {
+    chmodSync(directory, 0o700)
+    rmSync(directory, { recursive: true, force: true })
+  })
+  assert.equal(recordTheLauncher(directory), undefined, 'the launch records itself before the member is spawned')
+
+  // A real child, alive while its place in the record is written and read back.
+  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+  t.after(() => member.kill('SIGKILL'))
+  await new Promise((resolve) => member.once('spawn', resolve))
+  const pid = member.pid ?? 0
+  assert.ok(pid > 0, 'the member is a process this test started')
+
+  const held = recordedInsideTheHold(directory, pid, { recorded: true })
+  assert.deepEqual(held, { admitted: true, recorded: { recorded: true }, inTheLaunchRecord: true }, 'the member runs only when its place is in the record')
+  const record = JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord
+  assert.equal(record.member?.pid, pid, 'the record names the member, so a sweep cannot take the directory of a member still running')
+  assert.equal(record.member?.process_started_at, linuxProcessIdentities.identityOf(pid))
+
+  // A launch directory this user can no longer write: the member's place cannot be kept.
+  chmodSync(directory, 0o500)
+  const refused = recordedInsideTheHold(directory, pid, { recorded: true })
+  chmodSync(directory, 0o700)
+  assert.equal(refused.admitted, false, 'a member whose place cannot be written is refused, not run with no record of it')
+  assert.match(refused.recorded.recorded ? 'it was recorded' : refused.recorded.refusal, /could not be written/)
+  assert.equal((JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord).member?.pid, pid, 'and the record is left as it was')
+})
 
 test('a launcher killed hard leaves its directory behind, and the next launch takes it away (#124)', async (t) => {
   const place = placeFor(t)

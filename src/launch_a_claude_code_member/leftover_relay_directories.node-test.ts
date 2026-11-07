@@ -241,6 +241,29 @@ test('a sweep of a process that cannot name its own pid namespace sweeps nothing
   assert.deepEqual(sweepLeftoverLaunchDirectories(root), [dead], 'and with it, the same leftover goes')
 })
 
+test("a launch that cannot be given a pid namespace's name is refused, and records nothing (#124 r=4)", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-124-launch-'))
+  t.after(() => removeTheTree(directory))
+
+  const refused = recordTheLauncher(directory, process.pid, () => undefined)
+
+  // No record means no sweep can ever vouch for the directory, so the launch
+  // stops here rather than starting a member it could only refuse later, with
+  // "launcher.json could not be read back" naming a cause that is not the cause.
+  assert.match(refused ?? '', /pid namespace/, 'a launch that cannot say which pid namespace it is in has no record a sweep could act on')
+  assert.equal(existsSync(join(directory, LAUNCHER_RECORD_NAME)), false, 'so it is refused before its member is spawned, not recorded and then killed')
+  assert.equal(recordTheLauncher(directory), undefined, 'and the same directory records fine when the kernel names the namespace')
+})
+
+test('a launch whose own process the kernel cannot name is refused too, and records nothing (#124 r=4)', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-124-launch-'))
+  t.after(() => removeTheTree(directory))
+  const gone = await aProcessThatHasEnded()
+
+  assert.match(recordTheLauncher(directory, gone) ?? '', /could not be named/, 'a pid this kernel does not hold leaves nothing to record')
+  assert.equal(existsSync(join(directory, LAUNCHER_RECORD_NAME)), false)
+})
+
 test('a directory stays while the member of a killed launcher lives, and goes once the member does (#124)', async (t) => {
   const root = relayRoot(t)
   const goneLauncher = await aProcessThatHasEnded()
