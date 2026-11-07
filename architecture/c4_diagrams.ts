@@ -28,7 +28,7 @@ type Kind = 'b-sys' | 'b-per' | 'b-mac' | 'b-ext' | 'b-cmp' | 'b-dat' | 'b-team'
 const KINDS: Record<Kind, readonly [string, string, string, string, string]> = {
   'b-sys': ['#F5E9CC', '#A56F0A', '#3A2E13', '#E3AA3C', 'Martha'],
   'b-per': ['#E3EBF2', '#3B5B7A', '#1D2A36', '#8EB4D8', 'Person'],
-  'b-mac': ['#E6E4EE', '#5E5A78', '#26243A', '#A9A4C8', 'Macula, team mode only'],
+  'b-mac': ['#E6E4EE', '#5E5A78', '#26243A', '#A9A4C8', 'Macula, room not shipped'],
   'b-ext': ['#ECEFED', '#8A9791', '#1C2421', '#7D8B85', 'External system'],
   'b-cmp': ['#FFFFFF', '#A56F0A', '#171F1C', '#E3AA3C', 'Container or component'],
   'b-dat': ['#FBF6EA', '#A56F0A', '#2A2414', '#E3AA3C', 'Data, in the project'],
@@ -117,13 +117,18 @@ export interface BoxCoverage {
   readonly text: string
 }
 
-/** One line when a name fits its box, else two, broken at the underscore nearest the middle. */
+/** One line when a name fits its box, else two, broken between names at a comma, or inside one at its underscore nearest the middle. */
 function nameLines(name: string, code: boolean, width: number): string[] {
   const fits = Math.floor(width / (code ? 7.5 : 8.6))
   if (name.length <= fits) return [name]
-  const cuts = [...name.matchAll(/_|, /g)]
-    .map((found) => (found.index ?? 0) + found[0].length)
-    .filter((at) => at <= fits && name.length - at <= fits)
+  const cutsAt = (separators: RegExp): number[] =>
+    [...name.matchAll(separators)]
+      .map((found) => (found.index ?? 0) + found[0].length)
+      .filter((at) => at <= fits && name.length - at <= fits)
+  // A box that lists several directories breaks between them when it can, so no directory's name is cut
+  // in two while there is room to start the next one on the second line.
+  const betweenNames = cutsAt(/, /g)
+  const cuts = betweenNames.length > 0 ? betweenNames : cutsAt(/_|, /g)
   if (cuts.length === 0) return [name]
   const middle = name.length / 2
   const at = cuts.reduce((best, cut) => (Math.abs(cut - middle) < Math.abs(best - middle) ? cut : best), cuts[0]!)
@@ -175,7 +180,8 @@ class Diagram {
 
   bound(x: number, y: number, w: number, h: number, label: string, atTheBottom = false): void {
     this.parts.push(`<rect class="bound" x="${x}" y="${y}" width="${w}" height="${h}" rx="12"/>`)
-    if (atTheBottom) this.text('t-bound', x + w - 16, y + h - 12, label, true)
+    // A label at the bottom sits inside the boundary's own left edge, never across its right one.
+    if (atTheBottom) this.text('t-bound', x + 16, y + h - 12, label)
     else this.text('t-bound', x + 16, y + 22, label)
   }
 
@@ -235,8 +241,8 @@ export function context(): Diagram {
     desc: ['The project is a git checkout;', 'a member reaches GitHub with', 'its own gh and git, under the', 'shell gate'] })
   d.box({ kind: 'b-ext', x: 375, y: 430, w: 250, h: 140, name: 'Anthropic model API', type: '[External: the tool\'s own]',
     desc: ['The coding tool talks to it;', 'Martha never does, and never', 'sees a prompt the tool did not', 'hand it'] })
-  d.box({ kind: 'b-mac', x: 720, y: 430, w: 250, h: 140, name: 'Macula mesh and realm', type: '[Macula, team mode]',
-    desc: ['Will admit a crew by invite', 'and carry the shared room; not', 'built in this release, and solo', 'mode never reaches it'] })
+  d.box({ kind: 'b-mac', x: 720, y: 430, w: 250, h: 140, name: 'Macula mesh and realm', type: '[Macula]',
+    desc: ['A mesh server runs only when your', 'project\'s config names one; the room', 'and admission are team mode, and this', 'release ships neither'] })
 
   d.edge('M155 144V180H420V210', { x: 300, y: 172, text: 'runs init, approve, start' })
   d.edge('M500 144V210', { x: 508, y: 180, text: 'once published' }, true)
@@ -245,12 +251,12 @@ export function context(): Diagram {
   d.edge('M625 280H720', { x: 672, y: 272, text: 'start holds it', middle: true })
   d.edge('M280 300V380H155V430', { x: 160, y: 400, text: 'git, gh' })
   d.edge('M280 330H340V470H375', { x: 300, y: 470, text: 'its own model', middle: true })
-  d.edge('M585 350V410H660V430', { x: 668, y: 420, text: 'rooms, admission' }, true)
+  d.edge('M585 350V410H660V430', { x: 668, y: 420, text: 'the room, by invite' }, true)
 
   d.notes(30, 618, [
-    'Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no mesh, no account, no service.',
+    'Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account, no service, and no room code.',
     'The member Martha starts is a Claude Code session, so the trust the owner gives that folder and the sign-in it holds are the session\'s.',
-    'Team mode adds teammates and the Macula mesh, and nothing else: dashed boxes are planned and not built, and no code here reaches them.',
+    'Team mode adds teammates, and the room and admission drawn dashed here; a mesh server is installed and run only when a project\'s config names one.',
   ])
   d.legend(690, ['b-sys', 'b-per', 'b-mac', 'b-ext', 'b-later'], null)
   return d
@@ -258,13 +264,13 @@ export function context(): Diagram {
 
 /** The systems outside Martha that its containers reach, down the right of the container diagram. */
 function systemsTheContainersReach(d: Diagram): void {
-  d.box({ kind: 'b-ext', x: 680, y: 76, w: 296, h: 96, name: 'A terminal', type: '[External system]',
+  d.box({ kind: 'b-ext', x: 800, y: 76, w: 296, h: 96, name: 'A terminal', type: '[External system]',
     desc: ['One per member: start holds it'] })
-  d.box({ kind: 'b-ext', x: 680, y: 196, w: 296, h: 96, name: 'Claude Code', type: '[External: coding tool]',
+  d.box({ kind: 'b-ext', x: 800, y: 196, w: 296, h: 96, name: 'Claude Code', type: '[External: coding tool]',
     desc: ['The session a member is'] })
-  d.box({ kind: 'b-ext', x: 680, y: 316, w: 296, h: 96, name: 'git and the checkout', type: '[External systems]',
+  d.box({ kind: 'b-ext', x: 800, y: 316, w: 296, h: 96, name: 'git and the checkout', type: '[External systems]',
     desc: ['The tree id, and the member\'s work'] })
-  d.box({ kind: 'b-ext', x: 680, y: 436, w: 296, h: 96, name: 'The mesh server', type: '[External: a published package]',
+  d.box({ kind: 'b-ext', x: 800, y: 436, w: 296, h: 96, name: 'The mesh server', type: '[External: a published package]',
     desc: ['Installed from its recorded tree'] })
 }
 
@@ -274,16 +280,18 @@ function containerEdges(d: Diagram): void {
   d.edge('M300 136H332', { x: 316, y: 128, text: 'init writes it', middle: true })
   d.edge('M300 200H320V286H332', { x: 326, y: 240, text: 'approve', middle: true, rotate: 90 })
   d.edge('M300 214H308V446H332', { x: 314, y: 380, text: 'start', middle: true, rotate: 90 })
-  d.edge('M166 76V48H660V172H680', { x: 666, y: 110, text: 'a member\'s terminal', middle: true, rotate: 90 })
-  d.edge('M600 286H640V364H680', { x: 648, y: 330, text: 'the tree id', middle: true, rotate: 90 })
-  d.edge('M600 446H660V292H680', { x: 668, y: 380, text: 'runs the host', middle: true, rotate: 90 })
-  d.edge('M680 250H648V606H600', { x: 634, y: 560, text: 'loads the relay', middle: true, rotate: 90 })
-  d.edge('M600 490H680', { x: 640, y: 483, text: 'installs it', middle: true })
+  // The corridor between the boundary and the systems is 184 wide, so each vertical is 11 clear of its
+  // label and each label sits in a gap between the horizontal segments: rotated text is read as it lies.
+  d.edge('M166 76V48H660V172H800', { x: 640, y: 110, text: 'a member\'s terminal', middle: true, rotate: 90 })
+  d.edge('M600 286H700V364H800', { x: 686, y: 330, text: 'the tree id', middle: true, rotate: 90 })
+  d.edge('M600 446H660V292H800', { x: 646, y: 400, text: 'runs the host', middle: true, rotate: 90 })
+  d.edge('M800 250H730V606H600', { x: 716, y: 540, text: 'loads the relay', middle: true, rotate: 90 })
+  d.edge('M600 490H800', { x: 660, y: 483, text: 'installs it', middle: true })
 }
 
 /** Level 2: what Martha is made of, and which container reaches which system. */
 export function containers(): Diagram {
-  const d = new Diagram('c4-container.svg', 'Martha containers', 1000, 700)
+  const d = new Diagram('c4-container.svg', 'Martha containers', 1120, 780)
 
   d.bound(16, 40, 600, 660, 'Martha [the package, on the owner\'s machine]', true)
 
@@ -306,9 +314,10 @@ export function containers(): Diagram {
   systemsTheContainersReach(d)
   containerEdges(d)
 
-  d.notes(24, 716, [
+  d.notes(24, 728, [
     'The launch gate is not a box of its own here: it is the check inside start, drawn as a component one level down. Martha reaches',
-    'no service: state is files under the owner\'s own home, and the only things outside are the coding tool, a terminal and git.',
+    'no service: state is files under the owner\'s own home, and what is outside is the coding tool, a terminal, git, and a mesh server only',
+    'when the project\'s config names one.',
   ])
   return d
 }
@@ -318,13 +327,26 @@ export function containers(): Diagram {
  * The test beside this file fails when a directory is in neither a box's `names` nor here,
  * so a slice cannot arrive in src/ and stay off the picture by accident.
  */
-export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = []
+export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
+  {
+    name: 'log_ledger',
+    why: 'the crew ledger: a row per milestone and per outward act, and nothing this release runs loads it yet',
+  },
+  {
+    name: 'probe_launch_hosts',
+    why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
+  },
+  {
+    name: 'record_claude_code_host',
+    why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
+  },
+]
 
 /** Level 3: what Martha's code is made of, one box per group of slices in src/. */
 export function components(): Diagram {
-  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 940)
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 980)
 
-  d.bound(16, 40, 968, 776, 'Martha [the code in src/, one directory per capability]')
+  d.bound(16, 40, 968, 816, 'Martha [the code in src/, one directory per capability]')
 
   d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the four acts]', code: true,
     desc: ['init, approve, start <member>, --version:', 'the words checked before anything runs,', 'a refusal on stderr with the command that', 'fixes it, 0 done / 1 refused / 2 usage'] })
@@ -342,31 +364,31 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-dat', x: 32, y: 358, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory'], type: '[Martha\'s state]', code: true,
     desc: ['One directory per project, named by a', 'hash of its path: node ids, approvals,', 'launches, snapshots. row_streams_', 'directory appends rows as files'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 358, w: 300, h: 128, name: 'linux_process_identity', names: ['linux_process_identity'], type: '[this machine]', code: true,
-    desc: ['The files and scratch directories on', 'this machine\'s disk, and the processes', 'run on it: what the host contract asks', 'for, answered without a host'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 358, w: 300, h: 128, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 358, w: 300, h: 150, name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
+    desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 358, w: 300, h: 150, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
     desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 128, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 150, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
     desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 128, name: 'take_in_a_turn, shell_tools', names: ['take_in_a_turn', 'shell_tools', 'refuse_execution_after_ungated_text'], type: '[the shell gate]', code: true,
-    desc: ['What a host calls when a session took', 'something in, and what may run after;', 'refuse_execution_after_ungated_text', 'stops everything after unvetted text'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 128, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh'], type: '[whose text it was]', code: true,
-    desc: ['The origin a host attests, carried', 'with the turn: attribute_a_cross_', 'session_sender, carry_taint_across_a_', 'refresh, and the shell gate\'s reading of it'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 150, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text'], type: '[the shell gate]', code: true,
+    desc: ['What a host calls when a session took', 'something in, and what may run after:', 'answer_a_tool_call, the gate on every tool', 'call, and refuse_execution_after_ungated_text'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 150, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
+    desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
 
-  d.box({ kind: 'b-team', x: 32, y: 668, w: 300, h: 140, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'trust_only_framed_envelopes'], type: '[the rooms, team mode]', code: true,
-    desc: ['Whether a crew or shared room message', 'is admitted; read_a_room_through_its_', 'gate for the mesh side, trust_only_', 'framed_envelopes for what is believed'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 668, w: 300, h: 140, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay'], type: '[the Claude Code host]', code: true,
+  d.box({ kind: 'b-team', x: 32, y: 690, w: 300, h: 150, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'trust_only_framed_envelopes', 'refuse_widening_a_member_reach'], type: '[the rooms, team mode]', code: true,
+    desc: ['Whether a crew or shared room message is', 'admitted; read_a_room_through_its_gate for', 'the mesh side, trust_only_framed_envelopes', 'for what is believed. refuse_widening_a_', 'member_reach refuses the tools that widen'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 690, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay'], type: '[the Claude Code host]', code: true,
     desc: ['The host contract on Claude Code: the', 'plugin and its hooks, the relay that', 'answers over a socket, and the tools', 'registered in the member\'s session'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 668, w: 300, h: 140, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 690, w: 300, h: 150, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
     desc: ['A link to a private issue, an internal', 'host name or a private remote fails CI', 'by name, with a self-test that proves', 'the check still bites'] })
 
-  d.notes(24, 852, [
-    'Every box is a directory in src/: the name is the capability, and its test sits beside it. The command reads the declaration,',
-    'the approval and the gate before it starts anything; the relay is the only part that runs inside the member\'s session, and the',
-    'only part that sees a turn. The room boxes are team mode: this release ships solo, and loads none of them.',
+  d.notes(24, 890, [
+    'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
+    'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded, ',
+    'probe_launch_hosts and record_claude_code_host. Every gate opens its list signed; the rooms are team mode, and solo loads none of them.',
   ])
-  d.legend(906, ['b-sys', 'b-cmp', 'b-dat', 'b-team'], 'Boundary')
+  d.legend(944, ['b-sys', 'b-cmp', 'b-dat', 'b-team'], 'Boundary')
   return d
 }
 

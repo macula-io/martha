@@ -106,11 +106,11 @@
 <text class="t-desc" x="391" y="548">hand it</text>
 <rect class="b-mac" x="720" y="430" width="250" height="140" rx="10"/>
 <text class="t-name" x="736" y="458">Macula mesh and realm</text>
-<text class="t-type" x="736" y="476">[Macula, team mode]</text>
-<text class="t-desc" x="736" y="500">Will admit a crew by invite</text>
-<text class="t-desc" x="736" y="516">and carry the shared room; not</text>
-<text class="t-desc" x="736" y="532">built in this release, and solo</text>
-<text class="t-desc" x="736" y="548">mode never reaches it</text>
+<text class="t-type" x="736" y="476">[Macula]</text>
+<text class="t-desc" x="736" y="500">A mesh server runs only when your</text>
+<text class="t-desc" x="736" y="516">project's config names one; the room</text>
+<text class="t-desc" x="736" y="532">and admission are team mode, and this</text>
+<text class="t-desc" x="736" y="548">release ships neither</text>
 <path class="edge" d="M155 144V180H420V210" marker-end="url(#a)"/>
 <text class="t-rel" x="300" y="172">runs init, approve, start</text>
 <path class="edge-team" d="M500 144V210" marker-end="url(#a)"/>
@@ -126,18 +126,18 @@
 <path class="edge" d="M280 330H340V470H375" marker-end="url(#a)"/>
 <text class="t-rel" x="300" y="470" text-anchor="middle">its own model</text>
 <path class="edge-team" d="M585 350V410H660V430" marker-end="url(#a)"/>
-<text class="t-rel" x="668" y="420">rooms, admission</text>
-<text class="t-desc" x="30" y="618">Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no mesh, no account, no service.</text>
+<text class="t-rel" x="668" y="420">the room, by invite</text>
+<text class="t-desc" x="30" y="618">Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account, no service, and no room code.</text>
 <text class="t-desc" x="30" y="636">The member Martha starts is a Claude Code session, so the trust the owner gives that folder and the sign-in it holds are the session's.</text>
-<text class="t-desc" x="30" y="654">Team mode adds teammates and the Macula mesh, and nothing else: dashed boxes are planned and not built, and no code here reaches them.</text>
+<text class="t-desc" x="30" y="654">Team mode adds teammates, and the room and admission drawn dashed here; a mesh server is installed and run only when a project's config names one.</text>
 <rect class="b-sys" x="24" y="690" width="22" height="14" rx="3"/>
 <text class="t-leg" x="54" y="702">Martha</text>
 <rect class="b-per" x="103.6" y="690" width="22" height="14" rx="3"/>
 <text class="t-leg" x="133.6" y="702">Person</text>
 <rect class="b-mac" x="183.2" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="213.2" y="702">Macula, team mode only</text>
-<rect class="b-ext" x="368.4" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="398.4" y="702">External system</text>
-<rect class="b-later" x="507.4" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="537.4" y="702">Planned, not built</text>
+<text class="t-leg" x="213.2" y="702">Macula, room not shipped</text>
+<rect class="b-ext" x="381.59999999999997" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="411.59999999999997" y="702">External system</text>
+<rect class="b-later" x="520.5999999999999" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="550.5999999999999" y="702">Planned, not built</text>
 </svg>

@@ -22,9 +22,10 @@ design it grew from.
 | Also needs | git, and a terminal | the same, plus the Macula mesh and realm |
 | Who says yes to a push or a release | the owner | the people the team names |
 
-Solo mode needs no mesh, no account and no service. Team mode adds people and
-the mesh, and changes nothing else. The npm registry is where the signed package
-will come from; today it is installed from a checkout (#2, #21).
+Solo mode needs no account and no service, and loads no room code. A mesh server
+is installed and run only when the project's config names one, in either mode;
+what it adds, the room and its admission, is team mode. The npm registry is where
+the signed package will come from; today it is installed from a checkout (#2, #21).
 
 ## Containers: what Martha is made of
 
@@ -62,7 +63,9 @@ container or slice is loaded, and no mesh call is made.
 ![Martha components](../assets/c4-components.svg)
 
 Every box is a directory in `src/`, and its test sits beside it. The names are
-the capabilities, not the layers.
+the capabilities, not the layers. A test fails when a directory in `src/` is in
+none of the boxes and in none of the three left out below, so the picture cannot
+fall behind the code.
 
 | Component | What it does |
 |---|---|
@@ -71,16 +74,27 @@ the capabilities, not the layers.
 | `approve_a_checkouts_config` | Names what would start code, asks on the owner's own terminal, and keeps the fingerprint it was given. |
 | `start_a_member` | Refuses no terminal, a switch it does not pass, an unknown name and a stale approval; then names the approval it starts on. |
 | `launch_a_claude_code_member` | The places in Martha's state, the approved snapshot, the launch record, and the host's command and arguments. |
-| `refuse_launch_of_unapproved_config` | Fingerprints the config and the tree at start, and allows only what was approved. |
+| `refuse_launch_of_unapproved_config` | Fingerprints the config and the tree at start, and allows only what was approved; `refuse_code_a_checkout_runs_itself` closes a checkout's own scripts. |
 | `keep_martha_state_outside_the_checkout` | One directory per project, named by a hash of its path; `row_streams_directory` appends rows as files. |
-| `linux_process_identity` | The files, scratch directories and processes on this machine: what the host contract asks for. |
+| `host_contract`, `linux_process_identity` | What the crew core may ask of a coding tool — a clock, stores, running a process, delivery in and out — and this machine's answers to it, without a host. |
 | `install_the_recorded_mesh_server` | A tree by bytes, never by version: recorded by `record_mesh_server_tools`, proved by `prove_the_mesh_server_bytes`, installed by the launcher. |
 | `inbound_paths` | Every way text reaches a session and every way a checkout starts code, each row naming the gate on it; `check_every_path_is_gated` fails CI on a gap. |
-| `take_in_a_turn`, `shell_tools` | What a host calls when a session took something in, and what may run after; `refuse_execution_after_ungated_text` stops everything that follows unvetted text. |
-| `name_the_source_of_a_prompt` | The origin a host attests, carried with the turn: with `attribute_a_cross_session_sender` and `carry_taint_across_a_refresh`. |
-| `admit_a_room_message` | Whether a crew or shared room message is admitted, and what is believed of it. Team mode. |
+| `take_in_a_turn`, `shell_tools`, `answer_a_tool_call` | What a host calls when a session took something in, and what may run after: the gate on every tool call, and `refuse_execution_after_ungated_text`, which stops everything after unvetted text. |
+| `name_the_source_of_a_prompt` | The origin a host attests, carried with the turn: with `attribute_a_cross_session_sender` and `carry_taint_across_a_refresh`; `trust_only_signed_lists` opens every list a gate trusts, from the owner's signed bytes. |
+| `admit_a_room_message` | Whether a crew or shared room message is admitted, and what is believed of it. Team mode. `refuse_widening_a_member_reach` refuses the mesh tools that widen a member's reach. |
 | `claude_code_host`, `claude_code_relay` | The host contract on Claude Code: the plugin and its hooks, and the relay that answers over a socket. |
 | `check_nothing_private_gets_in` | This repository's own check: a private issue link, an internal host name or a private remote fails CI by name. |
+
+### Left out of the Component diagram on purpose
+
+Three directories in `src/` are drawn in no box, because nothing that runs loads
+them. The same test above fails if any other directory joins them without a box:
+
+| Left out | Why |
+|---|---|
+| `log_ledger` | The crew ledger — a row per milestone and per outward act. Nothing this release runs loads it yet: the crew protocol it belongs to is still to be ported. |
+| `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
+| `record_claude_code_host` | A script run by hand, `npm run record:claude-code-host`, when the coding tool is upgraded. The adapter reads the recording it writes; the script itself never runs. |
 
 ## Keeping the pictures true
 
