@@ -9,10 +9,12 @@
 // under XDG_RUNTIME_DIR when it is set (a per-user directory, short on Linux),
 // else under the system's own temporary directory, which TMPDIR does not move.
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 import type { TestContext } from 'node:test'
+
+import { removeTheTree } from './relay_copy.ts'
 
 /** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says. */
 const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
@@ -29,6 +31,7 @@ export function newShortRelayRoot(): string {
 /** A new directory, mode 0700, removed after the test: a relay root with room for a socket. */
 export function shortRelayRoot(t: TestContext): string {
   const root = newShortRelayRoot()
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  // A launch's relay copy is read-only (martha#117), and this may run before its launcher is gone.
+  t.after(() => removeTheTree(root))
   return root
 }
