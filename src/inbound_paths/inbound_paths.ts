@@ -232,7 +232,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     klass: 'delivered',
     control: {
       kind: 'no-text-reaches-the-model',
-      why: "Martha starts the host with project config switched off (project_config_off, ../refuse_launch_of_unapproved_config), and with it the host loads no project CLAUDE.md, nested or not, and no project agent: npm run probe:launch plants each and sees none load, while the same checkout started by hand loads them (Claude Code 2.1.319, which loads no AGENTS.md either way). A host the owner starts by hand loads them before any of Martha runs, as with C1 and C2, so the adapter must refuse that session a place in the crew",
+      why: "Martha starts the host with project config switched off (project_config_off, ../refuse_launch_of_unapproved_config), and with it the host loads no project CLAUDE.md, nested or not, and no project agent: npm run probe:launch plants each and sees none load, while the same checkout started by hand loads them (Claude Code 2.1.319). Whether the host loads an AGENTS.md is not observed: the probe plants none, and the martha#135 stand-in saw none load in any run, the control included, so it cannot tell an AGENTS.md that is switched off from one the host never reads. A host the owner starts by hand loads them before any of Martha runs, as with C1 and C2, so the adapter must refuse that session a place in the crew",
     },
     attestation: 'none',
   },
