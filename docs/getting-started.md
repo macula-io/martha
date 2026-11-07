@@ -107,6 +107,18 @@ gave it. `martha start` then holds your terminal until the member ends, and ends
 with the member's own exit status (128 plus the signal number if a signal killed
 it).
 
+If the `claude` in your PATH is not the version Martha's adapter was recorded
+against, one more line sits between those two. It is information, not a refusal:
+
+```text
+martha: The host at /usr/local/bin/claude is version 2.1.319; Martha's record of the host is of version 2.1.318. It loads Martha's relay, so the member starts.
+```
+
+Before it starts the member, Martha asks that same binary whether it loads
+Martha's relay, using the host's own loader, and refuses the start when it does
+not or cannot say: a member that ran with its relay left out would have nothing
+answering its prompts and tool calls.
+
 The member is a Claude Code session, so the first time it runs in a folder,
 Claude Code asks its own trust question before the session starts. Answer it
 once; it is asked per folder, not per member.
@@ -114,9 +126,14 @@ once; it is asked per folder, not per member.
 Give it the first task in its own terminal, in your words. For example:
 
 ```text
-On a new branch named first-task, add a file hello.txt containing the single
-line: hello. Then commit it with the message: the hello note. Do nothing else.
+Add a file hello.txt containing the single line: hello. Then, in one shell
+command, create a branch named first-task, add the file, and commit it with the
+message: the hello note. Do nothing else.
 ```
+
+The order matters. A member writes files with its own file tools, and a shell
+command is the last thing it runs: once a command has run, it can only read
+until you start it again.
 
 When you are done with the builder, end its session (`/exit` or Ctrl-D). The
 branch and the commit stay in the checkout.
@@ -173,6 +190,8 @@ it:
 | `... you have not approved it as it is now. Run martha approve ...` | `martha approve`, read, answer `yes` |
 | `martha approve asks you on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
 | `martha start runs a member on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
+| `The member is not started: ... does not load Martha's relay (...), so the member's gates would be off: ...` | that `claude` cannot run Martha's gates: use one that loads them, such as an updated Claude Code |
+| `... is stopped: its relay did not report the session's start within ... s. If the host was still asking whether to trust ..., start the member again and answer it; if it was not, the host is not running Martha's gates` | answer the trust question, then start the member again; if no question was asked, that `claude` is not running Martha's gates |
 | `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop it; those three are the only arguments `martha start` passes on |
 
 Exit codes: `0` done, `1` refused, `2` not a way the command is used
