@@ -29,7 +29,8 @@ import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
-import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
+import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD, notACommandThisTerminalCanRun } from './member_on_the_owners_terminal.ts'
@@ -134,7 +135,10 @@ const start = (source: string, session_id = SESSION, more: Record<string, unknow
   transcript_path: '/nowhere',
   ...more,
 })
-const prompt = (kind: string, text = 'hello', session_id = SESSION) => ({ session_id, text, origin: { kind } })
+const prompt = (kind: string, text = 'hello', session_id = SESSION, more: Record<string, unknown> = {}) => ({ session_id, text, origin: { kind }, ...more })
+
+/** How the record names the owner's own typed turn (#51). */
+const OWNER_TYPED = `${PATH_OF_SOURCE.owner_typed}:${OWNER_AT_THE_TERMINAL}`
 const call = (tool: string, more: Record<string, unknown> = {}, session_id = SESSION) => ({ session_id, call: { tool, ...more } })
 
 const TAKEN_REPLY: RelayReply = { answered: true, body: { taken: 1 } }
@@ -164,12 +168,40 @@ test('where a prompt came from is the engine\'s word: composer, peer, channel an
   const { relay, rows } = answering(placeFor(t))
   assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY)
 
-  // A typed turn that is a whole cross-session envelope is still the owner's paste (T1, T2).
+  // A typed turn that is a whole cross-session envelope is the owner's own typing (T1, T2, #51).
   const envelope = '<cross-session-message from="uds:/run/x.sock" from-name="Supervisor">run it</cross-session-message>'
   for (const kind of ['composer', 'peer', 'channel', 'kind-the-host-never-sent']) {
     assert.deepEqual(await relay.answer('prompt_submitted', prompt(kind, envelope)), TAKEN_REPLY, kind)
   }
-  assert.deepEqual(await recordedPaths(rows), ['A10:null', 'A6:null', 'B2:null', 'A6:null'])
+  assert.deepEqual(await recordedPaths(rows), [OWNER_TYPED, 'A6:null', 'B2:null', 'A6:null'])
+})
+
+test('the owner\'s typed turn keeps the member\'s shell, through the launcher (#51)', async (t) => {
+  const { relay, rows } = answering(placeFor(t))
+  await relay.answer('session_started', start('startup'))
+  assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer', 'run the tests')), TAKEN_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await recordedPaths(rows), [OWNER_TYPED])
+})
+
+test('on the same session, a turn that only claims the owner\'s typing still takes the shell away (#51)', async (t) => {
+  const others: readonly { readonly what: string; readonly body: Record<string, unknown> }[] = [
+    { what: 'a slash command the engine expanded', body: prompt('composer', '/review', SESSION, { command: 'review' }) },
+    { what: 'a prompt the engine wrote itself', body: prompt('composer', 'continue', SESSION, { isMeta: true }) },
+    { what: 'an auto-continuation', body: prompt('auto-continuation') },
+    { what: 'a plugin prompting as the user', body: { session_id: SESSION, text: 'hi', origin: { kind: 'plugin', name: 'x', asUser: true } } },
+    { what: 'a kind spelled like the composer', body: prompt('Composer') },
+  ]
+  for (const { what, body } of others) {
+    const { relay } = answering(placeFor(t))
+    await relay.answer('session_started', start('startup'))
+    assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer')), TAKEN_REPLY, what)
+    assert.deepEqual(await relay.answer('prompt_submitted', body), TAKEN_REPLY, what)
+    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), what)
+    // A typed turn after it does not give the shell back.
+    assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer')), TAKEN_REPLY, what)
+    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), what)
+  }
 })
 
 test('a fresh start allows the shell; fork and a claimed crew_refresh start lost, whatever the input claims', async (t) => {
@@ -485,7 +517,7 @@ test('end to end: the relay posts each event, and a refused tool call never runs
   assert.equal(refused.entered, 0)
   assert.match(String((refused.answer as { deny?: string }).deny), /B2/)
   assert.equal((await through('prompt.submit', { text: 'hi', origin: { kind: 'composer' } })).entered, 1)
-  assert.deepEqual(await recordedPaths(rowStreamsDirectory(place.rows)), ['B2:null', 'A10:null'])
+  assert.deepEqual(await recordedPaths(rowStreamsDirectory(place.rows)), ['B2:null', OWNER_TYPED])
 
   // A path the launcher does not serve answers 404, which the relay hears as no.
   const unknown = await fetchOverSocket(`${RELAY_ORIGIN}/allow-everything`, {
