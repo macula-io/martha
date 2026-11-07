@@ -162,6 +162,7 @@ test('a tear-down that fails fails the run, and the box is removed even when sto
   })
   assert.equal(result.passed, false, lines.join('\n'))
   assert.ok(lines.some((l) => /^FAIL tear down: .*planted: the registry refused to stop/.test(l)), lines.join('\n'))
+  assert.ok(lines.some((l) => l.startsWith('FAIL tear down:') && l.endsWith(`; relay root ${result.relayRoot}`)), `the failed tear-down names the relay root\n${lines.join('\n')}`)
   assert.equal(lines.at(-1), 'failed')
   assert.ok(!existsSync(result.box), 'the box is gone')
   assert.equal(await stillListening(result.registry), false, 'the registry no longer answers')
