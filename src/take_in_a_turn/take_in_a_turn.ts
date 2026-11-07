@@ -159,6 +159,7 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
   'B8', // no body text reaches the model
+  'A17', // auto-memory is off in a member's host, so it never becomes a turn (martha#136)
   // code the host starts by itself is not text taken in: the launch gate stands there
   ...INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id),
   // words refused before the host starts never become a turn: the argument gate stands there
