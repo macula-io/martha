@@ -596,10 +596,39 @@ start.** With an
 owner at the terminal, in a folder the host does not yet trust, a host that
 loads the relay when the launcher checks it but then runs no hooks gives up to
 `TRUST_ANSWER_DEADLINE_MS` of a member with no prompt gate and no
-tool call gate, with nothing on screen to say so. The routes to such a host are
-managed settings, or a `disableAllHooks` a member writes into the owner's user
-settings; the settings route is row A13, tracked in
-[#122](https://github.com/macula-io/martha/issues/122). This is accepted
+tool call gate, with nothing on screen to say so. The settings route to such a
+host is shut where the launcher can see it
+([#122](https://github.com/macula-io/martha/issues/122)): a launch is refused
+while the owner's user settings, the approved `--settings` copy, or the
+managed settings file or drop-in folder set a key the recorded host turns
+hooks off by (`disableAllHooks`, and from managed settings
+`allowManagedHooksOnly` and `strictPluginOnlyCustomization`). A launch is also
+refused while the host's safe mode is on, which keeps managed hooks only: its
+variable (`CLAUDE_CODE_SAFE_MODE`) in the launcher's environment or in any of
+those files' `env`, whatever its value, or its flag (`--safe-mode`) among the
+owner's arguments. Every one of these is read from the host's own hook-set
+function and the functions its exits call (`hooks_switches` and
+`hooks_switch_calls` in `recorded_claude_code_host.json`), and the recorder
+fails on a statement or an exit of that function it does not know, so a host
+that adds a way to drop hooks fails the recording instead of passing it.
+Claude Code 2.1.319 adds one such exit: with no terminal and
+`CLAUDE_CODE_IGNORE_PERSISTED_TRUST` set, the host keeps only the user,
+`--settings` and policy hooks. The recorder knows that shape and records the
+variable (`outside_a_terminal`), but refuses nothing for it: a member always
+has a terminal, and a live probe on 2.1.319 in print mode, with a project hook
+as the witness that the exit fired, saw the relay's hooks still run. A
+member's file tool call that names the owner's user settings file is denied,
+the path resolved as the host resolves it (trimmed, a leading `~` against its
+home); reads are denied too, which keeps nothing secret, since a shell can
+still read the file. A shell write is caught by the launcher itself: it reads
+those files again every `HOOK_SETTINGS_CHECK_MS` for the member's whole life,
+apart from any hook, as well as after every call, and stops the member when a
+switch appears. What is left: up to `HOOK_SETTINGS_CHECK_MS` of a member with
+no gate after such a write, since the host may drop its hooks as soon as it
+reloads the file; managed settings the host takes from a server or a device
+policy, which the launcher cannot read; and the host's own remote switch for
+hooks modules.
+This is accepted
 because a person must be able to read the host's trust question before
 answering it, and the live probe on 2.1.318 saw the relay report nothing
 before the answer, so no earlier signal exists to start a shorter clock from.
@@ -973,8 +1002,17 @@ crew with a shell:
   a member with no prompt gate and no tool call gate for up to
   `TRUST_ANSWER_DEADLINE_MS`, with nothing on screen to say so; every later
   start there is held to `SESSION_START_DEADLINE_MS` (the residual under the
-  trust question, above; the settings route to such a host is
-  [#122](https://github.com/macula-io/martha/issues/122)).
+  trust question, above; the settings route to such a host is shut where the
+  launcher can read the file, [#122](https://github.com/macula-io/martha/issues/122)).
+- **The call that writes a hook-killing key
+  ([#122](https://github.com/macula-io/martha/issues/122)).** A shell write to
+  the owner's user settings, or one that sets safe mode in its `env`, is caught
+  by the launcher's own check every `HOOK_SETTINGS_CHECK_MS` and after every
+  call, and stops the member; the host may drop its hooks as soon as it reloads
+  the file, so that member may run with no gate for up to
+  `HOOK_SETTINGS_CHECK_MS`, and the next launch is refused. Managed settings
+  from a server or a device policy, and the host's remote switch for hooks
+  modules, are not read by the launcher.
 - **T13**: a process of the same OS user can connect to a launch's relay socket
   and claim any origin, `composer` included (above).
 - **The terminal check is a speed bump.** `martha approve` and `martha start`

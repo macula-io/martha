@@ -36,7 +36,8 @@ import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_re
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
@@ -46,6 +47,9 @@ import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 
 // --- a member's places ----------------------------------------------------------
+
+/** The managed settings place of a test: the recorded file and drop-in names, in a folder of the place's own. */
+const managedSettingsOf = (place: { readonly home: string }) => ({ ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') })
 
 interface Place {
   /** The stop directory, standing in for the owner's home. */
@@ -127,6 +131,13 @@ function answering(place: Place, rows: RowStore = rowStreamsDirectory(place.rows
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    hookSettings: hookSettingsWatch({
+      user: join(place.home, USER_SETTINGS),
+      home: place.home,
+      approved: undefined,
+      managed: managedSettingsOf(place),
+      switches: CLAUDE_CODE_HOOK_SWITCHES,
+    }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -965,6 +976,8 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     policy: { may_send_executable_text: [] },
     places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
+    // The managed settings the host would read, under the place: never the machine's own.
+    managed_settings: managedSettingsOf(place),
     command,
     args: ['-p', 'the owner prompt'],
     // HOME is the place's own, so the owner's user settings file the launcher reads is the test's.
@@ -1361,6 +1374,140 @@ test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, an
   assert.equal(seen.CLAUDE_CODE_PLUGIN_DIRS, '', `it reached the server as ${seen.CLAUDE_CODE_PLUGIN_DIRS}`)
   started.stop('the test is over')
   await started.stopped
+})
+
+// --- settings that turn Martha's relay off (martha#122) -------------------------
+
+const [HOOKS_OFF] = CLAUDE_CODE_HOOK_SWITCHES.every_source
+const MANAGED_ONLY = CLAUDE_CODE_HOOK_SWITCHES.managed.filter((key) => !CLAUDE_CODE_HOOK_SWITCHES.every_source.includes(key))
+
+function writeSettings(path: string, settings: Record<string, unknown>): string {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify(settings))
+  return path
+}
+
+async function hookLaunchRefused(t: TestContext, plant: (place: Place) => string, key: string, files: Readonly<Record<string, string>> = {}): Promise<void> {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version), files)
+  const fake = fakeClaude(place)
+  const file = plant(place)
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
+  assert.ok(refusal.includes(file) && refusal.includes(key), refusal)
+}
+
+test("a hook-killing key in the owner's user settings starts nothing, naming the file and the key", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  await hookLaunchRefused(t, (place) => writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true }), HOOKS_OFF)
+})
+
+test('a hook-killing key in the approved --settings copy starts nothing, naming it and the key', async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  await hookLaunchRefused(t, () => USER_SETTINGS, HOOKS_OFF, { [USER_SETTINGS]: JSON.stringify({ [HOOKS_OFF]: true }) })
+})
+
+for (const key of MANAGED_ONLY) {
+  test(`${key} in the managed settings file, or in a file of its drop-in folder, starts nothing, naming the file and the key`, async (t) => {
+    const { file, drop_in } = RECORDED_HOST.managed_settings
+    await hookLaunchRefused(t, (place) => writeSettings(join(managedSettingsOf(place).dir, file), { [key]: true }), key)
+    await hookLaunchRefused(t, (place) => writeSettings(join(managedSettingsOf(place).dir, drop_in, '50-org.json'), { [key]: true }), key)
+  })
+}
+
+test("a member's file tool call that names the owner's user settings file is denied, directly and through a link", async (t) => {
+  const place = placeFor(t)
+  const { relay } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  const owners = join(place.home, USER_SETTINGS)
+  mkdirSync(dirname(owners), { recursive: true })
+  // The link lives beside the checkout: one in it would change the tree the owner approved.
+  symlinkSync(dirname(owners), join(place.home, 'linked'))
+  for (const [tool, input] of [
+    ['Write', { file_path: owners, content: JSON.stringify({ [HOOKS_OFF ?? '']: true }) }],
+    ['Edit', { file_path: join('..', 'linked', 'settings.json'), old_string: '{', new_string: '{"x":1,' }],
+  ] as const) {
+    assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /user settings/), tool)
+  }
+  assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
+})
+
+test("a call after which the owner's user settings carry a hook-killing key stops the member, naming the file and the key", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  const place = placeFor(t)
+  const { relay, stops } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  const shell = call('Bash', { command: 'python3 -c "..."' })
+  assert.deepEqual(await relay.answer('tool_called', shell), ALLOW_REPLY)
+  const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
+  const after = await relay.answer('tool_answered', shell)
+  assert.equal(after.answered, false)
+  assert.equal(stops.length, 1)
+  assert.ok(stops[0]?.includes(file) && stops[0].includes(HOOKS_OFF), stops[0] ?? 'no stop')
+})
+
+test("a hook-killing key written while the member runs stops it, with no tool call after the write", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(start('startup')),
+    socketPath: readFileSync(fake.envFile, 'utf8'),
+  })
+  assert.equal(posted.text, '{"taken":1}')
+  // The host may drop its hooks once it reloads the file, so no hook asks again: the launcher must.
+  const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
+  const stopped = await started.stopped
+  const why = stopped.stopped_because ?? ''
+  assert.ok(why.includes(file) && why.includes(HOOKS_OFF), why)
+})
+
+/** The recorded host's safe mode switches, read when a test asks. */
+const safeMode = () => CLAUDE_CODE_HOOK_SWITCHES.safe_mode
+
+/** A launch changed by `change` is refused, starts nothing, leaves nothing behind, and names each of `named`. */
+async function safeModeLaunchRefused(
+  t: TestContext,
+  change: (launch: ReturnType<typeof memberLaunch>, place: Place) => ReturnType<typeof memberLaunch>,
+  named: (place: Place) => readonly string[],
+): Promise<void> {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const refusal = await refusedLeavingNothing(t, place, change(memberLaunch(place, fake.command, place.approved, [], recording), place), fake.ranFile)
+  for (const name of named(place)) assert.ok(refusal.includes(name), `${name} not in: ${refusal}`)
+  assert.ok(refusal.includes('turns off the hooks'), refusal)
+}
+
+test("safe mode in the owner's user settings env starts nothing, naming the file and the variable, whatever the server environment rule allows", async (t) => {
+  const [SAFE_MODE_VARIABLE] = safeMode().variables
+  assert.ok(SAFE_MODE_VARIABLE !== undefined)
+  await safeModeLaunchRefused(
+    t,
+    (launch, place) => (writeSettings(join(place.home, USER_SETTINGS), { env: { [SAFE_MODE_VARIABLE]: '1' } }), launch),
+    (place) => [join(place.home, USER_SETTINGS), SAFE_MODE_VARIABLE],
+  )
+})
+
+test("safe mode in the launcher's own environment starts nothing, naming the variable", async (t) => {
+  const [SAFE_MODE_VARIABLE] = safeMode().variables
+  assert.ok(SAFE_MODE_VARIABLE !== undefined)
+  await safeModeLaunchRefused(t, (launch) => ({ ...launch, inherited: { ...launch.inherited, [SAFE_MODE_VARIABLE]: '1' } }), () => [SAFE_MODE_VARIABLE])
+})
+
+test("safe mode among the owner's arguments starts nothing, naming the argument", async (t) => {
+  const [SAFE_MODE_FLAG] = safeMode().flags
+  assert.ok(SAFE_MODE_FLAG !== undefined)
+  await safeModeLaunchRefused(t, (launch) => ({ ...launch, args: [...launch.args, SAFE_MODE_FLAG] }), () => [SAFE_MODE_FLAG])
 })
 
 test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {

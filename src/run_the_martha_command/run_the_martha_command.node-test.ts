@@ -16,7 +16,7 @@ import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkout
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
-import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, USAGE } from './run_the_martha_command.ts'
+import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -152,7 +152,7 @@ test('martha init then martha start on a terminal runs the owner\'s claude, name
   const [builder] = SOLO_MEMBERS
   const run = marthaOnATerminal(place, claude.env, 'start', builder!.name)
   assert.equal(run.status, 7, run.said)
-  assert.match(run.said, new RegExp(`^${builder!.name} started, pid [0-9]+$`, 'm'))
+  assert.match(run.said, new RegExp(`^${startedLine(builder!.name, '[0-9]+')}$`, 'm'))
   assert.ok(existsSync(claude.ran), 'the owner\'s claude ran')
 })
 
