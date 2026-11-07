@@ -12,6 +12,8 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { openState, ownWritesKeptIn, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
@@ -84,6 +86,13 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    hookSettings: hookSettingsWatch({
+      user: join(home, '.claude', 'settings.json'),
+      home,
+      approved: undefined,
+      managed: { ...RECORDED_HOST.managed_settings, dir: join(home, 'managed') },
+      switches: CLAUDE_CODE_HOOK_SWITCHES,
+    }),
     stopMember: (why) => void stops.push(why),
   })
   return { home, checkout, state, approved: started, relay, stops }
@@ -175,11 +184,13 @@ test("an Edit and a NotebookEdit are own writes of the file they name, as it is 
   assert.deepEqual(place.stops, [])
 })
 
-test('a path the member gives relative to where it started, or with spaces around it, is the file the host wrote', async (t) => {
+test('a path the member gives relative to where it started, from its home, or with spaces around it, is the file the host wrote', async (t) => {
   const place = checkoutFor(t)
   await started(place)
   writeFileSync(join(place.checkout, 'hello.txt'), 'hello\n')
   assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: ' hello.txt ', content: 'hello\n' })), TAKEN_REPLY)
+  writeFileSync(join(place.checkout, 'other.txt'), 'other\n')
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: '~/checkout/other.txt', content: 'other\n' })), TAKEN_REPLY)
   assert.deepEqual(place.stops, [])
 })
 

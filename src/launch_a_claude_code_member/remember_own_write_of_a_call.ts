@@ -13,9 +13,9 @@
 //   - for a Write, its bytes are the call's content.
 
 import { lstatSync, readFileSync, realpathSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, relative } from 'node:path'
 
-import { fileArgumentOf, WHOLE_FILE_CONTENT, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { asTheHostResolves, fileArgumentOf, WHOLE_FILE_CONTENT, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import type { LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import { checkoutTopOf, objectFormatOf, realOrResolved } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -37,14 +37,8 @@ export interface CallThatRan {
   readonly tool: string
   readonly input: Readonly<Record<string, unknown>>
   readonly session: string
-}
-
-/** The file a path names as the host resolves it: trimmed, a leading `~` against its home, the rest against `cwd`. */
-function asTheHostResolves(value: string, cwd: string, home: string): string {
-  const trimmed = value.trim()
-  if (trimmed === '~') return home
-  if (trimmed.startsWith('~/')) return join(home, trimmed.slice(2))
-  return resolve(cwd, trimmed)
+  /** The host's home, which a leading `~` in the call's path names. */
+  readonly home: string
 }
 
 const isUnder = (top: string, path: string): boolean => {
@@ -95,7 +89,7 @@ export function ownWriteOfCall(launch: ApprovedLaunch, call: CallThatRan, host: 
   const file = namedFileOf(call)
   const checkout = since === undefined || file === undefined ? undefined : checkoutOf(launch, host)
   if (since === undefined || file === undefined || checkout === undefined) return undefined
-  const path = realFileUnder(checkout.top, asTheHostResolves(file.named, checkout.cwd, launch.stop_dir))
+  const path = realFileUnder(checkout.top, asTheHostResolves(file.named, checkout.cwd, call.home))
   if (path === undefined) return undefined
   const bytes = readFileSync(path)
   if (!bytesAreTheCalls(call, bytes)) return undefined
