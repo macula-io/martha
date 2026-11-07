@@ -28,8 +28,11 @@
 import { chmodSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+/** Where the relay keeps its plugin manifest, as the host reads it. */
+export const RELAY_MANIFEST = '.claude-plugin/plugin.json'
+
 /** The relay's files, relative to its folder: what a launch carries into its copy. */
-export const RELAY_FILES = ['.claude-plugin/plugin.json', 'hooks/hooks.json', 'hooks/register.ts', 'hooks/relay_protocol.ts'] as const
+export const RELAY_FILES = [RELAY_MANIFEST, 'hooks/hooks.json', 'hooks/register.ts', 'hooks/relay_protocol.ts'] as const
 
 /** The copy's name inside a launch's relay directory. */
 export const RELAY_COPY_NAME = 'relay'

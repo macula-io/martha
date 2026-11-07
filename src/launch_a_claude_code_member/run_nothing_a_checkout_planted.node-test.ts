@@ -29,6 +29,7 @@ import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/re
 import { EMPTY_DIRECTORY_MODE } from './empty_directory.ts'
 import { CLAUDE_CODE, EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
+import { hostAnswers } from './host_stand_in.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
 const CONFIG_HOOKS_SINCE: readonly [number, number] = [2, 54]
@@ -238,6 +239,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       member,
       [
         '#!/bin/sh',
+        ...hostAnswers(),
         `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${empty}'`,
         `${place.member_commands}status=$?`,
         `printf '%s' "$status" > '${done}'`,

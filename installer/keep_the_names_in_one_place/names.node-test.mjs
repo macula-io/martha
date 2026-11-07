@@ -120,7 +120,29 @@ test('every signing call is to a sha the installer lists', () => {
 /** @param {string} text */
 const holdsWrite = (text) => /^\s*(packages|id-token):\s*write\b/m.test(text)
 /** @param {string} text */
-const unpinned = (text) => [...text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)].map((m) => m[1] ?? '').filter((ref) => !/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/.test(ref))
+const usesRefs = (text) => [...text.matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)].map((m) => m[1] ?? '')
+// A call to a workflow of this repository runs it at the caller's own commit, so the reference cannot move; what that
+// workflow runs is held to the rule instead, because it is added to the files checked (heldFiles below).
+const LOCAL_WORKFLOW = /^\.\/(\.github\/workflows\/[\w.-]+\.ya?ml)$/
+/** @param {string} text */
+const unpinned = (text) => usesRefs(text).filter((ref) => !/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/.test(ref) && !LOCAL_WORKFLOW.test(ref))
+/** @param {string} text */
+const localCalls = (text) => usesRefs(text).flatMap((ref) => LOCAL_WORKFLOW.exec(ref)?.[1] ?? [])
+
+/**
+ * The files a writer runs: the writers, and every workflow of this repository they call, however deep.
+ * @param {string[]} writers
+ * @param {(path: string) => string} readFile
+ */
+function heldFiles (writers, readFile) {
+  const held = new Set(writers)
+  const queue = [...writers]
+  for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+    const fresh = localCalls(readFile(file)).filter((callee) => !held.has(callee))
+    for (const callee of fresh) { held.add(callee); queue.push(callee) }
+  }
+  return [...held]
+}
 
 test('every action in a workflow that can publish or sign is pinned by a full commit sha', () => {
   // A job holding packages:write or id-token:write runs its actions with that power: a moved tag would too. The
@@ -128,9 +150,25 @@ test('every action in a workflow that can publish or sign is pinned by a full co
   const found = readdirSync(`${ROOT}/.github/workflows`).filter((f) => /\.ya?ml$/.test(f)).map((f) => `.github/workflows/${f}`)
   const writers = found.filter((f) => holdsWrite(read(f)))
   for (const known of ['release.yml', 'installer.yml', 'release-dry-run.yml']) assert.ok(writers.includes(`.github/workflows/${known}`), `${known} is found by what it holds`)
-  for (const file of writers) assert.deepEqual(unpinned(read(file)), [], `${file} runs actions not pinned by sha`)
+  const held = heldFiles(writers, read)
+  assert.ok(held.includes('.github/workflows/advisories.yml'), 'a workflow a release calls is held to the rule')
+  for (const file of held) assert.deepEqual(unpinned(read(file)), [], `${file} runs actions not pinned by sha`)
   const planted = 'permissions:\n  id-token: write\nsteps:\n  - uses: actions/checkout@v7\n'
   assert.ok(holdsWrite(planted) && unpinned(planted).length === 1, 'the scan bites on a planted workflow')
+})
+
+test('a workflow of this repository that a writer calls is held to the same pinning', () => {
+  // Planted: a writer that calls a local workflow, which runs an action by a tag. The call itself passes; the
+  // callee is reached and fails, so a local call cannot launder an unpinned action into a release.
+  const files = {
+    '.github/workflows/writer.yml': 'permissions:\n  id-token: write\njobs:\n  a:\n    uses: ./.github/workflows/callee.yml\n',
+    '.github/workflows/callee.yml': 'jobs:\n  b:\n    steps:\n      - uses: actions/checkout@v7\n'
+  }
+  /** @param {string} path */
+  const readPlanted = (path) => files[/** @type {keyof typeof files} */ (path)] ?? ''
+  const held = heldFiles(['.github/workflows/writer.yml'], readPlanted)
+  assert.deepEqual(unpinned(readPlanted('.github/workflows/writer.yml')), [])
+  assert.deepEqual(held.flatMap((file) => unpinned(readPlanted(file))), ['actions/checkout@v7'])
 })
 
 /**
