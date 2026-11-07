@@ -1555,6 +1555,41 @@ test('a member on the owner\'s terminal whose relay never reports its session st
   assert.ok(why.includes('trust'), why)
 })
 
+/** The host's own record of the folders it trusts, as Claude Code keeps it in the config folder the member's HOME names. */
+function hostTrustRecord(place: Place, record: string | undefined): void {
+  if (record !== undefined) writeFileSync(join(place.home, '.claude.json'), record)
+}
+
+test('a member on the owner\'s terminal in a folder the host\'s record already trusts is held to the short deadline: the host asks nothing (#104 r=3)', async (t) => {
+  const place = placeFor(t)
+  hostTrustRecord(place, JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
+  const session_start_deadline_ms = 300
+  const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+  await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
+  const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
+  assert.ok(why.includes(`within ${session_start_deadline_ms / 1000} s`), why)
+  assert.ok(!why.includes('trust'), why)
+})
+
+for (const [what, record] of [
+  ['no record at all', undefined],
+  ['a record that does not parse', '{"projects": {'],
+  ['a record where the folder is not trusted', (place: Place) => JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: false } } })],
+  ['a record that trusts only a folder above it', (place: Place) => JSON.stringify({ projects: { [dirname(place.checkout)]: { hasTrustDialogAccepted: true } } })],
+  ['a record whose trust is not the value true', (place: Place) => JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: 'true' } } })],
+] as const) {
+  test(`a member on the owner\'s terminal keeps the trust answer deadline on ${what} (#104 r=3)`, async (t) => {
+    const place = placeFor(t)
+    hostTrustRecord(place, typeof record === 'function' ? record(place) : record)
+    const session_start_deadline_ms = 300
+    const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+    const member = Number(textIn(terminal.fake.readyFile))
+    await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
+    assert.equal(isAlive(member), true, 'the member still runs')
+    assert.ok(!terminal.shown().includes('stopped'), terminal.shown())
+  })
+}
+
 test('a member on the owner\'s terminal that exits by itself leaves the terminal\'s settings as they were', async (t) => {
   const place = placeFor(t)
   const terminal = await ownersTerminal(t, place)
