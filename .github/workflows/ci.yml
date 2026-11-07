@@ -157,6 +157,8 @@ jobs:
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
   # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the
   # recording, never typed here), runs its own loader on the relay, and plants #104's line in a copy to prove it bites.
+  # Then a launch with that host on an owner's terminal must leave the installed relay folder as it was (martha#117),
+  # after a check that the host does write into a writable one.
   relay:
     name: the relay loads in the recorded host
     runs-on: ubuntu-latest
@@ -165,6 +167,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - run: npm ci
       - run: prove_the_relay_loads/prove_the_relay_loads.sh "${{ runner.temp }}/relay-loads"
 
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects

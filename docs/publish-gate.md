@@ -582,9 +582,19 @@ host, a **relay** (`src/claude_code_relay/`, a plugin the launcher loads with
 with the engine's own fields unchanged, and acts on the answer. The relay
 decides nothing.
 
+The host writes its own generated files (`tsconfig.json`,
+`.claude-plugin/types/`) into the folder `--plugin-dir` names, only those that
+are missing, and keeps whatever is already there
+([#117](https://github.com/macula-io/martha/issues/117)). So the installed
+relay folder is never named to the host: each launch copies the relay's
+declared files into its own socket directory, clears every write bit, and
+names that copy. A file put into the installed folder is not carried; a
+declared file that is missing or a link refuses the launch. The copy goes with
+the launch, and the installed relay stays byte for byte the release.
+
 A relay the host refuses to load runs no gate at all ([#104](https://github.com/macula-io/martha/issues/104)).
 So before a member starts, the launcher resolves the host's command once and
-asks that binary's own loader (`plugin validate`) whether it takes the relay,
+asks that binary's own loader (`plugin validate`) whether it takes the launch's copy of the relay,
 and starts nothing if it does not. A host of another version than the one the
 adapter was recorded from is told to the owner in one line. The command is
 looked up only in absolute `PATH` entries, so a `claude` planted in the

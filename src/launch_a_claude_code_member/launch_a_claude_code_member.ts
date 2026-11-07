@@ -14,14 +14,18 @@
 //      approved --settings copy, which may name only what the mesh server may
 //      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
 //      on a refusal of any nothing starts, and the refusal goes to the owner.
-//      Then the host's command, resolved once to the file it runs, must load
-//      the relay by the host's own loader, or nothing starts; a host of another
-//      version than the recording is told to the owner in one line
-//      (host_runs_the_relay.ts, martha#104).
 //   2. A fresh 0700 directory for the relay socket (relay_directory.ts); a
 //      pre-existing path, a link or a parent others may write refuses the launch.
 //      Inside it, an empty 0500 directory: where the member's git looks for
 //      hooks and direnv for its config (../refuse_code_a_checkout_runs_itself).
+//      Beside it, the launch's own read-only copy of the relay's declared files
+//      (relay_copy.ts, martha#117): the folder --plugin-dir names, so the host's
+//      generated files never land in the installed relay folder. A declared file
+//      that is missing or a link refuses the launch.
+//      Then the host's command, resolved once to the file it runs, must load
+//      that copy, the folder the member's host will load, by the host's own
+//      loader, or nothing starts; a host of another version than the recording
+//      is told to the owner in one line (host_runs_the_relay.ts, martha#104).
 //   3. The relay's server on that socket, answering with memberRelay.
 //   4. `claude` in a process group of its own, so one SIGKILL reaches the host
 //      and its tool servers. On the owner's own terminal (inherited stdio, with
@@ -30,7 +34,7 @@
 //      (member_on_the_owners_terminal.ts);
 //      otherwise it is also in a session of its own (`detached`). In both, the
 //      owner's arguments go first, then the launch gate's
-//      switches and the relay plugin. `--mcp-config` takes every argument after
+//      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
 //      environment is `launchEnvironment(inherited, switches)`, then the
 //      settings that keep a checkout from running its hooks, install scripts
@@ -56,7 +60,7 @@
 //
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
 // tool server outlives it, its launch record is dropped, the server closes, and
-// the socket directory and the snapshot are removed. If the launcher itself
+// the socket directory, with the relay's copy, and the snapshot are removed. If the launcher itself
 // exits first, or is ended by SIGTERM or SIGINT, it kills the group and removes
 // both directories on the way out.
 //
@@ -113,11 +117,12 @@ import {
 } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
 
-/** The relay plugin's folder, as `--plugin-dir` names it. */
+/** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
 
 /** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
@@ -300,6 +305,8 @@ interface LaunchMade extends ReadyLaunch {
   readonly binary: string
   readonly relayDirectory: Extract<RelayDirectory, { readonly made: true }>
   readonly emptyDirectory: string
+  /** The launch's read-only copy of the relay, which --plugin-dir names (martha#117). */
+  readonly pluginDir: string
   readonly server: RelayServer
 }
 
@@ -331,27 +338,32 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
 }
 
 /**
- * Step 1b: the file the host's command resolves to, which must load the relay;
+ * Step 2b: the file the host's command resolves to, which must load the launch's copy of the relay;
  * or the refusal. A host of another version than the recording is told to the
  * owner and refuses nothing (host_runs_the_relay.ts).
  */
-async function hostThatRunsTheRelay(launch: ClaudeCodeMemberLaunch, ready: ReadyLaunch): Promise<{ readonly binary: string } | string> {
+async function hostThatRunsTheRelay(
+  launch: ClaudeCodeMemberLaunch,
+  ready: ReadyLaunch,
+  pluginDir: string,
+): Promise<{ readonly binary: string } | string> {
   const cwd = launch.place.launch_dir
   const resolved = resolvedHostCommand(launch.command, ready.hostEnv.PATH, cwd)
   if ('refusal' in resolved) return `${NOT_STARTED}: ${resolved.refusal}`
   const env = ready.hostEnv
-  const refused = await refusalToLoadTheRelay(resolved.binary, RELAY_PLUGIN_DIR, env, cwd)
+  // The folder the member's host will load: the launch's copy, never the installed relay (martha#117).
+  const refused = await refusalToLoadTheRelay(resolved.binary, pluginDir, env, cwd, RELAY_PLUGIN_DIR)
   if (refused !== undefined) return `${NOT_STARTED}: ${refused}`
   const drift = await hostVersionLine(resolved.binary, env, cwd)
   if (drift !== undefined) launch.tellOwner(drift)
   return resolved
 }
 
-/** Step 2: the relay socket's directory, and the empty directory inside it; or the refusal, with both gone. */
+/** Step 2: the relay socket's directory, the empty directory and the relay's copy inside it; or the refusal, with all gone. */
 function launchDirectories(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
-): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory'> | string {
+): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir'> | string {
   const relayDirectory = makeRelayDirectory(join(launch.places.relay_root, randomUUID()))
   if (!relayDirectory.made) {
     ready.removeSnapshot()
@@ -364,7 +376,13 @@ function launchDirectories(
     ready.removeSnapshot()
     return empty.refusal
   }
-  return { relayDirectory, emptyDirectory }
+  const copy = copyTheRelay(RELAY_PLUGIN_DIR, join(relayDirectory.directory, RELAY_COPY_NAME))
+  if (!copy.made) {
+    relayDirectory.remove()
+    ready.removeSnapshot()
+    return copy.refusal
+  }
+  return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir }
 }
 
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
@@ -436,7 +454,7 @@ async function startedMember(
     await removeWhatTheLaunchMade(made)
     return `${NOT_STARTED}: ${placed}`
   }
-  const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', RELAY_PLUGIN_DIR]
+  const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', made.pluginDir]
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
     recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
@@ -562,13 +580,14 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const ready = readyLaunch(launch)
   if (typeof ready === 'string') return refuse(ready)
-  const host = await hostThatRunsTheRelay(launch, ready)
+  const directories = launchDirectories(launch, ready)
+  if (typeof directories === 'string') return refuse(directories)
+  const host = await hostThatRunsTheRelay(launch, ready, directories.pluginDir)
   if (typeof host === 'string') {
+    directories.relayDirectory.remove()
     ready.removeSnapshot()
     return refuse(host)
   }
-  const directories = launchDirectories(launch, ready)
-  if (typeof directories === 'string') return refuse(directories)
 
   let group: number | undefined
   let stoppedBecause: string | null = null
