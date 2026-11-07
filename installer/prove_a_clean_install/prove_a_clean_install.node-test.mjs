@@ -17,8 +17,7 @@ import { proveACleanInstall, WORK_PREFIX } from './prove_a_clean_install.mjs'
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
 const SOLO_CREW = fileURLToPath(new URL('../../src/declare_a_solo_crew/declare_a_solo_crew.ts', import.meta.url))
-/** @type {ReadonlyArray<{ name: string }>} */
-const { SOLO_MEMBERS } = await import(SOLO_CREW)
+const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string }> }} */ (await import(SOLO_CREW))
 // A command run that hangs fails here instead of stalling the suite to its own timeout.
 const COMMAND_TIMEOUT_MS = 50_000
 // The mode a planted defect gives the release: writable by its owner, which a placed release never is.
@@ -142,6 +141,16 @@ test('a member that does not stay up fails its start step, and the run still tea
   assert.ok(lines.some((l) => /^FAIL start \S+:/.test(l)), lines.join('\n'))
   assert.ok(lines.some((l) => l.includes('ok tear down:')), lines.join('\n'))
   assert.equal(lines.at(-1), 'failed')
+  assert.ok(!existsSync(result.box), 'the box is gone')
+})
+
+test('a member whose host was not started with the installed release\'s relay fails its start step', async () => {
+  /** @type {string[]} */
+  const lines = []
+  const result = await proveACleanInstall({ log: (line) => lines.push(line), plant: { relay: (dir) => `${dir}-elsewhere` } })
+  assert.equal(result.passed, false, lines.join('\n'))
+  assert.ok(lines.some((l) => /^FAIL start \S+: .*was not started with Martha's relay .*-elsewhere/.test(l)), lines.join('\n'))
+  assert.ok(lines.some((l) => l.includes('ok tear down:')), lines.join('\n'))
   assert.ok(!existsSync(result.box), 'the box is gone')
 })
 
