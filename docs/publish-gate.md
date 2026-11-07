@@ -993,7 +993,7 @@ unrecorded. An added key, a non-empty stderr, a truncation or a note is a
 different value.
 
 That decision is taken where a tool's result is recorded, in the relay's own
-answer to a finished call (`toolAnswered`, `src/launch_a_claude_member/`): the
+answer to a finished call (`toolAnswered`, `src/launch_a_claude_code_member/`): the
 relay sends the host's answer with `tool_answered` (`answeredBody` in
 `src/claude_code_relay/hooks/relay_protocol.ts`, which leaves an answer past
 `LARGEST_RELAYED_ANSWER` out rather than send a body the launcher kills the

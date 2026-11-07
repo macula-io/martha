@@ -2621,6 +2621,42 @@ test('a receipt is spent by the answer it was kept for: a second answer for that
   assert.ok(isDenied(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
 })
 
+// A kept run is a run that recorded nothing, not a call that skipped the checks (martha#129 r=2). The rechecks run
+// before the exemption is judged, so a launch that changed under the run, or a settings file that turned the relay
+// off, stops the member exactly as it does after any other call: an answer that would otherwise keep the shell keeps
+// nothing when the launcher can no longer vouch for what it is running in.
+test('a kept run whose launch changed under it still stops the member, and records nothing (martha#129 r=2)', async (t) => {
+  const place = placeFor(t)
+  const { relay, stops, rows } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsGiving({ output: RUN_OUTPUT, status: 0 }))
+  await relay.answer('session_started', start('startup'))
+  const bash = bashCall({})
+  assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
+  assert.deepEqual(await relay.run({ name: SIGNED_NAME }), { ran: 1, status: 0, output: Buffer.from(RUN_OUTPUT).toString('base64') })
+  // A stranger's change to the config, after the call was allowed and before it was answered.
+  writeFileSync(join(place.checkout, '.mcp.json'), JSON.stringify({ mcpServers: {} }))
+  const after = await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer: hostAnswerFor(0, RUN_OUTPUT) })
+  assert.equal(after.answered, false, 'the member is stopped, never answered with a taken')
+  assert.equal(stops.length, 1)
+  assert.ok((stops[0] ?? '').includes('.mcp.json'), stops[0] ?? 'no stop')
+  assert.deepEqual(await recordedPaths(rows), [], 'a stopped member records nothing')
+})
+
+test('a kept run whose settings turned the relay off still stops the member, and records nothing (martha#129 r=2)', async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  const place = placeFor(t)
+  const { relay, stops, rows } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsGiving({ output: RUN_OUTPUT, status: 0 }))
+  await relay.answer('session_started', start('startup'))
+  const bash = bashCall({})
+  assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
+  assert.deepEqual(await relay.run({ name: SIGNED_NAME }), { ran: 1, status: 0, output: Buffer.from(RUN_OUTPUT).toString('base64') })
+  const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
+  const after = await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer: hostAnswerFor(0, RUN_OUTPUT) })
+  assert.equal(after.answered, false, 'the member is stopped, never answered with a taken')
+  assert.equal(stops.length, 1)
+  assert.ok((stops[0] ?? '').includes(file) && (stops[0] ?? '').includes(HOOKS_OFF), stops[0] ?? 'no stop')
+  assert.deepEqual(await recordedPaths(rows), [], 'a stopped member records nothing')
+})
+
 test('a name the owner did not sign is not exempt, even with a receipt and the recorded answer (martha#129)', async (t) => {
   const after = await afterARunWasAnswered(placeFor(t), { signed: [] })
   assert.deepEqual(after.paths, ['A13:null'])
