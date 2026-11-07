@@ -332,14 +332,20 @@ function said (ran) {
   return { value: undefined, detail: text.split('\n').at(-1) ?? '' }
 }
 
-/** @param {number} pid */
-function alive (pid) {
+/**
+ * Whether a member's `pid` still answers kill(pid, 0); an unreaped one still does. Every look at a member's pid goes
+ * through here, so a test's planted late reap (Plant.answersFor) is seen by each of them.
+ * @param {number} pid
+ * @param {Plant} plant
+ */
+function answers (pid, plant) {
+  let signalled = true
   try {
     process.kill(pid, 0)
-    return true
   } catch {
-    return false
+    signalled = false
   }
+  return plant.answersFor?.(pid, signalled) ?? signalled
 }
 
 /** @param {string} text */
@@ -398,7 +404,7 @@ async function startMember ({ owner, name, startedLine, host, plant, relay, runn
   member.pid = Number(named[1])
   const noted = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
   const args = plant.hostArgs?.(noted) ?? noted
-  if (!alive(member.pid)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
+  if (!answers(member.pid, plant)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
   const at = args.findIndex((arg) => arg.startsWith(`${relay.root}${sep}`) && basename(arg) === relay.copyName)
   const why = notACopyOf(args[at], relay)
   if (at < 1 || why) throw new Error(`${name}'s host was not started with Martha's relay ${relay.installed}: ${why || 'it is its first argument'}; ${args.join(' ')}`)
@@ -458,7 +464,7 @@ const endOf = (member) => Promise.race([member.exited, delay(MEMBER_WAIT_MS, '',
  */
 async function endsInTime (pid, plant) {
   const deadline = Date.now() + MEMBER_WAIT_MS
-  while (plant.answersFor?.(pid, alive(pid)) ?? alive(pid)) {
+  while (answers(pid, plant)) {
     if (Date.now() > deadline) return false
     await delay(POLL_MS)
   }
