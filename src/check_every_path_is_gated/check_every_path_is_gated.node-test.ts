@@ -36,6 +36,8 @@ const gateRefuses = (path: string) =>
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
     ...Array.from({ length: 15 }, (_, index) => `A${index + 1}`),
+    // A16 is PR 133's (martha#127); whichever lands second makes this length 17.
+    'A17',
     ...Array.from({ length: 8 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
