@@ -157,7 +157,8 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A8', // a handover is inherited through the record, not taken in (rule 4)
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
-  'B8', // no body text reaches the model
+  // a row no text reaches the model on is never taken in: it says why in its control (B1, B8, A16)
+  ...INBOUND_PATHS.filter((path) => path.control.kind === 'no-text-reaches-the-model').map((path) => path.id),
   // code the host starts by itself is not text taken in: the launch gate stands there
   ...INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id),
   // words refused before the host starts never become a turn: the argument gate stands there

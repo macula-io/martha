@@ -145,6 +145,10 @@ config only touched a marker file (`npm run probe:launch`, the program in
 | OpenCode 2.2.5 as Martha starts it, the owner's environment setting both project-config switches to `0` | the same: the approved server only |
 | Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that only reports | the after-call hook, then the approved `Stop` and `SessionEnd` hooks: the host goes on past a hook that returns |
 | Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that waits for the launcher to SIGKILL the member's process group | the after-call hook only: neither the approved `Stop` nor the `SessionEnd` hook runs |
+| Claude Code 2.1.319 by hand, headless, a `CLAUDE.md` at the top and one below it, a file below read | both load (an `InstructionsLoaded` hook in the owner's settings sees each) |
+| Claude Code 2.1.319 as Martha starts it, the same checkout (A16) | neither loads |
+| Claude Code 2.1.319 by hand, headless, started as an agent the checkout defines (`--agent`) | the agent loads |
+| Claude Code 2.1.319 as Martha starts it, the same agent (A16) | the host finds no such agent |
 
 The host's own approval is name-keyed where it exists at all, so it cannot be the
 control. `src/refuse_launch_of_unapproved_config/` is five rules:
@@ -224,10 +228,26 @@ What the plan leaves out, stated rather than hidden:
   is left is the hooks of the one call that changed the tree, which run in
   parallel with Martha's own (`PreToolUse`/`PostToolUse`); the stop does not
   undo what they ran.
-- **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
-  servers in their frontmatter. They start only when the model spawns that
-  agent, which is a tool call the shell gate refuses while unapproved text is
-  readable (A7), and their files are in the tree the approval binds.
+- **A checkout's fixed text** (A16): its `CLAUDE.md` files, the top one and
+  any below it the host loads once a file there is read, and the agents it
+  defines (`.claude/agents`), whose frontmatter may name hooks and tool
+  servers. With project config off the host loads none of them, so no text
+  reaches the model (`npm run probe:launch` plants each and sees none load as
+  Martha starts the host, and all of them load by hand).
+- **What approved config prints at run time** (A7): a hook's output or added
+  context, and an enabled plugin's hooks. The approval pins the script, never
+  its output, which changes with the network, the clock or a file git ignores.
+  So the relay records A7 when the session starts whenever the carried
+  settings declare a hook or enable a plugin (`sourcesALaunchHandsTheModel` in
+  `src/claude_code_host/`), and the shell gate refuses the shell from then on.
+  A carried file it cannot read fails closed and records it too.
+- **A tool server's instruction block** (A11), handed to the model at start.
+  The mesh server's block is code of its recorded tree, which `treeUnlike`
+  compares file by file with the recorded one, through
+  `placeRecordedMeshServers`, before every launch (martha#65), so it records
+  nothing. Every other server in the carried `.mcp.json`, and any enabled
+  plugin, records A11 at start. Not closed: a same-user edit of the mesh
+  server's tree during a session, as for B1.
 
 **Where Martha does not start the host** — the owner opens the coding tool by
 hand and Martha loads inside it — the host has started these before any of
@@ -339,7 +359,8 @@ A host does these things, and the core does the rest:
 | before running any tool | `answerToolCall({ tool, session, policy, input, launch, names: host.tools })`, where `launch` is the place and approvals `prepareLaunch` was given and `names` is the host's own split of a called tool's name — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
 | after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
-| after any MCP tool result | `takeInTurn(session, { source: 'mcp_result' }, binder)` — a mesh tool that runs (`mesh_call`, `mesh_get`, `mesh_recall`, a ring's answer) hands back text with no sender to admit, so the shell gate judges it (B2) |
+| after any MCP tool result | `takeInTurn(session, { source: sourceOfAMeshToolResult(tool) }, binder)` — a mesh tool that runs hands back text with no sender to admit, so the shell gate judges it: `mesh_ring` records the ring's answer (A5), `mesh_answer_ring` what answering returns (A4), every other tool result B2 |
+| when a member's session starts | `takeInTurn` once per source `sourcesALaunchHandsTheModel(carried_files)` returns: A7 when the carried settings declare a hook or enable a plugin, A11 for a server outside the recorded mesh tree or a plugin |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
 | after a turn | `rememberSession(store, session)` |
@@ -396,7 +417,8 @@ The rules the seam keeps, and a host must not work around:
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the
   open question under item 6).
-- **A room is read through its gate, never raw (B1).** A mesh tool runs only
+- **A room is read through its gate, never raw (B1).** No text reaches the
+  model on B1: a mesh tool runs only
   when `MESH_TOOLS_THAT_RUN` names it: every other mesh tool, a new one
   included, is refused in every session, tainted or not, under every server
   namespace, and so is `mesh_say` when it waits for a reply or comes with no
@@ -867,6 +889,14 @@ permission mode, a session brought back, a switch carried as another's value and
 a switch nobody has read. A gate that passes everything, one that refuses
 everything, one that knows only one config switch, and a row naming a gate nobody
 built are each named.
+
+A row that claims the shell gate must also be reachable: the shell gate only
+stands on a row the host records. `shellGateRowsNothingRecords` takes every
+row the Claude Code relay records when it is driven with each declared start
+source, each prompt origin, each mesh tool that runs, another MCP tool and each
+built-in tool, and names a shell-gate row nothing reaches, and a row declared
+no turn source (`REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES`) that the relay
+records after all. There is no list of rows it lets pass (martha#121).
 
 Its tests plant each of those mistakes to prove the check is not vacuous: a row
 copied from the table without a control, a row whose control was forgotten, a row
