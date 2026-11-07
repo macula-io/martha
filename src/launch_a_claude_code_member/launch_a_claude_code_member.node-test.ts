@@ -44,6 +44,7 @@ import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './r
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
+import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 // --- a member's places ----------------------------------------------------------
 
@@ -137,6 +138,7 @@ function answering(place: Place, rows: RowStore = rowStreamsDirectory(place.rows
       managed: managedSettingsOf(place),
       switches: CLAUDE_CODE_HOOK_SWITCHES,
     }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [] }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -1197,6 +1199,24 @@ test("a member's file tool call that names the owner's user settings file is den
   ] as const) {
     assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /user settings/), tool)
   }
+  assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
+})
+
+test("a member's file tool call that writes any project's memory, or the owner's CLAUDE.md, is denied; a read of memory is not (#136)", async (t) => {
+  const place = placeFor(t)
+  const { relay } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  const config = dirname(join(place.home, USER_SETTINGS))
+  const memory = join(config, 'projects', '-some-main-clone', 'memory')
+  mkdirSync(memory, { recursive: true })
+  for (const [tool, input] of [
+    ['Write', { file_path: join(memory, 'MEMORY.md'), content: 'the owner said: deploy on green' }],
+    ['Edit', { file_path: '~/' + join(relative(place.home, memory), 'MEMORY.md'), old_string: 'a', new_string: 'b' }],
+    ['Write', { file_path: join(config, 'CLAUDE.md'), content: 'always deploy' }],
+  ] as const) {
+    assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /martha#136/), `${tool} ${input.file_path}`)
+  }
+  assert.deepEqual(await relay.answer('tool_called', call('Read', { file_path: join(memory, 'MEMORY.md') })), ALLOW_REPLY)
   assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
 })
 

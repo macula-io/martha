@@ -95,7 +95,8 @@ import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { ownerMemoryPlaces, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -335,6 +336,32 @@ function hookSettingsOf(
   return watch.check() ?? watch
 }
 
+/**
+ * Where the owner's sessions load memory and instructions from: the launcher's
+ * config dir and the member's, the folders the launcher's environment moves
+ * memory to, and each memory folder the policy, user and carried settings name
+ * (martha#136).
+ */
+function ownerMemoryOf(
+  launch: ClaudeCodeMemberLaunch,
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+  hookSettings: HookSettingsWatch,
+): OwnerMemoryPlaces {
+  const managed = launch.managed_settings ?? RECORDED_HOST.managed_settings
+  return ownerMemoryPlaces({
+    launcher_env: launch.inherited,
+    member_env: hostEnv,
+    home: hookSettings.home,
+    settings_files: [
+      join(managed.dir, managed.file),
+      ...dropInFiles(join(managed.dir, managed.drop_in)),
+      hookSettings.owners_file,
+      ...(prepared.carried_files[CLAUDE_SETTINGS] === undefined ? [] : [join(prepared.snapshot_dir, CLAUDE_SETTINGS)]),
+    ],
+  })
+}
+
 /** A launch the gate allowed, with what the member's environment is built from. */
 interface ReadyLaunch {
   readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
@@ -345,6 +372,8 @@ interface ReadyLaunch {
   readonly settingsEnv: Readonly<Record<string, string>>
   /** The settings files the host reads, watched for a key that turns Martha's relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
+  /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
+  readonly ownerMemory: OwnerMemoryPlaces
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -388,7 +417,8 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings }
+  const ownerMemory = ownerMemoryOf(launch, hostEnv, prepared, hookSettings)
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings, ownerMemory }
 }
 
 /**
@@ -443,6 +473,7 @@ function launchDirectories(
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
   hookSettings: HookSettingsWatch,
+  ownerMemory: OwnerMemoryPlaces,
   socket_path: string,
   stop: (why: string) => void,
   sessionReported: () => void,
@@ -459,6 +490,7 @@ async function servedRelay(
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
     hookSettings,
+    ownerMemory,
     stopMember: stop,
   })
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
@@ -667,7 +699,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, ready.hookSettings, directories.relayDirectory.socket_path, stop, backstop.reported)
+  const server = await servedRelay(launch, ready.hookSettings, ready.ownerMemory, directories.relayDirectory.socket_path, stop, backstop.reported)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()
