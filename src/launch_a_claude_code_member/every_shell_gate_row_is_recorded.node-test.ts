@@ -24,6 +24,8 @@ import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
 } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -88,6 +90,14 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(CARRIED),
+    // No settings file in the test's home, so the watch finds nothing and every event reaches its row.
+    hookSettings: hookSettingsWatch({
+      user: join(place.home, '.claude', 'settings.json'),
+      home: place.home,
+      approved: undefined,
+      managed: { ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') },
+      switches: CLAUDE_CODE_HOOK_SWITCHES,
+    }),
     stopMember: () => {},
   })
 

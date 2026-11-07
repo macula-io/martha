@@ -12,8 +12,8 @@
 // |---|---|
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
-// | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, started_on, host }, binder)`, where `started_on` is the checkout's tree read when the relay was made (martha#127) |
+// | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
+// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, started_on, host }, binder)`, where `started_on` is the checkout's tree read when the relay was made (martha#127) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -33,6 +33,7 @@ import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_TOOL_RESULT_ROWS, isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
+import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
@@ -69,6 +70,8 @@ export interface MemberRelayPlace {
    * instruction block (A11). The adapter's `sourcesALaunchHandsTheModel`.
    */
   readonly handed_at_start: readonly TurnSource[]
+  /** The settings files the host reads, watched for a key that turns the relay off (martha#122). */
+  readonly hookSettings: HookSettingsWatch
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -221,6 +224,8 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (call === undefined) return denied('the tool call names no tool')
   const unvouched = await vouchFor(state, session)
   if (unvouched !== undefined) return denied(unvouched)
+  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
+  if (settings !== undefined) return denied(settings)
   const verdict = answerToolCall({
     tool: call.tool,
     session,
@@ -241,6 +246,8 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   const launched = recheckLaunch(place.launch, thisMachine)
   if (!launched.allow) return stopMember(place, launched.refusal)
+  const hooksOff = place.hookSettings.check()
+  if (hooksOff !== undefined) return stopMember(place, hooksOff)
   const taken = isMcpToolCall(call.tool)
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(
