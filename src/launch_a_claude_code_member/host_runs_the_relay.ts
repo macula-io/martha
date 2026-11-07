@@ -58,13 +58,16 @@ const isRunnableFile = (path: string): boolean => {
 
 /**
  * The file a command runs, resolved once: a command with a slash is that path
- * (from `cwd`), any other is the first runnable file of that name on `path`,
- * where an empty entry is `cwd`. Links are followed to the file itself.
+ * (from `cwd`), any other is the first runnable file of that name in an
+ * absolute entry of `path`. An empty or relative entry is skipped: from the
+ * launch folder it names a folder under the checkout, where whoever writes the
+ * checkout could plant a `claude` that the load check and the member would run
+ * (martha#104 r=1). Links are followed to the file itself.
  */
 export function resolvedHostCommand(command: string, path: string | undefined, cwd: string): { readonly binary: string } | { readonly refusal: string } {
   const candidates = command.includes('/')
     ? [isAbsolute(command) ? command : resolve(cwd, command)]
-    : (path ?? '').split(delimiter).map((entry) => join(entry === '' ? cwd : resolve(cwd, entry), command))
+    : (path ?? '').split(delimiter).filter((entry) => isAbsolute(entry)).map((entry) => join(entry, command))
   const found = candidates.find(isRunnableFile)
   if (found === undefined) return { refusal: notACommandThisLauncherCanRun(command) }
   return { binary: realpathSync(found) }
