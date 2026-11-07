@@ -12,17 +12,16 @@
 // GHCR_TOKEN (the run's token: before the owner makes it public, the release package is not).
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, readdirSync, readlinkSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 
 import { listedSigners } from '../install_a_release/install_a_release.mjs'
 import { releaseRef } from '../keep_the_names_in_one_place/names.mjs'
 import { layerOf, registry } from '../read_the_release_registry/read_the_release_registry.mjs'
 import { TOP, unpackLayer } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
 import { signedBy } from '../verify_the_release_signature/verify_the_release_signature.mjs'
-import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
+import { removeEvenReadOnly, treeOf } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 
 /** @param {string} name */
 const need = (name) => {
@@ -38,21 +37,6 @@ const withPullCredentials = (url, options = {}) => {
   if (!String(url).includes('/token?')) return globalThis.fetch(url, options)
   const basic = Buffer.from(`dry-run:${env['GHCR_TOKEN']}`).toString('base64')
   return globalThis.fetch(url, { ...options, headers: { ...options.headers, authorization: `Basic ${basic}` } })
-}
-
-/**
- * Every file and link under `root`, as path -> sha256 of its bytes or "link:<target>".
- * @param {string} root
- */
-function treeOf (root) {
-  /** @type {Map<string, string>} */
-  const found = new Map()
-  for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
-    const path = join(entry.parentPath, entry.name)
-    if (entry.isSymbolicLink()) found.set(relative(root, path), `link:${readlinkSync(path)}`)
-    else if (entry.isFile()) found.set(relative(root, path), createHash('sha256').update(readFileSync(path)).digest('hex'))
-  }
-  return found
 }
 
 const version = env['DRY_RUN_VERSION'] ?? ''
