@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 980" role="img" aria-label="Martha components">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="Martha components">
 <title>Martha components</title>
 <style>
 .t-name { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; }
@@ -48,8 +48,8 @@
 }
 </style>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
-<rect class="bg" x="0" y="0" width="1000" height="980"/>
-<rect class="bound" x="16" y="40" width="968" height="816" rx="12"/>
+<rect class="bg" x="0" y="0" width="1000" height="1000"/>
+<rect class="bound" x="16" y="40" width="968" height="832" rx="12"/>
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>
 <rect class="b-sys" x="32" y="70" width="300" height="128" rx="10"/>
 <text class="t-code" x="48" y="98">run_the_martha_command</text>
@@ -116,22 +116,23 @@
 <text class="t-desc" x="680" y="444">record_mesh_server_tools records it,</text>
 <text class="t-desc" x="680" y="460">prove_the_mesh_server_bytes compares it</text>
 <text class="t-desc" x="680" y="476">again, and the launcher installs it</text>
-<rect class="b-cmp" x="32" y="524" width="300" height="150" rx="10"/>
+<rect class="b-cmp" x="32" y="524" width="300" height="170" rx="10"/>
 <text class="t-code" x="48" y="552">inbound_paths</text>
 <text class="t-type" x="48" y="570">[every path, and its control]</text>
 <text class="t-desc" x="48" y="594">Every way text reaches a session and</text>
 <text class="t-desc" x="48" y="610">every way a checkout starts code, each</text>
 <text class="t-desc" x="48" y="626">row naming the gate on it; check_every_</text>
 <text class="t-desc" x="48" y="642">path_is_gated fails CI on a gap</text>
-<rect class="b-cmp" x="348" y="524" width="300" height="150" rx="10"/>
+<rect class="b-cmp" x="348" y="524" width="300" height="170" rx="10"/>
 <text class="t-code" x="364" y="552">take_in_a_turn, shell_tools,</text>
 <text class="t-code" x="364" y="570">answer_a_tool_call</text>
 <text class="t-type" x="364" y="588">[the shell gate]</text>
 <text class="t-desc" x="364" y="612">What a host calls when a session took</text>
 <text class="t-desc" x="364" y="628">something in, and what may run after:</text>
-<text class="t-desc" x="364" y="644">answer_a_tool_call, the gate on every tool</text>
-<text class="t-desc" x="364" y="660">call, and refuse_execution_after_ungated_text</text>
-<rect class="b-cmp" x="664" y="524" width="300" height="150" rx="10"/>
+<text class="t-desc" x="364" y="644">refuse_execution_after_ungated_text stops</text>
+<text class="t-desc" x="364" y="660">everything after unvetted text, and what</text>
+<text class="t-desc" x="364" y="676">it believes is trust_only_framed_envelopes</text>
+<rect class="b-cmp" x="664" y="524" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="552">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="570">[whose text it was]</text>
 <text class="t-desc" x="680" y="594">The origin a host attests, carried with</text>
@@ -139,39 +140,38 @@
 <text class="t-desc" x="680" y="626">carry_taint_across_a_refresh, and the shell</text>
 <text class="t-desc" x="680" y="642">gate's reading; trust_only_signed_lists is</text>
 <text class="t-desc" x="680" y="658">how every list a gate trusts is opened</text>
-<rect class="b-team" x="32" y="690" width="300" height="150" rx="10"/>
-<text class="t-code" x="48" y="718">admit_a_room_message</text>
-<text class="t-type" x="48" y="736">[the rooms, team mode]</text>
-<text class="t-desc" x="48" y="760">Whether a crew or shared room message is</text>
-<text class="t-desc" x="48" y="776">admitted; read_a_room_through_its_gate for</text>
-<text class="t-desc" x="48" y="792">the mesh side, trust_only_framed_envelopes</text>
-<text class="t-desc" x="48" y="808">for what is believed. refuse_widening_a_</text>
-<text class="t-desc" x="48" y="824">member_reach refuses the tools that widen</text>
-<rect class="b-cmp" x="348" y="690" width="300" height="150" rx="10"/>
-<text class="t-code" x="364" y="718">claude_code_host, claude_code_relay</text>
-<text class="t-type" x="364" y="736">[the Claude Code host]</text>
-<text class="t-desc" x="364" y="760">The host contract on Claude Code: the</text>
-<text class="t-desc" x="364" y="776">plugin and its hooks, the relay that</text>
-<text class="t-desc" x="364" y="792">answers over a socket, and the tools</text>
-<text class="t-desc" x="364" y="808">registered in the member's session</text>
-<rect class="b-cmp" x="664" y="690" width="300" height="150" rx="10"/>
-<text class="t-code" x="680" y="718">check_nothing_private_gets_in</text>
-<text class="t-type" x="680" y="736">[this repository's own check]</text>
-<text class="t-desc" x="680" y="760">A link to a private issue, an internal</text>
-<text class="t-desc" x="680" y="776">host name or a private remote fails CI</text>
-<text class="t-desc" x="680" y="792">by name, with a self-test that proves</text>
-<text class="t-desc" x="680" y="808">the check still bites</text>
+<rect class="b-cmp" x="32" y="706" width="300" height="150" rx="10"/>
+<text class="t-code" x="48" y="734">admit_a_room_message</text>
+<text class="t-type" x="48" y="752">[loaded; the room is not built]</text>
+<text class="t-desc" x="48" y="776">Every launch loads these, though the room</text>
+<text class="t-desc" x="48" y="792">they serve is not built: the node id a</text>
+<text class="t-desc" x="48" y="808">member has; read_a_room_through_its_gate</text>
+<text class="t-desc" x="48" y="824">gives the mesh server's tools, and refuse_</text>
+<text class="t-desc" x="48" y="840">widening_a_member_reach refuses the rest</text>
+<rect class="b-cmp" x="348" y="706" width="300" height="150" rx="10"/>
+<text class="t-code" x="364" y="734">claude_code_host, claude_code_relay</text>
+<text class="t-type" x="364" y="752">[the Claude Code host]</text>
+<text class="t-desc" x="364" y="776">The host contract on Claude Code: the</text>
+<text class="t-desc" x="364" y="792">plugin and its hooks, the relay that</text>
+<text class="t-desc" x="364" y="808">answers over a socket, and the tools</text>
+<text class="t-desc" x="364" y="824">registered in the member's session</text>
+<rect class="b-cmp" x="664" y="706" width="300" height="150" rx="10"/>
+<text class="t-code" x="680" y="734">check_nothing_private_gets_in</text>
+<text class="t-type" x="680" y="752">[this repository's own check]</text>
+<text class="t-desc" x="680" y="776">A link to a private issue, an internal</text>
+<text class="t-desc" x="680" y="792">host name or a private remote fails CI</text>
+<text class="t-desc" x="680" y="808">by name, with a self-test that proves</text>
+<text class="t-desc" x="680" y="824">the check still bites</text>
 <text class="t-desc" x="24" y="890">Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:</text>
-<text class="t-desc" x="24" y="908">log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded, </text>
-<text class="t-desc" x="24" y="926">probe_launch_hosts and record_claude_code_host. Every gate opens its list signed; the rooms are team mode, and solo loads none of them.</text>
-<rect class="b-sys" x="24" y="944" width="22" height="14" rx="3"/>
-<text class="t-leg" x="54" y="956">Martha</text>
-<rect class="b-cmp" x="103.6" y="944" width="22" height="14" rx="3"/>
-<text class="t-leg" x="133.6" y="956">Container or component</text>
-<rect class="b-dat" x="288.79999999999995" y="944" width="22" height="14" rx="3"/>
-<text class="t-leg" x="318.79999999999995" y="956">Data, in the project</text>
-<rect class="b-team" x="460.79999999999995" y="944" width="22" height="14" rx="3"/>
-<text class="t-leg" x="490.79999999999995" y="956">Container, team mode only</text>
-<rect class="bound" x="665.8" y="944" width="22" height="14" rx="3"/>
-<text class="t-leg" x="695.8" y="956">Boundary</text>
+<text class="t-desc" x="24" y="908">log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,</text>
+<text class="t-desc" x="24" y="926">probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>
+<text class="t-desc" x="24" y="944">room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
+<rect class="b-sys" x="24" y="966" width="22" height="14" rx="3"/>
+<text class="t-leg" x="54" y="978">Martha</text>
+<rect class="b-cmp" x="103.6" y="966" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.6" y="978">Container or component</text>
+<rect class="b-dat" x="288.79999999999995" y="966" width="22" height="14" rx="3"/>
+<text class="t-leg" x="318.79999999999995" y="978">Data, in the project</text>
+<rect class="bound" x="460.79999999999995" y="966" width="22" height="14" rx="3"/>
+<text class="t-leg" x="490.79999999999995" y="978">Boundary</text>
 </svg>

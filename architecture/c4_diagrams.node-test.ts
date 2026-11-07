@@ -6,11 +6,25 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { join, relative } from 'node:path'
-import { ASSETS, components, DIAGRAMS, LEFT_OUT } from './c4_diagrams.ts'
+import { ASSETS, components, DIAGRAMS, LEFT_OUT, ROOM_SLICES_WHICH_LOAD } from './c4_diagrams.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
 const SRC = join(import.meta.dirname, '..', 'src')
+
+// Every directory under src/ a module of this process loads, by the resolve hook below. The hook lives
+// in this test's own process, which node --test gives each test file, and the test writes nothing to
+// disk, so nothing of it is left behind.
+const loadedFromSrc = new Set<string>()
+registerHooks({
+  resolve(specifier, context, next) {
+    const resolved = next(specifier, context)
+    const slice = /\/src\/([^/]+)\//.exec(resolved.url)?.[1]
+    if (slice !== undefined) loadedFromSrc.add(slice)
+    return resolved
+  },
+})
 
 // The page links an SVG by its path from the page to the generator's ASSETS.
 const linkTo = (file: string): string => `${relative(import.meta.dirname, ASSETS)}/${file}`
@@ -76,5 +90,20 @@ test('what is left out says why, is a directory in src/, and is said on the page
     assert.ok(!drawn.has(entry.name), `${entry.name} is both drawn and declared left out`)
     assert.ok(entry.why.trim().length > 0, `${entry.name} is left out with no reason`)
     assert.ok(README.includes(entry.name), `architecture/README.md does not say ${entry.name} is left out`)
+  }
+})
+
+// No room runs in this release, and a picture can easily say "solo loads none of it" and be wrong: the
+// command does load parts of the room's slices. So the page's words are held to what the command loads,
+// not to a reading of the imports.
+test('a launch loads exactly the room slices the page says it does', async () => {
+  loadedFromSrc.clear()
+  await import('../src/run_the_martha_command/run_the_martha_command.ts')
+  const loaded = [...ROOM_SLICES_WHICH_LOAD].filter((slice) => loadedFromSrc.has(slice)).sort()
+  assert.deepEqual(loaded, [...ROOM_SLICES_WHICH_LOAD].sort(),
+    `the page says a launch loads ${ROOM_SLICES_WHICH_LOAD.join(', ')}; one of them is no longer loaded, so the words and the code must be brought back together`)
+  const drawn = new Set(components().coverage.flatMap((box) => [...box.names]))
+  for (const slice of ROOM_SLICES_WHICH_LOAD) {
+    assert.ok(drawn.has(slice), `${slice} loads on every launch, so the Component diagram must draw it`)
   }
 })

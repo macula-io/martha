@@ -110,7 +110,7 @@
 <text class="t-desc" x="736" y="500">A mesh server runs only when your</text>
 <text class="t-desc" x="736" y="516">project's config names one; the room</text>
 <text class="t-desc" x="736" y="532">and admission are team mode, and this</text>
-<text class="t-desc" x="736" y="548">release ships neither</text>
+<text class="t-desc" x="736" y="548">release runs neither</text>
 <path class="edge" d="M155 144V180H420V210" marker-end="url(#a)"/>
 <text class="t-rel" x="300" y="172">runs init, approve, start</text>
 <path class="edge-team" d="M500 144V210" marker-end="url(#a)"/>
@@ -127,7 +127,7 @@
 <text class="t-rel" x="300" y="470" text-anchor="middle">its own model</text>
 <path class="edge-team" d="M585 350V410H660V430" marker-end="url(#a)"/>
 <text class="t-rel" x="668" y="420">the room, by invite</text>
-<text class="t-desc" x="30" y="618">Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account, no service, and no room code.</text>
+<text class="t-desc" x="30" y="618">Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account and no service, and it admits no room message.</text>
 <text class="t-desc" x="30" y="636">The member Martha starts is a Claude Code session, so the trust the owner gives that folder and the sign-in it holds are the session's.</text>
 <text class="t-desc" x="30" y="654">Team mode adds teammates, and the room and admission drawn dashed here; a mesh server is installed and run only when a project's config names one.</text>
 <rect class="b-sys" x="24" y="690" width="22" height="14" rx="3"/>

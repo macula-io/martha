@@ -22,10 +22,13 @@ design it grew from.
 | Also needs | git, and a terminal | the same, plus the Macula mesh and realm |
 | Who says yes to a push or a release | the owner | the people the team names |
 
-Solo mode needs no account and no service, and loads no room code. A mesh server
-is installed and run only when the project's config names one, in either mode;
-what it adds, the room and its admission, is team mode. The npm registry is where
-the signed package will come from; today it is installed from a checkout (#2, #21).
+Solo mode needs no account and no service, and admits no room message. The room
+itself is not built, and every launch still loads pieces of its slices: the node
+id a member has, the mesh server's tool list, the trust a turn is believed on, and
+the refusal of reach-widening mesh tools. The Components table below names each of
+them. A mesh server is installed and run only when the project's config names one,
+in either mode. The npm registry is where the signed package will come from;
+today it is installed from a checkout (#2, #21).
 
 ## Containers: what Martha is made of
 
@@ -55,8 +58,10 @@ planned.
 
 The mode is data in the declaration: a table of who may assign work, approve a
 push or a release, and resume parked work. Solo is a table with one person who
-may do everything. Team is a table with roles. In solo mode no team-mode
-container or slice is loaded, and no mesh call is made.
+may do everything. Team is a table with roles. In solo mode no room is run, no
+room message is admitted and no mesh call is made; what does load on every launch
+is the node id, the mesh server's tool list, the envelope trust and the reach
+refusal, and the Components table below names each of those slices.
 
 ## Components: what the code is made of
 
@@ -77,11 +82,11 @@ fall behind the code.
 | `refuse_launch_of_unapproved_config` | Fingerprints the config and the tree at start, and allows only what was approved; `refuse_code_a_checkout_runs_itself` closes a checkout's own scripts. |
 | `keep_martha_state_outside_the_checkout` | One directory per project, named by a hash of its path; `row_streams_directory` appends rows as files. |
 | `host_contract`, `linux_process_identity` | What the crew core may ask of a coding tool — a clock, stores, running a process, delivery in and out — and this machine's answers to it, without a host. |
-| `install_the_recorded_mesh_server` | A tree by bytes, never by version: recorded by `record_mesh_server_tools`, proved by `prove_the_mesh_server_bytes`, installed by the launcher. |
+| `install_the_recorded_mesh_server` | A tree by bytes, never by version: recorded by `record_mesh_server_tools` (itself a by-hand script, drawn here because the launcher imports what it recorded), proved by `prove_the_mesh_server_bytes`, installed by the launcher. |
 | `inbound_paths` | Every way text reaches a session and every way a checkout starts code, each row naming the gate on it; `check_every_path_is_gated` fails CI on a gap. |
-| `take_in_a_turn`, `shell_tools`, `answer_a_tool_call` | What a host calls when a session took something in, and what may run after: the gate on every tool call, and `refuse_execution_after_ungated_text`, which stops everything after unvetted text. |
+| `take_in_a_turn`, `shell_tools`, `answer_a_tool_call` | What a host calls when a session took something in, and what may run after: the gate on every tool call, `refuse_execution_after_ungated_text`, which stops everything after unvetted text, and `trust_only_framed_envelopes`, what a turn may be believed on. |
 | `name_the_source_of_a_prompt` | The origin a host attests, carried with the turn: with `attribute_a_cross_session_sender` and `carry_taint_across_a_refresh`; `trust_only_signed_lists` opens every list a gate trusts, from the owner's signed bytes. |
-| `admit_a_room_message` | Whether a crew or shared room message is admitted, and what is believed of it. Team mode. `refuse_widening_a_member_reach` refuses the mesh tools that widen a member's reach. |
+| `admit_a_room_message`, `read_a_room_through_its_gate` | The node id every member has, and the mesh server's tool list; `refuse_widening_a_member_reach` refuses the mesh tools that widen a member's reach. The room itself, which would admit a crew or shared message, is not built — yet every launch loads these parts of its slices, so the box is not dashed. |
 | `claude_code_host`, `claude_code_relay` | The host contract on Claude Code: the plugin and its hooks, and the relay that answers over a socket. |
 | `check_nothing_private_gets_in` | This repository's own check: a private issue link, an internal host name or a private remote fails CI by name. |
 

@@ -242,7 +242,7 @@ export function context(): Diagram {
   d.box({ kind: 'b-ext', x: 375, y: 430, w: 250, h: 140, name: 'Anthropic model API', type: '[External: the tool\'s own]',
     desc: ['The coding tool talks to it;', 'Martha never does, and never', 'sees a prompt the tool did not', 'hand it'] })
   d.box({ kind: 'b-mac', x: 720, y: 430, w: 250, h: 140, name: 'Macula mesh and realm', type: '[Macula]',
-    desc: ['A mesh server runs only when your', 'project\'s config names one; the room', 'and admission are team mode, and this', 'release ships neither'] })
+    desc: ['A mesh server runs only when your', 'project\'s config names one; the room', 'and admission are team mode, and this', 'release runs neither'] })
 
   d.edge('M155 144V180H420V210', { x: 300, y: 172, text: 'runs init, approve, start' })
   d.edge('M500 144V210', { x: 508, y: 180, text: 'once published' }, true)
@@ -254,7 +254,7 @@ export function context(): Diagram {
   d.edge('M585 350V410H660V430', { x: 668, y: 420, text: 'the room, by invite' }, true)
 
   d.notes(30, 618, [
-    'Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account, no service, and no room code.',
+    'Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account and no service, and it admits no room message.',
     'The member Martha starts is a Claude Code session, so the trust the owner gives that folder and the sign-in it holds are the session\'s.',
     'Team mode adds teammates, and the room and admission drawn dashed here; a mesh server is installed and run only when a project\'s config names one.',
   ])
@@ -300,7 +300,7 @@ export function containers(): Diagram {
   d.box({ kind: 'b-dat', x: 32, y: 246, w: 268, h: 120, name: 'Martha\'s state', type: '[~/.local/state/martha]',
     desc: ['Per project, outside the checkout:', 'each member\'s node id, the approvals', 'given, launch records and snapshots'] })
   d.box({ kind: 'b-later', x: 32, y: 546, w: 268, h: 120, name: 'the team mode', type: '[planned]',
-    desc: ['Realm admission and the shared room;', 'not built in this release, and solo', 'mode loads none of it'] })
+    desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing. The', 'parts every launch loads are drawn below'] })
 
   d.box({ kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.crew/crew.json]',
     desc: ['Who is on the crew, and the mode\'s', 'table of who may do what; written', 'once by init, never written over'] })
@@ -321,6 +321,19 @@ export function containers(): Diagram {
   ])
   return d
 }
+
+/**
+ * The slices of the room a launch loads, though no room runs: solo admits nothing and serves no
+ * room, and still loads these parts of it — the node id, the mesh server's tool list, and the gates
+ * that refuse raw mesh reads and reach-widening tools. The page says so in words, and the test
+ * beside this file imports the command and holds the page to what it actually loads.
+ */
+export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
+  'admit_a_room_message',
+  'read_a_room_through_its_gate',
+  'refuse_widening_a_member_reach',
+  'trust_only_framed_envelopes',
+]
 
 /**
  * The directories in src/ the Component diagram does not draw, and why each is left out.
@@ -344,9 +357,9 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
 
 /** Level 3: what Martha's code is made of, one box per group of slices in src/. */
 export function components(): Diagram {
-  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 980)
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1000)
 
-  d.bound(16, 40, 968, 816, 'Martha [the code in src/, one directory per capability]')
+  d.bound(16, 40, 968, 832, 'Martha [the code in src/, one directory per capability]')
 
   d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the four acts]', code: true,
     desc: ['init, approve, start <member>, --version:', 'the words checked before anything runs,', 'a refusal on stderr with the command that', 'fixes it, 0 done / 1 refused / 2 usage'] })
@@ -369,26 +382,27 @@ export function components(): Diagram {
   d.box({ kind: 'b-cmp', x: 664, y: 358, w: 300, h: 150, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
     desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 150, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 170, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
     desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 150, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text'], type: '[the shell gate]', code: true,
-    desc: ['What a host calls when a session took', 'something in, and what may run after:', 'answer_a_tool_call, the gate on every tool', 'call, and refuse_execution_after_ungated_text'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 150, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 170, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'trust_only_framed_envelopes'], type: '[the shell gate]', code: true,
+    desc: ['What a host calls when a session took', 'something in, and what may run after:', 'refuse_execution_after_ungated_text stops', 'everything after unvetted text, and what', 'it believes is trust_only_framed_envelopes'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 170, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
     desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
 
-  d.box({ kind: 'b-team', x: 32, y: 690, w: 300, h: 150, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'trust_only_framed_envelopes', 'refuse_widening_a_member_reach'], type: '[the rooms, team mode]', code: true,
-    desc: ['Whether a crew or shared room message is', 'admitted; read_a_room_through_its_gate for', 'the mesh side, trust_only_framed_envelopes', 'for what is believed. refuse_widening_a_', 'member_reach refuses the tools that widen'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 690, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay'], type: '[the Claude Code host]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 706, w: 300, h: 150, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
+    desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 706, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay'], type: '[the Claude Code host]', code: true,
     desc: ['The host contract on Claude Code: the', 'plugin and its hooks, the relay that', 'answers over a socket, and the tools', 'registered in the member\'s session'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 690, w: 300, h: 150, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 706, w: 300, h: 150, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
     desc: ['A link to a private issue, an internal', 'host name or a private remote fails CI', 'by name, with a self-test that proves', 'the check still bites'] })
 
   d.notes(24, 890, [
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
-    'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded, ',
-    'probe_launch_hosts and record_claude_code_host. Every gate opens its list signed; the rooms are team mode, and solo loads none of them.',
+    'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,',
+    'probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
+    'room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.',
   ])
-  d.legend(944, ['b-sys', 'b-cmp', 'b-dat', 'b-team'], 'Boundary')
+  d.legend(966, ['b-sys', 'b-cmp', 'b-dat'], 'Boundary')
   return d
 }
 
