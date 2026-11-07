@@ -262,7 +262,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'B4',
-    what: "files in a checkout, read, edited or searched through the host's own tools: a file git puts in the tree the member started on, while the launch checkout still holds that tree, is not text taken in (with config, the owner approved that tree to run as the owner; with none, nothing was approved, and that case is the owner's open choice on martha#127); an ignored file, a link that leads out, git's own directory and every other place are",
+    what: "files in a checkout, read, edited or searched through the host's own tools: a file git puts in the tree the owner approved, as the member started on it, while the launch checkout still holds that tree, is not text taken in, because the owner approved that tree to run as the owner; in a checkout with no config nothing was approved, so every read counts (decided 2026-11-07, martha#127); an ignored file, a link that leads out, git's own directory and every other place are",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',

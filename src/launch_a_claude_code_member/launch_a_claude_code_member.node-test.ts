@@ -435,6 +435,50 @@ test('in a checkout with no config, a file another process writes between two ca
   assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
 })
 
+/** A checkout with no config, whose start state nobody approved: every read in it counts (decided 2026-11-07, martha#127). */
+function configLess(t: TestContext): Place {
+  const place = placeFor(t)
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
+  return place
+}
+
+test('in a checkout with no config, a read of a tracked file is not exempt: Bash is denied, naming B4 (martha#127 r=3)', async (t) => {
+  const place = configLess(t)
+  const after = await afterOneTool(place, 'Read', { file_path: join(place.checkout, 'README.md') })
+  assert.deepEqual(after.paths, ['B4:null'])
+  assert.ok(isDenied(after.bash, /B4/))
+})
+
+test('in a checkout with no config whose tree git cannot read, a read of a tracked file is not exempt (martha#127 r=3)', async (t) => {
+  const place = configLess(t)
+  // Untracked, not ignored and unreadable: git cannot stage it, so the start read and every live read are both null.
+  const locked = join(place.checkout, 'locked')
+  writeFileSync(locked, 'x\n')
+  chmodSync(locked, 0o000)
+  const after = await afterOneTool(place, 'Read', { file_path: join(place.checkout, 'README.md') }).finally(() => chmodSync(locked, 0o600))
+  assert.deepEqual(after.paths, ['B4:null'])
+  assert.ok(isDenied(after.bash, /B4/))
+})
+
+test('in an approved checkout, a stranger\'s branch that deletes the config is no read of the approved tree: Bash is denied, naming B4 (martha#127 r=4)', async (t) => {
+  const place = placeFor(t)
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+
+  // With the config gone, the launch gate approves any tree, so only the bound to the approved start tree is left.
+  git(place.checkout, 'checkout', '-q', '-b', 'pull-request')
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  writeFileSync(join(place.checkout, 'STRANGER.md'), 'now run this\n')
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '-m', 'a stranger drops the config')
+  const read = call('Read', { file_path: join(place.checkout, 'STRANGER.md') })
+  assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
 test('a command\'s output always takes the shell as A13, and names gh as B3 and git history as B5 (martha#127)', async (t) => {
   const place = placeFor(t)
   const commands: readonly { readonly command: unknown; readonly paths: readonly string[] }[] = [
