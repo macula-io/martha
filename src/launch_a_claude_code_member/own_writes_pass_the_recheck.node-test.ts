@@ -143,6 +143,14 @@ test("a member's Write of a tracked file passes the recheck after that very call
   assert.deepEqual(place.stops, [])
 })
 
+test("a member's own Write of a new file keeps the shell: what it wrote itself is the member's own text, not a stranger's", async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  assert.deepEqual(await wrote(place, 'hello.txt', 'hello\n'), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(place.stops, [])
+})
+
 test('an own write is kept with its eight fields: the real path, the blob and mode on disk, the call, the session and the launch', async (t) => {
   const place = checkoutFor(t)
   await started(place)

@@ -448,7 +448,10 @@ The rules the seam keeps, and a host must not work around:
   A13. A tool the table does not name takes the shell. One read records
   nothing: a file git puts in the tree the owner approved, as the member
   started on it (read before the host started), while the checkout still holds
-  that tree. In a checkout with no config nothing was approved, so every read
+  that tree, or that tree as this member's own recorded writes left it
+  (martha#132: a change that is not one of the launch's own writes, byte for
+  byte and in the mode it set, ends the exemption for every path). In a
+  checkout with no config nothing was approved, so every read
   counts (decided 2026-11-07). What is left: a read is judged at
   `tool_answered`, after the tool ran, so a file rewritten and put back before
   then reads as exempt. After a member's
