@@ -4,5 +4,15 @@
   "session_start_schema": "hook_event_name:T(\"SessionStart\"),source:B([\"startup\",\"resume\",\"clear\",\"compact\",\"fork\"])",
   "prompt_origin_mapper": "function efe(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&R0e(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind}}}",
   "prompt_origin_fallback": "function Wdi({origin:e,bridgeOrigin:n,wakeupSource:r,mode:s,promptSource:h}){if(e)return efe(e,n);if(s===\"task-notification\")return{kind:\"task-notification\"};if(r)return{kind:\"scheduled-trigger\"};switch(h){case\"typed\":case\"queued\":case\"suggestion_accepted\":return{kind:\"unclassified\"};case\"sdk\":return{kind:\"sdk\"};case\"system\":return{kind:\"unclassified\"}}}",
-  "prompt_origin_subkinds": "var PTt=new Set([\"scheduled-trigger\",\"peer-send-message\",\"projects-relay\"]);var R0e=(e)=>PTt.has(e)"
+  "prompt_origin_subkinds": "var PTt=new Set([\"scheduled-trigger\",\"peer-send-message\",\"projects-relay\"]);var R0e=(e)=>PTt.has(e)",
+  "hooks_switches": "function r(){let o=Se(\"policySettings\");if(o?.disableAllHooks===!0)return{};if(o?.allowManagedHooksOnly===!0||Yr())return o?.hooks??{};if(ad(\"hooks\"))return o?.hooks??{};let t=br();if(t.disableAllHooks===!0){if(!qwr())return o?.hooks??{};return S()}return a(t.hooks??{})}",
+  "hooks_switch_calls": [
+    "function Yr(){return Oe(process.env.CLAUDE_CODE_SAFE_MODE)||i(\"--safe-mode\")}",
+    "function ad(o){let t=Se(\"policySettings\")?.strictPluginOnlyCustomization;if(t===!0)return!0;if(Array.isArray(t))return t.includes(o);return!1}"
+  ],
+  "managed_settings": {
+    "dir": "/etc/claude-code",
+    "file": "managed-settings.json",
+    "drop_in": "managed-settings.d"
+  }
 }

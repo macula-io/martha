@@ -12,7 +12,9 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { openState, ownWritesKeptIn, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   decideLaunch,
@@ -21,7 +23,7 @@ import {
   type ApprovedLaunch,
   type LaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { allOwnWrites, appendOwnWrite, OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { OWN_WRITE_MODES, type OwnWrites } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
@@ -75,7 +77,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
   const launch: ApprovedLaunch = {
     ...place,
     approved_fingerprints: [fingerprintOf(started)],
-    since_approval: { approved: started, member: MEMBER, state, launch_id: LAUNCH },
+    since_approval: { approved: started, member: MEMBER, own_writes: ownWritesKeptIn(state), launch_id: LAUNCH },
   }
   const stops: string[] = []
   const relay = memberRelay({
@@ -84,6 +86,13 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    hookSettings: hookSettingsWatch({
+      user: join(home, '.claude', 'settings.json'),
+      home,
+      approved: undefined,
+      managed: { ...RECORDED_HOST.managed_settings, dir: join(home, 'managed') },
+      switches: CLAUDE_CODE_HOOK_SWITCHES,
+    }),
     stopMember: (why) => void stops.push(why),
   })
   return { home, checkout, state, approved: started, relay, stops }
@@ -108,6 +117,7 @@ async function wrote(place: Checkout, path: string, content: string, on_disk = c
 }
 
 const blobOf = (place: Checkout, path: string): string => git(place.checkout, 'hash-object', '--', path)
+const allOwnWrites = (state: MarthaState): OwnWrites => ownWritesKeptIn(state).all()
 
 const MOVED = (paths: string): string =>
   `The checkout changed since the owner approved it, and not by this member's own file writes: ${paths}. ` +
@@ -174,11 +184,13 @@ test("an Edit and a NotebookEdit are own writes of the file they name, as it is 
   assert.deepEqual(place.stops, [])
 })
 
-test('a path the member gives relative to where it started, or with spaces around it, is the file the host wrote', async (t) => {
+test('a path the member gives relative to where it started, from its home, or with spaces around it, is the file the host wrote', async (t) => {
   const place = checkoutFor(t)
   await started(place)
   writeFileSync(join(place.checkout, 'hello.txt'), 'hello\n')
   assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: ' hello.txt ', content: 'hello\n' })), TAKEN_REPLY)
+  writeFileSync(join(place.checkout, 'other.txt'), 'other\n')
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: '~/checkout/other.txt', content: 'other\n' })), TAKEN_REPLY)
   assert.deepEqual(place.stops, [])
 })
 
@@ -213,7 +225,7 @@ test("another launch's record of the same bytes does not pass a path", async (t)
     launch: 'another-launch',
     recorded_at: new Date().toISOString(),
   }
-  assert.equal(appendOwnWrite(place.state, elsewhere), undefined)
+  assert.equal(ownWritesKeptIn(place.state).append(elsewhere), undefined)
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('outsider.txt')))
 })
 
@@ -240,6 +252,32 @@ test('a link put in the checkout is never an own write, even where the member wr
   assert.deepEqual(await wrote(place, 'hello.txt', 'hello\n'), TAKEN_REPLY)
   symlinkSync('hello.txt', join(place.checkout, 'link.txt'))
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('link.txt')))
+})
+
+test('a branch checked out mid-session that drops the config and adds a file stops the member (martha#142)', async (t) => {
+  const place = checkoutFor(t)
+  git(place.checkout, 'checkout', '-q', '-b', 'outsider')
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  writeFileSync(join(place.checkout, 'planted.sh'), 'echo planted\n')
+  git(place.checkout, 'add', 'planted.sh')
+  git(place.checkout, 'commit', '-q', '-m', 'drop the config, add a script')
+  git(place.checkout, 'checkout', '-q', '-')
+  await started(place)
+  git(place.checkout, 'checkout', '-q', 'outsider')
+  const why = MOVED('planted.sh')
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'git checkout outsider' })), STOPPING(why))
+  assert.deepEqual(place.stops, [why])
+})
+
+test('a checkout git can no longer read mid-session stops the member, even with its config gone: nothing can be told apart', async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  rmSync(join(place.checkout, '.git'), { recursive: true, force: true })
+  rmSync(join(place.checkout, '.mcp.json'))
+  const why =
+    "The checkout no longer matches what the owner approved, and git can no longer read it as a checkout below the owner's home, so the member's own writes cannot be told from anyone else's. " +
+    `Run martha approve, read what it shows, and answer yes; then martha start ${MEMBER}.`
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'rm -rf .git' })), STOPPING(why))
 })
 
 test('a file the member deleted passes: removing a file plants nothing', async (t) => {
@@ -281,6 +319,6 @@ test('a start refusal for a checkout the owner has not approved says how to appr
   assert.ok(!decision.allow)
   assert.equal(
     decision.refusal,
-    "This coding tool is not started here: the checkout holds config that starts code by itself (.mcp.json), and the owner has not approved this config with this checkout's files. Run martha approve, read what it shows, and answer yes.",
+    `This coding tool is not started here: the checkout holds config that starts code by itself (.mcp.json), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprintOf(place.approved)}). Run martha approve, read what it shows, and answer yes.`,
   )
 })
