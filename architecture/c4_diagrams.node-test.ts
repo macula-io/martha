@@ -26,6 +26,49 @@ registerHooks({
   },
 })
 
+/** What `martha` itself loads, recorded once: a second import of the same module runs no hook again. */
+let loadedByALaunch: Promise<ReadonlySet<string>> | undefined
+const slicesALaunchLoads = (): Promise<ReadonlySet<string>> => {
+  loadedByALaunch ??= (async () => {
+    loadedFromSrc.clear()
+    await import('../src/run_the_martha_command/run_the_martha_command.ts')
+    return new Set(loadedFromSrc)
+  })()
+  return loadedByALaunch
+}
+
+/**
+ * The slices that exist only to serve the room. No room runs in this release and a launch still loads
+ * parts of each of them, so the page says which parts, and this list is what holds it to the whole
+ * family: a slice that loads and is not named is the page understating what runs (martha#106).
+ */
+const ROOM_SLICES = [
+  'admit_a_room_message',
+  'read_a_room_through_its_gate',
+  'refuse_widening_a_member_reach',
+  'trust_only_framed_envelopes',
+] as const
+
+/**
+ * Sentences that were on the page and were false: a launch does load these slices' parts. Each is the
+ * wording as it was written, so putting one back fails here by name rather than passing quietly.
+ */
+const DENIES_LOADING: readonly string[] = [
+  'loads no room code',
+  'no team-mode container or slice is loaded',
+  'mode loads none of it',
+  'rooms are team mode, and solo loads none of them',
+]
+
+const textIn = (svg: string): string =>
+  [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((found) => found[1]).join(' ')
+
+/** Everything the page says: the README, and the words drawn in the three pictures it shows. */
+const pageText = [
+  README,
+  ...DIAGRAMS.map((make) => textIn(readFileSync(join(ASSETS, make().file), 'utf8'))),
+].join('\n')
+
 // The page links an SVG by its path from the page to the generator's ASSETS.
 const linkTo = (file: string): string => `${relative(import.meta.dirname, ASSETS)}/${file}`
 
@@ -95,15 +138,30 @@ test('what is left out says why, is a directory in src/, and is said on the page
 
 // No room runs in this release, and a picture can easily say "solo loads none of it" and be wrong: the
 // command does load parts of the room's slices. So the page's words are held to what the command loads,
-// not to a reading of the imports.
-test('a launch loads exactly the room slices the page says it does', async () => {
-  loadedFromSrc.clear()
-  await import('../src/run_the_martha_command/run_the_martha_command.ts')
-  const loaded = [...ROOM_SLICES_WHICH_LOAD].filter((slice) => loadedFromSrc.has(slice)).sort()
-  assert.deepEqual(loaded, [...ROOM_SLICES_WHICH_LOAD].sort(),
-    `the page says a launch loads ${ROOM_SLICES_WHICH_LOAD.join(', ')}; one of them is no longer loaded, so the words and the code must be brought back together`)
+// not to a reading of the imports. The comparison is exact in both directions: a room slice that loads
+// and is not named, and one that is named and no longer loads, both fail.
+test('a launch loads exactly the room slices the page says it does, and names each of them', async () => {
+  const loaded = await slicesALaunchLoads()
+  const loadedRoom = ROOM_SLICES.filter((slice) => loaded.has(slice)).sort()
+  assert.deepEqual(loadedRoom, [...ROOM_SLICES_WHICH_LOAD].sort(),
+    `a launch loads ${loadedRoom.join(', ')} of the room's slices, and the page says ${ROOM_SLICES_WHICH_LOAD.join(', ')}; bring the words and the code back together`)
   const drawn = new Set(components().coverage.flatMap((box) => [...box.names]))
   for (const slice of ROOM_SLICES_WHICH_LOAD) {
     assert.ok(drawn.has(slice), `${slice} loads on every launch, so the Component diagram must draw it`)
+    assert.ok(README.includes(slice), `architecture/README.md names none of ${slice}, which every launch loads`)
   }
+})
+
+test('nothing the page says denies that a launch loads the room', () => {
+  for (const phrase of DENIES_LOADING) {
+    assert.ok(!pageText.includes(phrase),
+      `the page says "${phrase}", and a launch loads ${ROOM_SLICES_WHICH_LOAD.join(', ')}`)
+  }
+})
+
+test('no directory the page leaves out is loaded by a launch', async () => {
+  const loaded = await slicesALaunchLoads()
+  const loadedButLeftOut = LEFT_OUT.map((entry) => entry.name).filter((name) => loaded.has(name))
+  assert.deepEqual(loadedButLeftOut, [],
+    `the page says nothing this release runs loads ${loadedButLeftOut.join(', ')}`)
 })
