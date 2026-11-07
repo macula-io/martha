@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -237,6 +237,25 @@ test('own write A, then own write B, then the file put back to A by someone else
   assert.deepEqual(await wrote(place, 'hello.txt', 'B\n'), TAKEN_REPLY)
   writeFileSync(join(place.checkout, 'hello.txt'), 'A\n')
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('hello.txt')))
+})
+
+test("an own Write that git changes as it adds it (text=auto over CRLF) passes: the blob is kept as git would add it", async (t) => {
+  const place = checkoutFor(t, { files: { '.gitattributes': '* text=auto\n' } })
+  await started(place)
+  assert.deepEqual(await wrote(place, 'windows.txt', 'one\r\ntwo\r\n'), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_called', call('Read')), ALLOW_REPLY)
+  const kept = allOwnWrites(place.state)
+  assert.ok('writes' in kept)
+  assert.equal(kept.writes[0]?.blob, blobOf(place, 'windows.txt'))
+  assert.deepEqual(place.stops, [])
+})
+
+test("an own write whose mode someone else changes after it (chmod +x) stops the member, naming the path", async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  assert.deepEqual(await wrote(place, 'run.sh', 'echo hello\n'), TAKEN_REPLY)
+  chmodSync(join(place.checkout, 'run.sh'), 0o755)
+  assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('run.sh')))
 })
 
 test("a Write whose bytes on disk are not the call's content is not kept, and the member is stopped", async (t) => {

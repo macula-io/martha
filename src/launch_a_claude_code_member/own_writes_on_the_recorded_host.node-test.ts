@@ -55,11 +55,11 @@ interface Project {
 }
 
 /** A checkout with a crew declared and its config approved by the owner, in a home made for the test. */
-function approvedProject(t: TestContext): Project {
+function approvedProject(t: TestContext, more: Readonly<Record<string, string>> = {}): Project {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-real-host-')))
   t.after(() => rmSync(home, { recursive: true, force: true }))
   const checkout = join(home, 'project')
-  const files = { 'README.md': 'a project\n', [CRLF_FILE]: 'one\r\ntwo\r\n', '.claude/settings.json': SETTINGS }
+  const files = { 'README.md': 'a project\n', [CRLF_FILE]: 'one\r\ntwo\r\n', '.claude/settings.json': SETTINGS, ...more }
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(checkout, path)), { recursive: true })
     writeFileSync(join(checkout, path), text)
@@ -148,4 +148,13 @@ test("a member's own Write over a file whose lines end in CRLF does not stop it"
   )
   assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
   assert.equal(readFileSync(join(project.checkout, CRLF_FILE), 'utf8'), 'one\r\ntwo\r\nthree\r\n')
+})
+
+test("a member's own CRLF Write where git normalises line ends as it adds (text=auto) does not stop it", { skip }, async (t) => {
+  const project = approvedProject(t, { '.gitattributes': '* text=auto\n' })
+  const ran = await run(project, 2, ({ number }) =>
+    number === 1 ? { tool: 'Write', input: { file_path: join(project.checkout, 'notes.txt'), content: 'one\r\ntwo\r\n' } } : END,
+  )
+  assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
+  assert.equal(readFileSync(join(project.checkout, 'notes.txt'), 'utf8'), 'one\r\ntwo\r\n')
 })
