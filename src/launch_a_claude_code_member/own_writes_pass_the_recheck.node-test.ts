@@ -254,6 +254,21 @@ test('a link put in the checkout is never an own write, even where the member wr
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('link.txt')))
 })
 
+test('a branch checked out mid-session that drops the config and adds a file stops the member (martha#142)', async (t) => {
+  const place = checkoutFor(t)
+  git(place.checkout, 'checkout', '-q', '-b', 'outsider')
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  writeFileSync(join(place.checkout, 'planted.sh'), 'echo planted\n')
+  git(place.checkout, 'add', 'planted.sh')
+  git(place.checkout, 'commit', '-q', '-m', 'drop the config, add a script')
+  git(place.checkout, 'checkout', '-q', '-')
+  await started(place)
+  git(place.checkout, 'checkout', '-q', 'outsider')
+  const why = MOVED('planted.sh')
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'git checkout outsider' })), STOPPING(why))
+  assert.deepEqual(place.stops, [why])
+})
+
 test('a file the member deleted passes: removing a file plants nothing', async (t) => {
   const place = checkoutFor(t)
   await started(place)
