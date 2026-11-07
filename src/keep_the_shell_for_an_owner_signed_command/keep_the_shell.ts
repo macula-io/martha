@@ -1,16 +1,18 @@
 // Whether a `Bash` result keeps the member's shell (martha#129, design step 4, with r=3): nothing is recorded only
 // when the call was exactly `martha run <name>` for a shape the owner signed, a receipt the launcher kept for this
-// very call matches, and the whole result equals the one built from that receipt. Every other `Bash` result
+// very call matches, and the host's whole answer equals the one built from that receipt. Every other `Bash` result
 // records A13, as #127 does.
 //
 //   - The command is compared byte for byte with RUN_COMMAND_PREFIX + name; nothing is parsed. A call run in the
 //     background is never exempt.
 //   - The receipt is single use and bound to the call's tool_use_id, taken from the relay's own tool_called.
-//   - The result is compared as a whole value with the one built from the receipt's output and status by the
-//     shape the pinned host was recorded giving (RecordedResultShape). An extra key, a non-empty stderr, an error
-//     field, a truncation or an added note is a different value: nothing is stripped or searched for.
-//   - The recorded shape covers statuses 0 and 1 only. Any other status (2, 127, 137, a signal) records A13, named
-//     as an unrecorded status: the host's result for it was not recorded and is not guessed.
+//   - The answer is compared as a whole value with the one built from the receipt's output and status by the
+//     answers the pinned host was recorded giving (RecordedResultShape, ../claude_code_host). An extra key, a
+//     non-empty stderr, an error field, a truncation, a reminder another hook added (`context`) or an added note is
+//     a different value. One key is left out of both sides: `ref`, the host's count of the messages it produced for
+//     the call, which is a number and carries no text the model reads.
+//   - The recorded answers cover statuses 0 and 1 only. Any other status (2, 127, 137, a signal) records A13, named
+//     as an unrecorded status: the host's answer for it was not recorded and is not guessed.
 
 import { createHash } from 'node:crypto'
 
@@ -21,10 +23,17 @@ export const RUN_COMMAND_PREFIX = 'martha run '
 /** The statuses whose host result was recorded. */
 export const RECORDED_STATUSES = [0, 1] as const
 
-/** One recorded host result: its value with the run's output replaced by `placeholder`, which occurs once. */
+/** Whether a run printed anything the host shows: the recorded answers differ between the two. */
+export type RecordedOutput = 'some' | 'none'
+
+/**
+ * One answer the pinned host was recorded giving to `martha run <name>`: for a status, with output or without,
+ * its value with the printed output written as `mark` wherever the host put it.
+ */
 export interface RecordedResultShape {
   readonly status: (typeof RECORDED_STATUSES)[number]
-  readonly placeholder: string
+  readonly output: RecordedOutput
+  readonly mark: string
   readonly value: unknown
 }
 
@@ -38,12 +47,12 @@ export interface Receipt {
   readonly output: string
 }
 
-/** A `Bash` call as the host answered it. */
+/** A `Bash` call as the host answered it: `answer` is what the host's tool.call resolved to, as the relay sent it. */
 export interface AnsweredBash {
   readonly tool_use_id: string
   readonly command: unknown
   readonly run_in_background: unknown
-  readonly result: unknown
+  readonly answer: unknown
 }
 
 export interface ShellDecision {
@@ -79,9 +88,19 @@ function shapeNameOf(call: AnsweredBash, signed_names: readonly string[]): { rea
 function receiptDecision(call: AnsweredBash, name: string, receipt: Receipt | undefined, shapes: readonly RecordedResultShape[]): ShellDecision {
   if (receipt === undefined || receipt.tool_use_id !== call.tool_use_id || receipt.name !== name) return { why: `no receipt was kept for this ${RUN_COMMAND_PREFIX}${name}` }
   if (sha256Of(receipt.output) !== receipt.output_sha256) return { why: RECEIPT_TAMPERED }
-  const shape = shapes.find((recorded) => recorded.status === receipt.status)
-  if (shape === undefined) return { why: `the run ended with status ${receipt.status}, whose host result was not recorded` }
-  return canonical(call.result) === canonical(resultBuiltFrom(shape, receipt.output)) ? { why: undefined } : { why: RESULT_DIFFERS }
+  const built = resultBuiltFrom(shapes, receipt.status, receipt.output)
+  if (built === undefined) return { why: `the run ended with status ${receipt.status}, whose host result was not recorded` }
+  return canonical(withoutRef(call.answer)) === canonical(built) ? { why: undefined } : { why: RESULT_DIFFERS }
+}
+
+/** The host's count of the messages it produced for the call: a number, never text the model reads. */
+export const HOST_MESSAGE_COUNT = 'ref'
+
+/** The answer with HOST_MESSAGE_COUNT left out, when it is a number; every other key stays. */
+function withoutRef(answer: unknown): unknown {
+  if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return answer
+  const { [HOST_MESSAGE_COUNT]: count, ...rest } = answer as Readonly<Record<string, unknown>>
+  return typeof count === 'number' ? rest : answer
 }
 
 /**
@@ -95,16 +114,27 @@ export function runNameOf(input: { readonly command?: unknown; readonly run_in_b
   return SHAPE_NAME.test(name) ? name : undefined
 }
 
-/** The recorded value with the placeholder string replaced by `output`, wherever a string equals it. */
-export function resultBuiltFrom(shape: RecordedResultShape, output: string): unknown {
-  return replaced(shape.value, shape.placeholder, output)
+/**
+ * The output as the recorded host shows it: leading empty lines and trailing white space left out. A host that
+ * shows it otherwise gives an answer that differs from the one built here, which records A13: a wrong rule can
+ * only take the exemption away, never give it.
+ */
+export function hostShown(output: string): string {
+  return output.replace(/^\n+/, '').trimEnd()
 }
 
-function replaced(value: unknown, placeholder: string, output: string): unknown {
-  if (typeof value === 'string') return value === placeholder ? output : value
-  if (Array.isArray(value)) return value.map((item) => replaced(item, placeholder, output))
+/** The answer the recorded host gives for a run that ended with `status` and printed `output`; undefined when none was recorded. */
+export function resultBuiltFrom(shapes: readonly RecordedResultShape[], status: number, output: string): unknown {
+  const shown = hostShown(output)
+  const shape = shapes.find((recorded) => recorded.status === status && recorded.output === (shown === '' ? 'none' : 'some'))
+  return shape === undefined ? undefined : replaced(shape.value, shape.mark, shown)
+}
+
+function replaced(value: unknown, mark: string, shown: string): unknown {
+  if (typeof value === 'string') return value.split(mark).join(shown)
+  if (Array.isArray(value)) return value.map((item) => replaced(item, mark, shown))
   if (typeof value !== 'object' || value === null) return value
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaced(item, placeholder, output)]))
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaced(item, mark, shown)]))
 }
 
 /** JSON with every object's keys sorted: two values are equal exactly when these strings are. */
