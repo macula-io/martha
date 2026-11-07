@@ -85,6 +85,9 @@ test('an exit joined by && fails the recording when either part is of no known s
   const interactive = HOST_TEXT_319.replace(NO_TERMINAL_FUNCTION, 'function ye(){return t().host.launchOptions.isInteractive()}')
   assert.throws(() => hookExitCallsIn(interactive, HOOK_SET_FUNCTION_319), /a\$e\(\)/)
   assert.throws(() => hookSwitchesOf(HOOK_SET_FUNCTION_319, [...EXIT_CALLS, BOTH_FUNCTION]), /a\$e\(\)/)
+  // The recorded calls are read again at every launch: an interactive part among them must not pass either.
+  const interactiveCalls = [...EXIT_CALLS, BOTH_FUNCTION, 'function ye(){return t().host.launchOptions.isInteractive()}', VARIABLE_SET_FUNCTION]
+  assert.throws(() => hookSwitchesOf(HOOK_SET_FUNCTION_319, interactiveCalls), /a\$e\(\)/)
 })
 
 test('an exit of the hook set that calls a function of no known shape fails the recording, naming the call', () => {
