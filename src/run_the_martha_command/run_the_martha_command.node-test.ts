@@ -171,11 +171,36 @@ test('martha start whose input is no terminal refuses, so a member\'s shell cann
 test('what martha shows the owner carries no terminal control: it is written out as an escape', (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-command-')))
   t.after(() => rmSync(home, { recursive: true, force: true }))
-  const root = join(home, 'erase\u001b[2K\u009bline\u202e')
+  const root = join(home, EVERY_CONTROL_CLASS)
   mkdirSync(root)
   const run = martha({ home, root }, 'init')
   assert.equal(run.status, EXIT_REFUSED, run.said)
-  assert.doesNotMatch(run.said, /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u)
-  assert.ok(run.err.includes('erase\\x1b[2K\\x9bline\\u202e'), run.err)
+  assert.doesNotMatch(run.said, SHOWN_CONTROLS)
+  assert.ok(run.err.includes(EVERY_CONTROL_CLASS_SHOWN), run.err)
+  allSaidByMartha(run.err)
+})
+
+/**
+ * A directory name holding one of every class a terminal acts on: a C0 control (ESC), a C1 control (CSI), DEL,
+ * two bidirectional overrides, two isolates, the three direction marks, and the line and paragraph separators.
+ */
+const EVERY_CONTROL_CLASS = 'erase\u001b[2K\u009bline\u007fdel\u202a\u202eover\u2066\u2069iso\u200e\u200f\u061c\u2028\u2029'
+
+/** That name as the owner must see it: each control written out as its escape, by hand rather than by the function under test. */
+const EVERY_CONTROL_CLASS_SHOWN = 'erase\\x1b[2K\\x9bline\\x7fdel\\u202a\\u202eover\\u2066\\u2069iso\\u200e\\u200f\\u061c\\u2028\\u2029'
+
+/** What no line Martha shows may carry: every control and direction mark a terminal acts on, the newline that ends a line aside. */
+const SHOWN_CONTROLS = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u
+
+test('an error nobody expected reaches the owner as one escaped martha: line, never as Node\'s own trace', (t) => {
+  const place = placeFor(t)
+  const closed = join(place.home, EVERY_CONTROL_CLASS)
+  // Empty and closed to writing: the state root cannot be made in it, and the home's removal still takes it.
+  mkdirSync(closed, { mode: 0o500 })
+  const run = marthaWith(place, { XDG_STATE_HOME: closed }, 'init')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.doesNotMatch(run.said, SHOWN_CONTROLS)
+  assert.doesNotMatch(run.err, /^\s+at /m, 'no stack trace')
+  assert.ok(run.err.includes(EVERY_CONTROL_CLASS_SHOWN), run.err)
   allSaidByMartha(run.err)
 })
