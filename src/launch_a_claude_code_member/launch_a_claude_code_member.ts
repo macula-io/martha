@@ -45,8 +45,9 @@
 //   6. The backstop (martha#104): a member whose relay does not report its
 //      session's start in time is stopped, and its stop says why, since a host
 //      that does not run the relay runs no gate at all. In time is
-//      TRUST_ANSWER_DEADLINE_MS when an owner can answer the host, which may
-//      first ask whether to trust the folder, else SESSION_START_DEADLINE_MS
+//      TRUST_ANSWER_DEADLINE_MS when an owner can answer the host and the
+//      host's own record does not already trust the folder, so the host may
+//      first ask whether to trust it; else SESSION_START_DEADLINE_MS
 //      (host_runs_the_relay.ts).
 //
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
@@ -96,6 +97,7 @@ import {
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import {
+  hostTrustsTheFolder,
   hostVersionLine,
   ownerCanAnswerTheHost,
   refusalToLoadTheRelay,
@@ -480,8 +482,8 @@ function whenTheMemberStops(
 }
 
 /** Why a member is stopped whose relay did not report its session's start: the backstop's deadline and reason (#104). */
-function sessionStartDeadline(launch: ClaudeCodeMemberLaunch): { readonly ms: number; readonly why: string } {
-  if (ownerCanAnswerTheHost(launch.stdio)) {
+function sessionStartDeadline(launch: ClaudeCodeMemberLaunch, hostEnv: Readonly<Record<string, string | undefined>>): { readonly ms: number; readonly why: string } {
+  if (ownerCanAnswerTheHost(launch.stdio) && !hostTrustsTheFolder(hostEnv, launch.place.launch_dir)) {
     const ms = launch.trust_answer_deadline_ms ?? TRUST_ANSWER_DEADLINE_MS
     return {
       ms,
@@ -533,7 +535,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     launch.tellOwner(`${launch.member_name} is stopped: ${why}`)
     if (group !== undefined) killGroup(group)
   }
-  const backstop = relayBackstop(sessionStartDeadline(launch), stop)
+  const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
   const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported)
   if (typeof server === 'string') {

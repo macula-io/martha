@@ -32,11 +32,15 @@
 // until the owner answers: on Claude Code 2.1.318 the relay reported the start
 // about a second after the answer, and nothing in the 45 s the question was
 // left open (martha#104 r=1, a live probe). A member with no owner at a
-// terminal cannot be asked, so a missing report means the gates are off.
+// terminal cannot be asked, so a missing report means the gates are off. Nor
+// is a member asked whose folder the host's own record already trusts
+// (hostTrustsTheFolder), so after a folder's first start the short deadline
+// holds there too.
 
 import { execFile } from 'node:child_process'
 import type { StdioOptions } from 'node:child_process'
-import { accessSync, constants, realpathSync, statSync } from 'node:fs'
+import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { isatty } from 'node:tty'
 
@@ -68,6 +72,45 @@ export const TRUST_ANSWER_DEADLINE_MS = 600_000
 
 /** Whether an owner can answer the host's questions: the member is given the launcher's input, and that is a terminal. */
 export const ownerCanAnswerTheHost = (stdio: StdioOptions): boolean => stdio === 'inherit' && isatty(0)
+
+/**
+ * The file in which Claude Code records the folders it trusts, in the folder
+ * CLAUDE_CONFIG_DIR names, else the home folder. The host's own refusal for an
+ * untrusted folder tells the owner to set `projects[<folder>].hasTrustDialogAccepted:
+ * true` in it, and on 2.1.318 its trust answer was written there under the
+ * folder's own path, for a plain folder and a git checkout's root alike
+ * (martha#104 r=2, live probes).
+ */
+export const HOST_TRUST_RECORD_FILE = '.claude.json'
+
+/** The variable that makes the host ask again whatever its record says (named in the host's own message). */
+export const HOST_IGNORES_ITS_TRUST_RECORD = 'CLAUDE_CODE_IGNORE_PERSISTED_TRUST'
+
+/**
+ * Whether the host's own record says it trusts `folder` already, so it will not
+ * ask. Read one way only: true only for the exact folder, by its path or its
+ * real path, marked with the value true. A record that is missing, unreadable,
+ * does not parse, trusts only a folder above, or a host told to ignore its
+ * record, is false: the owner may still be asked, and keeps the long deadline.
+ * A wrong true only stops a member sooner.
+ */
+export function hostTrustsTheFolder(env: Readonly<Record<string, string | undefined>>, folder: string): boolean {
+  const ignored = env[HOST_IGNORES_ITS_TRUST_RECORD]
+  if (ignored !== undefined && ignored !== '') return false
+  const configDir = env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir()
+  if (!isAbsolute(configDir)) return false
+  try {
+    const record: unknown = JSON.parse(readFileSync(join(configDir, HOST_TRUST_RECORD_FILE), 'utf8'))
+    const projects = isRecord(record) && isRecord(record.projects) ? record.projects : {}
+    const named = (path: string): boolean => {
+      const project = Object.hasOwn(projects, path) ? projects[path] : undefined
+      return isRecord(project) && project.hasTrustDialogAccepted === true
+    }
+    return named(folder) || named(realpathSync(folder))
+  } catch {
+    return false
+  }
+}
 
 /** The host's answers fit in this; a longer one is no answer the launcher reads. */
 const HOST_ANSWER_MAX_BYTES = 4 * 1024 * 1024

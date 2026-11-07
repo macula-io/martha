@@ -9,6 +9,9 @@ import { test, type TestContext } from 'node:test'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   firstValidatorError,
+  HOST_IGNORES_ITS_TRUST_RECORD,
+  HOST_TRUST_RECORD_FILE,
+  hostTrustsTheFolder,
   hostVersionLine,
   notACommandThisLauncherCanRun,
   refusalToLoadTheRelay,
@@ -111,4 +114,21 @@ test('the version line is told only when the host is not the recorded version, n
   assert.ok(other?.includes('999.0.0') && other.includes(RECORDED_HOST.host_version), String(other))
   const silent = await hostVersionLine(standIn(dir, []), {}, dir)
   assert.ok(silent?.includes(RECORDED_HOST.host_version) && silent.includes('does not say'), String(silent))
+})
+
+test('the host\'s trust record is read from CLAUDE_CONFIG_DIR before HOME, only when absolute, and not when the host is told to ignore it', (t) => {
+  const folder = placeFor(t)
+  const trusting = JSON.stringify({ projects: { [folder]: { hasTrustDialogAccepted: true } } })
+  const home = placeFor(t)
+  const configDir = placeFor(t)
+  writeFileSync(join(home, HOST_TRUST_RECORD_FILE), trusting)
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder), true)
+  assert.equal(hostTrustsTheFolder({ HOME: home, CLAUDE_CONFIG_DIR: configDir }, folder), false, 'CLAUDE_CONFIG_DIR names the record, and it has none')
+  writeFileSync(join(configDir, HOST_TRUST_RECORD_FILE), trusting)
+  assert.equal(hostTrustsTheFolder({ HOME: placeFor(t), CLAUDE_CONFIG_DIR: configDir }, folder), true)
+  assert.equal(hostTrustsTheFolder({ HOME: home, CLAUDE_CONFIG_DIR: 'relative' }, folder), false)
+  assert.equal(hostTrustsTheFolder({ HOME: home, [HOST_IGNORES_ITS_TRUST_RECORD]: '1' }, folder), false)
+  const linked = join(placeFor(t), 'linked')
+  symlinkSync(folder, linked)
+  assert.equal(hostTrustsTheFolder({ HOME: home }, linked), true, 'the record names the real path')
 })
