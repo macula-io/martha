@@ -19,18 +19,18 @@
 //      row that names it (B3, B5). A label only ever adds: it changes which row a
 //      refusal names, never whether the shell goes.
 //
-//   3. A READ OF THE TREE THE MEMBER STARTED ON RECORDS NOTHING, and only
-//      while the checkout still holds that tree. The launcher reads it before
-//      the host starts (`started_on`); a read is judged against it, never
-//      against the live tree, so a `gh pr checkout` or a file another process
-//      writes mid-session is a stranger's (martha#127, #132). Where the
-//      checkout has config, that tree is the one the owner approved to run as
-//      the owner, so reading the same bytes grants nothing more. Where it has
-//      none, nothing was approved: whether a read of the start tree is then
-//      exempt is the owner's choice, open on martha#127. What is in the tree
-//      is the launcher's question to git, never the model's
-//      (`isInTheCheckoutTree`). Git history is not in it: commit messages are
-//      B5 even in the member's own checkout.
+//   3. A READ OF THE TREE THE OWNER APPROVED, AS THE MEMBER STARTED ON IT,
+//      RECORDS NOTHING, and only while the checkout still holds that tree. The
+//      launcher reads the start state before the host starts and keeps its
+//      tree (`approved_start`) only when its fingerprint is one the owner
+//      approved: that tree is the one the owner approved to run as the owner,
+//      so reading the same bytes grants nothing more. A read is judged against
+//      it, never against the live tree, so a `gh pr checkout` or a file another
+//      process writes mid-session is a stranger's (#132). A checkout with no
+//      config approves nothing, so every read in it counts (decided 2026-11-07,
+//      martha#127). What is in the tree is the launcher's question to git,
+//      never the model's (`isInTheCheckoutTree`). Git history is not in it:
+//      commit messages are B5 even in the member's own checkout.
 //
 //   4. A READ THAT NAMES NO PLACE COUNTS. No path, a relative one, or one that
 //      is no text: the launcher cannot say what was read, so it was a stranger's.
@@ -49,9 +49,9 @@ import { takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.t
 
 /** What a host says one of its tools returned, keyed by the call's own fields. */
 export type ToolResultReading =
-  /** The file the call's `field` names: B4 unless it is in the approved tree. */
+  /** The file the call's `field` names: B4 unless it is in the tree the owner approved and the member started on. */
   | { readonly reads: 'a_file'; readonly source: 'checkout_file'; readonly field: string }
-  /** Every file under the path the call's `field` names: B4 unless all of it is in the approved tree. */
+  /** Every file under the path the call's `field` names: B4 unless all of it is in the tree the owner approved and the member started on. */
   | { readonly reads: 'a_search'; readonly source: 'checkout_file'; readonly field: string }
   /** The output of the command the call's `field` holds: always A13, plus the rows its first words name. */
   | { readonly reads: 'a_command'; readonly source: 'checkout_run'; readonly field: string }
@@ -78,8 +78,12 @@ export interface ToolResult {
   readonly input: Readonly<Record<string, unknown>>
   readonly rows: ToolResultRows
   readonly launch: ApprovedLaunch
-  /** The checkout's tree as the launcher read it before the host started; `null` when it had none. */
-  readonly started_on: string | null
+  /**
+   * The checkout's tree as the launcher read it before the host started, kept
+   * only when that start state's fingerprint is one the owner approved; `null`
+   * otherwise, and then every read counts.
+   */
+  readonly approved_start: string | null
   readonly host: LaunchHost
 }
 
@@ -94,12 +98,12 @@ function sourcesOf(reading: ToolResultReading, result: ToolResult): readonly Tur
   if (reading.reads === 'a_source') return [reading.source]
   const named = result.input[reading.field]
   if (reading.reads === 'a_command') return [reading.source, ...labelsOf(named)]
-  return readOfTheApprovedTree(named, SPAN_OF[reading.reads], result) ? [] : [reading.source]
+  return readOfTheApprovedStartTree(named, SPAN_OF[reading.reads], result) ? [] : [reading.source]
 }
 
-function readOfTheApprovedTree(path: unknown, span: ReadSpan, { launch, started_on, host }: ToolResult): boolean {
-  if (typeof path !== 'string' || started_on === null) return false
-  if (readCheckoutTree(launch.launch_dir, launch.stop_dir, host) !== started_on) return false
+function readOfTheApprovedStartTree(path: unknown, span: ReadSpan, { launch, approved_start, host }: ToolResult): boolean {
+  if (typeof path !== 'string' || approved_start === null) return false
+  if (readCheckoutTree(launch.launch_dir, launch.stop_dir, host) !== approved_start) return false
   return isInTheCheckoutTree(launch.launch_dir, launch.stop_dir, path, span, host)
 }
 
