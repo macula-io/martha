@@ -4,8 +4,9 @@
 // reads what it says and how it ends. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -16,7 +17,10 @@ import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkout
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
-import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
+import { EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
+import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
+import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -203,4 +207,83 @@ test('an error nobody expected reaches the owner as one escaped martha: line, ne
   assert.doesNotMatch(run.err, /^\s+at /m, 'no stack trace')
   assert.ok(run.err.includes(EVERY_CONTROL_CLASS_SHOWN), run.err)
   allSaidByMartha(run.err)
+})
+
+// martha#129: martha run, martha pin-key and martha keep-shapes.
+
+test('martha pin-key and keep-shapes off a terminal refuse, and pin nothing', (t) => {
+  const place = placeFor(t)
+  writeFileSync(join(place.root, 'owner.pub'), 'sk-ssh-ed25519@openssh.com AAAA owner\n')
+  for (const act of ['pin-key', 'keep-shapes']) {
+    const run = martha(place, act, 'owner.pub')
+    assert.equal(run.status, EXIT_REFUSED)
+    assert.ok(run.err.includes(OWNERS_ACT_NEEDS_A_TERMINAL), run.err)
+  }
+  assert.equal(execFileSync('find', [join(place.home, 'state'), '-name', OWNER_KEYS_FILE], { encoding: 'utf8' }), '')
+})
+
+test('martha run, pin-key and keep-shapes take exactly one argument', (t) => {
+  const place = placeFor(t)
+  for (const args of [['run'], ['run', 'a', 'b'], ['run', ''], ['pin-key'], ['keep-shapes', 'a', 'b']]) {
+    assert.equal(martha(place, ...args).status, EXIT_USAGE, args.join(' '))
+  }
+})
+
+test('martha run outside a member\'s shell refuses, naming why', (t) => {
+  const run = martha(placeFor(t), 'run', 'test')
+  assert.equal(run.status, EXIT_REFUSED)
+  assert.ok(run.err.includes(NOT_IN_A_MEMBER), run.err)
+  assert.equal(run.out, '')
+})
+
+/** bin/martha run against a stand-in launcher answering `answer`, while this process keeps serving it. */
+async function runAgainst(t: TestContext, answer: unknown) {
+  const place = placeFor(t)
+  const socket_path = join(shortRelayRoot(t), 'launcher.sock')
+  const asked: unknown[] = []
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => chunks.push(chunk))
+    request.on('end', () => {
+      asked.push({ path: request.url, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown })
+      response.end(JSON.stringify(answer))
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(socket_path, resolve))
+  t.after(() => server.close())
+  const child = spawn(process.execPath, [MARTHA, 'run', 'test'], {
+    cwd: place.root,
+    env: { PATH: process.env.PATH, HOME: place.home, XDG_STATE_HOME: join(place.home, 'state'), [RELAY_SOCKET_VARIABLE]: socket_path },
+  })
+  const out: Buffer[] = []
+  const err: Buffer[] = []
+  child.stdout.on('data', (chunk: Buffer) => out.push(chunk))
+  child.stderr.on('data', (chunk: Buffer) => err.push(chunk))
+  const status = await new Promise<number | null>((resolve) => child.on('close', resolve))
+  return { status, out: Buffer.concat(out), err: Buffer.concat(err).toString('utf8'), asked }
+}
+
+test('martha run writes the run\'s bytes to stdout as they are, nothing to stderr, and ends with its status', async (t) => {
+  // Terminal controls and a byte that is not text: the host must get exactly what the run gave.
+  const bytes = Buffer.from('ok \u001b[2J\r\n\u0000 done\n', 'utf8')
+  const run = await runAgainst(t, { ran: 1, status: 3, output: bytes.toString('base64') })
+  assert.deepEqual(run.asked, [{ path: RUN_PATH, body: { name: 'test' } }])
+  assert.equal(run.status, 3)
+  assert.deepEqual(run.out, bytes)
+  assert.equal(run.err, '')
+})
+
+test('martha run with a refusal from the launcher shows it, and writes nothing to stdout', async (t) => {
+  const run = await runAgainst(t, { refused: 'nothing ran: planted.txt' })
+  assert.equal(run.status, EXIT_REFUSED)
+  assert.equal(run.out.length, 0)
+  assert.match(run.err, /nothing ran: planted\.txt/)
+})
+
+test('martha run hears any other answer as a refusal', async (t) => {
+  for (const answer of [{ ran: 1, status: 0, output: 'not base64!' }, { ran: 1, status: 0, output: '', extra: 1 }, { allow: 1 }]) {
+    const run = await runAgainst(t, answer)
+    assert.equal(run.status, EXIT_REFUSED, JSON.stringify(answer))
+    assert.equal(run.out.length, 0)
+  }
 })
