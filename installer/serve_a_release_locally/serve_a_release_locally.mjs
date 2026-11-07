@@ -2,10 +2,11 @@
 // absolute path, a '..', a fifo or an escaping link that no tar tool would write), the manifest that names it, and
 // the cosign signature index and bundle over its digest, all served by a local registry on 127.0.0.1. Never shipped:
 // the package's "files" leave this directory out.
-import { chmodSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 import { PolicyError, VerificationError } from 'sigstore'
@@ -289,4 +290,19 @@ export function removeEvenReadOnly (path) {
   }
   walk(path)
   rmSync(path, { recursive: true, force: true })
+}
+
+/**
+ * Every file and link under `root`, as path -> sha256 of its bytes or "link:<target>".
+ * @param {string} root
+ */
+export function treeOf (root) {
+  /** @type {Map<string, string>} */
+  const found = new Map()
+  for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+    const path = join(entry.parentPath, entry.name)
+    if (entry.isSymbolicLink()) found.set(relative(root, path), `link:${readlinkSync(path)}`)
+    else if (entry.isFile()) found.set(relative(root, path), createHash('sha256').update(readFileSync(path)).digest('hex'))
+  }
+  return found
 }
