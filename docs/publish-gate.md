@@ -204,11 +204,14 @@ What the plan leaves out, stated rather than hidden:
 - **The tree does not cover** a file git ignores and does not track — the
   checkout's author cannot ship one; it is written on this machine by a command
   the member ran (A13) — nor the inside of a submodule beyond the commit its
-  parent records, nor a change the checkout's own index hides from
-  `git status` (assume-unchanged, skip-worktree): those flags are the
-  member's, and no commit carries them. Of the same class: a member's own git
+  parent records. Of the same class: a member's own git
   config whose `include.path` names a tracked file, which lets the checkout's
   author define a clean filter that reading the tree runs.
+- **A change the index hides from `git status` is covered (martha#127).** An
+  entry flagged assume-unchanged or skip-worktree (a sparse checkout sets the
+  second by itself) would let a rewrite leave the tree equal to HEAD's. A
+  checkout with any such entry is always staged in a scratch index with no
+  flags, from the bytes on disk, so the rewrite moves the fingerprint.
 - **The fingerprint-to-launch race**: between `prepareLaunch` and the host's
   start, a script the snapshot runs can still be rewritten in the checkout, and
   a `SessionStart` hook runs it before the first tool call is checked.
@@ -392,6 +395,22 @@ The rules the seam keeps, and a host must not work around:
   that does not match, a predecessor whose record is gone, or one reset since
   the stamp: the reader has lost its record. Another member's handover is a checkout file
   (B4), unattributed, and taints.
+- **What the host's own tools return is recorded too (martha#127).** After a
+  built-in tool runs, and before the model sees its result, the launcher
+  records it on the row the host's table (`CLAUDE_CODE_TOOL_RESULT_ROWS`)
+  places it on: a file or a search is B4, a page or a web search B6, a
+  subagent's answer B7. A command's output is always A13, because nothing tells
+  one part of it from another; a first word of `gh` adds B3 and `git log`,
+  `show`, `blame`, `reflog` or `shortlog` add B5, and a label never replaces
+  A13. A tool the table does not name takes the shell. One read records
+  nothing: a file git puts in the tree the owner approved, as the member
+  started on it (read before the host started), while the checkout still holds
+  that tree. In a checkout with no config nothing was approved, so every read
+  counts (decided 2026-11-07). What is left: a read is judged at
+  `tool_answered`, after the tool ran, so a file rewritten and put back before
+  then reads as exempt. After a member's
+  first command, nothing that executes or writes runs again until a fresh
+  start; giving the shell back is martha#129.
 - **There is no release.** A member tainted once stays tainted through every
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the

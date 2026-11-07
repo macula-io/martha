@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, the settings files read again for a key that turns the relay off (martha#122), and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
+// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, the settings files read again for a key that turns the relay off (martha#122), then for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)`, and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -32,14 +32,15 @@
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_TOOL_RESULT_ROWS, isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { fingerprintOf, readLaunchState, recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
 
@@ -79,13 +80,20 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
 /** What one member's answers share: its place, and every session it has taken a start of or refused. */
 interface RelayState {
   readonly place: MemberRelayPlace
+  /** The checkout's tree when this relay was made, before the host started, if the owner approved that state: what a read is exempt against (martha#127). */
+  readonly approved_start: string | null
   readonly sessions: Map<string, HostSession>
   readonly broken: Map<string, string>
 }
 
 /** The launcher's answers for one member. */
 export function memberRelay(place: MemberRelayPlace): MemberRelay {
-  const state: RelayState = { place, sessions: new Map<string, HostSession>(), broken: new Map<string, string>() }
+  const state: RelayState = {
+    place,
+    approved_start: approvedStartTree(place.launch),
+    sessions: new Map<string, HostSession>(),
+    broken: new Map<string, string>(),
+  }
   let queue: Promise<unknown> = Promise.resolve()
 
   const stop = (why: string): RelayReply => stopMember(place, why)
@@ -119,6 +127,17 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       return next
     },
   }
+}
+
+/**
+ * The checkout's tree as it is now, before the host starts, when the owner
+ * approved this start state; `null` otherwise. A checkout with no config is
+ * launched whatever it holds and approves nothing, so it gets `null`, and
+ * every read in it counts (decided 2026-11-07, martha#127).
+ */
+function approvedStartTree(launch: ApprovedLaunch): string | null {
+  const state = readLaunchState(launch, thisMachine)
+  return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
 }
 
 function stopMember(place: MemberRelayPlace, why: string): RelayReply {
@@ -227,7 +246,14 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (!launched.allow) return stopMember(place, launched.refusal)
   const hooksOff = place.hookSettings.check()
   if (hooksOff !== undefined) return stopMember(place, hooksOff)
-  if (!isMcpToolCall(call.tool)) return answered(TAKEN)
-  const why = await keep(state, takeInTurn(session, { source: 'mcp_result' }, place.binder))
+  const taken = isMcpToolCall(call.tool)
+    ? takeInTurn(session, { source: 'mcp_result' }, place.binder)
+    : takeInToolResult(
+        session,
+        { tool: call.tool, input: call.input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch: place.launch, approved_start: state.approved_start, host: thisMachine },
+        place.binder,
+      )
+  if (taken.gate.ingested.length === session.gate.ingested.length) return answered(TAKEN)
+  const why = await keep(state, taken)
   return why === undefined ? answered(TAKEN) : stopMember(place, why)
 }

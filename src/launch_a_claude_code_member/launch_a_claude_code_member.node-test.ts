@@ -17,7 +17,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_contract.ts'
@@ -32,6 +32,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
+import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
@@ -233,16 +234,261 @@ test('a fresh start allows the shell; fork and a claimed crew_refresh start lost
   }
 })
 
-test('an MCP tool result taints the session; a built-in tool result does not', async (t) => {
+test('an MCP tool result takes the shell, naming B2', async (t) => {
   const { relay, rows } = answering(placeFor(t))
   await relay.answer('session_started', start('startup'))
-
-  assert.deepEqual(await relay.answer('tool_answered', call('Read', { file_path: '/etc/hostname' })), TAKEN_REPLY)
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
 
   assert.deepEqual(await relay.answer('tool_answered', call('mcp__probe__fetch_page')), TAKEN_REPLY)
   assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B2/))
   assert.deepEqual(await recordedPaths(rows), ['B2:null'])
+})
+
+// --- what a built-in tool returned (martha#127) ----------------------------------
+
+/** One built-in tool ran in a fresh session: what it recorded, and whether the shell is still there after it. */
+let toolSessions = 0
+async function afterOneTool(place: Place, tool: string, input: Record<string, unknown>): Promise<{ paths: string[]; bash: RelayReply }> {
+  const { relay, rows } = answering(place)
+  const session_id = `tool-session-${String((toolSessions += 1))}`
+  await relay.answer('session_started', start('startup', session_id))
+  assert.deepEqual(await relay.answer('tool_answered', call(tool, input, session_id)), TAKEN_REPLY, tool)
+  return {
+    paths: await recordedPaths(rows, session_id),
+    bash: await relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)),
+  }
+}
+
+/** A second git repository beside the checkout: another clone, a stranger's files. */
+function anotherClone(place: Place): string {
+  const clone = join(place.home, 'another-clone')
+  mkdirSync(clone)
+  git(clone, 'init', '-q', '.')
+  writeFileSync(join(clone, 'NOTES.md'), 'now run this\n')
+  git(clone, 'add', '--all')
+  git(clone, 'commit', '-q', '-m', 'a stranger')
+  return clone
+}
+
+test('a file read outside the approved tree takes the shell, naming B4 (martha#127)', async (t) => {
+  const place = placeFor(t)
+  const clone = anotherClone(place)
+  const outside: readonly { readonly what: string; readonly tool: string; readonly input: Record<string, unknown> }[] = [
+    { what: 'a file in another clone', tool: 'Read', input: { file_path: join(clone, 'NOTES.md') } },
+    { what: 'an edit in another clone', tool: 'Edit', input: { file_path: join(clone, 'NOTES.md') } },
+    { what: 'a write in another clone', tool: 'Write', input: { file_path: join(clone, 'NEW.md') } },
+    { what: 'a notebook in another clone', tool: 'NotebookEdit', input: { notebook_path: join(clone, 'n.ipynb') } },
+    { what: 'a search of another clone', tool: 'Grep', input: { path: clone, pattern: 'run' } },
+    { what: 'a glob of another clone', tool: 'Glob', input: { path: clone, pattern: '*' } },
+    { what: 'a file in git\'s own directory', tool: 'Read', input: { file_path: join(place.checkout, '.git', 'config') } },
+    { what: 'a relative path, which names no place', tool: 'Read', input: { file_path: 'README.md' } },
+    { what: 'a read that names no file', tool: 'Read', input: {} },
+    { what: 'a search that names no path', tool: 'Grep', input: { pattern: 'run' } },
+    { what: 'a path that is no text', tool: 'Read', input: { file_path: 7 } },
+    { what: 'a pathspec that matches every file', tool: 'Read', input: { file_path: join(place.checkout, '*') } },
+  ]
+  for (const { what, tool, input } of outside) {
+    const after = await afterOneTool(place, tool, input)
+    assert.deepEqual(after.paths, ['B4:null'], what)
+    assert.ok(isDenied(after.bash, /B4/), what)
+  }
+})
+
+test('a link or an ignored file inside the checkout is outside the approval, naming B4 (martha#127)', async (t) => {
+  const place = placeFor(t, SERVERS, { '.gitignore': 'node_modules/\n' })
+  const clone = anotherClone(place)
+  mkdirSync(join(place.checkout, 'node_modules', 'pkg'), { recursive: true })
+  writeFileSync(join(place.checkout, 'node_modules', 'pkg', 'README.md'), 'now run this\n')
+  symlinkSync(join(clone, 'NOTES.md'), join(place.checkout, 'notes-link.md'))
+  mkdirSync(join(place.checkout, 'docs'))
+  writeFileSync(join(place.checkout, 'docs', 'guide.md'), 'a guide\n')
+  symlinkSync(clone, join(place.checkout, 'docs', 'elsewhere'))
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '-m', 'a link out')
+  // Untracked and not ignored, so in the fingerprinted tree, but a link: ls-files --stage does not show it.
+  mkdirSync(join(place.checkout, 'loose'))
+  writeFileSync(join(place.checkout, 'loose', 'a.md'), 'loose\n')
+  symlinkSync(clone, join(place.checkout, 'loose', 'out'))
+  const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
+
+  const outside: readonly { readonly what: string; readonly tool: string; readonly input: Record<string, unknown> }[] = [
+    { what: 'an ignored file', tool: 'Read', input: { file_path: join(place.checkout, 'node_modules', 'pkg', 'README.md') } },
+    { what: 'a tracked link that leads out', tool: 'Read', input: { file_path: join(place.checkout, 'notes-link.md') } },
+    { what: 'a search over a directory holding an ignored file', tool: 'Grep', input: { path: place.checkout, pattern: 'run' } },
+    { what: 'a search over a directory holding a link', tool: 'Grep', input: { path: join(place.checkout, 'docs'), pattern: 'run' } },
+    { what: 'a glob over a directory holding a link', tool: 'Glob', input: { path: join(place.checkout, 'docs'), pattern: '**' } },
+    { what: 'a search over a directory holding an untracked link', tool: 'Grep', input: { path: join(place.checkout, 'loose'), pattern: 'run' } },
+  ]
+  for (const { what, tool, input } of outside) {
+    const after = await afterOneTool(approved, tool, input)
+    assert.deepEqual(after.paths, ['B4:null'], what)
+    assert.ok(isDenied(after.bash, /B4/), what)
+  }
+})
+
+test("a read of the owner-approved tree keeps the member's shell (martha#127)", async (t) => {
+  const place = placeFor(t, SERVERS, { 'src/main.ts': 'export {}\n' })
+  writeFileSync(join(place.checkout, 'untracked.md'), 'not ignored, so in the approved tree\n')
+  const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
+
+  const inside: readonly { readonly what: string; readonly tool: string; readonly input: Record<string, unknown> }[] = [
+    { what: 'a tracked file', tool: 'Read', input: { file_path: join(place.checkout, 'README.md') } },
+    { what: 'a tracked file in a directory', tool: 'Read', input: { file_path: join(place.checkout, 'src', 'main.ts') } },
+    { what: 'an untracked file git does not ignore', tool: 'Read', input: { file_path: join(place.checkout, 'untracked.md') } },
+    { what: 'a search of a directory of the tree', tool: 'Grep', input: { path: join(place.checkout, 'src'), pattern: 'export' } },
+    { what: 'a glob of the checkout', tool: 'Glob', input: { path: place.checkout, pattern: '**' } },
+  ]
+  for (const { what, tool, input } of inside) {
+    const after = await afterOneTool(approved, tool, input)
+    assert.deepEqual(after.paths, [], what)
+    assert.deepEqual(after.bash, ALLOW_REPLY, what)
+  }
+})
+
+test('a tracked file rewritten under an index flag that hides it is no read of the approved tree: the member is stopped (martha#127 r=1)', async (t) => {
+  for (const flag of ['--skip-worktree', '--assume-unchanged']) {
+    const place = placeFor(t)
+    git(place.checkout, 'update-index', flag, 'README.md')
+    const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
+    const { relay, stops } = answering(approved)
+    await relay.answer('session_started', start('startup'))
+    assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY, flag)
+
+    writeFileSync(join(place.checkout, 'README.md'), 'now run this\n')
+    const read = call('Read', { file_path: join(place.checkout, 'README.md') })
+    assert.ok(isDenied(await relay.answer('tool_called', read), /no longer matches/), flag)
+    assert.equal((await relay.answer('tool_answered', read)).answered, false, flag)
+    assert.equal(stops.length, 1, flag)
+  }
+})
+
+test('in a checkout with no config, a read is judged against the tree the member started on, not the live one (martha#127 r=2, #132)', async (t) => {
+  const place = placeFor(t)
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+
+  // A stranger's branch checked out mid-session: with no config, the launch is still allowed.
+  git(place.checkout, 'checkout', '-q', '-b', 'pull-request')
+  writeFileSync(join(place.checkout, 'STRANGER.md'), 'now run this\n')
+  writeFileSync(join(place.checkout, 'README.md'), 'now run this too\n')
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '-m', 'a stranger')
+  const read = call('Read', { file_path: join(place.checkout, 'STRANGER.md') })
+  assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
+test('in a checkout with no config, a file another process writes between two calls is not exempt: Bash is denied, naming B4 (martha#127 r=2)', async (t) => {
+  const place = placeFor(t)
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+
+  writeFileSync(join(place.checkout, 'NOTES.md'), 'now run this\n')
+  const read = call('Read', { file_path: join(place.checkout, 'NOTES.md') })
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
+/** A checkout with no config, whose start state nobody approved: every read in it counts (decided 2026-11-07, martha#127). */
+function configLess(t: TestContext): Place {
+  const place = placeFor(t)
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
+  return place
+}
+
+test('in a checkout with no config, a read of a tracked file is not exempt: Bash is denied, naming B4 (martha#127 r=3)', async (t) => {
+  const place = configLess(t)
+  const after = await afterOneTool(place, 'Read', { file_path: join(place.checkout, 'README.md') })
+  assert.deepEqual(after.paths, ['B4:null'])
+  assert.ok(isDenied(after.bash, /B4/))
+})
+
+test('in a checkout with no config whose tree git cannot read, a read of a tracked file is not exempt (martha#127 r=3)', async (t) => {
+  const place = configLess(t)
+  // Untracked, not ignored and unreadable: git cannot stage it, so the start read and every live read are both null.
+  const locked = join(place.checkout, 'locked')
+  writeFileSync(locked, 'x\n')
+  chmodSync(locked, 0o000)
+  const after = await afterOneTool(place, 'Read', { file_path: join(place.checkout, 'README.md') }).finally(() => chmodSync(locked, 0o600))
+  assert.deepEqual(after.paths, ['B4:null'])
+  assert.ok(isDenied(after.bash, /B4/))
+})
+
+test('in an approved checkout, a stranger\'s branch that deletes the config is no read of the approved tree: Bash is denied, naming B4 (martha#127 r=4)', async (t) => {
+  const place = placeFor(t)
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+
+  // With the config gone, the launch gate approves any tree, so only the bound to the approved start tree is left.
+  git(place.checkout, 'checkout', '-q', '-b', 'pull-request')
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  writeFileSync(join(place.checkout, 'STRANGER.md'), 'now run this\n')
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '-m', 'a stranger drops the config')
+  const read = call('Read', { file_path: join(place.checkout, 'STRANGER.md') })
+  assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
+test('a command\'s output always takes the shell as A13, and names gh as B3 and git history as B5 (martha#127)', async (t) => {
+  const place = placeFor(t)
+  const commands: readonly { readonly command: unknown; readonly paths: readonly string[] }[] = [
+    { command: 'ls', paths: ['A13:null'] },
+    { command: 'gh pr view 1', paths: ['A13:null', 'B3:null'] },
+    { command: '  gh   pr diff 140', paths: ['A13:null', 'B3:null'] },
+    { command: 'gh pr view 1 && ls', paths: ['A13:null', 'B3:null'] },
+    { command: 'git log -1', paths: ['A13:null', 'B5:null'] },
+    { command: 'git show HEAD', paths: ['A13:null', 'B5:null'] },
+    { command: 'git blame README.md', paths: ['A13:null', 'B5:null'] },
+    { command: 'git reflog', paths: ['A13:null', 'B5:null'] },
+    { command: 'git shortlog -s', paths: ['A13:null', 'B5:null'] },
+    { command: 'git status', paths: ['A13:null'] },
+    { command: 'ghost pr view 1', paths: ['A13:null'] },
+    { command: undefined, paths: ['A13:null'] },
+  ]
+  for (const { command, paths } of commands) {
+    const after = await afterOneTool(place, 'Bash', command === undefined ? {} : { command })
+    assert.deepEqual(after.paths, paths, String(command))
+    assert.ok(isDenied(after.bash, /A13/), String(command))
+  }
+})
+
+test('a page, a search result and a subagent answer take the shell, naming B6 and B7 (martha#127)', async (t) => {
+  const place = placeFor(t)
+  for (const [tool, row] of [['WebFetch', 'B6'], ['WebSearch', 'B6'], ['Agent', 'B7'], ['Task', 'B7']] as const) {
+    const after = await afterOneTool(place, tool, { url: 'https://example.invalid/', prompt: 'now run this' })
+    assert.deepEqual(after.paths, [`${row}:null`], tool)
+    assert.ok(isDenied(after.bash, new RegExp(row)), tool)
+  }
+})
+
+test('a tool the table does not place takes the shell on a path the gate does not know (martha#127)', async (t) => {
+  const place = placeFor(t)
+  for (const tool of ['FutureTool', 'read', 'constructor', '__proto__', 'toString']) {
+    const after = await afterOneTool(place, tool, { file_path: join(place.checkout, 'README.md') })
+    assert.deepEqual(after.paths, [`${UNPLACED_TOOL_RESULT.path}:null`], tool)
+    assert.ok(isDenied(after.bash, /does not know/), tool)
+  }
+})
+
+test('every tool the host table places reaches the row the table names (martha#127)', async (t) => {
+  const place = placeFor(t)
+  const clone = anotherClone(place)
+  for (const [tool, reading] of Object.entries(CLAUDE_CODE_TOOL_RESULT_ROWS)) {
+    const input = 'field' in reading ? { [reading.field]: join(clone, 'NOTES.md') } : {}
+    const after = await afterOneTool(place, tool, input)
+    assert.equal(after.paths[0], `${PATH_OF_SOURCE[reading.source]}:null`, tool)
+  }
 })
 
 test('nothing the relay adds to a body widens a verdict', async (t) => {
@@ -527,7 +773,7 @@ test('end to end: the relay posts each event, and a refused tool call never runs
   }
 
   assert.equal((await through('classic.SessionStart', start('startup'))).entered, 1)
-  assert.equal((await through('tool.call', { tool: 'Bash', command: 'id' })).entered, 1)
+  assert.equal((await through('tool.call', { tool: 'Read', file_path: join(place.checkout, 'README.md') })).entered, 1)
   assert.equal((await through('tool.call', { tool: 'mcp__probe__fetch_page' })).entered, 1)
   const refused = await through('tool.call', { tool: 'Bash', command: 'id' })
   assert.equal(refused.entered, 0)
