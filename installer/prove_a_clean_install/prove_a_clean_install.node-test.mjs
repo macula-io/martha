@@ -237,9 +237,9 @@ test('a member whose host was given a relay that differs from the installed one 
       }
     }
   })
-  assert.equal(result.passed, false, lines.join('\n'))
   const differs = new RegExp(`^FAIL start \\S+: .*differs from it in ${CHANGED_FILE.replaceAll('.', '\\.')}(;|,)`)
   assert.ok(lines.some((l) => differs.test(l)), `the start step names ${CHANGED_FILE} as the file that differs\n${lines.join('\n')}`)
+  assert.equal(result.passed, false, lines.join('\n'))
   nothingLeftOfTheCrew(result, 1, lines.join('\n'))
 })
 
@@ -258,8 +258,8 @@ test('a member whose host was given a true copy of the relay outside the run\'s 
       })
     }
   })
-  assert.equal(result.passed, false, lines.join('\n'))
   assert.ok(lines.some((l) => /^FAIL start \S+: .*no argument names a copy /.test(l)), `the start step refuses a copy outside the run's relay root\n${lines.join('\n')}`)
+  assert.equal(result.passed, false, lines.join('\n'))
   nothingLeftOfTheCrew(result, 1, lines.join('\n'))
 })
 
