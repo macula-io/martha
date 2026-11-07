@@ -19,12 +19,18 @@
 //      row that names it (B3, B5). A label only ever adds: it changes which row a
 //      refusal names, never whether the shell goes.
 //
-//   3. A READ OF THE OWNER-APPROVED TREE RECORDS NOTHING. The owner approved
-//      that exact tree to run as the owner (../refuse_launch_of_unapproved_config),
-//      so reading the same bytes grants nothing the approval does not. What is
-//      in that tree is the launcher's question to git, never the model's
-//      (`isInTheCheckoutTree`). Git history is not in it: the approval binds the
-//      tree, and commit messages are B5 even in the member's own checkout.
+//   3. A READ OF THE TREE THE MEMBER STARTED ON RECORDS NOTHING, and only
+//      while the checkout still holds that tree. The launcher reads it before
+//      the host starts (`started_on`); a read is judged against it, never
+//      against the live tree, so a `gh pr checkout` or a file another process
+//      writes mid-session is a stranger's (martha#127, #132). Where the
+//      checkout has config, that tree is the one the owner approved to run as
+//      the owner, so reading the same bytes grants nothing more. Where it has
+//      none, nothing was approved: whether a read of the start tree is then
+//      exempt is the owner's choice, open on martha#127. What is in the tree
+//      is the launcher's question to git, never the model's
+//      (`isInTheCheckoutTree`). Git history is not in it: commit messages are
+//      B5 even in the member's own checkout.
 //
 //   4. A READ THAT NAMES NO PLACE COUNTS. No path, a relative one, or one that
 //      is no text: the launcher cannot say what was read, so it was a stranger's.
@@ -33,6 +39,7 @@ import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cro
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import {
   isInTheCheckoutTree,
+  readCheckoutTree,
   type LaunchHost,
   type ReadSpan,
 } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
@@ -71,6 +78,8 @@ export interface ToolResult {
   readonly input: Readonly<Record<string, unknown>>
   readonly rows: ToolResultRows
   readonly launch: ApprovedLaunch
+  /** The checkout's tree as the launcher read it before the host started; `null` when it had none. */
+  readonly started_on: string | null
   readonly host: LaunchHost
 }
 
@@ -81,15 +90,17 @@ export function takeInToolResult(session: HostSession, result: ToolResult, binde
   return sourcesOf(reading, result).reduce((taken, source) => takeInTurn(taken, { source }, binder), session)
 }
 
-function sourcesOf(reading: ToolResultReading, { input, launch, host }: ToolResult): readonly TurnSource[] {
+function sourcesOf(reading: ToolResultReading, result: ToolResult): readonly TurnSource[] {
   if (reading.reads === 'a_source') return [reading.source]
-  const named = input[reading.field]
+  const named = result.input[reading.field]
   if (reading.reads === 'a_command') return [reading.source, ...labelsOf(named)]
-  return readOfTheApprovedTree(named, SPAN_OF[reading.reads], launch, host) ? [] : [reading.source]
+  return readOfTheApprovedTree(named, SPAN_OF[reading.reads], result) ? [] : [reading.source]
 }
 
-function readOfTheApprovedTree(path: unknown, span: ReadSpan, launch: ApprovedLaunch, host: LaunchHost): boolean {
-  return typeof path === 'string' && isInTheCheckoutTree(launch.launch_dir, launch.stop_dir, path, span, host)
+function readOfTheApprovedTree(path: unknown, span: ReadSpan, { launch, started_on, host }: ToolResult): boolean {
+  if (typeof path !== 'string' || started_on === null) return false
+  if (readCheckoutTree(launch.launch_dir, launch.stop_dir, host) !== started_on) return false
+  return isInTheCheckoutTree(launch.launch_dir, launch.stop_dir, path, span, host)
 }
 
 /** The rows a command's first words name. Only ever added to A13, never instead of it. */

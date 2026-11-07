@@ -403,8 +403,11 @@ The rules the seam keeps, and a host must not work around:
   one part of it from another; a first word of `gh` adds B3 and `git log`,
   `show`, `blame`, `reflog` or `shortlog` add B5, and a label never replaces
   A13. A tool the table does not name takes the shell. One read records
-  nothing: a file git puts in the owner-approved tree of the launch checkout,
-  since the owner approved that tree to run as the owner. After a member's
+  nothing: a file git puts in the tree the member started on, read before the
+  host started, while the checkout still holds that tree. With config, that is
+  the tree the owner approved to run as the owner. With none, nothing was
+  approved; whether that read is exempt is the owner's open choice on
+  martha#127. After a member's
   first command, nothing that executes or writes runs again until a fresh
   start; giving the shell back is martha#129.
 - **There is no release.** A member tainted once stays tainted through every
