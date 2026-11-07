@@ -94,6 +94,29 @@ test('a config dir that is a link is denied by its real path too: memory, CLAUDE
   }
 })
 
+test('a config dir whose projects folder is a link to another disk denies a real-path write into a project with no folder yet (#136 r=3)', (t) => {
+  const place = placeFor(t)
+  const disk = join(place.root, 'other-disk')
+  mkdirSync(join(disk, '-home-owner-work'), { recursive: true })
+  rmSync(join(place.config, 'projects'), { recursive: true, force: true })
+  symlinkSync(disk, join(place.config, 'projects'))
+  const places = placesFor(place)
+  // No folder for this project yet anywhere, so only the projects folder as it leads can catch it.
+  assertDenied(places, place.worktree, place.home, join(disk, '-home-owner-next', 'memory', 'MEMORY.md'), 'a project with no folder yet, by the real projects folder')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${join(realPathOf(disk))}/*/memory/**)`), 'the permission rules name where the projects folder leads')
+})
+
+test('a project\'s memory folder that is a link to a folder that does not exist yet is denied where it will lead (#136 r=3)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const notYet = join(place.root, 'not-yet-created', 'memory')
+  const project = join(place.config, 'projects', '-dangling')
+  mkdirSync(project)
+  symlinkSync(notYet, join(project, 'memory'))
+  assertDenied(places, place.worktree, place.home, join(notYet, 'MEMORY.md'), 'the folder the link will lead to')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(notYet)}/**)`), 'the permission rules name where a link with no target yet will lead')
+})
+
 test('the owner\'s CLAUDE.md and rules are denied, in the launcher\'s config dir and in the member\'s when it differs', (t) => {
   const place = placeFor(t)
   const places = placesFor(place)

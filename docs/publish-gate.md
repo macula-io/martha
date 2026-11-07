@@ -785,14 +785,18 @@ where it came from. Three things stand on it:
   the checkout into a memory folder and a config dir that is a link are caught.
   A project's memory folder that is itself a link is caught where it leads: at
   each write, every `projects/*/memory` that exists then is followed, so a link
-  a member makes during its session is caught too.
+  a member makes during its session is caught too, including one whose target
+  folder does not exist yet, which is read from the link itself. The projects
+  folder itself is followed the same way, so a config dir whose `projects` is a
+  link to another disk is caught for a project that has no folder yet.
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
-  each place the relay refuses, as named and by its real path, and for where each
-  memory folder that is a link leads at launch (one linked later is the relay's
-  alone), from the same function. They go into the carried
-  `--settings` copy, after the owner's approval was fingerprinted, or into a
-  file the launch writes when none is carried. This layer is for a later host on
+  each place the relay refuses, as named and by its real path, for the projects
+  folder as it leads, and for where each memory folder that is a link leads at
+  launch (one linked later is the relay's alone), from the same function. They go
+  into the carried `--settings` copy, after the owner's approval was
+  fingerprinted, or into a file the launch writes when none is carried. This
+  layer is for a later host on
   which the off switch stops holding; on the recorded host the switch holds, and
   nothing claims this layer was seen working.
 

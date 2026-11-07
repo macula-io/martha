@@ -30,7 +30,11 @@
 //      in the checkout into a memory folder, and a config dir that is a link,
 //      are caught. A project's memory folder that is itself a link is caught by
 //      where it leads: at each write, every `<root>/projects/*/memory` that
-//      exists then is followed to its real path, and that folder is denied too.
+//      exists then is followed to its real path, and that folder is denied too
+//      — including a link whose target does not exist yet, which is read from
+//      the link itself (martha#136 r=3). A config dir's `projects` folder that
+//      is a link to another disk is followed the same way, for a write by the
+//      real path into a project that has no folder yet (martha#136 r=3).
 //   4. WRITES, NOT READS. Only the tools that write a file are refused. Reading a
 //      memory file is not a path from a member to a later session.
 //
@@ -39,8 +43,8 @@
 // when a permission rule refuses its write. Nothing here relies on the publish
 // gate's hook firing for that pass, which runs as a fork (Pluto, martha#136 r=2).
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, normalize, relative, sep } from 'node:path'
+import { readdirSync, readFileSync, readlinkSync } from 'node:fs'
+import { dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
 import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves, FILE_ARGUMENTS, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
@@ -121,20 +125,42 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_fil
 /** Whether `path` is `folder` or inside it. */
 const within = (path: string, folder: string): boolean => path === folder || path.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`)
 
-/** Whether `path` lies in some project's memory folder under `root`. */
+/** The `projects` folder under a memory root as the host resolves it: it may itself be a link to another disk (martha#136 r=3). */
+const projectsOf = (root: string): string => realPathOf(join(root, PROJECTS))
+
+/** Whether `path` lies in some project's memory folder under `root`: the projects folder as spelled and as it leads. */
 function inProjectMemory(path: string, root: string): boolean {
-  const [projects, project, memory] = relative(root, path).split(sep)
-  return projects === PROJECTS && project !== undefined && project !== '' && project !== '..' && memory === MEMORY
+  return [join(root, PROJECTS), projectsOf(root)].some((folder) => {
+    const [project, memory] = relative(folder, path).split(sep)
+    return project !== undefined && project !== '' && project !== '..' && memory === MEMORY
+  })
 }
 
 /** A place as named and by its real path, links followed. */
 const spellingsOf = (place: string): string[] => unique([place, realPathOf(place)])
 
+/**
+ * Where a link leads: its target, resolved against the folder that holds the link
+ * and then as the host would resolve it, so a link to a folder that does not exist
+ * yet is still denied where it will write (martha#136 r=3); or undefined when
+ * `link` is not a link.
+ */
+function whereALinkLeads(link: string): string | undefined {
+  try {
+    return realPathOf(resolve(dirname(link), readlinkSync(link)))
+  } catch {
+    return undefined
+  }
+}
+
 /** Where each project's memory folder under `root` leads now, links followed: a folder that is a link is denied where it leads. */
 function projectMemoryLeadsTo(root: string): string[] {
   const projects = join(root, PROJECTS)
   try {
-    return readdirSync(projects).map((project) => realPathOf(join(projects, project, MEMORY)))
+    return readdirSync(projects).map((project) => {
+      const memory = join(projects, project, MEMORY)
+      return whereALinkLeads(memory) ?? realPathOf(memory)
+    })
   } catch {
     return []
   }
@@ -183,11 +209,14 @@ export function writesTheOwnersMemory(
  */
 export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
   const rootSpellings = places.memory_roots.flatMap(spellingsOf)
+  // A projects folder that is a link to another disk is named by where it leads too,
+  // so a write by the real path into a project with no folder yet is refused (martha#136 r=3).
+  const projectFolders = unique([...rootSpellings.map((root) => join(root, PROJECTS)), ...places.memory_roots.map(projectsOf)])
   const linkedAway = places.memory_roots
     .flatMap(projectMemoryLeadsTo)
     .filter((folder) => !rootSpellings.some((root) => inProjectMemory(folder, root)))
   const globs = new Set([
-    ...rootSpellings.map((root) => `${join(root, PROJECTS)}/*/${MEMORY}/**`),
+    ...projectFolders.map((folder) => `${folder}/*/${MEMORY}/**`),
     ...[...linkedAway, ...places.folders.flatMap(spellingsOf)].map((folder) => `${folder}/**`),
     ...places.files.flatMap(spellingsOf),
   ])
