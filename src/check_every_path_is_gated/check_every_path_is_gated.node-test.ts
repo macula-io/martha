@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { INBOUND_PATHS, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import {
   admitsLaunch,
   fingerprintOf,
@@ -16,7 +16,7 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
+import { ARGUMENT_PROBES, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
@@ -35,7 +35,7 @@ const gateRefuses = (path: string) =>
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 13 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 15 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 8 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
@@ -495,4 +495,47 @@ test('a gate that pins the config but not the checkout it runs is caught', () =>
 test('the allowed and refused mesh tools together are exactly the recorded tools, each once', () => {
   const decided = [...MESH_TOOLS_THAT_RUN, ...MESH_TOOLS_REFUSED].sort()
   assert.deepEqual(decided, recordedTools)
+})
+
+/** The registry's rows that name an argument gate: the words an owner hands the host through martha start. */
+const ARGUMENT_ROWS = INBOUND_PATHS.filter((path) => path.control.kind === 'refused-before-launch').map((path) => path.id)
+
+test('the owner\'s words to martha start are a row, and an argument gate stands on it', () => {
+  assert.deepEqual(ARGUMENT_ROWS, ['A15'])
+})
+
+test('an argument gate that passes every word to the host is not a control', () => {
+  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': () => true })
+  assert.deepEqual(gaps.map((gap) => gap.path), ARGUMENT_ROWS)
+  assert.match(gaps[0]?.why ?? '', /passes/)
+})
+
+test('an argument gate that refuses every word, none included, is caught too', () => {
+  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': () => false })
+  assert.deepEqual(gaps.map((gap) => gap.path), ARGUMENT_ROWS)
+  assert.match(gaps[0]?.why ?? '', /refuses no arguments at all/)
+})
+
+test('an argument gate that knows only one config switch is caught: one question right is not a control', () => {
+  const settings_only = (args: readonly string[]) => !args.includes('--settings')
+  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': settings_only })
+  assert.deepEqual(gaps.map((gap) => gap.path), ARGUMENT_ROWS)
+})
+
+test('a row naming an argument gate nobody built is a gap, by name', () => {
+  const invented: InboundPath = {
+    id: 'A97',
+    what: 'a planted path naming an argument gate that does not exist',
+    klass: 'delivered',
+    control: { kind: 'refused-before-launch', gate: 'nobody-built-this' as never },
+    attestation: 'none',
+  }
+  const gaps = gapsInGateCoverage([...INBOUND_PATHS, invented], gateRefuses)
+  assert.deepEqual(gaps, [{ path: 'A97', why: 'names an argument gate nobody has built: nobody-built-this' }])
+})
+
+test('the shipped argument gate answers every probe as the probe expects', () => {
+  for (const probe of ARGUMENT_PROBES) {
+    assert.equal(ARGUMENT_GATES['owner-arguments-load-no-config'](probe.args), probe.passes, probe.what)
+  }
 })

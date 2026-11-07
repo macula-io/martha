@@ -48,6 +48,18 @@ export const compareVersions = (a, b) => {
 }
 
 /**
+ * Refuses an answer without reading it. Its body is cancelled first, or its connection stays open behind the
+ * refusal (martha#112).
+ * @param {Response} response
+ * @param {string} message
+ * @returns {Promise<never>}
+ */
+async function refusedUnread (response, message) {
+  await response.body?.cancel()
+  return refuse(message)
+}
+
+/**
  * The body, refused once it passes `limit` bytes, whether or not the server said how long it is.
  * @param {Response} response
  * @param {number} limit
@@ -55,7 +67,7 @@ export const compareVersions = (a, b) => {
  */
 async function readCapped (response, limit, what) {
   const declared = Number(response.headers.get('content-length') ?? 0)
-  if (declared > limit) refuse(`${what} is ${declared} bytes, over the ${limit} a release may carry; refused`)
+  if (declared > limit) await refusedUnread(response, `${what} is ${declared} bytes, over the ${limit} a release may carry; refused`)
   /** @type {Buffer[]} */
   const chunks = []
   let total = 0
@@ -172,7 +184,7 @@ export function registry ({ image, base = `https://${image.split('/')[0]}`, fetc
     const headers = { authorization: `Bearer ${token}` }
     if (accept) headers['accept'] = accept
     const response = await ask(`${base}/v2/${name}/${path}`, { headers, redirect: 'follow' }, what)
-    if (!response.ok) refuse(`${what}: ${image} answered ${response.status}; refused`)
+    if (!response.ok) await refusedUnread(response, `${what}: ${image} answered ${response.status}; refused`)
     return response
   }
 
@@ -189,7 +201,7 @@ export function registry ({ image, base = `https://${image.split('/')[0]}`, fetc
     async authorize () {
       const what = `an anonymous pull token for ${name}`
       const response = await ask(`${base}/token?scope=repository:${name}:pull`, {}, what)
-      if (!response.ok) refuse(`${base} gave no anonymous pull token for ${name} (${response.status}); is the package public?`)
+      if (!response.ok) await refusedUnread(response, `${base} gave no anonymous pull token for ${name} (${response.status}); is the package public?`)
       token = parsed(await readCapped(response, LIMITS.manifestBytes, what), what).token ?? ''
       if (!token) refuse(`${base} gave no anonymous pull token for ${name}; refused`)
     },
@@ -199,7 +211,7 @@ export function registry ({ image, base = `https://${image.split('/')[0]}`, fetc
     // reads, so it is refused, and naming a version gets past it.
     async highestVersion () {
       const response = await get('tags/list?n=10000', '', 'the version list')
-      if (/rel="?next"?/.test(response.headers.get('link') ?? '')) refuse(`${image} lists more tags than one page; name a version`)
+      if (/rel="?next"?/.test(response.headers.get('link') ?? '')) await refusedUnread(response, `${image} lists more tags than one page; name a version`)
       const tags = parsed(await readCapped(response, LIMITS.tagListBytes, 'the version list'), 'the version list').tags ?? []
       const versions = (Array.isArray(tags) ? tags : []).filter(isVersion).sort(compareVersions)
       const highest = versions.at(-1)

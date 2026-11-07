@@ -1,18 +1,24 @@
 // Where a prompt came from (#41, Jupiter's r=1 findings 1 and 2): every origin
 // kind Claude Code stamps is recorded on its own inbound path, and only the
-// owner's own gestures on A10.
+// owner's own typing as the owner's (#51).
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import type { Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import {
+  OWNER_AT_THE_TERMINAL,
+  refuseExecutionAfterUngatedText,
+  type Session,
+} from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   arrivalOfPrompt,
   CLAUDE_CODE_PROMPT_ORIGINS,
   SOURCE_OF_AN_UNKNOWN_ORIGIN,
   undeclaredPromptOrigins,
+  whatAPromptCarries,
+  type PromptCarries,
 } from './name_the_source_of_a_prompt.ts'
 
 // Synthetic only: this repository is public.
@@ -24,14 +30,24 @@ const sessions = (): SessionRecordStore => {
   return { read: (id) => records.get(id), write: (id, session) => void records.set(id, session) }
 }
 
-/** The inbound path a prompt of this kind is recorded on, through the host's own take-in. */
-const pathOfKind = (kind: string): string | undefined =>
-  takeInTurn(beginSession(sessions(), 's-1'), arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, kind), bindNothing).gate.ingested[0]?.path
+/** A prompt the owner typed by hand: no command expanded into it, not written by the engine. */
+const TYPED: PromptCarries = whatAPromptCarries({})
+
+/** The record a prompt of this kind leaves, through the host's own take-in. */
+const recordOfKind = (kind: string, carries: PromptCarries = TYPED) =>
+  takeInTurn(beginSession(sessions(), 's-1'), arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, kind, carries), bindNothing).gate
+
+/** The inbound path a prompt of this kind is recorded on. */
+const pathOfKind = (kind: string, carries: PromptCarries = TYPED): string | undefined =>
+  recordOfKind(kind, carries).ingested[0]?.path
+
+const shellAllowedAfter = (kind: string, carries: PromptCarries = TYPED): boolean =>
+  refuseExecutionAfterUngatedText({ tool: 'Bash', session: recordOfKind(kind, carries), policy: { may_send_executable_text: [] } }).allow
 
 // The oracle, written out: what each kind is, as the engine documents it.
 const EXPECTED_PATH: Readonly<Record<string, string>> = {
-  composer: 'A10', // Enter at the terminal
-  'auto-continuation': 'A10', // a follow-up to the owner's own click
+  composer: 'A14', // Enter at the terminal
+  'auto-continuation': 'B7', // text the engine or a model wrote: an ultraplan's output, a resume prompt, a plan
   bridge: 'A6', // Remote Control, which also relays a Slack user, an email sender, a project member
   'slack-ping': 'A6', // grouped with peer messages by the engine itself
   sdk: 'A6', // whatever the driving program pipes in
@@ -53,29 +69,64 @@ test('every kind the declaration lists is recorded on the path it really came in
   for (const [kind, path] of Object.entries(EXPECTED_PATH)) assert.equal(pathOfKind(kind), path, kind)
 })
 
-test('a channel, a plugin, a schedule, a notification or another agent is never recorded as the owner\'s paste', () => {
-  const owners = new Set(['composer', 'auto-continuation'])
-  for (const kind of Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources).filter((kind) => !owners.has(kind))) {
+test('a channel, a plugin, a schedule, a notification, another agent or an auto-continuation is never the owner\'s', () => {
+  for (const kind of Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources).filter((kind) => kind !== 'composer')) {
     assert.notEqual(pathOfKind(kind), PATH_OF_SOURCE.owner_paste, kind)
+    assert.notEqual(pathOfKind(kind), PATH_OF_SOURCE.owner_typed, kind)
+    assert.equal(shellAllowedAfter(kind), false, kind)
+  }
+})
+
+// --- the owner's own typed turn (#51) ------------------------------------------
+
+test('a turn the owner typed is the owner\'s, and the member keeps its shell', () => {
+  assert.deepEqual(recordOfKind('composer').ingested, [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL }])
+  assert.equal(shellAllowedAfter('composer'), true)
+})
+
+test('a typed turn that carries a slash command or that the engine wrote itself is not the owner\'s typing', () => {
+  const notTyping: readonly PromptCarries[] = [
+    whatAPromptCarries({ command: 'review' }),
+    whatAPromptCarries({ command: { name: 'review', source: 'project' } }),
+    whatAPromptCarries({ isMeta: true }),
+    whatAPromptCarries({ command: 'review', isMeta: true }),
+  ]
+  for (const carries of notTyping) {
+    assert.equal(pathOfKind('composer', carries), PATH_OF_SOURCE.owner_paste, JSON.stringify(carries))
+    assert.equal(shellAllowedAfter('composer', carries), false, JSON.stringify(carries))
+  }
+})
+
+test('what a prompt carries fails closed: any command, and any meta mark other than false, counts', () => {
+  assert.deepEqual(whatAPromptCarries({}), { command: false, meta: false })
+  assert.deepEqual(whatAPromptCarries({ command: null, isMeta: false }), { command: false, meta: false })
+  for (const command of ['', 0, false, 'x', {}, []]) assert.equal(whatAPromptCarries({ command }).command, true, JSON.stringify(command))
+  for (const isMeta of [true, 1, 'yes', {}, null]) assert.equal(whatAPromptCarries({ isMeta }).meta, true, JSON.stringify(isMeta))
+})
+
+test('only the composer is the owner\'s typing: no other kind becomes it, typed by hand or not', () => {
+  for (const kind of [...Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources), 'Composer', 'composer ', 'human', 'a kind a later host adds']) {
+    if (kind === 'composer') continue
+    assert.notEqual(pathOfKind(kind), PATH_OF_SOURCE.owner_typed, kind)
   }
 })
 
 test('a kind no declaration lists fails closed: another session\'s message, never the owner\'s', () => {
   assert.equal(SOURCE_OF_AN_UNKNOWN_ORIGIN, 'cross_session')
   for (const kind of ['a kind a later host adds', 'human', 'toString', '__proto__', 'constructor', '']) {
-    assert.deepEqual(arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, kind), { source: 'cross_session' }, kind)
+    assert.deepEqual(arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, kind, TYPED), { source: 'cross_session' }, kind)
     assert.equal(pathOfKind(kind), 'A6', kind)
   }
 })
 
 test('the source comes from the kind alone: no arrival carries text, a sender or an identity', () => {
   for (const kind of [...Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources), 'a kind a later host adds']) {
-    const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, kind)
+    const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, kind, TYPED)
     assert.deepEqual(Object.keys(arrival), ['source'], kind)
   }
   // The envelope rule is never reached, so a pasted envelope cannot move a turn.
-  const typed = takeInTurn(beginSession(sessions(), 's-1'), arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, 'composer'), bindNothing)
-  assert.deepEqual(typed.gate.ingested, [{ path: 'A10', from_node_id: null }], PASTED_ENVELOPE)
+  const typed = takeInTurn(beginSession(sessions(), 's-1'), arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, 'composer', TYPED), bindNothing)
+  assert.deepEqual(typed.gate.ingested, [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL }], PASTED_ENVELOPE)
 })
 
 test('undeclaredPromptOrigins names each kind the host stamps that the declaration does not list', () => {

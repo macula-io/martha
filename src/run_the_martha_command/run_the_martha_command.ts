@@ -9,7 +9,8 @@
 //
 // What it says: a refusal, and every line an act tells the owner, goes to stderr prefixed `martha:`, as
 // martha-install does. Every line it shows has its terminal controls written out as escapes first (shownSafely),
-// since a path, a member's name or a kept approval may hold bytes a terminal would act on. `--version` prints the release's version on stdout; `init` prints the members it
+// since a path, a member's name or a kept approval may hold bytes a terminal would act on. An error no act
+// expected is shown the same way, as one refused line, never as Node's own trace. `--version` prints the release's version on stdout; `init` prints the members it
 // declared; `start` prints one line naming the member and its pid once it is up, then holds the terminal until
 // the member ends, and ends the way the member did. Exit 0 is done, 1 refused, 2 not a way the command is used.
 
@@ -41,7 +42,7 @@ export const USAGE = 'usage: martha init | martha approve | martha start <member
 export const SAID_BY = 'martha:'
 
 /** The directory under the XDG state home that holds Martha's state, one directory per project. */
-export const STATE_ROOT_NAME = 'martha'
+const STATE_ROOT_NAME = 'martha'
 
 /** The host the owner has installed, found on their PATH. */
 const CLAUDE = 'claude'
@@ -153,8 +154,11 @@ function actOf(argv: readonly string[]): { readonly act: string; readonly member
   return separator === '--' ? { act, member, args: rest } : undefined
 }
 
-/** What a terminal would act on rather than show: C0 and C1 controls, DEL, and the bidirectional overrides and isolates. */
-const TERMINAL_CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu
+/**
+ * What a terminal would act on rather than show: C0 and C1 controls, DEL, the bidirectional marks (left-to-right,
+ * right-to-left, the Arabic letter mark), overrides and isolates, and the line and paragraph separators.
+ */
+const TERMINAL_CONTROL = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu
 
 /** `line` with every terminal control written out as an escape, so nothing Martha shows can move, erase or reorder what the owner reads. */
 export function shownSafely(line: string): string {
@@ -174,6 +178,16 @@ const showingSafely = (io: CommandIo): CommandIo => ({
 /** Runs the command `argv` names; resolves to the status it ends with. */
 export async function runMarthaCommand(argv: readonly string[], unescaped: CommandIo): Promise<number> {
   const io = showingSafely(unescaped)
+  try {
+    return await runAct(argv, io)
+  } catch (error) {
+    // An error nothing expected still reaches the owner as one escaped line of Martha's, never as Node's own trace.
+    return refused(io, error instanceof Error ? error.message : String(error))
+  }
+}
+
+/** The act `argv` names, run with an io that shows every line safely. */
+async function runAct(argv: readonly string[], io: CommandIo): Promise<number> {
   const asked = actOf(argv)
   if (asked === undefined) {
     io.err(USAGE)

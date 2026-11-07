@@ -153,6 +153,20 @@ jobs:
         working-directory: installer
         run: ../node_modules/.bin/eslint . --max-warnings=0
 
+  # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
+  # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
+  # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the
+  # recording, never typed here), runs its own loader on the relay, and plants #104's line in a copy to prove it bites.
+  relay:
+    name: the relay loads in the recorded host
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: prove_the_relay_loads/prove_the_relay_loads.sh "${{ runner.temp }}/relay-loads"
+
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects
   # never runs, and the only sign is a failed run with no jobs, which nobody reads.
   # The release workflows run on a tag or by hand only, so this is where a broken
@@ -188,6 +202,14 @@ jobs:
   installer:
     name: installer
     runs-on: ubuntu-latest
+    # A last backstop, so a hang never holds a runner for GitHub's six hours
+    # (martha#112). The test script itself fails a hung test and a leaking file
+    # by name. Measured on 2026-11-07: the whole job took 10 to 16 s in the last
+    # four green runs on main that ran it and on PR 99 (npm ci from cache, tsc,
+    # npm test). Five minutes
+    # leaves room for one test running to the script's --test-timeout and an
+    # npm cache miss.
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: installer
