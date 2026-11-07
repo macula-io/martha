@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { REGULAR, EXECUTABLE, SYMLINK, GITLINK, treeTheRunMaySee, type BaseEntry, type LiveEntry } from './whose_tree.ts'
+import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { treeTheRunMaySee, type BaseEntry, type LiveEntry } from './whose_tree.ts'
+
+const [REGULAR, EXECUTABLE] = OWN_WRITE_MODES
+// git's modes for a symbolic link and a submodule: entries that are not a regular file.
+const SYMLINK = '120000'
+const GITLINK = '160000'
 
 const blob = (char: string) => char.repeat(40)
-const base = (path: string, id: string, mode = REGULAR): BaseEntry => ({ path, mode, blob: id })
-const file = (path: string, id: string, mode = REGULAR): LiveEntry => ({ path, regular: true, mode, blob: id })
-const own = (path: string, id: string, mode = REGULAR) => ({ path, blob: id, mode })
+const base = (path: string, id: string, mode: string = REGULAR): BaseEntry => ({ path, mode, blob: id })
+const file = (path: string, id: string, mode: string = REGULAR): LiveEntry => ({ path, regular: true, mode, blob: id })
+const own = (path: string, id: string, mode: string = REGULAR) => ({ path, blob: id, mode })
 
 test('a live tree equal to the base passes, and every file is copied', () => {
   const seen = treeTheRunMaySee({ base: [base('a.ts', blob('1')), base('b.ts', blob('2'), EXECUTABLE)], own_writes: [], live: [file('a.ts', blob('1')), file('b.ts', blob('2'), EXECUTABLE)] })

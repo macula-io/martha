@@ -8,14 +8,10 @@
 // a regular file, in the base or in the live tree, is refused: a symlink or a gitlink has no blob, and a symlink
 // can resolve to a file no rule looked at. A refusal names the path, so the owner can see what took the shell.
 
-/** The modes of a regular file, as git writes them. */
-export const REGULAR = '100644'
-export const EXECUTABLE = '100755'
-/** Modes that are not a regular file: never seen by a run. */
-export const SYMLINK = '120000'
-export const GITLINK = '160000'
+import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
-const REGULAR_MODES: ReadonlySet<string> = new Set([REGULAR, EXECUTABLE])
+/** The modes of a regular file, as git writes them: the only entries a run sees, as the only own writes. */
+const REGULAR_MODES: ReadonlySet<string> = new Set(OWN_WRITE_MODES)
 
 /** One entry of the base tree, as `ls-tree -r` lists it. */
 export interface BaseEntry {
