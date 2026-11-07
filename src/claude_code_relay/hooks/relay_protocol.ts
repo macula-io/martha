@@ -88,6 +88,33 @@ const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boo
 
 const isReason = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 
+/**
+ * The largest answer the relay sends the launcher for a tool call (martha#129, design step 4.3). The launcher compares
+ * the whole answer with the one a signed run's receipt builds, so it needs the answer itself; past this the relay
+ * sends the call without it, and the call records A13 rather than a body the launcher stops the member over
+ * (LARGEST_RELAY_BODY, in ../../launch_a_claude_code_member/serve_the_relay.ts, is 32 MiB for the whole body).
+ */
+export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
+
+/**
+ * A `tool_answered` body: the call, and the answer the host showed for it when that answer can cross the socket. An
+ * answer left out is one the launcher cannot compare, so nothing is exempt on it (martha#129): omitting it can only
+ * take the exemption away, never give it.
+ */
+export function answeredBody(session_id: string, call: unknown, answer: unknown): Readonly<Record<string, unknown>> {
+  const body: Record<string, unknown> = { session_id, call }
+  if (answer === undefined) return body
+  let text: string | undefined
+  try {
+    text = JSON.stringify(answer)
+  } catch {
+    // An answer that cannot be written down is one the launcher cannot compare either.
+    text = undefined
+  }
+  if (text !== undefined && text.length <= LARGEST_RELAYED_ANSWER) body['answer'] = answer
+  return body
+}
+
 /** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes. */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)

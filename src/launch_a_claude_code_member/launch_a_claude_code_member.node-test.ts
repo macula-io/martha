@@ -17,9 +17,10 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
-import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -37,7 +38,7 @@ import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_re
 import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
-import { RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
+import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -2468,7 +2469,7 @@ test('a martha run call the launcher allowed binds one run, served on its path, 
   const place = placeFor(t)
   const ran: string[] = []
   const receipts = receiptsInMemory()
-  const runs = signedRunsOf(receipts, async (name) => (ran.push(name), { output: Buffer.from(RUN_OUTPUT), status: 1 }))
+  const runs = signedRunsOf(receipts, async (name) => (ran.push(name), { output: Buffer.from(RUN_OUTPUT), status: 1 }), () => ['test'], CLAUDE_CODE_BASH_RESULT_SHAPES)
   const { relay } = answering(place, rowStreamsDirectory(place.rows), [], runs)
   const directory = makeRelayDirectory(join(place.relay_root, 'runs'))
   assert.ok(directory.made)
@@ -2492,7 +2493,7 @@ test('a martha run call the launcher allowed binds one run, served on its path, 
 test('a martha run call the launcher denied binds no run (martha#129)', async (t) => {
   const place = placeFor(t)
   const ran: string[] = []
-  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsOf(receiptsInMemory(), async (name) => (ran.push(name), { output: Buffer.alloc(0), status: 0 })))
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsOf(receiptsInMemory(), async (name) => (ran.push(name), { output: Buffer.alloc(0), status: 0 }), () => ['test'], CLAUDE_CODE_BASH_RESULT_SHAPES))
   await relay.answer('session_started', start('startup'))
   await relay.answer('tool_called', call('mcp__probe__fetch_page'))
   await relay.answer('tool_answered', call('mcp__probe__fetch_page'))
@@ -2504,4 +2505,124 @@ test('a martha run call the launcher denied binds no run (martha#129)', async (t
 test('a member launched without signed runs runs no shape (martha#129)', async (t) => {
   const { relay } = answering(placeFor(t))
   assert.deepEqual(await relay.run({ name: 'test' }), { refused: NO_SIGNED_RUNS })
+})
+
+// --- a signed run's answer keeps the shell (martha#129, design step 4) ---------------------------
+//
+// The exemption is judged where it is used: a `martha run test` the launcher allowed, a receipt kept for that very
+// call by a run, and the answer the host showed for it. What every test below asks is the same question the member
+// asks after its tests: does the next `Edit` run? A recorded `Bash` result takes the shell (martha#127), so an
+// `Edit` that is allowed is the proof that nothing was recorded.
+
+const SIGNED_NAME = 'test'
+const RUN_TOOL_USE_ID = 'toolu_run'
+
+/** The answer the pinned host shows for a run that ended with `status` and printed `output`. */
+const hostAnswerFor = (status: number, output: string): unknown => resultBuiltFrom(CLAUDE_CODE_BASH_RESULT_SHAPES, status, output)
+
+/** Signed runs over a fresh receipt store, on the names given, each run giving `ended` without running anything. */
+const signedRunsGiving = (ended: { output: string; status: number }, names: readonly string[] = [SIGNED_NAME]): SignedRuns =>
+  signedRunsOf(receiptsInMemory(), async () => ({ output: Buffer.from(ended.output), status: ended.status }), () => names, CLAUDE_CODE_BASH_RESULT_SHAPES)
+
+interface OneRun {
+  readonly command?: string
+  readonly tool_use_id?: string
+  readonly run_in_background?: unknown
+  readonly status?: number
+  readonly output?: string
+  readonly signed?: readonly string[]
+  /** The answer the host showed, when not the one the receipt builds. */
+  readonly answer?: unknown
+}
+
+const bashCall = (one: OneRun) =>
+  call('Bash', {
+    command: one.command ?? `${RUN_COMMAND_PREFIX}${SIGNED_NAME}`,
+    tool_use_id: one.tool_use_id ?? RUN_TOOL_USE_ID,
+    ...(one.run_in_background === undefined ? {} : { run_in_background: one.run_in_background }),
+  })
+
+/** One answered run: what it recorded, and whether an `Edit` still runs after it. */
+async function afterARunWasAnswered(place: Place, one: OneRun = {}): Promise<{ paths: string[]; edit: RelayReply; ran: Ran | Refused }> {
+  const status = one.status ?? 0
+  const output = one.output ?? RUN_OUTPUT
+  const { relay, rows } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsGiving({ output, status }, one.signed))
+  await relay.answer('session_started', start('startup'))
+  const bash = bashCall(one)
+  assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
+  const ran = await relay.run({ name: SIGNED_NAME })
+  assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer: one.answer ?? hostAnswerFor(status, output) }), TAKEN_REPLY)
+  return { paths: await recordedPaths(rows), edit: await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), ran }
+}
+
+test('a signed run whose answer is exactly the one its receipt builds keeps the shell, for exit 0 and for exit 1 (martha#129)', async (t) => {
+  for (const status of [0, 1]) {
+    const after = await afterARunWasAnswered(placeFor(t), { status })
+    assert.deepEqual(after.paths, [], `a status ${String(status)} run records nothing`)
+    assert.deepEqual(after.edit, ALLOW_REPLY, `and the Edit after a status ${String(status)} run runs`)
+  }
+})
+
+test('the same run with an answer one byte or one field off records A13, and the Edit after it is denied (martha#129)', async (t) => {
+  const correct = hostAnswerFor(0, RUN_OUTPUT) as { readonly result: Readonly<Record<string, unknown>>; readonly text: string }
+  const variants: readonly { readonly what: string; readonly answer: unknown }[] = [
+    { what: 'one extra byte of output', answer: { ...correct, text: `${correct.text}x`, result: { ...correct.result, stdout: `${String(correct.result['stdout'])}x` } } },
+    { what: 'one byte on stderr', answer: { ...correct, result: { ...correct.result, stderr: 'a stranger wrote here' } } },
+    { what: 'the output truncated', answer: { ...correct, text: correct.text.slice(0, -1) } },
+    { what: 'one extra key', answer: { ...correct, note: 'added by another hook' } },
+    { what: 'the error form of exit 1', answer: hostAnswerFor(1, RUN_OUTPUT) },
+  ]
+  for (const { what, answer } of variants) {
+    const after = await afterARunWasAnswered(placeFor(t), { answer })
+    assert.deepEqual(after.paths, ['A13:null'], `an answer with ${what} is not the one the run gave`)
+    assert.ok(isDenied(after.edit, /A13/), what)
+  }
+})
+
+test('only the exact command is a signed run: a prefix, a trailing space, a pipe or the script typed directly records A13 (martha#129)', async (t) => {
+  for (const command of [`cd . && martha run ${SIGNED_NAME}`, `martha run ${SIGNED_NAME} `, ` martha run ${SIGNED_NAME}`, `martha run ${SIGNED_NAME}; id`, 'npm test']) {
+    const after = await afterARunWasAnswered(placeFor(t), { command })
+    assert.deepEqual(after.paths, ['A13:null'], command)
+    assert.ok(isDenied(after.edit, /A13/), command)
+  }
+})
+
+test('a run asked for in the background never keeps the shell (martha#129)', async (t) => {
+  const after = await afterARunWasAnswered(placeFor(t), { run_in_background: true })
+  assert.deepEqual(after.paths, ['A13:null'])
+  assert.ok(isDenied(after.edit, /A13/))
+})
+
+test('a receipt binds one call: an answer under another tool_use_id takes none of it and records A13 (martha#129)', async (t) => {
+  const place = placeFor(t)
+  const answer = hostAnswerFor(0, RUN_OUTPUT)
+  const { relay, rows } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsGiving({ output: RUN_OUTPUT, status: 0 }))
+  await relay.answer('session_started', start('startup'))
+  assert.deepEqual(await relay.answer('tool_called', bashCall({})), ALLOW_REPLY)
+  assert.deepEqual(await relay.run({ name: SIGNED_NAME }), { ran: 1, status: 0, output: Buffer.from(RUN_OUTPUT).toString('base64') })
+  assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bashCall({ tool_use_id: 'toolu_other' }).call, answer }), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['A13:null'], 'the receipt is kept for the call the relay saw, not for another')
+  assert.ok(isDenied(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
+})
+
+test('a receipt is spent by the answer it was kept for: a second answer for that call records A13 (martha#129)', async (t) => {
+  const place = placeFor(t)
+  const answer = hostAnswerFor(0, RUN_OUTPUT)
+  const { relay, rows } = answering(place, rowStreamsDirectory(place.rows), [], signedRunsGiving({ output: RUN_OUTPUT, status: 0 }))
+  await relay.answer('session_started', start('startup'))
+  const bash = bashCall({})
+  assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
+  assert.deepEqual(await relay.run({ name: SIGNED_NAME }), { ran: 1, status: 0, output: Buffer.from(RUN_OUTPUT).toString('base64') })
+  assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer }), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), [], 'the first answer keeps the shell and records nothing')
+  assert.deepEqual(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer }), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['A13:null'], 'the receipt was spent, so the second answer has nothing to be built from')
+  assert.ok(isDenied(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
+})
+
+test('a name the owner did not sign is not exempt, even with a receipt and the recorded answer (martha#129)', async (t) => {
+  const after = await afterARunWasAnswered(placeFor(t), { signed: [] })
+  assert.deepEqual(after.paths, ['A13:null'])
+  assert.ok(isDenied(after.edit, /A13/))
 })

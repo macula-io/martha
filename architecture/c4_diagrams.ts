@@ -385,7 +385,7 @@ export function components(): Diagram {
   d.box({ kind: 'b-cmp', x: 32, y: 542, w: 300, h: 170, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
     desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
   d.box({ kind: 'b-cmp', x: 348, y: 542, w: 300, h: 170, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'take_in_a_tool_result', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'trust_only_framed_envelopes', 'keep_the_shell_for_an_owner_signed_command'], type: '[the shell gate]', code: true,
-    desc: ['What a host calls when a turn or a tool\'s', 'result (take_in_a_tool_result) came in,', 'and what may run after; a signed run\'s', 'result keeps the shell (keep_the_shell_', 'for_an_owner_signed_command)'] })
+    desc: ['A turn or a tool\'s result: take_in_a_turn,', 'take_in_a_tool_result, shell_tools,', 'answer_a_tool_call, refuse_execution_', 'after_ungated_text, trust_only_framed_', 'envelopes; a signed run keeps the shell:', 'keep_the_shell_for_an_owner_signed_command'] })
   d.box({ kind: 'b-cmp', x: 664, y: 542, w: 300, h: 170, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
     desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
 

@@ -28,6 +28,7 @@ import process from 'node:process'
 import type { StdioOptions } from 'node:child_process'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { DeclarationRefused, declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import {
   nodeIdsFor,
   PERMISSION_BITS,
@@ -45,6 +46,7 @@ import {
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
 import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -166,6 +168,15 @@ function approvedPlace(request: MemberStartRequest, approval: Approval | undefin
   }
 }
 
+/**
+ * The shape names the owner has signed for this project, as the kept list opens now; none when it does not open
+ * trusted, so a list that cannot be vouched for keeps no shell (martha#129).
+ */
+function signedShapeNames(state: MarthaState): readonly string[] {
+  const opened = openKeptCommandShapes(state, new Date())
+  return opened.trusted ? opened.shapes.map((shape) => shape.name) : []
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -188,6 +199,13 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     inherited: request.inherited,
     stdio: request.stdio,
     tellOwner: (line) => request.tellOwner(line),
-    signed_runs: signedRunsOf(receiptsInMemory(), (name) => runAKeptShape(request.state, request.root, request.inherited, name, new Date())),
+    signed_runs: signedRunsOf(
+      receiptsInMemory(),
+      (name) => runAKeptShape(request.state, request.root, request.inherited, name, new Date()),
+      // The names the owner has signed now, read when an answer is judged: a list replaced mid-session takes effect
+      // on the next run, and one that no longer opens leaves nothing to keep the shell for (martha#129).
+      () => signedShapeNames(request.state),
+      CLAUDE_CODE_BASH_RESULT_SHAPES,
+    ),
   })
 }

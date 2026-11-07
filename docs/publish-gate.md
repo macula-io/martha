@@ -990,11 +990,23 @@ receipt is this call's, and the whole result equals the one built from the
 receipt by the shape the pinned host was recorded giving. The recorded shape
 covers statuses `RECORDED_STATUSES` only: any other status records A13, named as
 unrecorded. An added key, a non-empty stderr, a truncation or a note is a
-different value. It is wired into the relay's answer to a finished call when
-#127's recording of `Bash` results lands; until then a `Bash` result records
-nothing on any path, so there is nothing to exempt.
+different value.
 
-## The check
+That decision is taken where a tool's result is recorded, in the relay's own
+answer to a finished call (`toolAnswered`, `src/launch_a_claude_member/`): the
+relay sends the host's answer with `tool_answered` (`answeredBody` in
+`src/claude_code_relay/hooks/relay_protocol.ts`, which leaves an answer past
+`LARGEST_RELAYED_ANSWER` out rather than send a body the launcher kills the
+member over), the launcher takes the call's receipt there whatever the answer,
+and a run whose answer is exactly the one its receipt builds records nothing,
+so the next `Edit` runs. Every other `Bash` result records A13 through #127's
+table as before: an answer left out for its size, a host that renders the
+result differently, a status no recording covers, and any command that is not
+exactly `martha run <name>` all record. The shapes are the pinned host's own
+answers, recorded under
+`src/claude_code_host/recorded_claude_code_bash_results.json` and read as
+`CLAUDE_CODE_BASH_RESULT_SHAPES`.
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding

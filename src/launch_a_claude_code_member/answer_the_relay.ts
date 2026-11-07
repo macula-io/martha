@@ -267,15 +267,28 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
-  // The receipt is single use: taken now, whatever the result (martha#129).
-  place.signed_runs?.callAnswered(call.input)
+  // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
+  const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
+  const unvouched = recheckBeforeRecording(place, session, call)
+  if (unvouched !== undefined) return stopMember(place, unvouched)
+  // A `martha run <name>` whose answer is exactly the one its receipt builds records nothing (martha#129): the run's
+  // output is text the owner vouched for, so the shell stays. Every other result records, as #127 leaves it.
+  if (kept !== undefined && kept.why === undefined) return answered(TAKEN)
+  return recordToolResult(state, session, call)
+}
+
+/** The own write kept and every recheck, or why the member is stopped (#132, #121, #122). */
+function recheckBeforeRecording(place: MemberRelayPlace, session: HostSession, call: { readonly tool: string; readonly input: Body }): string | undefined {
   // Kept before the recheck, so the write this call made is not taken for an outsider's (martha#132).
   const unkept = rememberOwnWriteOfCall(place.launch, { tool: call.tool, input: call.input, session: session.id, home: place.hookSettings.home }, thisMachine)
-  if (unkept !== undefined) return stopMember(place, unkept)
+  if (unkept !== undefined) return unkept
   const launched = recheckLaunchPassingOwnWrites(place.launch, thisMachine)
-  if (!launched.allow) return stopMember(place, launched.refusal)
-  const hooksOff = place.hookSettings.check()
-  if (hooksOff !== undefined) return stopMember(place, hooksOff)
+  return launched.allow ? place.hookSettings.check() : launched.refusal
+}
+
+/** What the call's result records: a mesh tool's answer, or the host's own result by #127's table. */
+async function recordToolResult(state: RelayState, session: HostSession, call: { readonly tool: string; readonly input: Body }): Promise<RelayReply> {
+  const { place } = state
   const taken = isMcpToolCall(call.tool)
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(

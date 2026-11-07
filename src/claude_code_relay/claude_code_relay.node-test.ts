@@ -18,7 +18,7 @@ import {
   type RelayEngine,
   type RelayHook,
 } from './hooks/register.ts'
-import { heardTaken, RELAY_DEADLINE_MS, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
+import { heardTaken, LARGEST_RELAYED_ANSWER, RELAY_DEADLINE_MS, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 type AnyHook = RelayHook<any, any>
 type AnyCatch = RelayCatch<any, any>
@@ -128,7 +128,7 @@ async function callThrough(fake: Fake) {
   return { answer, ran: calls }
 }
 
-test('the relay sends the engine fields unchanged: the start whole, the origin whole, the call whole', async () => {
+test('the relay sends the engine fields unchanged: the start whole, the origin whole, the call with its answer', async () => {
   const fake = fakeEngine(sayYes)
   const start = { session_id: SESSION, source: 'fork', transcript_path: '/t', hook_event_name: 'SessionStart' }
   const started = next<typeof start>({})
@@ -146,9 +146,28 @@ test('the relay sends the engine fields unchanged: the start whole, the origin w
       { url: `${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, body: start, socketPath: SOCKET },
       { url: `${RELAY_ORIGIN}${RELAY_PATHS.prompt_submitted}`, body: { session_id: SESSION, text: PROMPT.text, origin: PROMPT.origin }, socketPath: SOCKET },
       { url: `${RELAY_ORIGIN}${RELAY_PATHS.tool_called}`, body: { session_id: SESSION, call: CALL }, socketPath: SOCKET },
-      { url: `${RELAY_ORIGIN}${RELAY_PATHS.tool_answered}`, body: { session_id: SESSION, call: CALL }, socketPath: SOCKET },
+      // The answer goes with the call (martha#129): the launcher keeps the shell only when this is exactly the one
+      // a signed run's receipt builds, so the relay carries it unchanged and decides nothing about it.
+      { url: `${RELAY_ORIGIN}${RELAY_PATHS.tool_answered}`, body: { session_id: SESSION, call: CALL, answer: RESULT }, socketPath: SOCKET },
     ],
   )
+})
+
+test('an answer too big to send is left out of the tool_answered body, and the call records A13 rather than a body the launcher stops the member over (martha#129)', async () => {
+  const huge = { text: 'x'.repeat(LARGEST_RELAYED_ANSWER) }
+  const fake = fakeEngine(sayYes)
+  const { fn } = next<typeof CALL>(huge)
+  await hooksOfTheRelay().get('tool.call')?.hook(fake.$, CALL, fn)
+  const answered = fake.posted.filter(({ url }) => url.endsWith(RELAY_PATHS.tool_answered))
+  assert.equal(answered.length, 1)
+  assert.deepEqual(answered[0]?.body, { session_id: SESSION, call: CALL })
+  // An answer that cannot be written down is one the launcher cannot compare either.
+  const circular: Record<string, unknown> = {}
+  circular['self'] = circular
+  const alsoFake = fakeEngine(sayYes)
+  const { fn: alsoFn } = next<typeof CALL>(circular)
+  await hooksOfTheRelay().get('tool.call')?.hook(alsoFake.$, CALL, alsoFn)
+  assert.deepEqual(alsoFake.posted.filter(({ url }) => url.endsWith(RELAY_PATHS.tool_answered)).map(({ body }) => body), [{ session_id: SESSION, call: CALL }])
 })
 
 test('the relay sends a prompt\'s command and meta mark unchanged, so the launcher can tell typing from an expansion (#51)', async () => {
