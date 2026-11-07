@@ -21,17 +21,33 @@
 //   --import=<GUARD>     loads fail_a_test_file_that_leaves_something_running.ts
 //                        into each file's process (every_test_file_cleans_up.ts).
 //
+// Every package whose tests npm test runs (PACKAGES: the repository's and the
+// installer's, martha#112) passes all three; each imports GUARD by its path from
+// its own folder (guardFlagFrom).
+//
 // The timeout is defined once, in package.json's test script. Nothing restates
 // it: what needs it reads it from there (testRunBoundOf).
+
+import { posix } from 'node:path'
 
 import type { Manifest } from './declared_in_package_json.ts'
 
 export const TEST_SCRIPT = 'test'
 export const TIMEOUT_FLAG = '--test-timeout'
 export const FORCE_EXIT_FLAG = '--test-force-exit'
-/** The module every test file's process loads first, to fail the file for what it leaves running. */
-export const GUARD = './prove_the_core/fail_a_test_file_that_leaves_something_running.ts'
-export const GUARD_FLAG = `--import=${GUARD}`
+/** The module every test file's process loads first, to fail the file for what it leaves running, from the repository. */
+export const GUARD = 'prove_the_core/fail_a_test_file_that_leaves_something_running.ts'
+/**
+ * The flag that loads GUARD in the test script of the package in `folder` (a
+ * folder of the repository, '.' for the repository itself): each package's
+ * script runs from its own folder, so the path is the guard's from there.
+ */
+export const guardFlagFrom = (folder: string): string => {
+  const path = posix.relative(folder, GUARD)
+  return `--import=${path.startsWith('../') ? path : `./${path}`}`
+}
+/** The flag in the repository's own test script. */
+export const GUARD_FLAG = guardFlagFrom('.')
 
 /** The test a_test_that_hangs_holding_a_socket.ts holds forever. */
 export const HUNG_TEST_NAME = 'a test that waits forever holding a socket'
@@ -48,15 +64,16 @@ export const testRunFlagsOf = (manifest: Manifest): string[] =>
   wordsOf(manifest.scripts[TEST_SCRIPT] ?? '').filter((word) => word.startsWith('--test-') || word.startsWith('--import='))
 
 /**
- * Whether the test script bounds every test, ends every file's process and fails
- * a file that leaves something running, and with which flags (testRunFlagsOf).
+ * Whether the test script of the package in `folder` bounds every test, ends
+ * every file's process and fails a file that leaves something running, and with
+ * which flags (testRunFlagsOf).
  */
-export function testRunBoundOf(manifest: Manifest): TestRunBound {
+export function testRunBoundOf(manifest: Manifest, folder = '.'): TestRunBound {
   const script = manifest.scripts[TEST_SCRIPT]
   if (script === undefined) return { bounded: false, problems: [`package.json has no "${TEST_SCRIPT}" script`] }
   const words = wordsOf(script)
   const { timeouts, timeout_ms } = timeoutOf(words)
-  const problems = [...timeoutProblemsOf(timeouts, timeout_ms), ...exitAndGuardProblemsOf(words)]
+  const problems = [...timeoutProblemsOf(timeouts, timeout_ms), ...exitAndGuardProblemsOf(words, guardFlagFrom(folder))]
   if (problems.length > 0 || timeout_ms === undefined) return { bounded: false, problems }
   return { bounded: true, timeout_ms, flags: testRunFlagsOf(manifest) }
 }
@@ -79,11 +96,11 @@ const timeoutProblemsOf = (timeouts: readonly string[], timeout_ms: number | und
 ]
 
 /** What is wrong with the rest: no force-exit, or no guard that fails a file leaving something running. */
-const exitAndGuardProblemsOf = (words: readonly string[]): string[] => [
+const exitAndGuardProblemsOf = (words: readonly string[], guard_flag: string): string[] => [
   ...(words.includes(FORCE_EXIT_FLAG)
     ? []
     : [`the test script has no ${FORCE_EXIT_FLAG}, so a test file that holds a handle open never exits`]),
-  ...(words.includes(GUARD_FLAG)
+  ...(words.includes(guard_flag)
     ? []
-    : [`the test script has no ${GUARD_FLAG}, so a test file that leaves something running passes silently`]),
+    : [`the test script has no ${guard_flag}, so a test file that leaves something running passes silently`]),
 ]

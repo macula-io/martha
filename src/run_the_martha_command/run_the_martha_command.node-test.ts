@@ -13,10 +13,10 @@ import { test, type TestContext } from 'node:test'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { LAUNCH_RECORDS_PLACE, NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
+import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
-import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, STATE_ROOT_NAME, USAGE } from './run_the_martha_command.ts'
+import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, USAGE } from './run_the_martha_command.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -134,17 +134,14 @@ function marthaOnATerminal(place: Place, env: Readonly<Record<string, string>>, 
 }
 
 /**
- * A fake claude on the place's PATH that notes it ran, waits until the launcher has recorded its launch, then ends
- * with status 7. Ending before the record is written is the race martha#94 holds a member against; this test is
- * about the command, so the fake waits for the event rather than racing it.
+ * A fake claude on the place's PATH that notes it ran, then ends with status 7 at once. The launcher holds a member
+ * on a terminal until it has recorded its launch (martha#94), so ending at once is not a race.
  */
 function claudeThatEnds(place: Place, t: TestContext): { readonly ran: string; readonly env: Readonly<Record<string, string>> } {
   const bin = join(place.home, 'bin')
   mkdirSync(bin)
   const ran = join(place.home, 'ran')
-  const launches = join(place.home, 'state', STATE_ROOT_NAME, '*', LAUNCH_RECORDS_PLACE, '*')
-  const recorded = `until ls ${launches} >/dev/null 2>&1; do sleep 0.02; done`
-  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, recorded, 'exit 7', ''].join('\n'), { mode: 0o700 })
+  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, 'exit 7', ''].join('\n'), { mode: 0o700 })
   return { ran, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
 }
 
