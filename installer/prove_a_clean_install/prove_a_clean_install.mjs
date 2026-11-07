@@ -14,7 +14,8 @@
 // for every member, each on a terminal of its own (util-linux script), as start and approve run only on one. The
 // host is a stand-in `claude` written from the installed tree's own host_stand_in.ts: it answers the launcher's
 // questions, notes the arguments it was started with, and stays up. A member is up when `martha start` names it and
-// its pid, that pid is alive, and its host was started with the installed release's relay plugin. Each member is
+// its pid, that pid is alive, and its host was started with the launch's own copy of the installed release's relay
+// (martha#117), byte for byte its declared files. Each member is
 // then stopped, and its pid must end. Members never hand text to each other: the owner relays every hand-off
 // (martha#51), so there is nothing between them to check here. A cloud box is never started from here.
 //
@@ -29,7 +30,7 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
@@ -247,6 +248,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   const { newShortRelayRoot } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'short_relay_root.ts')
   const { RELAY_PLUGIN_DIR } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'launch_a_claude_code_member.ts')
   const { startedLine } = await fromTheRelease(installed, 'run_the_martha_command', 'run_the_martha_command.ts')
+  const { RELAY_FILES, RELAY_COPY_NAME } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'relay_copy.ts')
   const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string }> }} */ (await fromTheRelease(installed, 'declare_a_solo_crew', 'declare_a_solo_crew.ts'))
   running.relayRoot = newShortRelayRoot()
   const host = standInHost(join(work, 'host'), hostAnswers(), plant)
@@ -254,7 +256,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   await step(run, 'init', () => said(owner.run('init')))
   await step(run, 'approve', () => said(owner.onATerminal('approve')))
   for (const { name } of SOLO_MEMBERS) {
-    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, relay: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, running, signal: run.signal }))
+    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
   }
   for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member))
 }
@@ -359,9 +361,31 @@ export function startedLineSource (startedLine, name) {
 const startedPattern = (startedLine, name) => new RegExp(`^${startedLineSource(startedLine, name)}$`, 'm')
 
 /**
+ * The installed relay and how a launch copies it (martha#117): the host is given the launch's own read-only copy,
+ * `copyName` in a launch's folder under the run's relay `root`, holding the relay's declared `files`.
+ * @typedef {{ installed: string, files: readonly string[], copyName: string, root: string }} Relay
+ */
+
+/**
+ * Why `copy` is not a copy of the installed relay, or '' when it is: a launch's copy under the run's relay root,
+ * each declared file byte for byte the installed one.
+ * @param {string | undefined} copy
+ * @param {Relay} relay
+ */
+function notACopyOf (copy, { installed, files, copyName, root }) {
+  if (!copy) return `no argument names a copy ${copyName} under ${root}`
+  try {
+    const differs = files.filter((file) => !readFileSync(join(copy, file)).equals(readFileSync(join(installed, file))))
+    return differs.length ? `${copy} differs from it in ${differs.join(', ')}` : ''
+  } catch (error) {
+    return reason(error)
+  }
+}
+
+/**
  * `martha start <name>` on its terminal, kept in `running` at once; up once it names the member's pid, the pid is
- * alive and its host was started with the release's relay.
- * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, relay: string, running: Running, signal?: AbortSignal }} start
+ * alive and its host was started with a copy of the release's relay.
+ * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, relay: Relay, running: Running, signal?: AbortSignal }} start
  */
 async function startMember ({ owner, name, startedLine, host, relay, running, signal }) {
   const member = runningMember(name, owner.startOnATerminal('start', name))
@@ -371,9 +395,10 @@ async function startMember ({ owner, name, startedLine, host, relay, running, si
   member.pid = Number(named[1])
   const args = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
   if (!alive(member.pid)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
-  const at = args.indexOf(relay)
-  if (at < 1) throw new Error(`${name}'s host was not started with Martha's relay ${relay}: ${args.join(' ')}`)
-  return { value: undefined, detail: `${startedLine(name, member.pid)}, alive; its host was started with ${args[at - 1]} ${relay}` }
+  const at = args.findIndex((arg) => arg.startsWith(`${relay.root}${sep}`) && basename(arg) === relay.copyName)
+  const why = notACopyOf(args[at], relay)
+  if (at < 1 || why) throw new Error(`${name}'s host was not started with Martha's relay ${relay.installed}: ${why || 'it is its first argument'}; ${args.join(' ')}`)
+  return { value: undefined, detail: `${startedLine(name, member.pid)}, alive; its host was started with ${args[at - 1]} ${args[at]}, a copy of ${relay.installed}` }
 }
 
 /**

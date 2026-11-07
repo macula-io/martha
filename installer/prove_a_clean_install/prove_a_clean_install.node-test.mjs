@@ -65,11 +65,11 @@ const alive = (pid) => {
  */
 const nothingLeftOfTheCrew = ({ members, relayRoot }, named, said) => {
   const pids = members.filter(({ pid }) => pid > 0)
-  assert.ok(pids.length >= named, `at least ${named} members were named with a pid\n${said}`)
   const outlived = pids.filter(({ pid }) => alive(pid))
   for (const { pid } of outlived) killItsGroup(pid)
   const rootLeft = relayRoot !== '' && existsSync(relayRoot)
-  if (rootLeft) rmSync(relayRoot, { recursive: true, force: true })
+  if (rootLeft) removeEvenReadOnly(relayRoot)
+  assert.ok(pids.length >= named, `at least ${named} members were named with a pid\n${said}`)
   assert.deepEqual(outlived.map(({ name, pid }) => `${name}, pid ${pid}`), [], `the tear-down ended every member\n${said}`)
   assert.notEqual(relayRoot, '', `the run made a relay root\n${said}`)
   assert.equal(rootLeft, false, `the tear-down removed the relay root ${relayRoot}\n${said}`)
