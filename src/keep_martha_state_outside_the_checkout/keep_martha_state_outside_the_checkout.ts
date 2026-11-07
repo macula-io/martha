@@ -111,7 +111,7 @@ export function readStateFile(path: string): { readonly text: string } | Refused
 }
 
 /** Writes a state file whole: under a staging name, then renamed into place. */
-function keepStateFile(state: MarthaState, name: string, text: string): void {
+export function keepStateFile(state: MarthaState, name: string, text: string): void {
   const staged = join(state.directory, `${STAGING_PREFIX}${randomUUID()}`)
   fs.writeFileSync(staged, text, { mode: STATE_FILE_MODE, flag: 'wx' })
   fs.chmodSync(staged, STATE_FILE_MODE)
