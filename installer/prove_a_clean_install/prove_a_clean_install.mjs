@@ -83,8 +83,10 @@ class StepFailed extends Error {}
  *   atTearDown?: (registry: Awaited<ReturnType<typeof serveRegistry>>) => void,
  *   host?: (script: string[]) => string[],
  *   relay?: (dir: string) => string,
- *   hostArgs?: (args: string[]) => string[]
+ *   hostArgs?: (args: string[]) => string[],
+ *   answersFor?: (pid: number, alive: boolean) => boolean
  * }} Plant
+ * answersFor: whether a pid still answers, given whether it does; a test plants a late reap with it.
  */
 
 /**
@@ -259,7 +261,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   for (const { name } of SOLO_MEMBERS) {
     await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, plant, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
   }
-  for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member))
+  for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member, plant))
 }
 
 /** @param {string} word */
@@ -330,14 +332,20 @@ function said (ran) {
   return { value: undefined, detail: text.split('\n').at(-1) ?? '' }
 }
 
-/** @param {number} pid */
-function alive (pid) {
+/**
+ * Whether a member's `pid` still answers kill(pid, 0); an unreaped one still does. Every look at a member's pid goes
+ * through here, so a test's planted late reap (Plant.answersFor) is seen by each of them.
+ * @param {number} pid
+ * @param {Plant} plant
+ */
+function answers (pid, plant) {
+  let signalled = true
   try {
     process.kill(pid, 0)
-    return true
   } catch {
-    return false
+    signalled = false
   }
+  return plant.answersFor?.(pid, signalled) ?? signalled
 }
 
 /** @param {string} text */
@@ -396,7 +404,7 @@ async function startMember ({ owner, name, startedLine, host, plant, relay, runn
   member.pid = Number(named[1])
   const noted = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
   const args = plant.hostArgs?.(noted) ?? noted
-  if (!alive(member.pid)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
+  if (!answers(member.pid, plant)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
   const at = args.findIndex((arg) => arg.startsWith(`${relay.root}${sep}`) && basename(arg) === relay.copyName)
   const why = notACopyOf(args[at], relay)
   if (at < 1 || why) throw new Error(`${name}'s host was not started with Martha's relay ${relay.installed}: ${why || 'it is its first argument'}; ${args.join(' ')}`)
@@ -449,15 +457,31 @@ async function waitFor (what, found, member, signal) {
 const endOf = (member) => Promise.race([member.exited, delay(MEMBER_WAIT_MS, '', { ref: false })])
 
 /**
+ * Whether `pid` has ended within MEMBER_WAIT_MS. A killed process still answers kill(pid, 0) until it is reaped, and
+ * its `martha start` can end before that happens, so one look straight after it ended can find it still there.
+ * @param {number} pid
+ * @param {Plant} plant
+ */
+async function endsInTime (pid, plant) {
+  const deadline = Date.now() + MEMBER_WAIT_MS
+  while (answers(pid, plant)) {
+    if (Date.now() > deadline) return false
+    await delay(POLL_MS)
+  }
+  return true
+}
+
+/**
  * Stops a member as its owner would, by signalling its process group, and checks that it and its `martha start` end.
  * @param {Member} member
+ * @param {Plant} plant
  */
-async function stopMember (member) {
+async function stopMember (member, plant) {
   if (member.ended) throw new Error(`${member.name} had already ended (${member.ended})`)
   process.kill(-member.pid, 'SIGTERM')
   const ended = await endOf(member)
   if (!ended) throw new Error(`martha start for ${member.name} did not end within ${MEMBER_WAIT_MS} ms`)
-  if (alive(member.pid)) throw new Error(`${member.name}, pid ${member.pid}, is still alive`)
+  if (!await endsInTime(member.pid, plant)) throw new Error(`${member.name}, pid ${member.pid}, is still alive after ${MEMBER_WAIT_MS} ms`)
   return { value: undefined, detail: `pid ${member.pid} ended; martha start ended ${ended}` }
 }
 
@@ -471,8 +495,9 @@ async function stopMember (member) {
 async function tearDown (log, { work, registry, relayRoot, members }, plant) {
   try {
     await step({ log }, 'tear down', async () => {
-      const refusals = [...await killEveryMember(members), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
-      if (refusals.length) throw new Error(refusals.join('; '))
+      const refusals = [...await killEveryMember(members, plant), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
+      const root = relayRoot ? `; relay root ${relayRoot}` : ''
+      if (refusals.length) throw new Error(`${refusals.join('; ')}${root}`)
       const crew = members.length ? `${members.length} members ended, ` : ''
       const relay = relayRoot ? `, relay root ${relayRoot} removed` : ''
       return { value: undefined, detail: `${crew}${registry ? 'registry stopped, ' : ''}${work ? 'box removed' : 'no box was made'}${relay}` }
@@ -486,15 +511,16 @@ async function tearDown (log, { work, registry, relayRoot, members }, plant) {
 /**
  * Every member still running is killed with its process group, and its `martha start` with it.
  * @param {Member[]} members
+ * @param {Plant} plant
  * @returns {Promise<string[]>} which did not end, if any
  */
-async function killEveryMember (members) {
+async function killEveryMember (members, plant) {
   const refusals = []
   for (const member of members) {
     member.child.stdin?.end()
     if (!member.ended) killEvenIfGone(member)
     if (!member.ended && !await endOf(member)) refusals.push(`martha start for ${member.name} did not end`)
-    if (member.pid && alive(member.pid)) refusals.push(`${member.name}, pid ${member.pid}, is still alive`)
+    if (member.pid && !await endsInTime(member.pid, plant)) refusals.push(`${member.name}, pid ${member.pid}, is still alive after ${MEMBER_WAIT_MS} ms`)
   }
   return refusals
 }
