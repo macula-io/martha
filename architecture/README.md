@@ -77,7 +77,7 @@ fall behind the code.
 | `run_the_martha_command` | The four acts, and the words they are used with: a refusal on stderr names the command that fixes it, and the exit status says which kind it was. |
 | `declare_a_solo_crew`, `declare_crew` | Reads `.crew/crew.json` once into typed settings, and writes it only where there is none. `who_may_act` holds the mode's table. |
 | `approve_a_checkouts_config` | Names what would start code, asks on the owner's own terminal, and keeps the fingerprint it was given. |
-| `start_a_member` | Refuses no terminal, a switch it does not pass, an unknown name and a stale approval; then names the approval it starts on. |
+| `start_a_member`, `pass_only_switches_that_load_no_config` | Refuses no terminal, an unknown name and a stale approval; then names the approval it starts on. `pass_only_switches_that_load_no_config` is what the owner's `--` words pass: an allow-list of the switches that load no config, code or permission, and any other word is refused by name. |
 | `launch_a_claude_code_member` | The places in Martha's state, the approved snapshot, the launch record, and the host's command and arguments. |
 | `refuse_launch_of_unapproved_config` | Fingerprints the config and the tree at start, and allows only what was approved; `refuse_code_a_checkout_runs_itself` closes a checkout's own scripts. |
 | `keep_martha_state_outside_the_checkout` | One directory per project, named by a hash of its path; `row_streams_directory` appends rows as files. |
