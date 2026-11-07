@@ -12,7 +12,7 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, ownWritesKeptIn, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   decideLaunch,
@@ -21,7 +21,7 @@ import {
   type ApprovedLaunch,
   type LaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { allOwnWrites, appendOwnWrite, OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { OWN_WRITE_MODES, type OwnWrites } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
@@ -75,7 +75,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
   const launch: ApprovedLaunch = {
     ...place,
     approved_fingerprints: [fingerprintOf(started)],
-    since_approval: { approved: started, member: MEMBER, state, launch_id: LAUNCH },
+    since_approval: { approved: started, member: MEMBER, own_writes: ownWritesKeptIn(state), launch_id: LAUNCH },
   }
   const stops: string[] = []
   const relay = memberRelay({
@@ -108,6 +108,7 @@ async function wrote(place: Checkout, path: string, content: string, on_disk = c
 }
 
 const blobOf = (place: Checkout, path: string): string => git(place.checkout, 'hash-object', '--', path)
+const allOwnWrites = (state: MarthaState): OwnWrites => ownWritesKeptIn(state).all()
 
 const MOVED = (paths: string): string =>
   `The checkout changed since the owner approved it, and not by this member's own file writes: ${paths}. ` +
@@ -213,7 +214,7 @@ test("another launch's record of the same bytes does not pass a path", async (t)
     launch: 'another-launch',
     recorded_at: new Date().toISOString(),
   }
-  assert.equal(appendOwnWrite(place.state, elsewhere), undefined)
+  assert.equal(ownWritesKeptIn(place.state).append(elsewhere), undefined)
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('outsider.txt')))
 })
 
@@ -281,6 +282,6 @@ test('a start refusal for a checkout the owner has not approved says how to appr
   assert.ok(!decision.allow)
   assert.equal(
     decision.refusal,
-    "This coding tool is not started here: the checkout holds config that starts code by itself (.mcp.json), and the owner has not approved this config with this checkout's files. Run martha approve, read what it shows, and answer yes.",
+    `This coding tool is not started here: the checkout holds config that starts code by itself (.mcp.json), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprintOf(place.approved)}). Run martha approve, read what it shows, and answer yes.`,
   )
 })

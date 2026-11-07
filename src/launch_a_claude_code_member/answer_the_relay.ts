@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
+// | tool_answered (the same call, after it ran) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -37,9 +37,10 @@ import type { ToolNames } from '../host_contract/host_contract.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { ALLOW, TAKEN, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
@@ -218,7 +219,10 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
-  const launched = recheckLaunch(place.launch, thisMachine)
+  // Kept before the recheck, so the write this call made is not taken for an outsider's (martha#132).
+  const unkept = rememberOwnWriteOfCall(place.launch, { tool: call.tool, input: call.input, session: session.id }, thisMachine)
+  if (unkept !== undefined) return stopMember(place, unkept)
+  const launched = recheckLaunchPassingOwnWrites(place.launch, thisMachine)
   if (!launched.allow) return stopMember(place, launched.refusal)
   if (!isMcpToolCall(call.tool)) return answered(TAKEN)
   const why = await keep(state, takeInTurn(session, { source: 'mcp_result' }, place.binder))

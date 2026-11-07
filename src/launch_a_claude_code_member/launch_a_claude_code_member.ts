@@ -398,6 +398,7 @@ async function servedRelay(
       launch_dir: launch.place.launch_dir,
       stop_dir: launch.place.stop_dir,
       approved_fingerprints: launch.place.approved_fingerprints,
+      ...(launch.place.since_approval === undefined ? {} : { since_approval: launch.place.since_approval }),
     },
     policy: launch.policy,
     names: { ownNameOf: ownNameOfCalledTool },
