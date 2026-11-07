@@ -56,7 +56,7 @@ export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string }
 
 /** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
 /** The directory inside Martha's state that holds the launcher's launch records. */
-export const LAUNCH_RECORDS_PLACE = 'launches'
+const LAUNCH_RECORDS_PLACE = 'launches'
 
 const STATE_PLACES = ['rows', LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers'] as const
 
