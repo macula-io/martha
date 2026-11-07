@@ -82,7 +82,8 @@ class StepFailed extends Error {}
  *   onDisk?: (on: OnDisk) => void,
  *   atTearDown?: (registry: Awaited<ReturnType<typeof serveRegistry>>) => void,
  *   host?: (script: string[]) => string[],
- *   relay?: (dir: string) => string
+ *   relay?: (dir: string) => string,
+ *   hostArgs?: (args: string[]) => string[]
  * }} Plant
  */
 
@@ -256,7 +257,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   await step(run, 'init', () => said(owner.run('init')))
   await step(run, 'approve', () => said(owner.onATerminal('approve')))
   for (const { name } of SOLO_MEMBERS) {
-    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
+    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, plant, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
   }
   for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member))
 }
@@ -385,15 +386,16 @@ function notACopyOf (copy, { installed, files, copyName, root }) {
 /**
  * `martha start <name>` on its terminal, kept in `running` at once; up once it names the member's pid, the pid is
  * alive and its host was started with a copy of the release's relay.
- * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, relay: Relay, running: Running, signal?: AbortSignal }} start
+ * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, plant: Plant, relay: Relay, running: Running, signal?: AbortSignal }} start
  */
-async function startMember ({ owner, name, startedLine, host, relay, running, signal }) {
+async function startMember ({ owner, name, startedLine, host, plant, relay, running, signal }) {
   const member = runningMember(name, owner.startOnATerminal('start', name))
   running.members.push(member)
   const started = startedPattern(startedLine, name)
   const named = await waitFor(`${name} to be named started`, () => member.said.replace(TERMINAL_LINE_END, '\n').match(started), member, signal)
   member.pid = Number(named[1])
-  const args = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
+  const noted = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
+  const args = plant.hostArgs?.(noted) ?? noted
   if (!alive(member.pid)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
   const at = args.findIndex((arg) => arg.startsWith(`${relay.root}${sep}`) && basename(arg) === relay.copyName)
   const why = notACopyOf(args[at], relay)

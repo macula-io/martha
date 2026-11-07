@@ -3,10 +3,10 @@
 // passed or was refused.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +21,9 @@ const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string
 // The line `martha start` prints once a member is up, as the committed tree makes it; computed for the same reason.
 const COMMAND = fileURLToPath(new URL('../../src/run_the_martha_command/run_the_martha_command.ts', import.meta.url))
 const { startedLine } = /** @type {{ startedLine: (member: string, pid: string) => string }} */ (await import(COMMAND))
+// The relay's declared files and the name of a launch's copy of them (martha#117), computed for the same reason.
+const RELAY_COPY = fileURLToPath(new URL('../../src/launch_a_claude_code_member/relay_copy.ts', import.meta.url))
+const { RELAY_FILES, RELAY_COPY_NAME } = /** @type {{ RELAY_FILES: readonly string[], RELAY_COPY_NAME: string }} */ (await import(RELAY_COPY))
 // A command run that hangs fails here instead of stalling the suite to its own timeout.
 const COMMAND_TIMEOUT_MS = 50_000
 // The mode a planted defect gives the release: writable by its owner, which a placed release never is.
@@ -200,6 +203,63 @@ test('a member whose host was not started with the installed release\'s relay fa
   assert.ok(lines.some((l) => l.includes('ok tear down:')), lines.join('\n'))
   assert.ok(!existsSync(result.box), 'the box is gone')
   // The first member came up before its relay was found wrong, so only the tear-down can end it.
+  nothingLeftOfTheCrew(result, 1, lines.join('\n'))
+})
+
+/**
+ * The relay's declared files, copied from `from` into `to`, each written plainly so the copy is easy to remove.
+ * @param {string} from
+ * @param {string} to
+ */
+const copyTheRelayFiles = (from, to) => {
+  for (const file of RELAY_FILES) {
+    mkdirSync(dirname(join(to, file)), { recursive: true })
+    writeFileSync(join(to, file), readFileSync(join(from, file)))
+  }
+}
+
+// The relay file the one-byte plant changes: the last declared one.
+const CHANGED_FILE = String(RELAY_FILES.at(-1))
+
+test('a member whose host was given a relay that differs from the installed one by one byte fails its start step, naming the file', async (t) => {
+  const elsewhere = join(scratch(t), 'installed-relay')
+  /** @type {string[]} */
+  const lines = []
+  const result = await proveACleanInstall({
+    log: (line) => lines.push(line),
+    plant: {
+      relay: (dir) => {
+        copyTheRelayFiles(dir, elsewhere)
+        const bytes = readFileSync(join(elsewhere, CHANGED_FILE))
+        bytes[0] = (bytes[0] ?? 0) ^ 1
+        writeFileSync(join(elsewhere, CHANGED_FILE), bytes)
+        return elsewhere
+      }
+    }
+  })
+  assert.equal(result.passed, false, lines.join('\n'))
+  const differs = new RegExp(`^FAIL start \\S+: .*differs from it in ${CHANGED_FILE.replaceAll('.', '\\.')}(;|,)`)
+  assert.ok(lines.some((l) => differs.test(l)), `the start step names ${CHANGED_FILE} as the file that differs\n${lines.join('\n')}`)
+  nothingLeftOfTheCrew(result, 1, lines.join('\n'))
+})
+
+test('a member whose host was given a true copy of the relay outside the run\'s relay root fails its start step', async (t) => {
+  const outside = join(scratch(t), RELAY_COPY_NAME)
+  /** @type {string[]} */
+  const lines = []
+  const result = await proveACleanInstall({
+    log: (line) => lines.push(line),
+    plant: {
+      // The launch's own copy, swapped in the noted arguments for an identical one that is not under the relay root.
+      hostArgs: (args) => args.map((arg) => {
+        if (basename(arg) !== RELAY_COPY_NAME || !existsSync(arg)) return arg
+        if (!existsSync(outside)) copyTheRelayFiles(arg, outside)
+        return outside
+      })
+    }
+  })
+  assert.equal(result.passed, false, lines.join('\n'))
+  assert.ok(lines.some((l) => /^FAIL start \S+: .*no argument names a copy /.test(l)), `the start step refuses a copy outside the run's relay root\n${lines.join('\n')}`)
   nothingLeftOfTheCrew(result, 1, lines.join('\n'))
 })
 
