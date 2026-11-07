@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+// The martha command (martha#98). Everything it does is in src/run_the_martha_command.
+import process from 'node:process'
+import { ioOfThisProcess, runMarthaCommand } from '../src/run_the_martha_command/run_the_martha_command.ts'
+
+process.exitCode = await runMarthaCommand(process.argv.slice(2), ioOfThisProcess)
