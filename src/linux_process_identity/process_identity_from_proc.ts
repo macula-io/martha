@@ -16,6 +16,13 @@
 // itself hold spaces or parentheses, so the fields are counted from the last
 // closing parenthesis. Where there is no /proc (another kernel), every process
 // reads as absent and the binder binds nobody.
+//
+// `lookupOf` is the same read for a caller that must act on the answer rather
+// than only compare it (martha#124): binding nobody is safe on a read that
+// failed, and removing a directory is not. So a lookup says which of three
+// things it found -- the process a pid holds now, that this kernel no longer
+// holds the pid, or that it could not say and why -- and only the second is
+// ever proof that a process is gone.
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -24,6 +31,25 @@ import type { Processes } from '../host_contract/host_contract.ts'
 
 /** The part of the contract this file provides. */
 export type ProcessIdentities = Pick<Processes, 'identityOf'>
+
+/** A process a pid holds: its pid, and when it started, boot included. */
+export interface ProcessIdentity {
+  readonly pid: number
+  readonly process_started_at: string
+}
+
+/**
+ * What a lookup found: the process a pid holds now; that the kernel no longer
+ * holds the pid; or that this kernel could not say, and why. A caller that
+ * removes something must treat 'unknown' as alive, never as gone.
+ */
+export type ProcessLookup =
+  | { readonly found: 'held'; readonly identity: ProcessIdentity }
+  | { readonly found: 'gone' }
+  | { readonly found: 'unknown'; readonly why: string }
+
+/** The part of the contract this file provides, and the lookup beside it. */
+export type ProcessLookups = ProcessIdentities & { readonly lookupOf: (pid: number) => ProcessLookup }
 
 /** The start time's place among the fields that follow the command name (field 3 onwards). */
 const START_TIME_AFTER_COMMAND = 22 - 3
@@ -35,23 +61,38 @@ const BOOT_ID = join('sys', 'kernel', 'random', 'boot_id')
 const BOOT_ID_FORM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Process identities under a /proc root; the live kernel's are `linuxProcessIdentities`. */
-export function procProcessIdentities(proc_root: string): ProcessIdentities {
+export function procProcessIdentities(proc_root: string): ProcessLookups {
+  const lookupOf = (pid: number): ProcessLookup => {
+    if (!Number.isSafeInteger(pid) || pid <= 0) return { found: 'unknown', why: `${pid} is no pid` }
+
+    const boot = bootOrWhy(proc_root)
+    if ('why' in boot) return { found: 'unknown', why: boot.why }
+
+    const stat_path = join(proc_root, String(pid), 'stat')
+    const stat = textOrWhy(stat_path)
+    if ('code' in stat) {
+      // The kernel keeps no pid it has no directory for: that one is proof.
+      // Any other failure -- EMFILE, EACCES, EPERM -- is this process failing
+      // to read, not the process having ended (#124).
+      return stat.code === 'ENOENT' ? { found: 'gone' } : { found: 'unknown', why: `${stat_path} could not be read (${stat.code})` }
+    }
+
+    const ticks = startTimeIn(stat.text)
+    if (ticks === null) return { found: 'unknown', why: `${stat_path} is no stat line` }
+    return { found: 'held', identity: { pid, process_started_at: `${boot.boot}/${ticks}` } }
+  }
+
   return {
-    identityOf(pid) {
-      if (!Number.isSafeInteger(pid) || pid <= 0) return null
-
-      const boot = bootOf(proc_root)
-      const stat = textOf(join(proc_root, String(pid), 'stat'))
-      if (boot === null || stat === undefined) return null
-
-      const ticks = startTimeIn(stat)
-      return ticks === null ? null : `${boot}/${ticks}`
+    identityOf: (pid) => {
+      const lookup = lookupOf(pid)
+      return lookup.found === 'held' ? lookup.identity.process_started_at : null
     },
+    lookupOf,
   }
 }
 
 /** The live kernel's process identities. */
-export const linuxProcessIdentities: ProcessIdentities = procProcessIdentities('/proc')
+export const linuxProcessIdentities: ProcessLookups = procProcessIdentities('/proc')
 
 /** The start time in one /proc/<pid>/stat line, or null when the line is not one. */
 export function startTimeIn(stat: string): string | null {
@@ -62,15 +103,18 @@ export function startTimeIn(stat: string): string | null {
   return start_time !== undefined && /^\d+$/.test(start_time) ? start_time : null
 }
 
-function bootOf(proc_root: string): string | null {
-  const boot = textOf(join(proc_root, BOOT_ID))?.trim()
-  return boot !== undefined && BOOT_ID_FORM.test(boot) ? boot : null
+function bootOrWhy(proc_root: string): { readonly boot: string } | { readonly why: string } {
+  const path = join(proc_root, BOOT_ID)
+  const read = textOrWhy(path)
+  if ('code' in read) return { why: `${path} could not be read (${read.code})` }
+  const boot = read.text.trim()
+  return BOOT_ID_FORM.test(boot) ? { boot } : { why: `${path} holds no boot id` }
 }
 
-function textOf(path: string): string | undefined {
+function textOrWhy(path: string): { readonly text: string } | { readonly code: string } {
   try {
-    return readFileSync(path, 'utf8')
-  } catch {
-    return undefined
+    return { text: readFileSync(path, 'utf8') }
+  } catch (error) {
+    return { code: (error as NodeJS.ErrnoException).code ?? String(error) }
   }
 }

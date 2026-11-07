@@ -22,6 +22,7 @@ import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../
 import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
+import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
@@ -37,6 +38,7 @@ import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
+import { LAUNCHER_RECORD_NAME, type LaunchRecord } from './leftover_relay_directories.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
@@ -1374,6 +1376,11 @@ test('a launcher killed hard leaves its directory behind, and the next launch ta
 
   const [leftover] = readdirSync(place.relay_root) as [string]
   assert.ok(leftover !== undefined, 'a launch keeps its directory in the relay root')
+  // The record holds both processes, so a sweep waits for the member as well as
+  // the launcher: a member can outlive a launcher killed hard (#124).
+  const launchRecord = JSON.parse(readFileSync(join(place.relay_root, leftover, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord
+  assert.equal(linuxProcessIdentities.lookupOf(launchRecord.launcher.pid).found, 'held', 'the launcher the record names is this one')
+  assert.equal(launchRecord.member === undefined ? 'none' : linuxProcessIdentities.lookupOf(launchRecord.member.pid).found, 'held', 'and the member it names is the one running')
 
   // SIGKILL runs none of the launcher's own cleanup: what it made stays, and so
   // does its member, which the launcher's handlers would have killed.
@@ -1381,8 +1388,13 @@ test('a launcher killed hard leaves its directory behind, and the next launch ta
   assert.equal(await firstEnded, 'SIGKILL')
   await killGroupsCarrying(place.relay_root)
   assert.deepEqual(readdirSync(place.relay_root), [leftover], 'a launcher killed hard leaves its directory behind')
+  // The read-only copy (#117) refuses a plain removal, which is why the sweep
+  // and the teardown open the folders first. Asked of the copy itself: a refused
+  // removal of the whole directory takes whatever it reaches before it fails,
+  // and that would be the record the sweep needs, in the order this filesystem
+  // happens to list them.
   assert.throws(
-    () => rmSync(join(place.relay_root, leftover), { recursive: true }),
+    () => rmSync(join(place.relay_root, leftover, relayCopy.RELAY_COPY_NAME), { recursive: true }),
     'the read-only relay copy (#117) refuses a plain removal',
   )
 

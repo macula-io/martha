@@ -116,7 +116,7 @@ import {
 } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
-import { recordTheLauncher, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
+import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
@@ -483,11 +483,37 @@ async function startedMember(
   })
   const start = await memberStartOf(launch.command, spawned, job, child.pid, record)
   if ('refusal' in start) {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-    await removeWhatTheLaunchMade(made)
+    await endTheLaunch(child, made)
     return `${NOT_STARTED}: ${start.refusal}`
   }
+  const memberError = await recordTheStartedMember(relayDirectory.directory, start.pid, child, made)
+  if (memberError !== undefined) return memberError
   return { child, pid: start.pid, recorded: start.recorded, launchRecords }
+}
+
+/**
+ * Adds the started member to the launch directory's record, so a sweep keeps it
+ * while either the launcher or the member lives; or ends the launch and says why.
+ * A member holds that directory as much as its launcher does: it can outlive a
+ * launcher killed hard, and its host still loads the relay from that copy
+ * (leftover_relay_directories.ts).
+ */
+async function recordTheStartedMember(
+  directory: string,
+  member: number,
+  child: ChildProcess,
+  made: LaunchMade,
+): Promise<string | undefined> {
+  const recorded = recordTheMember(directory, member)
+  if (recorded === undefined) return undefined
+  await endTheLaunch(child, made)
+  return `${NOT_STARTED}: ${recorded}`
+}
+
+/** Kills the member's process if it still runs, and removes everything the launch made. */
+async function endTheLaunch(child: ChildProcess, made: LaunchMade): Promise<void> {
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  await removeWhatTheLaunchMade(made)
 }
 
 /**
