@@ -27,8 +27,14 @@ for (const make of DIAGRAMS) {
   })
 }
 
-test('the model is a Context and a Container diagram', () => {
+// What the shared C4 gate asks of this repository (macula-io/macula-ci-images,
+// .github/workflows/c4-model.yml): a Context and a Component diagram for a repository that
+// builds an executable, and a Container diagram too because this one keeps architecture/README.md,
+// each shown by a README. The gate reads the files; this reads the generator, so a box deleted
+// here fails before the gate has to say so.
+test('the model is a Context, a Component and a Container diagram, and the gate asks for each', () => {
   const files = DIAGRAMS.map((make) => make().file)
-  assert.ok(files.some((f) => f.includes('context')), 'no context diagram')
-  assert.ok(files.some((f) => f.includes('container')), 'no container diagram')
+  for (const kind of ['context', 'component', 'container']) {
+    assert.ok(files.some((f) => f.includes(kind)), `no ${kind} diagram in the generator`)
+  }
 })
