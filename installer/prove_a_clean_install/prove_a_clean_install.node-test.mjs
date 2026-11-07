@@ -97,7 +97,7 @@ const leftAsLogged = (said) => ({
     const pid = said.match(new RegExp(`^ok start \\S+: ${startedLineSource(startedLine, name)},`, 'm'))?.[1]
     return pid === undefined ? [] : [{ name, pid: Number(pid) }]
   }),
-  relayRoot: said.match(/^ok tear down: .*relay root (\S+) removed/m)?.[1] ?? ''
+  relayRoot: said.match(/^(?:ok|FAIL) tear down: .*relay root (\S+)/m)?.[1] ?? ''
 })
 
 /** @param {import('node:test').TestContext} t */
@@ -259,6 +259,41 @@ test('a member whose host was given a true copy of the relay outside the run\'s 
     }
   })
   assert.ok(lines.some((l) => /^FAIL start \S+: .*no argument names a copy /.test(l)), `the start step refuses a copy outside the run's relay root\n${lines.join('\n')}`)
+  assert.equal(result.passed, false, lines.join('\n'))
+  nothingLeftOfTheCrew(result, 1, lines.join('\n'))
+})
+
+// How many looks a planted late reap answers for a pid that has already ended.
+const LATE_LOOKS = 3
+
+/** A late reap: each ended pid still answers for its first LATE_LOOKS looks, as an unreaped one does. */
+const aLateReap = () => {
+  /** @type {Map<number, number>} */
+  const looks = new Map()
+  return (/** @type {number} */ pid, /** @type {boolean} */ answers) => {
+    if (answers) return true
+    const seen = looks.get(pid) ?? 0
+    looks.set(pid, seen + 1)
+    return seen < LATE_LOOKS
+  }
+}
+
+test('a stopped member whose pid is reaped late is waited for, not refused', async () => {
+  /** @type {string[]} */
+  const lines = []
+  const result = await proveACleanInstall({ log: (line) => lines.push(line), plant: { answersFor: aLateReap() } })
+  for (const { name } of SOLO_MEMBERS) {
+    assert.ok(lines.some((l) => l.startsWith(`ok stop ${name}:`)), `the stop step waits for ${name}'s late reap\n${lines.join('\n')}`)
+  }
+  assert.equal(result.passed, true, lines.join('\n'))
+  nothingLeftOfTheCrew(result, SOLO_MEMBERS.length, lines.join('\n'))
+})
+
+test('a member the tear-down kills whose pid is reaped late is waited for, and the tear-down passes', async () => {
+  /** @type {string[]} */
+  const lines = []
+  const result = await proveACleanInstall({ log: (line) => lines.push(line), plant: { relay: (dir) => `${dir}-elsewhere`, answersFor: aLateReap() } })
+  assert.ok(lines.some((l) => l.startsWith('ok tear down:')), `the tear-down waits for the late reap\n${lines.join('\n')}`)
   assert.equal(result.passed, false, lines.join('\n'))
   nothingLeftOfTheCrew(result, 1, lines.join('\n'))
 })
