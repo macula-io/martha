@@ -64,7 +64,7 @@ test('a session that took in a stranger may not run a shell, this turn or the ne
   const first = denied(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch, host: thisMachine }))
   assert.match(first, /nothing executes/i)
 
-  const nextTurn = takeInTurn(tainted, { source: 'mesh_read' }, bindNothing)
+  const nextTurn = takeInTurn(tainted, { source: 'mcp_result' }, bindNothing)
   denied(answerToolCall({ names, tool: 'Bash', session: nextTurn, policy, launch, host: thisMachine }))
 })
 

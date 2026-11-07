@@ -24,6 +24,8 @@ import { basename, delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { EMPTY_DIRECTORY_MODE } from './empty_directory.ts'
@@ -78,6 +80,12 @@ interface Fixture {
   /** What a member types, as one sh script. */
   readonly member_commands: string
 }
+
+/** The owner's environment, and managed settings in a folder of the test's own, never the machine's (martha#121). */
+const ownersSettings = (place: Fixture) => ({
+  inherited: place.owner_env,
+  managed_settings: { ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed-settings') },
+})
 
 function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   const home = mkdtempSync(join(tmpdir(), 'martha-checkout-runs-'))
@@ -163,8 +171,11 @@ function ownerEnvironment(home: string, checkout: string, direnv: Direnv | undef
   mkdirSync(direnv_config)
   // direnv matches the .envrc's real path against the prefix: a TMPDIR behind a link (macOS) needs the real one (martha#79).
   writeFileSync(join(direnv_config, 'direnv.toml'), `[whitelist]\nprefix = [${JSON.stringify(realpathSync(home))}]\n`)
+  // The launcher reads the owner's Claude Code settings: give it an empty config folder of the test's own, and no plugin folder from the developer's shell (martha#121).
+  const { [PLUGIN_DIRS_VARIABLE]: _developers, ...owners } = process.env
   return {
-    ...process.env,
+    ...owners,
+    CLAUDE_CONFIG_DIR: join(home, 'claude-config'),
     PATH: direnv === undefined ? process.env.PATH : `${dirname(direnv.path)}${delimiter}${process.env.PATH ?? ''}`,
     DIRENV_CONFIG: direnv_config,
     DIRENV_DISABLE: '0',
@@ -258,7 +269,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       places: { rows: closed('rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers') },
       command: member,
       args: [],
-      inherited: place.owner_env,
+      ...ownersSettings(place),
       stdio: 'ignore',
       tellOwner: (line) => void lines.push(line),
     })

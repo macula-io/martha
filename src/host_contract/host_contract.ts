@@ -269,7 +269,6 @@ export type TurnSource =
   | 'owner_typed'
   | 'server_instructions'
   | 'checkout_run'
-  | 'mesh_read'
   | 'mcp_result'
   | 'gh'
   | 'checkout_file'

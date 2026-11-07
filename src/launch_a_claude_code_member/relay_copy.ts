@@ -124,8 +124,25 @@ function writeTheCopy(plugin_dir: string, files: ReadonlyMap<string, Buffer>): v
 
 function openUpFolders(directory: string): void {
   if (lstatOrUndefined(directory)?.isDirectory() !== true) return
-  chmodSync(directory, OWNER_WRITABLE_DIRECTORY)
-  for (const name of readdirSync(directory)) openUpFolders(join(directory, name))
+  // A folder can go between the check and either call below: a launcher that is
+  // tearing this tree down at the same time (#124), whose sweep may meet it. What
+  // is already gone needs no opening, and no other error is swallowed.
+  try {
+    chmodSync(directory, OWNER_WRITABLE_DIRECTORY)
+  } catch (error) {
+    if (codeOf(error) === 'ENOENT') return
+    throw error
+  }
+  for (const name of namesIn(directory)) openUpFolders(join(directory, name))
+}
+
+function namesIn(directory: string): readonly string[] {
+  try {
+    return readdirSync(directory)
+  } catch (error) {
+    if (codeOf(error) === 'ENOENT') return []
+    throw error
+  }
 }
 
 function lstatOrUndefined(path: string): ReturnType<typeof lstatSync> | undefined {
