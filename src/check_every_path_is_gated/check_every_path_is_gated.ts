@@ -27,7 +27,8 @@
 // does not name — and it must admit a rostered member, so a gate that refuses
 // everything is caught too.
 
-import { ARGUMENT_GATES, DELIVERY_GATES, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
@@ -479,4 +480,34 @@ function deliveryGateGap(name: string, gate: DeliveryGate | undefined): string |
   }
 
   return undefined
+}
+
+/**
+ * Rows that claim the shell gate while nothing the host records ever reaches
+ * them (martha#121). The shell gate refuses only what the session's record
+ * holds, so a row whose path no recording ever produces is a promise the gate
+ * never keeps. `recorded` is every path a host's production code recorded
+ * when driven with every event it declares: an adapter's own test drives it
+ * (../launch_a_claude_code_member for Claude Code) and hands the paths here.
+ *
+ * A row the registry declares is no turn source (an inheritance, a forgery the
+ * host never reports) is not asked to be recorded; such a row that a recording
+ * does reach is a gap too, since the declaration is then false.
+ */
+export function shellGateRowsNothingRecords(
+  recorded: readonly string[],
+  paths: readonly InboundPath[] = INBOUND_PATHS,
+  not_turn_sources: readonly string[] = REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES,
+): readonly Gap[] {
+  const reached = new Set(recorded)
+  const gaps: Gap[] = []
+  for (const path of paths) {
+    const declared_none = not_turn_sources.includes(path.id)
+    if (declared_none && reached.has(path.id)) {
+      gaps.push({ path: path.id, why: 'is declared no turn source, and a host records it' })
+    } else if (path.control.kind === 'shell-gate' && !declared_none && !reached.has(path.id)) {
+      gaps.push({ path: path.id, why: 'claims the shell gate, and nothing the host records ever reaches it' })
+    }
+  }
+  return gaps
 }
