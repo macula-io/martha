@@ -1,0 +1,48 @@
+# Host drift (martha#139): the committed recording of the Claude Code host is of the version members run, npm's
+# `latest` release, and that version's code still reads as recorded. Any difference fails, the version alone
+# included, naming the field.
+#
+# When it runs: daily, by hand, on every push to main, and on PRs that touch the recording, its readers or this
+# check. Not on every PR: a release is an event in nobody's change, and it must not turn every open PR red. A PR that
+# touches src/claude_code_host/** for another reason will go red the day a release lands; that is meant, since a
+# change to a reader is proven on the host members run. THE FIX IS A RE-RECORD, NOT A RETRY:
+#   npm run record:claude-code-host -- <claude binary> <version>
+# then a PR with whatever the named fields call for. prove_the_recorded_host_is_current.sh says how.
+#
+# A failed scheduled or main run stays red, and that is the whole signal: it names the versions and the fields that
+# differ, and the Supervisor routes the re-record. The job opens no issue and writes nothing: its token is read-only.
+#
+# That the check can fail at all is proven on every PR, with no npm, by ci.yml's `drift-bites` job.
+
+name: host drift
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/claude_code_host/**'
+      - 'src/record_claude_code_host/**'
+      - 'prove_the_recorded_host_is_current/**'
+      - '.github/workflows/host-drift.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: the recording is of the host members run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: the recording matches npm's latest Claude Code
+        run: prove_the_recorded_host_is_current/prove_the_recorded_host_is_current.sh "${{ runner.temp }}/host-drift"
