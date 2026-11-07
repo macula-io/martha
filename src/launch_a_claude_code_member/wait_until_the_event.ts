@@ -20,8 +20,20 @@ export const POLL_MS = 20
  * for as a diagnostic, and says it again whenever what it is watching changes.
  * `watching` is that state — what the owner's terminal has printed so far — so a
  * hang leaves the last thing it saw in the log.
+ *
+ * `cannotHappen` says why the event can no longer come, once something has
+ * ruled it out: a launcher that has refused will never say its member stopped.
+ * The wait then fails at once with that reason (martha#94), instead of hanging
+ * to the harness timeout. The event is looked at first, so a wait whose event
+ * has happened returns.
  */
-export async function until(what: string, holds: () => boolean, t: TestContext, watching?: () => string): Promise<void> {
+export async function until(
+  what: string,
+  holds: () => boolean,
+  t: TestContext,
+  watching?: () => string,
+  cannotHappen?: () => string | undefined,
+): Promise<void> {
   let said = ''
   const say = (): void => {
     const seen = watching?.() ?? ''
@@ -32,6 +44,8 @@ export async function until(what: string, holds: () => boolean, t: TestContext, 
   }
   say()
   while (!holds()) {
+    const ruledOut = cannotHappen?.()
+    if (ruledOut !== undefined) throw new Error(`${what} cannot happen: ${ruledOut}`)
     if (t.signal.aborted) throw new Error(`timed out waiting for ${what}`)
     await new Promise((resolve) => setTimeout(resolve, POLL_MS))
     say()

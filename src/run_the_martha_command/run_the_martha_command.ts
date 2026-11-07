@@ -41,7 +41,7 @@ export const USAGE = 'usage: martha init | martha approve | martha start <member
 export const SAID_BY = 'martha:'
 
 /** The directory under the XDG state home that holds Martha's state, one directory per project. */
-export const STATE_ROOT_NAME = 'martha'
+const STATE_ROOT_NAME = 'martha'
 
 /** The host the owner has installed, found on their PATH. */
 const CLAUDE = 'claude'
