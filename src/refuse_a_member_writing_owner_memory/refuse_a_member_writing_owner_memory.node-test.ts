@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import {
   FILE_WRITING_TOOLS,
   MEMORY_DIRECTORY_KEY,
@@ -70,7 +71,7 @@ test('a project\'s memory folder that is itself a link is denied where it leads,
   assertDenied(places, place.worktree, place.home, join(elsewhere, 'a.md'), 'the folder the memory link leads to')
   symlinkSync(project, join(place.worktree, 'lnk'))
   assertDenied(places, place.worktree, place.home, 'lnk/memory/b.md', 'a checkout link to the project, then the memory link')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${elsewhere}/**)`), 'the permission rules name where a linked memory folder leads')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(elsewhere)}/**)`), 'the permission rules name where a linked memory folder leads')
 })
 
 test('a config dir that is a link is denied by its real path too: memory, CLAUDE.md and rules/ (#136 r=2)', (t) => {
@@ -85,7 +86,10 @@ test('a config dir that is a link is denied by its real path too: memory, CLAUDE
   assertDenied(places, place.worktree, place.home, join(real, 'CLAUDE.md'), 'CLAUDE.md, by the real config dir')
   assertDenied(places, place.worktree, place.home, join(real, 'rules', 'deploy.md'), 'rules/, by the real config dir')
   const rules = memoryDenyRules(places)
-  for (const rule of [`Write(/${join(real, 'projects')}/*/memory/**)`, `Write(/${join(real, 'rules')}/**)`, `Write(/${join(real, 'CLAUDE.md')})`]) {
+  // Where the link leads, as the host resolves it: the scratch root a test runs in
+  // is itself reached through a link on macOS and in the suite's long-TMPDIR run (martha#79).
+  const leads = realPathOf(real)
+  for (const rule of [`Write(/${join(leads, 'projects')}/*/memory/**)`, `Write(/${join(leads, 'rules')}/**)`, `Write(/${join(leads, 'CLAUDE.md')})`]) {
     assert.ok(rules.includes(rule), `${rule} in ${rules.join(' ')}`)
   }
 })
@@ -139,8 +143,14 @@ test('the permission rules name the same places the gate denies, a Write and an 
   const override = join(place.root, 'cowork-memory')
   const places = placesFor(place, { [MEMORY_FOLDER_OVERRIDE]: override })
   const rules = memoryDenyRules(places)
-  const places_named = places.memory_roots.length + places.folders.length + places.files.length
-  assert.equal(rules.length, 2 * places_named)
+  // A place reached through a link is named twice, as spelled and as it leads
+  // (martha#79), so the count is not fixed: each rule is a Write, and the same
+  // Edit, of one place.
+  assert.deepEqual(
+    rules.filter((rule) => rule.startsWith('Edit(/')).map((rule) => rule.replace(/^Edit/, 'Write')),
+    rules.filter((rule) => rule.startsWith('Write(/')),
+    'every rule comes as a Write and an Edit of the same place',
+  )
   assert.ok(rules.includes(`Write(/${join(place.config, 'projects')}/*/memory/**)`), rules.join(' '))
   assert.ok(rules.includes(`Edit(/${override}/**)`), rules.join(' '))
   assert.ok(rules.includes(`Write(/${join(place.config, 'CLAUDE.md')})`), rules.join(' '))
