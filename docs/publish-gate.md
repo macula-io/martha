@@ -585,6 +585,27 @@ martha#24): that process could already rewrite the session records, the
 launch records and the row store. A secret held only by the relay would not
 close it: anything this user runs can read the host's environment and memory.
 
+**The owner's typed turn keeps the shell (A14, martha#51).** Claude Code's
+engine stamps a turn typed at the member's own terminal `composer`, where it
+queues the turn and where no hook may set it. The owner ruled that this stamp is
+host-attested, so the turn is recorded on A14 with the owner's mark, and the
+shell gate admits that mark there and nowhere else. The owner is the root of the
+policy, not an entry in it. What is not the owner's typing stays unattributed
+and still takes the shell away:
+
+- a typed turn that carries a slash command (text the engine expanded from a
+  command file, which a checkout can plant) or the engine's meta mark: A10;
+- `auto-continuation`, which is text the engine or a model wrote after the
+  owner's click (an approved ultraplan's cloud output, the usage-limit resume
+  prompt, an accepted plan): B7. A member refuses after one until a fresh
+  start;
+- every other origin, an unknown kind and a text-only turn that says it is the
+  owner's.
+
+A typed turn never clears a stranger's text already in the session. A paste is
+the owner's act: whatever the owner pastes is the owner's. Claiming `composer`
+on the socket is T13, and A14 does not widen it.
+
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the
 launcher handing a turn to the model or registering a tool (no slice does

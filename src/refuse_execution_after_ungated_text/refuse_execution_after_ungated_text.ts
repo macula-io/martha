@@ -35,6 +35,14 @@ export interface Ingestion {
   readonly from_node_id: string | null
 }
 
+/**
+ * The identity a turn the owner typed at the member's own terminal carries
+ * (martha#51). It is not a node id, so no signed list can name it, and it is
+ * admitted only on the row the host's engine attests (`host-engine`): the owner
+ * signs the policy, so the owner is its root, not an entry in it.
+ */
+export const OWNER_AT_THE_TERMINAL = 'the-owner-at-the-terminal'
+
 /** Who may send text that a session is allowed to act on. Node ids only. */
 export interface Policy {
   readonly may_send_executable_text: readonly string[]
@@ -87,7 +95,9 @@ export function recordIngestion(session: Session, arrived: readonly Ingestion[])
  * Reading and searching are always allowed: the member may read the text, it
  * just may not act on it. Everything that executes is refused while any
  * ingestion is unattributed, comes from a node id the policy table does not
- * name, or arrives on a path this gate has never heard of.
+ * name, or arrives on a path this gate has never heard of. The owner's typed
+ * turn is the one ingestion admitted without the policy: the owner's mark on
+ * the row the host's engine attests, and that mark nowhere else.
  */
 export function refuseExecutionAfterUngatedText({ tool, session, policy }: GateInput): Decision {
   if (!isShellTool(tool)) return { allow: true }
@@ -105,6 +115,15 @@ function refusalFor(ingest: Ingestion, path: InboundPath | undefined, policy: Po
 
   if (path === undefined) {
     return `${tool}: text arrived on path ${ingest.path}, which this gate does not know. ${WHAT_CLEARS_IT}`
+  }
+
+  if (path.attestation === 'host-engine') {
+    if (ingest.from_node_id === OWNER_AT_THE_TERMINAL) return undefined
+    return `${tool}: text on path ${path.id} (${path.what}) does not carry the owner's mark, the only sender that path admits. ${WHAT_CLEARS_IT}`
+  }
+
+  if (ingest.from_node_id === OWNER_AT_THE_TERMINAL) {
+    return `${tool}: text on path ${path.id} (${path.what}) carries the owner's mark, which only the host's engine attests, on its own path. ${WHAT_CLEARS_IT}`
   }
 
   if (ingest.from_node_id === null) {

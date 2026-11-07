@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { isReadOnlyTool, isShellTool } from '../shell_tools/shell_tools.ts'
 import {
+  OWNER_AT_THE_TERMINAL,
   recordIngestion,
   refuseExecutionAfterUngatedText,
   startFreshSession,
@@ -193,4 +195,43 @@ test('the refusal names the path and says what clears it, in business words', ()
   assert.match(why, /nothing executes/i)
   assert.match(why, /fresh start that reads no handover/i)
   assert.doesNotMatch(why, /undefined|null|NaN/)
+})
+
+// --- the owner's own typed turn (#51) ------------------------------------------
+//
+// Raf's ruling 2026-11-06: a turn the host engine stamps as typed at the member's
+// own terminal is host-attested, so it is the owner's. The owner signs the
+// policy, so the owner is its root, not an entry in it.
+
+const OWNER_ROWS = INBOUND_PATHS.filter((path) => path.attestation === 'host-engine')
+const ownerTyped = (): Ingestion => {
+  const [row] = OWNER_ROWS
+  assert.ok(row !== undefined, 'no registry row is attested by the host engine')
+  return { path: row.id, from_node_id: OWNER_AT_THE_TERMINAL }
+}
+
+test('exactly one registry row is the owner typing at the terminal, attested by the host engine', () => {
+  assert.equal(OWNER_ROWS.length, 1)
+})
+
+test('the owner\'s typed turn leaves every executing tool allowed', () => {
+  for (const tool of EXECUTING_TOOLS) assert.equal(allowed(tool, [ownerTyped()]), true, tool)
+})
+
+test('the owner\'s mark on any other row is refused: only the host engine attests the owner', () => {
+  for (const path of INBOUND_PATHS.filter((row) => row.attestation !== 'host-engine')) {
+    refusal('Bash', [{ path: path.id, from_node_id: OWNER_AT_THE_TERMINAL }])
+  }
+})
+
+test('the owner\'s row with a stranger, a crew mate or nobody named is refused: it carries the owner or nothing', () => {
+  for (const from_node_id of [stranger, crewmate, null, OWNER_AT_THE_TERMINAL.toUpperCase()]) {
+    refusal('Bash', [{ ...ownerTyped(), from_node_id }])
+  }
+})
+
+test('the owner\'s typed turn does not clear a stranger\'s text, before it or after it', () => {
+  const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
+  refusal('Bash', [ownerTyped(), strangers])
+  refusal('Bash', [strangers, ownerTyped()])
 })

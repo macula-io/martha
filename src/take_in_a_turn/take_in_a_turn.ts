@@ -16,7 +16,9 @@
 //      text. A commit authored under the supervisor's node id gets no shell.
 //      On the binder's path the host hands over no identity at all, only the
 //      sending process it attests, and the binder alone turns that into a node
-//      id (../attribute_a_cross_session_sender).
+//      id (../attribute_a_cross_session_sender). On the path the host's engine
+//      attests, the owner typing at the member's own terminal, the identity is
+//      the owner's mark and nothing the host offers (martha#51).
 //
 //   2. THE RECORD IS PERSISTED PER SESSION ID AND RELOADED ON START. Holding it
 //      only in memory fails open on every process restart, because a resumed
@@ -43,6 +45,7 @@
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
 import {
+  OWNER_AT_THE_TERMINAL,
   recordIngestion,
   startFreshSession,
   type Ingestion,
@@ -61,6 +64,7 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   cross_session: 'A6',
   checkout_hook: 'A7',
   owner_paste: 'A10',
+  owner_typed: 'A14',
   server_instructions: 'A11',
   checkout_run: 'A13',
   mesh_read: 'B1',
@@ -176,6 +180,7 @@ export function sourcesThatMayCarryAnIdentity(): readonly string[] {
 
 function identityOf(path: string, arrival: Arrival, binder: Binder): string | null {
   if (!senderIsAttested(path)) return null
+  if (attestationOf(path) === 'host-engine') return OWNER_AT_THE_TERMINAL
   if (attestationOf(path) === 'host-binder') return binder(attestedSenderOf(arrival))
   return 'from_identity' in arrival ? (arrival.from_identity ?? null) : null
 }

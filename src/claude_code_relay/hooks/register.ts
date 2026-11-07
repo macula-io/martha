@@ -90,10 +90,16 @@ export interface RelayOn {
 /** The settings SessionStart hook's input: the host's own fields, relayed whole. */
 export type ClassicSessionStart = Readonly<Record<string, unknown>>
 
-/** A prompt as the engine submits it: its text and the origin it stamped, among other fields. */
+/**
+ * A prompt as the engine submits it: its text, the origin it stamped, and the
+ * command and meta mark that tell the launcher typing from an expansion
+ * (martha#51), among other fields.
+ */
 export interface PromptSubmitted {
   readonly text: string
   readonly origin: Readonly<Record<string, unknown>>
+  readonly command?: unknown
+  readonly isMeta?: unknown
   readonly [field: string]: unknown
 }
 
@@ -188,7 +194,8 @@ export const register = (on: RelayOn): void => {
 
   on<PromptSubmitted, PromptAnswer>('prompt.submit', async ($, e, next) => {
     const session_id = await $.session.id()
-    const heard = await relay($, 'prompt_submitted', { session_id, text: e.text, origin: e.origin }, heardTaken)
+    const marks = { ...(e.command === undefined ? {} : { command: e.command }), ...(e.isMeta === undefined ? {} : { isMeta: e.isMeta }) }
+    const heard = await relay($, 'prompt_submitted', { session_id, text: e.text, origin: e.origin, ...marks }, heardTaken)
     return heard.yes ? next(e) : { drop: refusal(heard.why) }
   }).catch(async (_$, e, next) => (next.called ? next(e) : { drop: refusal('its relay failed before the launcher answered') }))
 
