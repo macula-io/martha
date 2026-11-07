@@ -75,6 +75,11 @@ jobs:
   gate:
     name: gate coverage
     runs-on: ubuntu-latest
+    # A signed run (martha#129) happens in a sandbox or not at all, so its tests
+    # skip where none can be built. Here one must be: a missing sandbox fails a
+    # test by name instead of skipping the gate in silence.
+    env:
+      MARTHA_SANDBOX_REQUIRED: '1'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -111,6 +116,13 @@ jobs:
           go install "$DIRENV_MODULE"
           "$GOBIN/direnv" version
           echo "MARTHA_TESTS_DIRENV=$(command -v direnv):$GOBIN/direnv" >> "$GITHUB_ENV"
+      # bubblewrap builds the sandbox from unprivileged user namespaces, which
+      # Ubuntu 24.04 restricts through AppArmor by default; this runner lifts it.
+      - name: a sandbox for signed runs
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --unshare-all --ro-bind / / true && bwrap --version
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test

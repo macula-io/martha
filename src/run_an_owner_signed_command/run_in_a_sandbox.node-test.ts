@@ -7,10 +7,11 @@ import { test } from 'node:test'
 
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type RunCopy } from './run_in_a_sandbox.ts'
+import { SANDBOX_REQUIRED_VARIABLE, skipWithoutTheSandbox } from './sandbox_under_test.ts'
 
 const [REGULAR] = OWN_WRITE_MODES
 const MARKER = 'stranger-marker-129'
-const unavailable = sandboxRefusal()
+const unavailable = skipWithoutTheSandbox()
 
 /** A run directory built from `copy` in a fresh parent; removed after the test. */
 function runDirectory(t: { after(fn: () => void): void }, copy: Partial<RunCopy> = {}) {
@@ -105,4 +106,8 @@ test('a run past its deadline is killed, and its status says so', { skip: unavai
   const ended = await runInTheSandbox(runDirectory(t), ['/bin/sh', '-c', 'sleep 30'], 200)
   assert.ok(typeof ended !== 'string', String(ended))
   assert.equal(ended.status, 137)
+})
+
+test('where the sandbox is required, it is there: a run is never skipped in silence', { skip: process.env[SANDBOX_REQUIRED_VARIABLE] === '1' ? false : 'the sandbox is not required here' }, () => {
+  assert.equal(sandboxRefusal(), undefined)
 })

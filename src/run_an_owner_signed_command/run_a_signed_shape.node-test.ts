@@ -9,10 +9,10 @@ import { openState, ownWritesKeptIn } from '../keep_martha_state_outside_the_che
 import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { gitBlobIdOf, OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
-import { sandboxRefusal } from './run_in_a_sandbox.ts'
+import { skipWithoutTheSandbox } from './sandbox_under_test.ts'
 
 const [REGULAR] = OWN_WRITE_MODES
-const unavailable = sandboxRefusal()
+const unavailable = skipWithoutTheSandbox()
 const MARKER = 'stranger-marker-129'
 const GIT_ENV = { PATH: process.env['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' }
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8' }).trim()
