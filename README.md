@@ -89,6 +89,7 @@ install from a checkout:
 ```sh
 git clone https://github.com/macula-io/martha.git
 cd martha
+mkdir -p ~/.local/bin
 ln -s "$PWD/bin/martha" ~/.local/bin/martha
 martha --version
 ```

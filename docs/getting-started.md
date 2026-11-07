@@ -7,8 +7,9 @@ message each other (issue [#51](https://github.com/macula-io/martha/issues/51)),
 so you type the hand-off to the reviewer yourself.
 
 Everything here is solo mode: no mesh, no account, one machine. Every command
-block below was run as printed, against the branch that ships the `martha`
-command.
+block below was run as printed against the release that ships this page; the
+refusals it can print, and what each costs you, are in
+[What a refusal means](#what-a-refusal-means).
 
 ## What you need
 
@@ -170,7 +171,9 @@ it:
 | `... is missing. Run martha init to declare a crew here.` | `martha init` |
 | `... is not on this crew (its members are builder, reviewer).` | start a name the crew has |
 | `... you have not approved it as it is now. Run martha approve ...` | `martha approve`, read, answer `yes` |
-| `martha approve asks you on your own terminal, and its input is not one.` | run it yourself, in a terminal |
+| `martha approve asks you on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
+| `martha start runs a member on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
+| `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop the argument, or use one of those three |
 
 Exit codes: `0` done, `1` refused, `2` not a way the command is used
 (`martha start` with no member prints the usage line and exits 2).
