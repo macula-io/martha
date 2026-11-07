@@ -130,11 +130,11 @@
 <text class="t-code" x="364" y="570">take_in_a_turn, shell_tools,</text>
 <text class="t-code" x="364" y="588">answer_a_tool_call</text>
 <text class="t-type" x="364" y="606">[the shell gate]</text>
-<text class="t-desc" x="364" y="630">What a host calls when a session took</text>
-<text class="t-desc" x="364" y="646">something in, and what may run after:</text>
-<text class="t-desc" x="364" y="662">refuse_execution_after_ungated_text,</text>
-<text class="t-desc" x="364" y="678">trust_only_framed_envelopes, and keep_the_</text>
-<text class="t-desc" x="364" y="694">shell_for_an_owner_signed_command</text>
+<text class="t-desc" x="364" y="630">What a host calls when a turn or a tool's</text>
+<text class="t-desc" x="364" y="646">result (take_in_a_tool_result) came in,</text>
+<text class="t-desc" x="364" y="662">and what may run after; a signed run's</text>
+<text class="t-desc" x="364" y="678">result keeps the shell (keep_the_shell_</text>
+<text class="t-desc" x="364" y="694">for_an_owner_signed_command)</text>
 <rect class="b-cmp" x="664" y="542" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="570">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="588">[whose text it was]</text>

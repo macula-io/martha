@@ -13,7 +13,9 @@
 //      the host reads, which may set no switch that turns the relay off, nor
 //      safe mode in the environment, a settings file's env or the owner's
 //      arguments (martha#122, ../claude_code_host/settings_that_turn_hooks_off),
-//      then the env of the
+//      and, but for the approved copy, may declare no hook and enable no plugin,
+//      nor may the launcher's environment name a plugin folder (martha#121,
+//      ../claude_code_host/hooks_and_plugins_the_owner_declares), then the env of the
 //      settings files the host loads, the owner's user settings and the
 //      approved --settings copy, which may name only what the mesh server may
 //      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
@@ -94,8 +96,10 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -127,6 +131,7 @@ import {
 } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
@@ -241,21 +246,45 @@ async function memberStartOf(
   if (spawned !== undefined) return { refusal: `${command} could not be started (${spawned.message}).` }
   if (job !== undefined) {
     const held = await job.member
-    return 'refusal' in held ? held : { pid: held.pid, recorded: held.admission.recorded }
+    if ('refusal' in held) return held
+    const { recorded, inTheLaunchRecord } = held.admission
+    return { pid: held.pid, recorded, inTheLaunchRecord }
   }
   // Read on the spawn, with no turn of the event loop since, so this process
   // has not reaped the child yet and the kernel still answers for its pid.
-  return childPid === undefined ? { refusal: `${command} could not be started (no pid).` } : { pid: childPid, recorded: record(childPid) }
+  return childPid === undefined
+    ? { refusal: `${command} could not be started (no pid).` }
+    : { pid: childPid, recorded: record(childPid), inTheLaunchRecord: false }
 }
 
 /** A member held on the owner's terminal, recorded before it may run: it runs only when the record holds. */
 interface RecordedWhileHeld {
   readonly admitted: boolean
   readonly recorded: LaunchRecorded
+  /** Whether the launch directory's own record already names the member, put there inside this hold. */
+  readonly inTheLaunchRecord: boolean
+}
+
+/**
+ * The member's place in its launch directory's record, written while the hold
+ * still holds it (#124). A launcher killed at any point after the member exists
+ * then leaves a record that names it, and a sweep cannot take away a running
+ * member's directory. The member is admitted only when this says it is recorded,
+ * so a write that fails refuses the member instead of leaving its directory
+ * unrecorded; a launch record that could not be kept refuses it just the same.
+ */
+export function recordedInsideTheHold(directory: string, pid: number, recorded: LaunchRecorded): RecordedWhileHeld {
+  if (!recorded.recorded) return { admitted: false, recorded, inTheLaunchRecord: false }
+  const whyNotRecorded = recordTheMember(directory, pid)
+  return whyNotRecorded === undefined
+    ? { admitted: true, recorded, inTheLaunchRecord: true }
+    : { admitted: false, recorded: { recorded: false, refusal: whyNotRecorded }, inTheLaunchRecord: false }
 }
 
 /** How a member's start ends: its pid, which is also its group's id, and its launch record; or why it did not start. */
-type RecordedStart = { readonly pid: number; readonly recorded: LaunchRecorded } | { readonly refusal: string }
+type RecordedStart =
+  | { readonly pid: number; readonly recorded: LaunchRecorded; readonly inTheLaunchRecord: boolean }
+  | { readonly refusal: string }
 
 /**
  * Why the mesh server the approved server config installs is not proved, or
@@ -316,23 +345,29 @@ function settingsEnvironment(
 /**
  * The settings files the member's host reads, watched for a key that turns
  * Martha's relay off: the owner's user settings, the approved --settings copy,
- * and the managed settings (martha#122); or why the launch is refused: one of
- * them sets such a key, or the user settings file cannot be told.
+ * and the managed settings (martha#122), and for a hook or plugin the owner's
+ * or the managed ones declare (martha#121); or why the launch is refused: one
+ * of them sets such a key or declares one, the environment or the owner's
+ * arguments switch safe mode on or name a plugin folder, or the user settings
+ * file cannot be told. Exported so npm run probe:launch runs this very gate.
  */
-function hookSettingsOf(
-  launch: ClaudeCodeMemberLaunch,
+export function hookSettingsOf(
   hostEnv: Readonly<Record<string, string | undefined>>,
+  args: readonly string[],
   prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+  managed: ManagedSettingsPlace = RECORDED_HOST.managed_settings,
 ): HookSettingsWatch | string {
   const user = userSettingsPath(hostEnv)
   if ('refusal' in user) return user.refusal
-  const safeMode = safeModeIn(hostEnv, launch.args, CLAUDE_CODE_HOOK_SWITCHES.safe_mode)
+  const safeMode = safeModeIn(hostEnv, args, CLAUDE_CODE_HOOK_SWITCHES.safe_mode)
   if (safeMode !== undefined) return safeMode
+  const pluginDirs = pluginDirsIn(hostEnv)
+  if (pluginDirs !== undefined) return pluginDirs
   const watch = hookSettingsWatch({
     user: user.path,
     home: hostEnv.HOME ?? homedir(),
     approved: prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
-    managed: launch.managed_settings ?? RECORDED_HOST.managed_settings,
+    managed,
     switches: CLAUDE_CODE_HOOK_SWITCHES,
   })
   return watch.check() ?? watch
@@ -375,7 +410,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   }
   const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
-  const hookSettings = hookSettingsOf(launch, hostEnv, prepared)
+  const hookSettings = hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings)
   if (typeof hookSettings === 'string') {
     removeSnapshot()
     return `${NOT_STARTED}: ${hookSettings}`
@@ -421,10 +456,21 @@ function launchDirectories(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
 ): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir'> | string {
+  // A launcher killed hard runs none of its own cleanup, so what another launch
+  // left in the relay root is swept here, before this launch makes its own
+  // directory; a launch still running is left alone (leftover_relay_directories.ts).
+  sweepLeftoverLaunchDirectories(launch.places.relay_root)
   const relayDirectory = makeRelayDirectory(join(launch.places.relay_root, randomUUID()))
   if (!relayDirectory.made) {
     ready.removeSnapshot()
     return relayDirectory.refusal
+  }
+  // The record that tells a later sweep this directory's launch is over.
+  const recorded = recordTheLauncher(relayDirectory.directory)
+  if (recorded !== undefined) {
+    relayDirectory.remove()
+    ready.removeSnapshot()
+    return `${NOT_STARTED}: ${recorded}`
   }
   const emptyDirectory = join(relayDirectory.directory, EMPTY_DIRECTORY_NAME)
   const empty = makeEmptyDirectory(emptyDirectory)
@@ -445,10 +491,10 @@ function launchDirectories(
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
-  hookSettings: HookSettingsWatch,
   socket_path: string,
   stop: (why: string) => void,
   sessionReported: () => void,
+  ready: ReadyLaunch,
 ): Promise<RelayServer | string> {
   const answering = memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
@@ -462,7 +508,8 @@ async function servedRelay(
     policy: launch.policy,
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
-    hookSettings,
+    handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
+    hookSettings: ready.hookSettings,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     stopMember: stop,
   })
@@ -518,11 +565,13 @@ async function startedMember(
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
     recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
+  // The member is held until its callback says yes, so its place in the launch
+  // directory's record is written inside the same hold: a launcher killed in
+  // between then leaves a record that already names its member (#124).
   const job = isOnTheOwnersTerminal(launch.stdio)
-    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid): RecordedWhileHeld => {
-        const recorded = record(pid)
-        return { admitted: recorded.recorded, recorded }
-      })
+    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid) =>
+        recordedInsideTheHold(relayDirectory.directory, pid, record(pid)),
+      )
     : undefined
   // On the owner's terminal `child` is the job-control shell: it exits once the
   // member has and the terminal is given back, so its exit is the member's.
@@ -534,11 +583,38 @@ async function startedMember(
   })
   const start = await memberStartOf(launch.command, spawned, job, child.pid, record)
   if ('refusal' in start) {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-    await removeWhatTheLaunchMade(made)
+    await endTheLaunch(child, made)
     return `${NOT_STARTED}: ${start.refusal}`
   }
+  // A member the hold already put in the launch directory's record needs no second write.
+  const memberError = start.inTheLaunchRecord ? undefined : await recordTheStartedMember(relayDirectory.directory, start.pid, child, made)
+  if (memberError !== undefined) return memberError
   return { child, pid: start.pid, recorded: start.recorded, launchRecords }
+}
+
+/**
+ * Adds the started member to the launch directory's record, so a sweep keeps it
+ * while either the launcher or the member lives; or ends the launch and says why.
+ * A member holds that directory as much as its launcher does: it can outlive a
+ * launcher killed hard, and its host still loads the relay from that copy
+ * (leftover_relay_directories.ts).
+ */
+async function recordTheStartedMember(
+  directory: string,
+  member: number,
+  child: ChildProcess,
+  made: LaunchMade,
+): Promise<string | undefined> {
+  const recorded = recordTheMember(directory, member)
+  if (recorded === undefined) return undefined
+  await endTheLaunch(child, made)
+  return `${NOT_STARTED}: ${recorded}`
+}
+
+/** Kills the member's process if it still runs, and removes everything the launch made. */
+async function endTheLaunch(child: ChildProcess, made: LaunchMade): Promise<void> {
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  await removeWhatTheLaunchMade(made)
 }
 
 /**
@@ -673,7 +749,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, ready.hookSettings, directories.relayDirectory.socket_path, stop, backstop.reported)
+  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported, ready)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()

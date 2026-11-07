@@ -70,6 +70,7 @@ import { launchRecordsDirectory } from '../linux_process_identity/launch_records
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
 
 /** The engine calls the adapter makes, as Claude Code's `$` offers them. */
@@ -201,6 +202,27 @@ export function ownNameOfCalledTool(called: string): string {
 
 /** The name Claude Code gives its shell tool: the one call a `martha run` can be bound to (martha#129). */
 export const CLAUDE_CODE_SHELL_TOOL = 'Bash'
+
+/**
+ * What each of Claude Code's own tools returns, for the launcher to record after
+ * it ran (martha#127). Keyed by the engine's names, read from each tool's input
+ * schema (`file_path`, `notebook_path`, `path`, `command`). A tool not here takes
+ * the shell (../take_in_a_tool_result), so adding a name is a decision that its
+ * result is placed right, made the way a name gets onto `READ_ONLY_TOOLS`.
+ */
+export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
+  Read: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
+  Edit: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
+  Write: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
+  NotebookEdit: { reads: 'a_file', source: 'checkout_file', field: 'notebook_path' },
+  Grep: { reads: 'a_search', source: 'checkout_file', field: 'path' },
+  Glob: { reads: 'a_search', source: 'checkout_file', field: 'path' },
+  Bash: { reads: 'a_command', source: 'checkout_run', field: 'command' },
+  WebFetch: { reads: 'a_source', source: 'web' },
+  WebSearch: { reads: 'a_source', source: 'web' },
+  Agent: { reads: 'a_source', source: 'subagent' },
+  Task: { reads: 'a_source', source: 'subagent' },
+}
 
 /** Whether a called tool is an MCP server's: its result is that server's text (B2). */
 export function isMcpToolCall(called: string): boolean {

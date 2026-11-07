@@ -86,6 +86,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    handed_at_start: [],
     hookSettings: hookSettingsWatch({
       user: join(home, '.claude', 'settings.json'),
       home,

@@ -45,8 +45,8 @@ test('the recorded host turns hooks off by disableAllHooks from any settings fil
     managed: ['allowManagedHooksOnly', 'disableAllHooks', 'strictPluginOnlyCustomization'],
     every_source: ['disableAllHooks'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
-    // 2.1.318 has no exit for a host with no terminal; 2.1.319 adds one (below), recorded when the host is re-recorded.
-    outside_a_terminal: [],
+    // 2.1.319's exit for a host with no terminal (below), recorded on the 2.1.319 re-record (martha#139).
+    outside_a_terminal: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'],
   })
   assert.deepEqual(hookSwitchesOf(RECORDED_HOST.hooks_switches, RECORDED_HOST.hooks_switch_calls), CLAUDE_CODE_HOOK_SWITCHES)
 })

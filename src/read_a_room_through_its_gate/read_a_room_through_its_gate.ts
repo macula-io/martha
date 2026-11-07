@@ -42,7 +42,7 @@
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
-import type { ToolNames } from '../host_contract/host_contract.ts'
+import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { PATH_OF_SOURCE, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -52,6 +52,15 @@ export const MESH_TOOL_PREFIX = 'mesh_'
 /** The tool that sends and returns the reply when told to wait for one. */
 const SENDS_AND_MAY_WAIT = `${MESH_TOOL_PREFIX}say`
 const WAIT_FOR_A_REPLY = 'wait_reply_seconds'
+
+/** The tool that rings an agent and returns its answer: a decline carries the callee's own reason (A5). */
+export const RINGS_AND_RETURNS_THE_ANSWER = `${MESH_TOOL_PREFIX}ring`
+
+/**
+ * The tool that answers a ring this member was given: its result can carry
+ * the caller's own text, an acknowledgement it could not read among it (A4).
+ */
+export const ANSWERS_A_RING = `${MESH_TOOL_PREFIX}answer_ring`
 
 /**
  * The mesh tools that may be called, by their own name. None of them returns
@@ -64,7 +73,7 @@ const WAIT_FOR_A_REPLY = 'wait_reply_seconds'
  */
 export const MESH_TOOLS_THAT_RUN: readonly string[] = [
   'mesh_agents',
-  'mesh_answer_ring',
+  ANSWERS_A_RING,
   'mesh_call',
   'mesh_find_record',
   'mesh_find_records',
@@ -83,7 +92,7 @@ export const MESH_TOOLS_THAT_RUN: readonly string[] = [
   'mesh_recall',
   'mesh_remember',
   'mesh_remember_directory',
-  'mesh_ring',
+  RINGS_AND_RETURNS_THE_ANSWER,
   SENDS_AND_MAY_WAIT,
   'mesh_unobserve_lobby',
   'mesh_unserve',
@@ -123,6 +132,24 @@ export function isRawMeshRead(
   if (input === undefined) return true
   const wait = input[WAIT_FOR_A_REPLY]
   return wait !== undefined && wait !== null && wait !== 0 && wait !== '0'
+}
+
+/** The ring tools whose result is a ring's own row, by their own name. */
+const SOURCE_OF_A_RING_TOOL: Readonly<Record<string, TurnSource>> = {
+  [RINGS_AND_RETURNS_THE_ANSWER]: 'ring_answer',
+  [ANSWERS_A_RING]: 'ring',
+}
+
+/**
+ * The turn source an MCP tool's result is recorded on, by the tool's own name.
+ * A ring's answer is A5: its decline reason is the callee's text. Answering a
+ * ring is A4: what comes back can carry the caller's text. Every other result
+ * that runs is an MCP result (B2): what it returns has no sender to admit. A
+ * tool that hands the model a room's text, or a ring's purpose, never runs
+ * (isRawMeshRead), so no result of one is ever recorded (B1).
+ */
+export function sourceOfAMeshToolResult(own_name: string): TurnSource {
+  return Object.hasOwn(SOURCE_OF_A_RING_TOOL, own_name) ? (SOURCE_OF_A_RING_TOOL[own_name] ?? 'mcp_result') : 'mcp_result'
 }
 
 /** The rooms a member can read, by the turn source their delivery is recorded on. */
