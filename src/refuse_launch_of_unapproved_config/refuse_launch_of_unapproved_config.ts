@@ -119,16 +119,45 @@ const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_D
  */
 const CLAUDE_COMMAND_ELSEWHERE = ['CLAUDE_CODE_SHELL_PREFIX'] as const
 
+/**
+ * Turns Claude Code's auto-memory off: the host then loads no memory folder into
+ * a member's session and runs no memory pass of its own in file mode. Set by the
+ * launcher, so an inherited 0, which beats a settings file's off, never reaches
+ * the member (martha#136; Claude Code 2.1.318 and 2.1.319, measured).
+ */
+export const CLAUDE_MEMORY_OFF: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }
+
+/**
+ * Each moves Claude Code's memory, or writes it on a path the off switch does
+ * not hold, so none reaches a member (martha#136 r=2): the hosted ("mcp") mode
+ * of the memory pass, which skips the off switch; team memory sync; and the two
+ * folders that override where memory lives, which would move a member's memory
+ * out of the folders the publish gate denies.
+ */
+export const CLAUDE_MEMORY_ELSEWHERE = [
+  'CLAUDE_CODE_POST_TURN_MEMORY',
+  'CLAUDE_MEMORY_STORES',
+  'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE',
+  'CLAUDE_CODE_REMOTE_MEMORY_DIR',
+] as const
+
 export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
+
+/** The switches that hand Claude Code a settings file: the carried copy, or the one a launch writes (martha#136). */
+export const claudeSettingsSwitches = (path: string): HostSwitches => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED })
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
   'claude-code': {
     // --strict-mcp-config: only the servers passed by --mcp-config start.
-    project_config_off: { args: ['--setting-sources', 'user', '--strict-mcp-config'], env: NO_ENV, env_dropped: CLAUDE_COMMAND_ELSEWHERE },
+    project_config_off: {
+      args: ['--setting-sources', 'user', '--strict-mcp-config'],
+      env: CLAUDE_MEMORY_OFF,
+      env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
+    },
     carried: {
       [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
-      [CLAUDE_SETTINGS]: (path) => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
+      [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
   },
   opencode: {

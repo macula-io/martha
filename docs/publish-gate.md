@@ -756,6 +756,56 @@ missing value or one that starts with `-`, so one switch cannot carry another as
 its value. `martha start` also starts only on a terminal, as `martha approve`
 asks only on one, so a member's shell tool cannot start a sibling.
 
+**A member's memory never feeds a later session (A17, martha#136).** Claude
+Code keeps auto-memory in `<config dir>/projects/<project key>/memory/`, loads it
+into every session of that project, and writes it by itself from a session
+(extractMemories, auto-dream, team memory). A session in a git worktree loads
+the main clone's folder, so a member could leave text there that the owner's own
+next session, or another member's, reads as memory, with nothing recording
+where it came from. Three things stand on it:
+
+- **Memory is off in a member's host.** The launcher sets
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and drops the four variables that move
+  memory or run a pass that does not check that switch
+  (`CLAUDE_CODE_POST_TURN_MEMORY`, `CLAUDE_MEMORY_STORES`,
+  `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE`, `CLAUDE_CODE_REMOTE_MEMORY_DIR`). Settings
+  whose `env` names any of them refuse the launch (#65's rule, pinned per name).
+  This rests on two code paths of the recorded host, restated under `memory_off`
+  in `recorded_claude_code_host.json`: file mode returns early on the off switch,
+  and hosted mode needs the dropped variable. A re-recorded host fails CI until
+  someone re-reads them for it.
+- **A member's file tool does not write the owner's memory.** The relay refuses a
+  `Write`, `Edit`, `MultiEdit` or `NotebookEdit` into every project's memory
+  folder under the launcher's config dir and the member's, into the owner's
+  `CLAUDE.md` and `rules/`, into the folders the launcher's environment moves
+  memory to, and into each `autoMemoryDirectory` the policy, user and carried
+  settings name (`src/refuse_a_member_writing_owner_memory/`). Reads are allowed.
+  Links are followed both ways, and to the end: one function resolves every
+  path here, following a link at any level — a `projects` folder that is a link
+  to another disk, a project folder, a project's memory folder, a chain of
+  links, and a link whose target does not exist yet, read from the link itself
+  — so the written path and every place are compared where they finally lead.
+  A chain longer than eight links, or a link that turns on itself, is refused:
+  no write is allowed while one stands, because the guard cannot tell which
+  folder it would land in. A project's memory folder is followed at each write,
+  so a link a member makes during its session is caught too.
+- **The host's own pass is refused the same places.** The settings the host is
+  started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
+  each place the relay refuses, as named and as it leads, for the projects
+  folder as it leads, and for where each memory folder that is a link leads at
+  launch (one linked later is the relay's alone), from the same function. They go
+  into the carried `--settings` copy, after the owner's approval was
+  fingerprinted, or into a file the launch writes when none is carried. This
+  layer is for a later host on which the off switch stops holding; on the
+  recorded host the switch holds, and
+  nothing claims this layer was seen working.
+
+What it does not rest on: the publish gate's hook for the memory pass, which
+runs as a fork whose tool calls the hook is not established to see. What it
+leaves open: a `Bash` write into a memory folder, which only a clean member
+holds; a host the owner starts by hand (C1, C2); and OpenCode, not probed for a
+memory of its own.
+
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the
 launcher handing a turn to the model or registering a tool (no slice does
