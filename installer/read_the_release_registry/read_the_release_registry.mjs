@@ -211,7 +211,7 @@ export function registry ({ image, base = `https://${image.split('/')[0]}`, fetc
     // reads, so it is refused, and naming a version gets past it.
     async highestVersion () {
       const response = await get('tags/list?n=10000', '', 'the version list')
-      if (/rel="?next"?/.test(response.headers.get('link') ?? '')) refuse(`${image} lists more tags than one page; name a version`)
+      if (/rel="?next"?/.test(response.headers.get('link') ?? '')) await refusedUnread(response, `${image} lists more tags than one page; name a version`)
       const tags = parsed(await readCapped(response, LIMITS.tagListBytes, 'the version list'), 'the version list').tags ?? []
       const versions = (Array.isArray(tags) ? tags : []).filter(isVersion).sort(compareVersions)
       const highest = versions.at(-1)
