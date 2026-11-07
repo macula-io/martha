@@ -21,6 +21,7 @@
 // The member's policy lets no node id hand it executable text: for the first release the owner relays every
 // hand-off between members (martha#51 ruling), and a turn the owner types is host-attested as theirs.
 
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import process from 'node:process'
 
@@ -33,6 +34,7 @@ import {
   readApprovals,
   stateSubdirectory,
   STATE_DIRECTORY_MODE,
+  ownWritesKeptIn,
   type Approval,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -45,7 +47,7 @@ import {
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { decideLaunch, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { decideLaunch, fingerprintOf, readLaunchState, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -144,6 +146,23 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   return { node_id: ids.ids[member.name]!, model: member.model, approval }
 }
 
+/**
+ * What the member is started on: the approval's fingerprint, and what its own writes are checked against while it
+ * runs (martha#132), each launch named afresh so no other launch's writes pass. None when the checkout needs none.
+ */
+function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'since_approval'> {
+  if (approval === undefined) return { approved_fingerprints: [] }
+  return {
+    approved_fingerprints: [approval.fingerprint],
+    since_approval: {
+      approved: { entries: approval.entries, tree: approval.tree },
+      member: request.member,
+      own_writes: ownWritesKeptIn(request.state),
+      launch_id: randomUUID(),
+    },
+  }
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -158,7 +177,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   return launchClaudeCodeMember({
     member_name: request.member,
     node_id: ready.node_id,
-    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, approved_fingerprints: ready.approval === undefined ? [] : [ready.approval.fingerprint] },
+    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, ...approvedPlace(request, ready.approval) },
     policy: { may_send_executable_text: [] },
     places,
     command: request.command,
