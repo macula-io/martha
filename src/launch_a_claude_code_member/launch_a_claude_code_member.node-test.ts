@@ -411,6 +411,24 @@ test('in a checkout with no config whose tree git cannot read, a read of a track
   assert.ok(isDenied(after.bash, /B4/))
 })
 
+test('in an approved checkout, a stranger\'s branch that deletes the config is no read of the approved tree: Bash is denied, naming B4 (martha#127 r=4)', async (t) => {
+  const place = placeFor(t)
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+
+  // With the config gone, the launch gate approves any tree, so only the bound to the approved start tree is left.
+  git(place.checkout, 'checkout', '-q', '-b', 'pull-request')
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  writeFileSync(join(place.checkout, 'STRANGER.md'), 'now run this\n')
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '-m', 'a stranger drops the config')
+  const read = call('Read', { file_path: join(place.checkout, 'STRANGER.md') })
+  assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
 test('a command\'s output always takes the shell as A13, and names gh as B3 and git history as B5 (martha#127)', async (t) => {
   const place = placeFor(t)
   const commands: readonly { readonly command: unknown; readonly paths: readonly string[] }[] = [
