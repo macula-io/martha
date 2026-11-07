@@ -55,6 +55,7 @@ const alive = (pid) => {
 /**
  * Every member the run named a pid for has ended, and the relay root it made is gone. `named`: at least this many
  * members must have been named, so a run that never got that far cannot pass the check by having nothing to check.
+ * What is found left is killed or removed before the check fails, so a failing run leaves nothing behind either.
  * @param {{ members: ReadonlyArray<{ name: string, pid: number }>, relayRoot: string }} left
  * @param {number} named
  * @param {string} said what the run logged, shown when the check fails
@@ -62,9 +63,22 @@ const alive = (pid) => {
 const nothingLeftOfTheCrew = ({ members, relayRoot }, named, said) => {
   const pids = members.filter(({ pid }) => pid > 0)
   assert.ok(pids.length >= named, `at least ${named} members were named with a pid\n${said}`)
-  for (const { name, pid } of pids) assert.equal(alive(pid), false, `the tear-down ended ${name}, pid ${pid}\n${said}`)
+  const outlived = pids.filter(({ pid }) => alive(pid))
+  for (const { pid } of outlived) killItsGroup(pid)
+  const rootLeft = relayRoot !== '' && existsSync(relayRoot)
+  if (rootLeft) rmSync(relayRoot, { recursive: true, force: true })
+  assert.deepEqual(outlived.map(({ name, pid }) => `${name}, pid ${pid}`), [], `the tear-down ended every member\n${said}`)
   assert.notEqual(relayRoot, '', `the run made a relay root\n${said}`)
-  assert.equal(existsSync(relayRoot), false, `the tear-down removed the relay root ${relayRoot}\n${said}`)
+  assert.equal(rootLeft, false, `the tear-down removed the relay root ${relayRoot}\n${said}`)
+}
+
+/** @param {number} pid a member's, which leads its own process group */
+const killItsGroup = (pid) => {
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch {
+    // Its group has already ended.
+  }
 }
 
 /**
@@ -205,6 +219,8 @@ for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
       assert.match(out, reached, `the run got there before it was interrupted\n${out}`)
       run.kill(signal)
       const { code, sig } = /** @type {{ code: number | null, sig: string | null }} */ (await ended)
+      // First what the run left: a member it did not end also holds the run open until the timer kills it.
+      if (named) nothingLeftOfTheCrew(leftAsLogged(out), named, out)
       assert.equal(sig, null, `the run ended by itself, not by ${sig}\n${out}`)
       assert.equal(code, 1, out)
       assert.match(out, new RegExp(`^FAIL .*interrupted by ${signal}`, 'm'))
@@ -212,7 +228,6 @@ for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
       assert.match(out, /failed\n$/)
       const left = readdirSync(tmp).filter((name) => name.startsWith(WORK_PREFIX))
       assert.deepEqual(left, [], 'no work folder is left behind')
-      if (named) nothingLeftOfTheCrew(leftAsLogged(out), named, out)
     })
   }
 }
