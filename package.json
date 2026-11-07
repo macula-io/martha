@@ -44,7 +44,8 @@
       "eslint": "prove_the_core"
     },
     "loaderImports": {
-      "src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts": "node:module"
+      "src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts": "node:module",
+      "architecture/c4_diagrams.node-test.ts": "node:module"
     }
   },
   "overrides": {

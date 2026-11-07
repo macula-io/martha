@@ -7,11 +7,12 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -38,6 +39,7 @@ import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
+import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
@@ -1343,9 +1345,22 @@ test('a mesh server tree changed since it was installed starts nothing, naming t
   assert.deepEqual(lines, [refusal])
 })
 
+/**
+ * The relay folder a running launch gave its host: the installed relay's files byte for byte, read-only, and the
+ * folder the host's loader was asked about, already filled (martha#117 with #104).
+ */
+function assertTheLaunchsCopy(plugin_dir: string, validatedFile: string): void {
+  for (const file of relayCopy.RELAY_FILES) {
+    assert.deepEqual(readFileSync(join(plugin_dir, file)), readFileSync(join(RELAY_PLUGIN_DIR, file)), file)
+  }
+  assert.equal(lstatSync(plugin_dir).mode & 0o777, relayCopy.RELAY_COPY_DIRECTORY_MODE)
+  assert.equal(readFileSync(validatedFile, 'utf8'), `${plugin_dir} held\n`)
+}
+
 test('an approved launch starts the host with the switches and the relay, and a refusal after a call kills its whole group', async (t) => {
   const place = placeFor(t)
-  const fake = fakeClaude(place)
+  const validatedFile = join(place.home, 'validated')
+  const fake = fakeClaude(place, { validatedFile })
   const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
   assert.equal(started.started, true)
   if (!started.started) return
@@ -1361,6 +1376,10 @@ test('an approved launch starts the host with the switches and the relay, and a 
   const args = readFileSync(fake.argsFile, 'utf8').trimEnd().split('\n')
   const snapshot = readdirSync(place.snapshot_root)
   assert.equal(snapshot.length, 1)
+  const socket_path = readFileSync(fake.envFile, 'utf8')
+  // The host is given this launch's read-only copy of the relay, never the installed folder (martha#117).
+  const plugin_dir = join(dirname(socket_path), relayCopy.RELAY_COPY_NAME)
+  assert.notEqual(plugin_dir, RELAY_PLUGIN_DIR)
   assert.deepEqual(args, [
     '-p',
     'the owner prompt',
@@ -1370,9 +1389,9 @@ test('an approved launch starts the host with the switches and the relay, and a 
     '--mcp-config',
     join(place.snapshot_root, snapshot[0] ?? '', '.mcp.json'),
     '--plugin-dir',
-    RELAY_PLUGIN_DIR,
+    plugin_dir,
   ])
-  const socket_path = readFileSync(fake.envFile, 'utf8')
+  assertTheLaunchsCopy(plugin_dir, validatedFile)
   assert.equal(dirname(dirname(socket_path)), place.relay_root)
   assert.equal(lstatSync(dirname(socket_path)).mode & 0o777, RELAY_DIRECTORY_MODE)
   assert.equal(Number(execFileSync('ps', ['-o', 'pgid=', '-p', String(started.pid)], { encoding: 'utf8' }).trim()), started.pid)
@@ -1463,6 +1482,9 @@ async function killGroupsCarrying(relay_root: string): Promise<void> {
  * member runs, and stops it on SIGUSR2 the way a refusal does. It stays up after
  * its member has stopped, until it is ended.
  */
+/** The owner's arguments a launcher process passes unless told otherwise: one prompt, answered and printed. */
+const OWNER_PROMPT_ARGS = ['-p', 'the owner prompt']
+
 function launcherProcess(
   place: Place,
   command: string,
@@ -1470,6 +1492,7 @@ function launcherProcess(
   inherited: Readonly<Record<string, string>> = {},
   mesh_trees?: MeshTreeRecording,
   deadlines: SessionStartDeadlines = {},
+  args: readonly string[] = OWNER_PROMPT_ARGS,
 ): string {
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
@@ -1487,7 +1510,7 @@ function launcherProcess(
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,
-      "  args: ['-p', 'the owner prompt'],",
+      `  args: ${JSON.stringify(args)},`,
       `  inherited: { PATH: process.env.PATH, ...${JSON.stringify(inherited)} },`,
       `  stdio: ${JSON.stringify(stdio)},`,
       '  tellOwner: () => undefined,',
@@ -1644,6 +1667,8 @@ interface TerminalLaunch {
   readonly exitsAfterMs?: number
   /** The launch's own session start deadlines (#104 r=2). */
   readonly deadlines?: SessionStartDeadlines
+  /** The owner's arguments to the host, instead of a prompt to print an answer to. */
+  readonly args?: readonly string[]
 }
 
 /** The deadlines a test gives a launch in place of the launcher's own. */
@@ -1683,7 +1708,7 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
-  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines)
+  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
@@ -1953,3 +1978,52 @@ for (const [what, make] of [
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+// The recorded host itself, on the owner's terminal (martha#117). The host writes
+// its generated types into the folder --plugin-dir names on an interactive start,
+// only the files that are missing, and keeps what is there; no stand-in does, so
+// only the host can show a launch leaves the installed relay folder as it was.
+// The relay CI job installs the recorded version and names it here; the job checks
+// first that this host does write into a writable folder, so a pass here is not
+// a host that writes nothing.
+const RECORDED_HOST_VARIABLE = 'MARTHA_RECORDED_HOST'
+/** The terminal type the host draws for. */
+const HOST_TERMINAL = 'xterm-256color'
+/** The host's own command that ends its session. */
+const HOST_EXIT_COMMAND = '/exit'
+const recordedHost = process.env[RECORDED_HOST_VARIABLE]
+
+/** Every file under `directory`, by its path inside it, with the SHA-256 of its bytes. */
+function treeOf(directory: string): Record<string, string> {
+  const files = readdirSync(directory, { recursive: true, withFileTypes: true }).filter((entry) => !entry.isDirectory())
+  return Object.fromEntries(
+    files
+      .map((entry) => join(entry.parentPath, entry.name))
+      .map((path) => [relative(directory, path), createHash('sha256').update(readFileSync(path)).digest('hex')] as const)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  )
+}
+
+test(
+  "with the recorded host on the owner's terminal, a launch leaves the installed relay folder as it was (martha#117)",
+  { skip: recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets` },
+  async (t) => {
+    const host = recordedHost ?? ''
+    // No mesh server: the real host would start one.
+    const place = placeFor(t, JSON.stringify({ mcpServers: {} }))
+    // What an owner's first run records: onboarding done and the checkout trusted. No account and no key.
+    const home = join(place.home, 'host-home')
+    mkdirSync(home, { mode: 0o700 })
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true, projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
+    const before = treeOf(RELAY_PLUGIN_DIR)
+
+    const terminal = terminalLaunch(t, place, { command: host, inherited: { HOME: home, TERM: HOST_TERMINAL }, args: [] })
+    await untilOnTerminal(terminal, "the relay to report the session's start", () => readdirSync(place.rows).length > 0, t)
+    // Out through the host's own exit, so whatever it does on its start is done.
+    terminal.press(`${HOST_EXIT_COMMAND}\r`)
+    await untilOnTerminal(terminal, 'the launch to end', () => /stopped /.test(terminal.shown()), t)
+
+    assert.deepEqual(treeOf(RELAY_PLUGIN_DIR), before)
+    assert.deepEqual(readdirSync(place.relay_root), [])
+  },
+)
