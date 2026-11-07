@@ -12,8 +12,8 @@
 // |---|---|
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
-// | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
+// | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
+// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, the settings files read again for a key that turns the relay off (martha#122), and for an MCP tool `takeInTurn(session, { source: 'mcp_result' }, binder)` |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -33,6 +33,7 @@ import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
+import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -60,6 +61,8 @@ export interface MemberRelayPlace {
   readonly names: ToolNames
   /** `bindNothing` until the host attests a sender (A6, anthropics/claude-code#107216). */
   readonly binder: Binder
+  /** The settings files the host reads, watched for a key that turns the relay off (martha#122). */
+  readonly hookSettings: HookSettingsWatch
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -200,6 +203,8 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (call === undefined) return denied('the tool call names no tool')
   const unvouched = await vouchFor(state, session)
   if (unvouched !== undefined) return denied(unvouched)
+  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
+  if (settings !== undefined) return denied(settings)
   const verdict = answerToolCall({
     tool: call.tool,
     session,
@@ -220,6 +225,8 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   const launched = recheckLaunch(place.launch, thisMachine)
   if (!launched.allow) return stopMember(place, launched.refusal)
+  const hooksOff = place.hookSettings.check()
+  if (hooksOff !== undefined) return stopMember(place, hooksOff)
   if (!isMcpToolCall(call.tool)) return answered(TAKEN)
   const why = await keep(state, takeInTurn(session, { source: 'mcp_result' }, place.binder))
   return why === undefined ? answered(TAKEN) : stopMember(place, why)

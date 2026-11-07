@@ -9,7 +9,11 @@
 // for this launch alone. In order:
 //
 //   1. `prepareLaunch`, then the mesh server version the approved server config
-//      installs, which must be a recorded one (martha#49), then the env of the
+//      installs, which must be a recorded one (martha#49), then the settings
+//      the host reads, which may set no switch that turns the relay off, nor
+//      safe mode in the environment, a settings file's env or the owner's
+//      arguments (martha#122, ../claude_code_host/settings_that_turn_hooks_off),
+//      then the env of the
 //      settings files the host loads, the owner's user settings and the
 //      approved --settings copy, which may name only what the mesh server may
 //      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
@@ -57,6 +61,9 @@
 //      host's own record does not already trust the folder, so the host may
 //      first ask whether to trust it; else SESSION_START_DEADLINE_MS
 //      (host_runs_the_relay.ts).
+//   7. The settings watch (martha#122 r=2): the launcher reads those settings
+//      files again every HOOK_SETTINGS_CHECK_MS for the member's whole life,
+//      apart from any hook, and stops the member when one now sets a switch.
 //
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
 // tool server outlives it, its launch record is dropped, the server closes, and
@@ -73,6 +80,7 @@
 import { type ChildProcess, spawn, type StdioOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -86,6 +94,8 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -151,6 +161,10 @@ export interface ClaudeCodeMemberLaunch {
   readonly places: LauncherPlaces
   /** The recorded mesh server trees; the reviewed recording unless a test gives its own. */
   readonly mesh_trees?: MeshTreeRecording
+  /** Where the host reads managed settings; the recorded host's place unless a test gives its own (martha#122). */
+  readonly managed_settings?: ManagedSettingsPlace
+  /** How often the launcher reads those settings files again while the member runs; HOOK_SETTINGS_CHECK_MS unless a test gives its own. */
+  readonly hook_settings_check_ms?: number
   /** The host's command: `claude`, or a path to it. */
   readonly command: string
   /** The owner's own arguments, the prompt among them; they go before Martha's. */
@@ -188,6 +202,14 @@ export type MemberStarted =
 
 /** The start of every refusal: the member was not started. */
 export const NOT_STARTED = 'The member is not started'
+
+/**
+ * How often, in ms, the launcher reads the settings files the host reads again
+ * while a member runs, apart from any hook: the host may drop its hooks as soon
+ * as it reloads a file a shell wrote a switch into, and then no hook asks again
+ * (martha#122 r=2). A member runs ungated for at most this long after the write.
+ */
+export const HOOK_SETTINGS_CHECK_MS = 1_000
 
 /** The signals that end the launcher without its 'exit' event, and so clean up on their own. */
 const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
@@ -288,6 +310,31 @@ function settingsEnvironment(
   )
 }
 
+/**
+ * The settings files the member's host reads, watched for a key that turns
+ * Martha's relay off: the owner's user settings, the approved --settings copy,
+ * and the managed settings (martha#122); or why the launch is refused: one of
+ * them sets such a key, or the user settings file cannot be told.
+ */
+function hookSettingsOf(
+  launch: ClaudeCodeMemberLaunch,
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+): HookSettingsWatch | string {
+  const user = userSettingsPath(hostEnv)
+  if ('refusal' in user) return user.refusal
+  const safeMode = safeModeIn(hostEnv, launch.args, CLAUDE_CODE_HOOK_SWITCHES.safe_mode)
+  if (safeMode !== undefined) return safeMode
+  const watch = hookSettingsWatch({
+    user: user.path,
+    home: hostEnv.HOME ?? homedir(),
+    approved: prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
+    managed: launch.managed_settings ?? RECORDED_HOST.managed_settings,
+    switches: CLAUDE_CODE_HOOK_SWITCHES,
+  })
+  return watch.check() ?? watch
+}
+
 /** A launch the gate allowed, with what the member's environment is built from. */
 interface ReadyLaunch {
   readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
@@ -296,6 +343,8 @@ interface ReadyLaunch {
   readonly hostEnv: Readonly<Record<string, string | undefined>>
   /** What the settings files the host loads add to every server's environment. */
   readonly settingsEnv: Readonly<Record<string, string>>
+  /** The settings files the host reads, watched for a key that turns Martha's relay off (martha#122). */
+  readonly hookSettings: HookSettingsWatch
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -322,6 +371,12 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${unproved}`
   }
   const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
+  // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
+  const hookSettings = hookSettingsOf(launch, hostEnv, prepared)
+  if (typeof hookSettings === 'string') {
+    removeSnapshot()
+    return `${NOT_STARTED}: ${hookSettings}`
+  }
   const fromSettings = settingsEnvironment(
     hostEnv,
     prepared.carried_files[CLAUDE_SETTINGS],
@@ -333,7 +388,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env }
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings }
 }
 
 /**
@@ -387,6 +442,7 @@ function launchDirectories(
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
+  hookSettings: HookSettingsWatch,
   socket_path: string,
   stop: (why: string) => void,
   sessionReported: () => void,
@@ -402,6 +458,7 @@ async function servedRelay(
     policy: launch.policy,
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    hookSettings,
     stopMember: stop,
   })
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
@@ -569,6 +626,21 @@ function relayBackstop(deadline: { readonly ms: number; readonly why: string }, 
   }
 }
 
+/**
+ * Reads the settings files the host reads again every `ms`, apart from any
+ * hook, and stops the member the first time one sets a switch (martha#122 r=2);
+ * returns what ends the watch.
+ */
+function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: string) => void): () => void {
+  const timer = setInterval(() => {
+    const why = watch.check()
+    if (why === undefined) return
+    clearInterval(timer)
+    stop(why)
+  }, ms)
+  return () => clearInterval(timer)
+}
+
 /** Starts one Claude Code member on its approved config, with its relay answered here. */
 export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
@@ -595,7 +667,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported)
+  const server = await servedRelay(launch, ready.hookSettings, directories.relayDirectory.socket_path, stop, backstop.reported)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()
@@ -610,7 +682,8 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
-  const ended = (): string | null => (backstop.disarm(), stoppedBecause)
+  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop)
+  const ended = (): string | null => (backstop.disarm(), unwatch(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()
 

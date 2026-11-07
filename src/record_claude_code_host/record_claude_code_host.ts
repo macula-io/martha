@@ -6,7 +6,8 @@
 //
 // Run the first when the host is upgraded; the coverage check then names any
 // session start source and any prompt origin kind the new host sends that its
-// declaration does not cover.
+// declaration does not cover, and a test names any change to the settings keys
+// that turn Martha's relay off (martha#122).
 //
 // The second writes nothing (martha#139). It derives a recording from the binary
 // in memory and compares it with the committed one, field by field. It exits 0
@@ -22,6 +23,7 @@ import { argv, exit, stderr, stdout } from 'node:process'
 
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
+import { hookExitCallsIn, hookSwitchesSourceIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
@@ -36,7 +38,15 @@ type Derived = Omit<RecordedHost, 'host_version'>
 const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string) => Partial<Derived> }> = [
   { part: 'session start schema', read: (text) => ({ session_start_schema: sessionStartSchemaIn(text) }) },
   { part: 'prompt origins', read: promptOriginsIn },
+  { part: 'hook switches', read: hookSwitchesIn },
+  { part: 'managed settings place', read: (text) => ({ managed_settings: managedSettingsPlaceIn(text) }) },
 ]
+
+/** The function that builds the hook set, and each function an exit of it calls (martha#122). */
+function hookSwitchesIn(text: string): Pick<Derived, 'hooks_switches' | 'hooks_switch_calls'> {
+  const hooks_switches = hookSwitchesSourceIn(text)
+  return { hooks_switches, hooks_switch_calls: hookExitCallsIn(text, hooks_switches) }
+}
 
 /** What a host's text says, part by part, and the parts that could not be read. */
 function readHost(text: string): { derived: Partial<Derived>; unreadable: readonly string[] } {

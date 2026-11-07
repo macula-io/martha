@@ -12,24 +12,33 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
-import { RECORDED_HOST, type RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const CHECK = '--check'
 
-type HostParts = Omit<RecordedHost, 'host_version'>
-
-/** The committed recording's parts, as a host binary would hold them among other code. */
-const RECORDED_PARTS: HostParts = {
+/**
+ * The committed recording's parts as a host binary holds them, by field. Each
+ * text part is the host's own code as recorded; the managed settings place,
+ * which is recorded as values, is written back in the shapes the host spells it.
+ */
+const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,
   prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
   prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback,
   prompt_origin_subkinds: RECORDED_HOST.prompt_origin_subkinds,
+  hooks_switches: RECORDED_HOST.hooks_switches,
+  hooks_switch_calls: RECORDED_HOST.hooks_switch_calls.join(';'),
+  managed_settings: [
+    `switch(P()){case"windows":return"C:\\\\ClaudeCode";default:return"${RECORDED_HOST.managed_settings.dir}"}`,
+    `getDropInDir(){return this.dropInDir??=qC(LS(),"${RECORDED_HOST.managed_settings.drop_in}")`,
+    `function jw(){return Ce(LS(),"${RECORDED_HOST.managed_settings.file}")}`,
+  ].join(';'),
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
-function hostHolding(t: TestContext, parts: Partial<HostParts>): string {
+function hostHolding(t: TestContext, parts: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'martha-host-drift-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const host = join(root, 'claude')
