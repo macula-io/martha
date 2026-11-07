@@ -38,6 +38,9 @@ const ON_THE_WAY = ['.local', join('.local', 'share')]
 // Said by the serve step and again by the final line of a passed run: nothing signed this release.
 const STOOD_IN = 'the sigstore bundle check is stood in, a local release is signed by nobody'
 
+/** What the run's work folder under TMPDIR is named after. */
+export const WORK_PREFIX = 'martha-clean-install-'
+
 class StepFailed extends Error {}
 
 /**
@@ -122,7 +125,7 @@ export async function proveACleanInstall ({ log = console.log, signedFor, plant 
   const running = {}
   let passed = true
   try {
-    running.work = mkdtempSync(join(tmpdir(), 'martha-clean-install-'))
+    running.work = mkdtempSync(join(tmpdir(), WORK_PREFIX))
     await installAndCheck({ log, signedFor, plant, work: running.work, running })
   } catch (error) {
     if (!(error instanceof StepFailed)) log(`FAIL run: ${reason(error)}`)
