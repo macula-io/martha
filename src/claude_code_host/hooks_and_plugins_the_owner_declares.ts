@@ -37,7 +37,8 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 const isOff = (value: unknown): boolean => value === undefined || value === false || value === null
 
 /** Whether a plugin folder value loads anything: set, and not blank as the host trims it. */
-const loadsPlugins = (value: unknown): boolean => value !== undefined && !(typeof value === 'string' && value.trim() === '')
+/** Whether a value of the plugin folder variable makes the host load a folder: set, and not blank. */
+export const loadsPlugins = (value: unknown): boolean => value !== undefined && !(typeof value === 'string' && value.trim() === '')
 
 const WHY =
   "a member's host would run them and what they print would reach the member with nothing recorded (martha#121); move them out of that file before starting a member"

@@ -12,8 +12,10 @@
 //   - A HOOK OR A PLUGIN IN THE CARRIED SETTINGS RECORDS A7. Which hook events
 //     put text into the context is the host's behaviour, and the launcher does
 //     not see another hook's output, so any declared hook counts. A plugin
-//     brings hooks of its own. The record lasts the whole session, so what a
-//     hook prints after a tool call is covered too.
+//     brings hooks of its own, and so does a plugin folder the settings' env
+//     names (CLAUDE_CODE_PLUGIN_DIRS, which the host reads from there). The
+//     record lasts the whole session, so what a hook prints after a tool call
+//     is covered too.
 //   - A SERVER IN THE CARRIED SERVER CONFIG THAT IS NOT THE RECORDED MESH
 //     SERVER RECORDS A11. A server hands the model its instruction block when
 //     the session starts. The mesh server's block is code of the tree that
@@ -32,11 +34,14 @@
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import { MESH_SERVER_PACKAGE } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { loadsPlugins, PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
 import { meshServerInstallsIn } from './mesh_server_install.ts'
 
 /** The settings keys that make the host run something whose output can reach the model. */
 const HOOKS_KEY = 'hooks'
 const PLUGINS_KEY = 'enabledPlugins'
+/** The settings key whose variables the host takes as its own environment. */
+const ENV_KEY = 'env'
 /** The server config key that names the servers. */
 const SERVERS_KEY = 'mcpServers'
 
@@ -64,12 +69,13 @@ function namesAnything(value: unknown): boolean {
   return value !== false
 }
 
-/** What the carried settings make the host run: hook output, and a plugin's hooks and servers. */
+/** What the carried settings make the host run: hook output, and a plugin's hooks and servers, enabled or loaded from a folder. */
 function fromSettings(bytes: Uint8Array | undefined): readonly TurnSource[] {
   if (bytes === undefined) return []
   const settings = objectIn(bytes)
   if (settings === undefined) return [HOOK_OUTPUT, SERVER_INSTRUCTIONS]
-  const plugins = namesAnything(settings[PLUGINS_KEY])
+  const env = settings[ENV_KEY]
+  const plugins = namesAnything(settings[PLUGINS_KEY]) || (isObject(env) && loadsPlugins(env[PLUGIN_DIRS_VARIABLE]))
   return [
     ...(plugins || namesAnything(settings[HOOKS_KEY]) ? [HOOK_OUTPUT] : []),
     ...(plugins ? [SERVER_INSTRUCTIONS] : []),

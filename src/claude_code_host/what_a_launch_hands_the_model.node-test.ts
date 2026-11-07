@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
 import { sourcesALaunchHandsTheModel } from './what_a_launch_hands_the_model.ts'
 
 const bytes = (value: unknown): Uint8Array => new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value))
@@ -56,6 +57,14 @@ test('settings with no hook record nothing: empty hooks, and settings that run n
 test('an enabled plugin records A7 and A11: it brings hooks and servers of its own', () => {
   const rows = [PATH_OF_SOURCE.checkout_hook, PATH_OF_SOURCE.server_instructions].sort()
   assert.deepEqual(rowsOf({ [CLAUDE_SETTINGS]: bytes({ enabledPlugins: { 'a@market': true } }) }), rows)
+})
+
+test("a plugin folder in the carried settings' env records A7 and A11, like an enabled plugin (#121 r=5)", () => {
+  const rows = [PATH_OF_SOURCE.checkout_hook, PATH_OF_SOURCE.server_instructions].sort()
+  assert.deepEqual(rowsOf({ [CLAUDE_SETTINGS]: bytes({ env: { [PLUGIN_DIRS_VARIABLE]: './.martha-plugins' } }) }), rows)
+  for (const blank of ['', '  ']) {
+    assert.deepEqual(rowsOf({ [CLAUDE_SETTINGS]: bytes({ env: { [PLUGIN_DIRS_VARIABLE]: blank } }) }), [], JSON.stringify(blank))
+  }
 })
 
 test('settings that cannot be read as an object record everything they could bring: failing closed', () => {

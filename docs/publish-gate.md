@@ -238,10 +238,11 @@ What the plan leaves out, stated rather than hidden:
   reaches the model (`npm run probe:launch` plants each and sees none load as
   Martha starts the host, and all of them load by hand).
 - **What approved config prints at run time** (A7): a hook's output or added
-  context, and an enabled plugin's hooks. The approval pins the script, never
-  its output, which changes with the network, the clock or a file git ignores.
-  So the relay records A7 when the session starts whenever the carried
-  settings declare a hook or enable a plugin (`sourcesALaunchHandsTheModel` in
+  context, and the hooks of a plugin it enables or loads from a folder its env
+  names. The approval pins the script, never its output, which changes with the
+  network, the clock or a file git ignores. So the relay records A7 when the
+  session starts whenever the carried settings declare a hook, enable a plugin
+  or name a plugin folder (`sourcesALaunchHandsTheModel` in
   `src/claude_code_host/`), and the shell gate refuses the shell from then on.
   A carried file it cannot read fails closed and records it too.
   The owner's user settings and the managed settings are loaded too

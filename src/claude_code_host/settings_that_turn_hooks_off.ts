@@ -473,7 +473,9 @@ export function hookSettingsWatch({ user, home, approved, managed, switches }: H
       if ('refusal' in read) unread.push(read.refusal)
       else files.push({ ...place, text: read.text })
     }
-    // The approved copy carries the relay's own hooks; every other file is the owner's or the admin's (martha#121).
+    // The approved copy carries the relay's own hooks, and what else it declares (hooks, enabled plugins, a plugin
+    // folder in its env) is recorded at session start by sourcesALaunchHandsTheModel; every other file is the
+    // owner's or the admin's (martha#121).
     const owners = files.filter((file) => file.path !== approved).map(hooksAndPluginsDeclaredIn)
     const reasons = [...unread, settingsTurningHooksOff(files, switches), ...owners].filter((reason) => reason !== undefined)
     return reasons.length > 0 ? reasons.join('; ') : undefined
