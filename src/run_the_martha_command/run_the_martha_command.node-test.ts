@@ -17,6 +17,7 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { EXIT_REFUSED, EXIT_USAGE, SAID_BY, USAGE } from './run_the_martha_command.ts'
+import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -140,7 +141,7 @@ function claudeThatEnds(place: Place, t: TestContext): { readonly ran: string; r
   const bin = join(place.home, 'bin')
   mkdirSync(bin)
   const ran = join(place.home, 'ran')
-  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', `: > '${ran}'`, 'exit 7', ''].join('\n'), { mode: 0o700 })
+  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, 'exit 7', ''].join('\n'), { mode: 0o700 })
   return { ran, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
 }
 
