@@ -173,7 +173,7 @@ it:
 | `... you have not approved it as it is now. Run martha approve ...` | `martha approve`, read, answer `yes` |
 | `martha approve asks you on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
 | `martha start runs a member on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
-| `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop the argument, or use one of those three |
+| `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop it; those three are the only arguments `martha start` passes on |
 
 Exit codes: `0` done, `1` refused, `2` not a way the command is used
 (`martha start` with no member prints the usage line and exits 2).
