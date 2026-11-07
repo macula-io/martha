@@ -27,6 +27,10 @@
 //   - a launch is refused while safe mode is on: its variable in the
 //     launcher's environment or in a settings file's env, or its flag among
 //     the owner's arguments (`safeModeIn`, `switchesSetIn`);
+//   - a launch is refused, and a running member stopped, while the owner's
+//     user settings or the managed settings declare a hook or enable a plugin,
+//     which would print into the member's session with nothing recorded
+//     (martha#121, ./hooks_and_plugins_the_owner_declares.ts);
 //   - a member's file tool call that names the owner's user settings file is
 //     denied, the path resolved the way the host resolves it: trimmed, with a
 //     leading `~` against the host's home (`namesTheOwnersSettings`). Reads are
@@ -43,6 +47,8 @@
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
+
+import { hooksAndPluginsDeclaredIn } from './hooks_and_plugins_the_owner_declares.ts'
 
 /** How safe mode is switched on: by a variable in the host's environment, or by a flag on its command line. */
 export interface SafeMode {
@@ -467,7 +473,11 @@ export function hookSettingsWatch({ user, home, approved, managed, switches }: H
       if ('refusal' in read) unread.push(read.refusal)
       else files.push({ ...place, text: read.text })
     }
-    const reasons = [...unread, settingsTurningHooksOff(files, switches)].filter((reason) => reason !== undefined)
+    // The approved copy carries the relay's own hooks, and what else it declares (hooks, enabled plugins, a plugin
+    // folder in its env) is recorded at session start by sourcesALaunchHandsTheModel; every other file is the
+    // owner's or the admin's (martha#121).
+    const owners = files.filter((file) => file.path !== approved).map(hooksAndPluginsDeclaredIn)
+    const reasons = [...unread, settingsTurningHooksOff(files, switches), ...owners].filter((reason) => reason !== undefined)
     return reasons.length > 0 ? reasons.join('; ') : undefined
   }
   return { owners_file: user, home, check }

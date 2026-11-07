@@ -16,7 +16,8 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { ARGUMENT_PROBES, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES } from './check_every_path_is_gated.ts'
+import { ARGUMENT_PROBES, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES, shellGateRowsNothingRecords } from './check_every_path_is_gated.ts'
+import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
@@ -35,9 +36,7 @@ const gateRefuses = (path: string) =>
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 15 }, (_, index) => `A${index + 1}`),
-    // A16 is PR 133's (martha#127); whichever lands second makes this length 17.
-    'A17',
+    ...Array.from({ length: 17 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 8 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
@@ -540,4 +539,42 @@ test('the shipped argument gate answers every probe as the probe expects', () =>
   for (const probe of ARGUMENT_PROBES) {
     assert.equal(ARGUMENT_GATES['owner-arguments-load-no-config'](probe.args), probe.passes, probe.what)
   }
+})
+
+// --- every shell-gate row is reached by a recording (martha#121) -------------------
+
+const SHELL_GATE_ROWS = INBOUND_PATHS.filter((path) => path.control.kind === 'shell-gate').map((path) => path.id)
+
+test('a shell-gate row nothing records is a gap, named; recording every one leaves none', () => {
+  const undeclared = SHELL_GATE_ROWS.filter((id) => !REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES.includes(id))
+  assert.deepEqual(shellGateRowsNothingRecords(undeclared), [])
+  for (const missing of SHELL_GATE_ROWS.filter((id) => !REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES.includes(id))) {
+    const gaps = shellGateRowsNothingRecords(undeclared.filter((id) => id !== missing))
+    assert.deepEqual(gaps.map((gap) => gap.path), [missing], missing)
+    assert.match(gaps[0]?.why ?? '', /nothing the host records/)
+  }
+})
+
+test('a planted shell-gate row nobody records fails the check by its name', () => {
+  const planted: InboundPath = { id: 'A97', what: 'a planted path', klass: 'delivered', control: { kind: 'shell-gate' }, attestation: 'none' }
+  const undeclared = SHELL_GATE_ROWS.filter((id) => !REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES.includes(id))
+  assert.deepEqual(
+    shellGateRowsNothingRecords(undeclared, [...INBOUND_PATHS, planted]).map((gap) => gap.path),
+    ['A97'],
+  )
+})
+
+test('a row declared no turn source that a host records anyway is a gap: the declaration is false', () => {
+  const declared = REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES.find((id) => SHELL_GATE_ROWS.includes(id))
+  assert.ok(declared !== undefined)
+  const undeclared = SHELL_GATE_ROWS.filter((id) => !REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES.includes(id))
+  const gaps = shellGateRowsNothingRecords([...undeclared, declared])
+  assert.deepEqual(gaps.map((gap) => gap.path), [declared])
+  assert.match(gaps[0]?.why ?? '', /declared no turn source/)
+})
+
+test('rows of other controls are never asked to be recorded', () => {
+  const others = INBOUND_PATHS.filter((path) => path.control.kind !== 'shell-gate')
+  assert.ok(others.length > 0)
+  assert.deepEqual(shellGateRowsNothingRecords([], others), [])
 })

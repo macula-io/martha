@@ -29,6 +29,9 @@ import {
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -65,6 +68,19 @@ interface Probe {
   readonly planned: boolean
   /** Set in the environment the host inherits, as an owner's shell might. */
   readonly inherited?: Readonly<Record<string, string>>
+  /**
+   * The owner's user settings, written to a config folder of the probe's own
+   * that CLAUDE_CONFIG_DIR names, so the developer's own settings and plugins
+   * stay out of the run (martha#121).
+   */
+  readonly owner_settings?: (place: Place) => string
+  /**
+   * Run the launcher's own settings gate (hookSettingsOf) before the host, as
+   * martha start does. When it refuses, naming every one of these words, the
+   * host is not started and GATE_REFUSED is marked; a refusal naming anything
+   * else fails the probe.
+   */
+  readonly gate_names?: (place: Place) => readonly string[]
 }
 
 function put(dir: string, name: string, content: string): void {
@@ -114,6 +130,85 @@ const ONE_CALL_PROMPT = 'Run the shell command `true` with the Bash tool, then r
 // The prompt goes before `--allowedTools`, which takes every argument up to the next option.
 const ONE_CALL_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', ONE_CALL_PROMPT, '--allowedTools', 'Bash(true)']
 
+// --- a checkout's fixed text: CLAUDE.md files and agents (A16, martha#121) ------
+
+const NESTED_DIR = 'sub'
+const NESTED_FILE = join(NESTED_DIR, 'notes.txt')
+const INSTRUCTIONS = 'CLAUDE.md'
+const AGENT = 'probe-agent'
+/** What Claude Code prints, and only it, when it has no agent by that name (2.1.319). */
+const NO_SUCH_AGENT = `--agent '${AGENT}' not found`
+/** A prompt that reads a file below the top, which is when the host loads that directory's CLAUDE.md. */
+const READ_BELOW_PROMPT = `Use the Read tool on ${NESTED_FILE}, then reply with the single word ok.`
+const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', READ_BELOW_PROMPT, '--allowedTools', 'Read']
+
+/** The checkout's fixed text: a CLAUDE.md at the top, one below it, and an agent. */
+function plantFixedText(place: Place): void {
+  put(place.checkout, INSTRUCTIONS, 'Probe instructions at the top.\n')
+  put(place.checkout, join(NESTED_DIR, INSTRUCTIONS), 'Probe instructions below the top.\n')
+  put(place.checkout, NESTED_FILE, 'a file below the top\n')
+  put(place.checkout, join('.claude', 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
+}
+
+/**
+ * Settings whose InstructionsLoaded hook marks each of the checkout's two
+ * CLAUDE.md files the host loads, by the path the host reports. A file the
+ * owner keeps elsewhere marks nothing. A PostToolUse hook on Read marks
+ * READ_BELOW when the model read the file below the top, so a run in which
+ * that read never happened cannot pass for one in which the nested file
+ * did not load.
+ */
+function instructionsHook(place: Place): string {
+  const read = join(place.scratch, 'mark_read_below.mjs')
+  writeFileSync(
+    read,
+    `import { readFileSync, writeFileSync } from 'node:fs'\n` +
+      `import { resolve } from 'node:path'\n` +
+      `const input = JSON.parse(readFileSync(0, 'utf8'))\n` +
+      `const path = resolve(input.cwd, String(input.tool_input?.file_path))\n` +
+      `if (path === ${JSON.stringify(join(place.checkout, NESTED_FILE))}) writeFileSync(${JSON.stringify(place.marker('READ_BELOW'))}, '')\n`,
+  )
+  const script = join(place.scratch, 'mark_instructions.mjs')
+  const marks = {
+    [join(place.checkout, INSTRUCTIONS)]: place.marker('TOP_CLAUDE_MD'),
+    [join(place.checkout, NESTED_DIR, INSTRUCTIONS)]: place.marker('NESTED_CLAUDE_MD'),
+  }
+  writeFileSync(
+    script,
+    `import { readFileSync, writeFileSync } from 'node:fs'\n` +
+      `const marks = ${JSON.stringify(marks)}\n` +
+      `const loaded = JSON.parse(readFileSync(0, 'utf8')).file_path\n` +
+      `if (Object.hasOwn(marks, loaded)) writeFileSync(marks[loaded], '')\n`,
+  )
+  return JSON.stringify({
+    hooks: {
+      InstructionsLoaded: [{ hooks: [{ type: 'command', command: `node ${script}` }] }],
+      SessionStart: [{ hooks: [{ type: 'command', command: `touch ${place.marker('SETTINGS_HOOK')}` }] }],
+      PostToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: `node ${read}` }] }],
+    },
+  })
+}
+
+/**
+ * Claude Code started as the checkout's agent. The markers sit beside the
+ * checkout (../ from where the host runs): AGENT_LOADED when the host ran it,
+ * AGENT_NOT_FOUND when the host said it has no such agent.
+ */
+const claudeAsTheAgent = (...extra: readonly string[]): Command => (switches) => ({
+  command: 'sh',
+  args: [
+    '-c',
+    `"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -qF -e "${NO_SUCH_AGENT}" ../agent.err && touch ../AGENT_NOT_FOUND; true`,
+    'claude-as-agent',
+    'claude',
+    ...extra,
+    '--agent',
+    AGENT,
+    PROMPT,
+    ...switches.args,
+  ],
+})
+
 const claude = (...extra: readonly string[]): Command => (switches) => ({
   command: 'claude',
   args: [...extra, ...switches.args],
@@ -124,6 +219,42 @@ const opencode = (...extra: readonly string[]): Command => (switches) => ({
 })
 
 const PROBES: readonly Probe[] = [
+  {
+    what: "Claude Code by hand, headless: a checkout's CLAUDE.md at the top and below it",
+    host: 'claude-code',
+    command: claude(...READ_BELOW_CLAUDE),
+    planted: (place) => {
+      plantFixedText(place)
+      put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place))
+    },
+    expected: { SETTINGS_HOOK: true, READ_BELOW: true, TOP_CLAUDE_MD: true, NESTED_CLAUDE_MD: true },
+    planned: false,
+  },
+  {
+    what: "Claude Code as Martha starts it, headless: a checkout's CLAUDE.md at the top and below it (A16)",
+    host: 'claude-code',
+    command: claude(...READ_BELOW_CLAUDE),
+    approved: (place) => put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place)),
+    planted: plantFixedText,
+    expected: { SETTINGS_HOOK: true, READ_BELOW: true, TOP_CLAUDE_MD: false, NESTED_CLAUDE_MD: false },
+    planned: true,
+  },
+  {
+    what: "Claude Code by hand, headless: started as a checkout's agent",
+    host: 'claude-code',
+    command: claudeAsTheAgent(...HEADLESS_CLAUDE),
+    planted: plantFixedText,
+    expected: { AGENT_LOADED: true, AGENT_NOT_FOUND: false },
+    planned: false,
+  },
+  {
+    what: "Claude Code as Martha starts it, headless: started as a checkout's agent (A16)",
+    host: 'claude-code',
+    command: claudeAsTheAgent(...HEADLESS_CLAUDE),
+    planted: plantFixedText,
+    expected: { AGENT_LOADED: false, AGENT_NOT_FOUND: true },
+    planned: true,
+  },
   {
     what: 'Claude Code by hand, interactive health check: a project tool server',
     host: 'claude-code',
@@ -224,8 +355,67 @@ function version(command: string): string {
 
 const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
 
+// --- the owner's user hooks and plugins (martha#121, finding 1) ---------------
+//
+// A member's host loads the owner's user settings, with --setting-sources user.
+// Run ungated, each of these shows that a hook or plugin there runs in a session
+// started on Martha's switches; gated, that the launcher's gate refuses it and
+// nothing starts. The config folder holds no login, so the host stops before
+// any model call, after its SessionStart hooks ran.
+
+const OWNER_CONFIG = 'owner-config'
+const ownerSettingsPath = (place: Place) => join(place.scratch, OWNER_CONFIG, USER_SETTINGS_FILE)
+const touchAtStart = (marker: string) => ({ SessionStart: [{ hooks: [{ type: 'command', command: `touch ${marker}` }] }] })
+const ownerHook = (place: Place) => JSON.stringify({ hooks: touchAtStart(place.marker('OWNER_HOOK')) })
+
+/** A plugin folder whose one hook marks PLUGIN_HOOK when a session starts. */
+function pluginFolder(place: Place): string {
+  const folder = join(place.scratch, 'probe-plugin')
+  put(folder, join('.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'probe-plugin', version: '0.0.1' }))
+  put(folder, join('hooks', 'hooks.json'), JSON.stringify({ hooks: touchAtStart(place.marker('PLUGIN_HOOK')) }))
+  return folder
+}
+const pluginInOwnerSettings = (place: Place) => JSON.stringify({ env: { [PLUGIN_DIRS_VARIABLE]: pluginFolder(place) } })
+
+const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] => {
+  const as = gated ? 'as martha start starts it, its settings gate included' : 'on the switches alone, its settings gate skipped'
+  const refused = (marker: string) => (gated ? { [marker]: false, GATE_REFUSED: true } : { [marker]: true })
+  const common = { host: 'claude-code' as const, command: claude(...HEADLESS_CLAUDE, PROMPT), approved: () => {}, planted: () => {}, planned: true }
+  return [
+    {
+      ...common,
+      what: `Claude Code ${as}: a SessionStart hook in the owner's user settings`,
+      owner_settings: ownerHook,
+      expected: refused('OWNER_HOOK'),
+      ...(gated ? { gate_names: (place: Place) => [ownerSettingsPath(place), 'SessionStart'] } : {}),
+    },
+    {
+      ...common,
+      what: `Claude Code ${as}: a plugin folder in the owner's user settings env`,
+      owner_settings: pluginInOwnerSettings,
+      expected: refused('PLUGIN_HOOK'),
+      ...(gated ? { gate_names: (place: Place) => [ownerSettingsPath(place), PLUGIN_DIRS_VARIABLE] } : {}),
+    },
+  ]
+})
+
+/** The environment a probe's host inherits: the owner's own config folder when it has one, and no plugin folder from the developer's shell. */
+function environmentOf(probe: Probe, place: Place): Record<string, string | undefined> {
+  if (probe.owner_settings === undefined) return { ...process.env, ...probe.inherited }
+  put(dirname(ownerSettingsPath(place)), USER_SETTINGS_FILE, probe.owner_settings(place))
+  const { [PLUGIN_DIRS_VARIABLE]: _developers, ...rest } = process.env
+  return { ...rest, CLAUDE_CONFIG_DIR: dirname(ownerSettingsPath(place)), ...probe.inherited }
+}
+
+/** The launcher's settings gate on this planned launch: undefined when it passes, else its refusal. */
+function gateRefusal(probe: Probe, inherited: Record<string, string | undefined>, prepared: Extract<ReturnType<typeof prepareLaunch>, { readonly allow: true }>): string | undefined {
+  if (probe.gate_names === undefined) return undefined
+  const gate = hookSettingsOf(launchEnvironment(inherited, prepared.switches), [], prepared)
+  return typeof gate === 'string' ? gate : undefined
+}
+
 /** The switches to start with, or why the planned launch was refused. */
-function switchesFor(probe: Probe, place: Place): HostSwitches | string {
+function switchesFor(probe: Probe, place: Place, inherited: Record<string, string | undefined> = {}): HostSwitches | string | { readonly gate: string } {
   if (!probe.planned) {
     probe.planted(place)
     return NO_SWITCHES
@@ -238,6 +428,8 @@ function switchesFor(probe: Probe, place: Place): HostSwitches | string {
     approved_fingerprints: [fingerprintOf(readLaunchState(where, thisMachine))],
   }, thisMachine)
   if (!prepared.allow) return prepared.refusal
+  const gate = gateRefusal(probe, inherited, prepared)
+  if (gate !== undefined) return { gate }
   probe.planted(place)
   return prepared.switches
 }
@@ -271,13 +463,15 @@ function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
     spawnSync('git', ['init', '-q', '.'], { cwd: checkout })
     const place: Place = { scratch, checkout, marker: (name) => join(scratch, name) }
 
-    const switches = switchesFor(probe, place)
+    const inherited = environmentOf(probe, place)
+    const switches = switchesFor(probe, place, inherited)
     if (typeof switches === 'string') return `refused by prepareLaunch: ${switches}`
+    if ('gate' in switches) return gateSeen(probe, place, switches.gate)
 
     const { command, args } = probe.command(switches)
     const run = spawnSync(command, args, {
       cwd: checkout,
-      env: launchEnvironment({ ...process.env, ...probe.inherited }, switches),
+      env: launchEnvironment(inherited, switches),
       stdio: 'ignore',
       timeout: RUN_TIMEOUT_MS,
     })
@@ -287,6 +481,13 @@ function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
   } finally {
     removeScratch(scratch, [checkout])
   }
+}
+
+/** The markers of a run the launcher's gate refused: nothing started, and GATE_REFUSED when the refusal names what the probe planted. */
+function gateSeen(probe: Probe, place: Place, refusal: string): Readonly<Record<string, boolean>> | string {
+  const names = probe.gate_names?.(place) ?? []
+  if (!names.every((name) => refusal.includes(name))) return `refused by the settings gate, not naming ${names.join(', ')}: ${refusal}`
+  return Object.fromEntries(Object.keys(probe.expected).map((name) => [name, name === 'GATE_REFUSED']))
 }
 
 const said = (started: boolean) => (started ? 'started' : 'not started')
@@ -321,7 +522,7 @@ function scratchProjectFolders(): readonly string[] {
 }
 const foldersBefore = new Set(scratchProjectFolders())
 
-for (const probe of PROBES) reportProbe(probe)
+for (const probe of [...PROBES, ...OWNER_PROBES]) reportProbe(probe)
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
