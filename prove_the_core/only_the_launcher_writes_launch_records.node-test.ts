@@ -38,6 +38,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'install_the_recorded_mesh_server',
     'keep_martha_state_outside_the_checkout',
     'launch_a_claude_code_member',
+    'run_an_owner_signed_command',
     'run_the_martha_command',
     'start_a_member',
   ])
