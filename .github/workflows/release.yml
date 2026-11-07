@@ -2,7 +2,8 @@
 # FROM scratch holding `git archive` of the tagged tree, signed by macula-ci-images' attest-image.yml.
 #
 # Nothing is pushed while the guard refuses (the tag is off main, or names another version than the root
-# package.json), the suite fails, the tagged tree holds private text, or the version is already on the registry.
+# package.json), the suite fails, a dependency carries a known published advisory (advisories.yml, martha#110), the
+# tagged tree holds private text, or the version is already on the registry.
 # The installer (installer/, @macula-io/martha on npm) checks the signature on the digest this job pushes, by the
 # signer sha listed in installer/signers.txt; keep-the-names-in-one-place fails when the sha below is not listed.
 #
@@ -43,6 +44,12 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
 
+  # A dependency with a known published advisory stops the release (martha#110).
+  advisories:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/advisories.yml
+
   # The tagged tree is a superset of what git archive packs (installer/ is export-ignored), so a clean tree is a
   # clean release.
   private:
@@ -59,7 +66,7 @@ jobs:
       - run: npm run check:private
 
   release:
-    needs: [guard, suite, private]
+    needs: [guard, suite, advisories, private]
     runs-on: ubuntu-latest
     permissions:
       contents: read

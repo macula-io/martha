@@ -13,6 +13,7 @@
 
 import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
 import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 /**
  * How the path reaches the member.
@@ -39,9 +40,14 @@ export type PathClass = 'delivered' | 'fetched' | 'launched'
  *   (../attribute_a_cross_session_sender, martha#14) resolves it to a node id
  *   through the launcher's record. A host that attests no sender binds nothing,
  *   and a delivery on this path then carries no identity.
+ * - `host-engine` — the host's engine stamped the turn as typed at the
+ *   member's own terminal, where it queued it and where no hook may set it, so
+ *   the sender is the owner (Raf's ruling on martha#51). The identity on such a
+ *   row is the owner's mark, never a node id: the owner signs the policy, so
+ *   the owner is its root and not an entry in it.
  * - `none` — nobody attests the sender.
  */
-export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'none'
+export type SenderAttestation = 'roster' | 'station' | 'host-binder' | 'host-engine' | 'none'
 
 /**
  * The delivery gates, by the name a row may use. A row may only name one of
@@ -67,6 +73,17 @@ export const LAUNCH_GATES = {
 export type KnownLaunchGate = keyof typeof LAUNCH_GATES
 
 /**
+ * The argument gates, by the name a row may use: what decides which of the
+ * owner's words reach the host when Martha starts it. The coverage check drives
+ * the function behind the name, once per question.
+ */
+export const ARGUMENT_GATES = {
+  'owner-arguments-load-no-config': passesOnlySwitchesThatLoadNoConfig,
+} as const satisfies Record<string, ArgumentGate>
+
+export type KnownArgumentGate = keyof typeof ARGUMENT_GATES
+
+/**
  * What stops outsider text on this path from being acted on.
  *
  * - `delivery-gate` — a deterministic check on the sender runs before the text
@@ -81,6 +98,10 @@ export type KnownLaunchGate = keyof typeof LAUNCH_GATES
  *   (../refuse_launch_of_unapproved_config). The only control a `launched` row
  *   may declare. `residual` says, in words, what happens where Martha does not
  *   start the host itself and so cannot run the gate first.
+ * - `refused-before-launch` — words handed to the host when Martha starts it,
+ *   judged before the host starts: every word the named argument gate does not
+ *   pass refuses the start, so none reaches the model or the host's config.
+ *   Only a `delivered` row may declare it.
  * - `none` — no control. A row in this state fails CI on purpose.
  */
 export type Control =
@@ -88,6 +109,7 @@ export type Control =
   | { readonly kind: 'shell-gate' }
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
   | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
+  | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
   | { readonly kind: 'none' }
 
 export interface InboundPath {
@@ -191,8 +213,22 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A14',
+    what: "a turn the owner typed at the member's own terminal, stamped as typed by the host's engine: no command expanded into it and not written by the engine (martha#51). The owner's mark is admitted here and nowhere else; a pasted text is the owner's act. Not closed: a process of the same OS user can claim this origin on the launcher's socket (T13, accepted under A13 until the signed roster, martha#24)",
+    klass: 'delivered',
+    control: { kind: 'shell-gate' },
+    attestation: 'host-engine',
+  },
+  {
+    id: 'A15',
+    what: "the owner's words after martha start <member> --, which the host would act on after the launch gate judged the launch: a prompt there is a turn no host stamped as the owner's, a --settings, --mcp-config or --plugin-dir loads config or code nobody approved, a permission switch lets a tool past the shell gate's hook (martha#98)",
+    klass: 'delivered',
+    control: { kind: 'refused-before-launch', gate: 'owner-arguments-load-no-config' },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
-    what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment reads, which the recorder does not list (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
+    what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',

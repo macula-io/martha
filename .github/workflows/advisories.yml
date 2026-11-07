@@ -1,0 +1,32 @@
+# Dependency advisories (martha#110): a dependency with a known published advisory fails CI, and every release
+# waits on this before anything ships.
+#
+# Both projects are scanned: the root (Martha itself, packed into the release image) and installer/ (the npm
+# package, whose sigstore is bundled into the tarball). npm audit reads the whole lock, dev included, because a
+# build tool runs in the release job with the repository's credentials.
+#
+# No baseline: an advisory is fixed, or waived by a dated, named, expiring row in .github/advisories-waivers.txt
+# (the shared workflow's header gives the format; a row more than 90 days out, or past its date, fails the run).
+#
+# The pin and the directory list live here once. ci runs this on every push to main and every PR; release.yml and
+# installer.yml call it, and their publish jobs need it.
+
+name: dependency advisories
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    permissions:
+      contents: read
+    uses: macula-io/macula-ci-images/.github/workflows/dependency-advisories.yml@b268b87644ae0256a20e259bd7e286e8c98b303c
+    with:
+      ecosystem: node
+      working-directories: '[".", "installer"]'

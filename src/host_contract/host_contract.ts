@@ -266,6 +266,7 @@ export type TurnSource =
   | 'cross_session'
   | 'checkout_hook'
   | 'owner_paste'
+  | 'owner_typed'
   | 'server_instructions'
   | 'checkout_run'
   | 'mesh_read'

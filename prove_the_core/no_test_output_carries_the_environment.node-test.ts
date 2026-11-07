@@ -7,7 +7,7 @@ import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { manifestOf } from './declared_in_package_json.ts'
+import { manifestOf, PACKAGES } from './declared_in_package_json.ts'
 import { TEST_SCRIPT, testRunFlagsOf } from './every_test_run_ends.ts'
 import {
   environmentLeakReportOf,
@@ -65,9 +65,6 @@ async function throughTheRunner(t: TestContext, command: readonly string[]): Pro
 
 /** node --test with the test script's own flags, on the planted `file`. */
 const nodeTestOn = (file: string): string[] => [process.execPath, '--test', ...testRunFlagsOf(manifestOf(repository)), plantedPath(file)]
-
-/** Every package in martha whose tests npm test runs: the repository's and the installer's. */
-const PACKAGES = ['.', 'installer']
 
 for (const folder of PACKAGES) {
   test(`npm test in ${folder} runs node --test through ${RUNNER}`, () => {
