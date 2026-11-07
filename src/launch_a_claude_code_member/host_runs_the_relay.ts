@@ -100,16 +100,20 @@ export function hostTrustsTheFolder(env: Readonly<Record<string, string | undefi
   const configDir = env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir()
   if (!isAbsolute(configDir)) return false
   try {
-    const record: unknown = JSON.parse(readFileSync(join(configDir, HOST_TRUST_RECORD_FILE), 'utf8'))
-    const projects = isRecord(record) && isRecord(record.projects) ? record.projects : {}
-    const named = (path: string): boolean => {
-      const project = Object.hasOwn(projects, path) ? projects[path] : undefined
-      return isRecord(project) && project.hasTrustDialogAccepted === true
-    }
-    return named(folder) || named(realpathSync(folder))
+    const projects = projectsIn(JSON.parse(readFileSync(join(configDir, HOST_TRUST_RECORD_FILE), 'utf8')))
+    return trustedIn(projects, folder) || trustedIn(projects, realpathSync(folder))
   } catch {
     return false
   }
+}
+
+/** The `projects` of the host's record; none when the record has no such object. */
+const projectsIn = (record: unknown): Readonly<Record<string, unknown>> => (isRecord(record) && isRecord(record.projects) ? record.projects : {})
+
+/** Whether the record marks exactly this path trusted, with the value true. */
+function trustedIn(projects: Readonly<Record<string, unknown>>, path: string): boolean {
+  const project = Object.hasOwn(projects, path) ? projects[path] : undefined
+  return isRecord(project) && project.hasTrustDialogAccepted === true
 }
 
 /** The host's answers fit in this; a longer one is no answer the launcher reads. */
