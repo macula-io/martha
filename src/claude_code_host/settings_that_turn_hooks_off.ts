@@ -20,6 +20,10 @@
 //   - a launch is refused while a settings file the host reads sets one: the
 //     owner's user settings, the approved --settings copy, and the managed file
 //     and drop-in folder, whose place the recorder also takes from the host;
+//   - an exit that fires only when the host runs with no terminal (2.1.319:
+//     CLAUDE_CODE_IGNORE_PERSISTED_TRUST set in print mode) is recorded and
+//     refused nothing: a member always has a terminal, and the relay's hooks
+//     ran on that exit in a live probe (`outside_a_terminal`);
 //   - a launch is refused while safe mode is on: its variable in the
 //     launcher's environment or in a settings file's env, or its flag among
 //     the owner's arguments (`safeModeIn`, `switchesSetIn`);
@@ -54,6 +58,15 @@ export interface HookSwitches {
   readonly every_source: readonly string[]
   /** Safe mode, which keeps managed hooks only. */
   readonly safe_mode: SafeMode
+  /**
+   * Variables that narrow the hook set only when the host runs with no
+   * terminal: it then keeps the user, --settings and policy hooks. A member
+   * always has one (martha start refuses without it, and passes no -p), and a
+   * live probe on 2.1.319 showed the relay's hooks run on this exit anyway
+   * (martha#122 r=3), so nothing is refused for them; they are recorded so a
+   * host that changes the exit fails the recording.
+   */
+  readonly outside_a_terminal: readonly string[]
 }
 
 /** Where the host reads managed settings on Linux: a folder, the file in it, and a drop-in folder in it. */
@@ -84,6 +97,11 @@ const SAFE_MODE_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(process\.env\.([
 // A key of the policy settings: true, or a list naming what was asked for.
 const POLICY_KEY_SHAPE =
   /^function ([\w$]+)\(([\w$]+)\)\{let ([\w$]+)=[\w$]+\("policySettings"\)\?\.([\w$]+);if\(\3===!0\)return!0;if\(Array\.isArray\(\3\)\)return \3\.includes\(\2\);return!1\}$/
+// Two calls that must both be true (2.1.319): the host has no terminal, and a
+// variable of its environment is set.
+const BOTH_SHAPE = /^function ([\w$]+)\(\)\{return ([\w$]+)\(\)&&([\w$]+)\(\)\}$/
+const NO_TERMINAL_SHAPE = /^function ([\w$]+)\(\)\{return![\w$]+\(\)\.host\.launchOptions\.isInteractive\(\)\}$/
+const VARIABLE_SET_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)\}$/
 
 const CLOSER: Readonly<Record<string, string>> = { '{': '}', '(': ')', '[': ']' }
 
@@ -194,15 +212,27 @@ function testedBy(part: string): Tested {
   throw new Error(`An exit of the hook-set function tests ${part}, of no known shape, so when it drops hooks cannot be told.`)
 }
 
-/** What a function an exit calls switches hooks off by, from its definition; undefined for no known shape. */
-function exitCallOf(definition: string): { readonly name: string; readonly safe_mode?: SafeMode; readonly policy_key?: string } | undefined {
+/** What a function an exit calls switches hooks by. */
+type ExitCall = { readonly name: string; readonly safe_mode?: SafeMode; readonly policy_key?: string; readonly outside_a_terminal?: string }
+
+/** The variable an exit of both shapes tests, its parts found among `calls`; undefined for no known shape. */
+function noTerminalExitOf(definition: string, calls: readonly string[]): ExitCall | undefined {
+  const [, name, first, second] = BOTH_SHAPE.exec(definition) ?? []
+  if (name === undefined) return undefined
+  const noTerminal = calls.some((call) => NO_TERMINAL_SHAPE.exec(call)?.[1] === first)
+  const variable = calls.map((call) => VARIABLE_SET_SHAPE.exec(call)).find((match) => match?.[1] === second)?.[2]
+  return noTerminal && variable !== undefined ? { name, outside_a_terminal: variable } : undefined
+}
+
+/** What a function an exit calls switches hooks by, from its definition and the parts it calls; undefined for no known shape. */
+function exitCallOf(definition: string, calls: readonly string[]): ExitCall | undefined {
   const safe = SAFE_MODE_SHAPE.exec(definition)
   if (safe?.[1] !== undefined && safe[2] !== undefined && safe[3] !== undefined) {
     return { name: safe[1], safe_mode: { variables: [safe[2]], flags: [safe[3]] } }
   }
   const key = POLICY_KEY_SHAPE.exec(definition)
   if (key?.[1] !== undefined && key[4] !== undefined) return { name: key[1], policy_key: key[4] }
-  return undefined
+  return noTerminalExitOf(definition, calls)
 }
 
 const callsOf = (tested: readonly Tested[]): string[] => [...new Set(tested.flatMap((test) => ('call' in test ? [test.call] : [])))]
@@ -210,16 +240,38 @@ const callsOf = (tested: readonly Tested[]): string[] => [...new Set(tested.flat
 const noKnownShape = (call: string): Error =>
   new Error(`An exit of the hook-set function calls ${call}(), a function of no known shape, so when it drops hooks cannot be told.`)
 
-/** Each function the hook-set function's exits call, cut whole from the host text, in the order first called; refuses one of no known shape. */
+/** The one definition of `name` in the host text that `shaped` accepts; undefined for none, or two that differ. */
+function onlyShaped(text: string, name: string, shaped: (definition: string) => boolean): string | undefined {
+  const known = new Set<string>()
+  for (const match of text.matchAll(new RegExp(`function ${escaped(name)}\\(`, 'g'))) {
+    const definition = text.slice(match.index, closingBrace(text, text.indexOf('{', match.index)))
+    if (shaped(definition)) known.add(definition)
+  }
+  return known.size === 1 ? [...known][0] : undefined
+}
+
+/** An exit of both shapes and its two parts, cut whole from the host text; undefined for no known shape. */
+function noTerminalExitIn(text: string, call: string): string[] | undefined {
+  const both = onlyShaped(text, call, (definition) => BOTH_SHAPE.exec(definition)?.[1] === call)
+  const [, , first, second] = BOTH_SHAPE.exec(both ?? '') ?? []
+  if (both === undefined || first === undefined || second === undefined) return undefined
+  const parts = [onlyShaped(text, first, (definition) => NO_TERMINAL_SHAPE.test(definition)), onlyShaped(text, second, (definition) => VARIABLE_SET_SHAPE.test(definition))]
+  const found = parts.filter((part) => part !== undefined)
+  return found.length === parts.length ? [both, ...found] : undefined
+}
+
+/**
+ * Each function the hook-set function's exits call, cut whole from the host
+ * text, in the order first called, an exit of both shapes followed by its two
+ * parts; refuses one of no known shape.
+ */
 export function hookExitCallsIn(text: string, source: string): string[] {
-  return callsOf(exitsOf(source).tested).map((call) => {
-    const known = new Set<string>()
-    for (const match of text.matchAll(new RegExp(`function ${escaped(call)}\\(`, 'g'))) {
-      const definition = text.slice(match.index, closingBrace(text, text.indexOf('{', match.index)))
-      if (exitCallOf(definition)?.name === call) known.add(definition)
-    }
-    if (known.size !== 1) throw noKnownShape(call)
-    return [...known][0] ?? ''
+  return callsOf(exitsOf(source).tested).flatMap((call) => {
+    const direct = onlyShaped(text, call, (definition) => exitCallOf(definition, [])?.name === call)
+    if (direct !== undefined) return [direct]
+    const both = noTerminalExitIn(text, call)
+    if (both === undefined) throw noKnownShape(call)
+    return both
   })
 }
 
@@ -247,9 +299,12 @@ export function hookSwitchesSourceIn(text: string): string {
 
 const sortedUnique = (keys: Iterable<string>): string[] => [...new Set(keys)].sort()
 
-/** What the functions the exits call switch on: keys of the policy settings, and safe mode. */
-function switchedByCalls(tested: readonly Tested[], calls: readonly string[]): { readonly policy_keys: string[]; readonly safe_mode: SafeMode } {
-  const known = calls.map(exitCallOf)
+/** What the functions the exits call switch on: keys of the policy settings, safe mode, and variables read only with no terminal. */
+function switchedByCalls(
+  tested: readonly Tested[],
+  calls: readonly string[],
+): { readonly policy_keys: string[]; readonly safe_mode: SafeMode; readonly outside_a_terminal: string[] } {
+  const known = calls.map((call) => exitCallOf(call, calls))
   const found = callsOf(tested).map((call) => known.find((candidate) => candidate?.name === call) ?? call)
   const unknown = found.find((call) => typeof call === 'string')
   if (unknown !== undefined) throw noKnownShape(unknown)
@@ -260,6 +315,7 @@ function switchedByCalls(tested: readonly Tested[], calls: readonly string[]): {
       variables: sortedUnique(shaped.flatMap((call) => call.safe_mode?.variables ?? [])),
       flags: sortedUnique(shaped.flatMap((call) => call.safe_mode?.flags ?? [])),
     },
+    outside_a_terminal: sortedUnique(shaped.flatMap((call) => (call.outside_a_terminal === undefined ? [] : [call.outside_a_terminal]))),
   }
 }
 
@@ -267,14 +323,14 @@ function switchedByCalls(tested: readonly Tested[], calls: readonly string[]): {
 export function hookSwitchesOf(source: string, calls: readonly string[]): HookSwitches {
   const { policy, tested } = exitsOf(source)
   const keys = tested.flatMap((test) => ('key' in test ? [test] : []))
-  const { policy_keys, safe_mode } = switchedByCalls(tested, calls)
+  const { policy_keys, safe_mode, outside_a_terminal } = switchedByCalls(tested, calls)
   const onPolicy = [...keys.filter((test) => test.local === policy).map((test) => test.key), ...policy_keys]
   const onMerged = keys.filter((test) => test.local !== policy).map((test) => test.key)
   if (onPolicy.length + onMerged.length === 0) {
     throw new Error(`The recorded hook-set function tests no settings key as true: ${source}`)
   }
   // The merged settings the host tests include the managed ones.
-  return { managed: sortedUnique([...onPolicy, ...onMerged]), every_source: sortedUnique(onMerged), safe_mode }
+  return { managed: sortedUnique([...onPolicy, ...onMerged]), every_source: sortedUnique(onMerged), safe_mode, outside_a_terminal }
 }
 
 const escaped = (name: string): string => name.replaceAll('$', '\\$')

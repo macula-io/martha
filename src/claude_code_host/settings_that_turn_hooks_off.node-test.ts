@@ -40,12 +40,13 @@ function scratch(t: TestContext): string {
   return dir
 }
 
-test('the recorded host turns hooks off by disableAllHooks from any settings file, by allowManagedHooksOnly and strictPluginOnlyCustomization from managed settings, and in safe mode; with no terminal it narrows them when a variable is set', () => {
+test('the recorded host turns hooks off by disableAllHooks from any settings file, by allowManagedHooksOnly and strictPluginOnlyCustomization from managed settings, and in safe mode', () => {
   assert.deepEqual(CLAUDE_CODE_HOOK_SWITCHES, {
     managed: ['allowManagedHooksOnly', 'disableAllHooks', 'strictPluginOnlyCustomization'],
     every_source: ['disableAllHooks'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
-    outside_a_terminal: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'],
+    // 2.1.318 has no exit for a host with no terminal; 2.1.319 adds one (below), recorded when the host is re-recorded.
+    outside_a_terminal: [],
   })
   assert.deepEqual(hookSwitchesOf(RECORDED_HOST.hooks_switches, RECORDED_HOST.hooks_switch_calls), CLAUDE_CODE_HOOK_SWITCHES)
 })

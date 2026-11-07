@@ -581,7 +581,13 @@ owner's arguments. Every one of these is read from the host's own hook-set
 function and the functions its exits call (`hooks_switches` and
 `hooks_switch_calls` in `recorded_claude_code_host.json`), and the recorder
 fails on a statement or an exit of that function it does not know, so a host
-that adds a way to drop hooks fails the recording instead of passing it. A
+that adds a way to drop hooks fails the recording instead of passing it.
+Claude Code 2.1.319 adds one such exit: with no terminal and
+`CLAUDE_CODE_IGNORE_PERSISTED_TRUST` set, the host keeps only the user,
+`--settings` and policy hooks. The recorder knows that shape and records the
+variable (`outside_a_terminal`), but refuses nothing for it: a member always
+has a terminal, and a live probe on 2.1.319 in print mode, with a project hook
+as the witness that the exit fired, saw the relay's hooks still run. A
 member's file tool call that names the owner's user settings file is denied,
 the path resolved as the host resolves it (trimmed, a leading `~` against its
 home); reads are denied too, which keeps nothing secret, since a shell can
