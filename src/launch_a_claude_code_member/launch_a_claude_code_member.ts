@@ -13,7 +13,9 @@
 //      the host reads, which may set no switch that turns the relay off, nor
 //      safe mode in the environment, a settings file's env or the owner's
 //      arguments (martha#122, ../claude_code_host/settings_that_turn_hooks_off),
-//      then the env of the
+//      and, but for the approved copy, may declare no hook and enable no plugin,
+//      nor may the launcher's environment name a plugin folder (martha#121,
+//      ../claude_code_host/hooks_and_plugins_the_owner_declares), then the env of the
 //      settings files the host loads, the owner's user settings and the
 //      approved --settings copy, which may name only what the mesh server may
 //      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
@@ -94,6 +96,7 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
@@ -314,23 +317,29 @@ function settingsEnvironment(
 /**
  * The settings files the member's host reads, watched for a key that turns
  * Martha's relay off: the owner's user settings, the approved --settings copy,
- * and the managed settings (martha#122); or why the launch is refused: one of
- * them sets such a key, or the user settings file cannot be told.
+ * and the managed settings (martha#122), and for a hook or plugin the owner's
+ * or the managed ones declare (martha#121); or why the launch is refused: one
+ * of them sets such a key or declares one, the environment or the owner's
+ * arguments switch safe mode on or name a plugin folder, or the user settings
+ * file cannot be told. Exported so npm run probe:launch runs this very gate.
  */
-function hookSettingsOf(
-  launch: ClaudeCodeMemberLaunch,
+export function hookSettingsOf(
   hostEnv: Readonly<Record<string, string | undefined>>,
+  args: readonly string[],
   prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+  managed: ManagedSettingsPlace = RECORDED_HOST.managed_settings,
 ): HookSettingsWatch | string {
   const user = userSettingsPath(hostEnv)
   if ('refusal' in user) return user.refusal
-  const safeMode = safeModeIn(hostEnv, launch.args, CLAUDE_CODE_HOOK_SWITCHES.safe_mode)
+  const safeMode = safeModeIn(hostEnv, args, CLAUDE_CODE_HOOK_SWITCHES.safe_mode)
   if (safeMode !== undefined) return safeMode
+  const pluginDirs = pluginDirsIn(hostEnv)
+  if (pluginDirs !== undefined) return pluginDirs
   const watch = hookSettingsWatch({
     user: user.path,
     home: hostEnv.HOME ?? homedir(),
     approved: prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
-    managed: launch.managed_settings ?? RECORDED_HOST.managed_settings,
+    managed,
     switches: CLAUDE_CODE_HOOK_SWITCHES,
   })
   return watch.check() ?? watch
@@ -373,7 +382,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   }
   const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
-  const hookSettings = hookSettingsOf(launch, hostEnv, prepared)
+  const hookSettings = hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings)
   if (typeof hookSettings === 'string') {
     removeSnapshot()
     return `${NOT_STARTED}: ${hookSettings}`

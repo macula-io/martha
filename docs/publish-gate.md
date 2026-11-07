@@ -244,6 +244,16 @@ What the plan leaves out, stated rather than hidden:
   settings declare a hook or enable a plugin (`sourcesALaunchHandsTheModel` in
   `src/claude_code_host/`), and the shell gate refuses the shell from then on.
   A carried file it cannot read fails closed and records it too.
+  The owner's user settings and the managed settings are loaded too
+  (`--setting-sources user`), and nothing would record what their hooks and
+  plugins print, so a member does not start while one of them declares a hook,
+  enables a plugin or names a plugin folder (`CLAUDE_CODE_PLUGIN_DIRS`, also
+  refused in the launcher's environment); the refusal names the file and each
+  one, so the owner knows what to move (martha#121). The launcher reads those
+  files again for the member's whole life, with the #122 watch below, and stops
+  the member when one appears. `npm run probe:launch` shows a hook and a plugin
+  folder in the owner's user settings running on Martha's switches alone, and
+  the launcher's own gate refusing both, with nothing started.
 - **A tool server's instruction block** (A11), handed to the model at start.
   The mesh server's block is code of its recorded tree, which `treeUnlike`
   compares file by file with the recorded one, through

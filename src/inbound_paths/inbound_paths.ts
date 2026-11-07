@@ -165,7 +165,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A7',
-    what: "what a checkout's approved config prints into the session at run time: a hook's output or added context, and an enabled plugin's hooks. The approval pins the script, never its output, which changes from run to run with the network, the clock or a file git ignores (martha#121). Recorded at every session start whenever the carried settings declare a hook or a plugin (sourcesALaunchHandsTheModel)",
+    what: "what a checkout's approved config prints into the session at run time: a hook's output or added context, and an enabled plugin's hooks. The approval pins the script, never its output, which changes from run to run with the network, the clock or a file git ignores (martha#121). Recorded at every session start whenever the carried settings declare a hook or a plugin (sourcesALaunchHandsTheModel). The owner's user settings and the managed settings, which the host also loads, may declare none: a member does not start, and a running one is stopped, while one of them declares a hook, enables a plugin or names a plugin folder (hooks_and_plugins_the_owner_declares, martha#121)",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'none',

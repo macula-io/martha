@@ -37,6 +37,7 @@ import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_rel
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
@@ -1384,13 +1385,14 @@ for (const [shape, configDir] of [
   })
 }
 
-test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, and the mesh server is given it empty", async (t) => {
+// A folder in it would load a plugin, which is refused (martha#121); a blank one loads nothing, and still never reaches the server.
+test("a blank CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, and the mesh server is given it empty", async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
   const { recording } = await recordedTreeOf(t, recorded.server_version)
   const place = placeFor(t, meshServerAt(recorded.server_version))
   const fake = fakeClaude(place)
-  const fromSettings = { CLAUDE_CODE_PLUGIN_DIRS: join(place.home, 'plugins') }
+  const fromSettings = { [PLUGIN_DIRS_VARIABLE]: ' ' }
   ownerSettings(place, fromSettings)
   const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
@@ -1403,7 +1405,7 @@ test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, an
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
   const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
-  assert.equal(seen.CLAUDE_CODE_PLUGIN_DIRS, '', `it reached the server as ${seen.CLAUDE_CODE_PLUGIN_DIRS}`)
+  assert.equal(seen[PLUGIN_DIRS_VARIABLE], '', `it reached the server as ${String(seen[PLUGIN_DIRS_VARIABLE])}`)
   started.stop('the test is over')
   await started.stopped
 })
@@ -1540,6 +1542,68 @@ test("safe mode among the owner's arguments starts nothing, naming the argument"
   const [SAFE_MODE_FLAG] = safeMode().flags
   assert.ok(SAFE_MODE_FLAG !== undefined)
   await safeModeLaunchRefused(t, (launch) => ({ ...launch, args: [...launch.args, SAFE_MODE_FLAG] }), () => [SAFE_MODE_FLAG])
+})
+
+// --- hooks and plugins the owner's user or managed settings declare (martha#121, finding 1) ---
+
+const OWNER_HOOK = { matcher: '', hooks: [{ type: 'command', command: 'echo from-the-owner' }] }
+const OWNER_PLUGIN = 'formatter@tools'
+
+/** Each settings file the owner or the admin holds, by name, and where it lies under a test's place. */
+const OWNERS_FILES: readonly (readonly [string, (place: Place) => string])[] = [
+  ['the user settings', (place) => join(place.home, USER_SETTINGS)],
+  ['the managed settings file', (place) => join(managedSettingsOf(place).dir, RECORDED_HOST.managed_settings.file)],
+  ['a file of the managed drop-in folder', (place) => join(managedSettingsOf(place).dir, RECORDED_HOST.managed_settings.drop_in, '50-org.json')],
+]
+
+for (const [which, pathOf] of OWNERS_FILES) {
+  test(`a hook only in ${which} starts nothing, naming the file and the event`, async (t) => {
+    await hookLaunchRefused(t, (place) => writeSettings(pathOf(place), { hooks: { SessionStart: [OWNER_HOOK] } }), 'SessionStart')
+  })
+
+  test(`a plugin only in ${which} starts nothing, naming the file and the plugin`, async (t) => {
+    await hookLaunchRefused(t, (place) => writeSettings(pathOf(place), { enabledPlugins: { [OWNER_PLUGIN]: true } }), OWNER_PLUGIN)
+  })
+
+  test(`a plugin folder in the env of ${which} starts nothing, naming the file and the variable`, async (t) => {
+    await hookLaunchRefused(t, (place) => writeSettings(pathOf(place), { env: { [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') } }), PLUGIN_DIRS_VARIABLE)
+  })
+}
+
+test("a plugin folder in the launcher's own environment starts nothing, naming the variable", async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  const fake = fakeClaude(place)
+  const launch = memberLaunch(place, fake.command, place.approved, [], recording)
+  const refusal = await refusedLeavingNothing(t, place, { ...launch, inherited: { ...launch.inherited, [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') } }, fake.ranFile)
+  assert.ok(refusal.includes(PLUGIN_DIRS_VARIABLE), refusal)
+})
+
+test('an empty user settings file, or one whose hooks and plugins are empty or off, starts the member', async (t) => {
+  for (const settings of [{}, { hooks: {}, enabledPlugins: {} }, { hooks: { SessionStart: [] }, enabledPlugins: { [OWNER_PLUGIN]: false } }]) {
+    const place = placeFor(t)
+    writeSettings(join(place.home, USER_SETTINGS), settings)
+    const fake = fakeClaude(place)
+    const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+    if (!started.started) assert.fail(`${JSON.stringify(settings)}: ${started.refusal}`)
+    started.stop('the test is over')
+    await started.stopped
+  }
+})
+
+test("a hook written into the owner's user settings while the member runs stops it, naming the file and the event", async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const file = writeSettings(join(place.home, USER_SETTINGS), { hooks: { UserPromptSubmit: [OWNER_HOOK] } })
+  const stopped = await started.stopped
+  const why = stopped.stopped_because ?? ''
+  assert.ok(why.includes(file) && why.includes('UserPromptSubmit'), why)
 })
 
 test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {
@@ -1734,7 +1798,9 @@ function launcherProcess(
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,
       `  args: ${JSON.stringify(args)},`,
-      `  inherited: { PATH: process.env.PATH, ...${JSON.stringify(inherited)} },`,
+      // The place's own HOME and managed folder, so the settings files the launcher reads are the test's, never the developer's.
+      `  managed_settings: ${JSON.stringify(managedSettingsOf(place))},`,
+      `  inherited: { PATH: process.env.PATH, HOME: place.home, ...${JSON.stringify(inherited)} },`,
       `  stdio: ${JSON.stringify(stdio)},`,
       '  tellOwner: () => undefined,',
       '})',
