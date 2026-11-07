@@ -173,11 +173,6 @@ export function blobAsGitAdds(top: string, path: string, host: LaunchHost): stri
   return git(host, top, ['hash-object', `--path=${relative(top, path)}`, '--', path])
 }
 
-/** The object format the checkout holding `dir` names its objects in (sha1 or sha256), or `undefined`. */
-export function objectFormatOf(dir: string, host: LaunchHost): string | undefined {
-  return git(host, dir, ['rev-parse', '--show-object-format'])
-}
-
 /**
  * Every path that differs between the trees `from` and `to` in the checkout holding `dir`, relative to its top,
  * with no rename paired up: a rename is a deletion and a new path. `undefined` when git cannot read either tree,

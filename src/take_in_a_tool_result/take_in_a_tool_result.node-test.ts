@@ -4,18 +4,23 @@
 //
 // The relay asks this after the launch recheck, and the recheck already stops a member whose checkout moved for a
 // reason that is not its own writing. These tests ask the module on its own, so the exemption's two directions are
-// pinned where they are decided: the member's own write records nothing, and any other change records B4.
+// pinned where they are decided: the member's own write records nothing, and any other change records B4 — as does a
+// change nothing can be told from, or own writes that can no longer be read, which are fail-closed edges of their own.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_TOOL_RESULT_ROWS } from '../claude_code_host/claude_code_host.ts'
-import { openState, ownWritesKeptIn } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import {
+  openState,
+  OWN_WRITES_FILE,
+  ownWritesKeptIn,
+} from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { readCheckoutTree } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import { readLaunchState, type ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -42,6 +47,8 @@ interface Checkout {
   readonly launch: ApprovedLaunch
   /** The tree the owner approved, read as the member started on it. */
   readonly start_tree: string
+  /** The file the member's own writes are kept in, one JSON line each. */
+  readonly own_writes_file: string
 }
 
 /** A checkout whose config the owner approved, and the launch started on it. */
@@ -68,7 +75,7 @@ function checkoutFor(t: TestContext): Checkout {
   }
   const start_tree = readCheckoutTree(checkout, home, thisMachine)
   assert.notEqual(start_tree, null)
-  return { home, checkout, launch, start_tree: start_tree ?? '' }
+  return { home, checkout, launch, start_tree: start_tree ?? '', own_writes_file: join(state.directory, OWN_WRITES_FILE) }
 }
 
 /** The member's own write of a file, kept as the launcher keeps one after the call ran. */
@@ -141,4 +148,43 @@ test("another launch's own write of the same bytes leaves the tree changed: read
   keptOwnWrite(place, 'hello.txt')
   const elsewhere = { ...place, launch: { ...place.launch, since_approval: { ...place.launch.since_approval!, launch_id: 'another-launch' } } }
   assert.deepEqual(recordedReading(elsewhere, file), ['B4:null'])
+})
+
+test('own writes that cannot be read refuse every read: one torn line in the store records B4', (t) => {
+  const place = checkoutFor(t)
+  const file = join(place.checkout, 'hello.txt')
+  writeFileSync(file, 'hello\n')
+  keptOwnWrite(place, 'hello.txt')
+  // A later writer to the store leaves a line that is no own write: what is kept can no longer be told from it.
+  appendFileSync(place.own_writes_file, 'not an own write\n')
+  assert.deepEqual(recordedReading(place, file), ['B4:null'])
+})
+
+test('an approved start tree the checkout no longer holds refuses every read: reading records B4', (t) => {
+  const place = checkoutFor(t)
+  // The checkout moves on and the tree the owner approved becomes unreachable, so git drops it from the store.
+  writeFileSync(join(place.checkout, 'README.md'), 'a tree nobody approved\n')
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '--amend', '-m', 'moved on')
+  git(place.checkout, 'reflog', 'expire', '--expire=now', '--all')
+  git(place.checkout, 'gc', '--prune=now', '--quiet')
+  const held = (): boolean => {
+    try {
+      git(place.checkout, 'cat-file', '-e', place.start_tree)
+      return true
+    } catch {
+      return false
+    }
+  }
+  assert.equal(held(), false, 'the approved start tree is still in the object store, so this test proves nothing')
+  assert.deepEqual(recordedReading(place, join(place.checkout, 'README.md')), ['B4:null'])
+})
+
+test('an own write whose file is then deleted leaves the tree changed: reading another tracked file records B4', (t) => {
+  const place = checkoutFor(t)
+  writeFileSync(join(place.checkout, 'README.md'), 'written by the member\n')
+  keptOwnWrite(place, 'README.md')
+  // The member removes the file it wrote: a deletion plants nothing, and it is still no own write of that file.
+  rmSync(join(place.checkout, 'README.md'))
+  assert.deepEqual(recordedReading(place, join(place.checkout, '.mcp.json')), ['B4:null'])
 })

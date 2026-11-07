@@ -15,17 +15,12 @@
 // outside the checkout). Which calls are own writes, and that the bytes on disk are the call's, is the caller's to
 // decide.
 
-import { createHash } from 'node:crypto'
 import { isAbsolute } from 'node:path'
 
 /** The modes of a regular file in git: a link or a gitlink is never an own write. */
 export const OWN_WRITE_MODES = ['100644', '100755'] as const
 
-/** The object formats git names a checkout's objects in (`git rev-parse --show-object-format`). */
-export const GIT_OBJECT_FORMATS = ['sha1', 'sha256'] as const
-
 export type OwnWriteMode = (typeof OWN_WRITE_MODES)[number]
-export type GitObjectFormat = (typeof GIT_OBJECT_FORMATS)[number]
 
 /** One file a member wrote with a file tool, as it was on disk after the call. */
 export interface OwnWrite {
@@ -106,9 +101,4 @@ export function latestOfLaunch(writes: readonly OwnWrite[], launch: string): rea
 export function ownWritesOfLaunch(store: OwnWritesStore, launch: string): OwnWrites {
   const all = store.all()
   return 'refusal' in all ? all : { writes: latestOfLaunch(all.writes, launch) }
-}
-
-/** The id git gives a blob of these bytes, in the checkout's object format. */
-export function gitBlobIdOf(bytes: Uint8Array, format: GitObjectFormat): string {
-  return createHash(format).update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
 }

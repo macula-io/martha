@@ -282,6 +282,16 @@ test('a link put in the checkout is never an own write, even where the member wr
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('link.txt')))
 })
 
+test('a directory named by a Write is not an own write: nothing is kept, and the call does not read it', async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  const directory = join(place.checkout, 'notes')
+  mkdirSync(directory)
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: directory, content: 'hello\n' })), TAKEN_REPLY)
+  assert.deepEqual(allOwnWrites(place.state), { writes: [] })
+  assert.deepEqual(place.stops, [])
+})
+
 test('a branch checked out mid-session that drops the config and adds a file stops the member (martha#142)', async (t) => {
   const place = checkoutFor(t)
   git(place.checkout, 'checkout', '-q', '-b', 'outsider')
