@@ -34,7 +34,8 @@ import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
@@ -43,6 +44,9 @@ import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 
 // --- a member's places ----------------------------------------------------------
+
+/** The managed settings place of a test: the recorded file and drop-in names, in a folder of the place's own. */
+const managedSettingsOf = (place: { readonly home: string }) => ({ ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') })
 
 interface Place {
   /** The stop directory, standing in for the owner's home. */
@@ -124,6 +128,12 @@ function answering(place: Place, rows: RowStore = rowStreamsDirectory(place.rows
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    hookSettings: hookSettingsWatch({
+      user: join(place.home, USER_SETTINGS),
+      approved: undefined,
+      managed: managedSettingsOf(place),
+      switches: CLAUDE_CODE_HOOK_SWITCHES,
+    }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -717,6 +727,8 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     policy: { may_send_executable_text: [] },
     places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
+    // The managed settings the host would read, under the place: never the machine's own.
+    managed_settings: managedSettingsOf(place),
     command,
     args: ['-p', 'the owner prompt'],
     // HOME is the place's own, so the owner's user settings file the launcher reads is the test's.
@@ -1113,6 +1125,76 @@ test("CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, an
   assert.equal(seen.CLAUDE_CODE_PLUGIN_DIRS, '', `it reached the server as ${seen.CLAUDE_CODE_PLUGIN_DIRS}`)
   started.stop('the test is over')
   await started.stopped
+})
+
+// --- settings that turn Martha's relay off (martha#122) -------------------------
+
+const [HOOKS_OFF] = CLAUDE_CODE_HOOK_SWITCHES.every_source
+const MANAGED_ONLY = CLAUDE_CODE_HOOK_SWITCHES.managed.filter((key) => !CLAUDE_CODE_HOOK_SWITCHES.every_source.includes(key))
+
+function writeSettings(path: string, settings: Record<string, unknown>): string {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify(settings))
+  return path
+}
+
+async function hookLaunchRefused(t: TestContext, plant: (place: Place) => string, key: string, files: Readonly<Record<string, string>> = {}): Promise<void> {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version), files)
+  const fake = fakeClaude(place)
+  const file = plant(place)
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
+  assert.ok(refusal.includes(file) && refusal.includes(key), refusal)
+}
+
+test("a hook-killing key in the owner's user settings starts nothing, naming the file and the key", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  await hookLaunchRefused(t, (place) => writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true }), HOOKS_OFF)
+})
+
+test('a hook-killing key in the approved --settings copy starts nothing, naming it and the key', async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  await hookLaunchRefused(t, () => USER_SETTINGS, HOOKS_OFF, { [USER_SETTINGS]: JSON.stringify({ [HOOKS_OFF]: true }) })
+})
+
+for (const key of MANAGED_ONLY) {
+  test(`${key} in the managed settings file, or in a file of its drop-in folder, starts nothing, naming the file and the key`, async (t) => {
+    const { file, drop_in } = RECORDED_HOST.managed_settings
+    await hookLaunchRefused(t, (place) => writeSettings(join(managedSettingsOf(place).dir, file), { [key]: true }), key)
+    await hookLaunchRefused(t, (place) => writeSettings(join(managedSettingsOf(place).dir, drop_in, '50-org.json'), { [key]: true }), key)
+  })
+}
+
+test("a member's file tool call that names the owner's user settings file is denied, directly and through a link", async (t) => {
+  const place = placeFor(t)
+  const { relay } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  const owners = join(place.home, USER_SETTINGS)
+  mkdirSync(dirname(owners), { recursive: true })
+  symlinkSync(dirname(owners), join(place.checkout, 'linked'))
+  for (const [tool, input] of [
+    ['Write', { file_path: owners, content: JSON.stringify({ [HOOKS_OFF ?? '']: true }) }],
+    ['Edit', { file_path: join(place.checkout, 'linked', 'settings.json'), old_string: '{', new_string: '{"x":1,' }],
+  ] as const) {
+    assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /user settings/), tool)
+  }
+  assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
+})
+
+test("a call after which the owner's user settings carry a hook-killing key stops the member, naming the file and the key", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  const place = placeFor(t)
+  const { relay, stops } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  const shell = call('Bash', { command: 'python3 -c "..."' })
+  assert.deepEqual(await relay.answer('tool_called', shell), ALLOW_REPLY)
+  const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
+  const after = await relay.answer('tool_answered', shell)
+  assert.equal(after.answered, false)
+  assert.equal(stops.length, 1)
+  assert.ok(stops[0]?.includes(file) && stops[0].includes(HOOKS_OFF), stops[0])
 })
 
 test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {
