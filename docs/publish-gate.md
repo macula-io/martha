@@ -413,6 +413,18 @@ The rules the seam keeps, and a host must not work around:
   that does not match, a predecessor whose record is gone, or one reset since
   the stamp: the reader has lost its record. Another member's handover is a checkout file
   (B4), unattributed, and taints.
+- **What the host's own tools return is recorded too (martha#127).** After a
+  built-in tool runs, and before the model sees its result, the launcher
+  records it on the row the host's table (`CLAUDE_CODE_TOOL_RESULT_ROWS`)
+  places it on: a file or a search is B4, a page or a web search B6, a
+  subagent's answer B7. A command's output is always A13, because nothing tells
+  one part of it from another; a first word of `gh` adds B3 and `git log`,
+  `show`, `blame`, `reflog` or `shortlog` add B5, and a label never replaces
+  A13. A tool the table does not name takes the shell. One read records
+  nothing: a file git puts in the owner-approved tree of the launch checkout,
+  since the owner approved that tree to run as the owner. After a member's
+  first command, nothing that executes or writes runs again until a fresh
+  start; giving the shell back is martha#129.
 - **There is no release.** A member tainted once stays tainted through every
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the

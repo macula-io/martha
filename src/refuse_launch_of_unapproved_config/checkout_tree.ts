@@ -118,3 +118,60 @@ function git(host: LaunchHost, cwd: string, args: readonly string[], set: Readon
   })
   return run.exit_code === 0 ? run.stdout.trim() : undefined
 }
+
+/** What a read covers: one file, or every file under a path a search walks. */
+export type ReadSpan = 'one_file' | 'every_file_below'
+
+/**
+ * Whether `path` is in the tree the owner approved for the checkout holding
+ * `dir`, so that reading it grants nothing the approval does not already grant
+ * (martha#127). The owner approved that exact tree to run as the owner's OS
+ * user: its hooks and servers execute from it. Reading the same bytes adds
+ * nothing to that.
+ *
+ * In the tree means: with every link resolved, the path sits under the
+ * checkout's top, and git puts it in the fingerprinted tree, tracked or
+ * untracked and not ignored. A search also walks everything below it, so for
+ * `every_file_below` nothing below the path may be ignored, a link, or a
+ * submodule: each of those is outside what the fingerprint pins. Pathspecs are
+ * literal, so a path holding `*` names that file and nothing else.
+ *
+ * Whether the tree still matches the approval is not asked here: the launch is
+ * read again before and after every call (../answer_a_tool_call), and a call
+ * that changed it stops the member.
+ */
+export function isInTheCheckoutTree(dir: string, stop_dir: string, path: string, span: ReadSpan, host: LaunchHost): boolean {
+  if (!isAbsolute(path)) return false
+  const shown = git(host, dir, ['rev-parse', '--show-toplevel'])
+  if (shown === undefined) return false
+  const top = realOrResolved(host, shown)
+  if (holds(top, realOrResolved(host, stop_dir))) return false
+  const real = realOrResolved(host, path)
+  if (!holds(top, real)) return false
+  const at = relative(top, real) || '.'
+  const listed = git(host, top, ['--literal-pathspecs', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', at])
+  if (listed === undefined || listed === '') return false
+  return span === 'one_file' || nothingBelowIsOutsideTheTree(host, top, at)
+}
+
+/** A git mode that is no plain file: a link (120000) or a submodule (160000). */
+const NOT_A_PLAIN_FILE = /^(120000|160000) /
+
+function nothingBelowIsOutsideTheTree(host: LaunchHost, top: string, at: string): boolean {
+  const ignored = git(host, top, ['--literal-pathspecs', 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z', '--', at])
+  if (ignored === undefined || ignored !== '') return false
+  const staged = git(host, top, ['--literal-pathspecs', 'ls-files', '--stage', '-z', '--', at])
+  if (staged === undefined) return false
+  if (staged.split('\0').some((entry) => NOT_A_PLAIN_FILE.test(entry))) return false
+  return untrackedLinksBelow(host, top, at) === false
+}
+
+/** Whether an untracked, unignored entry below `at` is a link, which `ls-files --stage` does not show. */
+function untrackedLinksBelow(host: LaunchHost, top: string, at: string): boolean | undefined {
+  const untracked = git(host, top, ['--literal-pathspecs', 'ls-files', '--others', '--exclude-standard', '-z', '--', at])
+  if (untracked === undefined) return undefined
+  return untracked
+    .split('\0')
+    .filter((entry) => entry !== '')
+    .some((entry) => host.stores.files.realPathOf(join(top, entry)) !== join(top, entry))
+}

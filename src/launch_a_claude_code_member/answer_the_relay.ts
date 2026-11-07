@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, and for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 |
+// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, host }, binder)` (martha#127) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -32,7 +32,7 @@
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_TOOL_RESULT_ROWS, isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
 import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
@@ -40,6 +40,7 @@ import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execu
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
 
@@ -232,8 +233,14 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   const launched = recheckLaunch(place.launch, thisMachine)
   if (!launched.allow) return stopMember(place, launched.refusal)
-  if (!isMcpToolCall(call.tool)) return answered(TAKEN)
-  const source = sourceOfAMeshToolResult(place.names.ownNameOf(call.tool))
-  const why = await keep(state, takeInTurn(session, { source }, place.binder))
+  const taken = isMcpToolCall(call.tool)
+    ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
+    : takeInToolResult(
+        session,
+        { tool: call.tool, input: call.input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch: place.launch, host: thisMachine },
+        place.binder,
+      )
+  if (taken.gate.ingested.length === session.gate.ingested.length) return answered(TAKEN)
+  const why = await keep(state, taken)
   return why === undefined ? answered(TAKEN) : stopMember(place, why)
 }

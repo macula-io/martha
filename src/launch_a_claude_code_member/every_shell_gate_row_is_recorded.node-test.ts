@@ -19,7 +19,7 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { shellGateRowsNothingRecords } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
-import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
@@ -28,7 +28,7 @@ import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_h
 import { MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { READ_ONLY_TOOLS } from '../shell_tools/shell_tools.ts'
+import { GIT, GITHUB_CLI, HISTORY_SUBCOMMANDS } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
@@ -46,20 +46,24 @@ const CARRIED = {
 const MESH_SERVER_TOOL = (own: string): string => `mcp__macula__${own}`
 const ANOTHER_SERVER_TOOL = 'mcp__probe__fetch_page'
 
+/** A place outside every checkout the test makes: what a file tool reads there is not the approved tree's. */
+const OUTSIDE_THE_TREE = tmpdir()
+
+/** The commands that decide a command's rows: any command, the GitHub CLI, and each history read of git. */
+const COMMANDS: readonly string[] = ['ls', GITHUB_CLI, ...HISTORY_SUBCOMMANDS.map((history) => `${GIT} ${history}`)]
+
 /**
- * One call of each kind of built-in tool the host runs, with the input that
- * decides its row. Until martha#127 lands its table of the host's tool results,
- * these are named here; #127 replaces them with that table.
+ * One call of every built-in tool the host's table names (martha#127), with
+ * each input that decides its row: a file or a search outside the tree, and
+ * every kind of command.
  */
-const BUILT_IN_CALLS: readonly Readonly<Record<string, unknown>>[] = [
-  ...READ_ONLY_TOOLS.map((tool) => ({ tool, file_path: '/etc/hostname', path: '/etc', pattern: '*' })),
-  { tool: 'Bash', command: 'gh pr view 1' },
-  { tool: 'Bash', command: 'git log -1' },
-  { tool: 'Bash', command: 'ls' },
-  { tool: 'WebFetch', url: 'https://example.invalid/', prompt: 'read it' },
-  { tool: 'WebSearch', query: 'anything' },
-  { tool: 'Agent', prompt: 'look around' },
-]
+const BUILT_IN_CALLS: readonly Readonly<Record<string, unknown>>[] = Object.entries(CLAUDE_CODE_TOOL_RESULT_ROWS).flatMap(
+  ([tool, row]) => {
+    if (row.reads === 'a_command') return COMMANDS.map((command) => ({ tool, [row.field]: command }))
+    if (row.reads === 'a_source') return [{ tool }]
+    return [{ tool, [row.field]: OUTSIDE_THE_TREE }]
+  },
+)
 
 /** A member's places, under one directory the test removes: a checkout with no launch config, and its rows. */
 function placeOf(t: TestContext): { readonly home: string; readonly checkout: string; readonly rows: string } {
