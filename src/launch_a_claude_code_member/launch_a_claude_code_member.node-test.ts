@@ -27,7 +27,7 @@ import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_throu
 import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -1079,6 +1079,19 @@ test("a name in the owner's user settings env nobody approved starts nothing, na
   const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
   assert.ok(refusal.includes(file) && refusal.includes('FROM_SETTINGS'), refusal)
 })
+
+for (const name of [...Object.keys(CLAUDE_MEMORY_OFF), ...CLAUDE_MEMORY_ELSEWHERE]) {
+  test(`${name} in the owner's user settings env starts nothing, so settings cannot turn a member's memory back on or move it (#136)`, async (t) => {
+    const recorded = RECORDED_MESH_SERVERS[0]
+    assert.ok(recorded !== undefined)
+    const { recording } = await recordedTreeOf(t, recorded.server_version)
+    const place = placeFor(t, meshServerAt(recorded.server_version))
+    const fake = fakeClaude(place)
+    const file = ownerSettings(place, { [name]: '0' })
+    const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
+    assert.ok(refusal.includes(file) && refusal.includes(name), refusal)
+  })
+}
 
 test('a name in the approved --settings env nobody approved starts nothing, naming it', async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
