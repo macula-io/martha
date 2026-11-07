@@ -351,7 +351,7 @@ async function hostThatRunsTheRelay(
   if ('refusal' in resolved) return `${NOT_STARTED}: ${resolved.refusal}`
   const env = ready.hostEnv
   // The folder the member's host will load: the launch's copy, never the installed relay (martha#117).
-  const refused = await refusalToLoadTheRelay(resolved.binary, pluginDir, env, cwd)
+  const refused = await refusalToLoadTheRelay(resolved.binary, pluginDir, env, cwd, RELAY_PLUGIN_DIR)
   if (refused !== undefined) return `${NOT_STARTED}: ${refused}`
   const drift = await hostVersionLine(resolved.binary, env, cwd)
   if (drift !== undefined) launch.tellOwner(drift)
