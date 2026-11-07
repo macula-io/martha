@@ -35,6 +35,9 @@ export const EXIT_REFUSED = 1
 /** The command was not used in a way it knows. */
 export const EXIT_USAGE = 2
 
+/** The line `martha start` prints once the member is up: its name and its pid. */
+export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`
+
 /** How the command is used. */
 export const USAGE = 'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha --version'
 
@@ -139,7 +142,7 @@ async function start(io: CommandIo, places: Places, member: string, args: readon
     tellOwner: tellOwnerOn(io),
   })
   if (!started.started) return EXIT_REFUSED
-  io.out(`${member} started, pid ${started.pid}`)
+  io.out(startedLine(member, started.pid))
   return exitOf(await started.stopped)
 }
 

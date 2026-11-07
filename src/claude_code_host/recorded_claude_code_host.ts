@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { promptOriginKindsOf } from './claude_code_prompt_origins.ts'
 import { sessionStartSourcesOf } from './claude_code_session_events.ts'
+import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
 
 export { CREW_REFRESH }
 
@@ -26,6 +27,12 @@ export interface RecordedHost {
   readonly prompt_origin_fallback: string
   /** The task-notification subkinds the mapper promotes to a kind of their own. */
   readonly prompt_origin_subkinds: string
+  /** The host's function that builds a session's hook set, whole: which settings keys turn hooks off (martha#122). */
+  readonly hooks_switches: string
+  /** Each function an exit of that function calls, whole: safe mode, and a policy key (martha#122 r=2). */
+  readonly hooks_switch_calls: readonly string[]
+  /** Where the host reads managed settings on Linux (martha#122). */
+  readonly managed_settings: ManagedSettingsPlace
 }
 
 /** The recording this repository carries. */
@@ -38,6 +45,9 @@ export const CLAUDE_CODE_SESSION_START_SOURCES: readonly string[] = sessionStart
 
 /** Every event the Claude Code host emits when a session starts, the crew's refresh included. */
 export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [...CLAUDE_CODE_SESSION_START_SOURCES, CREW_REFRESH]
+
+/** The settings keys that turn Martha's relay off in the recorded host, by where it honours them (martha#122). */
+export const CLAUDE_CODE_HOOK_SWITCHES: HookSwitches = hookSwitchesOf(RECORDED_HOST.hooks_switches, RECORDED_HOST.hooks_switch_calls)
 
 /** Every origin kind the recorded host stamps on a prompt. */
 export const CLAUDE_CODE_PROMPT_ORIGIN_KINDS: readonly string[] = promptOriginKindsOf(RECORDED_HOST)
