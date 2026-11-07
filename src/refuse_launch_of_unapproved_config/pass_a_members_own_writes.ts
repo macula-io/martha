@@ -48,29 +48,36 @@ const unreadTree = (tree: string, member: string): LaunchDecision => ({
   refusal: `The tree the owner approved (${tree}) can no longer be read from the checkout, so the member's own writes cannot be told from anyone else's. ${approveAgain(member)}`,
 })
 
+const noCheckout = (member: string): LaunchDecision => ({
+  allow: false,
+  refusal: `The checkout no longer matches what the owner approved, and git can no longer read it as a checkout below the owner's home, so the member's own writes cannot be told from anyone else's. ${approveAgain(member)}`,
+})
+
 /**
  * The launch, checked again before and after every tool call: what the owner approved, or that plus this launch's
  * own writes. A launch started on no approval is checked as the gate checks it.
  */
 export function recheckLaunchPassingOwnWrites(launch: ApprovedLaunch, host: LaunchHost): LaunchDecision {
   const live = readLaunchState(launch, host)
-  const decision = decideLaunch({ ...live, host: launch.host, approved_fingerprints: launch.approved_fingerprints })
   const since = launch.since_approval
-  if (decision.allow || since === undefined) return decision
-  const shape = decideLaunch({ ...live, host: launch.host, approved_fingerprints: [fingerprintOf(live)] })
+  if (since === undefined) return decideLaunch({ ...live, host: launch.host, approved_fingerprints: launch.approved_fingerprints })
+  const fingerprint = fingerprintOf(live)
+  const shape = decideLaunch({ ...live, host: launch.host, approved_fingerprints: [fingerprint] })
   if (!shape.allow) return shape
-  return judgedAgainstApproval(launch, since, live, host) ?? decision
+  // Not the gate's "no config needs no approval": on a running member started on an approval, the hooks it loaded
+  // run on after the checkout drops its config, so what changed is judged all the same (martha#142).
+  if (launch.approved_fingerprints.includes(fingerprint)) return { allow: true }
+  return judgedAgainstApproval(launch, since, live, host)
 }
 
 const ownWriteMatches = (write: OwnWrite | undefined, change: TreeChange): boolean =>
   write !== undefined && !change.deleted && write.blob === change.blob && write.mode === change.mode
 
-/** The decision on a live checkout that differs from the approved one, or undefined when either has no tree. */
-function judgedAgainstApproval(launch: ApprovedLaunch, since: SinceApproval, live: LaunchState, host: LaunchHost): LaunchDecision | undefined {
+/** The decision on a live checkout that differs from the approved one. */
+function judgedAgainstApproval(launch: ApprovedLaunch, since: SinceApproval, live: LaunchState, host: LaunchHost): LaunchDecision {
   const approved_tree = since.approved.tree
-  if (approved_tree === null || live.tree === null) return undefined
   const top = checkoutTopOf(realOrResolved(host, launch.launch_dir), host)
-  if (top === undefined) return undefined
+  if (approved_tree === null || live.tree === null || top === undefined) return noCheckout(since.member)
   const changes = changesBetween(top, approved_tree, live.tree, host)
   if (changes === undefined) return unreadTree(approved_tree, since.member)
   const own = ownWritesOfLaunch(since.own_writes, since.launch_id)

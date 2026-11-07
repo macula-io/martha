@@ -269,6 +269,17 @@ test('a branch checked out mid-session that drops the config and adds a file sto
   assert.deepEqual(place.stops, [why])
 })
 
+test('a checkout git can no longer read mid-session stops the member, even with its config gone: nothing can be told apart', async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  rmSync(join(place.checkout, '.git'), { recursive: true, force: true })
+  rmSync(join(place.checkout, '.mcp.json'))
+  const why =
+    "The checkout no longer matches what the owner approved, and git can no longer read it as a checkout below the owner's home, so the member's own writes cannot be told from anyone else's. " +
+    `Run martha approve, read what it shows, and answer yes; then martha start ${MEMBER}.`
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'rm -rf .git' })), STOPPING(why))
+})
+
 test('a file the member deleted passes: removing a file plants nothing', async (t) => {
   const place = checkoutFor(t)
   await started(place)
