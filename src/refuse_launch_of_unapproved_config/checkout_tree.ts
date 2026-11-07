@@ -24,9 +24,16 @@
 // not track. Such a file is not shipped by the checkout's author (a commit
 // cannot carry it untracked); it is written on this machine, by a command the
 // member ran (A13). Nor the inside of a submodule beyond the commit its parent
-// records. Nor a change the checkout's own index hides from git status
-// (assume-unchanged, skip-worktree): those flags are the member's, set on this
-// machine, and no commit carries them.
+// records.
+//
+// A change the checkout's own index hides from git status IS covered
+// (martha#127 r=1). An index entry flagged assume-unchanged or skip-worktree
+// (a sparse checkout sets the second by itself) makes git status skip that
+// file, so a rewrite under the flag would leave the clean tree equal to HEAD's
+// and the approval standing over a stranger's bytes. A checkout with any such
+// entry therefore never takes the clean path: its tree is staged in a scratch
+// index that carries no flags, from the bytes on disk, with sparse checkout
+// off for that one `git add`.
 //
 // Git runs here with every inherited GIT_ variable dropped, so the caller's
 // environment cannot point it at another repository or index, and with
@@ -57,7 +64,27 @@ const GIT_VARIABLES = 'GIT_'
 export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost): string | null {
   const top = git(host, dir, ['rev-parse', '--show-toplevel'])
   if (top === undefined || holds(realOrResolved(host, top), realOrResolved(host, stop_dir))) return null
-  return cleanTree(host, top) ?? stagedTree(host, top)
+  return (hidesAChangeFromStatus(host, top) ? undefined : cleanTree(host, top)) ?? stagedTree(host, top)
+}
+
+/** An index tag `git ls-files -v` prints for an entry git status does not look at: skip-worktree. */
+const SKIP_WORKTREE_TAG = 'S'
+
+/**
+ * Whether any index entry carries a flag that makes git status skip it:
+ * assume-unchanged (a lowercase tag) or skip-worktree (`S`). An index git
+ * cannot list counts as hiding one.
+ */
+function hidesAChangeFromStatus(host: LaunchHost, top: string): boolean {
+  const listed = git(host, top, ['ls-files', '-v', '-z'])
+  if (listed === undefined) return true
+  return listed
+    .split('\0')
+    .filter((entry) => entry !== '')
+    .some((entry) => {
+      const tag = entry.charAt(0)
+      return tag === SKIP_WORKTREE_TAG || tag !== tag.toUpperCase()
+    })
 }
 
 /** HEAD's tree when git reports nothing changed and nothing untracked, else `undefined`. */
@@ -80,7 +107,7 @@ function stagedTree(host: LaunchHost, top: string): string | null {
     const index = { GIT_INDEX_FILE: join(scratch.path, 'index') }
     const seeded = git(host, top, ['read-tree', 'HEAD'], index) ?? git(host, top, ['read-tree', '--empty'], index)
     if (seeded === undefined) return null
-    if (git(host, top, ['add', '--all', '--', '.'], index) === undefined) return null
+    if (git(host, top, ['-c', 'core.sparseCheckout=false', 'add', '--all', '--', '.'], index) === undefined) return null
     return git(host, top, ['write-tree'], index) ?? null
   } finally {
     scratch.remove()

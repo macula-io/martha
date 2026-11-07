@@ -204,11 +204,14 @@ What the plan leaves out, stated rather than hidden:
 - **The tree does not cover** a file git ignores and does not track — the
   checkout's author cannot ship one; it is written on this machine by a command
   the member ran (A13) — nor the inside of a submodule beyond the commit its
-  parent records, nor a change the checkout's own index hides from
-  `git status` (assume-unchanged, skip-worktree): those flags are the
-  member's, and no commit carries them. Of the same class: a member's own git
+  parent records. Of the same class: a member's own git
   config whose `include.path` names a tracked file, which lets the checkout's
   author define a clean filter that reading the tree runs.
+- **A change the index hides from `git status` is covered (martha#127).** An
+  entry flagged assume-unchanged or skip-worktree (a sparse checkout sets the
+  second by itself) would let a rewrite leave the tree equal to HEAD's. A
+  checkout with any such entry is always staged in a scratch index with no
+  flags, from the bytes on disk, so the rewrite moves the fingerprint.
 - **The fingerprint-to-launch race**: between `prepareLaunch` and the host's
   start, a script the snapshot runs can still be rewritten in the checkout, and
   a `SessionStart` hook runs it before the first tool call is checked.
