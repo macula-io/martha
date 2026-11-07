@@ -1,14 +1,17 @@
-// Martha's C4 model: the Context and the Container diagram, drawn from here.
+// Martha's C4 model: the Context, the Container and the Component diagram, drawn from here.
 //
-// This exists so a reader sees, in two pictures, what Martha talks to and what it
-// is made of, and so the pictures cannot drift from their source: the test beside
-// this file fails when an SVG in assets/ is not what this file draws.
+// This exists so a reader sees, in three pictures, what Martha talks to, what it is
+// made of, and what its code is made of, and so the pictures cannot drift from their
+// source: the test beside this file fails when an SVG in assets/ is not what this file
+// draws.
 //
 // Run:   node architecture/c4_diagrams.ts          (writes assets/c4-*.svg)
 // Look:  rsvg-convert -w 1400 assets/c4-context.svg -o <a png of your choice>
 //
-// The diagrams draw the design in issue #1. When a box changes, change it here,
-// redraw, and keep architecture/README.md's tables in step.
+// The diagrams draw the code that is in src/, not the design that is still to come:
+// every slice named in the Component diagram is a directory in src/, and a box drawn
+// for something not built says so. When a box changes, change it here, redraw, and
+// keep architecture/README.md's tables in step.
 //
 // Colours are literal values in plain classes with a prefers-color-scheme dark
 // block, never CSS custom properties, which some renderers draw black.
@@ -19,17 +22,18 @@ import { join } from 'node:path'
 const SANS = '"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif'
 const MONO = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace'
 
-type Kind = 'b-sys' | 'b-per' | 'b-mac' | 'b-ext' | 'b-cmp' | 'b-dat' | 'b-team'
+type Kind = 'b-sys' | 'b-per' | 'b-mac' | 'b-ext' | 'b-cmp' | 'b-dat' | 'b-team' | 'b-later'
 
 // Each kind: light fill, light stroke, dark fill, dark stroke, legend label.
 const KINDS: Record<Kind, readonly [string, string, string, string, string]> = {
   'b-sys': ['#F5E9CC', '#A56F0A', '#3A2E13', '#E3AA3C', 'Martha'],
   'b-per': ['#E3EBF2', '#3B5B7A', '#1D2A36', '#8EB4D8', 'Person'],
-  'b-mac': ['#E6E4EE', '#5E5A78', '#26243A', '#A9A4C8', 'Macula, team mode only'],
+  'b-mac': ['#E6E4EE', '#5E5A78', '#26243A', '#A9A4C8', 'Macula, room not shipped'],
   'b-ext': ['#ECEFED', '#8A9791', '#1C2421', '#7D8B85', 'External system'],
-  'b-cmp': ['#FFFFFF', '#A56F0A', '#171F1C', '#E3AA3C', 'Container'],
+  'b-cmp': ['#FFFFFF', '#A56F0A', '#171F1C', '#E3AA3C', 'Container or component'],
   'b-dat': ['#FBF6EA', '#A56F0A', '#2A2414', '#E3AA3C', 'Data, in the project'],
   'b-team': ['#FFFFFF', '#5E5A78', '#171F1C', '#A9A4C8', 'Container, team mode only'],
+  'b-later': ['#F3F4F3', '#8A9791', '#1C2421', '#7D8B85', 'Planned, not built'],
 }
 
 const KIND_NAMES = Object.keys(KINDS) as Kind[]
@@ -38,7 +42,7 @@ function kindRules(dark: boolean): string {
   return KIND_NAMES.map((k) => {
     const [lf, ls, df, ds] = KINDS[k]
     const width = k === 'b-sys' ? 2 : 1.25
-    const dash = k === 'b-team' || k === 'b-mac' ? ' stroke-dasharray: 5 4;' : ''
+    const dash = k === 'b-team' || k === 'b-mac' || k === 'b-later' ? ' stroke-dasharray: 5 4;' : ''
     return dark
       ? `.${k} { fill: ${df}; stroke: ${ds}; }`
       : `.${k} { fill: ${lf}; stroke: ${ls}; stroke-width: ${width};${dash} }`
@@ -96,8 +100,39 @@ interface Box {
   readonly name: string
   readonly type: string
   readonly desc: readonly string[]
+  /**
+   * The directories in src/ this box stands for, each named in its title or its description.
+   * A component box sets it, and the test beside this file holds every one of them to src/.
+   */
+  readonly names?: readonly string[]
   readonly person?: true
   readonly code?: true
+}
+
+/** What a box covering src/ directories stands for, as it was drawn. */
+export interface BoxCoverage {
+  readonly name: string
+  readonly names: readonly string[]
+  /** The title, the type and every description line, joined, so a name split over two lines is still found. */
+  readonly text: string
+}
+
+/** One line when a name fits its box, else two, broken between names at a comma, or inside one at its underscore nearest the middle. */
+function nameLines(name: string, code: boolean, width: number): string[] {
+  const fits = Math.floor(width / (code ? 7.5 : 8.6))
+  if (name.length <= fits) return [name]
+  const cutsAt = (separators: RegExp): number[] =>
+    [...name.matchAll(separators)]
+      .map((found) => (found.index ?? 0) + found[0].length)
+      .filter((at) => at <= fits && name.length - at <= fits)
+  // A box that lists several directories breaks between them when it can, so no directory's name is cut
+  // in two while there is room to start the next one on the second line.
+  const betweenNames = cutsAt(/, /g)
+  const cuts = betweenNames.length > 0 ? betweenNames : cutsAt(/_|, /g)
+  if (cuts.length === 0) return [name]
+  const middle = name.length / 2
+  const at = cuts.reduce((best, cut) => (Math.abs(cut - middle) < Math.abs(best - middle) ? cut : best), cuts[0]!)
+  return [name.slice(0, at).trimEnd(), name.slice(at).trimStart()]
 }
 
 interface Label {
@@ -110,6 +145,8 @@ interface Label {
 
 class Diagram {
   private readonly parts: string[] = []
+  /** Every box that stands for directories in src/, as drawn, for the test that holds the picture to them. */
+  readonly coverage: BoxCoverage[] = []
   readonly file: string
   readonly title: string
   readonly w: number
@@ -131,14 +168,21 @@ class Diagram {
     this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10"/>`)
     const tx = b.person ? b.x + 44 : b.x + 16
     if (b.person) this.parts.push(`<circle class="head" cx="${b.x + 26}" cy="${b.y + 24}" r="9"/>`)
-    this.text(b.code ? 't-code' : 't-name', tx, b.y + 28, b.name)
-    this.text('t-type', tx, b.y + 46, b.type)
-    b.desc.forEach((line, i) => this.text('t-desc', b.x + 16, b.y + 70 + 16 * i, line))
+    if (b.names) this.coverage.push({ name: b.name, names: b.names, text: [b.name, b.type, ...b.desc].join('') })
+    // A slice name longer than its box is broken at the underscore nearest its middle, so the name stays
+    // readable as the directory it is: keep_martha_state_outside_ / the_checkout.
+    const lines = nameLines(b.name, b.code === true, b.w - 32)
+    const room = 18 * (lines.length - 1)
+    lines.forEach((line, i) => this.text(b.code ? 't-code' : 't-name', tx, b.y + 28 + 18 * i, line))
+    this.text('t-type', tx, b.y + 46 + room, b.type)
+    b.desc.forEach((line, i) => this.text('t-desc', b.x + 16, b.y + 70 + room + 16 * i, line))
   }
 
-  bound(x: number, y: number, w: number, h: number, label: string): void {
+  bound(x: number, y: number, w: number, h: number, label: string, atTheBottom = false): void {
     this.parts.push(`<rect class="bound" x="${x}" y="${y}" width="${w}" height="${h}" rx="12"/>`)
-    this.text('t-bound', x + 16, y + 22, label)
+    // A label at the bottom sits inside the boundary's own left edge, never across its right one.
+    if (atTheBottom) this.text('t-bound', x + 16, y + h - 12, label)
+    else this.text('t-bound', x + 16, y + 22, label)
   }
 
   edge(d: string, label: Label, team = false): void {
@@ -175,130 +219,194 @@ class Diagram {
   }
 }
 
-/** Level 1: who uses Martha, and every system outside it that it reaches. */
+/** Level 1: who uses Martha, and every system and piece of Macula infrastructure it reaches. */
 export function context(): Diagram {
-  const d = new Diagram('c4-context.svg', 'Martha system context', 1000, 730)
+  const d = new Diagram('c4-context.svg', 'Martha system context', 1000, 720)
 
-  d.box({ kind: 'b-ext', x: 30, y: 20, w: 250, h: 124, name: 'npm registry', type: '[External system]',
-    desc: ['The signed Martha package;', 'its signature is checked', 'before anything is installed'] })
-  d.box({ kind: 'b-per', x: 375, y: 20, w: 250, h: 124, name: 'The owner', type: '[Person]', person: true,
-    desc: ['Sets the work, answers the', 'menus; in solo mode gives', 'the yes every push needs'] })
-  d.box({ kind: 'b-per', x: 720, y: 20, w: 250, h: 124, name: 'Teammates', type: '[Person, team mode]', person: true,
-    desc: ['More people on the crew;', 'the ones the team names', 'give the yes to a push'] })
+  d.box({ kind: 'b-per', x: 30, y: 20, w: 250, h: 124, name: 'The owner', type: '[Person]', person: true,
+    desc: ['Runs martha in their project', 'and reads what it asks; gives', 'the yes to every push'] })
+  d.box({ kind: 'b-later', x: 375, y: 20, w: 250, h: 124, name: 'npm registry', type: '[External: not published yet]',
+    desc: ['Will carry the signed package;', 'today Martha is installed from', 'a checkout (#2, #21)'] })
+  d.box({ kind: 'b-later', x: 720, y: 20, w: 250, h: 124, name: 'Teammates', type: '[Person, team mode]', person: true,
+    desc: ['More people on the crew, and', 'the roles the team names; not', 'built in this release'] })
 
-  d.box({ kind: 'b-ext', x: 30, y: 200, w: 250, h: 140, name: 'Claude Code', type: '[External: coding tool]',
-    desc: ['Runs a member session and', 'talks to its own model;', 'Martha is a plugin in it'] })
-  d.box({ kind: 'b-sys', x: 375, y: 200, w: 250, h: 140, name: 'Martha', type: '[In scope]',
-    desc: ['A crew of coding agents:', 'it hands work desk by desk', 'from builder to reviewer,', 'and writes down every step'] })
-  d.box({ kind: 'b-ext', x: 720, y: 200, w: 250, h: 140, name: 'OpenCode', type: '[External: coding tool]',
-    desc: ['The same, on a second', 'coding tool: the same crew,', 'Martha is a plugin in it'] })
+  d.box({ kind: 'b-ext', x: 30, y: 210, w: 250, h: 140, name: 'Claude Code', type: '[External: coding tool]',
+    desc: ['The session a member is: a', 'Claude Code process Martha', 'starts, with its own model and', 'its own tools'] })
+  d.box({ kind: 'b-sys', x: 375, y: 210, w: 250, h: 140, name: 'Martha', type: '[In scope, one machine]',
+    desc: ['A crew of coding agents: it', 'starts a member on config the', 'owner read and approved, and', 'refuses what was not approved'] })
+  d.box({ kind: 'b-ext', x: 720, y: 210, w: 250, h: 140, name: 'A terminal', type: '[External system]',
+    desc: ['Where the owner types, and', 'where a member runs: martha', 'start holds the terminal it', 'was run in'] })
 
-  d.box({ kind: 'b-ext', x: 30, y: 420, w: 250, h: 140, name: 'GitHub', type: '[External system]',
-    desc: ['Issues, pull requests and', 'CI runs: work comes in as', 'an issue and leaves as a', 'reviewed pull request'] })
-  d.box({ kind: 'b-mac', x: 375, y: 420, w: 250, h: 140, name: 'Macula mesh and realm', type: '[team mode only]',
-    desc: ['Admits a crew by invite,', 'and carries the shared room', 'between people and', 'machines'] })
-  d.box({ kind: 'b-ext', x: 720, y: 420, w: 250, h: 140, name: 'A terminal', type: '[External system]',
-    desc: ['One tab per member, so', 'the owner sees each agent', 'at work'] })
+  d.box({ kind: 'b-ext', x: 30, y: 430, w: 250, h: 140, name: 'git and GitHub', type: '[External systems]',
+    desc: ['The project is a git checkout;', 'a member reaches GitHub with', 'its own gh and git, under the', 'shell gate'] })
+  d.box({ kind: 'b-ext', x: 375, y: 430, w: 250, h: 140, name: 'Anthropic model API', type: '[External: the tool\'s own]',
+    desc: ['The coding tool talks to it;', 'Martha never does, and never', 'sees a prompt the tool did not', 'hand it'] })
+  d.box({ kind: 'b-mac', x: 720, y: 430, w: 250, h: 140, name: 'Macula mesh and realm', type: '[Macula]',
+    desc: ['A mesh server runs only when your', 'project\'s config names one; the room', 'and admission are team mode, and this', 'release runs neither'] })
 
-  d.edge('M375 82H280', { x: 327, y: 74, text: 'installs', middle: true })
-  d.edge('M500 144V200', { x: 412, y: 178, text: 'runs, approves' })
-  d.edge('M845 144V172H585V200', { x: 715, y: 166, text: 'their seats', middle: true }, true)
-  d.edge('M280 270H375', { x: 327, y: 262, text: 'loads', middle: true })
-  d.edge('M720 270H625', { x: 672, y: 262, text: 'loads', middle: true })
-  d.edge('M430 340V380H155V420', { x: 292, y: 374, text: 'gh and git', middle: true })
-  d.edge('M500 340V420', { x: 508, y: 400, text: 'rooms, admission' }, true)
-  d.edge('M570 340V380H845V420', { x: 708, y: 374, text: 'a tab per member', middle: true })
+  d.edge('M155 144V180H420V210', { x: 300, y: 172, text: 'runs init, approve, start' })
+  d.edge('M500 144V210', { x: 508, y: 180, text: 'once published' }, true)
+  d.edge('M845 144V180H600V210', { x: 700, y: 172, text: 'their seats' }, true)
+  d.edge('M375 280H280', { x: 327, y: 272, text: 'starts a member', middle: true })
+  d.edge('M625 280H720', { x: 672, y: 272, text: 'start holds it', middle: true })
+  d.edge('M280 300V380H155V430', { x: 160, y: 400, text: 'git, gh' })
+  d.edge('M280 330H340V470H375', { x: 300, y: 470, text: 'its own model', middle: true })
+  d.edge('M585 350V410H660V430', { x: 668, y: 420, text: 'the room, by invite' }, true)
 
-  d.notes(30, 610, [
-    'Solo mode needs only the owner, a coding tool, GitHub and a terminal: no mesh, no account, no service. Team mode adds',
-    'teammates and the Macula mesh, and changes nothing else: the mode is a table of who may do what, read from the crew\'s',
-    'declaration, not a second program. Every push and every release still waits for a person\'s yes.',
+  d.notes(30, 618, [
+    'Solo mode, which is what this release is, needs the owner, a coding tool and a git checkout: no account and no service, and it admits no room message.',
+    'The member Martha starts is a Claude Code session, so the trust the owner gives that folder and the sign-in it holds are the session\'s.',
+    'Team mode adds teammates, and the room and admission drawn dashed here; a mesh server is installed and run only when a project\'s config names one.',
   ])
-  d.legend(690, ['b-sys', 'b-per', 'b-mac', 'b-ext'], null)
+  d.legend(690, ['b-sys', 'b-per', 'b-mac', 'b-ext', 'b-later'], null)
   return d
 }
 
 /** The systems outside Martha that its containers reach, down the right of the container diagram. */
 function systemsTheContainersReach(d: Diagram): void {
-  d.box({ kind: 'b-ext', x: 680, y: 76, w: 296, h: 96, name: 'A terminal', type: '[External system]',
-    desc: ['One tab per member'] })
-  d.box({ kind: 'b-ext', x: 680, y: 196, w: 296, h: 96, name: 'Claude Code', type: '[External: coding tool]',
-    desc: ['Loads the adapter as a plugin'] })
-  d.box({ kind: 'b-ext', x: 680, y: 316, w: 296, h: 96, name: 'OpenCode', type: '[External: coding tool]',
-    desc: ['Loads the adapter as a plugin'] })
-  d.box({ kind: 'b-ext', x: 680, y: 436, w: 296, h: 96, name: 'GitHub', type: '[External system]',
-    desc: ['gh and git: issues, pull requests, CI'] })
-  d.box({ kind: 'b-mac', x: 680, y: 556, w: 296, h: 96, name: 'Macula mesh and realm', type: '[team mode only]',
-    desc: ['The invite, the shared room'] })
-  d.box({ kind: 'b-ext', x: 680, y: 676, w: 296, h: 96, name: 'npm and ghcr.io', type: '[External system]',
-    desc: ['The signed release, by digest'] })
+  d.box({ kind: 'b-ext', x: 800, y: 76, w: 296, h: 96, name: 'A terminal', type: '[External system]',
+    desc: ['One per member: start holds it'] })
+  d.box({ kind: 'b-ext', x: 800, y: 196, w: 296, h: 96, name: 'Claude Code', type: '[External: coding tool]',
+    desc: ['The session a member is'] })
+  d.box({ kind: 'b-ext', x: 800, y: 316, w: 296, h: 96, name: 'git and the checkout', type: '[External systems]',
+    desc: ['The tree id, and the member\'s work'] })
+  d.box({ kind: 'b-ext', x: 800, y: 436, w: 296, h: 96, name: 'The mesh server', type: '[External: a published package]',
+    desc: ['Installed from its recorded tree'] })
 }
 
 /** Which container reaches which, and which system, in the container diagram. */
 function containerEdges(d: Diagram): void {
-  d.edge('M332 131H300', { x: 316, y: 123, text: 'reads', middle: true })
-  d.edge('M600 110H680', { x: 640, y: 102, text: 'a tab', middle: true })
-  d.edge('M600 160H650V230H680', { x: 640, y: 196, text: 'starts', middle: true, rotate: 90 })
-  d.edge('M166 210V186', { x: 174, y: 202, text: 'settings, read once' })
-  d.edge('M432 275H400', { x: 416, y: 267, text: 'host', middle: true })
-  d.edge('M432 420H400', { x: 416, y: 412, text: 'host', middle: true })
-  d.edge('M680 250H600', { x: 640, y: 242, text: 'loads', middle: true })
-  d.edge('M680 380H600', { x: 640, y: 372, text: 'loads', middle: true })
-  d.edge('M216 480V507H660V484H680', { x: 438, y: 502, text: 'gh and git, through the host', middle: true })
-  d.edge('M166 644V674H660V604H680', { x: 438, y: 669, text: 'invite, room', middle: true }, true)
-  d.edge('M600 589H640V724H680', { x: 632, y: 616, text: 'signed release', middle: true, rotate: 90 })
+  d.edge('M166 226V246', { x: 174, y: 242, text: 'node id, approvals' })
+  d.edge('M300 136H332', { x: 316, y: 128, text: 'init writes it', middle: true })
+  d.edge('M300 200H320V286H332', { x: 326, y: 240, text: 'approve', middle: true, rotate: 90 })
+  d.edge('M300 214H308V446H332', { x: 314, y: 380, text: 'start', middle: true, rotate: 90 })
+  // The corridor between the boundary and the systems is 184 wide, so each vertical is 11 clear of its
+  // label and each label sits in a gap between the horizontal segments: rotated text is read as it lies.
+  d.edge('M166 76V48H660V172H800', { x: 640, y: 110, text: 'a member\'s terminal', middle: true, rotate: 90 })
+  d.edge('M600 286H700V364H800', { x: 686, y: 330, text: 'the tree id', middle: true, rotate: 90 })
+  d.edge('M600 446H660V292H800', { x: 646, y: 400, text: 'runs the host', middle: true, rotate: 90 })
+  d.edge('M800 250H730V606H600', { x: 716, y: 540, text: 'loads the relay', middle: true, rotate: 90 })
+  d.edge('M600 490H800', { x: 660, y: 483, text: 'installs it', middle: true })
 }
 
 /** Level 2: what Martha is made of, and which container reaches which system. */
 export function containers(): Diagram {
-  const d = new Diagram('c4-container.svg', 'Martha containers', 1000, 900)
+  const d = new Diagram('c4-container.svg', 'Martha containers', 1120, 780)
 
-  d.bound(16, 40, 600, 650, 'Martha [one package, on the owner\'s machine]')
+  d.bound(16, 40, 600, 660, 'Martha [the package, on the owner\'s machine]', true)
 
-  d.box({ kind: 'b-dat', x: 32, y: 76, w: 268, h: 110, name: 'crew declaration', type: '[files in .crew/]',
-    desc: ['Who is on the crew, the', 'mode\'s table of who may do', 'what, and the house rules'] })
-  d.box({ kind: 'b-cmp', x: 332, y: 76, w: 268, h: 110, name: 'launcher', type: '[command line]', code: true,
-    desc: ['Starts and stops members:', 'one coding-tool session and', 'one terminal tab each'] })
+  d.box({ kind: 'b-cmp', x: 32, y: 76, w: 268, h: 150, name: 'the martha command', type: '[bin/martha, a Node process]', code: true,
+    desc: ['init, approve, start <member>,', '--version. Reads the declaration and', 'the approval, then starts one member', 'and holds its terminal'] })
+  d.box({ kind: 'b-dat', x: 32, y: 246, w: 268, h: 120, name: 'Martha\'s state', type: '[~/.local/state/martha]',
+    desc: ['Per project, outside the checkout:', 'each member\'s node id, the approvals', 'given, launch records and snapshots'] })
+  d.box({ kind: 'b-later', x: 32, y: 546, w: 268, h: 120, name: 'the team mode', type: '[planned]',
+    desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing. The', 'parts every launch loads are drawn below'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 210, w: 368, h: 270, name: 'crew core', type: '[TypeScript, no coding-tool API]', code: true,
-    desc: [
-      'The protocol, one folder per capability:',
-      'declare_crew, host_contract, who_may_act,',
-      'deliver_crew_room, show_dashboard_beat,',
-      'log_ledger, park_and_wake, refresh_member,',
-      'hand_over_at_limit, ask_owner, switch_model,',
-      'the owner\'s small views, watch_waits,',
-      'prove_landing, open_and_finish_worktree,',
-      'guard_workspace, the publish gate;',
-      'team mode adds read_shared_room and',
-      'announce_node_events.',
-      'Each folder holds its hooks, tools, timer,',
-      'store keys, prompt text and test.',
-    ] })
-
-  d.box({ kind: 'b-cmp', x: 432, y: 210, w: 168, h: 125, name: 'Claude Code', type: '[adapter]', code: true,
-    desc: ['The host contract', 'over the plugin', 'API; the pane'] })
-  d.box({ kind: 'b-cmp', x: 432, y: 355, w: 168, h: 125, name: 'OpenCode', type: '[adapter]', code: true,
-    desc: ['The host contract', 'over the plugin', 'API'] })
-
-  d.box({ kind: 'b-team', x: 32, y: 534, w: 268, h: 110, name: 'realm admission', type: '[team mode only]', code: true,
-    desc: ['Joins a crew by invite,', 'and refuses a seat that', 'holds no credential'] })
-  d.box({ kind: 'b-cmp', x: 332, y: 534, w: 268, h: 110, name: 'release', type: '[pack, scan, sign]', code: true,
-    desc: ['Packs what is committed,', 'refuses private text, and', 'signs it in CI'] })
+  d.box({ kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.crew/crew.json]',
+    desc: ['Who is on the crew, and the mode\'s', 'table of who may do what; written', 'once by init, never written over'] })
+  d.box({ kind: 'b-cmp', x: 332, y: 216, w: 268, h: 140, name: 'the approval', type: '[approve_a_checkouts_config]', code: true,
+    desc: ['Shows every file that would start code', 'and the checkout\'s tree, then takes one', 'word: yes. Its fingerprint covers the', 'files and the tree'] })
+  d.box({ kind: 'b-cmp', x: 332, y: 376, w: 268, h: 140, name: 'the launcher', type: '[launch_a_claude_code_member]', code: true,
+    desc: ['Snapshots approved config, writes a', 'launch record before the host starts,', 'and runs the host with the arguments', 'the crew\'s member may pass'] })
+  d.box({ kind: 'b-cmp', x: 332, y: 546, w: 268, h: 120, name: 'the relay', type: '[claude_code_relay, a plugin]', code: true,
+    desc: ['Loads in the member\'s session and', 'gates its turns: what it may run, and', 'whose text it took in'] })
 
   systemsTheContainersReach(d)
   containerEdges(d)
 
-  d.notes(24, 806, [
-    'One code path for both modes: the core reads the mode from the declaration and never branches on the coding tool. An adapter',
-    'implements one small host contract (clock, stores, processes, delivery in and out, tool registration) and composes the slices.',
-    'In solo mode no team-mode container or slice is loaded, and no mesh call is made.',
+  d.notes(24, 728, [
+    'The launch gate is not a box of its own here: it is the check inside start, drawn as a component one level down. Martha reaches',
+    'no service: state is files under the owner\'s own home, and what is outside is the coding tool, a terminal, git, and a mesh server only',
+    'when the project\'s config names one.',
   ])
-  d.legend(866, ['b-cmp', 'b-team', 'b-dat', 'b-mac', 'b-ext'], 'Boundary')
   return d
 }
 
-export const DIAGRAMS = [context, containers] as const
+/**
+ * The slices of the room a launch loads, though no room runs: solo admits nothing and serves no
+ * room, and still loads these parts of it — the node id, the mesh server's tool list, and the gates
+ * that refuse raw mesh reads and reach-widening tools. The page says so in words, and the test
+ * beside this file imports the command and holds the page to what it actually loads.
+ */
+export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
+  'admit_a_room_message',
+  'read_a_room_through_its_gate',
+  'refuse_widening_a_member_reach',
+  'trust_only_framed_envelopes',
+]
+
+/**
+ * The directories in src/ the Component diagram does not draw, and why each is left out.
+ * The test beside this file fails when a directory is in neither a box's `names` nor here,
+ * so a slice cannot arrive in src/ and stay off the picture by accident.
+ */
+export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
+  {
+    name: 'log_ledger',
+    why: 'the crew ledger: a row per milestone and per outward act, and nothing this release runs loads it yet',
+  },
+  {
+    name: 'probe_launch_hosts',
+    why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
+  },
+  {
+    name: 'record_claude_code_host',
+    why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
+  },
+]
+
+/** Level 3: what Martha's code is made of, one box per group of slices in src/. */
+export function components(): Diagram {
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1000)
+
+  d.bound(16, 40, 968, 832, 'Martha [the code in src/, one directory per capability]')
+
+  d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the four acts]', code: true,
+    desc: ['init, approve, start <member>, --version:', 'the words checked before anything runs,', 'a refusal on stderr with the command that', 'fixes it, 0 done / 1 refused / 2 usage'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 70, w: 300, h: 128, name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
+    desc: ['Reads .crew/crew.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 70, w: 300, h: 128, name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
+    desc: ['Names every file that starts code and', 'the checkout\'s tree, asks on the owner\'s', 'own terminal, and keeps the fingerprint', 'it was given in approvals.jsonl'] })
+
+  d.box({ kind: 'b-cmp', x: 32, y: 214, w: 300, h: 128, name: 'start_a_member', names: ['start_a_member'], type: '[one member]', code: true,
+    desc: ['Refuses no terminal, a switch it does', 'not pass, a name the crew lacks, and a', 'stale approval, then names the approval', 'it starts on and holds the terminal'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 128, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member'], type: '[the launcher]', code: true,
+    desc: ['The places in Martha\'s state, a', 'snapshot of what was approved, a launch', 'record written before the host starts,', 'and the host\'s command and arguments'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 128, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself'], type: '[the launch gate]', code: true,
+    desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved; refuse_code_a_checkout_runs_', 'itself closes a checkout\'s own scripts'] })
+
+  d.box({ kind: 'b-dat', x: 32, y: 358, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory'], type: '[Martha\'s state]', code: true,
+    desc: ['One directory per project, named by a', 'hash of its path: node ids, approvals,', 'launches, snapshots. row_streams_', 'directory appends rows as files'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 358, w: 300, h: 150, name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
+    desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 358, w: 300, h: 150, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
+    desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] })
+
+  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 170, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
+    desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 170, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'trust_only_framed_envelopes'], type: '[the shell gate]', code: true,
+    desc: ['What a host calls when a session took', 'something in, and what may run after:', 'refuse_execution_after_ungated_text stops', 'everything after unvetted text, and what', 'it believes is trust_only_framed_envelopes'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 170, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
+    desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
+
+  d.box({ kind: 'b-cmp', x: 32, y: 706, w: 300, h: 150, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
+    desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 706, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay'], type: '[the Claude Code host]', code: true,
+    desc: ['The host contract on Claude Code: the', 'plugin and its hooks, the relay that', 'answers over a socket, and the tools', 'registered in the member\'s session'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 706, w: 300, h: 150, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
+    desc: ['A link to a private issue, an internal', 'host name or a private remote fails CI', 'by name, with a self-test that proves', 'the check still bites'] })
+
+  d.notes(24, 890, [
+    'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
+    'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,',
+    'probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
+    'room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.',
+  ])
+  d.legend(966, ['b-sys', 'b-cmp', 'b-dat'], 'Boundary')
+  return d
+}
+
+export const DIAGRAMS = [context, containers, components] as const
 
 export const ASSETS = join(import.meta.dirname, '..', 'assets')
 
