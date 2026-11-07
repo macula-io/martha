@@ -14,9 +14,11 @@
 // can still connect to the socket and claim any origin (T13, under A13, closed
 // by the signed roster, martha#24).
 
-import { type Stats, lstatSync, mkdirSync, rmSync } from 'node:fs'
+import { type Stats, lstatSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import process, { getuid } from 'node:process'
+
+import { removeTheTree } from './relay_copy.ts'
 
 /** Only the owner may enter, list or write the directory. */
 export const RELAY_DIRECTORY_MODE = 0o700
@@ -66,7 +68,8 @@ export function makeRelayDirectory(directory: string, owner_uid: number = getuid
   }
 
   const made = lstatSync(directory)
-  const remove = (): void => rmSync(directory, { recursive: true, force: true })
+  // The directory comes to hold folders nobody may write: the empty directory and the relay's copy (#117).
+  const remove = (): void => removeTheTree(directory)
   if (!isOnlyTheOwners(made, owner_uid)) {
     remove()
     return { made: false, refusal: `${REFUSED}: ${directory} was not made as a directory only this user may enter.` }

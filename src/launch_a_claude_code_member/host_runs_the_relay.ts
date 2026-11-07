@@ -189,8 +189,16 @@ export function firstValidatorError(report: unknown): string | undefined {
 }
 
 /** Why the host at `binary` would not load the relay at `pluginDir`, or undefined when it loads it. */
-export async function refusalToLoadTheRelay(binary: string, pluginDir: string, env: NodeJS.ProcessEnv, cwd: string): Promise<string | undefined> {
-  const does = `${binary} does not load Martha's relay (${pluginDir}), so the member's gates would be off`
+export async function refusalToLoadTheRelay(
+  binary: string,
+  pluginDir: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  copiedFrom?: string,
+): Promise<string | undefined> {
+  // A launch's copy is gone once the launch is refused; the owner is told the installed folder it was made from (#117).
+  const named = copiedFrom === undefined ? pluginDir : `${pluginDir}, this launch's copy of ${copiedFrom}`
+  const does = `${binary} does not load Martha's relay (${named}), so the member's gates would be off`
   const ran = await ranHost(binary, ['plugin', 'validate', '--json', pluginDir], env, cwd)
   if (ran.failure !== undefined) return `${does}: asked whether it does, ${ran.failure}.`
   let report: unknown
