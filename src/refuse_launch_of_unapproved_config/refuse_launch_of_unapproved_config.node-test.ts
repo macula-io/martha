@@ -545,6 +545,23 @@ test('the off switch and the hosted-mode variable are restated for the recorded 
   assert.ok((CLAUDE_MEMORY_ELSEWHERE as readonly string[]).includes(memory_off.hosted_mode_variable), `${memory_off.hosted_mode_variable} is dropped`)
 })
 
+test('the value the launch gives the off switch is one the recorded host reads as off, not one read back from the constant (#136 r=2)', () => {
+  const { file_mode_guard, on_check } = RECORDED_HOST.memory_off
+  // The check, by its own name, and the values it holds true, as the host's code spells them.
+  const checkName = /^function ([\w$]+)\(e\)\{/.exec(on_check)?.[1]
+  const holdsTrue = /return(\[[^\]]*\])\.includes\(n\)\}$/.exec(on_check)?.[1]
+  assert.ok(checkName !== undefined && holdsTrue !== undefined, 'the recorded on check reads as a function holding a list true')
+  const offValues = JSON.parse(holdsTrue) as readonly string[]
+  // The guard returns off when that check holds for the switch it reads.
+  const switchRead = /let e=process\.env\.([A-Z_]+);if\(([\w$]+)\(e\)\)return"off"/.exec(file_mode_guard)
+  const [, offSwitch, guardCalls] = switchRead ?? []
+  assert.ok(offSwitch !== undefined, 'the recorded guard returns off when a check holds for the switch it reads')
+  assert.equal(guardCalls, checkName, 'the guard calls the recorded on check')
+  assert.deepEqual(Object.keys(CLAUDE_MEMORY_OFF), [offSwitch], 'the launch sets the switch the guard reads, and only it')
+  const value = CLAUDE_MEMORY_OFF[offSwitch] ?? ''
+  assert.ok(offValues.includes(value.toLowerCase().trim()), `the launch's value ${JSON.stringify(value)} is one of ${holdsTrue}, which the host reads as off`)
+})
+
 test('the variables the launch sets and drops for memory are exactly those the publish-gate page and row A17 name (#136)', () => {
   const launched = new Set([...Object.keys(CLAUDE_MEMORY_OFF), ...CLAUDE_MEMORY_ELSEWHERE])
   const namesIn = (text: string): Set<string> => new Set(text.match(/CLAUDE_[A-Z_]+/g) ?? [])

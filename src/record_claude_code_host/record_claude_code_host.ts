@@ -24,20 +24,11 @@ import { argv, exit, stderr, stdout } from 'node:process'
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import type { RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CARRIED, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
 const CHECK = '--check'
-/** The recording's own note on where it comes from; it is carried over, never derived. */
-const NOTE = '_why'
-/** How the host keeps memory off, restated by hand for a version; carried over, never derived (martha#136). */
-const MEMORY_OFF = 'memory_off'
-/** The fields carried over from the committed recording, which --check leaves out. */
-const CARRIED: readonly string[] = [NOTE, MEMORY_OFF]
-
-type Derived = Omit<RecordedHost, 'host_version' | typeof MEMORY_OFF>
-
 /** Each part the recorder reads from a host's text, by the name a failed read reports. */
 const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string) => Partial<Derived> }> = [
   { part: 'session start schema', read: (text) => ({ session_start_schema: sessionStartSchemaIn(text) }) },
@@ -81,7 +72,7 @@ if (binary === undefined || host_version === undefined || !VERSION.test(host_ver
   exit(2)
 }
 
-const committed = JSON.parse(readFileSync(RECORDING, 'utf8')) as RecordedHost & { _why: string }
+const committed = JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed
 const { derived, unreadable } = readHost(readFileSync(binary, 'latin1'))
 
 if (checking) {
@@ -96,5 +87,5 @@ if (unreadable.length > 0) {
   stderr.write(`record_claude_code_host: not recorded, unreadable: ${unreadable.join(', ')}\n`)
   exit(1)
 }
-const recorded = { [NOTE]: committed._why, host_version, [MEMORY_OFF]: committed.memory_off, ...(derived as Derived) }
+const recorded = recordingFrom(committed, host_version, derived as Derived)
 writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)

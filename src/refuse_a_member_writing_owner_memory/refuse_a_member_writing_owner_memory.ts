@@ -26,8 +26,11 @@
 //      the host's home, the rest against the member's working directory
 //      (../claude_code_host asTheHostResolves). It is denied when either the
 //      path as spelled or its real path, links followed, falls inside a denied
-//      place, so a link into a memory folder and a memory folder that is itself
-//      a link are both caught.
+//      place, each place taken both as named and by its real path. So a link
+//      in the checkout into a memory folder, and a config dir that is a link,
+//      are caught. A project's memory folder that is itself a link is caught by
+//      where it leads: at each write, every `<root>/projects/*/memory` that
+//      exists then is followed to its real path, and that folder is denied too.
 //   4. WRITES, NOT READS. Only the tools that write a file are refused. Reading a
 //      memory file is not a path from a member to a later session.
 //
@@ -36,7 +39,7 @@
 // when a permission rule refuses its write. Nothing here relies on the publish
 // gate's hook firing for that pass, which runs as a fork (Pluto, martha#136 r=2).
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, normalize, relative, sep } from 'node:path'
 
 import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
@@ -124,13 +127,30 @@ function inProjectMemory(path: string, root: string): boolean {
   return projects === PROJECTS && project !== undefined && project !== '' && project !== '..' && memory === MEMORY
 }
 
+/** A place as named and by its real path, links followed. */
+const spellingsOf = (place: string): string[] => unique([place, realPathOf(place)])
+
+/** Where each project's memory folder under `root` leads now, links followed: a folder that is a link is denied where it leads. */
+function projectMemoryLeadsTo(root: string): string[] {
+  const projects = join(root, PROJECTS)
+  try {
+    return readdirSync(projects).map((project) => realPathOf(join(projects, project, MEMORY)))
+  } catch {
+    return []
+  }
+}
+
 /** The denied place one spelling of a path falls in, or undefined. */
 function placeOf(path: string, places: OwnerMemoryPlaces): string | undefined {
-  const root = places.memory_roots.find((candidate) => [candidate, realPathOf(candidate)].some((spelling) => inProjectMemory(path, spelling)))
+  const root = places.memory_roots.find(
+    (candidate) =>
+      spellingsOf(candidate).some((spelling) => inProjectMemory(path, spelling)) ||
+      projectMemoryLeadsTo(candidate).some((folder) => within(path, folder)),
+  )
   if (root !== undefined) return `a project's memory folder under ${root}`
-  const folder = places.folders.find((candidate) => [candidate, realPathOf(candidate)].some((spelling) => within(path, spelling)))
+  const folder = places.folders.find((candidate) => spellingsOf(candidate).some((spelling) => within(path, spelling)))
   if (folder !== undefined) return folder
-  return places.files.find((candidate) => [candidate, realPathOf(candidate)].includes(path))
+  return places.files.find((candidate) => spellingsOf(candidate).includes(path))
 }
 
 /** Why a member's tool call writes the owner's memory or instructions, or undefined (rules 3 and 4). */
@@ -154,14 +174,24 @@ export function writesTheOwnersMemory(
   return undefined
 }
 
-/** The permission rules that refuse the host's own writes into the same places (`Write(//<path>/**)`, `Edit(//<path>/**)`). */
+/**
+ * The permission rules that refuse the host's own writes into the same places
+ * (`Write(//<path>/**)`, `Edit(//<path>/**)`), each place as named and by its
+ * real path, and each project's memory folder that is a link where it leads at
+ * launch. A folder linked later is the gate's alone, which follows it at each
+ * write.
+ */
 export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
-  const globs = [
-    ...places.memory_roots.map((root) => `${join(root, PROJECTS)}/*/${MEMORY}/**`),
-    ...places.folders.map((folder) => `${folder}/**`),
-    ...places.files,
-  ]
-  return globs.flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])
+  const rootSpellings = places.memory_roots.flatMap(spellingsOf)
+  const linkedAway = places.memory_roots
+    .flatMap(projectMemoryLeadsTo)
+    .filter((folder) => !rootSpellings.some((root) => inProjectMemory(folder, root)))
+  const globs = new Set([
+    ...rootSpellings.map((root) => `${join(root, PROJECTS)}/*/${MEMORY}/**`),
+    ...[...linkedAway, ...places.folders.flatMap(spellingsOf)].map((folder) => `${folder}/**`),
+    ...places.files.flatMap(spellingsOf),
+  ])
+  return [...globs].flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)

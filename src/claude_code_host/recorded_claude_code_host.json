@@ -4,7 +4,8 @@
   "memory_off": {
     "version": "2.1.319",
     "file_mode_guard": "function Mh(){if(to())return\"off\";if(xT())return\"off\";if(q())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Pe(e))return\"off\";if(rs(e))return\"forced_on\";return Ih()?\"off\":\"unset\"}",
-    "hosted_mode_variable": "CLAUDE_CODE_POST_TURN_MEMORY"
+    "hosted_mode_variable": "CLAUDE_CODE_POST_TURN_MEMORY",
+    "on_check": "function Pe(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}"
   },
   "session_start_schema": "hook_event_name:T(\"SessionStart\"),source:B([\"startup\",\"resume\",\"clear\",\"compact\",\"fork\"])",
   "prompt_origin_mapper": "function Bpe(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&DUe(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind};case\"voice-call\":return{kind:\"unclassified\"}}}",

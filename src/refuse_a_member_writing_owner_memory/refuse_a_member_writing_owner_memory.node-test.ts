@@ -55,12 +55,39 @@ test('a memory path spelled with ~/, with white space around it, or through a li
   assertDenied(places, place.worktree, place.home, `  ${join(place.mainMemory, 'MEMORY.md')}\n`, 'white space around it')
   symlinkSync(place.mainMemory, join(place.worktree, 'notes'))
   assertDenied(places, place.worktree, place.home, 'notes/MEMORY.md', 'a link in the worktree to a memory folder')
+})
+
+test('a project\'s memory folder that is itself a link is denied where it leads, however the write spells it (#136 r=2)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
   const elsewhere = join(place.root, 'elsewhere')
   mkdirSync(elsewhere)
-  const linked = join(place.config, 'projects', '-linked', 'memory')
-  mkdirSync(join(place.config, 'projects', '-linked'))
-  symlinkSync(elsewhere, linked)
-  assertDenied(places, place.worktree, place.home, join(linked, 'MEMORY.md'), 'a memory folder that is itself a link')
+  const project = join(place.config, 'projects', '-linked')
+  mkdirSync(project)
+  // Linked after the places were taken, as a member could during its session: the gate follows it at the write.
+  symlinkSync(elsewhere, join(project, 'memory'))
+  assertDenied(places, place.worktree, place.home, join(project, 'memory', 'MEMORY.md'), 'through the memory folder')
+  assertDenied(places, place.worktree, place.home, join(elsewhere, 'a.md'), 'the folder the memory link leads to')
+  symlinkSync(project, join(place.worktree, 'lnk'))
+  assertDenied(places, place.worktree, place.home, 'lnk/memory/b.md', 'a checkout link to the project, then the memory link')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${elsewhere}/**)`), 'the permission rules name where a linked memory folder leads')
+})
+
+test('a config dir that is a link is denied by its real path too: memory, CLAUDE.md and rules/ (#136 r=2)', (t) => {
+  const place = placeFor(t)
+  const real = join(place.root, 'real-config')
+  mkdirSync(join(real, 'rules'), { recursive: true })
+  const linkedConfig = join(place.root, 'config-link')
+  symlinkSync(real, linkedConfig)
+  const places = placesFor(place, { CLAUDE_CONFIG_DIR: linkedConfig })
+  // A key with no folder yet, so only the config dir's own real path can catch it.
+  assertDenied(places, place.worktree, place.home, join(real, 'projects', '-new-key', 'memory', 'MEMORY.md'), 'memory, by the real config dir')
+  assertDenied(places, place.worktree, place.home, join(real, 'CLAUDE.md'), 'CLAUDE.md, by the real config dir')
+  assertDenied(places, place.worktree, place.home, join(real, 'rules', 'deploy.md'), 'rules/, by the real config dir')
+  const rules = memoryDenyRules(places)
+  for (const rule of [`Write(/${join(real, 'projects')}/*/memory/**)`, `Write(/${join(real, 'rules')}/**)`, `Write(/${join(real, 'CLAUDE.md')})`]) {
+    assert.ok(rules.includes(rule), `${rule} in ${rules.join(' ')}`)
+  }
 })
 
 test('the owner\'s CLAUDE.md and rules are denied, in the launcher\'s config dir and in the member\'s when it differs', (t) => {

@@ -24,6 +24,12 @@ export interface MemoryOff {
   readonly file_mode_guard: string
   /** The variable that turns on hosted mode, which does not check the off switch. */
   readonly hosted_mode_variable: string
+  /**
+   * The function the guard calls on the off switch's value, whole: the values it
+   * holds true are the ones that turn memory off, which the launch's value is
+   * pinned against.
+   */
+  readonly on_check: string
 }
 
 /** What the host binary says, as recorded. */

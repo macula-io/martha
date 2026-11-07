@@ -779,11 +779,18 @@ where it came from. Three things stand on it:
   folder under the launcher's config dir and the member's, into the owner's
   `CLAUDE.md` and `rules/`, into the folders the launcher's environment moves
   memory to, and into each `autoMemoryDirectory` the policy, user and carried
-  settings name: as spelled and as the real path, so a link does not escape
-  (`src/refuse_a_member_writing_owner_memory/`). Reads are allowed.
+  settings name (`src/refuse_a_member_writing_owner_memory/`). Reads are allowed.
+  Links are followed both ways. The written path counts as spelled and as its
+  real path, and each place counts as named and as its real path, so a link in
+  the checkout into a memory folder and a config dir that is a link are caught.
+  A project's memory folder that is itself a link is caught where it leads: at
+  each write, every `projects/*/memory` that exists then is followed, so a link
+  a member makes during its session is caught too.
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
-  each place the relay refuses, from the same function. They go into the carried
+  each place the relay refuses, as named and by its real path, and for where each
+  memory folder that is a link leads at launch (one linked later is the relay's
+  alone), from the same function. They go into the carried
   `--settings` copy, after the owner's approval was fingerprinted, or into a
   file the launch writes when none is carried. This layer is for a later host on
   which the off switch stops holding; on the recorded host the switch holds, and
