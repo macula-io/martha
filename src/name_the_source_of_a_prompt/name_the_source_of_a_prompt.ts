@@ -79,7 +79,8 @@ export function whatAPromptCarries(prompt: { readonly command?: unknown; readonl
 
 /**
  * Claude Code's origin kinds, as its engine names them for `prompt.submit`
- * (recorded from the 2.1.318 binary by ../claude_code_host).
+ * (recorded from the host binary by ../claude_code_host, whose
+ * recorded_claude_code_host.json names the version).
  */
 export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
   host: 'claude-code',
@@ -107,6 +108,9 @@ export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
     // A digest of another agent's activity, delivered to the agent observing it.
     'observer-activity': 'cross_session',
     // No provenance the engine can name, a same-user socket among them (rule 2).
+    // The engine also maps a voice call to it: a remote session's message, which
+    // the bridge can carry from someone other than the owner, marked as meta
+    // (Claude Code 2.1.319, martha#139).
     unclassified: 'cross_session',
     // An agent's own report coming back in: an observer's report, or a schedule
     // firing text stored earlier, mostly by a model. The schedule attests

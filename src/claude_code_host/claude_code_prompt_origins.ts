@@ -24,9 +24,16 @@ export type RecordedPromptOrigins = Pick<RecordedHost, 'prompt_origin_mapper' | 
 // shape only; the literals and the control flow are what is recorded.
 const NAME = '[\\w$]+'
 
-/** The mapper: it starts on the `human` case, which splits into bridge and composer. */
+/**
+ * A case after the pass-through ones that turns an ingress kind into a literal
+ * kind of its own: Claude Code 2.1.319 adds `case"voice-call":return{kind:"unclassified"}`
+ * (martha#139). Only this exact shape is read; any other ending fails closed.
+ */
+const REMAP = `;case"([a-z-]+)":return\\{kind:"([a-z-]+)"\\}`
+
+/** The mapper: it starts on the `human` case, which splits into bridge and composer, and ends on its pass-through cases and any remaps. */
 const MAPPER = new RegExp(
-  `function ${NAME}\\(${NAME},${NAME}\\)\\{switch\\(${NAME}\\.kind\\)\\{case"human":return ${NAME}===!0\\?\\{kind:"bridge"\\}:\\{kind:"composer"\\};.*?return\\{kind:${NAME}\\.kind\\}\\}\\}`,
+  `function ${NAME}\\(${NAME},${NAME}\\)\\{switch\\(${NAME}\\.kind\\)\\{case"human":return ${NAME}===!0\\?\\{kind:"bridge"\\}:\\{kind:"composer"\\};.*?return\\{kind:${NAME}\\.kind\\}(?:${REMAP})*\\}\\}`,
   'g',
 )
 
@@ -42,10 +49,55 @@ const SUBKINDS = new RegExp(
   'g',
 )
 
+/**
+ * An object the mapper returns: a literal kind, then any fields that are not a
+ * kind. A second kind is refused: the later key wins in JS, so the literal
+ * would not be the kind a hook gets (Pluto, martha#139 r=2).
+ */
+const KIND_OBJECT = `\\{kind:"[a-z-]+"(?:,(?!kind:)[\\w$]+:[\\w$.!]+)*\\}`
+
+/**
+ * Every shape a case of the mapper's switch may have (martha#145). The switch
+ * must be these and nothing else, end to end, so a case of another shape
+ * anywhere in it, not only at the end, fails the recording: its kind would
+ * otherwise reach a hook without the coverage check ever seeing it.
+ */
+const CASE_SHAPES = [
+  // A literal kind, or a choice between two (human: bridge or composer; plugin: as the user or not).
+  `case"[a-z-]+":return(?:${KIND_OBJECT}| [\\w$.]+===!0\\?${KIND_OBJECT}:${KIND_OBJECT});`,
+  // The task notification: its subkind when the set promotes it, else the notification itself.
+  `case"task-notification":\\{let\\{subkind:${NAME}\\}=${NAME};return ${NAME}!==void 0&&${NAME}\\(${NAME}\\)\\?\\{kind:${NAME}\\}:\\{kind:"task-notification"\\}\\}`,
+  // A group of cases that pass the ingress kind through.
+  `(?:case"[a-z-]+":)+return\\{kind:${NAME}\\.kind\\};?`,
+  // A literal remap after the pass-through cases (Claude Code 2.1.319's voice-call).
+  REMAP.slice(1).replaceAll(/\((?!\?)/g, '(?:'),
+]
+/** The mapper's switch, and a case label in it. */
+const SWITCH_BODY = new RegExp(`\\{switch\\(${NAME}\\.kind\\)\\{(.*)\\}\\}$`)
+const CASE_LABEL = /case"[a-z-]+"/g
+const ONE_CASE = new RegExp(`^(?:${CASE_SHAPES.join('|')})`)
+
+/**
+ * The mapper, when every case of its switch has a shape the reader knows;
+ * refuses one that does not, naming its first case of an unknown shape.
+ */
+function everyCaseKnown(mapper: string): string {
+  let rest = SWITCH_BODY.exec(mapper)?.[1] ?? ''
+  while (rest !== '') {
+    const known = ONE_CASE.exec(rest)?.[0]
+    if (known === undefined) {
+      const label = rest.match(CASE_LABEL)?.[0] ?? rest.slice(0, 40)
+      throw new Error(`Not a recording the reader can account for: the prompt origin mapper has a case of a shape it does not know, ${label}.`)
+    }
+    rest = rest.slice(known.length)
+  }
+  return mapper
+}
+
 /** A kind written out as a literal. */
 const KIND_LITERAL = /kind:"([a-z-]+)"/g
-/** The cases that pass the ingress kind through unchanged. */
-const PASSED_THROUGH = new RegExp(`((?:case"[a-z-]+":)+)return\\{kind:${NAME}\\.kind\\}`)
+/** The cases that pass the ingress kind through unchanged; a mapper may have more than one group of them. */
+const PASSED_THROUGH = new RegExp(`((?:case"[a-z-]+":)+)return\\{kind:${NAME}\\.kind\\}`, 'g')
 /** The promotion of a subkind: `{kind:<subkind>}` when the set has it, else task-notification. */
 const PROMOTION = new RegExp(`\\?\\{kind:${NAME}\\}:\\{kind:"task-notification"\\}`)
 
@@ -60,7 +112,7 @@ function oneIn(text: string, pattern: RegExp, what: string): string {
 /** The engine's prompt-origin code in a host's text. */
 export function promptOriginsIn(text: string): RecordedPromptOrigins {
   return {
-    prompt_origin_mapper: oneIn(text, MAPPER, 'prompt origin mapper'),
+    prompt_origin_mapper: everyCaseKnown(oneIn(text, MAPPER, 'prompt origin mapper')),
     prompt_origin_fallback: oneIn(text, FALLBACK, 'prompt origin fallback'),
     prompt_origin_subkinds: oneIn(text, SUBKINDS, 'set of promoted subkinds'),
   }
@@ -72,20 +124,27 @@ export function promptOriginKindsOf(recorded: RecordedPromptOrigins): readonly s
   const subkinds = subkindsIn(subkinds_list, recorded.prompt_origin_subkinds)
   const kinds = [
     ...[...mapper.matchAll(KIND_LITERAL)].map((match) => match[1] ?? ''),
-    ...[...passed.matchAll(/case"([a-z-]+)":/g)].map((match) => match[1] ?? ''),
+    ...passed.flatMap((group) => [...group.matchAll(/case"([a-z-]+)":/g)].map((match) => match[1] ?? '')),
     ...subkinds,
     ...[...fallback.matchAll(KIND_LITERAL)].map((match) => match[1] ?? ''),
   ]
   return [...new Set(kinds)]
 }
 
+/** Each ingress kind the recorded mapper turns into another literal kind, with that kind (martha#139). */
+export function promptOriginRemapsOf(recorded: RecordedPromptOrigins): Readonly<Record<string, string>> {
+  const { mapper } = recordedParts(recorded)
+  return Object.fromEntries([...mapper.matchAll(new RegExp(REMAP, 'g'))].map((match) => [match[1] ?? '', match[2] ?? '']))
+}
+
 /** The mapper, the fallback, the subkind list and the passed-through cases of a recording; refuses one missing. */
-function recordedParts(recorded: RecordedPromptOrigins): { mapper: string; fallback: string; subkinds_list: string; passed: string } {
-  const mapper = firstMatch(MAPPER, recorded.prompt_origin_mapper, 0)
+function recordedParts(recorded: RecordedPromptOrigins): { mapper: string; fallback: string; subkinds_list: string; passed: readonly string[] } {
+  const found = firstMatch(MAPPER, recorded.prompt_origin_mapper, 0)
+  const mapper = found === undefined ? undefined : everyCaseKnown(found)
   const fallback = firstMatch(FALLBACK, recorded.prompt_origin_fallback, 0)
   const subkinds_list = firstMatch(SUBKINDS, recorded.prompt_origin_subkinds, 1)
   const passed = passedThroughIn(mapper)
-  if (mapper === undefined || fallback === undefined || subkinds_list === undefined || passed === undefined || !PROMOTION.test(mapper)) {
+  if (mapper === undefined || fallback === undefined || subkinds_list === undefined || passed.length === 0 || !PROMOTION.test(mapper)) {
     throw new Error('Not a recording of the engine\'s prompt origins: the mapper, its promotion, the fallback or the subkind set is missing.')
   }
   return { mapper, fallback, subkinds_list, passed }
@@ -96,9 +155,9 @@ function firstMatch(pattern: RegExp, text: string, group: number): string | unde
   return new RegExp(pattern.source).exec(text)?.[group]
 }
 
-/** The cases the mapper passes through unchanged, when there is a mapper. */
-function passedThroughIn(mapper: string | undefined): string | undefined {
-  return mapper === undefined ? undefined : PASSED_THROUGH.exec(mapper)?.[1]
+/** Every group of cases the mapper passes through unchanged; none when there is no mapper. */
+function passedThroughIn(mapper: string | undefined): readonly string[] {
+  return mapper === undefined ? [] : [...mapper.matchAll(PASSED_THROUGH)].map((match) => match[1] ?? '')
 }
 
 /** The promoted subkinds in their recorded list; refuses anything but non-empty strings, at least one. */
