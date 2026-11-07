@@ -91,7 +91,7 @@ export function stateSubdirectory(state: MarthaState, name: string): { readonly 
 }
 
 /** A state file's text, '' when it is missing, or why it may not be read. */
-function readStateFile(path: string): { readonly text: string } | Refused {
+export function readStateFile(path: string): { readonly text: string } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
@@ -155,7 +155,7 @@ export function nodeIdsFor(state: MarthaState, names: readonly string[]): { read
 const SHA256_HEX = /^[0-9a-f]{64}$/
 
 /** A git object id, sha1 or sha256, as git names the checkout's tree. */
-const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+export const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
 
 /** The fields of an approval, and of each entry kind approve can keep: the gate refuses a symlink or an unreadable entry whatever was approved. */
 const APPROVAL_FIELDS = ['approved_at', 'entries', 'fingerprint', 'tree']
@@ -165,8 +165,8 @@ const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   file: ['kind', 'path', 'sha256'],
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
+export const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
 
 const isEntry = (value: unknown): value is ConfigEntry => {
@@ -176,7 +176,7 @@ const isEntry = (value: unknown): value is ConfigEntry => {
 }
 
 /** True when `text` is the instant toISOString writes for it, as approve keeps one. */
-const isInstant = (text: unknown): boolean => typeof text === 'string' && !Number.isNaN(Date.parse(text)) && new Date(text).toISOString() === text
+export const isInstant = (text: unknown): boolean => typeof text === 'string' && !Number.isNaN(Date.parse(text)) && new Date(text).toISOString() === text
 
 /** An approval only as approve keeps one: its exact fields, an instant, entries the gate writes, and the gate's own fingerprint over them. */
 const isApproval = (value: unknown): value is Approval => {
@@ -210,29 +210,34 @@ export function readApprovals(state: MarthaState): { readonly approvals: readonl
 
 const APPEND = fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
 
-/** The approvals file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
-function openForAppend(path: string): { readonly descriptor: number } | Refused {
+/** A state file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
+function openForAppend(path: string, what: string): { readonly descriptor: number } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, APPEND, STATE_FILE_MODE)
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
-    return { refusal: `${path} could not be opened to keep an approval (${code ?? String(error)}), so Martha keeps none in it.` }
+    return { refusal: `${path} could not be opened to append to (${code ?? String(error)}), so Martha keeps no ${what} in it.` }
   }
   const found = fs.fstatSync(descriptor)
   if (found.isFile() && found.uid === getuid?.() && (found.mode & OPEN_TO_OTHERS) === 0) return { descriptor }
   fs.closeSync(descriptor)
-  return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no approval in it.` }
+  return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no ${what} in it.` }
 }
 
-/** Keeps one more approval, as one line at the end of the file; or why it could not be kept. */
-export function appendApproval(state: MarthaState, approval: Approval): Refused | undefined {
-  const opened = openForAppend(join(state.directory, APPROVALS_FILE))
+/** Keeps `value` as one JSON line at the end of the state file `name`; or why it could not be kept. `what` names one such value. */
+export function appendStateLine(state: MarthaState, name: string, value: unknown, what: string): Refused | undefined {
+  const opened = openForAppend(join(state.directory, name), what)
   if ('refusal' in opened) return opened
   try {
-    fs.writeSync(opened.descriptor, `${JSON.stringify(approval)}\n`)
+    fs.writeSync(opened.descriptor, `${JSON.stringify(value)}\n`)
     return undefined
   } finally {
     fs.closeSync(opened.descriptor)
   }
+}
+
+/** Keeps one more approval, as one line at the end of the file; or why it could not be kept. */
+export function appendApproval(state: MarthaState, approval: Approval): Refused | undefined {
+  return appendStateLine(state, APPROVALS_FILE, approval, 'approval')
 }
