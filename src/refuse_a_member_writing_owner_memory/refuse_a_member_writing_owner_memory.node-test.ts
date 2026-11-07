@@ -7,6 +7,7 @@ import { test, type TestContext } from 'node:test'
 import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import {
   FILE_WRITING_TOOLS,
+  LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
   MEMORY_FOLDER_OVERRIDE,
   memoryDenyRules,
@@ -115,6 +116,85 @@ test('a project\'s memory folder that is a link to a folder that does not exist 
   symlinkSync(notYet, join(project, 'memory'))
   assertDenied(places, place.worktree, place.home, join(notYet, 'MEMORY.md'), 'the folder the link will lead to')
   assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(notYet)}/**)`), 'the permission rules name where a link with no target yet will lead')
+})
+
+/** A chain of `links` links under `base`, each pointing at the next and the last at `to`: returns the first (martha#136 r=4). */
+function chainAt(base: string, links: number, to: string): string {
+  mkdirSync(base, { recursive: true })
+  let target = to
+  for (let index = links; index >= 1; index -= 1) {
+    const link = join(base, `hop-${index}`)
+    symlinkSync(target, link)
+    target = link
+  }
+  return target
+}
+
+test('a memory folder that is a two-hop chain of links is denied where the chain ends, though the end does not exist yet (#136 r=4)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const end = join(place.root, 'end-not-yet')
+  const project = join(place.config, 'projects', '-two-hop')
+  mkdirSync(project)
+  symlinkSync(chainAt(join(place.root, 'hops'), 1, end), join(project, 'memory'))
+  assertDenied(places, place.worktree, place.home, join(end, 'MEMORY.md'), 'where the two-hop chain ends')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(end)}/**)`), 'the permission rules name the end of the chain')
+})
+
+test('a projects folder that is a link to a disk folder that does not exist yet denies a write into it (#136 r=4)', (t) => {
+  const place = placeFor(t)
+  const disk = join(place.root, 'disk-not-yet')
+  rmSync(join(place.config, 'projects'), { recursive: true, force: true })
+  symlinkSync(disk, join(place.config, 'projects'))
+  const places = placesFor(place)
+  assertDenied(places, place.worktree, place.home, join(disk, '-new', 'memory', 'MEMORY.md'), 'a project under the disk the projects folder will be')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(disk)}/*/memory/**)`), 'the permission rules name the disk it will lead to')
+})
+
+test('a project folder that is a link to a folder that does not exist yet denies a write into its memory (#136 r=4)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const elsewhere = join(place.root, 'project-not-yet')
+  symlinkSync(elsewhere, join(place.config, 'projects', '-project-link'))
+  assertDenied(places, place.worktree, place.home, join(elsewhere, 'memory', 'MEMORY.md'), 'the memory of the project folder the link will lead to')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(join(elsewhere, 'memory'))}/**)`), 'the permission rules name where that memory folder will be')
+})
+
+test('a chain of links at the cap is followed and denied at its end (#136 r=4)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const end = join(place.root, 'end-at-cap')
+  const project = join(place.config, 'projects', '-at-cap')
+  mkdirSync(project)
+  symlinkSync(chainAt(join(place.root, 'hops-at-cap'), LINK_HOPS - 1, end), join(project, 'memory'))
+  assertDenied(places, place.worktree, place.home, join(end, 'MEMORY.md'), 'the end of a chain at the cap')
+  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(end)}/**)`), 'the permission rules name the end of a chain at the cap')
+})
+
+test('a chain of links one past the cap is refused, and no write is allowed while it stands (#136 r=4)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const end = join(place.root, 'end-past-cap')
+  const project = join(place.config, 'projects', '-past-cap')
+  mkdirSync(project)
+  symlinkSync(chainAt(join(place.root, 'hops-past-cap'), LINK_HOPS, end), join(project, 'memory'))
+  for (const file_path of [join(end, 'MEMORY.md'), join(place.worktree, 'notes.md')]) {
+    const why = writesTheOwnersMemory('Write', { file_path, content: 'x' }, places, place.worktree, place.home)
+    assert.ok(why?.includes('cannot be followed to its end'), `${file_path} is refused: ${why}`)
+  }
+})
+
+test('a link that turns on itself is refused, and a read of the same path is not a write (#136 r=4)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const project = join(place.config, 'projects', '-cycle')
+  mkdirSync(project)
+  symlinkSync(join(project, 'second'), join(project, 'memory'))
+  symlinkSync(join(project, 'memory'), join(project, 'second'))
+  const memory = join(project, 'memory', 'MEMORY.md')
+  const why = writesTheOwnersMemory('Write', { file_path: memory, content: 'x' }, places, place.worktree, place.home)
+  assert.ok(why?.includes('cannot be followed to its end'), `a cycle is refused: ${why}`)
+  assert.equal(writesTheOwnersMemory('Read', { file_path: memory }, places, place.worktree, place.home), undefined, 'a read is not a write')
 })
 
 test('the owner\'s CLAUDE.md and rules are denied, in the launcher\'s config dir and in the member\'s when it differs', (t) => {

@@ -780,24 +780,24 @@ where it came from. Three things stand on it:
   `CLAUDE.md` and `rules/`, into the folders the launcher's environment moves
   memory to, and into each `autoMemoryDirectory` the policy, user and carried
   settings name (`src/refuse_a_member_writing_owner_memory/`). Reads are allowed.
-  Links are followed both ways. The written path counts as spelled and as its
-  real path, and each place counts as named and as its real path, so a link in
-  the checkout into a memory folder and a config dir that is a link are caught.
-  A project's memory folder that is itself a link is caught where it leads: at
-  each write, every `projects/*/memory` that exists then is followed, so a link
-  a member makes during its session is caught too, including one whose target
-  folder does not exist yet, which is read from the link itself. The projects
-  folder itself is followed the same way, so a config dir whose `projects` is a
-  link to another disk is caught for a project that has no folder yet.
+  Links are followed both ways, and to the end: one function resolves every
+  path here, following a link at any level — a `projects` folder that is a link
+  to another disk, a project folder, a project's memory folder, a chain of
+  links, and a link whose target does not exist yet, read from the link itself
+  — so the written path and every place are compared where they finally lead.
+  A chain longer than eight links, or a link that turns on itself, is refused:
+  no write is allowed while one stands, because the guard cannot tell which
+  folder it would land in. A project's memory folder is followed at each write,
+  so a link a member makes during its session is caught too.
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
-  each place the relay refuses, as named and by its real path, for the projects
+  each place the relay refuses, as named and as it leads, for the projects
   folder as it leads, and for where each memory folder that is a link leads at
   launch (one linked later is the relay's alone), from the same function. They go
   into the carried `--settings` copy, after the owner's approval was
   fingerprinted, or into a file the launch writes when none is carried. This
-  layer is for a later host on
-  which the off switch stops holding; on the recorded host the switch holds, and
+  layer is for a later host on which the off switch stops holding; on the
+  recorded host the switch holds, and
   nothing claims this layer was seen working.
 
 What it does not rest on: the publish gate's hook for the memory pass, which
