@@ -372,8 +372,8 @@ export function components(): Diagram {
     desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] })
   d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 146, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member'], type: '[the launcher]', code: true,
     desc: ['The places in Martha\'s state, a', 'snapshot of what was approved, a launch', 'record written before the host starts,', 'and the host\'s command and arguments'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 146, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself'], type: '[the launch gate]', code: true,
-    desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved; refuse_code_a_checkout_runs_', 'itself closes a checkout\'s own scripts'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 146, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes'], type: '[the launch gate]', code: true,
+    desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts'] })
 
   d.box({ kind: 'b-dat', x: 32, y: 376, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory'], type: '[Martha\'s state]', code: true,
     desc: ['One directory per project, named by a', 'hash of its path: node ids, approvals,', 'launches, snapshots. row_streams_', 'directory appends rows as files'] })
