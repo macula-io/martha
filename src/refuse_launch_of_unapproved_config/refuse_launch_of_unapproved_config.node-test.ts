@@ -9,6 +9,8 @@ import { readCheckoutTree } from './checkout_tree.ts'
 import {
   decideLaunch,
   fingerprintOf,
+  CLAUDE_MEMORY_ELSEWHERE,
+  CLAUDE_MEMORY_OFF,
   HOSTS,
   LAUNCH_FILES_OF_HOST,
   launchEnvironment,
@@ -465,6 +467,25 @@ test('a Claude Code launch drops an inherited CLAUDE_CODE_SHELL_PREFIX, which wo
     if (!prepared.allow) return
     const env = launchEnvironment({ CLAUDE_CODE_SHELL_PREFIX: join(place.checkout, 'wrap.sh'), PATH: '/usr/bin' }, prepared.switches)
     assert.equal(Object.hasOwn(env, 'CLAUDE_CODE_SHELL_PREFIX'), false, approved ? 'with config carried' : 'with no config')
+    assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
+  }
+})
+
+test('a Claude Code launch turns the host\'s auto-memory off and drops every variable that moves or bypasses it, whatever is inherited (#136)', (t) => {
+  const [offName, offValue] = Object.entries(CLAUDE_MEMORY_OFF)[0] ?? []
+  assert.ok(offName !== undefined && offValue !== undefined, 'one variable turns memory off')
+  assert.ok(CLAUDE_MEMORY_ELSEWHERE.length > 0, 'the names that move or bypass memory are listed')
+  for (const approved of [false, true]) {
+    const place = scratch(t)
+    if (approved) put(place.checkout, SERVERS, server('echo one'))
+    const { prepared } = prepare('claude-code', place, approved ? approve('claude-code', place) : [])
+    assert.equal(prepared.allow, true)
+    if (!prepared.allow) return
+    const inherited = { [offName]: '0', ...Object.fromEntries(CLAUDE_MEMORY_ELSEWHERE.map((name) => [name, join(place.checkout, name)])), PATH: '/usr/bin' }
+    const env = launchEnvironment(inherited, prepared.switches)
+    const shape = approved ? 'with config carried' : 'with no config'
+    assert.equal(env[offName], offValue, `${shape}: the inherited value never wins`)
+    for (const name of CLAUDE_MEMORY_ELSEWHERE) assert.equal(Object.hasOwn(env, name), false, `${shape}: ${name}`)
     assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
   }
 })
