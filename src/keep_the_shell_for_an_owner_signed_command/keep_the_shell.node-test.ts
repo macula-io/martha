@@ -10,6 +10,7 @@ import {
   resultBuiltFrom,
   RUN_COMMAND_PREFIX,
   RUN_IN_BACKGROUND,
+  runNameOf,
   sha256Of,
   type AnsweredBash,
   type Receipt,
@@ -92,4 +93,12 @@ test('the order of a result\'s keys does not matter, its values do', () => {
 test('the output replaces only a string equal to the placeholder, not one that contains it', () => {
   const shape: RecordedResultShape = { status: OK, placeholder: PLACEHOLDER, value: { stdout: PLACEHOLDER, note: `x${PLACEHOLDER}`, list: [PLACEHOLDER, 1] } }
   assert.deepEqual(resultBuiltFrom(shape, OUTPUT), { stdout: OUTPUT, note: `x${PLACEHOLDER}`, list: [OUTPUT, 1] })
+})
+
+test('a run is bound only to a foreground call whose command is exactly the prefix and a shape name', () => {
+  assert.equal(runNameOf({ command: `${RUN_COMMAND_PREFIX}${NAME}` }), NAME)
+  assert.equal(runNameOf({ command: `${RUN_COMMAND_PREFIX}${NAME}`, run_in_background: false }), NAME)
+  for (const input of [{ command: `${RUN_COMMAND_PREFIX}${NAME}`, run_in_background: true }, { command: `${RUN_COMMAND_PREFIX}${NAME} ` }, { command: `${RUN_COMMAND_PREFIX}A` }, { command: `${RUN_COMMAND_PREFIX}${NAME};id` }, { command: 'npm test' }, {}]) {
+    assert.equal(runNameOf(input), undefined, JSON.stringify(input))
+  }
 })

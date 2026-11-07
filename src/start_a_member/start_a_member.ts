@@ -45,6 +45,9 @@ import {
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
+import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
+import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { decideLaunch, fingerprintOf, readLaunchState, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -185,5 +188,6 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     inherited: request.inherited,
     stdio: request.stdio,
     tellOwner: (line) => request.tellOwner(line),
+    signed_runs: signedRunsOf(receiptsInMemory(), (name) => runAKeptShape(request.state, request.root, request.inherited, name, new Date())),
   })
 }

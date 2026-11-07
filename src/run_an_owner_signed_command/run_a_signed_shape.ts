@@ -15,6 +15,7 @@ import type { CommandShape, SignedBase } from '../keep_the_shell_for_an_owner_si
 import { dependenciesTheRunMaySee, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { treeTheRunMaySee, type BaseEntry, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { GIT_OBJECT_FORMATS, type GitObjectFormat, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { installedLockOf, namesUnder, readPackageOnce, readTheCheckoutOnce, type CheckoutRead, type PackageFile } from './read_the_checkout_once.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type FileToWrite, type RunEnded } from './run_in_a_sandbox.ts'
 import { objectFormatOf, openSignedBase, type OpenedBase } from './signed_base.ts'
@@ -55,6 +56,13 @@ export async function runASignedShape(run: ShapeToRun): Promise<RunEnded | strin
   } finally {
     rmSync(directory.root, { recursive: true, force: true })
   }
+}
+
+/** Run `name` from the list the owner signed and kept for this project, opened now; or why nothing ran. */
+export async function runAKeptShape(state: MarthaState, checkout: string, inherited: ShapeToRun['inherited'], name: string, now: Date): Promise<RunEnded | string> {
+  const opened = openKeptCommandShapes(state, now)
+  if (!opened.trusted) return opened.why
+  return runASignedShape({ state, checkout, base: opened.base, shapes: opened.shapes, name, inherited })
 }
 
 /** The base, the checkout read once, both rules: the bytes the run may see, or every reason it may not run. */

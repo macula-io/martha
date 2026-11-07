@@ -14,6 +14,8 @@
 
 import { createHash } from 'node:crypto'
 
+import { SHAPE_NAME } from './command_shapes.ts'
+
 /** What the member types to run a shape: this, then the shape's name, and nothing else. */
 export const RUN_COMMAND_PREFIX = 'martha run '
 /** The statuses whose host result was recorded. */
@@ -80,6 +82,17 @@ function receiptDecision(call: AnsweredBash, name: string, receipt: Receipt | un
   const shape = shapes.find((recorded) => recorded.status === receipt.status)
   if (shape === undefined) return { why: `the run ended with status ${receipt.status}, whose host result was not recorded` }
   return canonical(call.result) === canonical(resultBuiltFrom(shape, receipt.output)) ? { why: undefined } : { why: RESULT_DIFFERS }
+}
+
+/**
+ * The shape a `Bash` call asks to run: its name when the command is exactly RUN_COMMAND_PREFIX and a name a list
+ * may hold, in the foreground; undefined for every other call. The launcher binds a run only to such a call.
+ */
+export function runNameOf(input: { readonly command?: unknown; readonly run_in_background?: unknown }): string | undefined {
+  if (input.run_in_background !== undefined && input.run_in_background !== false) return undefined
+  if (typeof input.command !== 'string' || !input.command.startsWith(RUN_COMMAND_PREFIX)) return undefined
+  const name = input.command.slice(RUN_COMMAND_PREFIX.length)
+  return SHAPE_NAME.test(name) ? name : undefined
 }
 
 /** The recorded value with the placeholder string replaced by `output`, wherever a string equals it. */
