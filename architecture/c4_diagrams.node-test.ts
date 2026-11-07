@@ -5,11 +5,12 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { ASSETS, DIAGRAMS } from './c4_diagrams.ts'
+import { ASSETS, components, DIAGRAMS, LEFT_OUT } from './c4_diagrams.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
+const SRC = join(import.meta.dirname, '..', 'src')
 
 // The page links an SVG by its path from the page to the generator's ASSETS.
 const linkTo = (file: string): string => `${relative(import.meta.dirname, ASSETS)}/${file}`
@@ -36,5 +37,44 @@ test('the model is a Context, a Component and a Container diagram, and the gate 
   const files = DIAGRAMS.map((make) => make().file)
   for (const kind of ['context', 'component', 'container']) {
     assert.ok(files.some((f) => f.includes(kind)), `no ${kind} diagram in the generator`)
+  }
+})
+
+// The Component diagram is the code, so a slice cannot reach src/ and stay off it unseen:
+// it is drawn in a box, or named in LEFT_OUT with the reason it is not.
+const slicesInSrc = (): string[] =>
+  readdirSync(SRC, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+
+test('every directory in src/ is drawn in a component box or declared left out', () => {
+  const drawn = new Set(components().coverage.flatMap((box) => [...box.names]))
+  const leftOut = new Set(LEFT_OUT.map((entry) => entry.name))
+  const missing = slicesInSrc().filter((slice) => !drawn.has(slice) && !leftOut.has(slice))
+  assert.deepEqual(missing, [], `in no box and not declared left out: ${missing.join(', ')}`)
+})
+
+test('a component box stands for directories that are in src/, and names each one it stands for', () => {
+  const slices = new Set(slicesInSrc())
+  for (const box of components().coverage) {
+    for (const name of box.names) {
+      assert.ok(slices.has(name), `${box.name} stands for ${name}, which is not a directory in src/`)
+      assert.ok(box.text.includes(name), `${box.name} stands for ${name} but does not name it`)
+    }
+    for (const titled of box.name.split(', ')) {
+      assert.ok(box.names.includes(titled), `${box.name} titles ${titled}, which it does not stand for`)
+    }
+  }
+})
+
+test('what is left out says why, is a directory in src/, and is said on the page', () => {
+  const slices = new Set(slicesInSrc())
+  const drawn = new Set(components().coverage.flatMap((box) => [...box.names]))
+  for (const entry of LEFT_OUT) {
+    assert.ok(slices.has(entry.name), `${entry.name} is left out and is not a directory in src/`)
+    assert.ok(!drawn.has(entry.name), `${entry.name} is both drawn and declared left out`)
+    assert.ok(entry.why.trim().length > 0, `${entry.name} is left out with no reason`)
+    assert.ok(README.includes(entry.name), `architecture/README.md does not say ${entry.name} is left out`)
   }
 })

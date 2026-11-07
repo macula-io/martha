@@ -100,8 +100,21 @@ interface Box {
   readonly name: string
   readonly type: string
   readonly desc: readonly string[]
+  /**
+   * The directories in src/ this box stands for, each named in its title or its description.
+   * A component box sets it, and the test beside this file holds every one of them to src/.
+   */
+  readonly names?: readonly string[]
   readonly person?: true
   readonly code?: true
+}
+
+/** What a box covering src/ directories stands for, as it was drawn. */
+export interface BoxCoverage {
+  readonly name: string
+  readonly names: readonly string[]
+  /** The title, the type and every description line, joined, so a name split over two lines is still found. */
+  readonly text: string
 }
 
 /** One line when a name fits its box, else two, broken at the underscore nearest the middle. */
@@ -127,6 +140,8 @@ interface Label {
 
 class Diagram {
   private readonly parts: string[] = []
+  /** Every box that stands for directories in src/, as drawn, for the test that holds the picture to them. */
+  readonly coverage: BoxCoverage[] = []
   readonly file: string
   readonly title: string
   readonly w: number
@@ -148,6 +163,7 @@ class Diagram {
     this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10"/>`)
     const tx = b.person ? b.x + 44 : b.x + 16
     if (b.person) this.parts.push(`<circle class="head" cx="${b.x + 26}" cy="${b.y + 24}" r="9"/>`)
+    if (b.names) this.coverage.push({ name: b.name, names: b.names, text: [b.name, b.type, ...b.desc].join('') })
     // A slice name longer than its box is broken at the underscore nearest its middle, so the name stays
     // readable as the directory it is: keep_martha_state_outside_ / the_checkout.
     const lines = nameLines(b.name, b.code === true, b.w - 32)
@@ -297,45 +313,52 @@ export function containers(): Diagram {
   return d
 }
 
+/**
+ * The directories in src/ the Component diagram does not draw, and why each is left out.
+ * The test beside this file fails when a directory is in neither a box's `names` nor here,
+ * so a slice cannot arrive in src/ and stay off the picture by accident.
+ */
+export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = []
+
 /** Level 3: what Martha's code is made of, one box per group of slices in src/. */
 export function components(): Diagram {
   const d = new Diagram('c4-components.svg', 'Martha components', 1000, 940)
 
   d.bound(16, 40, 968, 776, 'Martha [the code in src/, one directory per capability]')
 
-  d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', type: '[the four acts]', code: true,
+  d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the four acts]', code: true,
     desc: ['init, approve, start <member>, --version:', 'the words checked before anything runs,', 'a refusal on stderr with the command that', 'fixes it, 0 done / 1 refused / 2 usage'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 70, w: 300, h: 128, name: 'declare_a_solo_crew, declare_crew', type: '[the declaration]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 70, w: 300, h: 128, name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
     desc: ['Reads .crew/crew.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 70, w: 300, h: 128, name: 'approve_a_checkouts_config', type: '[the owner\'s yes]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 70, w: 300, h: 128, name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
     desc: ['Names every file that starts code and', 'the checkout\'s tree, asks on the owner\'s', 'own terminal, and keeps the fingerprint', 'it was given in approvals.jsonl'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 214, w: 300, h: 128, name: 'start_a_member', type: '[one member]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 214, w: 300, h: 128, name: 'start_a_member', names: ['start_a_member'], type: '[one member]', code: true,
     desc: ['Refuses no terminal, a switch it does', 'not pass, a name the crew lacks, and a', 'stale approval, then names the approval', 'it starts on and holds the terminal'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 128, name: 'launch_a_claude_code_member', type: '[the launcher]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 128, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member'], type: '[the launcher]', code: true,
     desc: ['The places in Martha\'s state, a', 'snapshot of what was approved, a launch', 'record written before the host starts,', 'and the host\'s command and arguments'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 128, name: 'refuse_launch_of_unapproved_config', type: '[the launch gate]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 128, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself'], type: '[the launch gate]', code: true,
     desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved; refuse_code_a_checkout_runs_', 'itself closes a checkout\'s own scripts'] })
 
-  d.box({ kind: 'b-dat', x: 32, y: 358, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', type: '[Martha\'s state]', code: true,
+  d.box({ kind: 'b-dat', x: 32, y: 358, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory'], type: '[Martha\'s state]', code: true,
     desc: ['One directory per project, named by a', 'hash of its path: node ids, approvals,', 'launches, snapshots. row_streams_', 'directory appends rows as files'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 358, w: 300, h: 128, name: 'linux_process_identity', type: '[this machine]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 358, w: 300, h: 128, name: 'linux_process_identity', names: ['linux_process_identity'], type: '[this machine]', code: true,
     desc: ['The files and scratch directories on', 'this machine\'s disk, and the processes', 'run on it: what the host contract asks', 'for, answered without a host'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 358, w: 300, h: 128, name: 'install_the_recorded_mesh_server', type: '[recorded trees]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 358, w: 300, h: 128, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
     desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] })
 
-  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 128, name: 'inbound_paths', type: '[every path, and its control]', code: true,
+  d.box({ kind: 'b-cmp', x: 32, y: 524, w: 300, h: 128, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
     desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 128, name: 'take_in_a_turn, shell_tools', type: '[the shell gate]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 524, w: 300, h: 128, name: 'take_in_a_turn, shell_tools', names: ['take_in_a_turn', 'shell_tools', 'refuse_execution_after_ungated_text'], type: '[the shell gate]', code: true,
     desc: ['What a host calls when a session took', 'something in, and what may run after;', 'refuse_execution_after_ungated_text', 'stops everything after unvetted text'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 128, name: 'name_the_source_of_a_prompt', type: '[whose text it was]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 524, w: 300, h: 128, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh'], type: '[whose text it was]', code: true,
     desc: ['The origin a host attests, carried', 'with the turn: attribute_a_cross_', 'session_sender, carry_taint_across_a_', 'refresh, and the shell gate\'s reading of it'] })
 
-  d.box({ kind: 'b-team', x: 32, y: 668, w: 300, h: 140, name: 'admit_a_room_message', type: '[the rooms, team mode]', code: true,
+  d.box({ kind: 'b-team', x: 32, y: 668, w: 300, h: 140, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'trust_only_framed_envelopes'], type: '[the rooms, team mode]', code: true,
     desc: ['Whether a crew or shared room message', 'is admitted; read_a_room_through_its_', 'gate for the mesh side, trust_only_', 'framed_envelopes for what is believed'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 668, w: 300, h: 140, name: 'claude_code_host, claude_code_relay', type: '[the Claude Code host]', code: true,
+  d.box({ kind: 'b-cmp', x: 348, y: 668, w: 300, h: 140, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay'], type: '[the Claude Code host]', code: true,
     desc: ['The host contract on Claude Code: the', 'plugin and its hooks, the relay that', 'answers over a socket, and the tools', 'registered in the member\'s session'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 668, w: 300, h: 140, name: 'check_nothing_private_gets_in', type: '[this repository\'s own check]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 668, w: 300, h: 140, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
     desc: ['A link to a private issue, an internal', 'host name or a private remote fails CI', 'by name, with a self-test that proves', 'the check still bites'] })
 
   d.notes(24, 852, [
