@@ -82,6 +82,8 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hookSettingsWatch, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -146,6 +148,8 @@ export interface ClaudeCodeMemberLaunch {
   readonly places: LauncherPlaces
   /** The recorded mesh server trees; the reviewed recording unless a test gives its own. */
   readonly mesh_trees?: MeshTreeRecording
+  /** Where the host reads managed settings; the recorded host's place unless a test gives its own (martha#122). */
+  readonly managed_settings?: ManagedSettingsPlace
   /** The host's command: `claude`, or a path to it. */
   readonly command: string
   /** The owner's own arguments, the prompt among them; they go before Martha's. */
@@ -283,6 +287,28 @@ function settingsEnvironment(
   )
 }
 
+/**
+ * The settings files the member's host reads, watched for a key that turns
+ * Martha's relay off: the owner's user settings, the approved --settings copy,
+ * and the managed settings (martha#122); or why the launch is refused: one of
+ * them sets such a key, or the user settings file cannot be told.
+ */
+function hookSettingsOf(
+  launch: ClaudeCodeMemberLaunch,
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+): HookSettingsWatch | string {
+  const user = userSettingsPath(hostEnv)
+  if ('refusal' in user) return user.refusal
+  const watch = hookSettingsWatch({
+    user: user.path,
+    approved: prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
+    managed: launch.managed_settings ?? RECORDED_HOST.managed_settings,
+    switches: CLAUDE_CODE_HOOK_SWITCHES,
+  })
+  return watch.check() ?? watch
+}
+
 /** A launch the gate allowed, with what the member's environment is built from. */
 interface ReadyLaunch {
   readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
@@ -291,6 +317,8 @@ interface ReadyLaunch {
   readonly hostEnv: Readonly<Record<string, string | undefined>>
   /** What the settings files the host loads add to every server's environment. */
   readonly settingsEnv: Readonly<Record<string, string>>
+  /** The settings files the host reads, watched for a key that turns Martha's relay off (martha#122). */
+  readonly hookSettings: HookSettingsWatch
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -325,8 +353,13 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     removeSnapshot()
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
+  const hookSettings = hookSettingsOf(launch, hostEnv, prepared)
+  if (typeof hookSettings === 'string') {
+    removeSnapshot()
+    return `${NOT_STARTED}: ${hookSettings}`
+  }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env }
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings }
 }
 
 /**
@@ -369,6 +402,7 @@ function launchDirectories(
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
+  hookSettings: HookSettingsWatch,
   socket_path: string,
   stop: (why: string) => void,
   sessionReported: () => void,
@@ -384,6 +418,7 @@ async function servedRelay(
     policy: launch.policy,
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
+    hookSettings,
     stopMember: stop,
   })
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
@@ -576,7 +611,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported)
+  const server = await servedRelay(launch, ready.hookSettings, directories.relayDirectory.socket_path, stop, backstop.reported)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()

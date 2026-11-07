@@ -4,13 +4,15 @@
 //
 // Run it when the host is upgraded; the coverage check then names any session
 // start source and any prompt origin kind the new host sends that its
-// declaration does not cover.
+// declaration does not cover, and a test names any change to the settings keys
+// that turn Martha's relay off (martha#122).
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { argv, exit, stderr } from 'node:process'
 
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
+import { hookSwitchesSourceIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
@@ -29,5 +31,7 @@ const recorded: RecordedHost & { _why: string } = {
   host_version,
   session_start_schema: sessionStartSchemaIn(text),
   ...promptOriginsIn(text),
+  hooks_switches: hookSwitchesSourceIn(text),
+  managed_settings: managedSettingsPlaceIn(text),
 }
 writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)

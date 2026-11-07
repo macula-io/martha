@@ -1173,10 +1173,11 @@ test("a member's file tool call that names the owner's user settings file is den
   await relay.answer('session_started', start('startup'))
   const owners = join(place.home, USER_SETTINGS)
   mkdirSync(dirname(owners), { recursive: true })
-  symlinkSync(dirname(owners), join(place.checkout, 'linked'))
+  // The link lives beside the checkout: one in it would change the tree the owner approved.
+  symlinkSync(dirname(owners), join(place.home, 'linked'))
   for (const [tool, input] of [
     ['Write', { file_path: owners, content: JSON.stringify({ [HOOKS_OFF ?? '']: true }) }],
-    ['Edit', { file_path: join(place.checkout, 'linked', 'settings.json'), old_string: '{', new_string: '{"x":1,' }],
+    ['Edit', { file_path: join('..', 'linked', 'settings.json'), old_string: '{', new_string: '{"x":1,' }],
   ] as const) {
     assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /user settings/), tool)
   }
@@ -1194,7 +1195,7 @@ test("a call after which the owner's user settings carry a hook-killing key stop
   const after = await relay.answer('tool_answered', shell)
   assert.equal(after.answered, false)
   assert.equal(stops.length, 1)
-  assert.ok(stops[0]?.includes(file) && stops[0].includes(HOOKS_OFF), stops[0])
+  assert.ok(stops[0]?.includes(file) && stops[0].includes(HOOKS_OFF), stops[0] ?? 'no stop')
 })
 
 test('a mesh server tree changed since it was installed starts nothing, naming the file, and leaves nothing behind', async (t) => {

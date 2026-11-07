@@ -51,7 +51,11 @@ test('a host with no such function, or two that differ, is refused: the switches
 
 test('a recorded function that reads a new key turns that key into a switch, with no list typed here', () => {
   const added = HOOK_SET_FUNCTION.replace('let t=br();', 'let t=br();if(t.noHooksAtAll===!0)return{};')
-  assert.deepEqual(hookSwitchesOf(added), { managed: ['allowManagedHooksOnly', 'disableAllHooks'], every_source: ['disableAllHooks', 'noHooksAtAll'] })
+  // The merged settings the host tests include the managed ones, so a key it reads there is a managed switch too.
+  assert.deepEqual(hookSwitchesOf(added), {
+    managed: ['allowManagedHooksOnly', 'disableAllHooks', 'noHooksAtAll'],
+    every_source: ['disableAllHooks', 'noHooksAtAll'],
+  })
   assert.throws(() => hookSwitchesOf('function r(){return{}}'), /no settings key/)
 })
 
@@ -70,14 +74,14 @@ const file = (path: string, settings: unknown, managed = false) => ({ path, text
 for (const key of SWITCHES.every_source) {
   test(`${key} in the owner's user settings is refused, naming the file and the key`, () => {
     const refusal = settingsTurningHooksOff([file(USER, { [key]: true })], SWITCHES)
-    assert.ok(refusal?.includes(USER) && refusal.includes(key), refusal)
+    assert.ok(refusal?.includes(USER) && refusal.includes(key), refusal ?? 'no refusal')
   })
 }
 
 for (const key of SWITCHES.managed) {
   test(`${key} in managed settings is refused, naming the file and the key`, () => {
     const refusal = settingsTurningHooksOff([file(MANAGED, { [key]: true }, true)], SWITCHES)
-    assert.ok(refusal?.includes(MANAGED) && refusal.includes(key), refusal)
+    assert.ok(refusal?.includes(MANAGED) && refusal.includes(key), refusal ?? 'no refusal')
   })
 }
 
@@ -119,7 +123,7 @@ test('the watch reads the user file, the approved copy, the managed file and eac
   for (const path of [user, approved, join(managedDir, 'managed.json'), join(managedDir, 'drop-in', '10-org.json')]) {
     writeFileSync(path, JSON.stringify({ [key]: true }))
     const refusal = watch.check()
-    assert.ok(refusal?.includes(path) && refusal.includes(key), refusal)
+    assert.ok(refusal?.includes(path) && refusal.includes(key), refusal ?? 'no refusal')
     rmSync(path)
   }
   writeFileSync(join(managedDir, 'drop-in', 'notes.txt'), JSON.stringify({ [key]: true }))
