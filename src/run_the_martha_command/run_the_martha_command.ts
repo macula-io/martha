@@ -18,7 +18,7 @@ import { spawnSync, type StdioOptions } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { constants } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline/promises'
 import { isatty } from 'node:tty'
@@ -27,6 +27,8 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.ts'
+import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
+import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 
 /** The command ended as asked. */
 export const EXIT_DONE = 0
@@ -39,7 +41,11 @@ export const EXIT_USAGE = 2
 export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`
 
 /** How the command is used. */
-export const USAGE = 'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha --version'
+export const USAGE =
+  'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha run <shape> | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+
+/** Why an owner's act is refused where no owner is at the keyboard. */
+export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
 
 /** What starts every line Martha shows the owner on stderr. */
 export const SAID_BY = 'martha:'
@@ -60,6 +66,8 @@ export interface CommandIo {
   readonly terminal: OwnersTerminal
   out(line: string): void
   err(line: string): void
+  /** Writes bytes to stdout as they are: a signed run's output, which must reach the host unchanged (martha#129). */
+  outBytes(bytes: Buffer): void
 }
 
 /** The places every act needs. */
@@ -146,15 +154,74 @@ async function start(io: CommandIo, places: Places, member: string, args: readon
   return exitOf(await started.stopped)
 }
 
+/** `martha run <shape>`: the launcher's run of a shape the owner signed, its output on stdout as is, its status. */
+async function run(io: CommandIo, name: string): Promise<number> {
+  const heard = await askTheLauncherToRun(io.env, name)
+  if (!heard.ran) return refused(io, heard.why)
+  io.outBytes(Buffer.from(heard.output, 'base64'))
+  return heard.status
+}
+
+/** A file the owner names, read; or why it cannot be. */
+async function readNamed(io: CommandIo, path: string): Promise<string | { readonly refusal: string }> {
+  try {
+    return await readFile(resolve(io.cwd, path), 'utf8')
+  } catch (error) {
+    return { refusal: `${path} could not be read (${(error as NodeJS.ErrnoException).code ?? String(error)}).` }
+  }
+}
+
+/** `martha pin-key <file>`: the owner's hardware key, pinned for this project. */
+async function pinKey(io: CommandIo, places: Places, path: string): Promise<number> {
+  if (!io.terminal.is_terminal) return refused(io, OWNERS_ACT_NEEDS_A_TERMINAL)
+  const line = await readNamed(io, path)
+  if (typeof line !== 'string') return refused(io, line.refusal)
+  const pinned = pinOwnerKey(places.state, line)
+  if (pinned !== undefined) return refused(io, pinned.refusal)
+  io.out(`Pinned your key for ${places.root}.`)
+  return EXIT_DONE
+}
+
+/** `martha keep-shapes <file>`: the list the owner signed (the file and the file's .sig), kept when it opens. */
+async function keepShapes(io: CommandIo, places: Places, path: string): Promise<number> {
+  if (!io.terminal.is_terminal) return refused(io, OWNERS_ACT_NEEDS_A_TERMINAL)
+  const document = await readNamed(io, path)
+  if (typeof document !== 'string') return refused(io, document.refusal)
+  const signature = await readNamed(io, `${path}${SIGNATURE_SUFFIX}`)
+  if (typeof signature !== 'string') return refused(io, signature.refusal)
+  const kept = keepCommandShapes(places.state, Buffer.from(document, 'utf8'), signature, new Date())
+  if (!kept.trusted) return refused(io, kept.why)
+  io.out(`Kept epoch ${kept.epoch}: base ${kept.base.branch} of ${kept.base.remote_url}; shapes ${kept.shapes.map((shape) => shape.name).join(', ')}.`)
+  return EXIT_DONE
+}
+
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
 const ACTS_ALONE: readonly string[] = ['init', 'approve', '--version']
+/** The acts that take exactly one argument (martha#129). */
+const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes']
 
-function actOf(argv: readonly string[]): { readonly act: string; readonly member?: string; readonly args: readonly string[] } | undefined {
-  const [act, member, separator, ...rest] = argv
-  if (act !== undefined && ACTS_ALONE.includes(act)) return argv.length === 1 ? { act, args: [] } : undefined
-  if (act !== 'start' || member === undefined || member.startsWith('-')) return undefined
+type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[] }
+
+function actOf(argv: readonly string[]): Asked | undefined {
+  const [act] = argv
+  if (act === undefined) return undefined
+  if (ACTS_ALONE.includes(act)) return argv.length === 1 ? { act, args: [] } : undefined
+  if (ACTS_OF_ONE.includes(act)) return actOfOne(act, argv)
+  return act === 'start' ? startOf(act, argv) : undefined
+}
+
+/** `start <member> [-- <claude arguments>]`. */
+function startOf(act: string, argv: readonly string[]): Asked | undefined {
+  const [, member, separator, ...rest] = argv
+  if (member === undefined || member.startsWith('-')) return undefined
   if (separator === undefined) return { act, member, args: [] }
   return separator === '--' ? { act, member, args: rest } : undefined
+}
+
+/** An act of one argument: exactly one, and not empty. */
+function actOfOne(act: string, argv: readonly string[]): Asked | undefined {
+  const argument = argv[1]
+  return argv.length === 2 && argument !== undefined && argument !== '' ? { act, args: [argument] } : undefined
 }
 
 /**
@@ -200,8 +267,11 @@ async function runAct(argv: readonly string[], io: CommandIo): Promise<number> {
     io.out(version())
     return EXIT_DONE
   }
+  if (asked.act === 'run') return run(io, asked.args[0]!)
   const places = placesOf(io)
   if (typeof places === 'string') return refused(io, places)
+  if (asked.act === 'pin-key') return pinKey(io, places, asked.args[0]!)
+  if (asked.act === 'keep-shapes') return keepShapes(io, places, asked.args[0]!)
   if (asked.act === 'init') return init(io, places)
   if (asked.act === 'approve') return approve(io, places)
   return start(io, places, asked.member!, asked.args)
@@ -227,5 +297,6 @@ export const ioOfThisProcess: CommandIo = {
   stdio: 'inherit',
   terminal: terminalOfThisProcess,
   out: (line) => void process.stdout.write(`${line}\n`),
+  outBytes: (bytes) => void process.stdout.write(bytes),
   err: (line) => void process.stderr.write(`${line}\n`),
 }

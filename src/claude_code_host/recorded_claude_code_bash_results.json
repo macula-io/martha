@@ -1,0 +1,97 @@
+{
+  "_why": "What the pinned Claude Code host answered a tool.call hook (next(e), ref left out) for the exact command `martha run test`, run by a stand-in that printed `printed` and exited with `status` (martha#129, design step 4.3). Recorded 2026-11-07 with a scratch hooks module under claude -p --plugin-dir in an isolated HOME, no login, --allowedTools=Bash. The event carried tool.call tool_use_id; martha run was not marked isReadOnly.",
+  "host_version": "2.1.319",
+  "mark": "RUN-OUTPUT-MARK",
+  "cases": [
+    {
+      "status": 0,
+      "printed": "RUN-OUTPUT-MARK\n",
+      "command": "martha run test",
+      "answer": {
+        "result": {
+          "stdout": "RUN-OUTPUT-MARK",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "text": "RUN-OUTPUT-MARK"
+      }
+    },
+    {
+      "status": 1,
+      "printed": "RUN-OUTPUT-MARK\n",
+      "command": "martha run test",
+      "answer": {
+        "result": "Error: Exit code 1\nRUN-OUTPUT-MARK",
+        "text": "Exit code 1\nRUN-OUTPUT-MARK",
+        "isError": true
+      }
+    },
+    {
+      "status": 0,
+      "printed": "\n\n  lead and trail  \n\n",
+      "command": "martha run test",
+      "answer": {
+        "result": {
+          "stdout": "  lead and trail",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "text": "  lead and trail"
+      }
+    },
+    {
+      "status": 0,
+      "printed": "",
+      "command": "martha run test",
+      "answer": {
+        "result": {
+          "stdout": "",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "text": "(Bash completed with no output)"
+      }
+    },
+    {
+      "status": 1,
+      "printed": "",
+      "command": "martha run test",
+      "answer": {
+        "result": "Error: Exit code 1",
+        "text": "Exit code 1",
+        "isError": true
+      }
+    },
+    {
+      "status": 2,
+      "printed": "two\n",
+      "command": "martha run test",
+      "answer": {
+        "result": "Error: Exit code 2\ntwo",
+        "text": "Exit code 2\ntwo",
+        "isError": true
+      }
+    },
+    {
+      "status": 0,
+      "printed": "line one\nline two\n",
+      "command": "martha run test",
+      "answer": {
+        "result": {
+          "stdout": "line one\nline two",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "text": "line one\nline two"
+      }
+    }
+  ]
+}

@@ -361,8 +361,8 @@ export function components(): Diagram {
 
   d.bound(16, 40, 968, 850, 'Martha [the code in src/, one directory per capability]')
 
-  d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the four acts]', code: true,
-    desc: ['init, approve, start <member>, --version:', 'the words checked before anything runs,', 'a refusal on stderr with the command that', 'fixes it, 0 done / 1 refused / 2 usage'] })
+  d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the acts]', code: true,
+    desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, --version: the words', 'checked first, a refusal on stderr with', 'the command that fixes it, 0 / 1 / 2'] })
   d.box({ kind: 'b-cmp', x: 348, y: 70, w: 300, h: 128, name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
     desc: ['Reads .crew/crew.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] })
   d.box({ kind: 'b-cmp', x: 664, y: 70, w: 300, h: 128, name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
@@ -370,13 +370,13 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-cmp', x: 32, y: 214, w: 300, h: 146, name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
     desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 146, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member'], type: '[the launcher]', code: true,
-    desc: ['The places in Martha\'s state, a', 'snapshot of what was approved, a launch', 'record written before the host starts,', 'and the host\'s command and arguments'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 146, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself'], type: '[the launch gate]', code: true,
-    desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved; refuse_code_a_checkout_runs_', 'itself closes a checkout\'s own scripts'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 146, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command'], type: '[the launcher]', code: true,
+    desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 146, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes'], type: '[the launch gate]', code: true,
+    desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts'] })
 
-  d.box({ kind: 'b-dat', x: 32, y: 376, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory'], type: '[Martha\'s state]', code: true,
-    desc: ['One directory per project, named by a', 'hash of its path: node ids, approvals,', 'launches, snapshots. row_streams_', 'directory appends rows as files'] })
+  d.box({ kind: 'b-dat', x: 32, y: 376, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
+    desc: ['One directory per project, named by a', 'hash of its path: approvals, launches,', 'keep_what_the_owner_signed; row_streams_', 'directory appends rows as files'] })
   d.box({ kind: 'b-cmp', x: 348, y: 376, w: 300, h: 150, name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
     desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] })
   d.box({ kind: 'b-cmp', x: 664, y: 376, w: 300, h: 150, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
@@ -384,8 +384,8 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-cmp', x: 32, y: 542, w: 300, h: 170, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
     desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 542, w: 300, h: 170, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'take_in_a_tool_result', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'trust_only_framed_envelopes'], type: '[the shell gate]', code: true,
-    desc: ['What a host calls when a turn or a tool\'s', 'result (take_in_a_tool_result) came in,', 'and what may run after: refuse_execution_', 'after_ungated_text stops it all; trust_only_', 'framed_envelopes believes a framed one only'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 542, w: 300, h: 170, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'take_in_a_tool_result', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'trust_only_framed_envelopes', 'keep_the_shell_for_an_owner_signed_command'], type: '[the shell gate]', code: true,
+    desc: ['A turn or a tool\'s result: take_in_a_turn,', 'take_in_a_tool_result, shell_tools,', 'answer_a_tool_call, refuse_execution_', 'after_ungated_text, trust_only_framed_', 'envelopes; a signed run keeps the shell:', 'keep_the_shell_for_an_owner_signed_command'] })
   d.box({ kind: 'b-cmp', x: 664, y: 542, w: 300, h: 170, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
     desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
 
