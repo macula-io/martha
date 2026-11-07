@@ -33,6 +33,7 @@ import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { MEMBER_PID_FD, notACommandThisTerminalCanRun } from './member_on_the_owners_terminal.ts'
+import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
@@ -1024,6 +1025,10 @@ test('an approved launch starts the host with the switches and the relay, and a 
   const args = readFileSync(fake.argsFile, 'utf8').trimEnd().split('\n')
   const snapshot = readdirSync(place.snapshot_root)
   assert.equal(snapshot.length, 1)
+  const socket_path = readFileSync(fake.envFile, 'utf8')
+  // The host is given this launch's read-only copy of the relay, never the installed folder (martha#117).
+  const plugin_dir = join(dirname(socket_path), relayCopy.RELAY_COPY_NAME)
+  assert.notEqual(plugin_dir, RELAY_PLUGIN_DIR)
   assert.deepEqual(args, [
     '-p',
     'the owner prompt',
@@ -1033,9 +1038,12 @@ test('an approved launch starts the host with the switches and the relay, and a 
     '--mcp-config',
     join(place.snapshot_root, snapshot[0] ?? '', '.mcp.json'),
     '--plugin-dir',
-    RELAY_PLUGIN_DIR,
+    plugin_dir,
   ])
-  const socket_path = readFileSync(fake.envFile, 'utf8')
+  for (const file of relayCopy.RELAY_FILES) {
+    assert.deepEqual(readFileSync(join(plugin_dir, file)), readFileSync(join(RELAY_PLUGIN_DIR, file)), file)
+  }
+  assert.equal(lstatSync(plugin_dir).mode & 0o777, relayCopy.RELAY_COPY_DIRECTORY_MODE)
   assert.equal(dirname(dirname(socket_path)), place.relay_root)
   assert.equal(lstatSync(dirname(socket_path)).mode & 0o777, RELAY_DIRECTORY_MODE)
   assert.equal(Number(execFileSync('ps', ['-o', 'pgid=', '-p', String(started.pid)], { encoding: 'utf8' }).trim()), started.pid)
