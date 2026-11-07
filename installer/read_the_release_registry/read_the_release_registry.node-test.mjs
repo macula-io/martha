@@ -28,9 +28,33 @@ const refusedWith = async (promise, pattern, kind = Refused) => {
 const opened = async (t, ...args) => {
   const served = await serveRegistry(...args)
   t.after(served.close)
-  const reg = registry({ image: NAMES.image, base: served.base })
+  const answers = answersKept()
+  t.after(() => everyAnswerReadOrCancelled(answers.kept))
+  const reg = registry({ image: NAMES.image, base: served.base, fetch: answers.fetch })
   await reg.authorize()
-  return { reg, served }
+  return { reg, served, answers: answers.kept }
+}
+
+/** A fetch that keeps every answer it hands out, so a test can see whether each was read or cancelled. */
+const answersKept = () => {
+  /** @type {{ url: string, response: Response }[]} */
+  const kept = []
+  /** @type {typeof globalThis.fetch} */
+  const fetch = async (url, init) => {
+    const response = await globalThis.fetch(url, init)
+    kept.push({ url: String(url), response })
+    return response
+  }
+  return { kept, fetch }
+}
+
+/**
+ * An answer whose body is neither read nor cancelled holds its connection open behind the refusal (martha#112).
+ * @param {{ url: string, response: Response }[]} kept
+ */
+const everyAnswerReadOrCancelled = (kept) => {
+  const unread = kept.filter(({ response }) => response.body !== null && !response.bodyUsed).map(({ url }) => url)
+  assert.deepEqual(unread, [], `answers left unread: ${unread.join(', ')}`)
 }
 
 test('the highest X.Y.Z tag is taken; signature tags and names that are no version are passed over', async (t) => {
@@ -54,6 +78,14 @@ test('refused: a tag list over 1 MiB', async (t) => {
 test('refused: a tag list that says there is a next page', async (t) => {
   const { reg } = await opened(t, [release()], { nextPage: true })
   await refusedWith(reg.highestVersion(), /more tags than one page; name a version/)
+})
+
+test('refused unread: a tag list that says there is a next page has its body cancelled, not left open', async (t) => {
+  const { reg, answers } = await opened(t, [release()], { nextPage: true })
+  await refusedWith(reg.highestVersion(), /more tags than one page; name a version/)
+  const tagList = answers.find(({ url }) => url.includes('/tags/list'))
+  assert.ok(tagList, 'the tag list was asked for')
+  assert.equal(tagList.response.bodyUsed, true, 'the refused tag list\'s body is cancelled')
 })
 
 test('refused: a manifest over 64 KiB', async (t) => {

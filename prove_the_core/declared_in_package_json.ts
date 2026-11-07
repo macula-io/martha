@@ -10,6 +10,9 @@ import { join } from 'node:path'
 /** The core's directory, relative to the repository. */
 export const CORE = 'src'
 
+/** Every package in martha whose tests npm test runs, by folder: the repository's and the installer's. */
+export const PACKAGES: readonly string[] = ['.', 'installer']
+
 export interface Manifest {
   readonly scripts: Readonly<Record<string, string>>
   readonly martha?: {
