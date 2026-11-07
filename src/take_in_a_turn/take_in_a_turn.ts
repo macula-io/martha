@@ -161,6 +161,8 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'B8', // no body text reaches the model
   // code the host starts by itself is not text taken in: the launch gate stands there
   ...INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id),
+  // words refused before the host starts never become a turn: the argument gate stands there
+  ...INBOUND_PATHS.filter((path) => path.control.kind === 'refused-before-launch').map((path) => path.id),
 ]
 
 /** Registry rows a source can record that the registry does not know. */

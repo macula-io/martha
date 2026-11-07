@@ -20,7 +20,8 @@ import { NOT_STARTED } from '../launch_a_claude_code_member/launch_a_claude_code
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { launcherPlacesOf, NOT_A_TERMINAL, startMember, SWITCHES_THAT_LOAD_NO_CONFIG, type MemberStartRequest } from './start_a_member.ts'
+import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
