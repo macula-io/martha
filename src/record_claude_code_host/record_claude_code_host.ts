@@ -31,8 +31,12 @@ const VERSION = /^\d+\.\d+\.\d+$/
 const CHECK = '--check'
 /** The recording's own note on where it comes from; it is carried over, never derived. */
 const NOTE = '_why'
+/** How the host keeps memory off, restated by hand for a version; carried over, never derived (martha#136). */
+const MEMORY_OFF = 'memory_off'
+/** The fields carried over from the committed recording, which --check leaves out. */
+const CARRIED: readonly string[] = [NOTE, MEMORY_OFF]
 
-type Derived = Omit<RecordedHost, 'host_version'>
+type Derived = Omit<RecordedHost, 'host_version' | typeof MEMORY_OFF>
 
 /** Each part the recorder reads from a host's text, by the name a failed read reports. */
 const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string) => Partial<Derived> }> = [
@@ -64,9 +68,9 @@ function readHost(text: string): { derived: Partial<Derived>; unreadable: readon
   }
 }
 
-/** The fields, besides the note, whose values differ between two recordings, in a stable order. */
+/** The fields, besides those carried over, whose values differ between two recordings, in a stable order. */
 function fieldsThatDiffer(committed: Readonly<Record<string, unknown>>, derived: Readonly<Record<string, unknown>>): readonly string[] {
-  const fields = new Set([...Object.keys(committed), ...Object.keys(derived)].filter((field) => field !== NOTE))
+  const fields = new Set([...Object.keys(committed), ...Object.keys(derived)].filter((field) => !CARRIED.includes(field)))
   return [...fields].filter((field) => JSON.stringify(committed[field]) !== JSON.stringify(derived[field])).sort()
 }
 
@@ -92,5 +96,5 @@ if (unreadable.length > 0) {
   stderr.write(`record_claude_code_host: not recorded, unreadable: ${unreadable.join(', ')}\n`)
   exit(1)
 }
-const recorded = { [NOTE]: committed._why, host_version, ...(derived as Derived) }
+const recorded = { [NOTE]: committed._why, host_version, [MEMORY_OFF]: committed.memory_off, ...(derived as Derived) }
 writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)

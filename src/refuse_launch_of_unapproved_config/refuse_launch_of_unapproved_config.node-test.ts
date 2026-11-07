@@ -22,6 +22,7 @@ import {
   type Host,
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -488,6 +489,15 @@ test('a Claude Code launch turns the host\'s auto-memory off and drops every var
     for (const name of CLAUDE_MEMORY_ELSEWHERE) assert.equal(Object.hasOwn(env, name), false, `${shape}: ${name}`)
     assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
   }
+})
+
+test('the off switch and the hosted-mode variable are restated for the recorded host, and the launch sets and drops them (#136)', () => {
+  const { memory_off, host_version } = RECORDED_HOST
+  assert.equal(memory_off.version, host_version, 'a re-recorded host fails until the memory guard is re-read and restated for it')
+  const [offName, offValue] = Object.entries(CLAUDE_MEMORY_OFF)[0] ?? []
+  assert.ok(offName !== undefined && offValue !== undefined)
+  assert.ok(memory_off.file_mode_guard.includes(`process.env.${offName}`), `the recorded guard reads ${offName}`)
+  assert.ok((CLAUDE_MEMORY_ELSEWHERE as readonly string[]).includes(memory_off.hosted_mode_variable), `${memory_off.hosted_mode_variable} is dropped`)
 })
 
 test('a planned Claude Code launch starts only the servers it passes', (t) => {
