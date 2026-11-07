@@ -199,6 +199,9 @@ export function ownNameOfCalledTool(called: string): string {
   return own === '' ? called : own
 }
 
+/** The name Claude Code gives its shell tool: the one call a `martha run` can be bound to (martha#129). */
+export const CLAUDE_CODE_SHELL_TOOL = 'Bash'
+
 /** Whether a called tool is an MCP server's: its result is that server's text (B2). */
 export function isMcpToolCall(called: string): boolean {
   return called.startsWith(MCP_NAME_PREFIX)

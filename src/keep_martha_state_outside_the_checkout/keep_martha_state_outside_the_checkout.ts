@@ -21,6 +21,13 @@ import { getuid } from 'node:process'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import {
+  lineOfOwnWrite,
+  ownWriteOfLine,
+  type OwnWrite,
+  type OwnWrites,
+  type OwnWritesStore,
+} from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 /** Only the owner may enter, list or write a state directory. */
 export const STATE_DIRECTORY_MODE = 0o700
@@ -33,6 +40,9 @@ export const MEMBERS_FILE = 'members.json'
 
 /** The owner's approvals, one JSON line each. */
 export const APPROVALS_FILE = 'approvals.jsonl'
+
+/** The members' own writes, one JSON line each (martha#132, ../remember_a_members_own_writes). */
+export const OWN_WRITES_FILE = 'own_writes.jsonl'
 
 /** How many random bytes a node id holds: 64 hex digits, the shape NODE_ID accepts. */
 const NODE_ID_BYTES = 32
@@ -91,7 +101,7 @@ export function stateSubdirectory(state: MarthaState, name: string): { readonly 
 }
 
 /** A state file's text, '' when it is missing, or why it may not be read. */
-function readStateFile(path: string): { readonly text: string } | Refused {
+export function readStateFile(path: string): { readonly text: string } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
@@ -111,7 +121,7 @@ function readStateFile(path: string): { readonly text: string } | Refused {
 }
 
 /** Writes a state file whole: under a staging name, then renamed into place. */
-function keepStateFile(state: MarthaState, name: string, text: string): void {
+export function keepStateFile(state: MarthaState, name: string, text: string): void {
   const staged = join(state.directory, `${STAGING_PREFIX}${randomUUID()}`)
   fs.writeFileSync(staged, text, { mode: STATE_FILE_MODE, flag: 'wx' })
   fs.chmodSync(staged, STATE_FILE_MODE)
@@ -165,8 +175,8 @@ const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   file: ['kind', 'path', 'sha256'],
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
+export const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
 
 const isEntry = (value: unknown): value is ConfigEntry => {
@@ -210,29 +220,59 @@ export function readApprovals(state: MarthaState): { readonly approvals: readonl
 
 const APPEND = fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
 
-/** The approvals file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
-function openForAppend(path: string): { readonly descriptor: number } | Refused {
+/** A state file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
+function openForAppend(path: string, what: string): { readonly descriptor: number } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, APPEND, STATE_FILE_MODE)
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
-    return { refusal: `${path} could not be opened to keep an approval (${code ?? String(error)}), so Martha keeps none in it.` }
+    return { refusal: `${path} could not be opened to append to (${code ?? String(error)}), so Martha keeps no ${what} in it.` }
   }
   const found = fs.fstatSync(descriptor)
   if (found.isFile() && found.uid === getuid?.() && (found.mode & OPEN_TO_OTHERS) === 0) return { descriptor }
   fs.closeSync(descriptor)
-  return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no approval in it.` }
+  return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no ${what} in it.` }
+}
+
+/** Keeps `line` at the end of the state file `name`; or why it could not be kept. `what` names what one line holds. */
+export function appendStateLine(state: MarthaState, name: string, line: string, what: string): Refused | undefined {
+  const opened = openForAppend(join(state.directory, name), what)
+  if ('refusal' in opened) return opened
+  try {
+    fs.writeSync(opened.descriptor, `${line}\n`)
+    return undefined
+  } finally {
+    fs.closeSync(opened.descriptor)
+  }
 }
 
 /** Keeps one more approval, as one line at the end of the file; or why it could not be kept. */
 export function appendApproval(state: MarthaState, approval: Approval): Refused | undefined {
-  const opened = openForAppend(join(state.directory, APPROVALS_FILE))
-  if ('refusal' in opened) return opened
-  try {
-    fs.writeSync(opened.descriptor, `${JSON.stringify(approval)}\n`)
-    return undefined
-  } finally {
-    fs.closeSync(opened.descriptor)
+  return appendStateLine(state, APPROVALS_FILE, JSON.stringify(approval), 'approval')
+}
+
+/** What one own write is called in a refusal. */
+const ONE_OWN_WRITE = 'own write'
+
+/** Every own write kept for this project, in the order kept; a missing file is none, and one bad line refuses the file whole. */
+function readOwnWrites(state: MarthaState): OwnWrites {
+  const path = join(state.directory, OWN_WRITES_FILE)
+  const read = readStateFile(path)
+  if ('refusal' in read) return read
+  const writes = read.text
+    .split('\n')
+    .filter((line) => line !== '')
+    .map(ownWriteOfLine)
+  const bad = writes.indexOf(undefined)
+  if (bad !== -1) return { refusal: `${path} line ${bad + 1} is not an ${ONE_OWN_WRITE}, so Martha reads none of it.` }
+  return { writes: writes as OwnWrite[] }
+}
+
+/** The project's own writes, kept as one line each at the end of OWN_WRITES_FILE in its state. */
+export function ownWritesKeptIn(state: MarthaState): OwnWritesStore {
+  return {
+    append: (write) => appendStateLine(state, OWN_WRITES_FILE, lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal,
+    all: () => readOwnWrites(state),
   }
 }

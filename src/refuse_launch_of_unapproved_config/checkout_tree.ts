@@ -110,11 +110,52 @@ export function realOrResolved(host: LaunchHost, path: string): string {
 }
 
 function git(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
+  return gitRaw(host, cwd, args, set)?.trim()
+}
+
+/** Git's output as it wrote it, or `undefined` when git failed. */
+function gitRaw(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
   const run = host.processes.runNow({
     command: 'git',
     args: ['-c', 'core.fsmonitor=false', ...args],
     cwd,
     environment: { drop_prefixes: [GIT_VARIABLES], set },
   })
-  return run.exit_code === 0 ? run.stdout.trim() : undefined
+  return run.exit_code === 0 ? run.stdout : undefined
+}
+
+/** One path that differs between two trees, as `git diff-tree` names it: its new mode and blob, or deleted. */
+export type TreeChange =
+  | { readonly path: string; readonly deleted: true }
+  | { readonly path: string; readonly deleted: false; readonly mode: string; readonly blob: string }
+
+/** What `git diff-tree --raw` writes for a deleted path. */
+const DELETED = 'D'
+
+/** The top of the checkout holding `dir`, as git reports it, or `undefined` outside any checkout. */
+export function checkoutTopOf(dir: string, host: LaunchHost): string | undefined {
+  return git(host, dir, ['rev-parse', '--show-toplevel'])
+}
+
+/** The object format the checkout holding `dir` names its objects in (sha1 or sha256), or `undefined`. */
+export function objectFormatOf(dir: string, host: LaunchHost): string | undefined {
+  return git(host, dir, ['rev-parse', '--show-object-format'])
+}
+
+/**
+ * Every path that differs between the trees `from` and `to` in the checkout holding `dir`, relative to its top,
+ * with no rename paired up: a rename is a deletion and a new path. `undefined` when git cannot read either tree,
+ * an object the store no longer holds among them.
+ */
+export function changesBetween(dir: string, from: string, to: string, host: LaunchHost): readonly TreeChange[] | undefined {
+  const raw = gitRaw(host, dir, ['diff-tree', '-r', '-z', '--no-renames', '--no-abbrev', from, to])
+  if (raw === undefined) return undefined
+  const fields = raw.split('\0')
+  const changes: TreeChange[] = []
+  for (let at = 0; at + 1 < fields.length; at += 2) {
+    const [, mode = '', , blob = '', status = ''] = (fields[at] ?? '').split(' ')
+    const path = fields[at + 1] ?? ''
+    changes.push(status === DELETED ? { path, deleted: true } : { path, deleted: false, mode, blob })
+  }
+  return changes
 }

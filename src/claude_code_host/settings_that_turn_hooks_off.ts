@@ -42,7 +42,9 @@
 // refusal that names the file and the key.
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join } from 'node:path'
+
+import { asTheHostResolves } from './claude_code_file_tools.ts'
 
 /** How safe mode is switched on: by a variable in the host's environment, or by a flag on its command line. */
 export interface SafeMode {
@@ -485,14 +487,6 @@ function realPathOf(path: string): string {
 
 /** The tool call arguments that name the file a file tool reads or writes. */
 const FILE_ARGUMENTS = ['file_path', 'notebook_path'] as const
-
-/** The file a path names as the host resolves it: trimmed, a leading `~` against its home, the rest against `cwd`. */
-function asTheHostResolves(value: string, cwd: string, home: string): string {
-  const trimmed = value.trim()
-  if (trimmed === '~') return home
-  if (trimmed.startsWith('~/')) return join(home, trimmed.slice(2))
-  return resolve(cwd, trimmed)
-}
 
 /** Why a tool call names the owner's user settings file, or undefined. */
 export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string, home: string): string | undefined {
