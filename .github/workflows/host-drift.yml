@@ -9,8 +9,8 @@
 #   npm run record:claude-code-host -- <claude binary> <version>
 # then a PR with whatever the named fields call for. prove_the_recorded_host_is_current.sh says how.
 #
-# A failed scheduled or main run files one issue (or comments on the open one) with the versions, the field names
-# and the run link, nothing of the host's code, and stays red.
+# A failed scheduled or main run stays red, and that is the whole signal: it names the versions and the fields that
+# differ, and the Supervisor routes the re-record. The job opens no issue and writes nothing: its token is read-only.
 #
 # That the check can fail at all is proven on every PR, with no npm, by ci.yml's `drift-bites` job.
 
@@ -38,7 +38,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,10 +45,4 @@ jobs:
           node-version: '24'
       - run: npm ci
       - name: the recording matches npm's latest Claude Code
-        run: prove_the_recorded_host_is_current/prove_the_recorded_host_is_current.sh "${{ runner.temp }}/host-drift" "${{ runner.temp }}/host-drift.txt"
-      - name: a failed run on a schedule or on main is filed
-        if: failure() && (github.event_name == 'schedule' || github.event_name == 'push')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: prove_the_recorded_host_is_current/file_the_drift.sh "${{ runner.temp }}/host-drift.txt" "${RUN_URL}"
+        run: prove_the_recorded_host_is_current/prove_the_recorded_host_is_current.sh "${{ runner.temp }}/host-drift"

@@ -466,6 +466,19 @@ test('a host that passes the new ingress kind through hands a hook a kind the co
   }
 })
 
+test('a case the reader does not know, anywhere in the mapper\'s switch, fails the recording and is named (#145)', () => {
+  const mapper = RECORDED_HOST.prompt_origin_mapper
+  const passThrough = /case"peer":/
+  assert.match(mapper, passThrough, 'the recorded mapper has the pass-through group the case is planted before')
+  for (const planted of [`case"${REMAPPED_INGRESS}":return e;`, `case"${REMAPPED_INGRESS}":return{kind:e.via};`, `case"${REMAPPED_INGRESS}":break;`]) {
+    const middle = mapper.replace(passThrough, `${planted}case"peer":`)
+    const text = [middle, RECORDED_HOST.prompt_origin_fallback, RECORDED_HOST.prompt_origin_subkinds].join(' ')
+    assert.throws(() => promptOriginsIn(text), new RegExp(`prompt origin mapper.*case"${REMAPPED_INGRESS}"`), planted)
+    const recorded = { prompt_origin_mapper: middle, prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback, prompt_origin_subkinds: RECORDED_HOST.prompt_origin_subkinds }
+    assert.throws(() => promptOriginKindsOf(recorded), /prompt origin mapper/, planted)
+  }
+})
+
 // --- T8: a refresh is never claimed ---------------------------------------------------
 
 test('a turn or a hook input that claims crew_refresh or a predecessor id does not change the session\'s record', (t) => {

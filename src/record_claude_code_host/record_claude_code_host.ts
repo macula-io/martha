@@ -14,9 +14,9 @@
 // when they are the same and 1 when the binary cannot be read or any field
 // differs, the version included: members run whatever the binary is, so a
 // recording of another version describes a host nobody runs. Its standard output
-// carries only versions and the names of fields and parts, because the drift job
-// copies it into a public issue; a reader's own error, which can quote the
-// host's code, goes to standard error.
+// carries only versions and the names of fields and parts, which is what the
+// drift job's public log shows as the reason a run is red; a reader's own
+// error, which can quote the host's code, goes to standard error.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { argv, exit, stderr, stdout } from 'node:process'
