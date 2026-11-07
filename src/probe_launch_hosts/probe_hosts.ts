@@ -117,6 +117,8 @@ const NESTED_DIR = 'sub'
 const NESTED_FILE = join(NESTED_DIR, 'notes.txt')
 const INSTRUCTIONS = 'CLAUDE.md'
 const AGENT = 'probe-agent'
+/** What Claude Code prints, and only it, when it has no agent by that name (2.1.319). */
+const NO_SUCH_AGENT = `--agent '${AGENT}' not found`
 /** A prompt that reads a file below the top, which is when the host loads that directory's CLAUDE.md. */
 const READ_BELOW_PROMPT = `Use the Read tool on ${NESTED_FILE}, then reply with the single word ok.`
 const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', READ_BELOW_PROMPT, '--allowedTools', 'Read']
@@ -132,9 +134,21 @@ function plantFixedText(place: Place): void {
 /**
  * Settings whose InstructionsLoaded hook marks each of the checkout's two
  * CLAUDE.md files the host loads, by the path the host reports. A file the
- * owner keeps elsewhere marks nothing.
+ * owner keeps elsewhere marks nothing. A PostToolUse hook on Read marks
+ * READ_BELOW when the model read the file below the top, so a run in which
+ * that read never happened cannot pass for one in which the nested file
+ * did not load.
  */
 function instructionsHook(place: Place): string {
+  const read = join(place.scratch, 'mark_read_below.mjs')
+  writeFileSync(
+    read,
+    `import { readFileSync, writeFileSync } from 'node:fs'\n` +
+      `import { resolve } from 'node:path'\n` +
+      `const input = JSON.parse(readFileSync(0, 'utf8'))\n` +
+      `const path = resolve(input.cwd, String(input.tool_input?.file_path))\n` +
+      `if (path === ${JSON.stringify(join(place.checkout, NESTED_FILE))}) writeFileSync(${JSON.stringify(place.marker('READ_BELOW'))}, '')\n`,
+  )
   const script = join(place.scratch, 'mark_instructions.mjs')
   const marks = {
     [join(place.checkout, INSTRUCTIONS)]: place.marker('TOP_CLAUDE_MD'),
@@ -151,6 +165,7 @@ function instructionsHook(place: Place): string {
     hooks: {
       InstructionsLoaded: [{ hooks: [{ type: 'command', command: `node ${script}` }] }],
       SessionStart: [{ hooks: [{ type: 'command', command: `touch ${place.marker('SETTINGS_HOOK')}` }] }],
+      PostToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: `node ${read}` }] }],
     },
   })
 }
@@ -164,7 +179,7 @@ const claudeAsTheAgent = (...extra: readonly string[]): Command => (switches) =>
   command: 'sh',
   args: [
     '-c',
-    '"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -q "not found" ../agent.err && touch ../AGENT_NOT_FOUND; true',
+    `"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -qF -e "${NO_SUCH_AGENT}" ../agent.err && touch ../AGENT_NOT_FOUND; true`,
     'claude-as-agent',
     'claude',
     ...extra,
@@ -193,7 +208,7 @@ const PROBES: readonly Probe[] = [
       plantFixedText(place)
       put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place))
     },
-    expected: { SETTINGS_HOOK: true, TOP_CLAUDE_MD: true, NESTED_CLAUDE_MD: true },
+    expected: { SETTINGS_HOOK: true, READ_BELOW: true, TOP_CLAUDE_MD: true, NESTED_CLAUDE_MD: true },
     planned: false,
   },
   {
@@ -202,7 +217,7 @@ const PROBES: readonly Probe[] = [
     command: claude(...READ_BELOW_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place)),
     planted: plantFixedText,
-    expected: { SETTINGS_HOOK: true, TOP_CLAUDE_MD: false, NESTED_CLAUDE_MD: false },
+    expected: { SETTINGS_HOOK: true, READ_BELOW: true, TOP_CLAUDE_MD: false, NESTED_CLAUDE_MD: false },
     planned: true,
   },
   {
