@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prove_the_recorded_host_is_current.sh <work-dir> <summary-file>: the committed recording of the Claude Code host
+# prove_the_recorded_host_is_current.sh <work-dir>: the committed recording of the Claude Code host
 # (src/claude_code_host/recorded_claude_code_host.json) is of the version members run, and that version's code still
 # reads as recorded (martha#139).
 #
@@ -12,8 +12,8 @@
 #   npm run record:claude-code-host -- <the installed claude binary> <the version>
 # then a PR with whatever the newly named fields call for in the declarations or the readers.
 #
-# The summary file gets --check's standard output: versions and field or part names only, never host code, because
-# the drift job copies it into a public issue.
+# --check's standard output carries versions and field or part names only, never host code, since the run's log is
+# public.
 #
 # Exit: 0 the recording is current, 1 it is not (or the host cannot be read), 2 the host could not be set up.
 set -euo pipefail
@@ -24,11 +24,9 @@ RECORDER="${REPO}/src/record_claude_code_host/record_claude_code_host.ts"
 PACKAGE="@anthropic-ai/claude-code"
 # The tag members' installs follow. Moving the crew to another channel is a decision made here in a reviewed PR.
 DIST_TAG="latest"
-WORK="${1:?usage: prove_the_recorded_host_is_current.sh <work-dir> <summary-file>}"
-SUMMARY="${2:?usage: prove_the_recorded_host_is_current.sh <work-dir> <summary-file>}"
+WORK="${1:?usage: prove_the_recorded_host_is_current.sh <work-dir>}"
 mkdir -p "${WORK}"
 trap 'rm -rf "${WORK}"' EXIT
-: > "${SUMMARY}"
 
 version="$(npm view "${PACKAGE}" "dist-tags.${DIST_TAG}")" \
   || { echo "prove_the_recorded_host_is_current: npm names no ${DIST_TAG} version of ${PACKAGE}" >&2; exit 2; }
@@ -43,7 +41,6 @@ said="$("${claude}" --version)"
   || { echo "prove_the_recorded_host_is_current: installed a host that says '${said}', not ${version}" >&2; exit 2; }
 
 status=0
-node "${RECORDER}" --check "${claude}" "${version}" > "${SUMMARY}" || status=$?
-cat "${SUMMARY}"
+node "${RECORDER}" --check "${claude}" "${version}" || status=$?
 [[ "${status}" -eq 0 ]] && echo "prove_the_recorded_host_is_current: the recording is of Claude Code ${version}, the ${DIST_TAG} release"
 exit "${status}"
