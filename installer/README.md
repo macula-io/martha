@@ -48,6 +48,13 @@ martha-install [<version>] [--downgrade] [--digest sha256:<hex>]
 3. `installer-v<version>` publishes this installer to npm, with provenance, through trusted publishing.
 4. `v<version>` publishes a signed Martha release into the package, pinning that installer.
 
+Neither tag publishes while a dependency of Martha or of this installer carries a known published advisory
+(`advisories.yml`, which also runs on every pull request). An advisory is fixed or waived by a dated, named, expiring
+row in `.github/advisories-waivers.txt`; there is no baseline. The `overrides` in `package.json` are such fixes:
+sigstore 5.0.0 resolves glob 13 and minimatch 10, which carry GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249, so the
+installer pins their first patched releases. Its callers use only `glob(pattern, options)` and
+`minimatch(path, pattern)`, which both majors keep. Drop an override once sigstore resolves a patched release itself.
+
 ## License
 
 Apache-2.0
