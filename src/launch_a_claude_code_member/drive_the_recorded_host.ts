@@ -1,0 +1,267 @@
+// The recorded host, driven end to end by a scripted model (martha#132, and #129's recorder on top of it).
+//
+// This exists so a test can show what a real member does under Martha: the real `martha` command, the real
+// Claude Code at the recorded version, the real relay, hooks and launcher. Only the model is a stand-in: a local
+// HTTP server the host reaches through ANTHROPIC_BASE_URL, which answers each of the host's model requests by its
+// number with a scripted turn (a tool call, or text that ends the turn).
+//
+// The host runs in a home made for the run, under a pseudo-terminal `script` owns, so `martha start` sees a
+// terminal. The home holds the host's own record of a first run already done (onboarding, the stand-in's key
+// answered, the checkout trusted), so no first-run question shows. The run types one thing: the owner's turn,
+// once `martha start` says the member is up, since `martha start` passes the host no prompt. Nothing answers a
+// question by keystroke: a run whose stand-in hears no request within its deadline fails, with the last screen.
+//
+// A model request is one that offers tools: the host's side requests (a title, a summary) offer none, are
+// answered with text and are not counted.
+
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
+
+import { removeTheTree } from './relay_copy.ts'
+import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
+
+/** The variable the relay CI job names the recorded host's binary in. */
+export const RECORDED_HOST_VARIABLE = 'MARTHA_RECORDED_HOST'
+
+/** The pseudo-terminal runner util-linux provides. */
+const PTY_RUNNER = 'script'
+
+/** The terminal type the host draws for. */
+export const HOST_TERMINAL = 'xterm-256color'
+
+/** The host's own command that ends its session. */
+export const HOST_EXIT_COMMAND = '/exit'
+
+/** The stand-in's key. The host keeps the last characters of a key it was told to use, and compares those. */
+const STAND_IN_KEY = `sk-ant-api03-${'0'.repeat(80)}`
+const KEY_TAIL_LENGTH = 20
+
+/** Whether the terminal shows what martha start prints once `member` is up, as its startedLine writes it. */
+const memberIsUp = (member: string, shown: string): boolean => plainTextOf(shown).includes(startedLine(member, ''))
+
+/** One request the host sent the model, as the stand-in received it. */
+export interface ModelRequest {
+  /** 1 for the first request that offers tools, and so on. */
+  readonly number: number
+  readonly body: Readonly<Record<string, unknown>>
+}
+
+/** What the stand-in answers one model request with. */
+export type ScriptedTurn =
+  | { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }
+  | { readonly text: string }
+
+/** The model's turns: answer request `number`, after doing what the run needs done first. */
+export type ModelScript = (request: ModelRequest) => ScriptedTurn | Promise<ScriptedTurn>
+
+export interface RecordedHostRun {
+  /** The recorded host's binary: the CI job's MARTHA_RECORDED_HOST. */
+  readonly claude: string
+  /** The checkout the member works in, its crew declared and its config approved. */
+  readonly checkout: string
+  /** The owner's home for this run: made empty by the caller, removed by the caller. */
+  readonly home: string
+  /** The member to start. */
+  readonly member: string
+  /** What the owner types once the member is up. */
+  readonly owner_turn: string
+  readonly script: ModelScript
+  /** How many model requests the run waits for before it ends the host itself; a stopped member ends it sooner. */
+  readonly requests: number
+  /** How long the whole run may take. */
+  readonly deadline_ms: number
+}
+
+export interface RecordedHostRan {
+  readonly requests: readonly ModelRequest[]
+  /** Everything the terminal showed. */
+  readonly shown: string
+  /** How martha start ended. */
+  readonly exit_code: number | null
+}
+
+/** The repository's own `martha` command. */
+const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
+
+/** The places a run's processes find their state and sockets in, under its home. */
+function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: string, runtime: string): Record<string, string> {
+  const bin = join(run.home, 'bin')
+  mkdirSync(bin, { recursive: true })
+  rmSync(join(bin, 'claude'), { force: true })
+  symlinkSync(run.claude, join(bin, 'claude'))
+  return {
+    HOME: run.home,
+    PATH: [bin, join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'),
+    TERM: HOST_TERMINAL,
+    XDG_STATE_HOME: join(run.home, '.local', 'state'),
+    XDG_RUNTIME_DIR: runtime,
+    ANTHROPIC_BASE_URL: base_url,
+    ANTHROPIC_API_KEY: STAND_IN_KEY,
+  }
+}
+
+/**
+ * The host's own record of a first run already done, in `home`: onboarding done, the stand-in's key answered yes,
+ * and `checkout` trusted. Every key here is one the recorded host reads.
+ */
+export function firstRunDone(home: string, checkout: string): void {
+  const record = {
+    hasCompletedOnboarding: true,
+    customApiKeyResponses: { approved: [STAND_IN_KEY.slice(-KEY_TAIL_LENGTH)], rejected: [] },
+    projects: { [checkout]: { hasTrustDialogAccepted: true } },
+  }
+  writeFileSync(join(home, '.claude.json'), `${JSON.stringify(record)}\n`, { mode: 0o600 })
+}
+
+/** Runs `martha <args>` in `checkout` under a pseudo-terminal, typing `input`; its exit code and what it showed. */
+export function marthaOnATerminal(run: Pick<RecordedHostRun, 'claude' | 'home' | 'checkout'>, args: readonly string[], input = ''): { readonly exit_code: number | null; readonly shown: string } {
+  const runtime = mkdtempSync(join(tmpdir(), 'm-'))
+  try {
+    const command = [process.execPath, MARTHA, ...args].map(quoted).join(' ')
+    const ran = spawnSync(PTY_RUNNER, ['-qefc', command, '/dev/null'], {
+      cwd: run.checkout,
+      env: environmentOf(run, 'http://127.0.0.1:9', runtime),
+      input,
+      encoding: 'utf8',
+    })
+    return { exit_code: ran.status, shown: ran.stdout + ran.stderr }
+  } finally {
+    // A launch killed mid-run leaves its read-only relay copy here (martha#117).
+    removeTheTree(runtime)
+  }
+}
+
+const quoted = (word: string): string => `'${word.replaceAll("'", "'\\''")}'`
+
+/** The server-sent events of one streamed message holding `turn`. */
+function streamOf(turn: ScriptedTurn, model: unknown, number: number): string {
+  const message = { id: `msg_${number}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }
+  const block =
+    'tool' in turn
+      ? [
+          { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: `toolu_standin_${number}`, name: turn.tool, input: {} } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(turn.input) } },
+        ]
+      : [
+          { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: turn.text } },
+        ]
+  const events = [
+    { type: 'message_start', message },
+    ...block,
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: 'tool' in turn ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } },
+    { type: 'message_stop' },
+  ]
+  return events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
+}
+
+async function bodyOf(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) chunks.push(chunk as Buffer)
+  const text = Buffer.concat(chunks).toString('utf8')
+  return text === '' ? {} : (JSON.parse(text) as Record<string, unknown>)
+}
+
+/** The stand-in model: answers each request offering tools by its number, and every other request with text. */
+async function standIn(script: ModelScript, heard: ModelRequest[], failed: (why: string) => void): Promise<{ readonly url: string; close(): Promise<void> }> {
+  const answer = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    if (request.method !== 'POST' || !(request.url ?? '').startsWith('/v1/messages')) {
+      response.writeHead(request.method === 'HEAD' ? 200 : 404).end()
+      return
+    }
+    const body = await bodyOf(request)
+    if ((request.url ?? '').startsWith('/v1/messages/count_tokens')) {
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ input_tokens: 1 }))
+      return
+    }
+    const offers_tools = Array.isArray(body['tools']) && body['tools'].length > 0
+    const turn: ScriptedTurn = offers_tools ? await script(record(heard, body)) : { text: 'a side answer' }
+    response.writeHead(200, { 'content-type': 'text/event-stream' }).end(streamOf(turn, body['model'], heard.length))
+  }
+  const server = createServer((request, response) => {
+    answer(request, response).catch((error: unknown) => {
+      failed(`the stand-in could not answer: ${error instanceof Error ? error.message : String(error)}`)
+      response.writeHead(500).end()
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  }
+}
+
+function record(heard: ModelRequest[], body: Record<string, unknown>): ModelRequest {
+  const request = { number: heard.length + 1, body }
+  heard.push(request)
+  return request
+}
+
+/** The terminal's text with its control sequences taken out, for a person reading a failure. */
+export const plainTextOf = (shown: string): string =>
+  shown
+    .replaceAll(/\x1b\[[0-9;?<>=]*[ -/]*[@-~]/g, '')
+    .replaceAll(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replaceAll(/\x1b[()][0-9A-Za-z]/g, '')
+    .replaceAll(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
+
+/**
+ * Starts `run.member` with `martha start` on a pseudo-terminal, types the owner's turn once it is up, and lets the
+ * stand-in answer the host's model requests by `run.script`. Ends the host with its own exit command once
+ * `run.requests` were answered, unless the member was stopped first. Rejects when the deadline passes, with the
+ * last screen.
+ */
+export async function driveTheRecordedHost(run: RecordedHostRun): Promise<RecordedHostRan> {
+  const heard: ModelRequest[] = []
+  let failure: string | undefined
+  const model = await standIn(run.script, heard, (why) => void (failure ??= why))
+  const runtime = mkdtempSync(join(tmpdir(), 'm-'))
+  const command = [process.execPath, MARTHA, 'start', run.member].map(quoted).join(' ')
+  const terminal = spawn(PTY_RUNNER, ['-qefc', command, '/dev/null'], { cwd: run.checkout, env: environmentOf(run, model.url, runtime), stdio: ['pipe', 'pipe', 'pipe'], detached: true })
+  let shown = ''
+  terminal.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
+  terminal.stderr.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
+  const ended = new Promise<number | null>((resolve) => terminal.once('exit', (code) => resolve(code)))
+  let exit_code: number | null | undefined
+  void ended.then((code) => void (exit_code = code))
+  const started = Date.now()
+  const until = async (what: string, done: () => boolean): Promise<void> => {
+    while (!done()) {
+      if (failure !== undefined) throw new Error(`${failure}. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
+      if (Date.now() - started > run.deadline_ms) throw new Error(`No ${what} within ${run.deadline_ms} ms. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
+  try {
+    await until('started member', () => memberIsUp(run.member, shown) || exit_code !== undefined)
+    if (exit_code === undefined) {
+      // The host draws its prompt after the launcher says the member is up: type once it shows it has drawn.
+      const drawn = shown.length
+      await until('prompt drawn', () => shown.length > drawn || exit_code !== undefined)
+      terminal.stdin.write(run.owner_turn)
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      terminal.stdin.write('\r')
+    }
+    await until(`model request ${run.requests}`, () => heard.length >= run.requests || exit_code !== undefined)
+    if (exit_code === undefined) {
+      // The last turn ends in text; once the host has drawn it, end the host the way an owner does.
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      terminal.stdin.write(`${HOST_EXIT_COMMAND}\r`)
+    }
+    await until('end of martha start', () => exit_code !== undefined)
+    return { requests: heard, shown, exit_code: exit_code ?? null }
+  } finally {
+    if (exit_code === undefined && terminal.pid !== undefined) process.kill(-terminal.pid, 'SIGKILL')
+    await ended
+    await model.close()
+    // A launch killed mid-run leaves its read-only relay copy here (martha#117).
+    removeTheTree(runtime)
+  }
+}
