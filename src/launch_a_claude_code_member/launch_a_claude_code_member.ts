@@ -116,6 +116,7 @@ import {
 } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { recordTheLauncher, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
@@ -363,10 +364,21 @@ function launchDirectories(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
 ): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir'> | string {
+  // A launcher killed hard runs none of its own cleanup, so what another launch
+  // left in the relay root is swept here, before this launch makes its own
+  // directory; a launch still running is left alone (leftover_relay_directories.ts).
+  sweepLeftoverLaunchDirectories(launch.places.relay_root)
   const relayDirectory = makeRelayDirectory(join(launch.places.relay_root, randomUUID()))
   if (!relayDirectory.made) {
     ready.removeSnapshot()
     return relayDirectory.refusal
+  }
+  // The record that tells a later sweep this directory's launch is over.
+  const recorded = recordTheLauncher(relayDirectory.directory)
+  if (recorded !== undefined) {
+    relayDirectory.remove()
+    ready.removeSnapshot()
+    return `${NOT_STARTED}: ${recorded}`
   }
   const emptyDirectory = join(relayDirectory.directory, EMPTY_DIRECTORY_NAME)
   const empty = makeEmptyDirectory(emptyDirectory)

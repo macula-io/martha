@@ -1356,6 +1356,53 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   })
 }
 
+test('a launcher killed hard leaves its directory behind, and the next launch takes it away (#124)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+
+  const first = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const firstEnded = new Promise<NodeJS.Signals | null>((resolve) => first.once('exit', (_code, by) => resolve(by)))
+  // Before any assertion: a test that fails must not leave a member running.
+  t.after(async () => {
+    if (first.exitCode === null && first.signalCode === null) first.kill('SIGKILL')
+    await firstEnded
+    await killGroupsCarrying(place.relay_root)
+  })
+  let said = ''
+  first.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the first launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
+
+  const [leftover] = readdirSync(place.relay_root) as [string]
+  assert.ok(leftover !== undefined, 'a launch keeps its directory in the relay root')
+
+  // SIGKILL runs none of the launcher's own cleanup: what it made stays, and so
+  // does its member, which the launcher's handlers would have killed.
+  first.kill('SIGKILL')
+  assert.equal(await firstEnded, 'SIGKILL')
+  await killGroupsCarrying(place.relay_root)
+  assert.deepEqual(readdirSync(place.relay_root), [leftover], 'a launcher killed hard leaves its directory behind')
+  assert.throws(
+    () => rmSync(join(place.relay_root, leftover), { recursive: true }),
+    'the read-only relay copy (#117) refuses a plain removal',
+  )
+
+  // The next launch on this relay root sweeps the leftover away, and keeps its own.
+  const next = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const nextEnded = new Promise<NodeJS.Signals | null>((resolve) => next.once('exit', (_code, by) => resolve(by)))
+  t.after(async () => {
+    if (next.exitCode === null && next.signalCode === null) next.kill('SIGKILL')
+    await nextEnded
+    await killGroupsCarrying(place.relay_root)
+  })
+  let nextSaid = ''
+  next.stdout.on('data', (chunk: Buffer) => void (nextSaid += chunk.toString()))
+  await until('the next launcher to start its member', () => nextSaid.includes('started') && existsSync(fake.childFile), t, () => nextSaid, () => REFUSED_LINE.exec(nextSaid)?.[0])
+
+  const after = readdirSync(place.relay_root)
+  assert.equal(after.length, 1, 'the leftover went, and this launch has its own')
+  assert.notEqual(after[0], leftover, 'the directory left here is this launch\'s, not the one it swept')
+})
+
 // --- a member on the owner's own terminal (martha#54) ---------------------------
 
 /** The pseudo-terminal the owner's terminal is played on: util-linux's script. */
