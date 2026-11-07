@@ -117,7 +117,8 @@ test('the version line is told only when the host is not the recorded version, n
 })
 
 test('the host\'s trust record is read from CLAUDE_CONFIG_DIR before HOME, only when absolute, and not when the host is told to ignore it', (t) => {
-  const folder = placeFor(t)
+  // The host records a folder by its real path; the test's own folder may sit under a link (a linked TMPDIR).
+  const folder = realpathSync(placeFor(t))
   const trusting = JSON.stringify({ projects: { [folder]: { hasTrustDialogAccepted: true } } })
   const home = placeFor(t)
   const configDir = placeFor(t)
