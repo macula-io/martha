@@ -13,7 +13,7 @@
 // an extra field, a missing field. The relay has no default to choose (martha#41,
 // the Supervisor's condition 1 and Mars's point 3).
 
-/** The environment variable naming the launcher's socket. The relay reads it by this literal. */
+/** The environment variable naming the launcher's socket. The relay's register.ts spells it as a literal, as the host demands (#104). */
 export const RELAY_SOCKET_VARIABLE = 'MARTHA_RELAY_SOCKET'
 
 /**

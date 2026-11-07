@@ -41,7 +41,6 @@ import {
   RELAY_DEADLINE_MS,
   RELAY_ORIGIN,
   RELAY_PATHS,
-  RELAY_SOCKET_VARIABLE,
   heardTaken,
   heardVerdict,
   type Heard,
@@ -126,7 +125,10 @@ export async function relay(
   hear: (status: number, text: string) => Heard,
 ): Promise<Heard> {
   try {
-    const socketPath = await $.env.get(RELAY_SOCKET_VARIABLE)
+    // The host takes only a literal name here (it lists the variables a module reads before running it) and
+    // refuses the whole module for a constant (#104). The name is RELAY_SOCKET_VARIABLE's; the relay's tests
+    // fail when the two differ.
+    const socketPath = await $.env.get('MARTHA_RELAY_SOCKET')
     if (socketPath === undefined || socketPath === '') {
       return { yes: false, why: 'this member was not started by its launcher, so nothing answers for it' }
     }

@@ -541,6 +541,35 @@ host, a **relay** (`src/claude_code_relay/`, a plugin the launcher loads with
 with the engine's own fields unchanged, and acts on the answer. The relay
 decides nothing.
 
+A relay the host refuses to load runs no gate at all ([#104](https://github.com/macula-io/martha/issues/104)).
+So before a member starts, the launcher resolves the host's command once and
+asks that binary's own loader (`plugin validate`) whether it takes the relay,
+and starts nothing if it does not. A host of another version than the one the
+adapter was recorded from is told to the owner in one line. The command is
+looked up only in absolute `PATH` entries, so a `claude` planted in the
+checkout is never what runs. After the start, a member whose relay does not
+report its session's start in time is stopped: within
+`SESSION_START_DEADLINE_MS` when no owner can answer the host or the host's
+own record (`.claude.json`) already trusts the folder, within
+`TRUST_ANSWER_DEADLINE_MS` when an owner can answer and the record does not
+say so, because the host first asks whether to trust a folder it does not know
+and runs no hook until the owner answers. The record is read one way only:
+anything but the folder marked trusted keeps the long deadline, and a wrong
+"trusted" only stops a member sooner. CI runs the loader of the recorded
+version over the relay (`prove_the_relay_loads/`).
+
+**Residual: up to ten minutes ungated on a folder's first start.** With an
+owner at the terminal, in a folder the host does not yet trust, a host that
+loads the relay when the launcher checks it but then runs no hooks gives up to
+`TRUST_ANSWER_DEADLINE_MS` (10 minutes) of a member with no prompt gate and no
+tool call gate, with nothing on screen to say so. The routes to such a host are
+managed settings, or a `disableAllHooks` a member writes into the owner's user
+settings; the settings route is row A13, tracked in #24. This is accepted
+because a person must be able to read the host's trust question before
+answering it, and the live probe on 2.1.318 saw the relay report nothing
+before the answer, so no earlier signal exists to start a shorter clock from.
+Every later start in that folder is held to `SESSION_START_DEADLINE_MS`.
+
 | Host event (the relay) | The launcher's call |
 |---|---|
 | settings `SessionStart` (`classic.SessionStart`: the host's `source` and `session_id`) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`; the mod's own `session.start` carries neither field |
