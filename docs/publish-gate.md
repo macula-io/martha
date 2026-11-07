@@ -568,7 +568,8 @@ loads the relay when the launcher checks it but then runs no hooks gives up to
 `TRUST_ANSWER_DEADLINE_MS` (10 minutes) of a member with no prompt gate and no
 tool call gate, with nothing on screen to say so. The routes to such a host are
 managed settings, or a `disableAllHooks` a member writes into the owner's user
-settings; the settings route is row A13, tracked in #24. This is accepted
+settings; the settings route is row A13, tracked in
+[#122](https://github.com/macula-io/martha/issues/122). This is accepted
 because a person must be able to read the host's trust question before
 answering it, and the live probe on 2.1.318 saw the relay report nothing
 before the answer, so no earlier signal exists to start a shorter clock from.
@@ -936,6 +937,14 @@ crew with a shell:
   of its own that serves. Signing that file is macula-io/macula-mcp#79.
 - **A procedure the owner signs ([#50](https://github.com/macula-io/martha/issues/50))**
   is a proposal, not built: no member serves anything.
+- **Up to ten minutes ungated on a folder's first start
+  ([#104](https://github.com/macula-io/martha/issues/104)).** In a folder the
+  host does not yet trust, a host that loads the relay but runs no hooks leaves
+  a member with no prompt gate and no tool call gate for up to
+  `TRUST_ANSWER_DEADLINE_MS`, with nothing on screen to say so; every later
+  start there is held to `SESSION_START_DEADLINE_MS` (the residual under the
+  trust question, above; the settings route to such a host is
+  [#122](https://github.com/macula-io/martha/issues/122)).
 - **T13**: a process of the same OS user can connect to a launch's relay socket
   and claim any origin, `composer` included (above).
 - **The terminal check is a speed bump.** `martha approve` and `martha start`
