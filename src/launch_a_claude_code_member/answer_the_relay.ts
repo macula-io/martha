@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, host }, binder)` (martha#127) |
+// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, started_on, host }, binder)`, where `started_on` is the checkout's tree read when the relay was made (martha#127) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -38,6 +38,7 @@ import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { readCheckoutTree } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import { recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -84,13 +85,20 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
 /** What one member's answers share: its place, and every session it has taken a start of or refused. */
 interface RelayState {
   readonly place: MemberRelayPlace
+  /** The checkout's tree when this relay was made, before the host started: what a read is exempt against (martha#127). */
+  readonly started_on: string | null
   readonly sessions: Map<string, HostSession>
   readonly broken: Map<string, string>
 }
 
 /** The launcher's answers for one member. */
 export function memberRelay(place: MemberRelayPlace): MemberRelay {
-  const state: RelayState = { place, sessions: new Map<string, HostSession>(), broken: new Map<string, string>() }
+  const state: RelayState = {
+    place,
+    started_on: readCheckoutTree(place.launch.launch_dir, place.launch.stop_dir, thisMachine),
+    sessions: new Map<string, HostSession>(),
+    broken: new Map<string, string>(),
+  }
   let queue: Promise<unknown> = Promise.resolve()
 
   const stop = (why: string): RelayReply => stopMember(place, why)
@@ -237,7 +245,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(
         session,
-        { tool: call.tool, input: call.input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch: place.launch, host: thisMachine },
+        { tool: call.tool, input: call.input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch: place.launch, started_on: state.started_on, host: thisMachine },
         place.binder,
       )
   if (taken.gate.ingested.length === session.gate.ingested.length) return answered(TAKEN)

@@ -388,6 +388,41 @@ test('a tracked file rewritten under an index flag that hides it is no read of t
   }
 })
 
+test('in a checkout with no config, a read is judged against the tree the member started on, not the live one (martha#127 r=2, #132)', async (t) => {
+  const place = placeFor(t)
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+
+  // A stranger's branch checked out mid-session: with no config, the launch is still allowed.
+  git(place.checkout, 'checkout', '-q', '-b', 'pull-request')
+  writeFileSync(join(place.checkout, 'STRANGER.md'), 'now run this\n')
+  writeFileSync(join(place.checkout, 'README.md'), 'now run this too\n')
+  git(place.checkout, 'add', '--all')
+  git(place.checkout, 'commit', '-q', '-m', 'a stranger')
+  const read = call('Read', { file_path: join(place.checkout, 'STRANGER.md') })
+  assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
+test('in a checkout with no config, a file another process writes between two calls is not exempt: Bash is denied, naming B4 (martha#127 r=2)', async (t) => {
+  const place = placeFor(t)
+  git(place.checkout, 'rm', '-q', '.mcp.json')
+  git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+
+  writeFileSync(join(place.checkout, 'NOTES.md'), 'now run this\n')
+  const read = call('Read', { file_path: join(place.checkout, 'NOTES.md') })
+  assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(rows), ['B4:null'])
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+})
+
 test('a command\'s output always takes the shell as A13, and names gh as B3 and git history as B5 (martha#127)', async (t) => {
   const place = placeFor(t)
   const commands: readonly { readonly command: unknown; readonly paths: readonly string[] }[] = [

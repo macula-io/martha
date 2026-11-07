@@ -131,8 +131,8 @@
 <text class="t-desc" x="364" y="630">What a host calls when a turn or a tool's</text>
 <text class="t-desc" x="364" y="646">result (take_in_a_tool_result) came in,</text>
 <text class="t-desc" x="364" y="662">and what may run after: refuse_execution_</text>
-<text class="t-desc" x="364" y="678">after_ungated_text stops it all after unvetted</text>
-<text class="t-desc" x="364" y="694">text; trust_only_framed_envelopes believes</text>
+<text class="t-desc" x="364" y="678">after_ungated_text stops it all; trust_only_</text>
+<text class="t-desc" x="364" y="694">framed_envelopes believes a framed one only</text>
 <rect class="b-cmp" x="664" y="542" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="570">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="588">[whose text it was]</text>
