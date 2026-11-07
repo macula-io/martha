@@ -43,8 +43,11 @@
 //   5. `recordMemberLaunch` with the writable store only the launcher holds
 //      (#42). A launch that cannot be recorded is stopped.
 //   6. The backstop (martha#104): a member whose relay does not report its
-//      session's start within RELAY_DEADLINE_MS is stopped, and its stop says
-//      why, since a host that does not run the relay runs no gate at all.
+//      session's start in time is stopped, and its stop says why, since a host
+//      that does not run the relay runs no gate at all. In time is
+//      TRUST_ANSWER_DEADLINE_MS when an owner can answer the host, which may
+//      first ask whether to trust the folder, else SESSION_START_DEADLINE_MS
+//      (host_runs_the_relay.ts).
 //
 // When the member exits, by itself or killed: its group is sent SIGKILL so no
 // tool server outlives it, its launch record is dropped, the server closes, and
@@ -73,7 +76,7 @@ import {
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -92,7 +95,14 @@ import {
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
-import { hostVersionLine, refusalToLoadTheRelay, resolvedHostCommand } from './host_runs_the_relay.ts'
+import {
+  hostVersionLine,
+  ownerCanAnswerTheHost,
+  refusalToLoadTheRelay,
+  resolvedHostCommand,
+  SESSION_START_DEADLINE_MS,
+  TRUST_ANSWER_DEADLINE_MS,
+} from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, type MemberStart, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
@@ -139,8 +149,10 @@ export interface ClaudeCodeMemberLaunch {
   readonly stdio: StdioOptions
   /** Shows the owner a line: a refusal, what was not carried, why a member was stopped. */
   tellOwner(line: string): void
-  /** How long the relay has to report the session's start before the member is stopped; RELAY_DEADLINE_MS unless a test gives its own. */
-  readonly relay_deadline_ms?: number
+  /** How long the relay of a member no owner can answer for has to report the session's start; SESSION_START_DEADLINE_MS unless a test gives its own. */
+  readonly session_start_deadline_ms?: number
+  /** The same when an owner can answer the host, which may first ask whether to trust the folder; TRUST_ANSWER_DEADLINE_MS unless a test gives its own. */
+  readonly trust_answer_deadline_ms?: number
 }
 
 /** How a member's process ended. */
@@ -467,11 +479,24 @@ function whenTheMemberStops(
   })
 }
 
+/** Why a member is stopped whose relay did not report its session's start: the backstop's deadline and reason (#104). */
+function sessionStartDeadline(launch: ClaudeCodeMemberLaunch): { readonly ms: number; readonly why: string } {
+  if (ownerCanAnswerTheHost(launch.stdio)) {
+    const ms = launch.trust_answer_deadline_ms ?? TRUST_ANSWER_DEADLINE_MS
+    return {
+      ms,
+      why: `its relay did not report the session's start within ${ms / 1000} s. If the host was still asking whether to trust ${launch.place.launch_dir}, start the member again and answer it; if it was not, the host is not running Martha's gates`,
+    }
+  }
+  const ms = launch.session_start_deadline_ms ?? SESSION_START_DEADLINE_MS
+  return { ms, why: `its relay did not report the session's start within ${ms / 1000} s, so the host is not running Martha's gates` }
+}
+
 /**
  * The backstop (#104): a host that runs the relay reports the session's start;
- * a member whose relay has not, `deadline` ms after it was armed, is stopped.
+ * a member whose relay has not, the deadline's ms after it was armed, is stopped.
  */
-function relayBackstop(deadline: number, stop: (why: string) => void): { reported(): void; arm(): void; disarm(): void } {
+function relayBackstop(deadline: { readonly ms: number; readonly why: string }, stop: (why: string) => void): { reported(): void; arm(): void; disarm(): void } {
   let reported = false
   let unheard: NodeJS.Timeout | undefined
   const disarm = (): void => clearTimeout(unheard)
@@ -479,7 +504,7 @@ function relayBackstop(deadline: number, stop: (why: string) => void): { reporte
     reported: () => ((reported = true), disarm()),
     arm: () => {
       if (reported) return
-      unheard = setTimeout(() => stop(`its relay did not report the session's start within ${deadline} ms, so the host is not running Martha's gates`), deadline)
+      unheard = setTimeout(() => stop(deadline.why), deadline.ms)
     },
     disarm,
   }
@@ -508,7 +533,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     launch.tellOwner(`${launch.member_name} is stopped: ${why}`)
     if (group !== undefined) killGroup(group)
   }
-  const backstop = relayBackstop(launch.relay_deadline_ms ?? RELAY_DEADLINE_MS, stop)
+  const backstop = relayBackstop(sessionStartDeadline(launch), stop)
 
   const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported)
   if (typeof server === 'string') {

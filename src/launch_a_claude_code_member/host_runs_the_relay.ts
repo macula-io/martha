@@ -25,12 +25,20 @@
 //
 // What no check before the start can see (hooks turned off for the session by
 // managed settings, say) the launcher's backstop catches after it: a member
-// whose relay does not report its session's start within RELAY_DEADLINE_MS is
-// stopped (launch_a_claude_code_member.ts).
+// whose relay does not report its session's start in time is stopped
+// (launch_a_claude_code_member.ts). How long is in time depends on whether an
+// owner can answer the host. In a folder it has not been told to trust, the
+// host first asks whether to trust it, and runs no hook, the relay's included,
+// until the owner answers: on Claude Code 2.1.318 the relay reported the start
+// about a second after the answer, and nothing in the 45 s the question was
+// left open (martha#104 r=1, a live probe). A member with no owner at a
+// terminal cannot be asked, so a missing report means the gates are off.
 
 import { execFile } from 'node:child_process'
+import type { StdioOptions } from 'node:child_process'
 import { accessSync, constants, realpathSync, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
+import { isatty } from 'node:tty'
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 
@@ -40,6 +48,26 @@ import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
  * be unable to answer, and the launch is refused.
  */
 export const HOST_ANSWER_TIMEOUT_MS = 30_000
+
+/**
+ * How long a member no owner can answer for has to report its session's start
+ * before it is stopped. The host reports it as it starts, within a second or
+ * two; past this it is taken not to run the relay.
+ */
+export const SESSION_START_DEADLINE_MS = 30_000
+
+/**
+ * How long a member whose owner can answer the host has to report its
+ * session's start before it is stopped. The host may first ask the owner
+ * whether to trust the folder, and runs no hook until the answer, so this is
+ * long enough to read that question and the folder before answering. It is
+ * also how long a member whose host runs no hooks at all goes ungated with
+ * its owner at the terminal, so it is minutes, not hours.
+ */
+export const TRUST_ANSWER_DEADLINE_MS = 600_000
+
+/** Whether an owner can answer the host's questions: the member is given the launcher's input, and that is a terminal. */
+export const ownerCanAnswerTheHost = (stdio: StdioOptions): boolean => stdio === 'inherit' && isatty(0)
 
 /** The host's answers fit in this; a longer one is no answer the launcher reads. */
 const HOST_ANSWER_MAX_BYTES = 4 * 1024 * 1024

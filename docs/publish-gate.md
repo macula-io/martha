@@ -545,10 +545,15 @@ A relay the host refuses to load runs no gate at all ([#104](https://github.com/
 So before a member starts, the launcher resolves the host's command once and
 asks that binary's own loader (`plugin validate`) whether it takes the relay,
 and starts nothing if it does not. A host of another version than the one the
-adapter was recorded from is told to the owner in one line. After the start, a
-member whose relay does not report its session's start within
-`RELAY_DEADLINE_MS` is stopped. CI runs the loader of the recorded version
-over the relay (`prove_the_relay_loads/`).
+adapter was recorded from is told to the owner in one line. The command is
+looked up only in absolute `PATH` entries, so a `claude` planted in the
+checkout is never what runs. After the start, a member whose relay does not
+report its session's start in time is stopped: within
+`SESSION_START_DEADLINE_MS` when no owner can answer the host, within
+`TRUST_ANSWER_DEADLINE_MS` when one can, because the host first asks whether
+to trust a folder it does not know and runs no hook until the owner answers.
+CI runs the loader of the recorded version over the relay
+(`prove_the_relay_loads/`).
 
 | Host event (the relay) | The launcher's call |
 |---|---|
