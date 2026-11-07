@@ -45,10 +45,10 @@
 // values as on, and a value it would read as off costs the owner only a
 // refusal that names the file and the key.
 
-import { readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
-import { hooksAndPluginsDeclaredIn } from './hooks_and_plugins_the_owner_declares.ts'
+import { hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, MANAGED_MARKDOWN_FOLDER, type OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 
 /** How safe mode is switched on: by a variable in the host's environment, or by a flag on its command line. */
 export interface SafeMode {
@@ -112,7 +112,7 @@ const VARIABLE_SET_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\
 const CLOSER: Readonly<Record<string, string>> = { '{': '}', '(': ')', '[': ']' }
 
 /** The index just past the bracket that closes the one opened at `open`, skipping string literals. */
-function closingBrace(text: string, open: number): number {
+export function closingBrace(text: string, open: number): number {
   const opener = text[open] ?? ''
   const closer = CLOSER[opener]
   let depth = 0
@@ -351,10 +351,19 @@ function onlyOne(text: string, pattern: RegExp, what: string): RegExpMatchArray 
   return first
 }
 
+const DROP_IN_GETTER = /getDropInDir\(\)\{return this\.dropInDir\?\?=[\w$]+\(([\w$]+)\(\),"([^"]+)"\)/g
+
+/** The name of the host's function that returns its managed folder: the one its managed drop-in folder is joined to (martha#146). */
+export function managedFolderFunctionIn(text: string): string {
+  const folderOf = onlyOne(text, DROP_IN_GETTER, 'the managed drop-in folder')[1]
+  if (folderOf === undefined) throw new Error('The function that returns the managed folder cannot be read from the host.')
+  return folderOf
+}
+
 /** Where a host's text says it reads managed settings on Linux. */
 export function managedSettingsPlaceIn(text: string): ManagedSettingsPlace {
   const dir = onlyOne(text, /case"windows":return"[^"]*";default:return"(\/[^"]+)"\}/g, 'the Linux managed settings folder')[1]
-  const dropIn = onlyOne(text, /getDropInDir\(\)\{return this\.dropInDir\?\?=[\w$]+\(([\w$]+)\(\),"([^"]+)"\)/g, 'the managed drop-in folder')
+  const dropIn = onlyOne(text, DROP_IN_GETTER, 'the managed drop-in folder')
   const [, folderOf, drop_in] = dropIn
   if (dir === undefined || folderOf === undefined || drop_in === undefined) throw new Error('The managed settings place cannot be read from the host.')
   const file = onlyOne(
@@ -436,6 +445,73 @@ function dropInFiles(folder: string): string[] {
   }
 }
 
+/** What a folder walk found: the markdown files, and why a part of it could not be read. */
+interface Walked {
+  readonly files: readonly string[]
+  readonly unread: readonly string[]
+}
+
+const NOTHING: Walked = { files: [], unread: [] }
+
+/** Nothing for a path that is not there; why it cannot be read for any other failure. */
+function missingOr(path: string, error: unknown): Walked {
+  const code = (error as { code?: unknown }).code
+  if (code === 'ENOENT' || code === 'ENOTDIR') return NOTHING
+  return { files: [], unread: [`${path} cannot be read (${typeof code === 'string' ? code : String(error)}), so whether an agent, skill or command in it declares hooks cannot be told`] }
+}
+
+/** One entry of a folder: a markdown file, a folder to walk, or nothing; links followed as the host follows them. */
+function entryUnder(path: string, seen: Set<string>): Walked {
+  try {
+    const stat = statSync(path)
+    if (stat.isDirectory()) return markdownUnder(path, seen)
+    return stat.isFile() && path.endsWith('.md') ? { files: [path], unread: [] } : NOTHING
+  } catch (error) {
+    return missingOr(path, error)
+  }
+}
+
+/** Every .md file under a folder at any depth, each folder walked once: a superset of what the host loads from it. */
+function markdownUnder(folder: string, seen: Set<string>): Walked {
+  let real: string
+  let names: string[]
+  try {
+    real = realpathSync(folder)
+    names = readdirSync(folder).sort()
+  } catch (error) {
+    return missingOr(folder, error)
+  }
+  if (seen.has(real)) return NOTHING
+  seen.add(real)
+  const found = names.map((name) => entryUnder(join(folder, name), seen))
+  return { files: found.flatMap((one) => one.files), unread: found.flatMap((one) => one.unread) }
+}
+
+/** A markdown file's text, undefined when it went away; why it cannot be read otherwise. */
+function markdownTextOf(path: string): { readonly path: string; readonly text: string | undefined } | Walked {
+  try {
+    return { path, text: readFileSync(path, 'utf8') }
+  } catch (error) {
+    const missing = missingOr(path, error)
+    return missing.unread.length === 0 ? { path, text: undefined } : missing
+  }
+}
+
+/** The markdown folders the host loads in the user and managed scopes: each kind under the user config folder and under the managed folder. */
+export function markdownFolders(user: string, managed: ManagedSettingsPlace, kinds: readonly string[]): string[] {
+  return kinds.flatMap((kind) => [join(dirname(user), kind), join(managed.dir, MANAGED_MARKDOWN_FOLDER, kind)])
+}
+
+/** Why an agent, skill or command the host loads from the user or managed scope brings hooks in, each file named; and every part that cannot be read. */
+function hooksInMarkdown(user: string, managed: ManagedSettingsPlace, markdown: OwnersMarkdown): string[] {
+  const walked = markdownFolders(user, managed, markdown.kinds).map((folder) => markdownUnder(folder, new Set()))
+  const read = walked.flatMap((one) => one.files).map((path) => markdownTextOf(path))
+  const declared = read.flatMap((one): Array<string | undefined> =>
+    'path' in one ? [hooksInFrontmatterOf({ ...one, managed: false }, markdown.frontmatter_pattern)] : [...one.unread],
+  )
+  return [...walked.flatMap((one) => one.unread), ...declared].filter((reason) => reason !== undefined)
+}
+
 /** The settings files a member's host reads, read again each time it is asked. */
 export interface HookSettingsWatch {
   /** The owner's user settings file. */
@@ -455,10 +531,12 @@ export interface HookSettingsPlaces {
   readonly approved: string | undefined
   readonly managed: ManagedSettingsPlace
   readonly switches: HookSwitches
+  /** The host's frontmatter pattern and the markdown folders it loads in the user and managed scopes (martha#146). */
+  readonly markdown: OwnersMarkdown
 }
 
 /** Watches the settings files a member's host reads for a switch that turns Martha's relay off. */
-export function hookSettingsWatch({ user, home, approved, managed, switches }: HookSettingsPlaces): HookSettingsWatch {
+export function hookSettingsWatch({ user, home, approved, managed, switches, markdown }: HookSettingsPlaces): HookSettingsWatch {
   const check = (): string | undefined => {
     const places = [
       { path: user, managed: false },
@@ -477,7 +555,7 @@ export function hookSettingsWatch({ user, home, approved, managed, switches }: H
     // folder in its env) is recorded at session start by sourcesALaunchHandsTheModel; every other file is the
     // owner's or the admin's (martha#121).
     const owners = files.filter((file) => file.path !== approved).map(hooksAndPluginsDeclaredIn)
-    const reasons = [...unread, settingsTurningHooksOff(files, switches), ...owners].filter((reason) => reason !== undefined)
+    const reasons = [...unread, settingsTurningHooksOff(files, switches), ...owners, ...hooksInMarkdown(user, managed, markdown)].filter((reason) => reason !== undefined)
     return reasons.length > 0 ? reasons.join('; ') : undefined
   }
   return { owners_file: user, home, check }

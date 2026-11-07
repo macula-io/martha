@@ -23,7 +23,8 @@ import { argv, exit, stderr, stdout } from 'node:process'
 
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
-import { hookExitCallsIn, hookSwitchesSourceIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { markdownTheHostLoadsIn } from '../claude_code_host/markdown_the_host_loads.ts'
+import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
@@ -40,6 +41,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'prompt origins', read: promptOriginsIn },
   { part: 'hook switches', read: hookSwitchesIn },
   { part: 'managed settings place', read: (text) => ({ managed_settings: managedSettingsPlaceIn(text) }) },
+  { part: 'markdown the host loads', read: (text) => markdownTheHostLoadsIn(text, managedFolderFunctionIn(text)) },
 ]
 
 /** The function that builds the hook set, and each function an exit of it calls (martha#122). */

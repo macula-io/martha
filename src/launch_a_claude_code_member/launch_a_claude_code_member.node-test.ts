@@ -37,7 +37,7 @@ import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_re
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
@@ -145,6 +145,7 @@ function answering(
       approved: undefined,
       managed: managedSettingsOf(place),
       switches: CLAUDE_CODE_HOOK_SWITCHES,
+      markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
     stopMember: (why) => void stops.push(why),
   })

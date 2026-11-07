@@ -23,6 +23,37 @@ const CHECK = '--check'
  * text part is the host's own code as recorded; the managed settings place,
  * which is recorded as values, is written back in the shapes the host spells it.
  */
+/** The name a recorded function or statement gives to what `pattern`'s group 1 marks. */
+function nameIn(text: string, pattern: RegExp): string {
+  const name = pattern.exec(text)?.[1]
+  if (name === undefined) throw new Error(`The recording holds no ${String(pattern)}: ${text}`)
+  return name
+}
+
+/** The host's function that returns the managed folder, as the recorded loader calls it. */
+const MANAGED = nameIn(RECORDED_HOST.markdown_loader, /([\w$]+)\(\),"\.claude",/)
+const LOADER = nameIn(RECORDED_HOST.markdown_loader, /^async function ([\w$]+)\(/)
+const [PARSER_HEAD = '', BOM_STRIP = ''] = RECORDED_HOST.frontmatter_reader
+const FRONTMATTER_PATTERN = nameIn(PARSER_HEAD, /\.match\(([\w$]+)\);$/)
+
+/**
+ * The markdown parts (martha#146), in the shapes the host spells them: the
+ * frontmatter parser closed after its recorded opening, the pattern it matches
+ * as a literal, the loader and the one function that calls it, called with
+ * each kind, the skills loader's managed folder, and the output-style schema.
+ */
+const MARKDOWN_PARTS: Readonly<Record<string, string>> = {
+  frontmatter_reader: `${PARSER_HEAD}return 0};${BOM_STRIP}`,
+  frontmatter_pattern: `var a=1,${FRONTMATTER_PATTERN}=/${RECORDED_HOST.frontmatter_pattern}/;`,
+  markdown_loader: RECORDED_HOST.markdown_loader,
+  markdown_kinds: [
+    `function Wq(e,n,r){return Kq(()=>${LOADER}(e,n,r,0))}`,
+    ...RECORDED_HOST.markdown_kinds.map((kind) => `Wq("${kind}",0)`),
+    `let h=Lg(${MANAGED}(),".claude","${RECORDED_HOST.markdown_kinds[0] ?? ''}"),k=1;t(\`Loading skills from: managed=\${h}\`)`,
+  ].join(';'),
+  output_style_schema: `var Uq=p(()=>u(${RECORDED_HOST.output_style_schema}))`,
+}
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,
   prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
@@ -32,9 +63,10 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   hooks_switch_calls: RECORDED_HOST.hooks_switch_calls.join(';'),
   managed_settings: [
     `switch(P()){case"windows":return"C:\\\\ClaudeCode";default:return"${RECORDED_HOST.managed_settings.dir}"}`,
-    `getDropInDir(){return this.dropInDir??=qC(LS(),"${RECORDED_HOST.managed_settings.drop_in}")`,
-    `function jw(){return Ce(LS(),"${RECORDED_HOST.managed_settings.file}")}`,
+    `getDropInDir(){return this.dropInDir??=qC(${MANAGED}(),"${RECORDED_HOST.managed_settings.drop_in}")`,
+    `function jw(){return Ce(${MANAGED}(),"${RECORDED_HOST.managed_settings.file}")}`,
   ].join(';'),
+  ...MARKDOWN_PARTS,
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
@@ -86,4 +118,28 @@ test('a host the recorder cannot read fails the check, naming the part', (t) => 
   const run = check(hostHolding(t, withoutMapper), RECORDED_HOST.host_version)
   assert.equal(run.status, 1)
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: prompt origins\n`)
+})
+
+test('a host whose frontmatter pattern, markdown folders or output-style schema differ fails the check, naming the field (martha#146)', (t) => {
+  for (const [field, planted] of [
+    ['frontmatter_pattern', MARKDOWN_PARTS.frontmatter_pattern?.replace('\\s*\\n(', '[ \\t]*\\n(')],
+    ['markdown_kinds', `${MARKDOWN_PARTS.markdown_kinds ?? ''};Wq("output-styles",0)`],
+    ['output_style_schema', MARKDOWN_PARTS.output_style_schema?.replace('"force-for-plugin":', 'hooks:Jq().optional(),"force-for-plugin":')],
+  ] as const) {
+    assert.notEqual(planted, MARKDOWN_PARTS[field], `the planted ${field} differs`)
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, [field]: planted ?? '' }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, field)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${field}\n`)
+  }
+})
+
+test('a host whose frontmatter pattern carries a flag, or that has two markdown loaders, cannot be read, naming the part (martha#146)', (t) => {
+  for (const planted of [
+    { frontmatter_pattern: `var a=1,${FRONTMATTER_PATTERN}=/${RECORDED_HOST.frontmatter_pattern}/m;` },
+    { markdown_loader: `${RECORDED_HOST.markdown_loader};${RECORDED_HOST.markdown_loader.replace(`function ${LOADER}(`, 'function Zq(')}` },
+  ]) {
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, ...planted }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, JSON.stringify(Object.keys(planted)))
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+  }
 })
