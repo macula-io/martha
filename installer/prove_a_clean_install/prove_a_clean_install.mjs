@@ -341,14 +341,22 @@ function alive (pid) {
 const literally = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
- * The release's own started line for `name` as a pattern whose one group is the pid.
+ * The release's own started line for `name` as a pattern's source, unanchored, whose one group is the pid; a test
+ * reads the line back out of the log with it.
  * @param {(member: string, pid: string) => string} startedLine
  * @param {string} name
  */
-function startedPattern (startedLine, name) {
+export function startedLineSource (startedLine, name) {
   const [before, after] = startedLine(name, PID_AT).split(PID_AT)
-  return new RegExp(`^${literally(before ?? '')}([0-9]+)${literally(after ?? '')}$`, 'm')
+  return `${literally(before ?? '')}([0-9]+)${literally(after ?? '')}`
 }
+
+/**
+ * The started line as `martha start` prints it on a line of its own.
+ * @param {(member: string, pid: string) => string} startedLine
+ * @param {string} name
+ */
+const startedPattern = (startedLine, name) => new RegExp(`^${startedLineSource(startedLine, name)}$`, 'm')
 
 /**
  * `martha start <name>` on its terminal, kept in `running` at once; up once it names the member's pid, the pid is

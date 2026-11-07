@@ -12,12 +12,15 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, WORK_PREFIX } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, WORK_PREFIX } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
 const SOLO_CREW = fileURLToPath(new URL('../../src/declare_a_solo_crew/declare_a_solo_crew.ts', import.meta.url))
 const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string }> }} */ (await import(SOLO_CREW))
+// The line `martha start` prints once a member is up, as the committed tree makes it; computed for the same reason.
+const COMMAND = fileURLToPath(new URL('../../src/run_the_martha_command/run_the_martha_command.ts', import.meta.url))
+const { startedLine } = /** @type {{ startedLine: (member: string, pid: string) => string }} */ (await import(COMMAND))
 // A command run that hangs fails here instead of stalling the suite to its own timeout.
 const COMMAND_TIMEOUT_MS = 50_000
 // The mode a planted defect gives the release: writable by its owner, which a placed release never is.
@@ -87,7 +90,10 @@ const killItsGroup = (pid) => {
  * @param {string} said
  */
 const leftAsLogged = (said) => ({
-  members: [...said.matchAll(/^ok start (\S+): \S+ started, pid ([0-9]+),/gm)].map(([, name, pid]) => ({ name: String(name), pid: Number(pid) })),
+  members: SOLO_MEMBERS.flatMap(({ name }) => {
+    const pid = said.match(new RegExp(`^ok start \\S+: ${startedLineSource(startedLine, name)},`, 'm'))?.[1]
+    return pid === undefined ? [] : [{ name, pid: Number(pid) }]
+  }),
   relayRoot: said.match(/^ok tear down: .*relay root (\S+) removed/m)?.[1] ?? ''
 })
 
@@ -156,6 +162,7 @@ test('a tear-down that fails fails the run, and the box is removed even when sto
   assert.equal(lines.at(-1), 'failed')
   assert.ok(!existsSync(result.box), 'the box is gone')
   assert.equal(await stillListening(result.registry), false, 'the registry no longer answers')
+  nothingLeftOfTheCrew(result, SOLO_MEMBERS.length, lines.join('\n'))
 })
 
 test('an error outside the steps still tears down, logs a final failed line, and resolves', async () => {
