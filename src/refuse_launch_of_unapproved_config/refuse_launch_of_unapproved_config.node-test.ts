@@ -23,6 +23,7 @@ import {
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -498,6 +499,18 @@ test('the off switch and the hosted-mode variable are restated for the recorded 
   assert.ok(offName !== undefined && offValue !== undefined)
   assert.ok(memory_off.file_mode_guard.includes(`process.env.${offName}`), `the recorded guard reads ${offName}`)
   assert.ok((CLAUDE_MEMORY_ELSEWHERE as readonly string[]).includes(memory_off.hosted_mode_variable), `${memory_off.hosted_mode_variable} is dropped`)
+})
+
+test('the variables the launch sets and drops for memory are exactly those the publish-gate page and row A17 name (#136)', () => {
+  const launched = new Set([...Object.keys(CLAUDE_MEMORY_OFF), ...CLAUDE_MEMORY_ELSEWHERE])
+  const namesIn = (text: string): Set<string> => new Set(text.match(/CLAUDE_[A-Z_]+/g) ?? [])
+  const page = readFileSync(new URL('../../docs/publish-gate.md', import.meta.url), 'utf8')
+  const bullet = /^- \*\*Memory is off in a member's host\.\*\*[\s\S]*?(?=^- \*\*)/m.exec(page)?.[0]
+  assert.ok(bullet !== undefined, "the page's memory-off bullet")
+  assert.deepEqual(namesIn(bullet), launched, 'the page names exactly what the launch sets and drops')
+  const row = INBOUND_PATHS.find((path) => path.id === 'A17')
+  assert.ok(row !== undefined && row.control.kind === 'no-text-reaches-the-model', 'row A17 says why no memory reaches the model')
+  assert.deepEqual(namesIn(row.control.why.split(', and refuses')[0] ?? ''), launched, 'the row names exactly what the launch sets and drops')
 })
 
 test('a planned Claude Code launch starts only the servers it passes', (t) => {
