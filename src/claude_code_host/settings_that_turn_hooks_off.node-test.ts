@@ -40,11 +40,12 @@ function scratch(t: TestContext): string {
   return dir
 }
 
-test('the recorded host turns hooks off by disableAllHooks from any settings file, by allowManagedHooksOnly and strictPluginOnlyCustomization from managed settings, and in safe mode', () => {
+test('the recorded host turns hooks off by disableAllHooks from any settings file, by allowManagedHooksOnly and strictPluginOnlyCustomization from managed settings, and in safe mode; with no terminal it narrows them when a variable is set', () => {
   assert.deepEqual(CLAUDE_CODE_HOOK_SWITCHES, {
     managed: ['allowManagedHooksOnly', 'disableAllHooks', 'strictPluginOnlyCustomization'],
     every_source: ['disableAllHooks'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
+    outside_a_terminal: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'],
   })
   assert.deepEqual(hookSwitchesOf(RECORDED_HOST.hooks_switches, RECORDED_HOST.hooks_switch_calls), CLAUDE_CODE_HOOK_SWITCHES)
 })
@@ -52,6 +53,37 @@ test('the recorded host turns hooks off by disableAllHooks from any settings fil
 test('the recorder cuts each function an exit of the hook set calls, by its shape, among others of the same name', () => {
   assert.deepEqual(hookExitCallsIn(HOST_TEXT, HOOK_SET_FUNCTION), EXIT_CALLS)
   assert.deepEqual(hookSwitchesOf(HOOK_SET_FUNCTION, EXIT_CALLS).safe_mode, { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] })
+})
+
+/** 2.1.319's added exit: with no terminal and a variable set, the host keeps only the user, --settings and policy hooks. */
+const NO_TERMINAL_EXIT = 'if(a$e())return l();'
+const BOTH_FUNCTION = 'function a$e(){return ye()&&TAo()}'
+const NO_TERMINAL_FUNCTION = 'function ye(){return!t().host.launchOptions.isInteractive()}'
+const VARIABLE_SET_FUNCTION = 'function TAo(){return Ftt(()=>i.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)}'
+const HOOK_SET_FUNCTION_319 = HOOK_SET_FUNCTION.replace('return a(t.hooks??{})}', `${NO_TERMINAL_EXIT}return a(t.hooks??{})}`)
+/** As a minified host holds them: other functions of the same names, of other shapes, beside the ones the recorder needs. */
+const HOST_TEXT_319 =
+  `${HOST_TEXT.replace(HOOK_SET_FUNCTION, HOOK_SET_FUNCTION_319)}function ye(e){return e.codePointAt(0)}${NO_TERMINAL_FUNCTION}` +
+  `function a$e(h,M){return!h.has(M)}${BOTH_FUNCTION}${VARIABLE_SET_FUNCTION}function ye(){let e=a();return e}`
+
+test("the recorder cuts 2.1.319's exit for a host with no terminal and a variable set, with both its parts, and records the variable", () => {
+  const calls = hookExitCallsIn(HOST_TEXT_319, HOOK_SET_FUNCTION_319)
+  assert.deepEqual(calls, [...EXIT_CALLS, BOTH_FUNCTION, NO_TERMINAL_FUNCTION, VARIABLE_SET_FUNCTION])
+  const switches = hookSwitchesOf(HOOK_SET_FUNCTION_319, calls)
+  assert.deepEqual(switches.outside_a_terminal, ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'])
+  // It is no switch a settings file or the launcher's environment turns on for a member: a member always has a terminal.
+  assert.deepEqual(switches.safe_mode, { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] })
+  assert.deepEqual(switches.every_source, ['disableAllHooks'])
+})
+
+test('an exit joined by && fails the recording when either part is of no known shape, naming the exit', () => {
+  for (const part of [NO_TERMINAL_FUNCTION, VARIABLE_SET_FUNCTION]) {
+    const without = HOST_TEXT_319.replace(part, '')
+    assert.throws(() => hookExitCallsIn(without, HOOK_SET_FUNCTION_319), /a\$e\(\)/)
+  }
+  const interactive = HOST_TEXT_319.replace(NO_TERMINAL_FUNCTION, 'function ye(){return t().host.launchOptions.isInteractive()}')
+  assert.throws(() => hookExitCallsIn(interactive, HOOK_SET_FUNCTION_319), /a\$e\(\)/)
+  assert.throws(() => hookSwitchesOf(HOOK_SET_FUNCTION_319, [...EXIT_CALLS, BOTH_FUNCTION]), /a\$e\(\)/)
 })
 
 test('an exit of the hook set that calls a function of no known shape fails the recording, naming the call', () => {
@@ -88,6 +120,7 @@ test('a recorded function that reads a new key turns that key into a switch, wit
     managed: ['allowManagedHooksOnly', 'disableAllHooks', 'noHooksAtAll', 'strictPluginOnlyCustomization'],
     every_source: ['disableAllHooks', 'noHooksAtAll'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
+    outside_a_terminal: [],
   })
   assert.throws(() => hookSwitchesOf('function r(){let o=Se("policySettings");return a(o.hooks??{})}', []), /no settings key/)
   assert.throws(() => hookSwitchesOf('function r(){let t=br();if(t.noHooks===!0)return{};return a(t.hooks??{})}', []), /reads no policy settings/)
