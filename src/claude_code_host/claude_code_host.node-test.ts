@@ -23,7 +23,7 @@ import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { claudeCodeHost, ownNameOfCalledTool, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
-import { promptOriginKindsOf, promptOriginsIn } from './claude_code_prompt_origins.ts'
+import { promptOriginKindsOf, promptOriginRemapsOf, promptOriginsIn, type RecordedPromptOrigins } from './claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_session_events.ts'
 import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
@@ -410,6 +410,60 @@ test('the origin code is read from the host\'s own text: one of each part, or no
   // A mapper that no longer promotes subkinds is not read as one that does.
   const unpromoting = RECORDED_HOST.prompt_origin_mapper.replace(/\?\{kind:\w+\}:/, '?{kind:"task-notification"}:')
   assert.throws(() => promptOriginKindsOf({ ...found, prompt_origin_mapper: unpromoting }), /recording/)
+})
+
+// --- martha#139: a host remaps an ingress kind after its pass-through cases ---------------
+
+/** The recorded mapper's last statement: the cases that pass the ingress kind through. */
+const PASS_THROUGH_END = /return\{kind:([\w$]+)\.kind\}\}\}$/
+
+/** The recorded mapper with `tail` after its pass-through cases, as Claude Code 2.1.319 adds one. */
+function mapperEndingWith(tail: string): string {
+  const mapper = RECORDED_HOST.prompt_origin_mapper
+  assert.match(mapper, PASS_THROUGH_END, 'the recorded mapper ends on its pass-through cases')
+  return mapper.replace(PASS_THROUGH_END, (_end, origin: string) => `return{kind:${origin}.kind}${tail}}}`)
+}
+
+/** What the recorded origin code reads as when its mapper ends with `tail`. */
+function recordedWithMapperEnding(tail: string): RecordedPromptOrigins {
+  return promptOriginsIn([mapperEndingWith(tail), RECORDED_HOST.prompt_origin_fallback, RECORDED_HOST.prompt_origin_subkinds].join(' '))
+}
+
+const REMAPPED_INGRESS = 'voice-call'
+const REMAP_TARGET = 'unclassified'
+const REMAPPING_CASE = `;case"${REMAPPED_INGRESS}":return{kind:"${REMAP_TARGET}"}`
+
+test('a mapper that remaps an ingress kind to a literal kind after its pass-through cases is read, and the ingress kind is no kind a hook sees', () => {
+  const found = recordedWithMapperEnding(REMAPPING_CASE)
+  const kinds = promptOriginKindsOf(found)
+  assert.deepEqual([...kinds].sort(), [...CLAUDE_CODE_PROMPT_ORIGIN_KINDS].sort())
+  assert.ok(kinds.includes(REMAP_TARGET))
+  assert.equal(kinds.includes(REMAPPED_INGRESS), false)
+  assert.deepEqual(promptOriginRemapsOf(found), { [REMAPPED_INGRESS]: REMAP_TARGET })
+  assert.deepEqual(gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, kinds), [])
+})
+
+test('a trailing case of any other shape than a literal kind is refused: the reader is never unsure', () => {
+  for (const tail of [
+    `;case"${REMAPPED_INGRESS}":return{kind:"${REMAP_TARGET}",via:"x"}`,
+    `;case"${REMAPPED_INGRESS}":return e`,
+    `;case"${REMAPPED_INGRESS}":return{kind:e.via}`,
+    `;default:return{kind:"${REMAP_TARGET}"}`,
+  ]) {
+    assert.throws(() => recordedWithMapperEnding(tail), /prompt origin mapper/, tail)
+  }
+})
+
+test('a host that passes the new ingress kind through hands a hook a kind the coverage check names', () => {
+  for (const tail of [`;case"${REMAPPED_INGRESS}":return{kind:e.kind}`, `;case"${REMAPPED_INGRESS}":case"teleport":return{kind:e.kind}`]) {
+    const kinds = promptOriginKindsOf(recordedWithMapperEnding(tail))
+    assert.ok(kinds.includes(REMAPPED_INGRESS), tail)
+    assert.deepEqual(
+      gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, kinds).map((gap) => gap.path).filter((path) => path.includes(REMAPPED_INGRESS)),
+      [`prompt origin ${REMAPPED_INGRESS} on claude-code`],
+      tail,
+    )
+  }
 })
 
 // --- T8: a refresh is never claimed ---------------------------------------------------

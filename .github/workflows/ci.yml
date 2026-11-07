@@ -170,6 +170,20 @@ jobs:
       - run: npm ci
       - run: prove_the_relay_loads/prove_the_relay_loads.sh "${{ runner.temp }}/relay-loads"
 
+  # The host drift check can fail (martha#139): the recorder's --check passes on a host that says what the recording
+  # says and fails, naming the field, on one that does not. No host and no npm: the tests build their host from the
+  # recording's own parts, so this runs on every PR, and only host-drift.yml's comparison depends on a release.
+  drift-bites:
+    name: the host drift check bites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: prove_the_recorded_host_is_current/prove_the_drift_check_bites.sh
+
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects
   # never runs, and the only sign is a failed run with no jobs, which nobody reads.
   # The release workflows run on a tag or by hand only, so this is where a broken

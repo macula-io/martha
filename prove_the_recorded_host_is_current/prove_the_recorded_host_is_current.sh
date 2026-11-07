@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# prove_the_recorded_host_is_current.sh <work-dir> <summary-file>: the committed recording of the Claude Code host
+# (src/claude_code_host/recorded_claude_code_host.json) is of the version members run, and that version's code still
+# reads as recorded (martha#139).
+#
+# Members install Claude Code from npm's `latest` dist-tag. This installs exactly the version that tag names, checks
+# the installed host says it is that version, and runs the recorder's --check against it, which writes nothing. Any
+# difference fails, the version alone included: every value the adapter derives from the recording (prompt origin
+# kinds, session start sources) must describe the host that runs.
+#
+# The fix for a failure is a re-record, never a retry:
+#   npm run record:claude-code-host -- <the installed claude binary> <the version>
+# then a PR with whatever the newly named fields call for in the declarations or the readers.
+#
+# The summary file gets --check's standard output: versions and field or part names only, never host code, because
+# the drift job copies it into a public issue.
+#
+# Exit: 0 the recording is current, 1 it is not (or the host cannot be read), 2 the host could not be set up.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
+RECORDER="${REPO}/src/record_claude_code_host/record_claude_code_host.ts"
+PACKAGE="@anthropic-ai/claude-code"
+# The tag members' installs follow. Moving the crew to another channel is a decision made here in a reviewed PR.
+DIST_TAG="latest"
+WORK="${1:?usage: prove_the_recorded_host_is_current.sh <work-dir> <summary-file>}"
+SUMMARY="${2:?usage: prove_the_recorded_host_is_current.sh <work-dir> <summary-file>}"
+mkdir -p "${WORK}"
+trap 'rm -rf "${WORK}"' EXIT
+: > "${SUMMARY}"
+
+version="$(npm view "${PACKAGE}" "dist-tags.${DIST_TAG}")" \
+  || { echo "prove_the_recorded_host_is_current: npm names no ${DIST_TAG} version of ${PACKAGE}" >&2; exit 2; }
+[[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || { echo "prove_the_recorded_host_is_current: ${PACKAGE}@${DIST_TAG} is '${version}', not a version" >&2; exit 2; }
+
+npm install --prefix "${WORK}/host" --no-save --no-package-lock --no-audit --no-fund "${PACKAGE}@${version}" > /dev/null \
+  || { echo "prove_the_recorded_host_is_current: Claude Code ${version} could not be installed" >&2; exit 2; }
+claude="$(readlink -f "${WORK}/host/node_modules/.bin/claude")"
+said="$("${claude}" --version)"
+[[ "${said%% *}" == "${version}" ]] \
+  || { echo "prove_the_recorded_host_is_current: installed a host that says '${said}', not ${version}" >&2; exit 2; }
+
+status=0
+node "${RECORDER}" --check "${claude}" "${version}" > "${SUMMARY}" || status=$?
+cat "${SUMMARY}"
+[[ "${status}" -eq 0 ]] && echo "prove_the_recorded_host_is_current: the recording is of Claude Code ${version}, the ${DIST_TAG} release"
+exit "${status}"
