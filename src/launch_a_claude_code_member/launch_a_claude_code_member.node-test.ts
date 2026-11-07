@@ -22,6 +22,7 @@ import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../
 import { RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
+import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
@@ -39,7 +40,8 @@ import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
+import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
+import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './leftover_relay_directories.ts'
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
@@ -1890,6 +1892,93 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+test("a member is written into its launch directory's record inside the hold, and a write that fails refuses it (#124 r=4)", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-124-held-'))
+  t.after(() => {
+    chmodSync(directory, 0o700)
+    rmSync(directory, { recursive: true, force: true })
+  })
+  assert.equal(recordTheLauncher(directory), undefined, 'the launch records itself before the member is spawned')
+
+  // A real child, alive while its place in the record is written and read back.
+  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+  t.after(() => member.kill('SIGKILL'))
+  await new Promise((resolve) => member.once('spawn', resolve))
+  const pid = member.pid ?? 0
+  assert.ok(pid > 0, 'the member is a process this test started')
+
+  const held = recordedInsideTheHold(directory, pid, { recorded: true })
+  assert.deepEqual(held, { admitted: true, recorded: { recorded: true }, inTheLaunchRecord: true }, 'the member runs only when its place is in the record')
+  const record = JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord
+  assert.equal(record.member?.pid, pid, 'the record names the member, so a sweep cannot take the directory of a member still running')
+  assert.equal(record.member?.process_started_at, linuxProcessIdentities.identityOf(pid))
+
+  // A launch directory this user can no longer write: the member's place cannot be kept.
+  chmodSync(directory, 0o500)
+  const refused = recordedInsideTheHold(directory, pid, { recorded: true })
+  chmodSync(directory, 0o700)
+  assert.equal(refused.admitted, false, 'a member whose place cannot be written is refused, not run with no record of it')
+  assert.match(refused.recorded.recorded ? 'it was recorded' : refused.recorded.refusal, /could not be written/)
+  assert.equal((JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord).member?.pid, pid, 'and the record is left as it was')
+})
+
+test('a launcher killed hard leaves its directory behind, and the next launch takes it away (#124)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+
+  const first = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const firstEnded = new Promise<NodeJS.Signals | null>((resolve) => first.once('exit', (_code, by) => resolve(by)))
+  // Before any assertion: a test that fails must not leave a member running.
+  t.after(async () => {
+    if (first.exitCode === null && first.signalCode === null) first.kill('SIGKILL')
+    await firstEnded
+    await killGroupsCarrying(place.relay_root)
+  })
+  let said = ''
+  first.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the first launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
+
+  const [leftover] = readdirSync(place.relay_root) as [string]
+  assert.ok(leftover !== undefined, 'a launch keeps its directory in the relay root')
+  // The record holds both processes, so a sweep waits for the member as well as
+  // the launcher: a member can outlive a launcher killed hard (#124).
+  const launchRecord = JSON.parse(readFileSync(join(place.relay_root, leftover, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord
+  assert.equal(linuxProcessIdentities.lookupOf(launchRecord.launcher.pid).found, 'held', 'the launcher the record names is this one')
+  assert.equal(launchRecord.member === undefined ? 'none' : linuxProcessIdentities.lookupOf(launchRecord.member.pid).found, 'held', 'and the member it names is the one running')
+
+  // SIGKILL runs none of the launcher's own cleanup: what it made stays, and so
+  // does its member, which the launcher's handlers would have killed.
+  first.kill('SIGKILL')
+  assert.equal(await firstEnded, 'SIGKILL')
+  await killGroupsCarrying(place.relay_root)
+  assert.deepEqual(readdirSync(place.relay_root), [leftover], 'a launcher killed hard leaves its directory behind')
+  // The read-only copy (#117) refuses a plain removal, which is why the sweep
+  // and the teardown open the folders first. Asked of the copy itself: a refused
+  // removal of the whole directory takes whatever it reaches before it fails,
+  // and that would be the record the sweep needs, in the order this filesystem
+  // happens to list them.
+  assert.throws(
+    () => rmSync(join(place.relay_root, leftover, relayCopy.RELAY_COPY_NAME), { recursive: true }),
+    'the read-only relay copy (#117) refuses a plain removal',
+  )
+
+  // The next launch on this relay root sweeps the leftover away, and keeps its own.
+  const next = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const nextEnded = new Promise<NodeJS.Signals | null>((resolve) => next.once('exit', (_code, by) => resolve(by)))
+  t.after(async () => {
+    if (next.exitCode === null && next.signalCode === null) next.kill('SIGKILL')
+    await nextEnded
+    await killGroupsCarrying(place.relay_root)
+  })
+  let nextSaid = ''
+  next.stdout.on('data', (chunk: Buffer) => void (nextSaid += chunk.toString()))
+  await until('the next launcher to start its member', () => nextSaid.includes('started') && existsSync(fake.childFile), t, () => nextSaid, () => REFUSED_LINE.exec(nextSaid)?.[0])
+
+  const after = readdirSync(place.relay_root)
+  assert.equal(after.length, 1, 'the leftover went, and this launch has its own')
+  assert.notEqual(after[0], leftover, 'the directory left here is this launch\'s, not the one it swept')
+})
 
 // --- a member on the owner's own terminal (martha#54) ---------------------------
 
