@@ -13,7 +13,9 @@
 //
 //   1. INSTALL from the recorded lock alone, once per version, into
 //      `<root>/<version>`: `npm ci --ignore-scripts` in a fresh directory, run by
-//      the npm that ships with the node running the launcher, with user and
+//      the npm that ships with the node running the launcher
+//      (../run_the_nodes_own_npm_alone, where that isolation lives, shared with the
+//      pinned installer), with user and
 //      global config files that are empty, the recorded registry, its own prefix
 //      and cache, and an environment
 //      that holds nothing but its own HOME and PATH (an allow-list: no npm_config_*,
@@ -54,7 +56,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, sep } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import process from 'node:process'
 
 import {
@@ -80,10 +82,9 @@ import {
   type PackageEnvironmentReads,
   type RecordedMeshTree,
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import { runIsolatedNpm } from '../run_the_nodes_own_npm_alone/run_the_nodes_own_npm_alone.ts'
 import { TREE_PARAMETER, treeUrlOf } from './confine_to_the_recorded_tree.ts'
 
-/** Where npm's own program sits beside the node that runs this: `<prefix>/bin/node` and `<prefix>/lib/node_modules/npm`. */
-const NPM_CLI_FROM_PREFIX = ['lib', 'node_modules', 'npm', 'bin', 'npm-cli.js']
 const NODE_MODULES = 'node_modules'
 const PACKAGE_JSON = 'package.json'
 const PACKAGE_LOCK = 'package-lock.json'
@@ -113,51 +114,6 @@ function confinedStart(dir: string, file: string): readonly string[] {
   const hook = new URL(CONFINING_HOOK)
   hook.searchParams.set(TREE_PARAMETER, treeUrlOf(join(dir, NODE_MODULES)))
   return [PRELOAD, hook.href, file]
-}
-
-/** The npm program that ships with this node. */
-export function npmBesideNode(node: string = process.execPath): string {
-  return join(dirname(dirname(node)), ...NPM_CLI_FROM_PREFIX)
-}
-
-type Ran = { readonly ran: true } | { readonly ran: false; readonly why: string }
-
-/**
- * Runs npm in `dir` with no config, setting or install but the ones given here.
- * npm is given `dir`'s real path: it resolves its working directory through
- * links but not `--prefix`, and a prefix reached through a link (macOS's default
- * TMPDIR, /var -> /private/var) makes it key the lock by a path that climbs out
- * and back in, so the server's entry is not found (martha#79).
- */
-function runIsolatedNpm(args: readonly string[], linkedDir: string, registry: string, npmHome: string): Ran {
-  const npm = npmBesideNode()
-  const dir = realpathSync(linkedDir)
-  if (!existsSync(npm)) return { ran: false, why: `the npm of this node is not at ${npm}` }
-  mkdirSync(npmHome, { recursive: true, mode: 0o700 })
-  // Two files: npm refuses to load one file as both.
-  const [userConfig, globalConfig] = [join(npmHome, 'user-npmrc'), join(npmHome, 'global-npmrc')]
-  for (const empty of [userConfig, globalConfig]) writeFileSync(empty, '')
-  const isolated = [
-    `--userconfig=${userConfig}`,
-    `--globalconfig=${globalConfig}`,
-    `--registry=${registry}`,
-    `--prefix=${dir}`,
-    `--cache=${join(npmHome, 'cache')}`,
-    // A tarball that fails its integrity is not fetched again: other bytes are refused at once.
-    '--fetch-retries=0',
-    '--ignore-scripts',
-    '--no-audit',
-    '--no-fund',
-    '--no-update-notifier',
-    '--loglevel=error',
-  ]
-  const run = spawnSync(process.execPath, [npm, ...args, ...isolated], {
-    cwd: dir,
-    env: { HOME: npmHome, PATH: dirname(process.execPath) },
-    encoding: 'utf8',
-  })
-  if (run.status === 0) return { ran: true }
-  return { ran: false, why: (run.stderr || run.error?.message || `npm ended with ${String(run.status)}`).trim() }
 }
 
 /** Every file of an installed tree, by path under `dir`, sorted, with its hash; refuses what is no plain file. */

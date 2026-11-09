@@ -1,5 +1,6 @@
-// Test fixtures only: an npm registry on the loopback that serves a stand-in
-// mesh server and one dependency (martha#65).
+// Test fixtures only: an npm registry on the loopback that serves whatever
+// packages a test names, under the name and version it asks for (martha#84,
+// moved here from the mesh server's slice, which was its only user).
 //
 // A test cannot reach the real registry, and must not: what it proves is which
 // bytes npm takes, so it needs a registry it can make lie. This one serves the
@@ -27,6 +28,10 @@ export interface FakePackage {
   readonly version: string
   readonly dependencies?: Readonly<Record<string, string>>
   readonly bin?: Readonly<Record<string, string>>
+  /** The package's own scripts, such as a postinstall one a test needs npm to run. */
+  readonly scripts?: Readonly<Record<string, string>>
+  /** The dependencies a package carries inside its own tarball, as npm publishes a bundled one. */
+  readonly bundledDependencies?: readonly string[]
   readonly files: Readonly<Record<string, string>>
 }
 
@@ -55,7 +60,7 @@ function pack(pkg: FakePackage): Uint8Array {
   const work = mkdtempSync(join(tmpdir(), 'martha-fake-pkg-'))
   try {
     const root = join(work, 'package')
-    const manifest = { name: pkg.name, version: pkg.version, dependencies: pkg.dependencies ?? {}, bin: pkg.bin }
+    const manifest = { name: pkg.name, version: pkg.version, dependencies: pkg.dependencies ?? {}, bin: pkg.bin, scripts: pkg.scripts, bundleDependencies: pkg.bundledDependencies }
     const files = { ...pkg.files, 'package.json': JSON.stringify(manifest, null, 2) }
     for (const [path, text] of Object.entries(files)) {
       mkdirSync(dirname(join(root, path)), { recursive: true })
@@ -94,7 +99,7 @@ server.listen(0, '127.0.0.1', () => console.log(server.address().port))
 `
 
 /** Starts a registry serving these packages on 127.0.0.1, from a process of its own. */
-export async function fakeMeshRegistry(packages: readonly FakePackage[]): Promise<FakeRegistry> {
+export async function fakeNpmRegistry(packages: readonly FakePackage[]): Promise<FakeRegistry> {
   const dir = mkdtempSync(join(tmpdir(), 'martha-fake-registry-'))
   const root = join(dir, 'served')
   const log = join(dir, 'requests')
@@ -122,6 +127,7 @@ export async function fakeMeshRegistry(packages: readonly FakePackage[]): Promis
           version: pkg.version,
           dependencies: pkg.dependencies ?? {},
           bin: pkg.bin,
+          scripts: pkg.scripts,
           dist: { tarball: `${base}${pkg.name}/-/${tarballName(pkg)}`, integrity: sha512Of(tarball) },
         },
       },

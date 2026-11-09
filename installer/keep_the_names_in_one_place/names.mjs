@@ -19,6 +19,7 @@ const manifest = createRequire(import.meta.url)('../package.json')
  * @property {string} releaseFolder     the one top-level folder a release's layer holds
  * @property {string} releaseTagPrefix  what a release tag starts with
  * @property {string} installerTagPrefix what an installer tag starts with
+ * @property {string} installerPublishWorkflow the workflow whose run publishes this installer, and signs that publish
  * @property {string} dryRunTagPrefix  what a dry run's image tag starts with: never a version, never a release tag
  */
 
@@ -32,3 +33,17 @@ export const NAMES = Object.freeze({
 
 /** @param {string} version */
 export const releaseRef = (version) => `refs/tags/${NAMES.releaseTagPrefix}${version}`
+
+/**
+ * The git ref an installer version's publish ran at: what its provenance must name (martha#84).
+ * @param {string} version
+ */
+export const installerRef = (version) => `refs/tags/${NAMES.installerTagPrefix}${version}`
+
+/**
+ * Who a Fulcio certificate must have been issued to, as the whole identity: the repository, the workflow and the
+ * ref, exactly. Anchored and escaped, because sigstore-js tests a SAN policy as a JavaScript regular expression
+ * (@sigstore/verify policy.js).
+ * @param {string} identity
+ */
+export const anchoredIdentity = (identity) => `^${identity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`
