@@ -446,7 +446,7 @@ const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.map(({ rule }, at
     planted: () => {},
     planned: true,
     owner_settings: () => JSON.stringify({}),
-    owner_markdown: (place: Place): readonly OwnerMarkdownFile[] => [
+    owner_markdown: (): readonly OwnerMarkdownFile[] => [
       {
         folder: 'agents',
         name,

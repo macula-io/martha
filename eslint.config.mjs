@@ -11,6 +11,15 @@
 // No baseline and no exception in the code: an `eslint-disable` comment is refused, not obeyed (noInlineConfig).
 // eslint warns that it was ignored, and `npm run lint` allows no warning, so the comment itself fails the run.
 // Every JavaScript and TypeScript file is under it.
+//
+// The unused rule (martha#171) has two homes, because the compiler does not see everything:
+// - tsc holds it for the TypeScript projects, noUnusedLocals and noUnusedParameters in tsconfig.json and
+//   installer/tsconfig.json, naming the file, the line and the symbol.
+// - eslint holds it for the files no tsconfig includes (this one, and a .js or .mjs beside the sources), and for
+//   the one case the compiler does not look at at all: a catch binding nobody reads.
+// The `_` prefix this repository already uses for a name it cannot avoid, such as a handler that must take the place
+// it is given and does not read it, is read differently by the two halves: eslint lets any name it checks here carry
+// one, while tsc exempts a parameter only. An unused `_local` is still a local the compiler names.
 import tseslint from 'typescript-eslint'
 
 export const STRUCTURAL_CAPS = {
@@ -19,6 +28,20 @@ export const STRUCTURAL_CAPS = {
   'max-lines-per-function': ['error', { max: 60, skipBlankLines: true, skipComments: true }],
 }
 
+/** eslint's settings for the unused rule (martha#171). tsc never reads this file's export: its half is the two
+ * compiler flags in each tsconfig, which have no ignore pattern of their own, so there a `_` prefix exempts a
+ * parameter and nothing else. */
+export const UNUSED_RULE = [
+  'error',
+  {
+    args: 'after-used',
+    argsIgnorePattern: '^_',
+    varsIgnorePattern: '^_',
+    caughtErrors: 'all',
+    caughtErrorsIgnorePattern: '^_',
+  },
+]
+
 export default [
   { ignores: ['node_modules/'] },
   {
@@ -26,5 +49,14 @@ export default [
     languageOptions: { parser: tseslint.parser, ecmaVersion: 'latest', sourceType: 'module' },
     linterOptions: { noInlineConfig: true },
     rules: STRUCTURAL_CAPS,
+  },
+  {
+    files: ['**/*.{ts,mts,cts,tsx}'],
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: { '@typescript-eslint/no-unused-vars': UNUSED_RULE },
+  },
+  {
+    files: ['**/*.{js,mjs,cjs,jsx}'],
+    rules: { 'no-unused-vars': UNUSED_RULE },
   },
 ]
