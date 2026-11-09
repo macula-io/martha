@@ -21,7 +21,7 @@
 
 import { join, relative } from 'node:path'
 
-import { ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { ownWritesOfLaunch } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { checkoutTopOf, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import {
   decideLaunch,

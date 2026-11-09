@@ -47,7 +47,6 @@ import { join } from 'node:path'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import {
-  changesBetween,
   checkoutTopOf,
   isInTheCheckoutTree,
   readCheckoutTree,

@@ -67,8 +67,48 @@ Start solo and move to team without changing tools.
 
 ## Install
 
-Not yet available. Martha will ship as `@macula-io/martha` on npm once the
-publish gate ([issue #2](https://github.com/macula-io/martha/issues/2)) is met.
+Martha runs on Node, from the version its `engines` field sets, and starts one
+coding tool, whose version the Claude Code adapter records. These two commands,
+run from a Martha checkout, print both:
+
+```sh
+node -p "require('./package.json').engines.node"
+node -p "require('./src/claude_code_host/recorded_claude_code_host.json').host_version"
+```
+
+Those files are where the versions are set: upgrade Node to the one the first
+names, and sign in to the coding tool the second names (`claude --version` is
+what you have).
+
+**Nothing is published yet.** Martha ships as `@macula-io/martha` on npm once the
+publish gate ([issue #2](https://github.com/macula-io/martha/issues/2)) is met
+and the signed package
+([issue #21](https://github.com/macula-io/martha/issues/21)) exists. Until then,
+install from a checkout:
+
+```sh
+git clone https://github.com/macula-io/martha.git
+cd martha
+mkdir -p ~/.local/bin
+ln -s "$PWD/bin/martha" ~/.local/bin/martha
+martha --version
+```
+
+`martha --version` prints the release's version. If your shell cannot find
+`martha`, put `~/.local/bin` on your `PATH`.
+
+Once it is published, it is installed from the signed package, with Node alone:
+
+```sh
+npx -y --ignore-scripts @macula-io/martha@<exact version>
+```
+
+Name the installer's exact version: npm never lets a published version be
+replaced, so that line is what you trust. What the installer checks before it
+writes anything is in [the installer's README](installer/README.md).
+
+Then follow [getting started](docs/getting-started.md): a crew of two on your
+own project.
 
 ## Why "Martha"?
 

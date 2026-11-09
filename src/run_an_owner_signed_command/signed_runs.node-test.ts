@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { RESULT_DIFFERS, resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
+import { RESULT_DIFFERS, resultBuiltFrom, RUN_COMMAND_PREFIX } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { receiptsInMemory } from './receipts.ts'
 import { signedRunsOf } from './signed_runs.ts'
 

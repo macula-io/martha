@@ -117,14 +117,14 @@ function readInTheLaunchersGitDir(place: JudgePlace, format: GitObjectFormat, ho
 
 /** Keeps the tree whose attributes apply, and HEAD's own tree beside it, refusing when either does not read back. */
 function keepBothTrees(place: JudgePlace, head: string | undefined, host: JudgeHost, judge: string, index: string): string | undefined {
-  const approved = keepTheTree(place.attribute_tree as string, place, host, judge, index, 'the tree whose attributes apply')
+  const approved = keepTheTree(place.attribute_tree as string, host, judge, index, 'the tree whose attributes apply')
   if (approved !== undefined || place.attribute_tree === head) return approved
-  return seedTheLiveTree(place, head, host, judge, index)
+  return seedTheLiveTree(head, host, judge, index)
 }
 
 /** Seeds the index the live tree is written from: HEAD's tree, or an empty one in a checkout with no commit yet. */
-function seedTheLiveTree(place: JudgePlace, head: string | undefined, host: JudgeHost, judge: string, index: string): string | undefined {
-  if (head !== undefined) return keepTheTree(head, place, host, judge, index, "the checkout's own tree")
+function seedTheLiveTree(head: string | undefined, host: JudgeHost, judge: string, index: string): string | undefined {
+  if (head !== undefined) return keepTheTree(head, host, judge, index, "the checkout's own tree")
   const seeded = gitIn(host, judge, ['read-tree', '--empty'], { GIT_INDEX_FILE: index })
   return seeded === undefined ? `the checkout cannot be seeded as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` : undefined
 }
@@ -186,7 +186,6 @@ function emptyTree(host: JudgeHost, judge: string): string | undefined {
  */
 function keepTheTree(
   tree: string,
-  place: JudgePlace,
   host: JudgeHost,
   judge: string,
   index: string,

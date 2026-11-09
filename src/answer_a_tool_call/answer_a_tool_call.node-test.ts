@@ -42,7 +42,6 @@ const launch: ApprovedLaunch = {
 
 // Synthetic identities, never a real one: this repository is public.
 const supervisor_identity = 'identity-of-the-supervisor'
-const stranger_identity = 'identity-of-a-stranger'
 
 const policy: Policy = { may_send_executable_text: [supervisor_identity] }
 
