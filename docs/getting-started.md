@@ -30,8 +30,10 @@ refusals it can print, and what each costs you, are in
   node -p "require('./src/claude_code_host/recorded_claude_code_host.json').host_version"
   ```
 
-  `claude --version` is what you have. A member is a Claude Code session, so the
-  same sign-in serves it.
+  `claude --version` is what you have, in a plain shell. If a version manager
+  wraps node (asdf does), it puts its own shims first on the PATH, and the
+  `claude` your shell finds can be a different binary from the one Martha
+  resolves. A member is a Claude Code session, so the same sign-in serves it.
 
 - **git**, and a project that is a git checkout. Martha reads the top of the
   checkout it is run in, and every member works in that same tree.
@@ -114,8 +116,11 @@ against, one more line sits between those two. It is information, not a refusal:
 martha: The host at /usr/local/bin/claude is version 2.1.318; Martha's record of the host is of version 2.1.319. It loads Martha's relay, so the member starts.
 ```
 
-The two numbers are ones you can check: `claude --version` prints the first, and
-the second command under [What you need](#what-you-need) prints the other.
+The two numbers are ones you can check: run the path the line names with
+`--version`, and it prints the first; if a version manager wraps node, the
+`claude` your shell finds may be another binary, so take the path from the line
+rather than the name. The second command under [What you need](#what-you-need)
+prints the other.
 
 Before it starts the member, Martha asks that same binary whether it loads
 Martha's relay, using the host's own loader, and refuses the start when it does
@@ -182,8 +187,10 @@ base your project actually uses if it is not `main`.
 If Claude Code hands the review to its own background agent, Martha refuses that
 member's shell commands for the rest of the session once the agent's text
 arrives ([issue #170](https://github.com/macula-io/martha/issues/170)). The
-member can still read files, and the review still comes back; start the reviewer
-again if you want it to run commands.
+member can still read files, but the verdict that comes back never ran `git` and
+never saw the diff: do not rely on it. End the reviewer, start it again, and type
+the hand-off again; Martha's refusal says only a fresh start that reads no
+handover clears it.
 
 ## What a refusal means
 
@@ -201,7 +208,7 @@ it:
 | `martha start runs a member on your own terminal, and its input is not one. ...` | run it yourself, in a terminal |
 | `The member is not started: ... does not load Martha's relay (...), so the member's gates would be off: ...` | that `claude` cannot run Martha's gates: use one that loads them, such as an updated Claude Code |
 | `... is stopped: its relay did not report the session's start within ... s. If the host was still asking whether to trust ..., start the member again and answer it; if it was not, the host is not running Martha's gates` | answer the trust question, then start the member again; if no question was asked, that `claude` is not running Martha's gates |
-| `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop it; those three are the only arguments `martha start` passes on |
+| `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop it, and pass those three after `--`; they are the only arguments `martha start` passes on |
 
 Exit codes: `0` done, `1` refused, `2` not a way the command is used
 (`martha start` with no member prints the usage line and exits 2).
@@ -214,11 +221,13 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
   project, named by a hash of the project's path, holding what Martha keeps for
   that project — each member's node id (`members.json`), the approvals you gave
   (`approvals.jsonl`), each launch's copy of the config it started on, and the
-  record of what a member wrote itself. Nothing in your checkout holds any of
-  it.
+  record of what a member wrote itself. Those are the files you would look for;
+  the directory also holds what Martha keeps for itself (`rows/`, `launches/`,
+  `snapshots/`, `mesh-servers/`). Nothing in your checkout holds any of it.
 - `$XDG_RUNTIME_DIR/martha-<your uid>`, or `/tmp/martha-<your uid>`: the sockets
   a running member answers over. Made 0700, and refused if it is not yours
   alone.
 
-To start over: end your members, then delete `~/.local/state/martha` and edit or
+To start over: end your members, then delete `$XDG_STATE_HOME/martha`, or
+`~/.local/state/martha` when that variable is unset, and edit or
 delete `.crew/crew.json` as you would any file of your project.
