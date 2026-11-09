@@ -238,18 +238,22 @@ export const SESSION_INIT_ARGS = ['--print', '--input-format', 'stream-json', '-
 /** The one control request the init question writes: the engine's `initialize`, which answers with the session's init. */
 const INITIALIZE_REQUEST = JSON.stringify({ type: 'control_request', request_id: 'martha-session-init', request: { subtype: 'initialize' } })
 
+/** The session init one line of the host's output carries, or undefined when the line is not one. */
+function initOf(line: string): Readonly<Record<string, unknown>> | undefined {
+  try {
+    const message: unknown = JSON.parse(line)
+    const response = isRecord(message) && isRecord(message.response) ? message.response : undefined
+    return response !== undefined && isRecord(response.response) ? response.response : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** The session-init response a host printed, or undefined when no line is one. */
 export function initResponseIn(printed: string): Readonly<Record<string, unknown>> | undefined {
   for (const line of printed.split('\n')) {
-    if (!line.includes('control_response')) continue
-    try {
-      const message: unknown = JSON.parse(line)
-      const response = isRecord(message) && isRecord(message.response) ? message.response : undefined
-      const init = response !== undefined && isRecord(response.response) ? response.response : undefined
-      if (init !== undefined) return init
-    } catch {
-      continue
-    }
+    const init = line.includes('control_response') ? initOf(line) : undefined
+    if (init !== undefined) return init
   }
   return undefined
 }
