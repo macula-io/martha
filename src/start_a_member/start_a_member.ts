@@ -152,7 +152,7 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
  * runs (martha#132), each launch named afresh so no other launch's writes pass, and kept in a file of its own
  * (martha#162). None when the checkout needs none.
  */
-function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'since_approval'> {
+export function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'since_approval'> {
   if (approval === undefined) return { approved_fingerprints: [] }
   const launch_id = randomUUID()
   return {

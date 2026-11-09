@@ -204,6 +204,18 @@ test('a launch whose file is nothing but a torn line keeps its next record and n
   assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [next] })
 })
 
+test('a record whose path is not ASCII survives the cut that drops a torn line after it (martha#162 r=1)', (t) => {
+  const { state } = stateFor(t)
+  const first = ownWrite({ path: '/project/日本/é.txt', tool_use_id: 'toolu_1' })
+  kept(state, first)
+  const torn = JSON.stringify(ownWrite({ blob: OTHER_SHA1_BLOB, tool_use_id: 'toolu_2' })).slice(0, 40)
+  writeFileSync(filePath(state, 'launch-1'), torn, { flag: 'a' })
+  const next = ownWrite({ path: '/project/next.txt', tool_use_id: 'toolu_3' })
+  kept(state, next)
+  assert.equal(readFileSync(filePath(state, 'launch-1'), 'utf8'), `${JSON.stringify(first)}${NEWLINE}${JSON.stringify(next)}${NEWLINE}`)
+  assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [first, next] })
+})
+
 test('a record the disk would not take at all is refused as it happens, and leaves nothing behind (martha#162)', (t) => {
   const { state } = stateFor(t)
   const first = ownWrite()

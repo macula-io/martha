@@ -267,10 +267,12 @@ function openForAppend(path: string, what: string): { readonly descriptor: numbe
 function cutOffAnUnfinishedLine(descriptor: number): void {
   const size = fs.fstatSync(descriptor).size
   if (size === 0) return
-  const last = Buffer.alloc(1)
-  fs.readSync(descriptor, last, 0, 1, size - 1)
-  if (last[0] === NEWLINE_BYTE) return
-  fs.ftruncateSync(descriptor, fs.readFileSync(descriptor, 'utf8').lastIndexOf(NEWLINE) + 1)
+  const bytes = fs.readFileSync(descriptor)
+  if (bytes[size - 1] === NEWLINE_BYTE) return
+  // The newline is found in the bytes, never in the decoded text: ftruncate takes a byte offset, and a text's own
+  // index stops being one as soon as a record holds a character that is not ASCII — a path in Japanese, an accent
+  // (martha#162 r=1).
+  fs.ftruncateSync(descriptor, bytes.lastIndexOf(NEWLINE_BYTE) + 1)
 }
 
 /**
@@ -325,8 +327,7 @@ const NOT_UNDER_A_LAUNCH = 'An own write is kept under the launch that made it, 
 
 /** The own writes' directory in this project's state, made mode 0700 when missing; or why it may not be used. */
 function ownWritesDirectory(state: MarthaState): { readonly path: string } | Refused {
-  const made = stateSubdirectory(state, OWN_WRITES_PLACE)
-  return made
+  return stateSubdirectory(state, OWN_WRITES_PLACE)
 }
 
 /** The name one launch's own writes are kept under: never a path, and never a dot a person or git could steer with. */
