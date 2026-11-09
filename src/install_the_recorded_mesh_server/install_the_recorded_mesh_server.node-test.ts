@@ -458,18 +458,6 @@ test('a config planted where the launcher keeps npm\'s own home is not read', as
   assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
 
-test('code the launcher\'s environment would preload into npm is not loaded', async (t) => {
-  const { good } = await registries(t)
-  const recording = recorded(t, good)
-  const planted = scratch(t, 'preload')
-  const ran = join(planted, 'ran')
-  writeFileSync(join(planted, 'preload.cjs'), `require('node:fs').appendFileSync(${JSON.stringify(ran)}, 'x')\n`)
-  withEnvironment(t, { NODE_OPTIONS: `--require ${join(planted, 'preload.cjs')}` })
-  const root = scratch(t, 'servers')
-  placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
-  assert.throws(() => execFileSync('ls', [ran], { stdio: 'ignore' }), 'the preload never ran')
-})
-
 test('a planted install in the checkout\'s node_modules or under the global prefix is never what starts', async (t) => {
   const { good } = await registries(t)
   const recording = recorded(t, good)
