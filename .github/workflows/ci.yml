@@ -124,10 +124,12 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind / / true && bwrap --version
       - run: npm ci
-      # The compiler also holds the unused rule (martha#171): noUnusedLocals and
-      # noUnusedParameters are set in tsconfig.json, and the installer's own
-      # project sets them too, so an import or a local that a conflict resolution
-      # or a later change leaves behind fails here, by file, line and name.
+      # The unused rule (martha#171) is held by two checks, and a change runs
+      # both: the compiler, here and in the installer job (noUnusedLocals and
+      # noUnusedParameters in each tsconfig), names an unused import, local or
+      # parameter by file, line and symbol; eslint, in the structural floor job,
+      # holds the files no tsconfig includes, such as eslint.config.mjs, and the
+      # catch binding the compiler never looks at.
       - run: npx tsc --noEmit
       - run: npm test
       # macOS's default TMPDIR is long and is reached through a link
@@ -151,6 +153,10 @@ jobs:
   # structure_stays_flat.node-test.ts) and this runs them over the whole tree.
   # No baseline, no continue-on-error, and no warning allowed: an eslint-disable
   # comment is ignored with a warning, so it fails here too.
+  #
+  # The unused rule (martha#171) also runs here, at error level, for what the
+  # compiler cannot see: eslint.config.mjs itself, which belongs to no tsconfig,
+  # any .js or .mjs beside the sources, and a catch binding nobody reads.
   structure:
     name: structural floor
     runs-on: ubuntu-latest

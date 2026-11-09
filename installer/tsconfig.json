@@ -13,6 +13,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["*/*.mjs"],
+  "include": ["**/*.mjs"],
   "exclude": ["node_modules"]
 }
