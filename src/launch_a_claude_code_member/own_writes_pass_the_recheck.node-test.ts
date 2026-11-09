@@ -15,6 +15,7 @@ import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { openState, ownWritesKeptForLaunch, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   decideLaunch,
@@ -87,6 +88,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
     handed_at_start: [],
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, settings_files: [] }),
     hookSettings: hookSettingsWatch({
       user: join(home, '.claude', 'settings.json'),
       home,

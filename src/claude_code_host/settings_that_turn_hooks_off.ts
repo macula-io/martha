@@ -427,7 +427,7 @@ function textOf(path: string): { readonly text: string | undefined } | { readonl
 }
 
 /** The files of the managed drop-in folder the host may read: every .json in it, a superset of the host's own choice. */
-function dropInFiles(folder: string): string[] {
+export function dropInFiles(folder: string): string[] {
   try {
     return readdirSync(folder)
       .filter((name) => name.endsWith('.json'))
@@ -486,7 +486,7 @@ export function hookSettingsWatch({ user, home, approved, managed, switches }: H
 }
 
 /** A path as the file system resolves it: links followed as far as the path exists. */
-function realPathOf(path: string): string {
+export function realPathOf(path: string): string {
   try {
     return realpathSync(path)
   } catch {
@@ -496,7 +496,7 @@ function realPathOf(path: string): string {
 }
 
 /** The tool call arguments that name the file a file tool reads or writes. */
-const FILE_ARGUMENTS = ['file_path', 'notebook_path'] as const
+export const FILE_ARGUMENTS = ['file_path', 'notebook_path'] as const
 
 /** Why a tool call names the owner's user settings file, or undefined. */
 export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string, home: string): string | undefined {

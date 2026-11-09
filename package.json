@@ -36,6 +36,7 @@
       "src/install_the_recorded_mesh_server",
       "src/keep_martha_state_outside_the_checkout",
       "src/launch_a_claude_code_member",
+      "src/refuse_a_member_writing_owner_memory",
       "src/run_the_martha_command",
       "src/start_a_member"
     ],
