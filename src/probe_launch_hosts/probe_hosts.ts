@@ -31,6 +31,7 @@ import {
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
 import { HOOKS_SPELLINGS, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
@@ -390,6 +391,25 @@ function pluginFolder(place: Place): string {
 }
 const pluginInOwnerSettings = (place: Place) => JSON.stringify({ env: { [PLUGIN_DIRS_VARIABLE]: pluginFolder(place) } })
 
+// --- the settings that turn every hook off (martha#122) -----------------------
+//
+// The key is never typed here: it comes from the recorded host's own hook-set function, so a re-recording that
+// renames it changes what this plants, and a recording that names none fails the run rather than probing nothing.
+// Two rows, because they prove different things and one would hide the other:
+//   - the key ALONE in the owner's user settings, gated: with no hook in the file, the switch is the only reason
+//     the launcher has to refuse, so the refusal is that gate's and not another one's;
+//   - the key BESIDE a SessionStart hook, on the switches alone: the hook that would mark OWNER_HOOK does not run,
+//     which is what shows the key really is a switch on this host.
+
+/** The key the recorded host tests as `=== true` to drop every hook, whichever settings file sets it. */
+const HOOK_KILLING_KEY = CLAUDE_CODE_HOOK_SWITCHES.every_source[0]
+const SWITCHES_WITHOUT_A_PROBE = HOOK_KILLING_KEY === undefined ? ['a key that turns every hook off, in any settings file'] : []
+const killingKey = (): string => HOOK_KILLING_KEY ?? ''
+
+/** The owner's user settings with a SessionStart hook and that key beside it: the hook that would mark OWNER_HOOK. */
+const ownerHookAndSwitch = (place: Place) =>
+  JSON.stringify({ hooks: touchAtStart(place.marker('OWNER_HOOK')), [killingKey()]: true })
+
 const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] => {
   const as = gated ? 'as martha start starts it, its settings gate included' : 'on the switches alone, its settings gate skipped'
   const refused = (marker: string) => (gated ? { [marker]: false, GATE_REFUSED: true } : { [marker]: true })
@@ -409,8 +429,31 @@ const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] =>
       expected: refused('PLUGIN_HOOK'),
       ...(gated ? { gate_names: (place: Place) => [ownerSettingsPath(place), PLUGIN_DIRS_VARIABLE] } : {}),
     },
+    ...(gated
+      ? []
+      : [{
+          ...common,
+          what: `Claude Code ${as}: ${killingKey()}, which turns every hook off, beside a hook in the owner's user settings`,
+          owner_settings: ownerHookAndSwitch,
+          expected: { OWNER_HOOK: false },
+        }]),
   ]
 })
+
+/** The switch alone, gated: no hook in the file, so the only reason the launcher has to refuse is the switch itself. */
+const SWITCH_PROBES: readonly Probe[] = [
+  {
+    what: `Claude Code as martha start starts it: ${killingKey()} alone in the owner's user settings, with no hook beside it`,
+    host: 'claude-code',
+    command: claude(...HEADLESS_CLAUDE, PROMPT),
+    approved: () => {},
+    planted: () => {},
+    planned: true,
+    owner_settings: () => JSON.stringify({ [killingKey()]: true }),
+    expected: { GATE_REFUSED: true },
+    gate_names: (place: Place) => [ownerSettingsPath(place), killingKey()],
+  },
+]
 
 // --- the owner's own agents, skills and commands (martha#146) ----------------
 //
@@ -588,7 +631,12 @@ if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
   process.exitCode = 1
 }
 
-for (const probe of [...PROBES, ...OWNER_PROBES, ...MARKDOWN_HOOK_PROBES]) reportProbe(probe)
+if (SWITCHES_WITHOUT_A_PROBE.length > 0) {
+  console.error(`the recorded host names no key to plant, so nothing probes: ${SWITCHES_WITHOUT_A_PROBE.join(', ')}`)
+  process.exitCode = 1
+}
+
+for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES]) reportProbe(probe)
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every

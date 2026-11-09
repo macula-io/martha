@@ -685,7 +685,10 @@ owner's arguments. Every one of these is read from the host's own hook-set
 function and the functions its exits call (`hooks_switches` and
 `hooks_switch_calls` in `recorded_claude_code_host.json`), and the recorder
 fails on a statement or an exit of that function it does not know, so a host
-that adds a way to drop hooks fails the recording instead of passing it.
+that adds a way to drop hooks fails the recording instead of passing it. The
+probe plants that key beside a hook in the owner's user settings: on the
+switches alone the hook does not run, and gated the launch is refused before
+the host starts, naming the file and the key (`npm run probe:launch`).
 Claude Code 2.1.319 adds one such exit: with no terminal and
 `CLAUDE_CODE_IGNORE_PERSISTED_TRUST` set, the host keeps only the user,
 `--settings` and policy hooks. The recorder knows that shape and records the
