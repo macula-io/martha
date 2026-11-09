@@ -1122,15 +1122,16 @@ test('the session-init question starts nothing of the owner\'s, and nothing it s
   const fake = fakeClaude(place, { initChildFile: childFile, initHookFile: hookFile })
   const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, []))
   if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  // The pid is read here, before any assertion and before the after-hook that removes this place's home, which was
+  // registered first and so runs first: an after-hook that read the file would find it gone and kill nothing (#154 r=2).
+  const startedPid = existsSync(childFile) ? Number(readFileSync(childFile, 'utf8').trim()) : 0
   t.after(() => {
     // A stand-in that outlived its question is killed here too, so a red run leaves nothing behind.
-    const pid = existsSync(childFile) ? Number(readFileSync(childFile, 'utf8').trim()) : 0
-    if (pid > 0) {
-      try {
-        process.kill(pid, 'SIGKILL')
-      } catch {
-        // already gone
-      }
+    if (startedPid <= 0) return
+    try {
+      process.kill(startedPid, 'SIGKILL')
+    } catch {
+      // already gone
     }
   })
 
@@ -1139,14 +1140,13 @@ test('the session-init question starts nothing of the owner\'s, and nothing it s
   // No hook of the owner's ran for a question that starts nothing.
   assert.equal(existsSync(hookFile), false, 'a hook ran while the question was asked')
   // Nothing the question started is left running once it has its answer.
-  const child = Number(readFileSync(childFile, 'utf8').trim())
   let alive = true
   try {
-    process.kill(child, 0)
+    process.kill(startedPid, 0)
   } catch {
     alive = false
   }
-  assert.equal(alive, false, `what the question started (${child}) outlived it`)
+  assert.equal(alive, false, `what the question started (${startedPid}) outlived it`)
 })
 
 test('a host whose session init reports no output-styles folder starts nothing (#154)', async (t) => {
