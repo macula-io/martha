@@ -121,12 +121,16 @@ async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | s
 
 /** The approval the start is on, undefined when the checkout needs none, or why it may not start. */
 function approvalInUse(request: MemberStartRequest, approvals: readonly Approval[]): Approval | undefined | string {
-  const launch = readLaunchState({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }, thisMachine)
-  const fingerprint = fingerprintOf(launch)
-  const fingerprints = approvals.map((approval) => approval.fingerprint)
-  if (decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: fingerprints }).allow) {
-    return approvals.find((approval) => approval.fingerprint === fingerprint)
+  const place = { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }
+  // Each approval is read under the tree it approved, which is the only source of the attributes a checkout is read
+  // with (martha#167): a checkout whose attributes changed since an approval reads back as another tree.
+  for (const approval of approvals) {
+    const under = readLaunchState(place, thisMachine, approval.tree ?? undefined)
+    if (decideLaunch({ host: CLAUDE_CODE, ...under, approved_fingerprints: [approval.fingerprint] }).allow) return approval
   }
+  const launch = readLaunchState(place, thisMachine)
+  const fingerprint = fingerprintOf(launch)
+  if (decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: [] }).allow) return undefined
   const unapproved = decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: [fingerprint] }).allow
   if (!unapproved) return undefined
   const present = launch.entries.filter((entry) => entry.kind !== 'absent').map((entry) => entry.path)
@@ -157,11 +161,12 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
  * runs (martha#132), each launch named afresh so no other launch's writes pass, and kept in a file of its own
  * (martha#162). None when the checkout needs none.
  */
-export function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'since_approval'> {
+export function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'approved_tree' | 'since_approval'> {
   if (approval === undefined) return { approved_fingerprints: [] }
   const launch_id = randomUUID()
   return {
     approved_fingerprints: [approval.fingerprint],
+    ...(approval.tree === null ? {} : { approved_tree: approval.tree }),
     since_approval: {
       approved: { entries: approval.entries, tree: approval.tree },
       member: request.member,
