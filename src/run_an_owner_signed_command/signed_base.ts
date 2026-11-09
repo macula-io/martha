@@ -25,7 +25,7 @@ import { stateSubdirectory, type MarthaState } from '../keep_martha_state_outsid
  * checkout's files (../read_the_checkout_once, blobAsGitAdds).
  */
 const GIT_OBJECT_FORMATS = ['sha1', 'sha256'] as const
-type GitObjectFormat = (typeof GIT_OBJECT_FORMATS)[number]
+export type GitObjectFormat = (typeof GIT_OBJECT_FORMATS)[number]
 /** The launcher's own repository of the signed base, inside the project's state directory. */
 export const SIGNED_BASE_REPOSITORY = 'signed_base.git'
 /** The ref the signed branch is fetched into: the launcher's, never a remote-tracking ref. */
@@ -42,24 +42,36 @@ const FIELDS = /^(\d{6}) (\w+) ([0-9a-f]+)\t/
 export interface OpenedBase {
   readonly commit: string
   readonly fetched: boolean
+  /** The object format this repository and the checkout name their objects in. */
+  readonly format: GitObjectFormat
   readonly entries: readonly BaseEntry[]
   blob(id: string): Buffer | undefined
+  /**
+   * The blob git would give `bytes` at `path` with the attributes the base commit sets, kept here so its bytes can be
+   * read back with `blob`. Undefined when git cannot hash them.
+   *
+   * This never runs in the checkout. A checkout's `.git/config` and `.git/info/attributes` are a member's to write,
+   * and a clean filter named there is a program this launcher would run, outside the sandbox; a file could then be
+   * made to hash as an object it is not. Here the attributes come from the base commit the owner signed, and the
+   * repository and its config are the launcher's own.
+   */
+  normalise(path: string, bytes: Buffer): string | undefined
 }
 
 interface Git {
-  (args: readonly string[]): { readonly ok: boolean; readonly out: Buffer; readonly err: string }
+  (args: readonly string[], input?: Buffer): { readonly ok: boolean; readonly out: Buffer; readonly err: string }
 }
 
 /** git with nothing of the caller's but FETCH_KEEPS: no global or system config, no GIT_ variable, no prompt. */
-function gitIn(repository: string, inherited: Readonly<Record<string, string | undefined>>): Git {
-  return gitWith(['--git-dir', repository], inherited)
+function gitIn(repository: string, inherited: Readonly<Record<string, string | undefined>>, also: Readonly<Record<string, string>> = {}): Git {
+  return gitWith(['--git-dir', repository], inherited, also)
 }
 
-function gitWith(where: readonly string[], inherited: Readonly<Record<string, string | undefined>>): Git {
+function gitWith(where: readonly string[], inherited: Readonly<Record<string, string | undefined>>, also: Readonly<Record<string, string>> = {}): Git {
   const kept = Object.fromEntries(FETCH_KEEPS.flatMap((name) => (inherited[name] === undefined ? [] : [[name, inherited[name]!]])))
-  const env = { ...kept, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG, GIT_ALLOW_PROTOCOL: BASE_PROTOCOLS, GIT_TERMINAL_PROMPT: '0' }
-  return (args) => {
-    const run = spawnSync('git', [...where, '-c', 'core.fsmonitor=false', ...args], { env, maxBuffer: Number.MAX_SAFE_INTEGER })
+  const env = { ...kept, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG, GIT_ALLOW_PROTOCOL: BASE_PROTOCOLS, GIT_TERMINAL_PROMPT: '0', ...also }
+  return (args, input) => {
+    const run = spawnSync('git', [...where, '-c', 'core.fsmonitor=false', ...args], { env, input, maxBuffer: Number.MAX_SAFE_INTEGER })
     return { ok: run.status === 0, out: run.stdout ?? Buffer.alloc(0), err: run.stderr?.toString('utf8').trim() ?? String(run.error) }
   }
 }
@@ -71,7 +83,7 @@ function objectFormatOf(checkout: string, inherited: Readonly<Record<string, str
 }
 
 /** The launcher's repository of the base, made with `format` when missing; or why it cannot be used. */
-function baseRepository(state: MarthaState, format: GitObjectFormat, inherited: Readonly<Record<string, string | undefined>>): Git | string {
+function baseRepository(state: MarthaState, format: GitObjectFormat, inherited: Readonly<Record<string, string | undefined>>): { readonly git: Git; readonly path: string } | string {
   const place = stateSubdirectory(state, SIGNED_BASE_REPOSITORY)
   if ('refusal' in place) return place.refusal
   const git = gitIn(place.path, inherited)
@@ -80,7 +92,7 @@ function baseRepository(state: MarthaState, format: GitObjectFormat, inherited: 
     if (!made.ok) return `the base repository cannot be made (${made.err})`
   }
   const has = git(['rev-parse', '--show-object-format']).out.toString('utf8').trim()
-  return has === format ? git : `the base repository holds ${has} objects and the checkout ${format}`
+  return has === format ? { git, path: place.path } : `the base repository holds ${has} objects and the checkout ${format}`
 }
 
 const isObjectFormat = (value: string): value is GitObjectFormat => GIT_OBJECT_FORMATS.some((format) => format === value)
@@ -89,20 +101,27 @@ const isObjectFormat = (value: string): value is GitObjectFormat => GIT_OBJECT_F
 export function openSignedBase(state: MarthaState, checkout: string, base: SignedBase, inherited: Readonly<Record<string, string | undefined>>): OpenedBase | string {
   const format = objectFormatOf(checkout, inherited)
   if (!isObjectFormat(format)) return format
-  const git = baseRepository(state, format, inherited)
-  if (typeof git === 'string') return git
+  const repository = baseRepository(state, format, inherited)
+  if (typeof repository === 'string') return repository
+  const { git, path: repositoryPath } = repository
   const fetched = git(['fetch', '--quiet', '--no-tags', '--no-recurse-submodules', '--', base.remote_url, `+refs/heads/${base.branch}:${BASE_REF}`])
   const commit = git(['rev-parse', '--verify', '--quiet', `${BASE_REF}^{commit}`])
   if (!commit.ok) return `the signed branch ${base.branch} could not be fetched and none was fetched before (${fetched.err})`
   const listed = git(['ls-tree', '-r', '-z', '--full-tree', BASE_REF])
   if (!listed.ok) return `the base tree cannot be listed (${listed.err})`
+  const head = commit.out.toString('utf8').trim()
   return {
-    commit: commit.out.toString('utf8').trim(),
+    commit: head,
     fetched: fetched.ok,
+    format,
     entries: entriesOf(listed.out),
     blob: (id) => {
       const read = git(['cat-file', 'blob', id])
       return read.ok ? read.out : undefined
+    },
+    normalise: (relative, bytes) => {
+      const run = gitIn(repositoryPath, inherited, { GIT_ATTR_SOURCE: head })(['hash-object', '-w', `--path=${relative}`, '--stdin'], bytes)
+      return run.ok ? run.out.toString('utf8').trim() : undefined
     },
   }
 }

@@ -13,7 +13,7 @@ import { relative, sep } from 'node:path'
 import { ownWritesKeptIn, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import type { CommandShape, SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import { dependenciesTheRunMaySee, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { treeTheRunMaySee, type BaseEntry, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
+import { treeTheRunMaySee, type BaseEntry, type FileTheRunMaySee, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { installedLockOf, namesUnder, readPackageOnce, readTheCheckoutOnce, type CheckoutRead, type PackageFile } from './read_the_checkout_once.ts'
@@ -67,17 +67,23 @@ export async function runAKeptShape(state: MarthaState, checkout: string, inheri
 function judgeTheCheckout(run: ShapeToRun): Judged | string {
   const base = openSignedBase(run.state, run.checkout, run.base, run.inherited)
   if (typeof base === 'string') return base
-  const read = readTheCheckoutOnce(run.checkout, run.inherited)
+  const read = readTheCheckoutOnce(run.checkout, base.format, run.inherited)
   if (typeof read === 'string') return read
   const own = ownWritesKeptIn(run.state).all()
   if ('refusal' in own) return own.refusal
-  const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live })
+  // Asked of git only for a file whose own bytes vouched for nothing, and asked in the launcher's repository: the
+  // checkout's config and attributes are a member's to write (../signed_base, normalise).
+  const normalisedBlobOf = (entry: { readonly path: string; readonly blob: string }): string | undefined => {
+    const bytes = read.bytes.get(entry.path)
+    return bytes === undefined ? undefined : base.normalise(entry.path, bytes)
+  }
+  const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live, normalisedBlobOf })
   const dependencies = judgeTheDependencies(run.checkout, base, read)
   const refusals = [...tree.refusals.map((refused) => `${refused.path}: ${refused.why}`), ...dependencies.refusals]
   if (refusals.length > 0) return `nothing ran: ${refusals.join('; ')}`
   const packages = readThePackages(run.checkout, dependencies.packages)
   if (typeof packages === 'string') return packages
-  return { files: filesToWrite(tree.files, read), packages, dependencies }
+  return { files: filesToWrite(tree.files, read, base), packages, dependencies }
 }
 
 /**
@@ -124,9 +130,18 @@ function readThePackages(checkout: string, keys: readonly string[]): readonly Pa
   return files
 }
 
-/** The judged files with the bytes read for them; a file the read did not hold is a fault, never an empty file. */
-function filesToWrite(files: readonly { readonly path: string; readonly mode: string }[], read: CheckoutRead): readonly FileToWrite[] {
+/**
+ * The judged files with the bytes to write for them: the bytes read, or, for a file that passed only as git
+ * normalises it, the bytes of the object that was judged. A file the read did not hold, or an object git cannot give
+ * back, is a fault, never an empty file.
+ */
+function filesToWrite(files: readonly FileTheRunMaySee[], read: CheckoutRead, base: OpenedBase): readonly FileToWrite[] {
   return files.map((file) => {
+    if (file.from_object) {
+      const object = base.blob(file.blob)
+      if (object === undefined) throw new Error(`${file.path} was judged by an object that cannot be read back`)
+      return { path: file.path, mode: file.mode, bytes: object }
+    }
     const bytes = read.bytes.get(file.path)
     if (bytes === undefined) throw new Error(`${file.path} was judged but not read`)
     return { path: file.path, mode: file.mode, bytes }

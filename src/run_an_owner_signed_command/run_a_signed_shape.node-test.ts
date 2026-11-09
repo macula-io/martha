@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -124,6 +124,33 @@ test('an own write git changes as it adds it still passes: the blob judged is th
   const ended = await runASignedShape(p.run)
   assert.ok(typeof ended !== 'string', String(ended))
   assert.equal(ended.status, 0, said(ended))
+  // The run is written from the object that was judged, not from the working tree's bytes: only the normalised
+  // object is what the base or the own write says, so only it may reach the sandbox.
+  const printed = await runASignedShape({ ...p.run, shapes: [{ name: 'test', argv: ['/bin/sh', '-c', 'cat windows.txt'] }] })
+  assert.ok(typeof printed !== 'string', String(printed))
+  assert.equal(printed.output.toString('utf8'), 'one\ntwo\n', 'the run must hold the judged object, not the working tree bytes')
+})
+
+test("a checkout that would make git hash its own file as another's is refused, and nothing of it runs (martha#129)", { skip: unavailable }, async (t) => {
+  const p = place(t)
+  // A member may write the checkout's own git configuration and its per-repository attributes. Here they name a
+  // clean filter, a program, that answers with an object the owner signed for a file whose contents are not that
+  // object. If the launcher ever asked the checkout what a file hashes to, this file would be taken for the base's
+  // and its contents would run, and the filter would run outside the sandbox to say so.
+  const ran = join(p.top, 'program-ran')
+  const base = git(p.checkout, 'rev-parse', `HEAD:${MANIFEST}`)
+  const program = join(p.top, 'clean.sh')
+  writeFileSync(program, `#!/bin/sh\ntouch '${ran}'\ngit cat-file blob ${base}\n`)
+  chmodSync(program, 0o755)
+  git(p.checkout, 'config', 'filter.x.clean', program)
+  mkdirSync(join(p.checkout, '.git', 'info'), { recursive: true })
+  writeFileSync(join(p.checkout, '.git', 'info', 'attributes'), `${MANIFEST} filter=x\n`)
+  writeFileSync(join(p.checkout, MANIFEST), JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: `echo ${MARKER}` } }))
+  const ended = await runASignedShape(p.run)
+  assert.equal(existsSync(ran), false, "the checkout's git configuration must never choose a program the launcher runs")
+  assert.equal(typeof ended, 'string', `the run must be refused, and said: ${said(ended)}`)
+  assert.match(String(ended), new RegExp(MANIFEST.replace('.', '\\.')))
+  assert.equal(String(ended).includes(MARKER), false)
 })
 
 test('an own write of another checkout does not vouch for a file at the same path here', { skip: unavailable }, async (t) => {

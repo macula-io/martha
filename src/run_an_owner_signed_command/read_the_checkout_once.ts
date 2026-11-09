@@ -9,19 +9,21 @@
 // directory resolves elsewhere (a directory swapped for a link) or that is not a regular file is not a regular
 // file here, and the tree rule refuses it. A path that is gone is a deletion.
 //
-// A regular file's blob is the one `git add` would give it, not one of its raw bytes (martha#132): the tree it is
-// judged against is git's, so attributes, clean filters and line-end settings must be applied the same way, by the
-// same git. A checkout whose working tree holds CRLF under `text=auto` is the plain case: hashed raw it matches
-// nothing git stores. git is given the bytes this file read, never the path again, so what is judged is what the
-// run is written from even if the checkout changes under it.
+// A regular file's blob here is the one git gives its bytes with no filter applied, computed in this process. That is
+// exact and needs no program: when it matches an object the tree already holds, the file is that object whatever any
+// git configuration says. Only a file that matches nothing is asked of git, and then in the launcher's own repository
+// with the attributes the base commit sets (../signed_base, normalise), never in the checkout, whose config and
+// attributes a member may write (martha#132, #129 r=4).
 
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { lstatSync, readdirSync, readFileSync, realpathSync, type Stats } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 
 import { DEPENDENCIES, INSTALLED_LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import type { LiveEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import type { GitObjectFormat } from './signed_base.ts'
 
 const [REGULAR_MODE, EXECUTABLE_MODE] = OWN_WRITE_MODES
 const ANY_EXECUTE_BIT = 0o111
@@ -42,16 +44,9 @@ function pathsGitSees(top: string, inherited: Readonly<Record<string, string | u
   return [...new Set(run.stdout.toString('utf8').split(RECORD).filter((path) => path !== ''))]
 }
 
-/**
- * The blob `git add` would give `bytes` at `path` in the checkout at `top`: the attributes, clean filters and
- * line-end settings for that path applied by the same git, to the bytes this read took. Undefined when git cannot
- * hash them.
- */
-function blobAsGitAdds(top: string, path: string, bytes: Buffer, inherited: Readonly<Record<string, string | undefined>>): string | undefined {
-  const env = { PATH: inherited['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG }
-  const run = spawnSync('git', ['-C', top, '-c', 'core.fsmonitor=false', 'hash-object', `--path=${path}`, '--stdin'], { env, input: bytes, maxBuffer: Number.MAX_SAFE_INTEGER })
-  const blob = run.status === 0 ? run.stdout.toString('utf8').trim() : ''
-  return blob === '' ? undefined : blob
+/** The id git gives `bytes` with no filter applied, in the checkout's object format: exact, and no program runs. */
+function rawBlobOf(bytes: Buffer, format: GitObjectFormat): string {
+  return createHash(format).update(`blob ${bytes.length}\u0000`).update(bytes).digest('hex')
 }
 
 /** Whether `path`'s directory, resolved, is where it is named under `top`: no component is a link out. */
@@ -88,7 +83,7 @@ function lstatOrGone(path: string): Stats | undefined {
 type ReadEntry = { readonly entry: LiveEntry; readonly bytes?: Buffer }
 
 /** Read every path git sees in the checkout at `top` once; or why it cannot be read. */
-export function readTheCheckoutOnce(top: string, inherited: Readonly<Record<string, string | undefined>>): CheckoutRead | string {
+export function readTheCheckoutOnce(top: string, format: GitObjectFormat, inherited: Readonly<Record<string, string | undefined>>): CheckoutRead | string {
   const real = realpathSync(top)
   const paths = pathsGitSees(real, inherited)
   if (typeof paths === 'string') return paths
@@ -100,9 +95,7 @@ export function readTheCheckoutOnce(top: string, inherited: Readonly<Record<stri
       entries.push({ entry: { path, regular: false } })
       continue
     }
-    const blob = blobAsGitAdds(real, path, one.bytes, inherited)
-    if (blob === undefined) return `git cannot give ${path} the blob it would add`
-    entries.push({ entry: { path, regular: true, mode: one.mode, blob }, bytes: one.bytes })
+    entries.push({ entry: { path, regular: true, mode: one.mode, blob: rawBlobOf(one.bytes, format) }, bytes: one.bytes })
   }
   return {
     live: entries.map((one) => one.entry),

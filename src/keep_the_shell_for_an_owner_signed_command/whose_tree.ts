@@ -37,6 +37,11 @@ export interface FileTheRunMaySee {
   readonly path: string
   readonly mode: string
   readonly blob: string
+  /**
+   * True when the file passes only as git normalises it, so the run must be written from that object's bytes rather
+   * than the bytes read from the checkout: those two differ, and only the object was judged.
+   */
+  readonly from_object: boolean
 }
 
 export interface PathRefused {
@@ -53,6 +58,11 @@ export interface TreeToJudge {
   readonly base: readonly BaseEntry[]
   readonly own_writes: readonly OwnWriteSeen[]
   readonly live: readonly LiveEntry[]
+  /**
+   * The blob git would give the file whose raw bytes vouched for nothing, with the attributes the base commit sets.
+   * Omitted where nothing may be normalised, as in a test of the rule alone.
+   */
+  readonly normalisedBlobOf?: (regular: { readonly path: string; readonly mode: string; readonly blob: string }) => string | undefined
 }
 
 const entryKey = (mode: string, blob: string) => `${mode} ${blob}`
@@ -67,18 +77,28 @@ export function treeTheRunMaySee(tree: TreeToJudge): TreeTheRunMaySee {
   const base_refusals = tree.base
     .filter((entry) => !REGULAR_MODES.has(entry.mode))
     .map((entry) => ({ path: entry.path, why: `the base holds ${entry.path} as mode ${entry.mode}, not a regular file` }))
-  const judged = tree.live.map((entry) => judgeLive(entry, base, own))
+  const judged = tree.live.map((entry) => judgeLive(entry, base, own, tree.normalisedBlobOf))
   return {
     files: judged.flatMap((j) => ('file' in j ? [j.file] : [])),
     refusals: [...base_refusals, ...judged.flatMap((j) => ('refusal' in j ? [j.refusal] : []))],
   }
 }
 
-function judgeLive(entry: LiveEntry, base: ReadonlyMap<string, string>, own: ReadonlyMap<string, readonly OwnWriteLeft[]>): { file: FileTheRunMaySee } | { refusal: PathRefused } {
+function judgeLive(
+  entry: LiveEntry,
+  base: ReadonlyMap<string, string>,
+  own: ReadonlyMap<string, readonly OwnWriteLeft[]>,
+  normalisedBlobOf: TreeToJudge['normalisedBlobOf'],
+): { file: FileTheRunMaySee } | { refusal: PathRefused } {
   if (!entry.regular) return { refusal: { path: entry.path, why: `${entry.path} is not a regular file` } }
-  const asChange: TreeChange = { path: entry.path, deleted: false, mode: entry.mode, blob: entry.blob }
+  if (!REGULAR_MODES.has(entry.mode)) return { refusal: { path: entry.path, why: `${entry.path} is neither the base's nor the member's own write` } }
   const ownHere = own.get(entry.path) ?? []
-  const vouched = REGULAR_MODES.has(entry.mode) && (base.get(entry.path) === entryKey(entry.mode, entry.blob) || ownHere.some((write) => ownWriteMatches(write, asChange)))
-  if (!vouched) return { refusal: { path: entry.path, why: `${entry.path} is neither the base's nor the member's own write` } }
-  return { file: { path: entry.path, mode: entry.mode, blob: entry.blob } }
+  const vouched = (blob: string): boolean => {
+    const asChange: TreeChange = { path: entry.path, deleted: false, mode: entry.mode, blob }
+    return base.get(entry.path) === entryKey(entry.mode, blob) || ownHere.some((write) => ownWriteMatches(write, asChange))
+  }
+  if (vouched(entry.blob)) return { file: { path: entry.path, mode: entry.mode, blob: entry.blob, from_object: false } }
+  const normalised = normalisedBlobOf?.(entry)
+  if (normalised !== undefined && vouched(normalised)) return { file: { path: entry.path, mode: entry.mode, blob: normalised, from_object: true } }
+  return { refusal: { path: entry.path, why: `${entry.path} is neither the base's nor the member's own write` } }
 }
