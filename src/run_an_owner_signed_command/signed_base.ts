@@ -15,17 +15,11 @@ import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { GIT_OBJECT_FORMATS, type GitObjectFormat } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import type { SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import type { BaseEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
-/**
- * The object formats git names a checkout's objects in (`git rev-parse --show-object-format`). The launcher's own
- * repository of the base is made in the checkout's, so the ids `ls-tree` prints compare with the ids git gives the
- * checkout's files (../read_the_checkout_once, blobAsGitAdds).
- */
-const GIT_OBJECT_FORMATS = ['sha1', 'sha256'] as const
-export type GitObjectFormat = (typeof GIT_OBJECT_FORMATS)[number]
 /** The launcher's own repository of the signed base, inside the project's state directory. */
 export const SIGNED_BASE_REPOSITORY = 'signed_base.git'
 /** The ref the signed branch is fetched into: the launcher's, never a remote-tracking ref. */
@@ -42,20 +36,12 @@ const FIELDS = /^(\d{6}) (\w+) ([0-9a-f]+)\t/
 export interface OpenedBase {
   readonly commit: string
   readonly fetched: boolean
+  /** The launcher's own repository of the base: where a file is hashed under the base's attributes (#129, #167). */
+  readonly repository: string
   /** The object format this repository and the checkout name their objects in. */
   readonly format: GitObjectFormat
   readonly entries: readonly BaseEntry[]
   blob(id: string): Buffer | undefined
-  /**
-   * The blob git would give `bytes` at `path` with the attributes the base commit sets, kept here so its bytes can be
-   * read back with `blob`. Undefined when git cannot hash them.
-   *
-   * This never runs in the checkout. A checkout's `.git/config` and `.git/info/attributes` are a member's to write,
-   * and a clean filter named there is a program this launcher would run, outside the sandbox; a file could then be
-   * made to hash as an object it is not. Here the attributes come from the base commit the owner signed, and the
-   * repository and its config are the launcher's own.
-   */
-  normalise(path: string, bytes: Buffer): string | undefined
 }
 
 interface Git {
@@ -113,15 +99,12 @@ export function openSignedBase(state: MarthaState, checkout: string, base: Signe
   return {
     commit: head,
     fetched: fetched.ok,
+    repository: repositoryPath,
     format,
     entries: entriesOf(listed.out),
     blob: (id) => {
       const read = git(['cat-file', 'blob', id])
       return read.ok ? read.out : undefined
-    },
-    normalise: (relative, bytes) => {
-      const run = gitIn(repositoryPath, inherited, { GIT_ATTR_SOURCE: head })(['hash-object', '-w', `--path=${relative}`, '--stdin'], bytes)
-      return run.ok ? run.out.toString('utf8').trim() : undefined
     },
   }
 }

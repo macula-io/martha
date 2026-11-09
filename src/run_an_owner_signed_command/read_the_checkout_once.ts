@@ -16,14 +16,13 @@
 // attributes a member may write (martha#132, #129 r=4).
 
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { lstatSync, readdirSync, readFileSync, realpathSync, type Stats } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 
+import { rawBlobOf, type GitObjectFormat } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import { DEPENDENCIES, INSTALLED_LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import type { LiveEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
-import type { GitObjectFormat } from './signed_base.ts'
 
 const [REGULAR_MODE, EXECUTABLE_MODE] = OWN_WRITE_MODES
 const ANY_EXECUTE_BIT = 0o111
@@ -45,10 +44,6 @@ function pathsGitSees(top: string, inherited: Readonly<Record<string, string | u
 }
 
 /** The id git gives `bytes` with no filter applied, in the checkout's object format: exact, and no program runs. */
-function rawBlobOf(bytes: Buffer, format: GitObjectFormat): string {
-  return createHash(format).update(`blob ${bytes.length}\u0000`).update(bytes).digest('hex')
-}
-
 /** Whether `path`'s directory, resolved, is where it is named under `top`: no component is a link out. */
 function staysUnder(top: string, path: string): boolean {
   try {

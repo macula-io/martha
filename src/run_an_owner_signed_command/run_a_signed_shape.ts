@@ -10,12 +10,14 @@
 import { realpathSync, rmSync } from 'node:fs'
 import { relative, sep } from 'node:path'
 
+import { blobUnderTheTree } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import { ownWritesKeptIn, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import type { CommandShape, SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import { dependenciesTheRunMaySee, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { treeTheRunMaySee, type BaseEntry, type FileTheRunMaySee, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { installedLockOf, namesUnder, readPackageOnce, readTheCheckoutOnce, type CheckoutRead, type PackageFile } from './read_the_checkout_once.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type FileToWrite, type RunEnded } from './run_in_a_sandbox.ts'
 import { openSignedBase, type OpenedBase } from './signed_base.ts'
@@ -72,12 +74,13 @@ function judgeTheCheckout(run: ShapeToRun): Judged | string {
   const own = ownWritesKeptIn(run.state).all()
   if ('refusal' in own) return own.refusal
   // Asked of git only for a file whose own bytes vouched for nothing, and asked in the launcher's repository: the
-  // checkout's config and attributes are a member's to write (../signed_base, normalise).
-  const normalisedBlobOf = (entry: { readonly path: string; readonly blob: string }): string | undefined => {
+  // checkout's config and attributes are a member's to write (../hash_a_file_under_a_tree).
+  const store = { repository: base.repository, tree: base.commit, format: base.format, processes: thisMachine.processes, scratch: thisMachine.stores.scratch }
+  const blobUnderTheTreeOf = (entry: { readonly path: string }, isKnown: (blob: string) => boolean) => {
     const bytes = read.bytes.get(entry.path)
-    return bytes === undefined ? undefined : base.normalise(entry.path, bytes)
+    return bytes === undefined ? undefined : blobUnderTheTree(store, entry.path, bytes, isKnown)
   }
-  const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live, normalisedBlobOf })
+  const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live, blobUnderTheTreeOf })
   const dependencies = judgeTheDependencies(run.checkout, base, read)
   const refusals = [...tree.refusals.map((refused) => `${refused.path}: ${refused.why}`), ...dependencies.refusals]
   if (refusals.length > 0) return `nothing ran: ${refusals.join('; ')}`
