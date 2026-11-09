@@ -157,7 +157,7 @@ const NESTED_DIR = 'sub'
 const NESTED_FILE = join(NESTED_DIR, 'notes.txt')
 const AGENT = 'probe-agent'
 /** What Claude Code prints, and only it, when it has no agent by that name (2.1.319). */
-const NO_SUCH_AGENT = `--agent '${AGENT}' not found`
+const noSuchAgent = (name: string) => `--agent '${name}' not found`
 /** A prompt that reads a file below the top, which is when the host loads that directory's CLAUDE.md. */
 const READ_BELOW_PROMPT = `Use the Read tool on ${NESTED_FILE}, then reply with the single word ok.`
 const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', READ_BELOW_PROMPT, '--allowedTools', 'Read']
@@ -210,20 +210,22 @@ function instructionsHook(place: Place): string {
 }
 
 /**
- * Claude Code started as the checkout's agent. The markers sit beside the
- * checkout (../ from where the host runs): AGENT_LOADED when the host ran it,
- * AGENT_NOT_FOUND when the host said it has no such agent.
+ * Claude Code started as the agent `name`, which is looked up where `owner_markdown`
+ * puts it or in the checkout. The markers sit beside the checkout (../ from where
+ * the host runs): AGENT_LOADED when the host ran it, AGENT_NOT_FOUND when the host
+ * said it has no such agent. A host with no login in its config folder never
+ * reaches a model call, so AGENT_LOADED says nothing about whether it loaded.
  */
-const claudeAsTheAgent = (...extra: readonly string[]): Command => (switches) => ({
+const claudeAsTheAgent = (name: string, ...extra: readonly string[]): Command => (switches) => ({
   command: 'sh',
   args: [
     '-c',
-    `"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -qF -e "${NO_SUCH_AGENT}" ../agent.err && touch ../AGENT_NOT_FOUND; true`,
+    `"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -qF -e "${noSuchAgent(name)}" ../agent.err && touch ../AGENT_NOT_FOUND; true`,
     'claude-as-agent',
     'claude',
     ...extra,
     '--agent',
-    AGENT,
+    name,
     PROMPT,
     ...switches.args,
   ],
@@ -262,7 +264,7 @@ const PROBES: readonly Probe[] = [
   {
     what: "Claude Code by hand, headless: started as a checkout's agent",
     host: 'claude-code',
-    command: claudeAsTheAgent(...HEADLESS_CLAUDE),
+    command: claudeAsTheAgent(AGENT, ...HEADLESS_CLAUDE),
     planted: plantFixedText,
     expected: { AGENT_LOADED: true, AGENT_NOT_FOUND: false },
     planned: false,
@@ -270,7 +272,7 @@ const PROBES: readonly Probe[] = [
   {
     what: "Claude Code as Martha starts it, headless: started as a checkout's agent (A16)",
     host: 'claude-code',
-    command: claudeAsTheAgent(...HEADLESS_CLAUDE),
+    command: claudeAsTheAgent(AGENT, ...HEADLESS_CLAUDE),
     planted: plantFixedText,
     expected: { AGENT_LOADED: false, AGENT_NOT_FOUND: true },
     planned: true,
@@ -508,6 +510,80 @@ const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.map(({ rule }, at
   }
 })
 
+// --- the two spellings the launcher passes, asked of the host (martha#174) ---
+//
+// The gate refuses a frontmatter holding one of HOOKS_SPELLINGS. It passes two
+// other spellings YAML has for the key `hooks` — both named in #146's r=2 review
+// — and that review had no way to ask the host what it makes of them. These rows
+// ask it: each plants one as a user-scope agent, starts the host as that agent,
+// and reads the one marker the agent's own SessionStart and UserPromptSubmit
+// hooks touch. The premise they rest on is HOOKS_SPELLINGS as it stands: a rule
+// that starts refusing either one leaves the row's own answer unchanged.
+//
+// The control writes the key as `hooks`, so a run in which the host ran no
+// agent's own hooks at all cannot pass for one in which it does not read a
+// spelling: nothing here is proved by an absence alone. These rows take Martha's
+// switches alone, with the launcher's settings gate skipped, because that gate
+// refuses the control: `martha start` would not start any of the three. The
+// config folder holds no login, so the host stops before any model call, after
+// the hooks an agent file declares before the turn have run.
+//
+// What 2.1.319 answers: a binary-tagged scalar used as the key is not the key
+// `hooks` — the host names the frontmatter key it read as the base64 text — and
+// a flow sequence key whose colon the next line opens does not parse at all
+// ("YAML Parse error: Multiline implicit key"), so the file is ignored and there
+// is no agent by that name to start. Neither one runs a hook. A host upgrade
+// that starts reading either fails its row.
+
+/** A user-scope agent whose frontmatter writes the key `hooks` one way, with hooks that mark that they ran. */
+function hostKeyAgent(place: Place, name: string, keyLine: (value: string) => string): OwnerMarkdownFile {
+  const hook = (event: string) => `${event}: [{hooks: [{type: command, command: "touch ${place.marker('AGENT_HOOK')}"}]}]`
+  return {
+    folder: 'agents',
+    name: `${name}.md`,
+    text: `---\nname: ${name}\ndescription: a probe agent\n${keyLine(`{${hook('SessionStart')}, ${hook('UserPromptSubmit')}}`)}\n---\n${PROMPT}\n`,
+  }
+}
+
+/** The control, and the two spellings the launcher passes, each with what the host does with it: whether its hooks run, and whether there is an agent by that name. */
+const HOST_KEY_CASES: ReadonlyArray<{
+  readonly what: string
+  readonly name: string
+  readonly keyLine: (value: string) => string
+  readonly expected: Readonly<Record<string, boolean>>
+}> = [
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as `hooks` (the control for the two below)',
+    name: 'hooks-key-control',
+    keyLine: (value) => `hooks: ${value}`,
+    expected: { AGENT_HOOK: true, AGENT_NOT_FOUND: false },
+  },
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as a binary-tagged scalar',
+    name: 'hooks-key-binary-tagged',
+    keyLine: (value) => `!!binary aG9va3M=: ${value}`,
+    expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: false },
+  },
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as a flow sequence with a comment before its colon',
+    name: 'hooks-key-commented',
+    keyLine: (value) => `[hooks] # c\n: ${value}`,
+    expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: true },
+  },
+]
+
+const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
+  what: one.what,
+  host: 'claude-code' as const,
+  command: claudeAsTheAgent(one.name, ...HEADLESS_CLAUDE),
+  approved: () => {},
+  planted: () => {},
+  planned: true,
+  owner_settings: () => JSON.stringify({}),
+  owner_markdown: (place: Place): readonly OwnerMarkdownFile[] => [hostKeyAgent(place, one.name, one.keyLine)],
+  expected: one.expected,
+}))
+
 /** The environment a probe's host inherits: the owner's own config folder when it has one, and no plugin folder from the developer's shell. */
 function environmentOf(probe: Probe, place: Place): Record<string, string | undefined> {
   if (probe.owner_settings === undefined && probe.owner_markdown === undefined) return { ...process.env, ...probe.inherited }
@@ -661,7 +737,7 @@ if (SWITCHES_WITHOUT_A_PROBE.length > 0) {
   process.exitCode = 1
 }
 
-for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES]) reportProbe(probe)
+for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES, ...HOST_KEY_PROBES]) reportProbe(probe)
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
