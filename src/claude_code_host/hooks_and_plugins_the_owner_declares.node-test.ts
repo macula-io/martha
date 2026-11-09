@@ -116,7 +116,7 @@ test('every spelling rule has a frontmatter only it catches, and the refusal nam
   }
 })
 
-test('the key hooks is refused in every spelling this rule covers, a collection used as the key included', () => {
+test('the key hooks is refused in each spelling the list names, a verbatim tag and githooks included', () => {
   for (const frontmatter of [
     'hooks:\n  PreToolUse: []',
     '"hooks": {}',

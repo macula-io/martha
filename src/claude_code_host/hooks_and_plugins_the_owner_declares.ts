@@ -99,11 +99,10 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 // commands whose frontmatter can carry hooks, and a member started on Martha's
 // switches runs them (probed live on 2.1.319). Martha has no YAML parser and
 // takes none for this, so a frontmatter counts as declaring hooks when it holds
-// one of these spellings (Pluto's reviews, r=1 to r=3). These are the spellings
-// this refuses, not every way YAML has to write the key: a flow sequence used
-// as the key reaches the host as the key itself (`[hooks]: {...}` is live on
-// 2.1.319 and declares hooks like `hooks:` does), which is what r=3 found this
-// list missing.
+// one of these spellings (Pluto's reviews, r=1 to r=3). They are the spellings
+// this refuses, not a claim to hold every way YAML has to write the key: r=3
+// found one this list was missing, and a spelling that turns up later is
+// another round of the same work.
 //   - the text `hooks` with a colon after it, anywhere: bare, quoted, tagged
 //     (`!<tag:yaml.org,2002:str>"hooks":`), in flow style, or with a line break
 //     before the colon. `githooks:` counts too, a refusal the owner can read;
