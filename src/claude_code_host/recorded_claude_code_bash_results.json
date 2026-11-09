@@ -1,6 +1,6 @@
 {
-  "_why": "What the pinned Claude Code host answered a tool.call hook (next(e), ref left out) for the exact command `martha run test`, run by a stand-in that printed `printed` and exited with `status` (martha#129, design step 4.3). Recorded 2026-11-07 with a scratch hooks module under claude -p --plugin-dir in an isolated HOME, no login, --allowedTools=Bash. The event carried tool.call tool_use_id; martha run was not marked isReadOnly.",
-  "host_version": "2.1.319",
+  "_why": "What the pinned Claude Code host answered a tool.call hook (next(e), ref left out) for the exact command `martha run test`, run by a stand-in that printed `printed` and exited with `status` (martha#129, design step 4.3). Recorded 2026-11-07 on 2.1.319 with a scratch hooks module under claude -p --plugin-dir in an isolated HOME, no login, --allowedTools=Bash, and re-taken 2026-11-09 on 2.1.321 by that same method, every answer unchanged (martha#193). The event carried tool.call tool_use_id; martha run was not marked isReadOnly. A host re-record re-takes this one as well: claude_code_host.node-test.ts holds this file's host_version to recorded_claude_code_host.json's, so the two never describe different hosts.",
+  "host_version": "2.1.321",
   "mark": "RUN-OUTPUT-MARK",
   "cases": [
     {
