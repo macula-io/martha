@@ -1,23 +1,23 @@
 {
   "_why": "What the Claude Code host itself says, recorded from its binary so the adapter derives from the host and not from a list typed by hand (#41). Re-record with: npm run record:claude-code-host -- <claude binary> <version>.",
-  "host_version": "2.1.319",
+  "host_version": "2.1.321",
   "memory_off": {
-    "version": "2.1.319",
-    "file_mode_guard": "function Mh(){if(to())return\"off\";if(xT())return\"off\";if(q())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Pe(e))return\"off\";if(rs(e))return\"forced_on\";return Ih()?\"off\":\"unset\"}",
+    "version": "2.1.321",
+    "file_mode_guard": "function gy(){if(oo())return\"off\";if(JT())return\"off\";if(q())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Pe(e))return\"off\";if(cs(e))return\"forced_on\";return _y()?\"off\":\"unset\"}",
     "hosted_mode_variable": "CLAUDE_CODE_POST_TURN_MEMORY",
     "on_check": "function Pe(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}"
   },
   "session_start_schema": "hook_event_name:T(\"SessionStart\"),source:B([\"startup\",\"resume\",\"clear\",\"compact\",\"fork\"])",
-  "prompt_origin_mapper": "function Bpe(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&DUe(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind};case\"voice-call\":return{kind:\"unclassified\"}}}",
-  "prompt_origin_fallback": "function g_i({origin:e,bridgeOrigin:n,wakeupSource:r,mode:s,promptSource:h}){if(e)return Bpe(e,n);if(s===\"task-notification\")return{kind:\"task-notification\"};if(r)return{kind:\"scheduled-trigger\"};switch(h){case\"typed\":case\"queued\":case\"suggestion_accepted\":return{kind:\"unclassified\"};case\"sdk\":return{kind:\"sdk\"};case\"system\":return{kind:\"unclassified\"}}}",
-  "prompt_origin_subkinds": "var nRt=new Set([\"scheduled-trigger\",\"peer-send-message\",\"projects-relay\"]);var DUe=(e)=>nRt.has(e)",
-  "hooks_switches": "function r(){let o=be(\"policySettings\");if(o?.disableAllHooks===!0)return{};if(o?.allowManagedHooksOnly===!0||to())return o?.hooks??{};if(ud(\"hooks\"))return o?.hooks??{};let t=Ar();if(t.disableAllHooks===!0){if(!ZTr())return o?.hooks??{};return l()}if(a$e())return l();return c(t.hooks??{})}",
+  "prompt_origin_mapper": "function cge(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&g1e(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind};case\"voice-call\":return{kind:\"unclassified\"}}}",
+  "prompt_origin_fallback": "function JTi({origin:e,bridgeOrigin:n,wakeupSource:r,mode:s,promptSource:h}){if(e)return cge(e,n);if(s===\"task-notification\")return{kind:\"task-notification\"};if(r)return{kind:\"scheduled-trigger\"};switch(h){case\"typed\":case\"queued\":case\"suggestion_accepted\":return{kind:\"unclassified\"};case\"sdk\":return{kind:\"sdk\"};case\"system\":return{kind:\"unclassified\"}}}",
+  "prompt_origin_subkinds": "var pPt=new Set([\"scheduled-trigger\",\"peer-send-message\",\"projects-relay\"]);var g1e=(e)=>pPt.has(e)",
+  "hooks_switches": "function r(){let o=Se(\"policySettings\");if(o?.disableAllHooks===!0)return{};if(o?.allowManagedHooksOnly===!0||oo())return o?.hooks??{};if(_d(\"hooks\"))return o?.hooks??{};let t=kr();if(t.disableAllHooks===!0){if(!BPr())return o?.hooks??{};return l()}if(BFe())return l();return c(t.hooks??{})}",
   "hooks_switch_calls": [
-    "function to(){return Pe(process.env.CLAUDE_CODE_SAFE_MODE)||i(\"--safe-mode\")}",
-    "function ud(o){let t=be(\"policySettings\")?.strictPluginOnlyCustomization;if(t===!0)return!0;if(Array.isArray(t))return t.includes(o);return!1}",
-    "function a$e(){return ye()&&TAo()}",
+    "function oo(){return Pe(process.env.CLAUDE_CODE_SAFE_MODE)||i(\"--safe-mode\")}",
+    "function _d(o){let t=Se(\"policySettings\")?.strictPluginOnlyCustomization;if(t===!0)return!0;if(Array.isArray(t))return t.includes(o);return!1}",
+    "function BFe(){return ye()&&qIo()}",
     "function ye(){return!t().host.launchOptions.isInteractive()}",
-    "function TAo(){return Ftt(()=>i.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)}"
+    "function qIo(){return xrt(()=>i.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)}"
   ],
   "managed_settings": {
     "dir": "/etc/claude-code",
@@ -26,14 +26,14 @@
   },
   "frontmatter_pattern": "^---\\s*\\n([\\s\\S]*?)---\\s*\\n?",
   "frontmatter_reader": [
-    "function td(e,n,r){let s=e;e=iE(e);let h=e.indexOf(\"---\",3)<0?null:e.match(pv);",
-    "function iE(e){return e.charCodeAt(0)===65279?e.slice(1):e}"
+    "function ad(e,n,r){let s=e;e=kE(e);let h=e.indexOf(\"---\",3)<0?null:e.match(Hv);",
+    "function kE(e){return e.charCodeAt(0)===65279?e.slice(1):e}"
   ],
-  "markdown_loader": "async function S1o(e,n,r,s){let h=Date.now(),y=of(),S=y===null?null:OF(y,e),w=OF(YS(),\".claude\",e),H=await rde(e,n),z=new Set(await Promise.all(H.map(async(Mt)=>Ap(await $Se(Mt).catch(()=>Mt))))),Y=e===\"agents\"?L(await Promise.all(zl().map(async(Mt)=>{let Tt=OF(rYe(Mt),\".claude\",e),wt=await $Se(Tt).catch(()=>Tt);return await YVe(Tt)?void 0:wt}))).filter((Mt)=>Mt!==void 0&&!z.has(Ap(Mt))):[],ke=H.length;sYe(H,e,n);for(let Mt=H.length-1;Mt>=ke;Mt--)if(await YVe(H[Mt]))H.splice(Mt,1);let ne=e===\"agents\"&&ud(\"agents\"),Ee=Vt(\"projectSettings\")&&!ne,Ce=s||Bee();if(Ce&&!q())t(`${w}: not read: this session takes its managed settings from its organization, and its own account could have written the managed folder`);let[Ae,xe,He,Ne]=await Promise.all([(q()||Ce?Promise.resolve([]):MU(w,r)).then((Mt)=>Mt.map((Tt)=>({...Tt,baseDir:w,source:\"policySettings\"}))),S!==null&&Vt(\"userSettings\")&&!ne?(r?b1o(e,S,r):MU(S)).then((Mt)=>Mt.map((Tt)=>({...Tt,baseDir:S,source:\"userSettings\"}))):Promise.resolve([]),Ee?Promise.all(H.map((Mt)=>MU(Mt,r).then((Tt)=>Tt.map((wt)=>({...wt,baseDir:Mt,source:\"projectSettings\"}))))):Promise.resolve([]),Ee?Promise.all(Y.map((Mt)=>MU(Mt,r).then((Tt)=>Tt.map((wt)=>({...wt,baseDir:Mt,source:\"projectSettings\",fromAdditionalDirectory:!0}))))):Promise.resolve([])]),Ye=He.flat(),Xe=Ne.flat(),pt=[...Abo(Ae),...xe,...Xe,...Ye],ot=await Promise.all(pt.map((Mt)=>_1o(Mt.filePath))),Ze=new Map,gt=[];for(let[Mt,Tt]of pt.entries()){let wt=ot[Mt]??null;if(wt===null){gt.push(Tt);continue}let It=Ze.get(wt);if(It!==void 0){t(`Skipping duplicate file '${Tt.filePath}' from ${Tt.source} (same inode already loaded from ${It})`);continue}Ze.set(wt,Tt.source),gt.push(Tt)}let Rt=pt.length-gt.length;if(Rt>0)t(`Deduplicated ${Rt} files in ${e} (same inode via symlinks or hard links)`);return l(\"tengu_dir_search\",{durationMs:Date.now()-h,managedFilesFound:Ae.length,userFilesFound:xe.length,projectFilesFound:Ye.length,projectDirsSearched:H.length,subdir:f(e)}),gt}",
+  "markdown_loader": "async function p3o(e,n,r,s){let h=Date.now(),y=Ef(),S=y===null?null:A$(y,e),w=A$(aw(),\".claude\",e),H=await mce(e,n),K=new Set(await Promise.all(H.map(async(wt)=>$p(await Mwe(wt).catch(()=>wt))))),Y=e===\"agents\"?L(await Promise.all(ql().map(async(wt)=>{let Ot=A$(O6e(wt),\".claude\",e),Ct=await Mwe(Ot).catch(()=>Ot);return await v4e(Ot)?void 0:Ct}))).filter((wt)=>wt!==void 0&&!K.has($p(wt))):[],ke=H.length;I6e(H,e,n);for(let wt=H.length-1;wt>=ke;wt--)if(await v4e(H[wt]))H.splice(wt,1);let ne=e===\"agents\"&&_d(\"agents\"),Ee=qt(\"projectSettings\")&&!ne,Ce=s||Nte();if(Ce&&!q())t(`${w}: not read: this session takes its managed settings from its organization, and its own account could have written the managed folder`);let[Ae,xe,He,$e]=await Promise.all([(q()||Ce?Promise.resolve([]):$j(w,r)).then((wt)=>wt.map((Ot)=>({...Ot,baseDir:w,source:\"policySettings\"}))),S!==null&&qt(\"userSettings\")&&!ne?(r?g3o(e,S,r):$j(S)).then((wt)=>wt.map((Ot)=>({...Ot,baseDir:S,source:\"userSettings\"}))):Promise.resolve([]),Ee?Promise.all(H.map((wt)=>$j(wt,r).then((Ot)=>Ot.map((Ct)=>({...Ct,baseDir:wt,source:\"projectSettings\"}))))):Promise.resolve([]),Ee?Promise.all(Y.map((wt)=>$j(wt,r).then((Ot)=>Ot.map((Ct)=>({...Ct,baseDir:wt,source:\"projectSettings\",fromAdditionalDirectory:!0}))))):Promise.resolve([])]),Ve=He.flat(),Je=$e.flat(),st=[...jvo(Ae),...xe,...Je,...Ve],tt=await Promise.all(st.map((wt)=>c3o(wt.filePath))),pt=new Map,Tt=[];for(let[wt,Ot]of st.entries()){let Ct=tt[wt]??null;if(Ct===null){Tt.push(Ot);continue}let Dt=pt.get(Ct);if(Dt!==void 0){t(`Skipping duplicate file '${Ot.filePath}' from ${Ot.source} (same inode already loaded from ${Dt})`);continue}pt.set(Ct,Ot.source),Tt.push(Ot)}let _t=st.length-Tt.length;if(_t>0)t(`Deduplicated ${_t} files in ${e} (same inode via symlinks or hard links)`);return l(\"tengu_dir_search\",{durationMs:Date.now()-h,managedFilesFound:Ae.length,userFilesFound:xe.length,projectFilesFound:Ve.length,projectDirsSearched:H.length,subdir:f(e)}),Tt}",
   "markdown_kinds": [
     "agents",
     "commands",
     "skills"
   ],
-  "output_style_schema": "{name:My().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:My().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":CI().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":CI().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}"
+  "output_style_schema": "{name:r_().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:r_().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":_D().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":_D().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}"
 }

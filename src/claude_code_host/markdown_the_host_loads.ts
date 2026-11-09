@@ -18,9 +18,10 @@
 //     `<managed folder>/.claude/<kind>` and from `<user config folder>/<kind>`,
 //     and from project folders only when project settings are on, which
 //     Martha's switches turn off;
-//   - `output_style_schema`: the output-style frontmatter schema, which on
-//     2.1.319 has no hooks key, so output styles stay out of the refusal. The
-//     recording check fails when it changes, and a test fails when it gains one.
+//   - `output_style_schema`: the output-style frontmatter schema, which the
+//     recorded host has no hooks key for, so output styles stay out of the
+//     refusal. The recording check fails when it changes, and a test fails when
+//     it gains one.
 
 import { MANAGED_MARKDOWN_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 import { closingBrace } from './settings_that_turn_hooks_off.ts'
