@@ -35,7 +35,7 @@ import { CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_c
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { isRecord } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
@@ -692,7 +692,7 @@ function runProbe(probe: Probe): RunResult | string {
     })
     if (run.error !== undefined) return `could not run: ${run.error.message}`
     spawnSync('sleep', ['1'])
-    const printed = typeof run.stdout === 'string' ? run.stdout : ''
+    const printed = printedText(run.stdout)
     return {
       markers: {
         ...Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(markerPath(probe, place, name))])),
@@ -797,27 +797,6 @@ const userScopePlaces = (place: Place) => {
 
 /** Every folder under the config dir the host loads the owner's text from, by the recording's names and the field's. */
 const OWNER_SCOPE_FOLDERS: readonly string[] = [...RECORDED_HOST.markdown_kinds, CLAUDE_CODE_OUTPUT_STYLES_FOLDER]
-
-/**
- * The Write the host was refused, as the host itself reports it (martha#154 r=2): the run is asked for json output, and
- * its `permission_denials` names the tool and the path it was stopped on. A row that only reads the file's absence is
- * satisfied by a host that never attempted the write -- a model that did nothing, a run that failed -- so this is what
- * makes the row say the write was tried and refused.
- */
-export function deniedWriteIn(printed: string, target: string): boolean {
-  const answer = ((): unknown => {
-    try {
-      return JSON.parse(printed.trim().split('\n').at(-1) ?? '')
-    } catch {
-      return undefined
-    }
-  })()
-  const denials = isRecord(answer) && Array.isArray(answer['permission_denials']) ? (answer['permission_denials'] as unknown[]) : []
-  return denials.some((denial) => {
-    const input = isRecord(denial) && isRecord(denial['tool_input']) ? denial['tool_input'] : {}
-    return isRecord(denial) && denial['tool_name'] === 'Write' && input['file_path'] === target
-  })
-}
 
 const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder) =>
   [false, true].map((gated): Probe => {
