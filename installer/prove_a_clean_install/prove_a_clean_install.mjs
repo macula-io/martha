@@ -113,12 +113,13 @@ const interruptedBy = (signal) => `interrupted by ${String(signal?.reason)}`
  * Parks the run at `step` when a test named it with HOLD_VARIABLE: it says so in the log, then waits for the
  * interrupt, which is the only thing that ends the wait. A run nobody parked for returns at once, and so does a run
  * already interrupted. This is what makes an interrupt land at the state a test names rather than at whatever the run
- * had reached when the signal arrived (martha#189).
+ * had reached when the signal arrived (martha#189). Exported so a test can pin the wait itself, which no run-level test
+ * can: a hold that logged and returned at once still leaves an interrupted run failing a step later (martha#189 r=2).
  * @param {(line: string) => void} log
  * @param {string} step
  * @param {AbortSignal | undefined} signal
  */
-async function heldAt (log, step, signal) {
+export async function heldAt (log, step, signal) {
   if ((process.env[HOLD_VARIABLE] ?? '').trim() !== step) return
   log(`${HELD}: ${step}, waiting to be interrupted`)
   if (signal === undefined) return

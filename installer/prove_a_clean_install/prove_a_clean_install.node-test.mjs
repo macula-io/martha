@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, HOLD_VARIABLE, WORK_PREFIX } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -384,6 +384,39 @@ for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
     })
   }
 }
+
+// martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
+// interrupted and fails; a hold that logged and returned at once would leave them green, because the signal still ends
+// the run at the step after. This pins the wait itself, with no clock: after the line the promise has not settled, the
+// abort settles it, and a run already interrupted returns at once.
+test('the hold writes its line and then waits for the interrupt, and one already interrupted returns at once (martha#189 r=2)', async (t) => {
+  const step = 'a step this test parks at'
+  const before = process.env[HOLD_VARIABLE]
+  t.after(() => {
+    if (before === undefined) delete process.env[HOLD_VARIABLE]
+    else process.env[HOLD_VARIABLE] = before
+  })
+  process.env[HOLD_VARIABLE] = step
+  /** @type {string[]} */
+  const lines = []
+  const controller = new AbortController()
+  let settled = false
+  const held = heldAt((line) => lines.push(line), step, controller.signal).then(() => { settled = true })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(lines, [`${HELD}: ${step}, waiting to be interrupted`], 'the hold says where it parked')
+  assert.equal(settled, false, 'the hold is still waiting after its line, and only the interrupt ends it')
+  controller.abort()
+  await held
+  assert.equal(settled, true, 'the interrupt ends the wait')
+
+  const alreadyAborted = new AbortController()
+  alreadyAborted.abort()
+  const atOnce = await Promise.race([
+    heldAt((line) => lines.push(line), step, alreadyAborted.signal).then(() => 'returned'),
+    new Promise((resolve) => setImmediate(() => resolve('still waiting')))
+  ])
+  assert.equal(atOnce, 'returned', 'a run already interrupted does not wait')
+})
 
 test('a refused install fails the run and still leaves nothing behind', async () => {
   /** @type {string[]} */
