@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, WORK_PREFIX } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, HOLD_VARIABLE, WORK_PREFIX } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -299,20 +299,70 @@ test('a member the tear-down kills whose pid is reaped late is waited for, and t
   nothingLeftOfTheCrew(result, 1, lines.join('\n'))
 })
 
-// Where a run as a command is interrupted: early, before anything of the crew exists, and once the first member is
-// up and only the tear-down can end it; `named` is how many members must then have been named with a pid.
-const [FIRST] = SOLO_MEMBERS
-/** @type {Array<{ at: string, reached: RegExp, named: number }>} */
+// martha#189: the walk demands no directory that is gone. An interrupted launch takes its own snapshot directory away
+// while the tear-down walks the same tree, and the window that opens between the chmod that opens a directory and the
+// read that lists it is where that lands. The reader below stands in for exactly that window, so no race is timed.
+test('a removal survives a launch snapshot dir that is gone between the chmod that opens it and the read that lists it (martha#189)', (t) => {
+  const root = scratch(t)
+  const gone = join(root, 'state', 'martha', 'a project', 'snapshots', 'launch-Q0Ggs3')
+  mkdirSync(gone, { recursive: true })
+  writeFileSync(join(gone, 'a snapshot'), 'x')
+  /** @type {Set<string>} */
+  const opened = new Set()
+  /** @param {string} dir */
+  const vanishes = (dir) => Object.assign(new Error(`ENOENT: no such file or directory, scandir '${dir}'`), { code: 'ENOENT' })
+  removeEvenReadOnly(root, {
+    chmodSync: (/** @type {string} */ dir, /** @type {number} */ mode) => { chmodSync(dir, mode); opened.add(dir) },
+    readdirSync: (/** @type {string} */ dir, /** @type {object} */ options) => {
+      if (opened.has(dir) && dir === gone) throw vanishes(dir)
+      return readdirSync(dir, options)
+    },
+    rmSync
+  })
+  assert.ok(opened.has(gone), 'the directory was opened before it was read, which is the window this stands in for')
+  assert.equal(existsSync(root), false, 'the tree is gone, and the removal did not fail on the directory that went')
+})
+
+test('a removal that cannot read a directory that is there fails, so a tree left behind is named (martha#189)', (t) => {
+  const root = scratch(t)
+  const unreadable = join(root, 'unreadable')
+  mkdirSync(unreadable)
+  const denied = Object.assign(new Error(`EACCES: permission denied, scandir '${unreadable}'`), { code: 'EACCES' })
+  assert.throws(
+    () => removeEvenReadOnly(root, {
+      chmodSync,
+      readdirSync: (/** @type {string} */ dir, /** @type {object} */ options) => {
+        if (dir === unreadable) throw denied
+        return readdirSync(dir, options)
+      },
+      rmSync
+    }),
+    /EACCES: permission denied, scandir/
+  )
+})
+
+// Where a run as a command is interrupted: early, before anything of the crew exists, and while the second member's
+// start is in flight — the run parks there until the signal arrives, so the interrupt lands at the state the test
+// names rather than wherever the run had reached when the signal happened to arrive (martha#189); `named` is how many
+// members must then have been named with a pid.
+const SECOND = SOLO_MEMBERS[1]
+/** @type {Array<{ at: string, reached: RegExp, named: number, hold?: string }>} */
 const INTERRUPT_POINTS = [
   { at: 'once the registry serves', reached: /^ok serve:/m, named: 0 },
-  { at: `once ${FIRST?.name} is up`, reached: new RegExp(`^ok start ${FIRST?.name}:`, 'm'), named: 1 }
+  {
+    at: `while ${SECOND?.name}'s start is in flight`,
+    reached: new RegExp(`^${HELD}: start ${SECOND?.name}, waiting to be interrupted`, 'm'),
+    named: 1,
+    hold: `start ${SECOND?.name}`
+  }
 ]
 
 for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
-  for (const { at, reached, named } of INTERRUPT_POINTS) {
+  for (const { at, reached, named, hold } of INTERRUPT_POINTS) {
     test(`run as a command, ${signal} ${at} fails the run and still tears down: nothing is left`, async (t) => {
       const tmp = scratch(t)
-      const run = spawn(process.execPath, [SCRIPT], { env: { ...process.env, TMPDIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] })
+      const env = { ...process.env, TMPDIR: tmp, [HOLD_VARIABLE]: hold ?? '' }
+      const run = spawn(process.execPath, [SCRIPT], { env, stdio: ['ignore', 'pipe', 'pipe'] })
       let out = ''
       const there = new Promise((resolve) => run.stdout.on('data', (chunk) => { out += chunk; if (reached.test(out)) resolve(undefined) }))
       const ended = new Promise((resolve) => run.once('exit', (code, sig) => resolve({ code, sig })))
