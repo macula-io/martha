@@ -35,7 +35,8 @@ import {
   readApprovals,
   stateSubdirectory,
   STATE_DIRECTORY_MODE,
-  ownWritesKeptIn,
+  ownWritesKeptForLaunch,
+  pruneOwnWritesOfOldLaunches,
   type Approval,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -153,17 +154,19 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
 
 /**
  * What the member is started on: the approval's fingerprint, and what its own writes are checked against while it
- * runs (martha#132), each launch named afresh so no other launch's writes pass. None when the checkout needs none.
+ * runs (martha#132), each launch named afresh so no other launch's writes pass, and kept in a file of its own
+ * (martha#162). None when the checkout needs none.
  */
-function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'since_approval'> {
+export function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'since_approval'> {
   if (approval === undefined) return { approved_fingerprints: [] }
+  const launch_id = randomUUID()
   return {
     approved_fingerprints: [approval.fingerprint],
     since_approval: {
       approved: { entries: approval.entries, tree: approval.tree },
       member: request.member,
-      own_writes: ownWritesKeptIn(request.state),
-      launch_id: randomUUID(),
+      own_writes: ownWritesKeptForLaunch(request.state, launch_id),
+      launch_id,
     },
   }
 }
@@ -186,6 +189,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   }
   if (ready.approval !== undefined) {
     request.tellOwner(`Starting ${request.member} on the config you approved at ${ready.approval.approved_at} (fingerprint ${ready.approval.fingerprint}).`)
+    for (const unremoved of pruneOwnWritesOfOldLaunches(request.state)) request.tellOwner(unremoved)
   }
   const { snapshot_root, ...places } = request.places
   return launchClaudeCodeMember({
