@@ -242,12 +242,21 @@ What the plan leaves out, stated rather than hidden:
   is left is the hooks of the one call that changed the tree, which run in
   parallel with Martha's own (`PreToolUse`/`PostToolUse`); the stop does not
   undo what they ran.
-- **A checkout's fixed text** (A16): its `CLAUDE.md` files, the top one and
-  any below it the host loads once a file there is read, and the agents it
-  defines (`.claude/agents`), whose frontmatter may name hooks and tool
-  servers. With project config off the host loads none of them, so no text
-  reaches the model (`npm run probe:launch` plants each and sees none load as
-  Martha starts the host, and all of them load by hand).
+- **A checkout's fixed text** (A16): its `CLAUDE.md` files, the top one, any
+  below it the host loads once a file there is read, and those of the
+  directories above the checkout, and the agents it defines (`.claude/agents`),
+  whose frontmatter may name hooks and tool servers. With project config off the
+  host loads none of them, so no text reaches the model: `npm run probe:launch`
+  plants the top and the nested `CLAUDE.md` and one agent, sees none load as
+  Martha starts the host, and sees all of them load by hand. The `CLAUDE.md` of
+  the directories above the checkout is not planted in this tree, so that one
+  rests on the design's prototype and is not pinned here (martha#165). Whether
+  the host loads an `AGENTS.md` is not observed: no run, not even with project
+  config on, saw one load, so that text is not pinned (martha#135). Each of
+  these texts has exactly one owning row — a
+  `CLAUDE.local.md`, which git ignores and a member can write, is B4's, not
+  this row's — and `INSTRUCTION_TEXT_OWNERS` fails CI when a row and the table
+  disagree (martha#135).
 - **What approved config prints at run time** (A7): a hook's output or added
   context, and the hooks of a plugin it enables or loads from a folder its env
   names. The approval pins the script, never its output, which changes with the
@@ -452,7 +461,14 @@ The rules the seam keeps, and a host must not work around:
   (martha#132: a change that is not one of the launch's own writes, byte for
   byte and in the mode it set, ends the exemption for every path). In a
   checkout with no config nothing was approved, so every read
-  counts (decided 2026-11-07). What is left: a read is judged at
+  counts (decided 2026-11-07). A `CLAUDE.local.md` is ignored, so it is never
+  in the approved tree: a read of one is text taken in, and so is any fixed
+  text a read attaches, which belongs to A16 (martha#135). A read is judged by
+  the path the call names (`take_in_a_tool_result`), so a read of a tracked
+  file that came back with an attached `CLAUDE.local.md` is still exempt; that
+  holds only while the host attaches no such text under Martha's switches,
+  which is martha#165's case to pin.
+  What is left: a read is judged at
   `tool_answered`, after the tool ran, so a file rewritten and put back before
   then reads as exempt. After a member's
   first command, nothing that executes or writes runs again until a fresh
