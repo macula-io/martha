@@ -120,6 +120,7 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import {
   hostTrustsTheFolder,
@@ -186,6 +187,8 @@ export interface ClaudeCodeMemberLaunch {
   readonly session_start_deadline_ms?: number
   /** The same when an owner can answer the host, which may first ask whether to trust the folder; TRUST_ANSWER_DEADLINE_MS unless a test gives its own. */
   readonly trust_answer_deadline_ms?: number
+  /** The member's signed runs (martha#129): `martha start` gives them; without them the member runs no shape. */
+  readonly signed_runs?: SignedRuns
 }
 
 /** How a member's process ended. */
@@ -593,6 +596,7 @@ async function servedRelay(
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
     hookSettings: ready.hookSettings,
     ownerMemory: ready.ownerMemory,
+    ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     stopMember: stop,
   })
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
@@ -601,6 +605,7 @@ async function servedRelay(
       if (event === 'session_started') sessionReported()
       return answering.answer(event, body)
     },
+    run: (body) => answering.run(body),
   }
 
   try {
