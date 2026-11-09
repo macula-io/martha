@@ -287,3 +287,20 @@ test('martha run hears any other answer as a refusal', async (t) => {
     assert.equal(run.out.length, 0)
   }
 })
+
+test('martha install runs outside a checkout, and refuses a release that carries no pin, naming it', (t) => {
+  // The act is placed before the places are read: an installed machine with no checkout must still upgrade
+  // (martha#84). This tree carries no installer.json, so the refusal is the pin's, never the checkout's.
+  const run = martha(placeFor(t, { checkout: false }), 'install')
+  assert.equal(run.status, EXIT_REFUSED)
+  assert.match(run.said, /installer pin/)
+  assert.doesNotMatch(run.said, /git checkout/)
+  allSaidByMartha(run.err)
+})
+
+test('martha install with a switch it does not know is a usage error, and the usage names the act', (t) => {
+  const run = martha(placeFor(t), 'install', '--bogus')
+  assert.equal(run.status, EXIT_USAGE)
+  assert.ok(USAGE.includes('martha install'), USAGE)
+  assert.doesNotMatch(run.err, /installer pin/)
+})

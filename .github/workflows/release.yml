@@ -85,6 +85,21 @@ jobs:
         run: |
           echo "image=$(jq -r .martha.image installer/package.json)" >> "$GITHUB_OUTPUT"
           echo "version=${GITHUB_REF_NAME#"$(jq -r .martha.releaseTagPrefix installer/package.json)"}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      # The pin is made from npm's provenance (martha#84): the installer's own sigstore checks the bundle, and the
+      # tag that version's publish ran at is what the attestation's commit must name.
+      - name: The tag the installer's publish ran at
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version installer/package.json)"
+          tag="$(jq -r .martha.installerTagPrefix installer/package.json)${version}"
+          git fetch --depth 1 origin "refs/tags/${tag}:refs/tags/${tag}"
+          git rev-parse --verify "refs/tags/${tag}^{commit}"
+      - name: The installer's own dependencies (its sigstore checks the pin)
+        working-directory: installer
+        run: npm ci --omit=dev --ignore-scripts
       # A docker-container builder: the default docker driver ignores oci-mediatypes and pushes a Docker v2
       # manifest, which every install refuses.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

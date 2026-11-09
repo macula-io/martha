@@ -6,7 +6,12 @@
 # the installer) and a Containerfile that copies it, as one layer, into an image FROM scratch. The release job scans
 # the tagged tree for private text before it calls this.
 #
-# Exit: 0 laid out, 1 refused (a version the tree does not carry, a runtime dependency), 2 the context could not be made.
+# It then pins the installer (martha#84): installer/pin_the_installer/pin_the_installer.mjs writes
+# <folder>/installer.json from npm's provenance for the installer version this tree carries, so a release that
+# cannot be pinned is never built, and the pin is inside the signed layer.
+#
+# Exit: 0 laid out, 1 refused (a version the tree does not carry, a runtime dependency, a pin that cannot be made),
+# 2 the context could not be made.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -34,6 +39,9 @@ mkdir -p "${context}"
 git -C "${REPO}" archive --format=tar --prefix="${folder}/" HEAD | tar -x -C "${context}"
 [[ -f "${context}/${folder}/package.json" ]] || { echo "pack_a_release: the packed tree has no package.json" >&2; exit 2; }
 [[ ! -e "${context}/${folder}/installer" ]] || { echo "pack_a_release: installer/ was packed; .gitattributes no longer leaves it out" >&2; exit 2; }
+# A pin is generated here, from what npm serves, and never packed with the tree (martha#84).
+[[ ! -e "${context}/${folder}/installer.json" ]] || { echo "pack_a_release: installer.json was packed; a release's pin is generated, never committed" >&2; exit 2; }
+node "${REPO}/installer/pin_the_installer/pin_the_installer.mjs" "${context}" || exit 1
 
 cat > "${context}/Containerfile" <<CONTAINERFILE
 FROM scratch

@@ -357,9 +357,9 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
 
 /** Level 3: what Martha's code is made of, one box per group of slices in src/. */
 export function components(): Diagram {
-  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1020)
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1170)
 
-  d.bound(16, 40, 968, 850, 'Martha [the code in src/, one directory per capability]')
+  d.bound(16, 40, 968, 1000, 'Martha [the code in src/, one directory per capability]')
 
   d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the acts]', code: true,
     desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, --version: the words', 'checked first, a refusal on stderr with', 'the command that fixes it, 0 / 1 / 2'] })
@@ -389,6 +389,11 @@ export function components(): Diagram {
   d.box({ kind: 'b-cmp', x: 664, y: 542, w: 300, h: 170, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
     desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
 
+  d.box({ kind: 'b-cmp', x: 32, y: 890, w: 300, h: 140, name: 'install_the_pinned_installer', names: ['install_the_pinned_installer'], type: '[the installer this release pins]', code: true,
+    desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 890, w: 300, h: 140, name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
+    desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] })
+
   d.box({ kind: 'b-cmp', x: 32, y: 724, w: 300, h: 150, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
     desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] })
   d.box({ kind: 'b-cmp', x: 348, y: 724, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'refuse_a_member_writing_owner_memory'], type: '[the Claude Code host]', code: true,
@@ -396,7 +401,7 @@ export function components(): Diagram {
   d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 150, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
     desc: ['A link to a private issue, an internal', 'host name or a private remote fails CI', 'by name, with a self-test that proves', 'the check still bites'] })
 
-  d.notes(24, 908, [
+  d.notes(24, 1058, [
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
     'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,',
     'probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',

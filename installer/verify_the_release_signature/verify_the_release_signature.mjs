@@ -15,11 +15,12 @@
 // A verify that could not run (the trust root did not arrive) is a CouldNotCheck, never "unsigned" and never fine.
 import { PolicyError, ValidationError, VerificationError, createVerifier } from 'sigstore'
 
-import { NAMES, releaseRef } from '../keep_the_names_in_one_place/names.mjs'
+import { anchoredIdentity, NAMES, releaseRef } from '../keep_the_names_in_one_place/names.mjs'
 import { couldNotCheck } from '../refuse_in_words/refuse_in_words.mjs'
 
-const OID_SOURCE_REPOSITORY = '1.3.6.1.4.1.57264.1.12'
-const OID_SOURCE_REF = '1.3.6.1.4.1.57264.1.14'
+/** Fulcio's GitHub extensions: the repository the run was in, and the ref it ran at. */
+export const OID_SOURCE_REPOSITORY = '1.3.6.1.4.1.57264.1.12'
+export const OID_SOURCE_REF = '1.3.6.1.4.1.57264.1.14'
 const COSIGN_SIGN = 'https://sigstore.dev/cosign/sign/v1'
 const IN_TOTO_STATEMENT = 'https://in-toto.io/Statement/v1'
 const IN_TOTO_PAYLOAD = 'application/vnd.in-toto+json'
@@ -31,11 +32,10 @@ const IN_TOTO_PAYLOAD = 'application/vnd.in-toto+json'
 export const readSigners = (text) => text.split('\n').map((l) => l.trim()).filter((l) => /^[0-9a-f]{40}$/.test(l))
 
 /**
- * sigstore-js tests a SAN policy as a JavaScript regular expression against the certificate's SAN
- * (@sigstore/verify policy.js), so the exact identity is passed anchored, with every metacharacter escaped.
+ * The exact identity a release's certificate must carry: the signer workflow at one listed sha.
  * @param {string} sha
  */
-export const identityPattern = (sha) => `^${`${NAMES.signerWorkflow}@${sha}`.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`
+export const identityPattern = (sha) => anchoredIdentity(`${NAMES.signerWorkflow}@${sha}`)
 
 /**
  * A DER length at offset 1: [length, where the content starts], or [] when it is not one.

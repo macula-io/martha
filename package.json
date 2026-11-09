@@ -33,6 +33,7 @@
       "src/claude_code_host",
       "src/claude_code_relay",
       "src/declare_a_solo_crew",
+      "src/install_the_pinned_installer",
       "src/install_the_recorded_mesh_server",
       "src/keep_martha_state_outside_the_checkout",
       "src/keep_what_the_owner_signed",
@@ -40,6 +41,7 @@
       "src/refuse_a_member_writing_owner_memory",
       "src/run_an_owner_signed_command",
       "src/run_the_martha_command",
+      "src/run_the_nodes_own_npm_alone",
       "src/start_a_member"
     ],
     "packageImports": {
@@ -49,7 +51,8 @@
     "loaderImports": {
       "src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts": "node:module",
       "architecture/c4_diagrams.node-test.ts": "node:module"
-    }
+    },
+    "installerPackage": "@macula-io/martha"
   },
   "overrides": {
     "minimatch": "^11.0.5"
