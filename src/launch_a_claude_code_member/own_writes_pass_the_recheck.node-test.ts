@@ -12,7 +12,7 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { openState, ownWritesKeptIn, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -90,6 +90,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(home, 'managed') },
       switches: CLAUDE_CODE_HOOK_SWITCHES,
+      markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
     stopMember: (why) => void stops.push(why),
   })

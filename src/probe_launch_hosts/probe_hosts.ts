@@ -30,7 +30,7 @@ import {
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
-import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { HOOKS_SPELLINGS, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
@@ -76,12 +76,25 @@ interface Probe {
    */
   readonly owner_settings?: (place: Place) => string
   /**
+   * The owner's own markdown, written under the config folder CLAUDE_CONFIG_DIR
+   * names: an agent, skill or command whose frontmatter can carry hooks
+   * (martha#146). Each is placed at `<config folder>/<folder>/<name>`.
+   */
+  readonly owner_markdown?: (place: Place) => readonly OwnerMarkdownFile[]
+  /**
    * Run the launcher's own settings gate (hookSettingsOf) before the host, as
    * martha start does. When it refuses, naming every one of these words, the
    * host is not started and GATE_REFUSED is marked; a refusal naming anything
    * else fails the probe.
    */
   readonly gate_names?: (place: Place) => readonly string[]
+}
+
+/** One file of the owner's own markdown, at `<config folder>/<folder>/<name>`. */
+interface OwnerMarkdownFile {
+  readonly folder: string
+  readonly name: string
+  readonly text: string
 }
 
 function put(dir: string, name: string, content: string): void {
@@ -399,12 +412,60 @@ const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] =>
   ]
 })
 
+// --- the owner's own agents, skills and commands (martha#146) ----------------
+//
+// A member's host is started with --setting-sources user, so it reads the
+// owner's user scope, and an agent, skill or command there can carry hooks in
+// its frontmatter. A member that runs one gets those hooks for as long as it
+// runs, and what they print reaches the member with no row recording it. Gated,
+// the launcher refuses before the host starts, naming the file and the spelling
+// of the key it found. One row per spelling, because each is a different way
+// YAML writes the one key the host looks for, and a spelling that stopped being
+// caught would be a row that stopped refusing.
+
+/** A frontmatter that spells the key `hooks` by one rule alone, keyed by the words its refusal names it by. */
+const SPELLED_AS: Readonly<Record<string, string>> = {
+  'the key hooks': '!<tag:yaml.org,2002:str>"hooks": {PreToolUse: []}',
+  'a collection used as a key': '[hooks]: {PreToolUse: []}',
+  'a backslash, which can spell any key': '"hoo\\x6bs": {}',
+  'an explicit key (?)': '? name2\n: x',
+  'a merge key (<<)': '<<: {}',
+  'an alias used as a key': 'a: &k other\n*k : {}',
+}
+
+/** A spelling rule with no frontmatter here: the run fails rather than quietly probing fewer rows. */
+const SPELLINGS_WITHOUT_A_PROBE = HOOKS_SPELLINGS.map(({ rule }) => rule).filter((rule) => SPELLED_AS[rule] === undefined)
+
+const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.map(({ rule }, at) => {
+  const name = `spelling-${at}.md`
+  return {
+    what: `Claude Code as martha start starts it: a user-scope agent whose frontmatter spells the hooks key as ${rule}`,
+    host: 'claude-code' as const,
+    command: claude(...HEADLESS_CLAUDE, PROMPT),
+    approved: () => {},
+    planted: () => {},
+    planned: true,
+    owner_settings: () => JSON.stringify({}),
+    owner_markdown: (): readonly OwnerMarkdownFile[] => [
+      {
+        folder: 'agents',
+        name,
+        text: `---\nname: spelling-${at}\ndescription: a probe agent\n${SPELLED_AS[rule] ?? ''}\n---\n${PROMPT}\n`,
+      },
+    ],
+    expected: { GATE_REFUSED: true },
+    gate_names: (place: Place) => [join(dirname(ownerSettingsPath(place)), 'agents', name), rule],
+  }
+})
+
 /** The environment a probe's host inherits: the owner's own config folder when it has one, and no plugin folder from the developer's shell. */
 function environmentOf(probe: Probe, place: Place): Record<string, string | undefined> {
-  if (probe.owner_settings === undefined) return { ...process.env, ...probe.inherited }
-  put(dirname(ownerSettingsPath(place)), USER_SETTINGS_FILE, probe.owner_settings(place))
+  if (probe.owner_settings === undefined && probe.owner_markdown === undefined) return { ...process.env, ...probe.inherited }
+  const config = dirname(ownerSettingsPath(place))
+  if (probe.owner_settings !== undefined) put(config, USER_SETTINGS_FILE, probe.owner_settings(place))
+  for (const file of probe.owner_markdown?.(place) ?? []) put(join(config, file.folder), file.name, file.text)
   const { [PLUGIN_DIRS_VARIABLE]: _developers, ...rest } = process.env
-  return { ...rest, CLAUDE_CONFIG_DIR: dirname(ownerSettingsPath(place)), ...probe.inherited }
+  return { ...rest, CLAUDE_CONFIG_DIR: config, ...probe.inherited }
 }
 
 /** The launcher's settings gate on this planned launch: undefined when it passes, else its refusal. */
@@ -522,7 +583,12 @@ function scratchProjectFolders(): readonly string[] {
 }
 const foldersBefore = new Set(scratchProjectFolders())
 
-for (const probe of [...PROBES, ...OWNER_PROBES]) reportProbe(probe)
+if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
+  console.error(`no probe row for the spelling rule(s): ${SPELLINGS_WITHOUT_A_PROBE.join(', ')}`)
+  process.exitCode = 1
+}
+
+for (const probe of [...PROBES, ...OWNER_PROBES, ...MARKDOWN_HOOK_PROBES]) reportProbe(probe)
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every

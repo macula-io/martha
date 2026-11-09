@@ -92,3 +92,82 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
   if (!loadsPlugins(environment[PLUGIN_DIRS_VARIABLE])) return undefined
   return `the launcher's environment sets ${PLUGIN_DIRS_VARIABLE}, which loads plugins into the member's host whose hooks would print into the member's session with nothing recorded (martha#121); unset it before starting a member`
 }
+
+// --- hooks in an agent's, a skill's or a command's frontmatter (martha#146) ---
+//
+// The owner's user scope and the managed scope hold agents, skills and
+// commands whose frontmatter can carry hooks, and a member started on Martha's
+// switches runs them (probed live on 2.1.319). Martha has no YAML parser and
+// takes none for this, so a frontmatter counts as declaring hooks when it holds
+// one of these spellings (Pluto's reviews, r=1 to r=3). They are the spellings
+// this refuses, not a claim to hold every way YAML has to write the key: r=3
+// found one this list was missing, and a spelling that turns up later is
+// another round of the same work.
+//   - the text `hooks` with a colon after it, anywhere: bare, quoted, tagged
+//     (`!<tag:yaml.org,2002:str>"hooks":`), in flow style, or with a line break
+//     before the colon. `githooks:` counts too, a refusal the owner can read;
+//   - a collection used as a key, `]` or `}` with a colon after it: a flow
+//     sequence used as the key reaches the host as the key itself (`[hooks]:
+//     {...}` is live on 2.1.319 and declares hooks like `hooks:` does), and
+//     this rule takes that whole class — `[hooks,]:`, `[[hooks]]:` and
+//     `{hooks: x}:` with it;
+//   - a backslash anywhere, since a double-quoted escape (`"hoo\x6bs"`) or a
+//     line continuation can build the key with no `hooks` in the text;
+//   - an explicit key (`?` as a line's first character after blanks);
+//   - a merge key (`<<`);
+//   - an alias used as a key (`*name:`), which can copy `hooks` from an anchor
+//     on a value elsewhere.
+// A false positive costs a refusal that names the file and the rule.
+//
+// The frontmatter is found where the host finds it: one leading byte-order mark
+// stripped, then the host's own pattern from the recording, its group 1. A file
+// whose opening the host's pattern takes but which never closes is refused as
+// cannot-be-told.
+
+/** The spellings by which a frontmatter can declare hooks, each with the words a refusal names it by. */
+export const HOOKS_SPELLINGS: ReadonlyArray<{ readonly rule: string; readonly found: RegExp }> = [
+  { rule: 'the key hooks', found: /hooks["']?\s*:/ },
+  { rule: 'a collection used as a key', found: /[\]}]\s*:/ },
+  { rule: 'a backslash, which can spell any key', found: /\\/ },
+  { rule: 'an explicit key (?)', found: /^\s*\?/m },
+  { rule: 'a merge key (<<)', found: /<</ },
+  { rule: 'an alias used as a key', found: /(^|[\s{,[])\*[^\s,:{}[\]]+\s*:/ },
+]
+
+/** What the launcher reads the owner's and the managed markdown by: the host's frontmatter pattern and the folders it loads, from the recording. */
+export interface OwnersMarkdown {
+  readonly frontmatter_pattern: string
+  readonly kinds: readonly string[]
+}
+
+/** The folder under the managed folder that holds its markdown folders, as the recorded loader joins it. */
+export const MANAGED_MARKDOWN_FOLDER = '.claude'
+
+const BYTE_ORDER_MARK = 0xfeff
+
+const FRONTMATTER_WHY =
+  "a member's host would run them while that agent, skill or command runs, and what they print would reach the member with nothing recorded (martha#146); move the hooks out of that file before starting a member"
+
+/** The opening of a frontmatter pattern: everything before its first group. */
+const openingOf = (pattern: string): RegExp => new RegExp(pattern.slice(0, pattern.indexOf('(')))
+
+/** A file's frontmatter as the host finds it: its text, none, or an opening that never closes. */
+function frontmatterOf(text: string, pattern: string): { readonly frontmatter: string } | 'none' | 'unclosed' {
+  const stripped = text.charCodeAt(0) === BYTE_ORDER_MARK ? text.slice(1) : text
+  const found = new RegExp(pattern).exec(stripped)
+  if (found !== null) return { frontmatter: found[1] ?? '' }
+  return openingOf(pattern).test(stripped) ? 'unclosed' : 'none'
+}
+
+/** Why an agent, skill or command file in the owner's or the managed scope brings hooks into a member, naming the file and the rule; or undefined. */
+export function hooksInFrontmatterOf(file: HookSettingsFile, pattern: string): string | undefined {
+  if (file.text === undefined) return undefined
+  const found = frontmatterOf(file.text, pattern)
+  if (found === 'none') return undefined
+  if (found === 'unclosed') {
+    return `${file.path} opens a frontmatter that never closes, so whether it declares hooks cannot be told; close it or remove the file`
+  }
+  const rules = HOOKS_SPELLINGS.filter(({ found: spelled }) => spelled.test(found.frontmatter)).map(({ rule }) => rule)
+  if (rules.length === 0) return undefined
+  return `${file.path} has frontmatter holding ${rules.join(' and ')}, so it can declare hooks: ${FRONTMATTER_WHY}`
+}

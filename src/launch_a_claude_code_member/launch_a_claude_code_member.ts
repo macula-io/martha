@@ -97,7 +97,7 @@ import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claud
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
@@ -121,6 +121,7 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
 import {
   hostTrustsTheFolder,
@@ -187,6 +188,8 @@ export interface ClaudeCodeMemberLaunch {
   readonly session_start_deadline_ms?: number
   /** The same when an owner can answer the host, which may first ask whether to trust the folder; TRUST_ANSWER_DEADLINE_MS unless a test gives its own. */
   readonly trust_answer_deadline_ms?: number
+  /** The member's signed runs (martha#129): `martha start` gives them; without them the member runs no shape. */
+  readonly signed_runs?: SignedRuns
   /**
    * A test's ear on what the relay is handed, so that what the relay calls `started_with` is measured against what
    * the host was really spawned with rather than inferred from the code that builds both (martha#135). A real
@@ -377,6 +380,7 @@ export function hookSettingsOf(
     approved,
     managed,
     switches: CLAUDE_CODE_HOOK_SWITCHES,
+    markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
   })
   return watch.check() ?? watch
 }
@@ -601,6 +605,7 @@ async function servedRelay(
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
     hookSettings: ready.hookSettings,
     ownerMemory: ready.ownerMemory,
+    ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)
@@ -611,6 +616,7 @@ async function servedRelay(
       if (event === 'session_started') sessionReported()
       return answering.answer(event, body)
     },
+    run: (body) => answering.run(body),
   }
 
   try {

@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127) |
+// | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -49,7 +49,8 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { ALLOW, TAKEN, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { ALLOW, TAKEN, type Ran, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -61,6 +62,8 @@ export type RelayReply =
 
 export interface MemberRelay {
   answer(event: RelayEvent, body: unknown): Promise<RelayReply>
+  /** `martha run <name>` asks for a signed shape (martha#129); answered outside the event queue, as a run takes long. */
+  run(body: unknown): Promise<Ran | Refused>
 }
 
 export interface MemberRelayPlace {
@@ -87,9 +90,14 @@ export interface MemberRelayPlace {
   readonly hookSettings: HookSettingsWatch
   /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
   readonly ownerMemory: OwnerMemoryPlaces
+  /** The member's signed runs (martha#129); a member without them runs no shape. */
+  readonly signed_runs?: SignedRuns
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
+
+/** Why a run is refused for a member launched without signed runs. */
+export const NO_SIGNED_RUNS = 'this member was launched with no signed shapes to run'
 
 const answered = (body: Taken | Refused | Verdict): RelayReply => ({ answered: true, body })
 const refused = (why: string): RelayReply => answered({ refused: why })
@@ -149,6 +157,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       queue = next.catch(() => undefined)
       return next
     },
+    run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
   }
 }
 
@@ -263,7 +272,9 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
     names: place.names,
     host: thisMachine,
   })
-  return verdict === undefined ? answered(ALLOW) : denied(verdict.deny)
+  if (verdict !== undefined) return denied(verdict.deny)
+  place.signed_runs?.callAllowed(call.tool, call.input)
+  return answered(ALLOW)
 }
 
 async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
@@ -272,13 +283,28 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
+  // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
+  const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
+  const unvouched = recheckBeforeRecording(place, session, call)
+  if (unvouched !== undefined) return stopMember(place, unvouched)
+  // A `martha run <name>` whose answer is exactly the one its receipt builds records nothing (martha#129): the run's
+  // output is text the owner vouched for, so the shell stays. Every other result records, as #127 leaves it.
+  if (kept !== undefined && kept.why === undefined) return answered(TAKEN)
+  return recordToolResult(state, session, call)
+}
+
+/** The own write kept and every recheck, or why the member is stopped (#132, #121, #122). */
+function recheckBeforeRecording(place: MemberRelayPlace, session: HostSession, call: { readonly tool: string; readonly input: Body }): string | undefined {
   // Kept before the recheck, so the write this call made is not taken for an outsider's (martha#132).
   const unkept = rememberOwnWriteOfCall(place.launch, { tool: call.tool, input: call.input, session: session.id, home: place.hookSettings.home }, thisMachine)
-  if (unkept !== undefined) return stopMember(place, unkept)
+  if (unkept !== undefined) return unkept
   const launched = recheckLaunchPassingOwnWrites(place.launch, thisMachine)
-  if (!launched.allow) return stopMember(place, launched.refusal)
-  const hooksOff = place.hookSettings.check()
-  if (hooksOff !== undefined) return stopMember(place, hooksOff)
+  return launched.allow ? place.hookSettings.check() : launched.refusal
+}
+
+/** What the call's result records: a mesh tool's answer, or the host's own result by #127's table. */
+async function recordToolResult(state: RelayState, session: HostSession, call: { readonly tool: string; readonly input: Body }): Promise<RelayReply> {
+  const { place } = state
   const taken = isMcpToolCall(call.tool)
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(

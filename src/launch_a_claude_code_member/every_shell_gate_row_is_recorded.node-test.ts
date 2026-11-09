@@ -24,7 +24,7 @@ import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
 } from '../claude_code_host/recorded_claude_code_host.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -99,6 +99,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') },
       switches: CLAUDE_CODE_HOOK_SWITCHES,
+      markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [] }),
     stopMember: () => {},

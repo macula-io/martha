@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs'
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { promptOriginKindsOf } from './claude_code_prompt_origins.ts'
 import { sessionStartSourcesOf } from './claude_code_session_events.ts'
+import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
+import type { MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
 
 export { CREW_REFRESH }
@@ -32,8 +34,8 @@ export interface MemoryOff {
   readonly on_check: string
 }
 
-/** What the host binary says, as recorded. */
-export interface RecordedHost {
+/** What the host binary says, as recorded; the markdown it loads since martha#146. */
+export interface RecordedHost extends MarkdownTheHostLoads {
   readonly host_version: string
   /**
    * How the recorded host's auto-memory is kept off, re-read by hand from that
@@ -73,3 +75,9 @@ export const CLAUDE_CODE_HOOK_SWITCHES: HookSwitches = hookSwitchesOf(RECORDED_H
 
 /** Every origin kind the recorded host stamps on a prompt. */
 export const CLAUDE_CODE_PROMPT_ORIGIN_KINDS: readonly string[] = promptOriginKindsOf(RECORDED_HOST)
+
+/** The host's frontmatter pattern and the markdown folders it loads in the user and managed scopes, as recorded (martha#146). */
+export const CLAUDE_CODE_OWNERS_MARKDOWN: OwnersMarkdown = {
+  frontmatter_pattern: RECORDED_HOST.frontmatter_pattern,
+  kinds: RECORDED_HOST.markdown_kinds,
+}

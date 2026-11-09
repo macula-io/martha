@@ -81,6 +81,15 @@ export const LIST_FIELD = {
 
 export type TrustListKind = keyof typeof LIST_FIELD
 
+/**
+ * The kind of the one signed list that is not a list of node ids: the commands whose output keeps a member's
+ * shell (martha#129). Its body is read by ../keep_the_shell_for_an_owner_signed_command, not by this module.
+ */
+export const COMMAND_SHAPES_KIND = 'command_shapes'
+
+/** Every kind of document the owner signs and a verifier opens. */
+export type SignedListKind = TrustListKind | typeof COMMAND_SHAPES_KIND
+
 /** Every field a trust list document has, and nothing else. */
 const DOCUMENT_FIELDS = ['body', 'crew', 'epoch', 'expires_at', 'issued_at', 'kind'] as const
 
@@ -110,9 +119,9 @@ export interface OpenedEpoch {
  * opens an old epoch, or another list at the newest epoch, as if new.
  */
 export interface EpochStore {
-  newest(crew: string, kind: TrustListKind): OpenedEpoch | undefined
+  newest(crew: string, kind: SignedListKind): OpenedEpoch | undefined
   /** Keep this as the newest; only a trusted open calls it. */
-  keep(crew: string, kind: TrustListKind, opened: OpenedEpoch): void
+  keep(crew: string, kind: SignedListKind, opened: OpenedEpoch): void
 }
 
 export type OpenedList =
@@ -124,8 +133,12 @@ export type OpenedList =
     }
   | { readonly trusted: false; readonly why: string; readonly node_ids: readonly string[]; readonly members: readonly SignedMember[] }
 
-export interface TrustListToOpen {
-  readonly kind: TrustListKind
+/** One node-id trust list to open. */
+export type TrustListToOpen = SignedDocumentToOpen<TrustListKind>
+
+/** A signed document of any kind, to open with the body reader its kind has. */
+export interface SignedDocumentToOpen<Kind extends SignedListKind = SignedListKind> {
+  readonly kind: Kind
   /** The document's bytes, exactly as signed; undefined when there is none. */
   readonly document: Buffer | undefined
   /** The armored `.sig` file `ssh-keygen -Y sign` wrote; undefined when there is none. */
@@ -142,12 +155,25 @@ const NO_MEMBERS: readonly SignedMember[] = []
 
 /** Open one trust list: its node ids when everything holds, and nobody otherwise. */
 export function openTrustList(input: TrustListToOpen): OpenedList {
-  const why = refusalOf(input)
-  if (typeof why === 'string') {
-    return { trusted: false, why: `the ${input.kind} trusts nobody: ${why}`, node_ids: NOBODY, members: NO_MEMBERS }
+  const opened = openSignedDocument(input, (body) => entriesOf(input.kind, body))
+  if (!opened.trusted) {
+    return { trusted: false, why: `the ${input.kind} trusts nobody: ${opened.why}`, node_ids: NOBODY, members: NO_MEMBERS }
   }
-  input.epochs.keep(input.crew, input.kind, { epoch: why.epoch, digest: why.digest })
-  return { trusted: true, node_ids: why.entries.map((entry) => entry.node_id), members: why.members, epoch: why.epoch }
+  return { trusted: true, node_ids: opened.body.map((entry) => entry.node_id), members: membersOf(opened.body), epoch: opened.epoch }
+}
+
+/** A signed document opened: its body as its kind's reader read it, or why it opens as nothing. */
+export type OpenedDocument<Body> = { readonly trusted: true; readonly body: Body; readonly epoch: number } | { readonly trusted: false; readonly why: string }
+
+/**
+ * Open one signed document of any kind, every rule above applied before `readBody` sees its body. `readBody`
+ * gives the body as its kind reads it, or why it cannot be read; the epoch is kept only when it can.
+ */
+export function openSignedDocument<Body>(input: SignedDocumentToOpen, readBody: (body: unknown) => Body | string): OpenedDocument<Body> {
+  const accepted = refusalOf(input, readBody)
+  if (typeof accepted === 'string') return { trusted: false, why: accepted }
+  input.epochs.keep(input.crew, input.kind, { epoch: accepted.epoch, digest: accepted.digest })
+  return { trusted: true, body: accepted.body, epoch: accepted.epoch }
 }
 
 interface Entry {
@@ -156,14 +182,13 @@ interface Entry {
   readonly member_name?: string
 }
 
-interface Accepted {
-  readonly entries: readonly Entry[]
-  readonly members: readonly SignedMember[]
+interface Accepted<Body> {
+  readonly body: Body
   readonly epoch: number
   readonly digest: string
 }
 
-function refusalOf(input: TrustListToOpen): string | Accepted {
+function refusalOf<Body>(input: SignedDocumentToOpen, readBody: (body: unknown) => Body | string): string | Accepted<Body> {
   if (input.document === undefined) return 'there is no document'
   if (input.signature === undefined) return 'the document is not signed'
 
@@ -175,7 +200,7 @@ function refusalOf(input: TrustListToOpen): string | Accepted {
   if (!pinned.some((blob) => blob.equals(check.key.blob))) return 'it is signed by a key that is not pinned'
   if (!check.user_present) return 'the hardware key was not touched when it signed'
 
-  return contentOf(input)
+  return contentOf(input, readBody)
 }
 
 function pinnedHardwareKeys(lines: readonly string[]): readonly Buffer[] | string {
@@ -186,7 +211,7 @@ function pinnedHardwareKeys(lines: readonly string[]): readonly Buffer[] | strin
   return keys.flatMap((key) => (key === undefined ? [] : [key.blob]))
 }
 
-function contentOf(input: TrustListToOpen): string | Accepted {
+function contentOf<Body>(input: SignedDocumentToOpen, readBody: (body: unknown) => Body | string): string | Accepted<Body> {
   const document = parsed(input.document)
   if (typeof document === 'string') return document
   if (document.kind !== input.kind) return `the document is a ${String(document.kind)}`
@@ -195,13 +220,13 @@ function contentOf(input: TrustListToOpen): string | Accepted {
   const lifetime = lifetimeRefusal(document, input.now)
   if (lifetime !== undefined) return lifetime
 
-  const entries = entriesOf(input.kind, document.body)
-  if (typeof entries === 'string') return entries
+  const body = readBody(document.body)
+  if (typeof body === 'string') return body
 
   const opened = epochToOpen(input, document)
   if (typeof opened === 'string') return opened
 
-  return { entries, members: membersOf(entries), epoch: opened.epoch, digest: opened.digest }
+  return { body, epoch: opened.epoch, digest: opened.digest }
 }
 
 /** Why the document's signed issue date and expiry do not hold at `now` (rule 3), or undefined when they do. */
@@ -219,7 +244,7 @@ function lifetimeRefusal(document: Record<string, unknown>, now: Date): string |
 }
 
 /** The document's epoch and digest when it is newer than, or the very list, this verifier last opened. */
-function epochToOpen(input: TrustListToOpen, document: Record<string, unknown>): string | OpenedEpoch {
+function epochToOpen(input: SignedDocumentToOpen, document: Record<string, unknown>): string | OpenedEpoch {
   const epoch = document.epoch
   if (typeof epoch !== 'number' || !Number.isSafeInteger(epoch) || epoch < 0) return 'the epoch is not a whole number'
   const digest = createHash('sha256').update(JSON.stringify(document)).digest('hex')

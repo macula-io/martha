@@ -275,6 +275,18 @@ What the plan leaves out, stated rather than hidden:
   the member when one appears. `npm run probe:launch` shows a hook and a plugin
   folder in the owner's user settings running on Martha's switches alone, and
   the launcher's own gate refusing both, with nothing started.
+  The owner's own agents, skills and commands are loaded from the user scope as
+  well (`<user config folder>/agents`, `skills` and `commands`, and
+  `<managed folder>/.claude/` beside them), and their frontmatter can carry
+  hooks that run while that agent, skill or command runs, with what they print
+  reaching the member and no row recording it. So a member does not start while
+  any file in those folders declares hooks in one of the spellings the launcher
+  reads: the key `hooks` with a colon after it (bare, quoted, tagged, escaped,
+  flow style), a collection used as the key (`[hooks]:`, which the host reads as
+  the key itself, `[hooks,]:`, `[[hooks]]:`, `{hooks: x}:`), an explicit key, a
+  merge key, or an alias used as a key. The refusal names the file and the
+  spelling (martha#146). `npm run probe:launch` carries one row per spelling,
+  each refused by the launcher's own gate with nothing started.
 - **A tool server's instruction block** (A11), handed to the model at start.
   The mesh server's block is code of its recorded tree, which `treeUnlike`
   compares file by file with the recorded one, through
@@ -1018,6 +1030,74 @@ another process stays martha#24's residual. Code running as the member's own use
 pinned key the host installed where that user can write, which is the OS
 boundary of martha#24.
 
+## Commands whose output keeps the shell
+
+[Issue #129](https://github.com/macula-io/martha/issues/129). Running the
+owner's tests is how a member learns what it broke, and a test's output is the
+checkout's text: once [#127](https://github.com/macula-io/martha/issues/127)
+records every `Bash` result as A13, a member that runs `npm test` loses its
+shell. The way back is a short list of commands the owner signs, run by the
+launcher on bytes it has checked, so their output holds nothing the owner did
+not vouch for.
+
+**The list.** A signed document of kind `command_shapes`
+(`src/keep_the_shell_for_an_owner_signed_command/command_shapes.ts`), opened by
+the rules of the section above: a `base` (`remote_url` and `branch`, the one
+branch whose commits the owner vouches for) and `shapes`, each a `name` matching
+`SHAPE_NAME` and an `argv` run with no shell. Its `crew` is the project's name
+in Martha's state root, so a list signed for one checkout opens empty in
+another. The owner pins a hardware key with `martha pin-key <public key file>`
+and keeps a signed list with `martha keep-shapes <file>` (which reads `<file>`
+and `<file>.sig`); both refuse unless their input is a terminal, and the list
+is kept only when it opens. The key, the newest epoch opened and the list live
+in the project's state directory (`src/keep_what_the_owner_signed/`); the
+epochs persist across processes, and an epochs file that does not parse opens
+no list at all.
+
+**A run.** The member types exactly `martha run <name>` as a `Bash` call, in
+the foreground (`runNameOf`). When the launcher allows that call, its relay's
+`tool_called` makes it the one call a run binds to, by its `tool_use_id`; the
+`martha run` client then asks the launcher on the relay socket (`RUN_PATH`),
+and the launcher runs the shape only while exactly that call is pending. It
+(`runASignedShape`, `src/run_an_owner_signed_command/`):
+
+| Step | What stands on it |
+|---|---|
+| the base | fetched from the signed `remote_url` and `branch` into a repository of the launcher's own (`BASE_REF`), with git's global and system config off; never the checkout's `.git`, `origin` or URL rewrites |
+| the checkout | read once: every path git would see is `lstat`ed, a regular file's blob id computed from the bytes read; anything else is refused |
+| the tree rule | a regular file passes when its blob is the base's at that path, or one the member wrote itself through `Edit` or `Write` (the own-writes registry, [#132](https://github.com/macula-io/martha/issues/132), every launch); any other file, and any entry in the base that is not a regular file, refuses the run, by path |
+| the dependency rule | `package.json` and `package-lock.json` must equal the base's; the base lock and `node_modules/.package-lock.json` must both be lockfile version `LOCKFILE_VERSION`, every installed entry must match the base lock's version and integrity, and every package directory on disk must be one the installed lock holds; `.bin` is rebuilt from the base lock |
+| the copy | exactly the bytes judged, written into a fresh directory in Martha's state (`RUNS_DIRECTORY`): no `.git`, no ignored file, no `node_modules/.cache` |
+| the sandbox | bubblewrap shows the copy at `RUN_TREE`, an empty home at `RUN_HOME`, an empty `/tmp`, the node install and the `SYSTEM_DIRECTORIES` read-only, and no network; the environment is built from nothing; stdout and stderr share one pipe; a run past `RUN_DEADLINE_MS` is killed |
+| the receipt | the output, its sha256 and the status, kept for that `tool_use_id` (`src/run_an_owner_signed_command/receipts.ts`) and taken once, when the call is answered |
+
+`martha run` writes the run's bytes to stdout unchanged, nothing to stderr, and
+ends with the run's status. A refusal anywhere on the way runs nothing and says
+why.
+
+**The exemption** (`keepsTheShell`) records nothing for a `Bash` result only
+when the command is exactly `martha run <name>` for a shape signed now, the
+receipt is this call's, and the whole result equals the one built from the
+receipt by the shape the pinned host was recorded giving. The recorded shape
+covers statuses `RECORDED_STATUSES` only: any other status records A13, named as
+unrecorded. An added key, a non-empty stderr, a truncation or a note is a
+different value.
+
+That decision is taken where a tool's result is recorded, in the relay's own
+answer to a finished call (`toolAnswered`, `src/launch_a_claude_code_member/`): the
+relay sends the host's answer with `tool_answered` (`answeredBody` in
+`src/claude_code_relay/hooks/relay_protocol.ts`, which leaves an answer past
+`LARGEST_RELAYED_ANSWER` out rather than send a body the launcher kills the
+member over), the launcher takes the call's receipt there whatever the answer,
+and a run whose answer is exactly the one its receipt builds records nothing,
+so the next `Edit` runs. Every other `Bash` result records A13 through #127's
+table as before: an answer left out for its size, a host that renders the
+result differently, a status no recording covers, and any command that is not
+exactly `martha run <name>` all record. The shapes are the pinned host's own
+answers, recorded under
+`src/claude_code_host/recorded_claude_code_bash_results.json` and read as
+`CLAUDE_CODE_BASH_RESULT_SHAPES`.
+
 ## The check
 
 `src/check_every_path_is_gated/` reports every row that reaches a shell-holding
@@ -1144,6 +1224,24 @@ crew with a shell:
   `HOOK_SETTINGS_CHECK_MS`, and the next launch is refused. Managed settings
   from a server or a device policy, and the host's remote switch for hooks
   modules, are not read by the launcher.
+- **What the owner signed for a project is the owner's user's to write
+  ([#129](https://github.com/macula-io/martha/issues/129)).** The pinned key,
+  the epochs, the kept list, the receipts' launcher, the signed base's
+  repository and the live `node_modules` are all writable by the member's OS
+  user, as `approvals.jsonl` is; `martha pin-key`'s terminal check is the same
+  speed bump as `martha approve`'s, so a member's shell given a terminal could
+  pin a key it made in software and sign its own list. The boundary is #24.
+- **Signed runs and their limits
+  ([#129](https://github.com/macula-io/martha/issues/129)).** A push to the
+  signed branch moves the base, so keeping that branch to the owner's own merges
+  is the owner's part. A package the base lock pins can print its author's text:
+  by merging the lock the owner vouches for it, and the advisories check refuses
+  the known-bad ones. Without unprivileged user namespaces (stock Ubuntu 24.04,
+  without an AppArmor profile for bubblewrap) no run happens. The node install's
+  own directory is shown read-only but is not checked for being writable by this
+  user, so an nvm install works. The host shortens a long result, which then
+  differs from the receipt: a big test log loses the exemption. A shape that
+  needs git finds no repository, and git history is B5.
 - **T13**: a process of the same OS user can connect to a launch's relay socket
   and claim any origin, `composer` included (above).
 - **The terminal check is a speed bump.** `martha approve` and `martha start`
