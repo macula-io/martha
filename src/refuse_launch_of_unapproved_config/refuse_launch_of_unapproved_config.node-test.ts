@@ -20,6 +20,8 @@ import {
   readLaunchState,
   recheckLaunch,
   snapshotApproved,
+  startedWithOf,
+  startedWithTheSwitches,
   type Host,
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -631,6 +633,46 @@ test('an unapproved launch is refused before anything is copied', (t) => {
   const { snapshot_root, prepared } = prepare('claude-code', place, [])
   assert.equal(prepared.allow, false)
   assert.equal(existsSync(snapshot_root), false)
+})
+
+// martha#135: what a launch started the host with, down to the names a host's declaration lists, and whether that
+// really holds the declaration.
+
+for (const host of Object.keys(HOSTS) as readonly Host[]) {
+  test(`a start keeps only the environment names ${host}'s declaration lists, and the value or absence of each (martha#135)`, () => {
+    const switches = HOSTS[host].project_config_off
+    const declared = [...Object.keys(switches.env), ...switches.env_dropped]
+    const started = startedWithOf(switches, switches.args, { ...switches.env, AN_OWNER_KEY: 'sk-live-nobody-reads-this' })
+    assert.deepEqual(Object.keys(started.env).sort(), [...new Set(declared)].sort())
+    assert.equal(Object.hasOwn(started.env, 'AN_OWNER_KEY'), false)
+    for (const [name, value] of Object.entries(switches.env)) assert.equal(started.env[name], value, name)
+    for (const name of switches.env_dropped) assert.equal(started.env[name], null, name)
+    assert.deepEqual(started.args, switches.args)
+  })
+
+  test(`an argument sequence that is not one unbroken run in the start does not hold ${host}'s declaration (martha#135)`, () => {
+    const switches = HOSTS[host].project_config_off
+    const [first, ...rest] = switches.args
+    if (first === undefined || rest.length === 0) return
+    const shuffled = [first, 'something else', ...rest]
+    assert.equal(startedWithTheSwitches(startedWithOf(switches, shuffled, switches.env), switches), false)
+    assert.equal(startedWithTheSwitches(startedWithOf(switches, switches.args, switches.env), switches), true)
+  })
+}
+
+test('a start with no declaration to measure it against never holds one (martha#135)', () => {
+  assert.equal(startedWithTheSwitches(undefined, HOSTS['claude-code'].project_config_off), false)
+  assert.equal(startedWithTheSwitches(startedWithOf(undefined, [], {}), undefined), false)
+})
+
+test("a start that kept a name outside the declaration does not hold it, whatever the name's value (martha#135)", () => {
+  const switches = HOSTS['claude-code'].project_config_off
+  const honest = startedWithOf(switches, switches.args, switches.env)
+  assert.equal(startedWithTheSwitches(honest, switches), true)
+  // `startedWithOf` keeps no such name today, and this is written past it on purpose: the check inside
+  // `startedWithTheSwitches` is the one that has to hold if that filter ever loosens, so it is pinned on its own.
+  const keptAnOwnersKey = { ...honest, env: { ...honest.env, AN_OWNER_KEY: 'sk-live-nobody-reads-this' } }
+  assert.equal(startedWithTheSwitches(keptAnOwnersKey, switches), false)
 })
 
 // --- conversions that rewrite the bytes a launch runs (martha#167) -------------

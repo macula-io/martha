@@ -16,10 +16,11 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { ARGUMENT_PROBES, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES, shellGateRowsNothingRecords } from './check_every_path_is_gated.ts'
+import { ARGUMENT_PROBES, claimsTheShellGate, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type PathGate } from './check_every_path_is_gated.ts'
 import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -34,6 +35,21 @@ const gateRefuses = (path: string) =>
     policy,
   }).allow === false
 
+// The path gate this check drives, as the launcher holds it (martha#168). It is
+// passed in, not defaulted: the gate reads the machine, and the register may not
+// import the host adapter that holds it.
+const PATH_GATES: Readonly<Record<string, PathGate>> = { 'nothing-a-later-git-run-reads': admitsAWriteNoLaterGitRunReads }
+
+// The coverage check, driving the real path gate unless a test says otherwise.
+const coverageOf = (
+  paths: readonly InboundPath[],
+  refuses: (path: string) => boolean,
+  delivery: Parameters<typeof gapsInGateCoverage>[2] = DELIVERY_GATES,
+  launch: Parameters<typeof gapsInGateCoverage>[3] = LAUNCH_GATES,
+  argument: Parameters<typeof gapsInGateCoverage>[4] = ARGUMENT_GATES,
+  path: Readonly<Record<string, PathGate>> = PATH_GATES,
+) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path)
+
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
     ...Array.from({ length: 18 }, (_, index) => `A${index + 1}`),
@@ -45,7 +61,7 @@ test('every inbound path the table names is in the registry, exactly once', () =
 })
 
 test('the registry as shipped has no path without a control', () => {
-  assert.deepEqual(gapsInGateCoverage(INBOUND_PATHS, gateRefuses), [])
+  assert.deepEqual(coverageOf(INBOUND_PATHS, gateRefuses), [])
 })
 
 test('a planted path with no control makes the check fail, and it names that path', () => {
@@ -56,7 +72,7 @@ test('a planted path with no control makes the check fail, and it names that pat
     control: { kind: 'none' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['A99'],
@@ -69,7 +85,7 @@ test('a planted path whose control was left out altogether makes the check fail'
     what: 'a planted path with the control field forgotten',
     klass: 'fetched',
   } as unknown as InboundPath
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['B99'],
@@ -84,7 +100,7 @@ test('a path that claims the shell gate must really be refused by it', () => {
     control: { kind: 'shell-gate' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, lying], (path) => path !== 'A98')
+  const gaps = coverageOf([...INBOUND_PATHS, lying], (path) => path !== 'A98')
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['A98'],
@@ -98,7 +114,7 @@ test('a delivery gate nobody has built is not a control', () => {
     klass: 'delivered',
     control: { kind: 'delivery-gate', gate: 'a-gate-someone-will-write-later' },
   } as unknown as InboundPath
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, invented], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, invented], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['A97'],
@@ -113,7 +129,7 @@ test('a path excused from the model must say why in words', () => {
     control: { kind: 'no-text-reaches-the-model', why: '   ' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, excused], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, excused], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['B98'],
@@ -121,7 +137,7 @@ test('a path excused from the model must say why in words', () => {
 })
 
 test('a delivery gate that admits everyone is not a control either', () => {
-  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, {
     'crew-room-acceptance': () => true,
     'shared-room-acceptance': () => true,
   })
@@ -133,7 +149,7 @@ test('a delivery gate that admits everyone is not a control either', () => {
 })
 
 test('a delivery gate that refuses everyone is caught too', () => {
-  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, {
     'crew-room-acceptance': () => false,
     'shared-room-acceptance': () => false,
   })
@@ -148,7 +164,7 @@ test('a gate that answers only the roster question is caught: one question right
   const roster_only = ({ message, rosters }: { message: { from_node_id: string | null }; rosters: { crew: { member_node_ids: readonly string[] } } }) =>
     message.from_node_id !== null && rosters.crew.member_node_ids.includes(message.from_node_id)
 
-  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, {
     'crew-room-acceptance': roster_only as never,
     'shared-room-acceptance': roster_only as never,
   })
@@ -165,7 +181,7 @@ test('a gate that answers only the roster question is caught: one question right
 const LAUNCHED = INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id)
 
 const withLaunchGates = (gate: LaunchGate) =>
-  gapsInGateCoverage(INBOUND_PATHS, gateRefuses, undefined, { 'owner-approved-launch-config': gate })
+  coverageOf(INBOUND_PATHS, gateRefuses, undefined, { 'owner-approved-launch-config': gate })
 
 test('the registry has launched rows, and every one of them stands on the launch gate', () => {
   assert.notDeepEqual(LAUNCHED, [])
@@ -182,7 +198,7 @@ test('a planted launched path with no control makes the check fail, and it names
     control: { kind: 'none' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['C99'],
@@ -198,7 +214,7 @@ test('a launched path claiming the shell gate is a gap, even though the shell ga
     attestation: 'none',
   }
   assert.equal(gateRefuses('C98'), true)
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['C98'],
@@ -214,7 +230,7 @@ test('a launched path claiming a delivery gate is a gap too', () => {
     control: { kind: 'delivery-gate', gate: 'crew-room-acceptance' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['C97'],
@@ -229,7 +245,7 @@ test('a launch gate on a path the host does not start is a gap', () => {
     control: { kind: 'launch-gate', gate: 'owner-approved-launch-config', residual: 'a residual' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, planted], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, planted], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['A96'],
@@ -244,7 +260,7 @@ test('a launch gate nobody has built is not a control', () => {
     control: { kind: 'launch-gate', gate: 'a-gate-someone-will-write-later', residual: 'a residual' },
     attestation: 'none',
   } as unknown as InboundPath
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, invented], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, invented], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['C96'],
@@ -260,7 +276,7 @@ test('a launched path must say in words what happens where Martha does not start
     control: { kind: 'launch-gate', gate: 'owner-approved-launch-config', residual: '  ' },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, silent], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, silent], gateRefuses)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
     ['C95'],
@@ -506,20 +522,20 @@ test('the owner\'s words to martha start are a row, and an argument gate stands 
 })
 
 test('an argument gate that passes every word to the host is not a control', () => {
-  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': () => true })
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': () => true })
   assert.deepEqual(gaps.map((gap) => gap.path), ARGUMENT_ROWS)
   assert.match(gaps[0]?.why ?? '', /passes/)
 })
 
 test('an argument gate that refuses every word, none included, is caught too', () => {
-  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': () => false })
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': () => false })
   assert.deepEqual(gaps.map((gap) => gap.path), ARGUMENT_ROWS)
   assert.match(gaps[0]?.why ?? '', /refuses no arguments at all/)
 })
 
 test('an argument gate that knows only one config switch is caught: one question right is not a control', () => {
   const settings_only = (args: readonly string[]) => !args.includes('--settings')
-  const gaps = gapsInGateCoverage(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': settings_only })
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, { 'owner-arguments-load-no-config': settings_only })
   assert.deepEqual(gaps.map((gap) => gap.path), ARGUMENT_ROWS)
 })
 
@@ -531,7 +547,7 @@ test('a row naming an argument gate nobody built is a gap, by name', () => {
     control: { kind: 'refused-before-launch', gate: 'nobody-built-this' as never },
     attestation: 'none',
   }
-  const gaps = gapsInGateCoverage([...INBOUND_PATHS, invented], gateRefuses)
+  const gaps = coverageOf([...INBOUND_PATHS, invented], gateRefuses)
   assert.deepEqual(gaps, [{ path: 'A97', why: 'names an argument gate nobody has built: nobody-built-this' }])
 })
 
@@ -543,7 +559,7 @@ test('the shipped argument gate answers every probe as the probe expects', () =>
 
 // --- every shell-gate row is reached by a recording (martha#121) -------------------
 
-const SHELL_GATE_ROWS = INBOUND_PATHS.filter((path) => path.control.kind === 'shell-gate').map((path) => path.id)
+const SHELL_GATE_ROWS = INBOUND_PATHS.filter((path) => claimsTheShellGate(path.control)).map((path) => path.id)
 
 test('a shell-gate row nothing records is a gap, named; recording every one leaves none', () => {
   const undeclared = SHELL_GATE_ROWS.filter((id) => !REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES.includes(id))
@@ -574,7 +590,62 @@ test('a row declared no turn source that a host records anyway is a gap: the dec
 })
 
 test('rows of other controls are never asked to be recorded', () => {
-  const others = INBOUND_PATHS.filter((path) => path.control.kind !== 'shell-gate')
+  const others = INBOUND_PATHS.filter((path) => !claimsTheShellGate(path.control))
   assert.ok(others.length > 0)
   assert.deepEqual(shellGateRowsNothingRecords([], others), [])
 })
+
+// --- a member's file tools are checked path by path (martha#168) -------------------
+
+test('the shipped path gate answers every probe as the probe expects', () => {
+  for (const probe of PATH_PROBES) {
+    assert.equal(admitsAWriteNoLaterGitRunReads(probe), probe.admits, probe.what)
+  }
+})
+
+test('a path gate that admits everything, and one that refuses everything, are both caught', () => {
+  const admitsAll: PathGate = () => true
+  const refusesAll: PathGate = () => false
+  assert.deepEqual(
+    coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': admitsAll }).map((gap) => gap.why),
+    ['the gate nothing-a-later-git-run-reads admits the checkout\'s own git directory'],
+  )
+  assert.deepEqual(
+    coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': refusesAll }).map((gap) => gap.why),
+    ['the gate nothing-a-later-git-run-reads refuses an ordinary file in the checkout'],
+  )
+})
+
+test('a row naming a path gate nobody built is a gap, by name', () => {
+  const invented: InboundPath = {
+    id: 'A97',
+    what: 'a planted path naming a path gate that does not exist',
+    klass: 'delivered',
+    control: { kind: 'check_every_path_is_gated', gate: 'nobody-built-this' as never, also: [] },
+    attestation: 'none',
+  }
+  const gaps = coverageOf([...INBOUND_PATHS, invented], gateRefuses)
+  assert.deepEqual(gaps, [{ path: 'A97', why: 'names a path gate nobody has built: nobody-built-this' }])
+})
+
+test('a control a row carries beside its path gate is judged by its own rule too', () => {
+  // The row claims a shell gate that does not refuse it: the path gate alone is not the whole control.
+  const beside: InboundPath = {
+    id: 'A96',
+    what: 'a planted path whose shell gate does not stand',
+    klass: 'delivered',
+    control: { kind: 'check_every_path_is_gated', gate: 'nothing-a-later-git-run-reads', also: [{ kind: 'shell-gate' }] },
+    attestation: 'none',
+  }
+  const gaps = coverageOf([...INBOUND_PATHS, beside], (path) => path !== 'A96')
+  assert.deepEqual(gaps, [{ path: 'A96', why: 'claims the shell gate, and the shell gate does not refuse it' }])
+  // And with the shell gate standing, the same row is no gap.
+  assert.deepEqual(coverageOf([beside], gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': admitsAWriteNoLaterGitRunReads }), [])
+})
+
+test('the row for code a checkout runs claims the path gate, with the shell gate beside it (#168)', () => {
+  const row = INBOUND_PATHS.find((path) => path.id === 'A13')
+  assert.ok(row !== undefined)
+  assert.deepEqual(row.control, { kind: 'check_every_path_is_gated', gate: 'nothing-a-later-git-run-reads', also: [{ kind: 'shell-gate' }] })
+})
+

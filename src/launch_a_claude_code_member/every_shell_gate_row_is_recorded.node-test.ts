@@ -19,7 +19,7 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { shellGateRowsNothingRecords } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
-import { CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
@@ -29,7 +29,7 @@ import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
-import { CLAUDE_SERVERS, CLAUDE_SETTINGS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_SERVERS, CLAUDE_SETTINGS, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { GIT, GITHUB_CLI, HISTORY_SUBCOMMANDS } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -96,6 +96,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
     launch: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [] },
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
+    started_with: startedWithTheSwitchesOfTheAdapter(),
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(CARRIED),
     // No settings file in the test's home, so the watch finds nothing and every event reaches its row.
@@ -107,7 +108,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
       switches: CLAUDE_CODE_HOOK_SWITCHES,
       markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [], user_scope: userScopeFor(place.home) }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) }),
     stopMember: () => {},
   })
 
@@ -155,3 +156,8 @@ test('the drive is not vacuous: without what the launch hands the model at start
   const named = shellGateRowsNothingRecords(recorded.filter((path) => !handed.includes(path))).map((gap) => gap.path)
   assert.ok(handed.every((row) => named.includes(row)), named.join(', '))
 })
+
+/** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
+function startedWithTheSwitchesOfTheAdapter(): StartedWith {
+  return startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_READ_ATTACHES_NOTHING.args, CLAUDE_CODE_READ_ATTACHES_NOTHING.env)
+}
