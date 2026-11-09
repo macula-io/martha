@@ -84,8 +84,8 @@ export function environmentWith(change: EnvironmentChange | undefined): Record<s
 }
 
 /** Processes run now on this machine, waited for. */
-export const runNowOnThisMachine: Processes['runNow'] = ({ command, args, cwd, environment }) => {
-  const run = spawnSync(command, [...args], { cwd, encoding: 'utf8', env: environmentWith(environment) })
+export const runNowOnThisMachine: Processes['runNow'] = ({ command, args, cwd, environment, input }) => {
+  const run = spawnSync(command, [...args], { cwd, encoding: 'utf8', env: environmentWith(environment), input })
   return { exit_code: run.error === undefined ? run.status : null, stdout: run.stdout ?? '', stderr: run.stderr ?? '' }
 }
 

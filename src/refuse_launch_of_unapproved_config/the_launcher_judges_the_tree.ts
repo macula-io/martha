@@ -14,12 +14,21 @@
 //     HEAD's own while there is no approval yet. `GIT_ATTR_SOURCE` names it;
 //   - every inherited `GIT_*` variable is dropped, so the caller cannot point git at another repository or index.
 //
-// The checkout's object store is offered read-only, through the alternates file of the git dir the launcher makes, and
-// nothing else of the checkout is. Before either tree is used it is read into an index and written back: `write-tree`
-// recomputes every tree id from that index, so when the id git computes is not the id it was asked to read, the object
-// under that id was not the object its name says it is, and the launch is refused rather than judged against it. The
-// live tree is then written into the checkout's own object store, as `git add` left it, because the id the owner
-// approves has to be readable again by a later process.
+// The checkout's object store is offered through the alternates file of the git dir the launcher makes, and nothing
+// else of the checkout is: git reads the objects it is asked for by id from there, and writes nothing into it except
+// the live tree, once it has been judged (below).
+//
+// No tree is trusted for the name it was asked by. `read-tree` fills an index and, beside the entries, a cache-tree
+// holding the tree ids it was handed: `write-tree` on that index answers with the id it was asked for without
+// computing one, so an object forged under one of the tree's subtrees would read back as the tree the owner approved.
+// So the entries `read-tree` found are moved into a second index that carries no cache-tree, and the id written from
+// that one is compared with the id asked for. When they differ, the object under that name is not the tree it names,
+// and the launch is refused rather than judged against it. What the gate then decides on is the entries it read into
+// that second index itself, never a second listing of a store a member can write.
+//
+// The live tree is written into the checkout's own object store, blobs and trees both, as `git add` left it there:
+// the id the owner approves has to be readable again by a later process, and the blob of a file the checkout never
+// carried has no other store to live in once the launcher's scratch directory is gone.
 //
 // Every file is then judged once, by `blobUnderTheTree` (../hash_a_file_under_a_tree): its own bytes are hashed in this
 // process first, and when that id is the approved tree's blob at that path, no program runs and the file is the object
@@ -66,6 +75,18 @@ interface TreeEntry {
   readonly blob: string
 }
 
+/** A tree the launcher read itself: its entries, and the index it wrote them into, which carries no cache-tree. */
+interface VerifiedTree {
+  readonly entries: ReadonlyMap<string, TreeEntry>
+  readonly index: string
+}
+
+/** The tree the checkout's files make, and the entries it is made of as the launcher read them back from its index. */
+interface LiveTree {
+  readonly tree: string
+  readonly entries: ReadonlyMap<string, TreeEntry>
+}
+
 /** A git mode that is a plain file, executable or not; the only modes whose bytes the gate reads. */
 const REGULAR_MODES = ['100644', '100755']
 /** A git mode that holds a link's target, which is the blob's bytes with nothing converted. */
@@ -109,38 +130,55 @@ function readInTheLaunchersGitDir(place: JudgePlace, format: GitObjectFormat, ho
   if (attribute_tree === undefined) return { kind: 'refused', refusal: `the checkout's attributes cannot be named, ${THE_TREE_CANNOT_BE_JUDGED}` }
   const attributed: JudgePlace = { ...place, attribute_tree }
 
-  const index = join(scratch.path, 'index')
-  const unkept = keepBothTrees(attributed, head, host, judge, index)
-  if (unkept !== undefined) return { kind: 'refused', refusal: unkept, ...(place.attribute_tree === null ? {} : { the_approved_tree: true as const }) }
-  return readTheLiveTree(attributed, format, host, judge, index)
+  const refused = (refusal: string): JudgedTree => ({
+    kind: 'refused',
+    refusal,
+    ...(place.attribute_tree === null ? {} : { the_approved_tree: true as const }),
+  })
+
+  const approved = theTreeItReadItself(attribute_tree, 'the tree whose attributes apply', host, judge, scratch, 'approved')
+  if (typeof approved === 'string') return refused(approved)
+  const start = theTreeTheLiveTreeStartsFrom(head, attribute_tree, approved, host, judge, scratch)
+  if (typeof start === 'string') return refused(start)
+  return readTheLiveTree(attributed, format, host, judge, start, approved.entries)
 }
 
-/** Keeps the tree whose attributes apply, and HEAD's own tree beside it, refusing when either does not read back. */
-function keepBothTrees(place: JudgePlace, head: string | undefined, host: JudgeHost, judge: string, index: string): string | undefined {
-  const approved = keepTheTree(place.attribute_tree as string, host, judge, index, 'the tree whose attributes apply')
-  if (approved !== undefined || place.attribute_tree === head) return approved
-  return seedTheLiveTree(head, host, judge, index)
+/**
+ * The index the live tree is written from: HEAD's tree as the launcher read it, the approved entries themselves when
+ * HEAD is that tree (they are read already, and `git add` writes the same index onward), or an empty one in a checkout
+ * with no commit yet.
+ */
+function theTreeTheLiveTreeStartsFrom(
+  head: string | undefined,
+  attribute_tree: string,
+  approved: VerifiedTree,
+  host: JudgeHost,
+  judge: string,
+  scratch: ScratchDirectory,
+): VerifiedTree | string {
+  if (head === undefined) {
+    const index = join(scratch.path, 'live.index')
+    const seeded = gitIn(host, judge, ['read-tree', '--empty'], { GIT_INDEX_FILE: index })
+    return seeded === undefined ? `the checkout cannot be seeded as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` : { entries: new Map<string, TreeEntry>(), index }
+  }
+  if (head === attribute_tree) return approved
+  return theTreeItReadItself(head, "the checkout's own tree", host, judge, scratch, 'head')
 }
 
-/** Seeds the index the live tree is written from: HEAD's tree, or an empty one in a checkout with no commit yet. */
-function seedTheLiveTree(head: string | undefined, host: JudgeHost, judge: string, index: string): string | undefined {
-  if (head !== undefined) return keepTheTree(head, host, judge, index, "the checkout's own tree")
-  const seeded = gitIn(host, judge, ['read-tree', '--empty'], { GIT_INDEX_FILE: index })
-  return seeded === undefined ? `the checkout cannot be seeded as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` : undefined
-}
+/** Writes the live tree and judges every file of it against the entries of the tree whose attributes apply. */
+function readTheLiveTree(
+  place: JudgePlace,
+  format: GitObjectFormat,
+  host: JudgeHost,
+  judge: string,
+  start: VerifiedTree,
+  approved: ReadonlyMap<string, TreeEntry>,
+): JudgedTree {
+  const live = writeTheLiveTree(place, place.attribute_tree as string, judge, start.index, host)
+  if ('kind' in live) return live
 
-/** Writes the live tree and judges every file of it against the tree whose attributes apply. */
-function readTheLiveTree(place: JudgePlace, format: GitObjectFormat, host: JudgeHost, judge: string, index: string): JudgedTree {
-  const live = writeTheLiveTree(place, place.attribute_tree as string, judge, index, host)
-  if (typeof live !== 'string') return live
-
-  const approved = entriesOf(place.attribute_tree as string, host, judge)
-  if (typeof approved === 'string') return { kind: 'refused', refusal: approved }
-  const entries = entriesOf(live, host, judge)
-  if (typeof entries === 'string') return { kind: 'refused', refusal: entries }
-
-  const refusal = judgeEveryFile(place, place.attribute_tree as string, entries, approved, format, host, judge)
-  return refusal === undefined ? { kind: 'tree', tree: live, changes: differencesBetween(approved, entries) } : { kind: 'refused', refusal }
+  const refusal = judgeEveryFile(place, place.attribute_tree as string, live.entries, approved, format, host, judge)
+  return refusal === undefined ? { kind: 'tree', tree: live.tree, changes: differencesBetween(approved, live.entries) } : { kind: 'refused', refusal }
 }
 
 /**
@@ -165,10 +203,6 @@ function makeTheLaunchersGitDir(host: JudgeHost, scratch: ScratchDirectory, judg
   return undefined
 }
 
-/**
- * HEAD's tree id, read from the checkout's git dir: it hashes no file and starts nothing. A tree that cannot be
- * named is refused, since there is then nothing to compare the live tree against.
- */
 /** HEAD's tree id, or undefined in a checkout with no commit yet: a tree that cannot be read was never approved. */
 function headTreeOf(git_dir: string, host: JudgeHost): string | undefined {
   return gitIn(host, git_dir, ['rev-parse', '--verify', '--quiet', 'HEAD^{tree}'])
@@ -180,25 +214,36 @@ function emptyTree(host: JudgeHost, judge: string): string | undefined {
 }
 
 /**
- * Reads `tree` into the index with the checkout's objects offered, then writes it back WITHOUT them: the objects the
- * write produces are written in the launcher's git dir, recomputed from the index. The read is kept only when the id
- * git computes is the id asked for; anything else means the object under that name is not what its name says.
+ * Reads `tree` with the checkout's objects offered, moves the entries it found into a second index that carries no
+ * cache-tree, and writes the tree back from those entries: the objects the write produces are written in the launcher's
+ * git dir, and the id git computes there is recomputed from what was read. `read-tree` alone would not do: it primes
+ * the index's cache-tree with the ids it was handed, and `write-tree` on that index answers with the id it was asked
+ * for without computing one, so an object forged under one of the tree's subtrees would read back as the tree the
+ * owner approved. The read is kept only when the recomputed id is the id asked for; anything else means the object
+ * under that name is not what its name says. What is kept is the entries the launcher read itself.
  */
-function keepTheTree(
+function theTreeItReadItself(
   tree: string,
+  what: string,
   host: JudgeHost,
   judge: string,
-  index: string,
-  what: string,
-): string | undefined {
-  const read = gitIn(host, judge, ['read-tree', tree], { GIT_INDEX_FILE: index })
+  scratch: ScratchDirectory,
+  name: string,
+): VerifiedTree | string {
+  const asRead = join(scratch.path, `${name}.read.index`)
+  const recomputed = join(scratch.path, `${name}.recomputed.index`)
+  const read = gitIn(host, judge, ['read-tree', tree], { GIT_INDEX_FILE: asRead })
   if (read === undefined) return `${what} (${tree}) cannot be read, ${THE_TREE_CANNOT_BE_JUDGED}`
-  const written = gitIn(host, judge, ['write-tree'], { GIT_INDEX_FILE: index })
+  const listed = gitRawIn(host, judge, ['ls-files', '-s', '-z'], { GIT_INDEX_FILE: asRead })
+  if (listed === undefined) return `${what} (${tree}) cannot be listed as it was read, ${THE_TREE_CANNOT_BE_JUDGED}`
+  const moved = gitRawIn(host, judge, ['update-index', '-z', '--index-info'], { GIT_INDEX_FILE: recomputed }, listed)
+  if (moved === undefined) return `${what} (${tree}) cannot be carried into an index of its own, ${THE_TREE_CANNOT_BE_JUDGED}`
+  const written = gitIn(host, judge, ['write-tree'], { GIT_INDEX_FILE: recomputed })
   if (written === undefined) return `${what} (${tree}) cannot be written back from what was read, so it cannot be trusted (martha#167); approve the checkout again`
   if (written !== tree) {
     return `${what} (${tree}) does not read back as itself (it reads back as ${written}), so the object under that name is not the tree it names (martha#167); approve the checkout again`
   }
-  return undefined
+  return { entries: entriesFromListing(listed), index: recomputed }
 }
 
 /**
@@ -217,36 +262,41 @@ export function differencesBetween(from: ReadonlyMap<string, TreeEntry>, to: Rea
   return changes
 }
 
-/** Every path under `tree`, as git lists it from the launcher's git dir. */
-function entriesOf(tree: string, host: JudgeHost, judge: string): ReadonlyMap<string, TreeEntry> | string {
-  const listed = gitRawIn(host, judge, ['ls-tree', '-r', '-z', '--full-tree', tree])
-  if (listed === undefined) return `the tree ${tree} cannot be listed, ${THE_TREE_CANNOT_BE_JUDGED}`
+/** Every path of an index the launcher read itself, as `git ls-files -s -z` prints it: `<mode> <blob> <stage>TAB<path>`. */
+function entriesFromListing(listed: string): ReadonlyMap<string, TreeEntry> {
   const entries = new Map<string, TreeEntry>()
   for (const record of listed.split(RECORD)) {
     const tab = record.indexOf('\t')
     if (tab < 0) continue
-    const [mode = '', , blob = ''] = record.slice(0, tab).split(' ')
+    const [mode = '', blob = ''] = record.slice(0, tab).split(' ')
     entries.set(record.slice(tab + 1), { mode, blob })
   }
   return entries
 }
 
-/** The tree git would write with the checkout's files as they are, hashed under the tree whose attributes apply. */
-function writeTheLiveTree(place: JudgePlace, attribute_tree: string, judge: string, index: string, host: JudgeHost): string | JudgedTree {
+/**
+ * The tree git would write with the checkout's files as they are, hashed under the tree whose attributes apply, and
+ * the entries it is made of as the launcher read them back from its own index.
+ */
+function writeTheLiveTree(place: JudgePlace, attribute_tree: string, judge: string, index: string, host: JudgeHost): LiveTree | JudgedTree {
+  // The blobs `git add` hashes for new and changed files are written into the checkout's own object store, as `git add`
+  // wrote them before the gate ran in a git dir of its own: the owner approves a tree naming them, and a later read has
+  // to find them once this scratch directory is gone.
+  const objects = join(place.git_dir, 'objects')
   const added = gitIn(host, judge, ['-c', 'core.sparseCheckout=false', 'add', '--all', '--', '.'], {
     GIT_WORK_TREE: place.top,
     GIT_INDEX_FILE: index,
     GIT_ATTR_SOURCE: attribute_tree,
+    GIT_OBJECT_DIRECTORY: objects,
   })
   if (added === undefined) return { kind: 'refused', refusal: `the checkout cannot be read as a working tree, ${THE_TREE_CANNOT_BE_JUDGED}` }
-  // The live tree is written into the checkout's own object store, as `git add` used to leave it: the owner approves
-  // that id, and a later read uses it again as the tree whose attributes apply, so it has to outlive this scratch.
-  const written = gitIn(host, judge, ['write-tree'], {
-    GIT_INDEX_FILE: index,
-    GIT_OBJECT_DIRECTORY: join(place.git_dir, 'objects'),
-    GIT_ALTERNATE_OBJECT_DIRECTORIES: join(judge, 'objects'),
-  })
-  return written ?? { kind: 'refused', refusal: `the checkout cannot be written as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` }
+  // The trees, too, are written there rather than in the scratch git dir: the id the owner approves is read again by a
+  // later process as the tree whose attributes apply, so it has to outlive this scratch.
+  const written = gitIn(host, judge, ['write-tree'], { GIT_INDEX_FILE: index, GIT_OBJECT_DIRECTORY: objects })
+  if (written === undefined) return { kind: 'refused', refusal: `the checkout cannot be written as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` }
+  const listed = gitRawIn(host, judge, ['ls-files', '-s', '-z'], { GIT_INDEX_FILE: index })
+  if (listed === undefined) return { kind: 'refused', refusal: `the checkout's tree cannot be listed as it was written, ${THE_TREE_CANNOT_BE_JUDGED}` }
+  return { tree: written, entries: entriesFromListing(listed) }
 }
 
 /**
@@ -302,11 +352,18 @@ function gitIn(host: JudgeHost, git_dir: string, args: readonly string[], set: R
   return gitRawIn(host, git_dir, args, set)?.trim()
 }
 
-function gitRawIn(host: JudgeHost, git_dir: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
+function gitRawIn(
+  host: JudgeHost,
+  git_dir: string,
+  args: readonly string[],
+  set: Readonly<Record<string, string>> = {},
+  input?: string,
+): string | undefined {
   const run = host.processes.runNow({
     command: 'git',
     args: ['--git-dir', git_dir, '-c', 'core.fsmonitor=false', ...args],
     cwd: git_dir,
+    ...(input === undefined ? {} : { input }),
     environment: {
       drop_prefixes: NOTHING_DROPPED,
       set: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG, GIT_TERMINAL_PROMPT: '0', ...set },

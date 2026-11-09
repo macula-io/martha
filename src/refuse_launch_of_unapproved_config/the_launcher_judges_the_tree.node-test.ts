@@ -114,6 +114,44 @@ test('an approved tree that does not read back as itself is refused rather than 
   assert.ok(refusal.includes('approve the checkout again'), refusal)
 })
 
+test('a subtree forged under the approved tree is refused, not read as the tree the owner approved', (t) => {
+  const where = place(t, { 'sub/hook.sh': '#!/bin/sh\necho approved\n' })
+  const approved = head(where)
+  const approved_subtree = git(where.checkout, 'rev-parse', 'HEAD:sub')
+
+  writeFileSync(join(where.checkout, 'sub', 'hook.sh'), '#!/bin/sh\necho planted\n')
+  git(where.checkout, 'add', '--all')
+  const planted_subtree = git(where.checkout, 'ls-tree', git(where.checkout, 'write-tree'), 'sub').split(/\s+/)[2] ?? ''
+  assert.notEqual(planted_subtree, approved_subtree)
+
+  // The object the approved subtree's id names is replaced by another subtree's. `read-tree` hands its entries on without
+  // a word, and an index that kept the cache-tree `read-tree` primed would hand the approved id back as if it had
+  // computed it; only the id recomputed from those entries tells the two apart.
+  const objects = join(where.checkout, '.git', 'objects')
+  const object = join(objects, approved_subtree.slice(0, 2), approved_subtree.slice(2))
+  execFileSync('chmod', ['u+w', object])
+  writeFileSync(object, execFileSync('cat', [join(objects, planted_subtree.slice(0, 2), planted_subtree.slice(2))]))
+
+  const read = judged(where, approved)
+  assert.equal(read.kind, 'refused', 'a tree whose subtree was forged is not the tree the owner approved')
+  const refusal = read.kind === 'refused' ? read.refusal : ''
+  assert.ok(refusal.includes('does not read back as itself'), refusal)
+})
+
+test('a file the checkout never carried keeps its blob, so a later read under that approval reads the same tree', (t) => {
+  const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n' })
+  writeFileSync(join(where.checkout, 'new.sh'), '#!/bin/sh\necho brand new\n')
+
+  const first = judged(where)
+  assert.equal(first.kind, 'tree')
+  const approved = first.kind === 'tree' ? first.tree : ''
+  assert.notEqual(approved, head(where), 'the file the checkout never carried is in the tree that is approved')
+
+  const again = judged(where, approved)
+  assert.equal(again.kind, 'tree', 'an approval holding a new file is read again once its blob outlives the read that wrote it')
+  assert.equal(again.kind === 'tree' ? again.tree : '', approved, 'and it reads as the very tree that was approved')
+})
+
 // --- the bytes first (martha#167 §4, Saturnus’s condition (a)) ------------------
 
 test('a file whose own bytes are the approved blob is answered without git being asked at all', () => {
