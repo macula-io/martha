@@ -55,7 +55,12 @@ import {
   type ReadSpan,
 } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import { ownWriteMatches } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import {
+  startedWithTheSwitches,
+  type ApprovedLaunch,
+  type HostSwitches,
+  type StartedWith,
+} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { ownWritesOfLaunch } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -97,6 +102,18 @@ export interface ToolResult {
    * otherwise, and then every read counts.
    */
   readonly approved_start: string | null
+  /**
+   * What the launcher spawned this launch's host with, as it handed it to the relay (martha#135): the arguments and,
+   * down to the names the adapter declares, the environment. It is never written to state; it lives in the
+   * launcher's memory for the life of the launch, which is the relay's life. `undefined` when there is no start to
+   * hand over, and then no read is exempt.
+   */
+  readonly started_with: StartedWith | undefined
+  /**
+   * The switches under which this host attaches no other file's text to a read, as its adapter declares them
+   * (martha#135); `undefined` when the adapter declares none, and then no read is exempt.
+   */
+  readonly read_attaches_nothing: HostSwitches | undefined
   readonly host: LaunchHost
 }
 
@@ -118,6 +135,10 @@ function readOfTheApprovedStartTree(path: unknown, span: ReadSpan, result: ToolR
   if (typeof path !== 'string') return false
   const { launch, approved_start, host } = result
   if (approved_start === null) return false
+  // A host can attach another file's text to what a read returns — a nested CLAUDE.md, an ignored CLAUDE.local.md —
+  // and Martha places the result by the call, never by what came back. So a read of the approved tree is exempt only
+  // while the launch really started the host with the switches its adapter says attach nothing (martha#135).
+  if (!startedWithTheSwitches(result.started_with, result.read_attaches_nothing)) return false
   if (!holdsTheApprovedStartTree(launch, approved_start, host)) return false
   return isInTheCheckoutTree(launch.launch_dir, launch.stop_dir, path, span, host)
 }

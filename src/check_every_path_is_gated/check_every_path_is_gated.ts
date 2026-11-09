@@ -27,6 +27,8 @@
 // does not name — and it must admit a rostered member, so a gate that refuses
 // everything is caught too.
 
+import { join } from 'node:path'
+
 import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
@@ -124,7 +126,11 @@ const PROBES: readonly Probe[] = [
  *
  * `gateRefuses` is the real shell gate, driven once per row that claims it.
  * `delivery_gates` is the real map of gates, driven once per question per row
- * that names one.
+ * that names one. `path_gates` is the same for a row whose control checks every
+ * path a member's file tools name (martha#168): it is empty here, because the
+ * gate reads the machine and a slice may import no adapter, so whoever runs the
+ * check supplies it — and a row naming a gate the caller did not supply is a gap,
+ * never a pass.
  */
 export function gapsInGateCoverage(
   paths: readonly InboundPath[],
@@ -132,9 +138,10 @@ export function gapsInGateCoverage(
   delivery_gates: Readonly<Record<string, DeliveryGate>> = DELIVERY_GATES,
   launch_gates: Readonly<Record<string, LaunchGate>> = LAUNCH_GATES,
   argument_gates: Readonly<Record<string, ArgumentGate>> = ARGUMENT_GATES,
+  path_gates: Readonly<Record<string, PathGate>> = {},
 ): readonly Gap[] {
   const gaps: Gap[] = []
-  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates }
+  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates }
 
   for (const path of paths) {
     const why = gapOfRow(path, gateRefuses, gates)
@@ -149,6 +156,7 @@ interface Gates {
   readonly delivery: Readonly<Record<string, DeliveryGate>>
   readonly launch: Readonly<Record<string, LaunchGate>>
   readonly argument: Readonly<Record<string, ArgumentGate>>
+  readonly path: Readonly<Record<string, PathGate>>
 }
 
 /**
@@ -170,7 +178,29 @@ function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gat
 
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
+  if (control.kind === 'check_every_path_is_gated') return gatedPathRowGap(path, control, gateRefuses, gates)
+
   return claimedControlGap(path, control, gateRefuses, gates.delivery)
+}
+
+/**
+ * Why a row claiming a path gate is a gap: the gate nobody built, a gate that
+ * answers one of the questions wrong, or a control it carries beside the path
+ * gate that does not stand on the row either (martha#168).
+ */
+function gatedPathRowGap(
+  path: InboundPath,
+  control: Extract<Control, { kind: 'check_every_path_is_gated' }>,
+  gateRefuses: (path: string) => boolean,
+  gates: Gates,
+): string | undefined {
+  const gate = gates.path[control.gate]
+  if (gate === undefined) return `names a path gate nobody has built: ${control.gate}`
+  const failed = PATH_PROBES.find((probe) => gate(probe) !== probe.admits)
+  if (failed !== undefined) {
+    return failed.admits ? `the gate ${control.gate} refuses ${failed.what}` : `the gate ${control.gate} admits ${failed.what}`
+  }
+  return control.also.map((also) => gapOfRow({ ...path, control: also }, gateRefuses, gates)).find((why) => why !== undefined)
 }
 
 /** Why a row naming an argument gate is a gap: it is not delivered text, or its gate fails a question. */
@@ -188,6 +218,47 @@ export interface ArgumentProbe {
   readonly what: string
   readonly args: readonly string[]
 }
+
+/**
+ * A path a member's file tool names, whether the gate must admit it, and where
+ * the member stands: the checkout a write lands in, and its home.
+ */
+export interface PathProbe {
+  readonly admits: boolean
+  readonly what: string
+  /** The path the member's Write names. */
+  readonly path: string
+  /** The member's working directory: the checkout a git dir is found from. */
+  readonly cwd: string
+  /** The host's home, which a leading `~` resolves against. */
+  readonly home: string
+}
+
+/**
+ * What decides whether a member's file tool may write a path it names. Built in
+ * the host adapter that holds the guard, and passed to the check by whoever runs
+ * it: a slice may import no adapter, so the check takes the gate as an argument
+ * rather than naming a function it cannot reach.
+ */
+export type PathGate = (probe: PathProbe) => boolean
+
+/** The home and the checkout the path-gate probes stand in: neither exists on any machine, so the answer rests on the names alone. */
+const PROBE_HOME = '/an-owners-home'
+const PROBE_CHECKOUT = '/the/checkout'
+
+/**
+ * The questions every path gate is asked, one per class of path a member's file
+ * tool can name: an ordinary file in the checkout it stands in, the checkout's
+ * own git directory, a `.git` a member would add under `src` spelled as macOS
+ * reads it, and the owner's own git configuration. The first is admitted, so a
+ * gate that refuses everything is caught.
+ */
+export const PATH_PROBES: readonly PathProbe[] = [
+  { admits: true, what: 'an ordinary file in the checkout', path: join(PROBE_CHECKOUT, 'src', 'a.ts'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+  { admits: false, what: "the checkout's own git directory", path: join(PROBE_CHECKOUT, '.git', 'hooks', 'pre-commit'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+  { admits: false, what: 'a .git a member would add, spelled as a case-insensitive disk reads it', path: join(PROBE_CHECKOUT, 'src', '.GIT'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+  { admits: false, what: "the owner's own git configuration", path: join(PROBE_HOME, '.gitconfig'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+]
 
 /**
  * The questions every argument gate is asked, one per class of word the host
@@ -505,9 +576,17 @@ export function shellGateRowsNothingRecords(
     const declared_none = not_turn_sources.includes(path.id)
     if (declared_none && reached.has(path.id)) {
       gaps.push({ path: path.id, why: 'is declared no turn source, and a host records it' })
-    } else if (path.control.kind === 'shell-gate' && !declared_none && !reached.has(path.id)) {
+    } else if (claimsTheShellGate(path.control) && !declared_none && !reached.has(path.id)) {
       gaps.push({ path: path.id, why: 'claims the shell gate, and nothing the host records ever reaches it' })
     }
   }
   return gaps
+}
+
+/**
+ * Whether a row claims the shell gate, beside any other control it carries: a
+ * row may claim it through a path gate's `also` (martha#168).
+ */
+export function claimsTheShellGate(control: Control): boolean {
+  return control.kind === 'shell-gate' || (control.kind === 'check_every_path_is_gated' && control.also.some(claimsTheShellGate))
 }

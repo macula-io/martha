@@ -73,6 +73,15 @@ const PID_AT = '\u0000'
 /** What the run's work folder under TMPDIR is named after. */
 export const WORK_PREFIX = 'martha-clean-install-'
 
+/**
+ * The variable a test sets to park the run at one named step, so the interrupt it sends lands at the state the test
+ * asserts instead of wherever the run had got to when the signal arrived (martha#189).
+ */
+export const HOLD_VARIABLE = 'MARTHA_CLEAN_INSTALL_HOLD'
+
+/** What a parked run writes before it waits: the line a test waits for, so it never sleeps and never retries (martha#189). */
+export const HELD = 'held'
+
 class StepFailed extends Error {}
 
 /**
@@ -99,6 +108,26 @@ const reason = (error) => error instanceof Error ? error.message : String(error)
 
 /** @param {AbortSignal | undefined} signal */
 const interruptedBy = (signal) => `interrupted by ${String(signal?.reason)}`
+
+/**
+ * Parks the run at `step` when a test named it with HOLD_VARIABLE: it says so in the log, then waits for the
+ * interrupt, which is the only thing that ends the wait. A run nobody parked for returns at once, and so does a run
+ * already interrupted. This is what makes an interrupt land at the state a test names rather than at whatever the run
+ * had reached when the signal arrived (martha#189). Exported so a test can pin the wait itself, which no run-level test
+ * can: a hold that logged and returned at once still leaves an interrupted run failing a step later (martha#189 r=2).
+ * @param {(line: string) => void} log
+ * @param {string} step
+ * @param {AbortSignal | undefined} signal
+ */
+export async function heldAt (log, step, signal) {
+  if ((process.env[HOLD_VARIABLE] ?? '').trim() !== step) return
+  log(`${HELD}: ${step}, waiting to be interrupted`)
+  if (signal === undefined) return
+  await new Promise((resolve) => {
+    if (signal.aborted) resolve(undefined)
+    else signal.addEventListener('abort', resolve, { once: true })
+  })
+}
 
 /**
  * Runs one step: its result is the line's detail; a throw is a FAIL line and stops the steps after it. A step does
@@ -259,7 +288,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   await step(run, 'init', () => said(owner.run('init')))
   await step(run, 'approve', () => said(owner.onATerminal('approve')))
   for (const { name } of SOLO_MEMBERS) {
-    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, plant, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
+    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, plant, log: run.log, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
   }
   for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member, plant))
 }
@@ -394,11 +423,14 @@ function notACopyOf (copy, { installed, files, copyName, root }) {
 /**
  * `martha start <name>` on its terminal, kept in `running` at once; up once it names the member's pid, the pid is
  * alive and its host was started with a copy of the release's relay.
- * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, plant: Plant, relay: Relay, running: Running, signal?: AbortSignal }} start
+ * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, plant: Plant, log: (line: string) => void, relay: Relay, running: Running, signal?: AbortSignal }} start
  */
-async function startMember ({ owner, name, startedLine, host, plant, relay, running, signal }) {
+async function startMember ({ owner, name, startedLine, host, plant, log, relay, running, signal }) {
   const member = runningMember(name, owner.startOnATerminal('start', name))
   running.members.push(member)
+  // The start is in flight and nothing of it is named yet: a test that names this step interrupts here, so the state
+  // it asserts is the state the run is in (martha#189).
+  await heldAt(log, `start ${name}`, signal)
   const started = startedPattern(startedLine, name)
   const named = await waitFor(`${name} to be named started`, () => member.said.replace(TERMINAL_LINE_END, '\n').match(started), member, signal)
   member.pid = Number(named[1])

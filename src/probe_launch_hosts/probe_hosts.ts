@@ -31,6 +31,7 @@ import {
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
 import { HOOKS_SPELLINGS, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
@@ -88,6 +89,12 @@ interface Probe {
    * else fails the probe.
    */
   readonly gate_names?: (place: Place) => readonly string[]
+  /**
+   * Also require the host itself to have exited cleanly, for a row whose claim is
+   * that something did NOT happen: a host that quits on the config before it gets
+   * that far would leave the same markers as one that ran and rightly did nothing.
+   */
+  readonly host_ok?: true
 }
 
 /** One file of the owner's own markdown, at `<config folder>/<folder>/<name>`. */
@@ -392,6 +399,27 @@ function pluginFolder(place: Place): string {
 }
 const pluginInOwnerSettings = (place: Place) => JSON.stringify({ env: { [PLUGIN_DIRS_VARIABLE]: pluginFolder(place) } })
 
+// --- the settings that turn every hook off (martha#122) -----------------------
+//
+// The keys are never typed here: they come from the recorded host's own hook-set function, so a re-recording that
+// renames one changes what this plants, and a recording that names none fails the run rather than probing nothing.
+// One pair of rows for EACH key the recording names, because a re-recording can add a second way to turn every hook
+// off, and a pair written for the first alone would leave the new one probing nothing while the run stayed green:
+//   - the key BESIDE a SessionStart hook, on the switches alone: the hook that would mark OWNER_HOOK does not run,
+//     which is what shows the key really is a switch on this host. The row also claims the host exited cleanly, since
+//     its evidence is an absence: a host that quit on the file would look exactly like one that ran and dropped it;
+//   - the key ALONE in the owner's user settings, gated: with no hook in the file, the switch is the only reason
+//     the launcher has to refuse, so the refusal is that gate's and not another one's.
+
+/** Every key the recorded host tests as `=== true` to drop every hook, whichever settings file sets it. */
+const HOOK_KILLING_KEYS: readonly string[] = CLAUDE_CODE_HOOK_SWITCHES.every_source
+/** A recording that names no key: the run fails rather than quietly probing fewer rows. */
+const SWITCHES_WITHOUT_A_PROBE = HOOK_KILLING_KEYS.length === 0 ? ['a key that turns every hook off, in any settings file'] : []
+
+/** The owner's user settings with a SessionStart hook and one of those keys beside it: the hook that would mark OWNER_HOOK. */
+const ownerHookAndSwitch = (place: Place, key: string) =>
+  JSON.stringify({ hooks: touchAtStart(place.marker('OWNER_HOOK')), [key]: true })
+
 const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] => {
   const as = gated ? 'as martha start starts it, its settings gate included' : 'on the switches alone, its settings gate skipped'
   const refused = (marker: string) => (gated ? { [marker]: false, GATE_REFUSED: true } : { [marker]: true })
@@ -411,8 +439,30 @@ const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] =>
       expected: refused('PLUGIN_HOOK'),
       ...(gated ? { gate_names: (place: Place) => [ownerSettingsPath(place), PLUGIN_DIRS_VARIABLE] } : {}),
     },
+    ...(gated
+      ? []
+      : HOOK_KILLING_KEYS.map((key): Probe => ({
+          ...common,
+          what: `Claude Code ${as}: ${key}, which turns every hook off, beside a hook in the owner's user settings`,
+          owner_settings: (place: Place) => ownerHookAndSwitch(place, key),
+          expected: { OWNER_HOOK: false },
+          host_ok: true,
+        }))),
   ]
 })
+
+/** Each key alone, gated: no hook in the file, so the only reason the launcher has to refuse is the key itself. */
+const SWITCH_PROBES: readonly Probe[] = HOOK_KILLING_KEYS.map((key): Probe => ({
+  what: `Claude Code as martha start starts it: ${key} alone in the owner's user settings, with no hook beside it`,
+  host: 'claude-code',
+  command: claude(...HEADLESS_CLAUDE, PROMPT),
+  approved: () => {},
+  planted: () => {},
+  planned: true,
+  owner_settings: () => JSON.stringify({ [key]: true }),
+  expected: { GATE_REFUSED: true },
+  gate_names: (place: Place) => [ownerSettingsPath(place), key],
+}))
 
 // --- the owner's own agents, skills and commands (martha#146) ----------------
 //
@@ -590,8 +640,15 @@ function removeScratch(scratch: string, checkouts: readonly string[]): void {
   rmSync(scratch, { recursive: true, force: true })
 }
 
+/** What one run left: each marker and whether it was started, and the host's own exit status. */
+interface RunResult {
+  readonly markers: Readonly<Record<string, boolean>>
+  /** The host's exit status, or null when the launcher's gate refused it and no host ran. */
+  readonly status: number | null
+}
+
 /** Each marker and whether it was started, or why the probe could not run. */
-function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
+function runProbe(probe: Probe): RunResult | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
   const checkout = join(scratch, 'checkout')
@@ -603,7 +660,10 @@ function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
     const inherited = environmentOf(probe, place)
     const switches = switchesFor(probe, place, inherited)
     if (typeof switches === 'string') return `refused by prepareLaunch: ${switches}`
-    if ('gate' in switches) return gateSeen(probe, place, switches.gate)
+    if ('gate' in switches) {
+      const refused = gateSeen(probe, place, switches.gate)
+      return typeof refused === 'string' ? refused : { markers: refused, status: null }
+    }
 
     const { command, args } = probe.command(switches)
     const run = spawnSync(command, args, {
@@ -614,7 +674,10 @@ function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
     })
     if (run.error !== undefined) return `could not run: ${run.error.message}`
     spawnSync('sleep', ['1'])
-    return Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(place.marker(name))]))
+    return {
+      markers: Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(place.marker(name))])),
+      status: run.status,
+    }
   } finally {
     removeScratch(scratch, [checkout])
   }
@@ -635,19 +698,24 @@ for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES).c
 
 /** Runs one probe and prints each marker against its claim; a probe that cannot run, or a marker that differs, fails the run. */
 function reportProbe(probe: Probe): void {
-  const seen = runProbe(probe)
-  if (typeof seen === 'string') {
-    console.log(`${probe.what}: ${seen}`)
+  const run = runProbe(probe)
+  if (typeof run === 'string') {
+    console.log(`${probe.what}: ${run}`)
     process.exitCode = 1
     return
   }
   for (const [name, claimed] of Object.entries(probe.expected)) {
-    const matches = seen[name] === claimed
+    const matches = run.markers[name] === claimed
     if (!matches) process.exitCode = 1
     console.log(
-      `${probe.what}: ${name} ${said(seen[name] === true)}, ${matches ? 'as claimed' : `CLAIMED ${said(claimed)}`}`,
+      `${probe.what}: ${name} ${said(run.markers[name] === true)}, ${matches ? 'as claimed' : `CLAIMED ${said(claimed)}`}`,
     )
   }
+  // A row whose claim is that nothing happened also says the host was there to not do it.
+  if (probe.host_ok !== true) return
+  const exitedOk = run.status === 0
+  if (!exitedOk) process.exitCode = 1
+  console.log(`${probe.what}: the host exited ${exitedOk ? 'cleanly, as claimed' : `CLAIMED cleanly but exited ${run.status ?? 'not at all'}`}`)
 }
 
 /** The host's project folders for scratch checkouts, so a run that leaves one behind fails. */
@@ -664,7 +732,12 @@ if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
   process.exitCode = 1
 }
 
-for (const probe of [...PROBES, ...OWNER_PROBES, ...MARKDOWN_HOOK_PROBES, ...HOST_KEY_PROBES]) reportProbe(probe)
+if (SWITCHES_WITHOUT_A_PROBE.length > 0) {
+  console.error(`the recorded host names no key to plant, so nothing probes: ${SWITCHES_WITHOUT_A_PROBE.join(', ')}`)
+  process.exitCode = 1
+}
+
+for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES, ...HOST_KEY_PROBES]) reportProbe(probe)
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every

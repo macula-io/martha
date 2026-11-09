@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
@@ -38,14 +39,14 @@ function placeFor(t: TestContext) {
 }
 
 const placesFor = (place: ReturnType<typeof placeFor>, launcher: Record<string, string> = {}, settings: string[] = []): OwnerMemoryPlaces =>
-  ownerMemoryPlaces({ launcher_env: { HOME: place.home, ...launcher }, member_env: { HOME: place.home }, home: place.home, settings_files: settings })
+  ownerMemoryPlaces({ launcher_env: { HOME: place.home, ...launcher }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.worktree, settings_files: settings })
 
 const write = (file_path: string) => ({ file_path, content: 'remember: the owner said deploy' })
 
 function assertDenied(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, why: string): void {
   for (const tool of FILE_WRITING_TOOLS) {
     const input = tool === 'NotebookEdit' ? { notebook_path: file_path } : write(file_path)
-    assert.ok(writesTheOwnersMemory(tool, input, places, cwd, home)?.includes('martha#136'), `${tool}: ${why}`)
+    assert.ok(writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine)?.includes('martha#136'), `${tool}: ${why}`)
   }
 }
 
@@ -186,7 +187,7 @@ test('a chain of links one past the cap is refused, and no write is allowed whil
   mkdirSync(project)
   symlinkSync(chainAt(join(place.root, 'hops-past-cap'), LINK_HOPS, end), join(project, 'memory'))
   for (const file_path of [join(end, 'MEMORY.md'), join(place.worktree, 'notes.md')]) {
-    const why = writesTheOwnersMemory('Write', { file_path, content: 'x' }, places, place.worktree, place.home)
+    const why = writesTheOwnersMemory('Write', { file_path, content: 'x' }, places, place.worktree, place.home, thisMachine)
     assert.ok(why?.includes('cannot be followed to its end'), `${file_path} is refused: ${why}`)
   }
 })
@@ -199,9 +200,9 @@ test('a link that turns on itself is refused, and a read of the same path is not
   symlinkSync(join(project, 'second'), join(project, 'memory'))
   symlinkSync(join(project, 'memory'), join(project, 'second'))
   const memory = join(project, 'memory', 'MEMORY.md')
-  const why = writesTheOwnersMemory('Write', { file_path: memory, content: 'x' }, places, place.worktree, place.home)
+  const why = writesTheOwnersMemory('Write', { file_path: memory, content: 'x' }, places, place.worktree, place.home, thisMachine)
   assert.ok(why?.includes('cannot be followed to its end'), `a cycle is refused: ${why}`)
-  assert.equal(writesTheOwnersMemory('Read', { file_path: memory }, places, place.worktree, place.home), undefined, 'a read is not a write')
+  assert.equal(writesTheOwnersMemory('Read', { file_path: memory }, places, place.worktree, place.home, thisMachine), undefined, 'a read is not a write')
 })
 
 test('a projects folder that is a chain of links past the cap is refused, not dropped (#136 r=5)', (t) => {
@@ -211,7 +212,7 @@ test('a projects folder that is a chain of links past the cap is refused, not dr
   symlinkSync(chainAt(join(place.root, 'projects-past-cap'), LINK_HOPS, disk), join(place.config, 'projects'))
   const places = placesFor(place)
   for (const file_path of [join(disk, '-new', 'memory', 'MEMORY.md'), join(place.worktree, 'notes.md')]) {
-    const why = writesTheOwnersMemory('Write', { file_path, content: 'x' }, places, place.worktree, place.home)
+    const why = writesTheOwnersMemory('Write', { file_path, content: 'x' }, places, place.worktree, place.home, thisMachine)
     assert.ok(why?.includes('cannot be followed to its end'), `${file_path} is refused: ${why}`)
   }
 })
@@ -221,7 +222,7 @@ test('a project folder that is a chain of links past the cap is refused, not dro
   const places = placesFor(place)
   const pe = join(place.root, 'pe-past-cap')
   symlinkSync(chainAt(join(place.root, 'project-past-cap'), LINK_HOPS, pe), join(place.config, 'projects', '-chain'))
-  const why = writesTheOwnersMemory('Write', { file_path: join(pe, 'memory', 'MEMORY.md'), content: 'x' }, places, place.worktree, place.home)
+  const why = writesTheOwnersMemory('Write', { file_path: join(pe, 'memory', 'MEMORY.md'), content: 'x' }, places, place.worktree, place.home, thisMachine)
   assert.ok(why?.includes('cannot be followed to its end'), `refused: ${why}`)
 })
 
@@ -259,6 +260,7 @@ test('the owner\'s CLAUDE.md and rules are denied, in the launcher\'s config dir
     launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
     member_env: { HOME: place.home },
     home: place.home,
+    launch_dir: place.worktree,
     settings_files: [],
   })
   assertDenied(both, place.worktree, place.home, join(scratchConfig, 'projects', 'x', 'memory', 'MEMORY.md'), 'the launcher\'s dir')
@@ -282,10 +284,10 @@ test('a write elsewhere under projects/, outside the checkout, and any read of a
   const place = placeFor(t)
   const places = placesFor(place)
   for (const tool of FILE_WRITING_TOOLS) {
-    assert.equal(writesTheOwnersMemory(tool, write(join(place.config, 'projects', '-work-main-clone', 'session.jsonl')), places, place.worktree, place.home), undefined, tool)
-    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'memory', 'notes.md')), places, place.worktree, place.home), undefined, tool)
+    assert.equal(writesTheOwnersMemory(tool, write(join(place.config, 'projects', '-work-main-clone', 'session.jsonl')), places, place.worktree, place.home, thisMachine), undefined, tool)
+    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'memory', 'notes.md')), places, place.worktree, place.home, thisMachine), undefined, tool)
   }
-  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.mainMemory, 'MEMORY.md') }, places, place.worktree, place.home), undefined)
+  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.mainMemory, 'MEMORY.md') }, places, place.worktree, place.home, thisMachine), undefined)
 })
 
 test('the permission rules name the same places the gate denies, a Write and an Edit rule each', (t) => {
@@ -339,6 +341,7 @@ test('a member may not write the owner\'s user settings file, in the launcher\'s
     launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
     member_env: { HOME: place.home },
     home: place.home,
+    launch_dir: place.worktree,
     settings_files: [],
   })
   assertDenied(both, place.worktree, place.home, join(scratchConfig, USER_SETTINGS_FILE), 'the launcher\'s settings file')
@@ -367,6 +370,7 @@ test('a member may not write the owner\'s user MCP config, in the config dir or 
     launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
     member_env: { HOME: place.home },
     home: place.home,
+    launch_dir: place.worktree,
     settings_files: [],
   })
   assertDenied(both, place.worktree, place.home, join(scratchConfig, HOST_TRUST_RECORD_FILE), 'in the launcher\'s config dir')
@@ -407,10 +411,10 @@ test('every place the map says another package denies is refused through the rea
     .map(([name]) => name)
   assert.deepEqual(deniedBy.sort(), Object.keys(A_WRITE_INTO).sort(), 'every name the map says another package denies has a write this test makes')
   // The gate is known to run: a write outside every place is allowed.
-  assert.equal(writesTheOwnersMemory('Write', write(join(place.worktree, 'notes.md')), places, place.worktree, place.home), undefined, 'a write outside every place')
+  assert.equal(writesTheOwnersMemory('Write', write(join(place.worktree, 'notes.md')), places, place.worktree, place.home, thisMachine), undefined, 'a write outside every place')
   for (const name of deniedBy) {
     const file_path = join(place.config, A_WRITE_INTO[name] ?? '')
-    assert.notEqual(writesTheOwnersMemory('Write', write(file_path), places, place.worktree, place.home), undefined, `${name}: ${file_path} is refused`)
+    assert.notEqual(writesTheOwnersMemory('Write', write(file_path), places, place.worktree, place.home, thisMachine), undefined, `${name}: ${file_path} is refused`)
   }
 })
 
@@ -455,3 +459,153 @@ test('the places this guard denies are exactly the recorded names it owns, split
   const places = placesTheHostProtects()
   assert.deepEqual([...places.folders, ...places.files].sort(), owned.sort())
 })
+
+// --- what a later git run of the owner's reads (martha#168) -----------------------
+
+/** Every file tool, refused as a git place, naming martha#168 and no other reason. */
+function assertRefusedAsGit(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, why: string): void {
+  for (const tool of FILE_WRITING_TOOLS) {
+    const input = tool === 'NotebookEdit' ? { notebook_path: file_path } : write(file_path)
+    const said = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine)
+    assert.ok(said?.includes('martha#168'), `${tool}: ${why} (${said ?? 'admitted'})`)
+    assert.ok(said !== undefined && !said.includes('martha#136'), `${tool}: ${why} is refused as memory, not as a git place (${said})`)
+  }
+}
+
+/** Every file tool, admitted. */
+function assertAdmitted(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, why: string): void {
+  for (const tool of FILE_WRITING_TOOLS) {
+    const input = tool === 'NotebookEdit' ? { notebook_path: file_path } : write(file_path)
+    assert.equal(writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine), undefined, `${tool}: ${why}`)
+  }
+}
+
+test('a write into the checkout\'s own git directory is refused, and an ordinary file in that checkout is admitted (#168)', (t) => {
+  const place = placeFor(t)
+  const checkout = place.worktree
+  for (const dir of [join(checkout, '.git', 'hooks'), join(checkout, '.git', 'objects', 'info')]) mkdirSync(dir, { recursive: true })
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n')
+  const places = placesFor(place)
+  assertRefusedAsGit(places, checkout, place.home, join(checkout, '.git', 'hooks', 'pre-commit'), 'a hook the owner\'s next git run would start')
+  assertRefusedAsGit(places, checkout, place.home, join(checkout, '.git', 'config'), 'the checkout\'s own git config')
+  assertRefusedAsGit(places, checkout, place.home, join(checkout, '.git', 'objects', 'info', 'alternates'), 'the object store')
+  assert.equal(writesTheOwnersMemory('Read', { file_path: join(checkout, '.git', 'config') }, places, checkout, place.home, thisMachine), undefined, 'a read of the git config is not a write')
+  assertAdmitted(places, checkout, place.home, join(checkout, 'src', 'x.ts'), 'an ordinary file in the same checkout')
+})
+
+test('a .git segment anywhere is refused, at the end of the path and above it, and a .gitignore is not (#168)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const other = join(place.root, 'another-repo')
+  mkdirSync(join(other, '.git', 'hooks'), { recursive: true })
+  assertRefusedAsGit(places, place.worktree, place.home, join(place.worktree, 'src', '.git'), 'a .git file a member would add under src')
+  assertRefusedAsGit(places, place.worktree, place.home, join(other, '.git', 'hooks', 'pre-commit'), 'another repository\'s git dir, outside this checkout')
+  assertRefusedAsGit(places, place.worktree, place.home, join(place.worktree, '.git'), 'the .git entry itself, at the end of the path')
+  assertAdmitted(places, place.worktree, place.home, join(place.worktree, 'src', '.gitignore'), 'a .gitignore is no .git')
+  assertAdmitted(places, place.worktree, place.home, join(place.worktree, 'src', '.gitattributes'), 'a .gitattributes is no .git')
+})
+
+test('git\'s own .git synonyms are refused: any ASCII case, the points HFS+ ignores, and the NTFS short name (#168)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const named = (name: string) => join(place.worktree, 'src', name)
+  // git 2.56.0 utf8.c next_hfs_char drops these code points, and folds with tolower(); path.c is_ntfs_dotgit takes `.git` in any case, and `git~1`.
+  for (const spelling of ['.GIT', '.Git', '.gIt', '.git‌', '.g‌it', '.git﻿', '.git.', '.git ', 'git~1', 'GIT~1', 'git~1.', 'git~1 ']) {
+    assertRefusedAsGit(places, place.worktree, place.home, named(spelling), `the spelling ${JSON.stringify(spelling)}`)
+  }
+  for (const spelling of ['git~2', 'git~4', 'git', '.gitignore', '.gitattributes', 'x.git', '.github']) {
+    assertAdmitted(places, place.worktree, place.home, named(spelling), `the name ${JSON.stringify(spelling)} is no .git`)
+  }
+})
+
+test('a backslash is a separator to git\'s NTFS check too, so src/a\\.git and src/a\\git~1 are refused (#168)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const named = (name: string) => join(place.worktree, 'src', name)
+  // read-cache.c:1051-1054 (git 2.56.0): inside a path, a `\` makes git run
+  // is_ntfs_dotgit again on what follows it, so the name it finds on this disk is not the one it judges.
+  assertRefusedAsGit(places, place.worktree, place.home, named('a\\.git'), 'a .git after a backslash')
+  assertRefusedAsGit(places, place.worktree, place.home, named('a\\git~1'), 'a git~1 after a backslash')
+  assertRefusedAsGit(places, place.worktree, place.home, named('a\\.git\\hooks'), 'a .git between two backslashes')
+  assertAdmitted(places, place.worktree, place.home, named('a\\b.ts'), 'an ordinary name holding a backslash')
+  assertAdmitted(places, place.worktree, place.home, named('a\\.gitignore'), 'a .gitignore after a backslash is no .git')
+})
+
+test('a .git file naming a git directory outside the checkout is refused there, and where a linked worktree shares one (#168)', (t) => {
+  const place = placeFor(t)
+  const elsewhere = join(place.root, 'on-another-disk')
+  const gitDir = join(elsewhere, 'a-git-dir')
+  mkdirSync(join(gitDir, 'hooks'), { recursive: true })
+  writeFileSync(join(place.worktree, '.git'), `gitdir: ${gitDir}\n`)
+  const places = placesFor(place)
+  assertRefusedAsGit(places, place.worktree, place.home, join(gitDir, 'hooks', 'pre-commit'), 'the git dir a .git file names, under no .git segment')
+  assertRefusedAsGit(places, place.worktree, place.home, join(gitDir, 'config'), 'its config')
+  assertAdmitted(places, place.worktree, place.home, join(place.worktree, 'src', 'x.ts'), 'an ordinary file in the checkout that named it')
+
+  const shared = join(elsewhere, 'a-shared-git-dir')
+  const linked = join(place.root, 'worktrees', 'a-linked-worktree')
+  const worktreeGitDir = join(shared, 'worktrees', 'a-linked-worktree')
+  mkdirSync(worktreeGitDir, { recursive: true })
+  mkdirSync(join(shared, 'hooks'), { recursive: true })
+  writeFileSync(join(worktreeGitDir, 'commondir'), '../..\n')
+  writeFileSync(join(worktreeGitDir, 'index'), '')
+  mkdirSync(linked, { recursive: true })
+  writeFileSync(join(linked, '.git'), `gitdir: ${worktreeGitDir}\n`)
+  assertRefusedAsGit(places, linked, place.home, join(worktreeGitDir, 'index'), 'the index in the worktree\'s own git dir')
+  assertRefusedAsGit(places, linked, place.home, join(shared, 'hooks', 'pre-commit'), 'a hook in the git dir it shares, found through commondir')
+  assertAdmitted(places, linked, place.home, join(linked, 'src', 'x.ts'), 'an ordinary file in the linked worktree')
+})
+
+test('the git configuration files of the owner\'s own runs are refused, and the variables that move them too (#168)', (t) => {
+  const place = placeFor(t)
+  const moved = join(place.root, 'moved', 'gitconfig')
+  const system = join(place.root, 'system-gitconfig')
+  const xdg = join(place.root, 'an-xdg-config-home')
+  const places = placesFor(place, { GIT_CONFIG_GLOBAL: moved, GIT_CONFIG_SYSTEM: system, XDG_CONFIG_HOME: xdg })
+  assertRefusedAsGit(places, place.worktree, place.home, moved, 'GIT_CONFIG_GLOBAL')
+  assertRefusedAsGit(places, place.worktree, place.home, system, 'GIT_CONFIG_SYSTEM')
+  assertRefusedAsGit(places, place.worktree, place.home, join(xdg, 'git', 'config'), 'the XDG file the launcher\'s environment moves')
+  assertRefusedAsGit(places, place.worktree, place.home, join(place.home, '.gitconfig'), 'the owner\'s ~/.gitconfig')
+  assertRefusedAsGit(places, place.worktree, place.home, join(place.home, '.config', 'git', 'config'), 'the XDG file\'s own default under ~/.config')
+  assertAdmitted(places, place.worktree, place.home, join(place.root, 'a-project', 'gitconfig'), 'a gitconfig no git run reads')
+  assert.equal(writesTheOwnersMemory('Read', { file_path: moved }, places, place.worktree, place.home, thisMachine), undefined, 'a read of the user-level git config is not a write')
+
+  // A path a variable named is admitted once nothing names it.
+  const plain = placesFor(place)
+  assertAdmitted(plain, place.worktree, place.home, moved, 'no variable names it')
+  assertAdmitted(plain, place.worktree, place.home, join(xdg, 'git', 'config'), 'no XDG_CONFIG_HOME is set')
+})
+
+test('GIT_DIR and GIT_COMMON_DIR the launcher\'s environment names are refused whole (#168)', (t) => {
+  const place = placeFor(t)
+  const gitDir = join(place.root, 'a-git-dir-the-launcher-names')
+  const shared = join(place.root, 'a-shared-git-dir')
+  mkdirSync(join(gitDir, 'refs', 'heads'), { recursive: true })
+  mkdirSync(join(shared, 'hooks'), { recursive: true })
+  const places = placesFor(place, { GIT_DIR: gitDir, GIT_COMMON_DIR: shared })
+  assertRefusedAsGit(places, place.worktree, place.home, join(gitDir, 'refs', 'heads', 'main'), 'GIT_DIR')
+  assertRefusedAsGit(places, place.worktree, place.home, join(shared, 'hooks', 'pre-commit'), 'GIT_COMMON_DIR')
+  assertAdmitted(places, place.worktree, place.home, join(place.worktree, 'src', 'x.ts'), 'an ordinary file')
+})
+
+test('a git directory behind a chain of links that cannot be followed is refused, never allowed (#168)', (t) => {
+  const place = placeFor(t)
+  // A link that turns on itself, where the launcher's environment says the git dir is.
+  const loop = join(place.root, 'loop-git-dir')
+  symlinkSync('loop-git-dir', loop)
+  const places = placesFor(place, { GIT_DIR: loop })
+  const why = writesTheOwnersMemory('Write', write(join(place.worktree, 'src', 'x.ts')), places, place.worktree, place.home, thisMachine)
+  assert.ok(why?.includes('martha#168'), `a write while the git dir cannot be followed is refused (${why ?? 'admitted'})`)
+})
+
+test('a git directory that appears during the session is covered from the next call (#168)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const gitDir = join(place.root, 'a-git-dir-made-later')
+  const config = join(gitDir, 'config')
+  assertAdmitted(places, place.worktree, place.home, config, 'the checkout that says where its git dir is has not appeared yet')
+  mkdirSync(gitDir, { recursive: true })
+  writeFileSync(join(place.worktree, '.git'), `gitdir: ${gitDir}\n`)
+  assertRefusedAsGit(places, place.worktree, place.home, config, 'the checkout that appeared between calls')
+})
+

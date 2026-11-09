@@ -277,19 +277,50 @@ export function scratchMachine () {
 }
 
 /**
- * A scratch tree removed whole, its read-only release directories included.
- * @param {string} path
+ * Whether an error is the file system saying the path is no longer there (martha#189).
+ * @param {unknown} error
  */
-export function removeEvenReadOnly (path) {
+const isGone = (error) => error instanceof Error && /** @type {{ code?: unknown }} */ (error).code === 'ENOENT'
+
+/**
+ * The file-system calls one removal makes. A test passes its own to stand in for a directory that vanishes between
+ * the chmod that opens it and the read that lists it, which is what an interrupted launch does (martha#189).
+ * @typedef {{
+ *   chmodSync: (path: string, mode: number) => void,
+ *   readdirSync: (path: string, options: { withFileTypes: true }) => import('node:fs').Dirent[],
+ *   rmSync: (path: string, options: { recursive: true, force: true }) => void
+ * }} RemovalReads
+ */
+
+/** The file system a removal reads, unchanged: the calls this module already imports. @type {RemovalReads} */
+export const THIS_MACHINES_FILES = { chmodSync, readdirSync, rmSync }
+
+/**
+ * A scratch tree removed whole, its read-only release directories included.
+ *
+ * A folder that is already gone is gone, not a failure: an interrupted launch can take its own directory away while
+ * this walks, and demanding it failed the tear-down of every run a member was interrupted in (martha#189). Any other
+ * error still comes out, so a tree that is there and cannot be removed is named by the caller.
+ * @param {string} path
+ * @param {RemovalReads} [files] the file-system calls; this machine's unless a test stands in for one
+ */
+export function removeEvenReadOnly (path, files = THIS_MACHINES_FILES) {
   /** @param {string} dir */
   const walk = (dir) => {
-    try { chmodSync(dir, 0o700) } catch { return }
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    let entries
+    try {
+      files.chmodSync(dir, 0o700)
+      entries = files.readdirSync(dir, { withFileTypes: true })
+    } catch (error) {
+      if (isGone(error)) return
+      throw error
+    }
+    for (const entry of entries) {
       if (entry.isDirectory()) walk(join(dir, entry.name))
     }
   }
   walk(path)
-  rmSync(path, { recursive: true, force: true })
+  files.rmSync(path, { recursive: true, force: true })
 }
 
 /**
