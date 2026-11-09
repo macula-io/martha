@@ -16,6 +16,7 @@ import {
   INBOUND_PATHS,
   INSTRUCTION_FILES,
   INSTRUCTION_TEXT_OWNERS,
+  INSTRUCTION_TEXT_WORDING,
   gapsInInstructionTextOwnership,
   type InboundPath,
   type InstructionText,
@@ -33,7 +34,10 @@ const silent = (id: string, what: string, why: string): InboundPath => ({
   attestation: 'none',
 })
 
-const text = (owner: string, file: string = INSTRUCTION_FILES.checkout): InstructionText => ({ text: 'A_TEXT', file, owner, observed: true })
+const text = (owner: string, file: string = INSTRUCTION_FILES.checkout, words: readonly string[] = []): InstructionText => ({ text: 'A_TEXT', file, owner, words })
+
+/** The row A16's own text is, for the cases that plant a text requiring its words. */
+const aCheckoutsFixedText = (why: string) => silent('A16', `a checkout's fixed text: its ${INSTRUCTION_FILES.checkout} files`, why)
 
 test('the ownership table as shipped gives each instruction text exactly one owner, and no other row names its file (#135)', () => {
   assert.deepEqual(gapsInInstructionTextOwnership(), [])
@@ -60,6 +64,40 @@ test('a row that points at the owner instead of naming the file is no claim of i
     row('B4', `files a read takes in; the fixed text a read attaches is the owner's (${INSTRUCTION_FILES.checkout}: see A16)`),
   ]
   assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16')]), [])
+})
+
+test('a pointer at a row that does not own the file is a claim of its own, so the check fails, naming both rows', () => {
+  const rows = [aCheckoutsFixedText('the host loads none of them'), row('B4', `files a read takes in (an ${INSTRUCTION_FILES.checkout} here: see C1)`)]
+  assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16')]), [
+    { text: INSTRUCTION_FILES.checkout, why: 'row B4 names it too, and A16 is its owner' },
+  ])
+})
+
+test("a pointer at its own row claims another row's file, so the check fails", () => {
+  const rows = [aCheckoutsFixedText('the host loads none of them'), row('B4', `files a read takes in (an ${INSTRUCTION_FILES.checkout} here: see B4)`)]
+  assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16')]), [
+    { text: INSTRUCTION_FILES.checkout, why: 'row B4 names it too, and A16 is its owner' },
+  ])
+})
+
+test('an owner that says every phrase its text requires passes, read exactly as the phrase is written', () => {
+  const said = `each of ${INSTRUCTION_TEXT_WORDING.above} is planted, and ${INSTRUCTION_TEXT_WORDING.not_observed} here`
+  const words = [INSTRUCTION_TEXT_WORDING.above, INSTRUCTION_TEXT_WORDING.not_observed]
+  assert.deepEqual(gapsInInstructionTextOwnership([aCheckoutsFixedText(said)], [text('A16', INSTRUCTION_FILES.checkout, words)]), [])
+})
+
+test('an owner that stops saying where a text comes from makes the check fail, naming the phrase it dropped', () => {
+  const rows = [aCheckoutsFixedText('the host loads none of them, here or below')]
+  assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16', INSTRUCTION_FILES.checkout, [INSTRUCTION_TEXT_WORDING.above])]), [
+    { text: 'A_TEXT', why: `its owner A16 does not say "${INSTRUCTION_TEXT_WORDING.above}", which this text requires of it` },
+  ])
+})
+
+test('an owner that stops saying a text is not observed makes the check fail, naming the phrase it dropped', () => {
+  const rows = [aCheckoutsFixedText('the host loads none of them')]
+  assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16', INSTRUCTION_FILES.checkout, [INSTRUCTION_TEXT_WORDING.not_observed])]), [
+    { text: 'A_TEXT', why: `its owner A16 does not say "${INSTRUCTION_TEXT_WORDING.not_observed}", which this text requires of it` },
+  ])
 })
 
 test('an owner that is not a row makes the check fail, naming the owner', () => {
