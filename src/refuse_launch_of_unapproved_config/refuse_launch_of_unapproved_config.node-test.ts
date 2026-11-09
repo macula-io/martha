@@ -625,3 +625,24 @@ test('an unapproved launch is refused before anything is copied', (t) => {
   assert.equal(prepared.allow, false)
   assert.equal(existsSync(snapshot_root), false)
 })
+
+// --- conversions that rewrite the bytes a launch runs (martha#167) -------------
+
+test('a file whose bytes differ from the approved one but hash to it through ident is refused, naming the file and the attribute (martha#167)', (t) => {
+  const place = scratch(t)
+  put(place.checkout, SETTINGS, '{}')
+  put(place.checkout, '.gitattributes', 'hook.sh ident\n')
+  put(place.checkout, 'hook.sh', '#!/bin/sh\n# $Id$\necho approved\n')
+  commitAll(place.checkout, 'an approved hook with a marker')
+  const approved = approve('claude-code', place)
+  assert.equal(decide('claude-code', place, approved).decision.allow, true)
+
+  // The same blob once ident has collapsed the marker, with a command planted inside it: the bytes on disk are
+  // not the ones the owner approved, and git status, git add and the tree all say "unchanged".
+  put(place.checkout, 'hook.sh', '#!/bin/sh\n# $Id: ; echo PLANTED; : $\necho approved\n')
+  const after = decide('claude-code', place, approved)
+  const refusal = after.decision.allow ? '' : after.decision.refusal
+  assert.equal(after.decision.allow, false, 'a file converted by ident must not stand in for the approved one')
+  assert.ok(refusal.includes('hook.sh'), refusal)
+  assert.ok(refusal.includes('ident'), refusal)
+})
