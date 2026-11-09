@@ -104,8 +104,10 @@ export interface ToolResult {
    */
   readonly approved_start: string | null
   /**
-   * What the launch started the host with, kept beside the start tree (martha#135); `undefined` when it recorded no
-   * start, and then no read is exempt.
+   * What the launcher spawned this launch's host with, as it handed it to the relay (martha#135): the arguments and,
+   * down to the names the adapter declares, the environment. It is never written to state; it lives in the
+   * launcher's memory for the life of the launch, which is the relay's life. `undefined` when there is no start to
+   * hand over, and then no read is exempt.
    */
   readonly started_with: StartedWith | undefined
   /**

@@ -207,6 +207,10 @@ export function startedWithOf(
  * True when a launch really started the host with `switches` (martha#135): every declared argument sequence appears in
  * its arguments as one unbroken run, every declared environment value is the declared one, every dropped name is
  * absent, and no name outside the declaration was kept. A host whose adapter declares no switches holds none.
+ *
+ * It reads the arguments, it does not read the host's mind. The owner's own arguments go before Martha's (a launch's
+ * `args`), so an owner argument that takes a value and ends them would have the first declared switch read as its
+ * value; that is the owner's own path, on the owner's terminal, not a member's.
  */
 export function startedWithTheSwitches(started_with: StartedWith | undefined, switches: HostSwitches | undefined): boolean {
   if (started_with === undefined || switches === undefined) return false

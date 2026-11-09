@@ -121,7 +121,7 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
 import {
   hostTrustsTheFolder,
   hostVersionLine,
@@ -187,6 +187,12 @@ export interface ClaudeCodeMemberLaunch {
   readonly session_start_deadline_ms?: number
   /** The same when an owner can answer the host, which may first ask whether to trust the folder; TRUST_ANSWER_DEADLINE_MS unless a test gives its own. */
   readonly trust_answer_deadline_ms?: number
+  /**
+   * A test's ear on what the relay is handed, so that what the relay calls `started_with` is measured against what
+   * the host was really spawned with rather than inferred from the code that builds both (martha#135). A real
+   * launch gives none.
+   */
+  readonly hearRelayPlace?: (place: MemberRelayPlace) => void
 }
 
 /** How a member's process ended. */
@@ -579,7 +585,7 @@ async function servedRelay(
   ready: ReadyLaunch,
   starting: Starting,
 ): Promise<RelayServer | string> {
-  const answering = memberRelay({
+  const place: MemberRelayPlace = {
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
     launch: {
       host: launch.place.host,
@@ -596,7 +602,9 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory: ready.ownerMemory,
     stopMember: stop,
-  })
+  }
+  launch.hearRelayPlace?.(place)
+  const answering = memberRelay(place)
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
   const relay: MemberRelay = {
     answer: (event, body) => {

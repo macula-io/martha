@@ -34,7 +34,7 @@ import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace, type RelayReply } from './answer_the_relay.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -1108,6 +1108,62 @@ test('the member, its load check and its version check all run the one file its 
   const calls = readFileSync(fake.callsFile, 'utf8').trimEnd().split('\n')
   assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', '-p'])
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
+})
+
+// --- what the relay is told the host was started with (martha#135) -----------------
+
+/**
+ * A fake `claude` that writes the arguments it was spawned with and the environment it was spawned with, then waits:
+ * the test reads both back, so what the relay holds is measured against the spawned process, not against the code
+ * that builds it.
+ */
+function fakeClaudeThatSaysHowItStarted(place: Place): { readonly command: string; readonly argsFile: string; readonly envFile: string } {
+  const dir = join(place.home, 'fake-says-how-it-started')
+  mkdirSync(dir)
+  const argsFile = join(dir, 'args')
+  const envFile = join(dir, 'env')
+  const command = join(dir, 'claude')
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...hostAnswers(),
+      `printf '%s\\n' "$@" > '${argsFile}'`,
+      // Written beside and moved into place, so the test never reads a dump that is half written.
+      `env > '${envFile}.being-written'`,
+      `mv '${envFile}.being-written' '${envFile}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, argsFile, envFile }
+}
+
+/** What `env` printed, as a record: the first `=` in a line splits the name from the value. */
+const environmentOfDump = (text: string): Record<string, string> =>
+  Object.fromEntries(
+    text
+      .split('\n')
+      .filter((line) => line.includes('='))
+      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+  )
+
+test('the started_with the relay is handed is what the host was spawned with, down to the names the adapter declares (martha#135)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await launchClaudeCodeMember({
+    ...memberLaunch(place, fake.command, place.approved),
+    hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
+  })
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const spawnedArgs = readFileSync(fake.argsFile, 'utf8').split('\n').filter((line) => line !== '')
+  const spawnedEnv = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  assert.equal(heard.length, 1, 'the launcher handed the relay one place')
+  assert.deepEqual(heard[0]?.started_with, startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, spawnedArgs, spawnedEnv))
 })
 
 test('a member with no owner to answer its host, whose relay never reports its session start, is stopped once its deadline passes, saying why', async (t) => {

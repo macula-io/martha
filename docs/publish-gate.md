@@ -463,9 +463,11 @@ The rules the seam keeps, and a host must not work around:
   exemption also needs the launch to have really started the host with the
   switches its adapter declares, the ones under which the host attaches no
   other file's text to a read (`started_with`, martha#135): a host whose
-  adapter declares none, a launch that recorded no start, one argument of the
+  adapter declares none, a launch whose launcher has no start to hand the
+  relay, one argument of the
   declaration missing or one dropped name carried, and every read counts
-  again. In a
+  again. `started_with` is not state: it is what the launcher spawned the host
+  with, handed to the relay and held for the launch's life. In a
   checkout with no config nothing was approved, so every read
   counts (decided 2026-11-07). A `CLAUDE.local.md` is ignored, so it is never
   in the approved tree: a read of one is text taken in, and so is any fixed

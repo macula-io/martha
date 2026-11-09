@@ -658,3 +658,13 @@ test('a start with no declaration to measure it against never holds one (martha#
   assert.equal(startedWithTheSwitches(undefined, HOSTS['claude-code'].project_config_off), false)
   assert.equal(startedWithTheSwitches(startedWithOf(undefined, [], {}), undefined), false)
 })
+
+test("a start that kept a name outside the declaration does not hold it, whatever the name's value (martha#135)", () => {
+  const switches = HOSTS['claude-code'].project_config_off
+  const honest = startedWithOf(switches, switches.args, switches.env)
+  assert.equal(startedWithTheSwitches(honest, switches), true)
+  // `startedWithOf` keeps no such name today, and this is written past it on purpose: the check inside
+  // `startedWithTheSwitches` is the one that has to hold if that filter ever loosens, so it is pinned on its own.
+  const keptAnOwnersKey = { ...honest, env: { ...honest.env, AN_OWNER_KEY: 'sk-live-nobody-reads-this' } }
+  assert.equal(startedWithTheSwitches(keptAnOwnersKey, switches), false)
+})
