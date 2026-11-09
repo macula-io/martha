@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { openState, OWN_WRITES_PLACE, OWN_WRITES_SUFFIX, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, OWN_WRITES_PLACE, OWN_WRITES_SUFFIX, ownWritesKeptForTheHistory, WHAT_A_SIGNED_RUN_NEEDS, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
@@ -155,11 +155,22 @@ test('a torn own-writes file of an older launch stops neither the run nor anothe
   assert.ok(typeof ended !== 'string', `the run must run: ${String(ended)}`)
   assert.equal(ended.output.toString('utf8'), MARKER)
   // Put back what the older launch's member wrote: no own write vouches for it, so it refuses by name, and the file
-  // the history passed over is named with it, so the owner can approve the tree and run.
+  // the history passed over is named with it — and with the way back that works in a signed run, never a new start,
+  // which cannot help here (martha#162 r=5).
   writeFileSync(join(p.checkout, 'older.txt'), MARKER)
-  const refused = String(await runASignedShape(p.run))
-  assert.match(refused, /older\.txt is neither the base's nor the member's own write/)
-  assert.match(refused, /the-older-launch/)
+  const olderWrites = ownWritesFileOf(p.state, 'the-older-launch')
+  assert.equal(
+    String(await runASignedShape(p.run)),
+    `nothing ran: older.txt: older.txt is neither the base's nor the member's own write; ${olderWrites} ends in a line that was never finished, so Martha reads none of this launch's own writes. ${WHAT_A_SIGNED_RUN_NEEDS}`,
+  )
+  // Walk the remedy it names: once the signed branch holds the file, the run goes.
+  const remote = join(p.top, 'remote')
+  writeFileSync(join(remote, 'older.txt'), MARKER)
+  git(remote, 'add', '-A')
+  git(remote, 'commit', '--quiet', '-m', 'the owner takes the file the older launch wrote')
+  const ran = await runASignedShape({ ...p.run, shapes: [{ name: 'test', argv: ['/bin/sh', '-c', 'cat older.txt newer.txt'] }] })
+  assert.ok(typeof ran !== 'string', `the run must run: ${String(ran)}`)
+  assert.equal(ran.output.toString('utf8'), `${MARKER}${MARKER}`)
 })
 
 test('an own write git changes as it adds it still passes: the blob judged is the one git would give it (martha#132)', { skip: unavailable }, async (t) => {

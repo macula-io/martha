@@ -349,22 +349,32 @@ function launchOfOwnWritesFileName(name: string): string | undefined {
   }
 }
 
-/** Why one launch's own writes are not trusted, and the way back that needs no hand-edited state file. */
-const startAgain = (path: string, why: string): Refused => ({
-  refusal: `${path} ${why}, so Martha reads none of this launch's own writes. Start the member again: each start keeps a file of its own.`,
+/** Why one launch's own writes are not trusted, and what the reader can do about it (martha#162). */
+const untrusted = (path: string, why: string, remedy: string): Refused => ({
+  refusal: `${path} ${why}, so Martha reads none of this launch's own writes. ${remedy}`,
 })
 
+/** The way back for a launch's own recheck: a new start keeps a file of its own, and the torn one is left behind. */
+export const START_AGAIN = 'Start the member again: each start keeps a file of its own.'
+
+/**
+ * The way back in a signed run, which no new start helps (martha#162 r=5): the run is judged against the branch the
+ * owner signed and the members' own writes, so a file that no own write vouches for runs once that branch holds it,
+ * or once it is gone.
+ */
+export const WHAT_A_SIGNED_RUN_NEEDS = "A run sees a file only when the signed branch holds it or a member's own write vouches for it: commit it to the signed branch, or remove it."
+
 /** The own writes kept in one launch's file, in the order kept; a missing file is none, and one bad line refuses it whole. */
-function readOwnWritesOf(path: string): OwnWrites {
+function readOwnWritesOf(path: string, remedy: string): OwnWrites {
   const read = readStateFile(path)
   if ('refusal' in read) return read
-  if (read.text !== '' && !read.text.endsWith(NEWLINE)) return startAgain(path, 'ends in a line that was never finished')
+  if (read.text !== '' && !read.text.endsWith(NEWLINE)) return untrusted(path, 'ends in a line that was never finished', remedy)
   const writes = read.text
     .split(NEWLINE)
     .filter((line) => line !== '')
     .map(ownWriteOfLine)
   const bad = writes.indexOf(undefined)
-  if (bad !== -1) return startAgain(path, `line ${bad + 1} is not an ${ONE_OWN_WRITE}`)
+  if (bad !== -1) return untrusted(path, `line ${bad + 1} is not an ${ONE_OWN_WRITE}`, remedy)
   return { writes: writes as OwnWrite[] }
 }
 
@@ -388,7 +398,7 @@ export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnW
   return {
     append: (write) =>
       write.launch === launch ? appendStateLine(path, lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal : `An own write of another launch is not kept in ${path}.`,
-    all: () => readOwnWritesOf(path),
+    all: () => readOwnWritesOf(path, START_AGAIN),
   }
 }
 
@@ -429,7 +439,7 @@ function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWritesOfTheHisto
   const unread: string[] = []
   for (const [name, launch] of names.sort().map((name) => [name, launchOfOwnWritesFileName(name)] as const)) {
     if (launch === undefined) continue
-    const read = readOwnWritesOf(join(directory.path, name))
+    const read = readOwnWritesOf(join(directory.path, name), WHAT_A_SIGNED_RUN_NEEDS)
     if ('refusal' in read) {
       unread.push(read.refusal)
       continue

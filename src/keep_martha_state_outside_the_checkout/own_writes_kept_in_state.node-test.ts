@@ -13,6 +13,8 @@ import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite, type OwnWrites } fro
 import {
   openState,
   OWN_WRITES_LAUNCHES_KEPT,
+  START_AGAIN,
+  WHAT_A_SIGNED_RUN_NEEDS,
   OWN_WRITES_PLACE,
   OWN_WRITES_SUFFIX,
   ownWritesKeptForLaunch,
@@ -159,14 +161,13 @@ for (const [what, line] of MALFORMED) {
     const other = ownWrite({ launch: 'launch-2', tool_use_id: 'toolu_2' })
     kept(state, other)
     writeFileSync(filePath(state, 'launch-1'), `${line}${NEWLINE}`, { flag: 'a' })
-    const expected = {
-      refusal: `${filePath(state, 'launch-1')} line 2 is not an own write, so Martha reads none of this launch's own writes. Start the member again: each start keeps a file of its own.`,
-    }
+    const why = `${filePath(state, 'launch-1')} line 2 is not an own write, so Martha reads none of this launch's own writes.`
+    const expected = { refusal: `${why} ${START_AGAIN}` }
     assert.deepEqual(ofLaunch(state, 'launch-1'), expected)
     assert.deepEqual(ofLaunch(state, 'launch-2'), { writes: [other] })
     // The whole history reads past the torn launch and names it; it does not refuse the project's other launches
-    // (martha#162 r=4).
-    assert.deepEqual(allOwnWrites(state), { writes: [other], unread: [expected.refusal] })
+    // (martha#162 r=4). Its way back is the signed run's, not a new start, which cannot help there (r=5).
+    assert.deepEqual(allOwnWrites(state), { writes: [other], unread: [`${why} ${WHAT_A_SIGNED_RUN_NEEDS}`] })
   })
 }
 
