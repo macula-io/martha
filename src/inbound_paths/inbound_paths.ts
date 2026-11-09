@@ -144,7 +144,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A4',
-    what: 'a mesh ring: its purpose, and its decline reason',
+    what: "a mesh ring this member answers: what answering it returns (mesh_answer_ring), which can carry the caller's own text. The ring's purpose itself is handed only by mesh tools refused by name (B1)",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'station',
@@ -165,7 +165,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A7',
-    what: "text a checkout puts into the session: its auto-injected CLAUDE.md or AGENTS.md, what an approved hook prints, and the agents a checkout defines (.claude/agents), whose frontmatter may name hooks and tool servers that start only when the model spawns that agent, a tool call",
+    what: "what a checkout's approved config prints into the session at run time: a hook's output or added context, and the hooks of a plugin it enables or loads from a folder its env names. The approval pins the script, never its output, which changes from run to run with the network, the clock or a file git ignores (martha#121). Recorded at every session start whenever the carried settings declare a hook or a plugin (sourcesALaunchHandsTheModel). The owner's user settings and the managed settings, which the host also loads, may declare none: a member does not start, and a running one is stopped, while one of them declares a hook, enables a plugin or names a plugin folder (hooks_and_plugins_the_owner_declares, martha#121)",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'none',
@@ -193,7 +193,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A11',
-    what: 'an MCP server instruction block, shipped by the package',
+    what: "an MCP server's instruction block, handed to the model when the session starts. Recorded at every session start for every server the recorded mesh server tree does not bind, and for an enabled plugin (sourcesALaunchHandsTheModel). The mesh server's block is code of its recorded tree, which treeUnlike compares with the recorded one file by file, through placeRecordedMeshServers, before every launch (martha#65, ../install_the_recorded_mesh_server), so it records nothing (martha#121). Not closed: a same-user edit of that tree during a session, as for B1",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
     attestation: 'none',
@@ -227,10 +227,23 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A16',
+    what: "a checkout's fixed text: its CLAUDE.md or AGENTS.md files, the top one and any below it that the host loads once a file there is read, and the agents it defines (.claude/agents), whose frontmatter may name hooks and tool servers (martha#121)",
+    klass: 'delivered',
+    control: {
+      kind: 'no-text-reaches-the-model',
+      why: "Martha starts the host with project config switched off (project_config_off, ../refuse_launch_of_unapproved_config), and with it the host loads no project CLAUDE.md, nested or not, and no project agent: npm run probe:launch plants each and sees none load, while the same checkout started by hand loads them (Claude Code 2.1.319). Whether the host loads an AGENTS.md is not observed: the probe plants none, and the martha#135 stand-in saw none load in any run, the control included, so it cannot tell an AGENTS.md that is switched off from one the host never reads. A host the owner starts by hand loads them before any of Martha runs, as with C1 and C2, so the adapter must refuse that session a place in the crew",
+    },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
     what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',
-    control: { kind: 'shell-gate' },
+    control: {
+      kind: 'no-text-reaches-the-model',
+      why: "every mesh tool that would hand the model a room's or another agent's text, a ring's purpose among it, is refused by its own name before it runs (isRawMeshRead and MESH_TOOLS_REFUSED, ../read_a_room_through_its_gate); the mesh tools that run are recorded on B2, A4 or A5 (sourceOfAMeshToolResult), and a room is read through its gate (A1, A2)",
+    },
     attestation: 'none',
   },
   {
@@ -249,7 +262,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'B4',
-    what: 'files in a checkout',
+    what: "files in a checkout, read, edited or searched through the host's own tools: a file git puts in the tree the owner approved, as the member started on it, or that tree as this member's own recorded writes left it, while the launch checkout still holds either, is not text taken in, because the owner approved that tree to run as the owner and the member itself wrote the rest (decided 2026-11-07, martha#127 and martha#132); in a checkout with no config nothing was approved, so every read counts; an ignored file, a link that leads out, git's own directory and every other place are",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',

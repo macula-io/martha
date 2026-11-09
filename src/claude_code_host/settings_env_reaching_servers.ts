@@ -27,6 +27,8 @@
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
+import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
+
 /** One of Claude Code's own variables, which its settings may carry and the mesh server never reads. */
 export interface ClaudeCodeOwnVariable {
   readonly name: string
@@ -43,7 +45,7 @@ export interface ClaudeCodeOwnVariable {
  */
 export const CLAUDE_CODE_OWN_VARIABLES: readonly ClaudeCodeOwnVariable[] = [
   {
-    name: 'CLAUDE_CODE_PLUGIN_DIRS',
+    name: PLUGIN_DIRS_VARIABLE,
     why: 'the directories Claude Code loads plugins from; no file of the recorded trees of 0.51.0 or 0.51.2 names it',
   },
 ]

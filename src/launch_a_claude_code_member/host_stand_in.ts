@@ -7,6 +7,7 @@
 // it ran, so a test of a member still sees whether the member itself ran.
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RELAY_MANIFEST } from './relay_copy.ts'
 
 /** The host's report for a plugin it loads. */
 export const LOADS_THE_RELAY = JSON.stringify({ success: true, manifest: { errors: [] }, contents: [] })
@@ -24,6 +25,8 @@ export interface HostAnswers {
   readonly version?: string
   /** A file each run appends "$0 $1" to. */
   readonly callsFile?: string
+  /** A file `plugin validate` writes the folder it was asked about to, then whether the relay's manifest was in it (#117). */
+  readonly validatedFile?: string
 }
 
 const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`
@@ -34,6 +37,9 @@ export function hostAnswers(answers: HostAnswers = {}): string[] {
   const reportExit = answers.reportExit ?? (report === LOADS_THE_RELAY ? 0 : 1)
   return [
     ...(answers.callsFile === undefined ? [] : [`printf '%s %s\\n' "$0" "$1" >> ${quoted(answers.callsFile)}`]),
+    ...(answers.validatedFile === undefined
+      ? []
+      : [`if [ "$1" = plugin ]; then eval "folder=\\\${$#}"; printf '%s %s\\n' "$folder" "$([ -f "$folder/${RELAY_MANIFEST}" ] && echo held || echo empty)" > ${quoted(answers.validatedFile)}; fi`]),
     `if [ "$1" = plugin ]; then printf '%s' ${quoted(report)}; exit ${reportExit}; fi`,
     `if [ "$1" = --version ]; then printf '%s (Claude Code)\\n' ${quoted(answers.version ?? RECORDED_HOST.host_version)}; exit 0; fi`,
   ]

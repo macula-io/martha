@@ -24,9 +24,16 @@
 // not track. Such a file is not shipped by the checkout's author (a commit
 // cannot carry it untracked); it is written on this machine, by a command the
 // member ran (A13). Nor the inside of a submodule beyond the commit its parent
-// records. Nor a change the checkout's own index hides from git status
-// (assume-unchanged, skip-worktree): those flags are the member's, set on this
-// machine, and no commit carries them.
+// records.
+//
+// A change the checkout's own index hides from git status IS covered
+// (martha#127 r=1). An index entry flagged assume-unchanged or skip-worktree
+// (a sparse checkout sets the second by itself) makes git status skip that
+// file, so a rewrite under the flag would leave the clean tree equal to HEAD's
+// and the approval standing over a stranger's bytes. A checkout with any such
+// entry therefore never takes the clean path: its tree is staged in a scratch
+// index that carries no flags, from the bytes on disk, with sparse checkout
+// off for that one `git add`.
 //
 // Git runs here with every inherited GIT_ variable dropped, so the caller's
 // environment cannot point it at another repository or index, and with
@@ -57,7 +64,27 @@ const GIT_VARIABLES = 'GIT_'
 export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost): string | null {
   const top = git(host, dir, ['rev-parse', '--show-toplevel'])
   if (top === undefined || holds(realOrResolved(host, top), realOrResolved(host, stop_dir))) return null
-  return cleanTree(host, top) ?? stagedTree(host, top)
+  return (hidesAChangeFromStatus(host, top) ? undefined : cleanTree(host, top)) ?? stagedTree(host, top)
+}
+
+/** An index tag `git ls-files -v` prints for an entry git status does not look at: skip-worktree. */
+const SKIP_WORKTREE_TAG = 'S'
+
+/**
+ * Whether any index entry carries a flag that makes git status skip it:
+ * assume-unchanged (a lowercase tag) or skip-worktree (`S`). An index git
+ * cannot list counts as hiding one.
+ */
+function hidesAChangeFromStatus(host: LaunchHost, top: string): boolean {
+  const listed = git(host, top, ['ls-files', '-v', '-z'])
+  if (listed === undefined) return true
+  return listed
+    .split('\0')
+    .filter((entry) => entry !== '')
+    .some((entry) => {
+      const tag = entry.charAt(0)
+      return tag === SKIP_WORKTREE_TAG || tag !== tag.toUpperCase()
+    })
 }
 
 /** HEAD's tree when git reports nothing changed and nothing untracked, else `undefined`. */
@@ -80,7 +107,7 @@ function stagedTree(host: LaunchHost, top: string): string | null {
     const index = { GIT_INDEX_FILE: join(scratch.path, 'index') }
     const seeded = git(host, top, ['read-tree', 'HEAD'], index) ?? git(host, top, ['read-tree', '--empty'], index)
     if (seeded === undefined) return null
-    if (git(host, top, ['add', '--all', '--', '.'], index) === undefined) return null
+    if (git(host, top, ['-c', 'core.sparseCheckout=false', 'add', '--all', '--', '.'], index) === undefined) return null
     return git(host, top, ['write-tree'], index) ?? null
   } finally {
     scratch.remove()
@@ -110,11 +137,113 @@ export function realOrResolved(host: LaunchHost, path: string): string {
 }
 
 function git(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
+  return gitRaw(host, cwd, args, set)?.trim()
+}
+
+/** Git's output as it wrote it, or `undefined` when git failed. */
+function gitRaw(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
   const run = host.processes.runNow({
     command: 'git',
     args: ['-c', 'core.fsmonitor=false', ...args],
     cwd,
     environment: { drop_prefixes: [GIT_VARIABLES], set },
   })
-  return run.exit_code === 0 ? run.stdout.trim() : undefined
+  return run.exit_code === 0 ? run.stdout : undefined
+}
+
+/** One path that differs between two trees, as `git diff-tree` names it: its new mode and blob, or deleted. */
+export type TreeChange =
+  | { readonly path: string; readonly deleted: true }
+  | { readonly path: string; readonly deleted: false; readonly mode: string; readonly blob: string }
+
+/** What `git diff-tree --raw` writes for a deleted path. */
+const DELETED = 'D'
+
+/** The top of the checkout holding `dir`, as git reports it, or `undefined` outside any checkout. */
+export function checkoutTopOf(dir: string, host: LaunchHost): string | undefined {
+  return git(host, dir, ['rev-parse', '--show-toplevel'])
+}
+
+/**
+ * The blob id `git add` would give the file at `path` now, in the checkout whose top is `top`: its attributes, clean
+ * filters and line-end settings applied as they are when the tree is read, by the same git. `undefined` when git
+ * cannot hash it.
+ */
+export function blobAsGitAdds(top: string, path: string, host: LaunchHost): string | undefined {
+  return git(host, top, ['hash-object', `--path=${relative(top, path)}`, '--', path])
+}
+
+/**
+ * Every path that differs between the trees `from` and `to` in the checkout holding `dir`, relative to its top,
+ * with no rename paired up: a rename is a deletion and a new path. `undefined` when git cannot read either tree,
+ * an object the store no longer holds among them.
+ */
+export function changesBetween(dir: string, from: string, to: string, host: LaunchHost): readonly TreeChange[] | undefined {
+  const raw = gitRaw(host, dir, ['diff-tree', '-r', '-z', '--no-renames', '--no-abbrev', from, to])
+  if (raw === undefined) return undefined
+  const fields = raw.split('\0')
+  const changes: TreeChange[] = []
+  for (let at = 0; at + 1 < fields.length; at += 2) {
+    const [, mode = '', , blob = '', status = ''] = (fields[at] ?? '').split(' ')
+    const path = fields[at + 1] ?? ''
+    changes.push(status === DELETED ? { path, deleted: true } : { path, deleted: false, mode, blob })
+  }
+  return changes
+}
+
+/** What a read covers: one file, or every file under a path a search walks. */
+export type ReadSpan = 'one_file' | 'every_file_below'
+
+/**
+ * Whether `path` is in the tree the owner approved for the checkout holding
+ * `dir`, so that reading it grants nothing the approval does not already grant
+ * (martha#127). The owner approved that exact tree to run as the owner's OS
+ * user: its hooks and servers execute from it. Reading the same bytes adds
+ * nothing to that.
+ *
+ * In the tree means: with every link resolved, the path sits under the
+ * checkout's top, and git puts it in the fingerprinted tree, tracked or
+ * untracked and not ignored. A search also walks everything below it, so for
+ * `every_file_below` nothing below the path may be ignored, a link, or a
+ * submodule: each of those is outside what the fingerprint pins. Pathspecs are
+ * literal, so a path holding `*` names that file and nothing else.
+ *
+ * Whether the tree still matches the approval is not asked here: the launch is
+ * read again before and after every call (../answer_a_tool_call), and a call
+ * that changed it stops the member.
+ */
+export function isInTheCheckoutTree(dir: string, stop_dir: string, path: string, span: ReadSpan, host: LaunchHost): boolean {
+  if (!isAbsolute(path)) return false
+  const shown = git(host, dir, ['rev-parse', '--show-toplevel'])
+  if (shown === undefined) return false
+  const top = realOrResolved(host, shown)
+  if (holds(top, realOrResolved(host, stop_dir))) return false
+  const real = realOrResolved(host, path)
+  if (!holds(top, real)) return false
+  const at = relative(top, real) || '.'
+  const listed = git(host, top, ['--literal-pathspecs', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', at])
+  if (listed === undefined || listed === '') return false
+  return span === 'one_file' || nothingBelowIsOutsideTheTree(host, top, at)
+}
+
+/** A git mode that is no plain file: a link (120000) or a submodule (160000). */
+const NOT_A_PLAIN_FILE = /^(120000|160000) /
+
+function nothingBelowIsOutsideTheTree(host: LaunchHost, top: string, at: string): boolean {
+  const ignored = git(host, top, ['--literal-pathspecs', 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z', '--', at])
+  if (ignored === undefined || ignored !== '') return false
+  const staged = git(host, top, ['--literal-pathspecs', 'ls-files', '--stage', '-z', '--', at])
+  if (staged === undefined) return false
+  if (staged.split('\0').some((entry) => NOT_A_PLAIN_FILE.test(entry))) return false
+  return untrackedLinksBelow(host, top, at) === false
+}
+
+/** Whether an untracked, unignored entry below `at` is a link, which `ls-files --stage` does not show. */
+function untrackedLinksBelow(host: LaunchHost, top: string, at: string): boolean | undefined {
+  const untracked = git(host, top, ['--literal-pathspecs', 'ls-files', '--others', '--exclude-standard', '-z', '--', at])
+  if (untracked === undefined) return undefined
+  return untracked
+    .split('\0')
+    .filter((entry) => entry !== '')
+    .some((entry) => host.stores.files.realPathOf(join(top, entry)) !== join(top, entry))
 }

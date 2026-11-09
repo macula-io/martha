@@ -215,7 +215,7 @@ const fakeProc = (t: TestContext, boot_id: string | undefined) => {
     else writeFileSync(path, `${id}\n`)
   }
   setBoot(boot_id)
-  return { processes: procProcessIdentities(root), setBoot }
+  return { root, processes: procProcessIdentities(root), setBoot }
 }
 
 const BOOT = 'aaaaaaaa-2222-3333-4444-bbbbbbbbbbbb'
@@ -255,6 +255,34 @@ test('an identity names the boot as well as the start, so neither alone can matc
   assert.equal(identity?.includes(BOOT), true)
   assert.equal(identity?.includes(STARTED), true)
   assert.notEqual(identity, STARTED)
+})
+
+// --- what a lookup says, and why it could not say it (#124) --------------------
+
+test('a lookup names the process a pid holds, and says a pid the kernel does not hold is gone', (t) => {
+  const proc = fakeProc(t, BOOT)
+
+  assert.deepEqual(proc.processes.lookupOf(PLUTO.pid), {
+    found: 'held',
+    identity: { pid: PLUTO.pid, process_started_at: `${BOOT}/${STARTED}` },
+  })
+  assert.deepEqual(proc.processes.lookupOf(NEPTUNUS.pid), { found: 'gone' }, 'a pid with no entry under this /proc')
+})
+
+test('a lookup that cannot read says so, and never that the process is gone (#124)', (t) => {
+  const proc = fakeProc(t, BOOT)
+  const statFile = join(proc.root, String(PLUTO.pid), 'stat')
+
+  const unreadable = join(proc.root, String(NEPTUNUS.pid), 'stat')
+  mkdirSync(unreadable, { recursive: true })
+  const asADirectory = proc.processes.lookupOf(NEPTUNUS.pid)
+  assert.equal(asADirectory.found, 'unknown', 'a stat that fails another way is not a gone pid')
+  assert.match(asADirectory.found === 'unknown' ? asADirectory.why : '', /EISDIR/)
+
+  rmSync(statFile)
+  proc.setBoot(undefined)
+  assert.equal(proc.processes.lookupOf(PLUTO.pid).found, 'unknown', 'no boot id is no answer, not a gone pid')
+  assert.equal(proc.processes.lookupOf(0).found, 'unknown', 'and neither is a pid this kernel could not be asked about')
 })
 
 const hasProc = linuxProcessIdentities.identityOf(process.pid) !== null

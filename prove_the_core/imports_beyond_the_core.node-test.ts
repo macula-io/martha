@@ -28,9 +28,10 @@ test('no file imports anything but its own code, Node, or a package in the one f
 })
 
 const CONFINING_HOOK = 'src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
+const DIAGRAM_TEST = 'architecture/c4_diagrams.node-test.ts'
 
-test('tripwire: package.json lets exactly the mesh server\'s confining hook import node:module; another loader file is a decision, not a drift (martha#73)', () => {
-  assert.deepEqual(loaders, { [CONFINING_HOOK]: 'node:module' })
+test('tripwire: package.json lets exactly two files import node:module — the mesh server\'s confining hook (martha#73) and the diagram test\'s resolve hook (martha#106); a third is a decision, not a drift', () => {
+  assert.deepEqual(loaders, { [CONFINING_HOOK]: 'node:module', [DIAGRAM_TEST]: 'node:module' })
 })
 
 test('a loader module allowed for one file is still named in any other file, and another loader module in that file is named too', () => {

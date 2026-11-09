@@ -1,0 +1,29 @@
+# Martha's C4 model: what it talks to, what it is made of, and what its code is made of.
+# Three diagrams in assets/ — context, components and containers — each shown by
+# architecture/README.md, and this workflow red until they are there. The house's C4
+# sweep finds a repository that builds an executable and carries no model; this gate
+# is what keeps the model there once it has one.
+#
+# WHY ITS OWN FILE. The model is the reader's, not the release's: it is kept out of the
+# image's path on purpose, so a red diagram must never block a publish. It also rules out
+# the lint and test workflows, which the release job takes as its gate wherever it has
+# one. So the gate is its own workflow, started by every pull request and by a push to
+# main, with no path filter.
+#
+# The check is the house's, pinned by full commit sha as every shared call is.
+
+name: c4 model
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  c4-model:
+    permissions:
+      contents: read
+    uses: macula-io/macula-ci-images/.github/workflows/c4-model.yml@399162a9d3dcac07b904ed12f203f42165c577e8

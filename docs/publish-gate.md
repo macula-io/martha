@@ -145,6 +145,10 @@ config only touched a marker file (`npm run probe:launch`, the program in
 | OpenCode 2.2.5 as Martha starts it, the owner's environment setting both project-config switches to `0` | the same: the approved server only |
 | Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that only reports | the after-call hook, then the approved `Stop` and `SessionEnd` hooks: the host goes on past a hook that returns |
 | Claude Code 2.1.318 as Martha starts it, headless, one tool call, an after-call hook that waits for the launcher to SIGKILL the member's process group | the after-call hook only: neither the approved `Stop` nor the `SessionEnd` hook runs |
+| Claude Code 2.1.319 by hand, headless, a `CLAUDE.md` at the top and one below it, a file below read | both load (an `InstructionsLoaded` hook in the owner's settings sees each) |
+| Claude Code 2.1.319 as Martha starts it, the same checkout (A16) | neither loads |
+| Claude Code 2.1.319 by hand, headless, started as an agent the checkout defines (`--agent`) | the agent loads |
+| Claude Code 2.1.319 as Martha starts it, the same agent (A16) | the host finds no such agent |
 
 The host's own approval is name-keyed where it exists at all, so it cannot be the
 control. `src/refuse_launch_of_unapproved_config/` is five rules:
@@ -190,9 +194,20 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
 5. **No config needs no approval.** A checkout holding none of the files starts,
    still with project config off.
 
-Only the owner approves a fingerprint, typed in that member's tab and logged
-(martha#1, decision 4). The refusal names the files and the fingerprint to
-approve.
+Only the owner approves a checkout, with `martha approve` at their own terminal,
+and the approval is logged (martha#1, decision 4). The refusal names the files
+and says to run `martha approve`.
+
+**A member's own file writes pass the recheck (martha#132).** A running member
+is checked again before and after every tool call. Its own `Write`, `Edit` and
+`NotebookEdit` calls are kept as it makes them (the file's git blob and mode
+once the call ran, the call, the session and the launch) before the recheck
+after that call. The live checkout then passes when every path that differs
+from the approved tree is deleted, or holds what this launch's last own write
+at that path left. Anything else (a `Bash` command's change, a link, another
+process's write, a config file git ignores) stops the member, naming the paths
+and saying to run `martha approve`, then `martha start` again. The code is
+`src/refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts`.
 
 What the plan leaves out, stated rather than hidden:
 
@@ -204,11 +219,14 @@ What the plan leaves out, stated rather than hidden:
 - **The tree does not cover** a file git ignores and does not track — the
   checkout's author cannot ship one; it is written on this machine by a command
   the member ran (A13) — nor the inside of a submodule beyond the commit its
-  parent records, nor a change the checkout's own index hides from
-  `git status` (assume-unchanged, skip-worktree): those flags are the
-  member's, and no commit carries them. Of the same class: a member's own git
+  parent records. Of the same class: a member's own git
   config whose `include.path` names a tracked file, which lets the checkout's
   author define a clean filter that reading the tree runs.
+- **A change the index hides from `git status` is covered (martha#127).** An
+  entry flagged assume-unchanged or skip-worktree (a sparse checkout sets the
+  second by itself) would let a rewrite leave the tree equal to HEAD's. A
+  checkout with any such entry is always staged in a scratch index with no
+  flags, from the bytes on disk, so the rewrite moves the fingerprint.
 - **The fingerprint-to-launch race**: between `prepareLaunch` and the host's
   start, a script the snapshot runs can still be rewritten in the checkout, and
   a `SessionStart` hook runs it before the first tool call is checked.
@@ -224,10 +242,37 @@ What the plan leaves out, stated rather than hidden:
   is left is the hooks of the one call that changed the tree, which run in
   parallel with Martha's own (`PreToolUse`/`PostToolUse`); the stop does not
   undo what they ran.
-- **Agents a checkout defines** (`.claude/agents`) may name hooks and tool
-  servers in their frontmatter. They start only when the model spawns that
-  agent, which is a tool call the shell gate refuses while unapproved text is
-  readable (A7), and their files are in the tree the approval binds.
+- **A checkout's fixed text** (A16): its `CLAUDE.md` files, the top one and
+  any below it the host loads once a file there is read, and the agents it
+  defines (`.claude/agents`), whose frontmatter may name hooks and tool
+  servers. With project config off the host loads none of them, so no text
+  reaches the model (`npm run probe:launch` plants each and sees none load as
+  Martha starts the host, and all of them load by hand).
+- **What approved config prints at run time** (A7): a hook's output or added
+  context, and the hooks of a plugin it enables or loads from a folder its env
+  names. The approval pins the script, never its output, which changes with the
+  network, the clock or a file git ignores. So the relay records A7 when the
+  session starts whenever the carried settings declare a hook, enable a plugin
+  or name a plugin folder (`sourcesALaunchHandsTheModel` in
+  `src/claude_code_host/`), and the shell gate refuses the shell from then on.
+  A carried file it cannot read fails closed and records it too.
+  The owner's user settings and the managed settings are loaded too
+  (`--setting-sources user`), and nothing would record what their hooks and
+  plugins print, so a member does not start while one of them declares a hook,
+  enables a plugin or names a plugin folder (`CLAUDE_CODE_PLUGIN_DIRS`, also
+  refused in the launcher's environment); the refusal names the file and each
+  one, so the owner knows what to move (martha#121). The launcher reads those
+  files again for the member's whole life, with the #122 watch below, and stops
+  the member when one appears. `npm run probe:launch` shows a hook and a plugin
+  folder in the owner's user settings running on Martha's switches alone, and
+  the launcher's own gate refusing both, with nothing started.
+- **A tool server's instruction block** (A11), handed to the model at start.
+  The mesh server's block is code of its recorded tree, which `treeUnlike`
+  compares file by file with the recorded one, through
+  `placeRecordedMeshServers`, before every launch (martha#65), so it records
+  nothing. Every other server in the carried `.mcp.json`, and any enabled
+  plugin, records A11 at start. Not closed: a same-user edit of the mesh
+  server's tree during a session, as for B1.
 
 **Where Martha does not start the host** — the owner opens the coding tool by
 hand and Martha loads inside it — the host has started these before any of
@@ -339,7 +384,8 @@ A host does these things, and the core does the rest:
 | before running any tool | `answerToolCall({ tool, session, policy, input, launch, names: host.tools })`, where `launch` is the place and approvals `prepareLaunch` was given and `names` is the host's own split of a called tool's name — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
 | after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
-| after any MCP tool result | `takeInTurn(session, { source: 'mcp_result' }, binder)` — a mesh tool that runs (`mesh_call`, `mesh_get`, `mesh_recall`, a ring's answer) hands back text with no sender to admit, so the shell gate judges it (B2) |
+| after any MCP tool result | `takeInTurn(session, { source: sourceOfAMeshToolResult(tool) }, binder)` — a mesh tool that runs hands back text with no sender to admit, so the shell gate judges it: `mesh_ring` records the ring's answer (A5), `mesh_answer_ring` what answering returns (A4), every other tool result B2 |
+| when a member's session starts | `takeInTurn` once per source `sourcesALaunchHandsTheModel(carried_files)` returns: A7 when the carried settings declare a hook or enable a plugin, A11 for a server outside the recorded mesh tree or a plugin |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
 | after a turn | `rememberSession(store, session)` |
@@ -392,11 +438,31 @@ The rules the seam keeps, and a host must not work around:
   that does not match, a predecessor whose record is gone, or one reset since
   the stamp: the reader has lost its record. Another member's handover is a checkout file
   (B4), unattributed, and taints.
+- **What the host's own tools return is recorded too (martha#127).** After a
+  built-in tool runs, and before the model sees its result, the launcher
+  records it on the row the host's table (`CLAUDE_CODE_TOOL_RESULT_ROWS`)
+  places it on: a file or a search is B4, a page or a web search B6, a
+  subagent's answer B7. A command's output is always A13, because nothing tells
+  one part of it from another; a first word of `gh` adds B3 and `git log`,
+  `show`, `blame`, `reflog` or `shortlog` add B5, and a label never replaces
+  A13. A tool the table does not name takes the shell. One read records
+  nothing: a file git puts in the tree the owner approved, as the member
+  started on it (read before the host started), while the checkout still holds
+  that tree, or that tree as this member's own recorded writes left it
+  (martha#132: a change that is not one of the launch's own writes, byte for
+  byte and in the mode it set, ends the exemption for every path). In a
+  checkout with no config nothing was approved, so every read
+  counts (decided 2026-11-07). What is left: a read is judged at
+  `tool_answered`, after the tool ran, so a file rewritten and put back before
+  then reads as exempt. After a member's
+  first command, nothing that executes or writes runs again until a fresh
+  start; giving the shell back is martha#129.
 - **There is no release.** A member tainted once stays tainted through every
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the
   open question under item 6).
-- **A room is read through its gate, never raw (B1).** A mesh tool runs only
+- **A room is read through its gate, never raw (B1).** No text reaches the
+  model on B1: a mesh tool runs only
   when `MESH_TOOLS_THAT_RUN` names it: every other mesh tool, a new one
   included, is refused in every session, tainted or not, under every server
   namespace, and so is `mesh_say` when it waits for a reply or comes with no
@@ -545,9 +611,19 @@ host, a **relay** (`src/claude_code_relay/`, a plugin the launcher loads with
 with the engine's own fields unchanged, and acts on the answer. The relay
 decides nothing.
 
+The host writes its own generated files (`tsconfig.json`,
+`.claude-plugin/types/`) into the folder `--plugin-dir` names, only those that
+are missing, and keeps whatever is already there
+([#117](https://github.com/macula-io/martha/issues/117)). So the installed
+relay folder is never named to the host: each launch copies the relay's
+declared files into its own socket directory, clears every write bit, and
+names that copy. A file put into the installed folder is not carried; a
+declared file that is missing or a link refuses the launch. The copy goes with
+the launch, and the installed relay stays byte for byte the release.
+
 A relay the host refuses to load runs no gate at all ([#104](https://github.com/macula-io/martha/issues/104)).
 So before a member starts, the launcher resolves the host's command once and
-asks that binary's own loader (`plugin validate`) whether it takes the relay,
+asks that binary's own loader (`plugin validate`) whether it takes the launch's copy of the relay,
 and starts nothing if it does not. A host of another version than the one the
 adapter was recorded from is told to the owner in one line. The command is
 looked up only in absolute `PATH` entries, so a `claude` planted in the
@@ -567,10 +643,39 @@ start.** With an
 owner at the terminal, in a folder the host does not yet trust, a host that
 loads the relay when the launcher checks it but then runs no hooks gives up to
 `TRUST_ANSWER_DEADLINE_MS` of a member with no prompt gate and no
-tool call gate, with nothing on screen to say so. The routes to such a host are
-managed settings, or a `disableAllHooks` a member writes into the owner's user
-settings; the settings route is row A13, tracked in
-[#122](https://github.com/macula-io/martha/issues/122). This is accepted
+tool call gate, with nothing on screen to say so. The settings route to such a
+host is shut where the launcher can see it
+([#122](https://github.com/macula-io/martha/issues/122)): a launch is refused
+while the owner's user settings, the approved `--settings` copy, or the
+managed settings file or drop-in folder set a key the recorded host turns
+hooks off by (`disableAllHooks`, and from managed settings
+`allowManagedHooksOnly` and `strictPluginOnlyCustomization`). A launch is also
+refused while the host's safe mode is on, which keeps managed hooks only: its
+variable (`CLAUDE_CODE_SAFE_MODE`) in the launcher's environment or in any of
+those files' `env`, whatever its value, or its flag (`--safe-mode`) among the
+owner's arguments. Every one of these is read from the host's own hook-set
+function and the functions its exits call (`hooks_switches` and
+`hooks_switch_calls` in `recorded_claude_code_host.json`), and the recorder
+fails on a statement or an exit of that function it does not know, so a host
+that adds a way to drop hooks fails the recording instead of passing it.
+Claude Code 2.1.319 adds one such exit: with no terminal and
+`CLAUDE_CODE_IGNORE_PERSISTED_TRUST` set, the host keeps only the user,
+`--settings` and policy hooks. The recorder knows that shape and records the
+variable (`outside_a_terminal`), but refuses nothing for it: a member always
+has a terminal, and a live probe on 2.1.319 in print mode, with a project hook
+as the witness that the exit fired, saw the relay's hooks still run. A
+member's file tool call that names the owner's user settings file is denied,
+the path resolved as the host resolves it (trimmed, a leading `~` against its
+home); reads are denied too, which keeps nothing secret, since a shell can
+still read the file. A shell write is caught by the launcher itself: it reads
+those files again every `HOOK_SETTINGS_CHECK_MS` for the member's whole life,
+apart from any hook, as well as after every call, and stops the member when a
+switch appears. What is left: up to `HOOK_SETTINGS_CHECK_MS` of a member with
+no gate after such a write, since the host may drop its hooks as soon as it
+reloads the file; managed settings the host takes from a server or a device
+policy, which the launcher cannot read; and the host's own remote switch for
+hooks modules.
+This is accepted
 because a person must be able to read the host's trust question before
 answering it, and the live probe on 2.1.318 saw the relay report nothing
 before the answer, so no earlier signal exists to start a shorter clock from.
@@ -868,6 +973,14 @@ a switch nobody has read. A gate that passes everything, one that refuses
 everything, one that knows only one config switch, and a row naming a gate nobody
 built are each named.
 
+A row that claims the shell gate must also be reachable: the shell gate only
+stands on a row the host records. `shellGateRowsNothingRecords` takes every
+row the Claude Code relay records when it is driven with each declared start
+source, each prompt origin, each mesh tool that runs, another MCP tool and each
+built-in tool, and names a shell-gate row nothing reaches, and a row declared
+no turn source (`REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES`) that the relay
+records after all. There is no list of rows it lets pass (martha#121).
+
 Its tests plant each of those mistakes to prove the check is not vacuous: a row
 copied from the table without a control, a row whose control was forgotten, a row
 claiming the shell gate while the gate does not refuse it, a row naming a gate
@@ -944,8 +1057,17 @@ crew with a shell:
   a member with no prompt gate and no tool call gate for up to
   `TRUST_ANSWER_DEADLINE_MS`, with nothing on screen to say so; every later
   start there is held to `SESSION_START_DEADLINE_MS` (the residual under the
-  trust question, above; the settings route to such a host is
-  [#122](https://github.com/macula-io/martha/issues/122)).
+  trust question, above; the settings route to such a host is shut where the
+  launcher can read the file, [#122](https://github.com/macula-io/martha/issues/122)).
+- **The call that writes a hook-killing key
+  ([#122](https://github.com/macula-io/martha/issues/122)).** A shell write to
+  the owner's user settings, or one that sets safe mode in its `env`, is caught
+  by the launcher's own check every `HOOK_SETTINGS_CHECK_MS` and after every
+  call, and stops the member; the host may drop its hooks as soon as it reloads
+  the file, so that member may run with no gate for up to
+  `HOOK_SETTINGS_CHECK_MS`, and the next launch is refused. Managed settings
+  from a server or a device policy, and the host's remote switch for hooks
+  modules, are not read by the launcher.
 - **T13**: a process of the same OS user can connect to a launch's relay socket
   and claim any origin, `composer` included (above).
 - **The terminal check is a speed bump.** `martha approve` and `martha start`
