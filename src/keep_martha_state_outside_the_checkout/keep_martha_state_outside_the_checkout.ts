@@ -120,7 +120,7 @@ export function stateSubdirectory(state: MarthaState, name: string): { readonly 
 }
 
 /** A state file's text, '' when it is missing, or why it may not be read. */
-function readStateFile(path: string): { readonly text: string } | Refused {
+export function readStateFile(path: string): { readonly text: string } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
@@ -140,7 +140,7 @@ function readStateFile(path: string): { readonly text: string } | Refused {
 }
 
 /** Writes a state file whole: under a staging name, then renamed into place. */
-function keepStateFile(state: MarthaState, name: string, text: string): void {
+export function keepStateFile(state: MarthaState, name: string, text: string): void {
   const staged = join(state.directory, `${STAGING_PREFIX}${randomUUID()}`)
   fs.writeFileSync(staged, text, { mode: STATE_FILE_MODE, flag: 'wx' })
   fs.chmodSync(staged, STATE_FILE_MODE)
@@ -194,8 +194,8 @@ const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   file: ['kind', 'path', 'sha256'],
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
+export const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
+export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
 
 const isEntry = (value: unknown): value is ConfigEntry => {
@@ -278,9 +278,10 @@ function cutOffAnUnfinishedLine(descriptor: number): void {
 /**
  * Keeps `line` at the end of the state file at `path`; or why it could not be kept. `what` names what one line
  * holds. The bytes written are counted (martha#162): a record kept only in part is cut back off the file and refused
- * here, so a short write never leaves half a record for the next read to trip over.
+ * here, so a short write never leaves half a record for the next read to trip over. The path is the caller's rather
+ * than `state.directory` plus a name, because a launch's own writes are kept in a directory of their own (martha#162).
  */
-function appendStateLine(path: string, line: string, what: string): Refused | undefined {
+export function appendStateLine(path: string, line: string, what: string): Refused | undefined {
   const opened = openForAppend(path, what)
   if ('refusal' in opened) return opened
   const { descriptor } = opened
