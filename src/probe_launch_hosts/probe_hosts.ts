@@ -29,6 +29,7 @@ import {
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
@@ -134,7 +135,6 @@ const ONE_CALL_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', ONE_CALL_
 
 const NESTED_DIR = 'sub'
 const NESTED_FILE = join(NESTED_DIR, 'notes.txt')
-const INSTRUCTIONS = 'CLAUDE.md'
 const AGENT = 'probe-agent'
 /** What Claude Code prints, and only it, when it has no agent by that name (2.1.319). */
 const NO_SUCH_AGENT = `--agent '${AGENT}' not found`
@@ -144,8 +144,8 @@ const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', READ_BE
 
 /** The checkout's fixed text: a CLAUDE.md at the top, one below it, and an agent. */
 function plantFixedText(place: Place): void {
-  put(place.checkout, INSTRUCTIONS, 'Probe instructions at the top.\n')
-  put(place.checkout, join(NESTED_DIR, INSTRUCTIONS), 'Probe instructions below the top.\n')
+  put(place.checkout, INSTRUCTION_FILES.checkout, 'Probe instructions at the top.\n')
+  put(place.checkout, join(NESTED_DIR, INSTRUCTION_FILES.checkout), 'Probe instructions below the top.\n')
   put(place.checkout, NESTED_FILE, 'a file below the top\n')
   put(place.checkout, join('.claude', 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
 }
@@ -170,8 +170,8 @@ function instructionsHook(place: Place): string {
   )
   const script = join(place.scratch, 'mark_instructions.mjs')
   const marks = {
-    [join(place.checkout, INSTRUCTIONS)]: place.marker('TOP_CLAUDE_MD'),
-    [join(place.checkout, NESTED_DIR, INSTRUCTIONS)]: place.marker('NESTED_CLAUDE_MD'),
+    [join(place.checkout, INSTRUCTION_FILES.checkout)]: place.marker('TOP_CLAUDE_MD'),
+    [join(place.checkout, NESTED_DIR, INSTRUCTION_FILES.checkout)]: place.marker('NESTED_CLAUDE_MD'),
   }
   writeFileSync(
     script,
