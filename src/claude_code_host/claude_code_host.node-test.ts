@@ -22,6 +22,7 @@ import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { RECORDED_BASH_RESULTS } from './claude_code_bash_results.ts'
 import { claudeCodeHost, ownNameOfCalledTool, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
 import { promptOriginKindsOf, promptOriginRemapsOf, promptOriginsIn, type RecordedPromptOrigins } from './claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_session_events.ts'
@@ -356,6 +357,22 @@ test('the recording names the host version it was taken from', () => {
   const recorded = JSON.parse(readFileSync(new URL('./recorded_claude_code_host.json', import.meta.url), 'utf8')) as { host_version?: unknown }
   assert.match(String(recorded.host_version), /^\d+\.\d+\.\d+$/)
   assert.equal(RECORDED_HOST.host_version, recorded.host_version)
+})
+
+test('the Bash answers are of the host this repository records (martha#193)', () => {
+  // Two recordings of one host. `npm run record:claude-code-host` refreshes recorded_claude_code_host.json from the
+  // binary and never touches recorded_claude_code_bash_results.json, which is a live observation of what that host
+  // answered a `tool.call` hook. The version in each is the only sign that the answers were taken from another host,
+  // and nothing else compares them, so a host re-record leaves this one silently a version behind. A host whose
+  // rendering changed would then be read as a run the exemption does not cover, which records A13 on every signed
+  // run. Re-take the answers by the method the file's own `_why` states, then record that host's version here.
+  assert.equal(
+    RECORDED_BASH_RESULTS.host_version,
+    RECORDED_HOST.host_version,
+    `the Bash answers were observed of ${RECORDED_BASH_RESULTS.host_version}, and the host recording is ` +
+      `${RECORDED_HOST.host_version}. Re-observe them on ${RECORDED_HOST.host_version} the way ` +
+      'recorded_claude_code_bash_results.json\'s `_why` says, and record that version with them.',
+  )
 })
 
 // --- T1, T5: the prompt origin kinds come from the host's own code -----------------

@@ -32,7 +32,13 @@
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { CLAUDE_CODE_TOOL_RESULT_ROWS, isMcpToolCall, sessionStartOf, type SessionStartHookInput } from '../claude_code_host/claude_code_host.ts'
+import {
+  CLAUDE_CODE_READ_ATTACHES_NOTHING,
+  CLAUDE_CODE_TOOL_RESULT_ROWS,
+  isMcpToolCall,
+  sessionStartOf,
+  type SessionStartHookInput,
+} from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
@@ -40,7 +46,7 @@ import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from 
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Ran, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -67,6 +73,11 @@ export interface MemberRelayPlace {
   readonly policy: Policy
   /** How the host names a called tool: the adapter's `host.tools`. */
   readonly names: ToolNames
+  /**
+   * What this launch started the host with, down to the names its adapter declares (martha#135): the arguments and
+   * environment `spawn` got, so a read's exemption can ask what really started the host.
+   */
+  readonly started_with: StartedWith
   /** `bindNothing` until the host attests a sender (A6, anthropics/claude-code#107216). */
   readonly binder: Binder
   /**
@@ -250,7 +261,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (unvouched !== undefined) return denied(unvouched)
   const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
   if (settings !== undefined) return denied(settings)
-  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home)
+  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
   if (memory !== undefined) return denied(memory)
   const verdict = answerToolCall({
     tool: call.tool,
@@ -298,7 +309,16 @@ async function recordToolResult(state: RelayState, session: HostSession, call: {
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(
         session,
-        { tool: call.tool, input: call.input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch: place.launch, approved_start: state.approved_start, host: thisMachine },
+        {
+          tool: call.tool,
+          input: call.input,
+          rows: CLAUDE_CODE_TOOL_RESULT_ROWS,
+          launch: place.launch,
+          approved_start: state.approved_start,
+          started_with: place.started_with,
+          read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
+          host: thisMachine,
+        },
         place.binder,
       )
   if (taken.gate.ingested.length === session.gate.ingested.length) return answered(TAKEN)

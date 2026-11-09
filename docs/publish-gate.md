@@ -479,7 +479,15 @@ The rules the seam keeps, and a host must not work around:
   started on it (read before the host started), while the checkout still holds
   that tree, or that tree as this member's own recorded writes left it
   (martha#132: a change that is not one of the launch's own writes, byte for
-  byte and in the mode it set, ends the exemption for every path). In a
+  byte and in the mode it set, ends the exemption for every path). The
+  exemption also needs the launch to have really started the host with the
+  switches its adapter declares, the ones under which the host attaches no
+  other file's text to a read (`started_with`, martha#135): a host whose
+  adapter declares none, a launch whose launcher has no start to hand the
+  relay, one argument of the
+  declaration missing or one dropped name carried, and every read counts
+  again. `started_with` is not state: it is what the launcher spawned the host
+  with, handed to the relay and held for the launch's life. In a
   checkout with no config nothing was approved, so every read
   counts (decided 2026-11-07). A `CLAUDE.local.md` is ignored, so it is never
   in the approved tree: a read of one is text taken in, and so is any fixed
@@ -693,7 +701,11 @@ owner's arguments. Every one of these is read from the host's own hook-set
 function and the functions its exits call (`hooks_switches` and
 `hooks_switch_calls` in `recorded_claude_code_host.json`), and the recorder
 fails on a statement or an exit of that function it does not know, so a host
-that adds a way to drop hooks fails the recording instead of passing it.
+that adds a way to drop hooks fails the recording instead of passing it. The
+probe plants each key the recording names beside a hook in the owner's user
+settings, and each one alone with no hook beside it: on the switches alone the
+hook does not run and the host exits cleanly, and gated the launch is refused
+before the host starts, naming the file and the key (`npm run probe:launch`).
 Claude Code 2.1.319 adds one such exit: with no terminal and
 `CLAUDE_CODE_IGNORE_PERSISTED_TRUST` set, the host keeps only the user,
 `--settings` and policy hooks. The recorder knows that shape and records the
@@ -841,6 +853,23 @@ where it came from. Three things stand on it:
   land in. A chain that exists to its end is resolved by the system in one step,
   up to the system's own limit, and refused when the system cannot resolve it. A project's memory folder is followed at each write,
   so a link a member makes during its session is caught too.
+- **A member's file tool does not write what a later git run of the owner's
+  reads (martha#168).** The same relay refuses a write whose path has a segment
+  git would take for its own `.git` directory — by git's own checks, not the
+  name exactly: the code points HFS+ ignores, any ASCII case, and the NTFS short
+  name `git~1`, applied on every platform whatever `core.protectHFS` and
+  `core.protectNTFS` say there, since both default off on Linux, where the member
+  runs. It also refuses a write into the checkout's git directory, found on disk
+  and never by `rev-parse`, with the one a linked worktree shares through its
+  `commondir`, and into the git configuration files of the owner's own runs
+  (`~/.gitconfig`, the XDG one, and `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`,
+  `GIT_DIR` and `GIT_COMMON_DIR` when the launcher's environment names them). The
+  git directory is read at each call, so one that appears during the session is
+  covered from the next call. The permission rules do not carry these places: the
+  host runs no pass that writes a git directory or the owner's git config by
+  itself. What no path rule closes is filed as martha#192: an embedded bare
+  repository in the tree, a `core.hooksPath` already pointing into it, and
+  `include.path`/`includeIf`.
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
   each place the relay refuses, as named and as it leads, for the projects
@@ -854,9 +883,9 @@ where it came from. Three things stand on it:
 
 What it does not rest on: the publish gate's hook for the memory pass, which
 runs as a fork whose tool calls the hook is not established to see. What it
-leaves open: a `Bash` write into a memory folder, which only a clean member
-holds; a host the owner starts by hand (C1, C2); and OpenCode, not probed for a
-memory of its own.
+leaves open: a `Bash` write into a memory folder, a git directory or the owner's
+git config, which only a clean member holds; a host the owner starts by hand
+(C1, C2); and OpenCode, not probed for a memory of its own.
 
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the

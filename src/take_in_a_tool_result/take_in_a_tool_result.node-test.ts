@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_TOOL_RESULT_ROWS } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS } from '../claude_code_host/claude_code_host.ts'
 import {
   openState,
   OWN_WRITES_PLACE,
@@ -24,7 +24,14 @@ import {
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { readCheckoutTree } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
-import { readLaunchState, type ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import {
+  HOSTS,
+  readLaunchState,
+  startedWithOf,
+  type ApprovedLaunch,
+  type HostSwitches,
+  type StartedWith,
+} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { latestOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
@@ -54,6 +61,8 @@ interface Checkout {
   readonly start_tree: string
   /** Martha's state of the project. */
   readonly state: MarthaState
+  /** What this launch started the host with, as the launcher records it (martha#135). */
+  readonly started_with: StartedWith
 }
 
 /** A checkout whose config the owner approved, and the launch started on it. */
@@ -81,7 +90,15 @@ function checkoutFor(t: TestContext): Checkout {
   const start = readCheckoutTree(checkout, home, thisMachine)
   assert.equal(start.kind, 'tree')
   const start_tree = start.kind === 'tree' ? start.tree : ''
-  return { home, checkout, launch, start_tree, state }
+  return {
+    home,
+    checkout,
+    launch,
+    start_tree,
+    state,
+    // The switches `prepareLaunch` starts the host with, which is what the launcher records.
+    started_with: startedWithOf(SWITCHES, SWITCHES.args, SWITCHES.env),
+  }
 }
 
 /** The member's own write of a file, kept as the launcher keeps one after the call ran. */
@@ -102,8 +119,22 @@ function keptOwnWrite(place: Checkout, path: string): OwnWrite {
   return write
 }
 
-/** What reading `file_path` records, as the gate reads it. */
+/** The switches the adapter declares, which are what a read has to have been started with to stay exempt (martha#135). */
+const SWITCHES: HostSwitches = CLAUDE_CODE_READ_ATTACHES_NOTHING
+
+/** What reading `file_path` records, as the gate reads it, for a launch that started the host as `place` records. */
 function recordedReading(place: Checkout, path: string): string[] {
+  return recordedReadingStartedWith(place, path, place.started_with, SWITCHES)
+}
+
+/** What reading `file_path` records when the launch started the host with `started_with`, under `declares`. */
+function recordedReadingStartedWith(
+  place: Checkout,
+  path: string,
+  started_with: StartedWith | undefined,
+  declares: HostSwitches | undefined,
+  start_tree: string | null = place.start_tree,
+): string[] {
   const session = { id: 'session-1', gate: startFreshSession(), record_missing: false }
   const taken = takeInToolResult(
     session,
@@ -112,8 +143,10 @@ function recordedReading(place: Checkout, path: string): string[] {
       input: { file_path: path },
       rows: CLAUDE_CODE_TOOL_RESULT_ROWS,
       launch: place.launch,
-      approved_start: place.start_tree,
+      approved_start: start_tree,
       host: thisMachine,
+      started_with,
+      read_attaches_nothing: declares,
     },
     bindNothing,
   )
@@ -193,4 +226,66 @@ test('an own write whose file is then deleted leaves the tree changed: reading a
   // The member removes the file it wrote: a deletion plants nothing, and it is still no own write of that file.
   rmSync(join(place.checkout, 'README.md'))
   assert.deepEqual(recordedReading(place, join(place.checkout, '.mcp.json')), ['B4:null'])
+})
+
+// martha#135: the exemption holds only while the launch really started the host with the switches under which the
+// host attaches no other file's text to a read. Every case below is a read of a tracked file of the approved tree,
+// which is exempt on the tree's own; what changes is what the launch started with.
+
+test('a read of a tracked file stays exempt while the launch started the host with the declared switches (martha#135)', (t) => {
+  const place = checkoutFor(t)
+  assert.deepEqual(recordedReading(place, join(place.checkout, 'README.md')), [])
+})
+
+test('a launch that started the host without the declared switches records B4 for a read of the approved tree (martha#135)', (t) => {
+  const place = checkoutFor(t)
+  const withoutTheSwitches = startedWithOf(SWITCHES, [], {})
+  assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), withoutTheSwitches, SWITCHES), ['B4:null'])
+})
+
+for (const [dropped, at] of SWITCHES.args.map((arg, index) => [arg, index] as const)) {
+  test(`a launch that did not start the host with ${dropped} records B4 for a read of the approved tree (martha#135)`, (t) => {
+    const place = checkoutFor(t)
+    const short = startedWithOf(SWITCHES, SWITCHES.args.filter((_, index) => index !== at), SWITCHES.env)
+    assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), short, SWITCHES), ['B4:null'])
+  })
+}
+
+for (const [name, value] of Object.entries(SWITCHES.env)) {
+  test(`a launch with no ${name}=${value} in its environment records B4 for a read of the approved tree (martha#135)`, (t) => {
+    const place = checkoutFor(t)
+    const other = startedWithOf(SWITCHES, SWITCHES.args, { ...SWITCHES.env, [name]: `${value}-and-more` })
+    assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), other, SWITCHES), ['B4:null'])
+    const absent = startedWithOf(SWITCHES, SWITCHES.args, {})
+    assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), absent, SWITCHES), ['B4:null'])
+  })
+}
+
+for (const name of SWITCHES.env_dropped) {
+  test(`a launch that carried ${name} records B4 for a read of the approved tree (martha#135)`, (t) => {
+    const place = checkoutFor(t)
+    const carried = startedWithOf(SWITCHES, SWITCHES.args, { ...SWITCHES.env, [name]: 'a prefix nobody dropped' })
+    assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), carried, SWITCHES), ['B4:null'])
+  })
+}
+
+test('a host whose adapter declares no switches attaches its reads nothing: a read of the approved tree records B4 (martha#135)', (t) => {
+  const place = checkoutFor(t)
+  assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), place.started_with, undefined), ['B4:null'])
+})
+
+test('a launch that recorded no start records B4 for every read, whatever it says it started with (martha#135)', (t) => {
+  const place = checkoutFor(t)
+  assert.deepEqual(recordedReadingStartedWith(place, join(place.checkout, 'README.md'), undefined, SWITCHES), ['B4:null'])
+})
+
+test('the adapter declaration is the very project-config-off switches, referenced and never copied (martha#135)', () => {
+  assert.equal(CLAUDE_CODE_READ_ATTACHES_NOTHING, HOSTS['claude-code'].project_config_off)
+})
+
+test('a checkout with no approved start keeps every read counting, whatever the launch started with (martha#135, martha#127 r=3)', (t) => {
+  const place = checkoutFor(t)
+  // Nothing was approved for this checkout, so there is no start tree, and the switches change nothing.
+  const read = recordedReadingStartedWith(place, join(place.checkout, 'README.md'), place.started_with, SWITCHES, null)
+  assert.deepEqual(read, ['B4:null'])
 })

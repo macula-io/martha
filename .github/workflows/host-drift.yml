@@ -9,6 +9,10 @@
 #   npm run record:claude-code-host -- <claude binary> <version>
 # then a PR with whatever the named fields call for. prove_the_recorded_host_is_current.sh says how.
 #
+# The re-record also re-takes the `Bash` answers recording, which this check never touches and which is a live
+# observation of the host (martha#193): re-observe it on the new host the way its own `_why` says, because
+# claude_code_host.node-test.ts fails, naming both versions, until the two recordings name one host.
+#
 # A failed scheduled or main run stays red, and that is the whole signal: it names the versions and the fields that
 # differ, and the Supervisor routes the re-record. The job opens no issue and writes nothing: its token is read-only.
 #
