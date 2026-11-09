@@ -83,7 +83,10 @@ function judgeTheCheckout(run: ShapeToRun): Judged | string {
   const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live, blobUnderTheTreeOf })
   const dependencies = judgeTheDependencies(run.checkout, base, read)
   const refusals = [...tree.refusals.map((refused) => `${refused.path}: ${refused.why}`), ...dependencies.refusals]
-  if (refusals.length > 0) return `nothing ran: ${refusals.join('; ')}`
+  // A launch's file the history passed over vouches for nothing (martha#162 r=4): what its member wrote is not an own
+  // write here, so a path behind one of those writes refuses above by name. This names the file that was passed over
+  // and why, and it refuses nothing by itself.
+  if (refusals.length > 0) return `nothing ran: ${[...refusals, ...own.unread].join('; ')}`
   const packages = readThePackages(run.checkout, dependencies.packages)
   if (typeof packages === 'string') return packages
   return { files: filesToWrite(tree.files, read, base), packages, dependencies }

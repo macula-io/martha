@@ -39,6 +39,8 @@ import {
   ownWriteOfLine,
   type OwnWrite,
   type OwnWrites,
+  type OwnWritesHistoryStore,
+  type OwnWritesOfTheHistory,
   type OwnWritesStore,
 } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
@@ -393,8 +395,12 @@ export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnW
 /**
  * Every own write still kept, launch by launch in the order each launch kept them, and the launches in the order of
  * their first record: the whole history a reader of it (#129) asks for (martha#162).
+ *
+ * One launch's file that cannot be read does not take the history with it (martha#162 r=4): the history reads the
+ * other launches and names the file it passed over. Nothing that launch's member wrote is an own write then, so a
+ * path behind one of those writes refuses by name, and the owner can approve the tree and run.
  */
-export function ownWritesKeptForTheHistory(state: MarthaState): OwnWritesStore {
+export function ownWritesKeptForTheHistory(state: MarthaState): OwnWritesHistoryStore {
   return {
     append: (write) => {
       const directory = ownWritesDirectory(state)
@@ -410,7 +416,7 @@ interface LaunchOwnWrites {
   readonly writes: readonly OwnWrite[]
 }
 
-function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWrites {
+function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWritesOfTheHistory {
   const directory = ownWritesDirectory(state)
   if ('refusal' in directory) return directory
   let names: string[]
@@ -420,16 +426,20 @@ function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWrites {
     return { refusal: `${directory.path} could not be read (${(error as NodeJS.ErrnoException).code ?? String(error)}).` }
   }
   const kept: LaunchOwnWrites[] = []
+  const unread: string[] = []
   for (const [name, launch] of names.sort().map((name) => [name, launchOfOwnWritesFileName(name)] as const)) {
     if (launch === undefined) continue
     const read = readOwnWritesOf(join(directory.path, name))
-    if ('refusal' in read) return read
+    if ('refusal' in read) {
+      unread.push(read.refusal)
+      continue
+    }
     kept.push({ launch, writes: read.writes })
   }
   const firstRecord = (one: LaunchOwnWrites): string => one.writes[0]?.recorded_at ?? ''
   // The names are read in order, and this sort is stable, so two launches whose first record is the same instant are
   // read in the order of their names, and the same history comes back every time.
-  return { writes: kept.sort((one, other) => firstRecord(one).localeCompare(firstRecord(other))).flatMap((one) => one.writes) }
+  return { writes: kept.sort((one, other) => firstRecord(one).localeCompare(firstRecord(other))).flatMap((one) => one.writes), unread }
 }
 
 /**

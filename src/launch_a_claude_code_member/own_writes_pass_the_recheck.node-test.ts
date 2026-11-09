@@ -24,7 +24,7 @@ import {
   type ApprovedLaunch,
   type LaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { OWN_WRITE_MODES, type OwnWrites } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { OWN_WRITE_MODES, type OwnWritesOfTheHistory } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
@@ -121,7 +121,7 @@ async function wrote(place: Checkout, path: string, content: string, on_disk = c
 }
 
 const blobOf = (place: Checkout, path: string): string => git(place.checkout, 'hash-object', '--', path)
-const allOwnWrites = (state: MarthaState): OwnWrites => ownWritesKeptForTheHistory(state).all()
+const allOwnWrites = (state: MarthaState): OwnWritesOfTheHistory => ownWritesKeptForTheHistory(state).all()
 
 const MOVED = (paths: string): string =>
   `The checkout changed since the owner approved it, and not by this member's own file writes: ${paths}. ` +
@@ -213,7 +213,7 @@ test("a Bash call's changes are never own writes: it is stopped, naming the path
   const why = MOVED('README.md')
   assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'echo changed > README.md' })), STOPPING(why))
   assert.deepEqual(place.stops, [why])
-  assert.deepEqual(allOwnWrites(place.state), { writes: [] })
+  assert.deepEqual(allOwnWrites(place.state), { writes: [], unread: [] })
 })
 
 test('a change nobody recorded is refused before the next call, naming the path and how to approve it', async (t) => {
@@ -274,7 +274,7 @@ test("a Write whose bytes on disk are not the call's content is not kept, and th
   await started(place)
   const why = MOVED('hello.txt')
   assert.deepEqual(await wrote(place, 'hello.txt', 'what the member wrote\n', 'what someone else left\n'), STOPPING(why))
-  assert.deepEqual(allOwnWrites(place.state), { writes: [] })
+  assert.deepEqual(allOwnWrites(place.state), { writes: [], unread: [] })
 })
 
 test('a link put in the checkout is never an own write, even where the member wrote', async (t) => {
@@ -291,7 +291,7 @@ test('a directory named by a Write is not an own write: nothing is kept, and the
   const directory = join(place.checkout, 'notes')
   mkdirSync(directory)
   assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: directory, content: 'hello\n' })), TAKEN_REPLY)
-  assert.deepEqual(allOwnWrites(place.state), { writes: [] })
+  assert.deepEqual(allOwnWrites(place.state), { writes: [], unread: [] })
   assert.deepEqual(place.stops, [])
 })
 

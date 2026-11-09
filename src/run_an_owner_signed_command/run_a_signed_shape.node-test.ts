@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { openState, ownWritesKeptForTheHistory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, OWN_WRITES_PLACE, OWN_WRITES_SUFFIX, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
@@ -23,6 +23,33 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd,
  * truth for an own write recorded by hand here, never a value the reader computes for itself.
  */
 const blobOf = (checkout: string, path: string): string => git(checkout, 'hash-object', `--path=${path}`, '--', path)
+
+/** The file one launch's own writes are kept in, found by the launch its name decodes to. */
+function ownWritesFileOf(state: MarthaState, launch: string): string {
+  const directory = join(state.directory, OWN_WRITES_PLACE)
+  const name = readdirSync(directory).find((candidate) => {
+    if (!candidate.endsWith(OWN_WRITES_SUFFIX)) return false
+    try {
+      return decodeURIComponent(candidate.slice(0, -OWN_WRITES_SUFFIX.length)) === launch
+    } catch {
+      return false
+    }
+  })
+  assert.ok(name !== undefined, `no own-writes file for ${launch}`)
+  return join(directory, name)
+}
+
+/** One own write of `path` in `checkout`, as the member's Write leaves it, kept under `launch`. */
+const ownWriteOf = (checkout: string, path: string, launch: string) => ({
+  path: join(checkout, path),
+  blob: blobOf(checkout, path),
+  mode: REGULAR,
+  tool: 'Write',
+  tool_use_id: `toolu_${path}`,
+  session: 's',
+  launch,
+  recorded_at: new Date().toISOString(),
+})
 
 // One dependency, `tool`, with two bin names, pinned by the base lock and installed to match it.
 const TOOL = { version: '1.0.0', resolved: 'https://registry.example.invalid/tool-1.0.0.tgz', integrity: 'sha512-tool', bin: { tool: 'cli.sh', 'tool-too': 'cli.sh' } }
@@ -109,6 +136,30 @@ test('a file neither base nor own write runs nothing, and is named; written thro
   const ended = await runASignedShape(p.run)
   assert.ok(typeof ended !== 'string', String(ended))
   assert.equal(ended.status, 0)
+})
+
+test('a torn own-writes file of an older launch stops neither the run nor another launch, and is named when its paths refuse (martha#162 r=4)', { skip: unavailable }, async (t) => {
+  const p = place(t)
+  const history = ownWritesKeptForTheHistory(p.state)
+  // The older launch's write, kept, and then its file left torn by a crash mid-append.
+  writeFileSync(join(p.checkout, 'older.txt'), MARKER)
+  assert.equal(history.append(ownWriteOf(p.checkout, 'older.txt', 'the-older-launch')), undefined)
+  writeFileSync(ownWritesFileOf(p.state, 'the-older-launch'), '{"path":"/project/ole', { flag: 'a' })
+  // The newer launch's write, kept cleanly.
+  writeFileSync(join(p.checkout, 'newer.txt'), MARKER)
+  assert.equal(history.append(ownWriteOf(p.checkout, 'newer.txt', 'the-newer-launch')), undefined)
+  // What the newer launch wrote still runs: one launch's torn file is not the project's refusal, and a new start is
+  // no answer to it, so the run must not be stopped at all.
+  rmSync(join(p.checkout, 'older.txt'))
+  const ended = await runASignedShape({ ...p.run, shapes: [{ name: 'test', argv: ['/bin/sh', '-c', 'cat newer.txt'] }] })
+  assert.ok(typeof ended !== 'string', `the run must run: ${String(ended)}`)
+  assert.equal(ended.output.toString('utf8'), MARKER)
+  // Put back what the older launch's member wrote: no own write vouches for it, so it refuses by name, and the file
+  // the history passed over is named with it, so the owner can approve the tree and run.
+  writeFileSync(join(p.checkout, 'older.txt'), MARKER)
+  const refused = String(await runASignedShape(p.run))
+  assert.match(refused, /older\.txt is neither the base's nor the member's own write/)
+  assert.match(refused, /the-older-launch/)
 })
 
 test('an own write git changes as it adds it still passes: the blob judged is the one git would give it (martha#132)', { skip: unavailable }, async (t) => {
