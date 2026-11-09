@@ -35,6 +35,7 @@ import { CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_c
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { isRecord } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
@@ -105,6 +106,13 @@ interface Probe {
    * that far would leave the same markers as one that ran and rightly did nothing.
    */
   readonly host_ok?: true
+  /**
+   * Markers read from what the host printed, for a row whose claim is that the host
+   * TRIED something and was refused (martha#154 r=2): a row that only says the file
+   * is absent is satisfied by a host that never attempted the write at all. The run
+   * is asked for json output, and this reads the refusal out of it.
+   */
+  readonly from_output?: (place: Place, printed: string) => Readonly<Record<string, boolean>>
 }
 
 /** One file of the owner's own markdown, at `<config folder>/<folder>/<name>`. */
@@ -672,27 +680,39 @@ function runProbe(probe: Probe): RunResult | string {
     const inherited = environmentOf(probe, place)
     const switches = switchesFor(probe, place, inherited)
     if (typeof switches === 'string') return `refused by prepareLaunch: ${switches}`
-    if ('gate' in switches) {
-      const refused = gateSeen(probe, place, switches.gate)
-      return typeof refused === 'string' ? refused : { markers: refused, status: null }
-    }
+    if ('gate' in switches) return aRunTheGateRefused(probe, place, switches.gate)
 
     const { command, args } = probe.command(switches, place)
     const run = spawnSync(command, args, {
       cwd: checkout,
       env: launchEnvironment(inherited, switches),
-      stdio: 'ignore',
+      // Captured for the rows that read the host's own account of what it was refused; the others ignore it.
+      stdio: ['ignore', 'pipe', 'ignore'],
       timeout: RUN_TIMEOUT_MS,
     })
     if (run.error !== undefined) return `could not run: ${run.error.message}`
     spawnSync('sleep', ['1'])
+    const printed = typeof run.stdout === 'string' ? run.stdout : ''
     return {
-      markers: Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(markerPath(probe, place, name))])),
+      markers: {
+        ...Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(markerPath(probe, place, name))])),
+        ...(probe.from_output?.(place, printed) ?? {}),
+      },
       status: run.status,
     }
   } finally {
     removeScratch(scratch, [checkout])
   }
+}
+
+/**
+ * The run a settings-gate refusal leaves: a failure for a row that needs the host to have run, whose claim is about what
+ * the host would have tried, and the refusal's own markers for the others (martha#154 r=2).
+ */
+function aRunTheGateRefused(probe: Probe, place: Place, refusal: string): RunResult | string {
+  if (probe.host_ok === true) return `the launcher's own settings gate refused this run (${refusal}), so the host never ran and the row proves nothing`
+  const seen = gateSeen(probe, place, refusal)
+  return typeof seen === 'string' ? seen : { markers: seen, status: null }
 }
 
 /** The markers of a run the launcher's gate refused: nothing started, and GATE_REFUSED when the refusal names what the probe planted. */
@@ -778,6 +798,27 @@ const userScopePlaces = (place: Place) => {
 /** Every folder under the config dir the host loads the owner's text from, by the recording's names and the field's. */
 const OWNER_SCOPE_FOLDERS: readonly string[] = [...RECORDED_HOST.markdown_kinds, CLAUDE_CODE_OUTPUT_STYLES_FOLDER]
 
+/**
+ * The Write the host was refused, as the host itself reports it (martha#154 r=2): the run is asked for json output, and
+ * its `permission_denials` names the tool and the path it was stopped on. A row that only reads the file's absence is
+ * satisfied by a host that never attempted the write -- a model that did nothing, a run that failed -- so this is what
+ * makes the row say the write was tried and refused.
+ */
+export function deniedWriteIn(printed: string, target: string): boolean {
+  const answer = ((): unknown => {
+    try {
+      return JSON.parse(printed.trim().split('\n').at(-1) ?? '')
+    } catch {
+      return undefined
+    }
+  })()
+  const denials = isRecord(answer) && Array.isArray(answer['permission_denials']) ? (answer['permission_denials'] as unknown[]) : []
+  return denials.some((denial) => {
+    const input = isRecord(denial) && isRecord(denial['tool_input']) ? denial['tool_input'] : {}
+    return isRecord(denial) && denial['tool_name'] === 'Write' && input['file_path'] === target
+  })
+}
+
 const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder) =>
   [false, true].map((gated): Probe => {
     const target = (place: Place) => join(userScopeConfig(place), folder, 'probe-note.md')
@@ -794,6 +835,8 @@ const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder
           'haiku',
           '--permission-mode',
           'acceptEdits',
+          '--output-format',
+          'json',
           `--add-dir=${userScopeConfig(place)}`,
           `Use the Write tool to create the file ${target(place)} with the single line: probe. Do nothing else.`,
           ...switches.args,
@@ -804,7 +847,10 @@ const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder
       planned: gated,
       owner_settings: (place) => (gated ? JSON.stringify({ permissions: { deny: memoryDenyRules(userScopePlaces(place)) } }) : JSON.stringify({})),
       markerAt: target,
-      expected: { OWNER_SCOPE_FILE: !gated },
+      // A refused write is the row's claim, and it takes the host itself to have run: a gate refusal, a crash or a
+      // model that did nothing is a failure, not "not started, as claimed" (martha#154 r=2).
+      ...(gated ? { host_ok: true as const, from_output: (place: Place, printed: string) => ({ OWNER_SCOPE_WRITE_DENIED: deniedWriteIn(printed, target(place)) }) } : {}),
+      expected: { OWNER_SCOPE_FILE: !gated, ...(gated ? { OWNER_SCOPE_WRITE_DENIED: true } : {}) },
     }
   }),
 )

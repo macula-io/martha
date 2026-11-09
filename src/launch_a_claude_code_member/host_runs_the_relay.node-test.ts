@@ -6,9 +6,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { CLAUDE_SERVERS, HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   firstValidatorError,
+  initQuestionArgs,
+  MCP_CONFIG_SWITCH,
+  SESSION_INIT_ARGS,
   HOST_IGNORES_ITS_TRUST_RECORD,
   HOST_TRUST_RECORD_FILE,
   hostTrustsTheFolder,
@@ -132,4 +136,19 @@ test('the host\'s trust record is read from CLAUDE_CONFIG_DIR before HOME, only 
   const linked = join(placeFor(t), 'linked')
   symlinkSync(folder, linked)
   assert.equal(hostTrustsTheFolder({ HOME: home }, linked), true, 'the record names the real path')
+})
+
+// What the question is asked with (martha#154 r=2): the member's own settings, so the `env` block that moves the
+// config dir applies, and nothing that starts anything -- no server file, and every hook off.
+test('the session-init question is asked with no server file and with hooks off (#154 r=2)', () => {
+  const serversSwitch = HOSTS['claude-code'].carried[CLAUDE_SERVERS]
+  assert.ok(serversSwitch !== undefined, 'the adapter names the switch that hands the host its server file')
+  const launchSwitches = [...HOSTS['claude-code'].project_config_off.args, ...serversSwitch(join(tmpdir(), 'servers.json')).args]
+  assert.ok(launchSwitches.includes('--mcp-config'), 'the member itself is started with the servers file')
+  const asked = initQuestionArgs(launchSwitches, '/tmp/hooks-off.json')
+  assert.deepEqual(asked.filter((arg) => arg.startsWith(MCP_CONFIG_SWITCH)), [], 'no switch that names a server')
+  assert.ok(asked.includes('--strict-mcp-config'), 'strict stays, so settings-named servers start nothing either')
+  assert.ok(asked.includes('--setting-sources'), 'the settings that may move the config dir are still read')
+  assert.deepEqual(asked.slice(asked.indexOf('--settings'), asked.indexOf('--settings') + 2), ['--settings', '/tmp/hooks-off.json'])
+  assert.deepEqual(asked.slice(-SESSION_INIT_ARGS.length), [...SESSION_INIT_ARGS])
 })

@@ -538,6 +538,27 @@ function placesAwayFromTheOwner(
   return { ownerMemory, settingsArgs: startSettings.args }
 }
 
+/** The settings file the session-init question is asked with: hooks off, and nothing else (martha#154 r=2). */
+const INIT_QUESTION_SETTINGS = 'martha-init-question.json'
+
+/**
+ * The settings file that turns every hook off for the session-init question, by the key the recording names (martha#154
+ * r=2); or why the question cannot be asked safely. A question that reads the owner's settings can run their hooks, and
+ * a hook runs whatever it names, with the launcher's environment and before the launch placed anything; asked with this
+ * file, the question still reads those settings -- the `env` block that may move the config dir included -- and runs no
+ * hook of theirs.
+ */
+function initQuestionSettings(prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly path: string } | { readonly refusal: string } {
+  const off = CLAUDE_CODE_HOOK_SWITCHES.every_source
+  if (off.length === 0) {
+    return { refusal: 'the recording names no key that turns every hook off from any settings file, so the session-init question cannot be asked without running the owner\'s hooks (martha#154)' }
+  }
+  const path = join(prepared.snapshot_dir, INIT_QUESTION_SETTINGS)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify(Object.fromEntries(off.map((key) => [key, true]))))
+  return { path }
+}
+
 /**
  * Step 2b: the file the host's command resolves to, which must load the launch's copy of the relay, and the folder
  * it reports for the owner's user output styles (martha#154); or the refusal. A host of another version than the
@@ -558,8 +579,11 @@ async function hostThatRunsTheRelay(
   const drift = await hostVersionLine(resolved.binary, env, cwd)
   if (drift !== undefined) launch.tellOwner(drift)
   // The styles folder the member's own session reports, asked with the switches its host starts on so the settings
-  // env blocks that move it are applied (martha#154).
-  const reported = await outputStylesDirTheHostReports(resolved.binary, ready.prepared.switches.args, env, cwd)
+  // env blocks that move it are applied -- and with no server named and hooks off, so the question starts nothing
+  // (martha#154 r=2).
+  const hooksOff = initQuestionSettings(ready.prepared)
+  if ('refusal' in hooksOff) return `${NOT_STARTED}: ${hooksOff.refusal}`
+  const reported = await outputStylesDirTheHostReports(resolved.binary, ready.prepared.switches.args, hooksOff.path, env, cwd)
   if ('refusal' in reported) return `${NOT_STARTED}: ${reported.refusal}`
   return { binary: resolved.binary, reported_output_styles_dir: reported.dir }
 }

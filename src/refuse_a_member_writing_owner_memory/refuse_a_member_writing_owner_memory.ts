@@ -69,7 +69,7 @@ import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { DEFAULT_CONFIG_DIR, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
@@ -649,7 +649,8 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
  */
 export function userScopeUnder(home: string): OwnerUserScope {
   const settings = userSettingsPath({ HOME: home })
-  const config = 'path' in settings ? dirname(settings.path) : join(home, '.claude')
+  // With only a HOME, `userSettingsPath` never refuses; the fallback is the host's own default, never a restated one.
+  const config = 'path' in settings ? dirname(settings.path) : join(home, DEFAULT_CONFIG_DIR)
   return {
     markdown_kinds: RECORDED_HOST.markdown_kinds,
     output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,

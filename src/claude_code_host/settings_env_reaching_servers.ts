@@ -52,7 +52,8 @@ export const CLAUDE_CODE_OWN_VARIABLES: readonly ClaudeCodeOwnVariable[] = [
 
 /** Where Claude Code reads the owner's user settings: CLAUDE_CONFIG_DIR, else ~/.claude. */
 export const USER_SETTINGS_FILE = 'settings.json'
-const DEFAULT_CONFIG_DIR = '.claude'
+/** The config dir under the home a host loads when CLAUDE_CONFIG_DIR says nothing. */
+export const DEFAULT_CONFIG_DIR = '.claude'
 
 /**
  * The user settings file the host started with this environment reads; or a

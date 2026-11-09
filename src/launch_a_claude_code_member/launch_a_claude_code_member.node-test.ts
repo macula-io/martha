@@ -1109,6 +1109,46 @@ test('a host of another version than the recording starts its member, after one 
   assert.equal(named.length, 1, lines.join('\n'))
 })
 
+// The question reads the owner's settings, because a settings `env` block may move the config dir, and those settings
+// can name a hook; the launch's own switches can name a tool server. On 2.1.321 both of those run before the host
+// answers (martha#154 r=2), with the launcher's environment and before the launch placed the recorded server tree. So
+// the question is asked with no server file and with hooks off, and whatever it started anyway is killed with it.
+// Red without either half: the stand-in starts the child and touches the hook file as a host does, so a launch that
+// passes `--mcp-config` on, or that kills only the host, is caught here.
+test('the session-init question starts nothing of the owner\'s, and nothing it started outlives it (#154 r=2)', async (t) => {
+  const place = placeFor(t)
+  const childFile = join(place.home, 'init-child.pid')
+  const hookFile = join(place.home, 'init-hook-ran')
+  const fake = fakeClaude(place, { initChildFile: childFile, initHookFile: hookFile })
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, []))
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  t.after(() => {
+    // A stand-in that outlived its question is killed here too, so a red run leaves nothing behind.
+    const pid = existsSync(childFile) ? Number(readFileSync(childFile, 'utf8').trim()) : 0
+    if (pid > 0) {
+      try {
+        process.kill(pid, 'SIGKILL')
+      } catch {
+        // already gone
+      }
+    }
+  })
+
+  // The host answered, so the question ran, and it started what a host starts: the file is its evidence.
+  assert.equal(existsSync(childFile), true, 'the stand-in never started a child, so the kill is not shown')
+  // No hook of the owner's ran for a question that starts nothing.
+  assert.equal(existsSync(hookFile), false, 'a hook ran while the question was asked')
+  // Nothing the question started is left running once it has its answer.
+  const child = Number(readFileSync(childFile, 'utf8').trim())
+  let alive = true
+  try {
+    process.kill(child, 0)
+  } catch {
+    alive = false
+  }
+  assert.equal(alive, false, `what the question started (${child}) outlived it`)
+})
+
 test('a host whose session init reports no output-styles folder starts nothing (#154)', async (t) => {
   const place = placeFor(t)
   // An init response with no folder in it: the launcher cannot tell which folder to deny, so it starts no member.
