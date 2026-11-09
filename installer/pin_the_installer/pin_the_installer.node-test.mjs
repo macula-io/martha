@@ -21,7 +21,7 @@ import { pinTheInstaller } from './pin_the_installer.mjs'
 
 const NAME = '@martha-pin/fixture'
 const VERSION = '1.0.0'
-const SOURCE = 'https://github.com/martha-pin/fixture'
+const SOURCE = 'https://github.com/macula-io/martha'
 const WORKFLOW = '.github/workflows/installer.yml'
 const ISSUER = 'https://token.actions.githubusercontent.com'
 const REF = `refs/tags/${NAMES.installerTagPrefix}${VERSION}`
@@ -227,7 +227,7 @@ test('a version npm holds no attestation for is refused, naming what is missing'
 test('an attestation that names another repository, workflow or ref is refused, naming both, and nothing is pinned', async (t) => {
   /** @type {((statement: any) => void)[]} */
   const changes = [
-    (statement) => { statement.predicate.buildDefinition.externalParameters.workflow.repository = 'https://github.com/attacker/fork' },
+    (statement) => { statement.predicate.buildDefinition.externalParameters.workflow.repository = 'https://github.com/sigstore/sigstore-js' },
     (statement) => { statement.predicate.buildDefinition.externalParameters.workflow.path = '.github/workflows/other.yml' },
     (statement) => { statement.predicate.buildDefinition.externalParameters.workflow.ref = 'refs/heads/main' }
   ]
@@ -240,7 +240,7 @@ test('an attestation that names another repository, workflow or ref is refused, 
 })
 
 test('a certificate issued for another repository or ref is refused, naming both', async (t) => {
-  for (const other of [{ repository: 'https://github.com/attacker/fork' }, { ref: 'refs/heads/main' }]) {
+  for (const other of [{ repository: 'https://github.com/sigstore/sigstore-js' }, { ref: 'refs/heads/main' }]) {
     await refusedWith((await attempt(t, { makeVerifier: sigstoreStandIn({}, other) })).pinning, /the certificate names/)
   }
 })
@@ -259,7 +259,7 @@ test('an attestation built from another commit than the installer tag names is r
 
 test('the commit is read from the entry whose uri names this repository and ref, never from the first', async (t) => {
   const world = repoOf(t)
-  const decoy = { uri: 'git+https://github.com/attacker/fork@refs/heads/main', digest: { gitCommit: 'b'.repeat(40) } }
+  const decoy = { uri: 'git+https://github.com/sigstore/sigstore-js@refs/heads/main', digest: { gitCommit: 'b'.repeat(40) } }
   const change = (/** @type {any} */ statement) => { statement.predicate.buildDefinition.resolvedDependencies = [decoy, ...statement.predicate.buildDefinition.resolvedDependencies] }
   const { pinning } = await attempt(t, { world, attestations: attestationsOver(statementFor(world.commit, change)) })
   assert.deepEqual((await pinning).pin.version, VERSION, 'a decoy first in the list does not decide the commit')
