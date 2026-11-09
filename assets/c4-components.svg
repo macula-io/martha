@@ -92,8 +92,9 @@
 <text class="t-type" x="680" y="260">[the launch gate]</text>
 <text class="t-desc" x="680" y="284">Fingerprints the config and the tree</text>
 <text class="t-desc" x="680" y="300">id at start, and allows only what was</text>
-<text class="t-desc" x="680" y="316">approved; refuse_code_a_checkout_runs_</text>
-<text class="t-desc" x="680" y="332">itself closes a checkout's own scripts</text>
+<text class="t-desc" x="680" y="316">approved, plus remember_a_members_</text>
+<text class="t-desc" x="680" y="332">own_writes; refuse_code_a_checkout_</text>
+<text class="t-desc" x="680" y="348">runs_itself closes a checkout's scripts</text>
 <rect class="b-dat" x="32" y="376" width="300" height="150" rx="10"/>
 <text class="t-code" x="48" y="404">keep_martha_state_</text>
 <text class="t-code" x="48" y="422">outside_the_checkout</text>

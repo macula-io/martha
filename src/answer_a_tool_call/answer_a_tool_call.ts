@@ -8,8 +8,8 @@
 // The hooks and servers the owner approved run scripts from the live checkout,
 // so one call that changes the tree (a `gh pr checkout`, a pull) makes every
 // hook after it run the new author's script. Once the checkout no longer
-// matches what the owner approved, no tool runs. The host also asks
-// `recheckLaunch` after every call, and on a refusal that hook does not return
+// matches what the owner approved, plus the member's own file writes
+// (martha#132), no tool runs. The host also asks the same recheck after every call, and on a refusal that hook does not return
 // until the launcher has sent SIGKILL to the member's process group, because a
 // host fires hooks on its own events (the end of a turn, its exit) even when
 // every call is refused. What is left: the hooks of the one call that changed
@@ -31,11 +31,8 @@ import { isShellTool } from '../shell_tools/shell_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
-import {
-  recheckLaunch,
-  type ApprovedLaunch,
-  type LaunchHost,
-} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
+import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 export type { ApprovedLaunch, LaunchHost }
 
@@ -58,7 +55,7 @@ export interface ToolCall {
 
 /** Refuse the tool call, or let it run. */
 export function answerToolCall({ tool, session, policy, input, launch, names, host }: ToolCall): ToolCallAnswer {
-  const launched = recheckLaunch(launch, host)
+  const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
       deny:

@@ -48,7 +48,8 @@ import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
 import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { asTheHostResolves, FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
+import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'] as const

@@ -194,9 +194,20 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
 5. **No config needs no approval.** A checkout holding none of the files starts,
    still with project config off.
 
-Only the owner approves a fingerprint, typed in that member's tab and logged
-(martha#1, decision 4). The refusal names the files and the fingerprint to
-approve.
+Only the owner approves a checkout, with `martha approve` at their own terminal,
+and the approval is logged (martha#1, decision 4). The refusal names the files
+and says to run `martha approve`.
+
+**A member's own file writes pass the recheck (martha#132).** A running member
+is checked again before and after every tool call. Its own `Write`, `Edit` and
+`NotebookEdit` calls are kept as it makes them (the file's git blob and mode
+once the call ran, the call, the session and the launch) before the recheck
+after that call. The live checkout then passes when every path that differs
+from the approved tree is deleted, or holds what this launch's last own write
+at that path left. Anything else (a `Bash` command's change, a link, another
+process's write, a config file git ignores) stops the member, naming the paths
+and saying to run `martha approve`, then `martha start` again. The code is
+`src/refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts`.
 
 What the plan leaves out, stated rather than hidden:
 
@@ -437,7 +448,10 @@ The rules the seam keeps, and a host must not work around:
   A13. A tool the table does not name takes the shell. One read records
   nothing: a file git puts in the tree the owner approved, as the member
   started on it (read before the host started), while the checkout still holds
-  that tree. In a checkout with no config nothing was approved, so every read
+  that tree, or that tree as this member's own recorded writes left it
+  (martha#132: a change that is not one of the launch's own writes, byte for
+  byte and in the mode it set, ends the exemption for every path). In a
+  checkout with no config nothing was approved, so every read
   counts (decided 2026-11-07). What is left: a read is judged at
   `tool_answered`, after the tool ran, so a file rewritten and put back before
   then reads as exempt. After a member's

@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran) | `recheckLaunch(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127) |
+// | tool_answered (the same call, after it ran) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -39,10 +39,12 @@ import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { fingerprintOf, readLaunchState, recheckLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
+import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
@@ -259,7 +261,10 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
-  const launched = recheckLaunch(place.launch, thisMachine)
+  // Kept before the recheck, so the write this call made is not taken for an outsider's (martha#132).
+  const unkept = rememberOwnWriteOfCall(place.launch, { tool: call.tool, input: call.input, session: session.id, home: place.hookSettings.home }, thisMachine)
+  if (unkept !== undefined) return stopMember(place, unkept)
+  const launched = recheckLaunchPassingOwnWrites(place.launch, thisMachine)
   if (!launched.allow) return stopMember(place, launched.refusal)
   const hooksOff = place.hookSettings.check()
   if (hooksOff !== undefined) return stopMember(place, hooksOff)
