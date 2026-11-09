@@ -124,6 +124,10 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind / / true && bwrap --version
       - run: npm ci
+      # The compiler also holds the unused rule (martha#171): noUnusedLocals and
+      # noUnusedParameters are set in tsconfig.json, and the installer's own
+      # project sets them too, so an import or a local that a conflict resolution
+      # or a later change leaves behind fails here, by file, line and name.
       - run: npx tsc --noEmit
       - run: npm test
       # macOS's default TMPDIR is long and is reached through a link
