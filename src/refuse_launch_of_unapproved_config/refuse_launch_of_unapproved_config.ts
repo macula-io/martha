@@ -38,8 +38,8 @@
 //   5. NO CONFIG NEEDS NO APPROVAL. A checkout holding none of the files starts
 //      — still with project config off.
 //
-// The approvals are the owner's, typed in that member's tab and logged, which no
-// model can mint (martha#1, decision 4). They are a same-user file like the
+// The approvals are the owner's, given with `martha approve` at their own
+// terminal and logged, which no model can mint (martha#1, decision 4). They are a same-user file like the
 // roster, which martha#1 decision 2 accepts for now.
 //
 // The gate reaches the machine only through the host contract (martha#26): it
@@ -51,6 +51,7 @@ import { createHash } from 'node:crypto'
 import { dirname, join, relative, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost } from './checkout_tree.ts'
+import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 export type { LaunchHost }
 
@@ -119,16 +120,45 @@ const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_D
  */
 const CLAUDE_COMMAND_ELSEWHERE = ['CLAUDE_CODE_SHELL_PREFIX'] as const
 
+/**
+ * Turns Claude Code's auto-memory off: the host then loads no memory folder into
+ * a member's session and runs no memory pass of its own in file mode. Set by the
+ * launcher, so an inherited 0, which beats a settings file's off, never reaches
+ * the member (martha#136; Claude Code 2.1.318 and 2.1.319, measured).
+ */
+export const CLAUDE_MEMORY_OFF: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }
+
+/**
+ * Each moves Claude Code's memory, or writes it on a path the off switch does
+ * not hold, so none reaches a member (martha#136 r=2): the hosted ("mcp") mode
+ * of the memory pass, which skips the off switch; team memory sync; and the two
+ * folders that override where memory lives, which would move a member's memory
+ * out of the folders the publish gate denies.
+ */
+export const CLAUDE_MEMORY_ELSEWHERE = [
+  'CLAUDE_CODE_POST_TURN_MEMORY',
+  'CLAUDE_MEMORY_STORES',
+  'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE',
+  'CLAUDE_CODE_REMOTE_MEMORY_DIR',
+] as const
+
 export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
+
+/** The switches that hand Claude Code a settings file: the carried copy, or the one a launch writes (martha#136). */
+export const claudeSettingsSwitches = (path: string): HostSwitches => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED })
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
   'claude-code': {
     // --strict-mcp-config: only the servers passed by --mcp-config start.
-    project_config_off: { args: ['--setting-sources', 'user', '--strict-mcp-config'], env: NO_ENV, env_dropped: CLAUDE_COMMAND_ELSEWHERE },
+    project_config_off: {
+      args: ['--setting-sources', 'user', '--strict-mcp-config'],
+      env: CLAUDE_MEMORY_OFF,
+      env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
+    },
     carried: {
       [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
-      [CLAUDE_SETTINGS]: (path) => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
+      [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
   },
   opencode: {
@@ -229,13 +259,27 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints }: Lau
 
   return {
     allow: false,
-    refusal: `${REFUSED}: the checkout holds config that starts code by itself (${present.join(', ')}), and the owner has not approved this config with this checkout's files. Read them, then approve fingerprint ${fingerprint} in this member's tab.`,
+    refusal: `${REFUSED}: the checkout holds config that starts code by itself (${present.join(', ')}), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprint}). Run martha approve, read what it shows, and answer yes.`,
   }
+}
+
+/** What a member started on an approval checks its own writes against (./pass_a_members_own_writes.ts, martha#132). */
+export interface SinceApproval {
+  /** The config and the tree the owner approved, as the member was started on them. */
+  readonly approved: LaunchState
+  /** The member's name, so a stop says which member to start again. */
+  readonly member: string
+  /** Where the member's own writes are kept: the host's store, handed in by the adapter that starts it. */
+  readonly own_writes: OwnWritesStore
+  /** This launch, as its own writes name it. */
+  readonly launch_id: string
 }
 
 /** Where a member was started and what the owner approved there, as `prepareLaunch` was given it. */
 export interface ApprovedLaunch extends LaunchPlace {
   readonly approved_fingerprints: readonly string[]
+  /** Set when the member was started on an owner's approval: its own writes then pass the recheck. */
+  readonly since_approval?: SinceApproval
 }
 
 /**
@@ -320,6 +364,8 @@ export function prepareLaunch(place: SnapshotPlace, machine: LaunchHost): Prepar
 export type SnapshotPlace = LaunchPlace & {
   readonly snapshot_root: string
   readonly approved_fingerprints: readonly string[]
+  /** Set when the member is started on an owner's approval: its own writes then pass the recheck (martha#132). */
+  readonly since_approval?: SinceApproval
 }
 
 /**

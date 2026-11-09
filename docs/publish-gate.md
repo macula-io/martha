@@ -194,9 +194,20 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
 5. **No config needs no approval.** A checkout holding none of the files starts,
    still with project config off.
 
-Only the owner approves a fingerprint, typed in that member's tab and logged
-(martha#1, decision 4). The refusal names the files and the fingerprint to
-approve.
+Only the owner approves a checkout, with `martha approve` at their own terminal,
+and the approval is logged (martha#1, decision 4). The refusal names the files
+and says to run `martha approve`.
+
+**A member's own file writes pass the recheck (martha#132).** A running member
+is checked again before and after every tool call. Its own `Write`, `Edit` and
+`NotebookEdit` calls are kept as it makes them (the file's git blob and mode
+once the call ran, the call, the session and the launch) before the recheck
+after that call. The live checkout then passes when every path that differs
+from the approved tree is deleted, or holds what this launch's last own write
+at that path left. Anything else (a `Bash` command's change, a link, another
+process's write, a config file git ignores) stops the member, naming the paths
+and saying to run `martha approve`, then `martha start` again. The code is
+`src/refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts`.
 
 What the plan leaves out, stated rather than hidden:
 
@@ -231,12 +242,21 @@ What the plan leaves out, stated rather than hidden:
   is left is the hooks of the one call that changed the tree, which run in
   parallel with Martha's own (`PreToolUse`/`PostToolUse`); the stop does not
   undo what they ran.
-- **A checkout's fixed text** (A16): its `CLAUDE.md` files, the top one and
-  any below it the host loads once a file there is read, and the agents it
-  defines (`.claude/agents`), whose frontmatter may name hooks and tool
-  servers. With project config off the host loads none of them, so no text
-  reaches the model (`npm run probe:launch` plants each and sees none load as
-  Martha starts the host, and all of them load by hand).
+- **A checkout's fixed text** (A16): its `CLAUDE.md` files, the top one, any
+  below it the host loads once a file there is read, and those of the
+  directories above the checkout, and the agents it defines (`.claude/agents`),
+  whose frontmatter may name hooks and tool servers. With project config off the
+  host loads none of them, so no text reaches the model: `npm run probe:launch`
+  plants the top and the nested `CLAUDE.md` and one agent, sees none load as
+  Martha starts the host, and sees all of them load by hand. The `CLAUDE.md` of
+  the directories above the checkout is not planted in this tree, so that one
+  rests on the design's prototype and is not pinned here (martha#165). Whether
+  the host loads an `AGENTS.md` is not observed: no run, not even with project
+  config on, saw one load, so that text is not pinned (martha#135). Each of
+  these texts has exactly one owning row — a
+  `CLAUDE.local.md`, which git ignores and a member can write, is B4's, not
+  this row's — and `INSTRUCTION_TEXT_OWNERS` fails CI when a row and the table
+  disagree (martha#135).
 - **What approved config prints at run time** (A7): a hook's output or added
   context, and the hooks of a plugin it enables or loads from a folder its env
   names. The approval pins the script, never its output, which changes with the
@@ -437,8 +457,18 @@ The rules the seam keeps, and a host must not work around:
   A13. A tool the table does not name takes the shell. One read records
   nothing: a file git puts in the tree the owner approved, as the member
   started on it (read before the host started), while the checkout still holds
-  that tree. In a checkout with no config nothing was approved, so every read
-  counts (decided 2026-11-07). What is left: a read is judged at
+  that tree, or that tree as this member's own recorded writes left it
+  (martha#132: a change that is not one of the launch's own writes, byte for
+  byte and in the mode it set, ends the exemption for every path). In a
+  checkout with no config nothing was approved, so every read
+  counts (decided 2026-11-07). A `CLAUDE.local.md` is ignored, so it is never
+  in the approved tree: a read of one is text taken in, and so is any fixed
+  text a read attaches, which belongs to A16 (martha#135). A read is judged by
+  the path the call names (`take_in_a_tool_result`), so a read of a tracked
+  file that came back with an attached `CLAUDE.local.md` is still exempt; that
+  holds only while the host attaches no such text under Martha's switches,
+  which is martha#165's case to pin.
+  What is left: a read is judged at
   `tool_answered`, after the tool ran, so a file rewritten and put back before
   then reads as exempt. After a member's
   first command, nothing that executes or writes runs again until a fresh
@@ -755,6 +785,58 @@ later host adds included, refuses the start by name. A value switch refuses a
 missing value or one that starts with `-`, so one switch cannot carry another as
 its value. `martha start` also starts only on a terminal, as `martha approve`
 asks only on one, so a member's shell tool cannot start a sibling.
+
+**A member's memory never feeds a later session (A17, martha#136).** Claude
+Code keeps auto-memory in `<config dir>/projects/<project key>/memory/`, loads it
+into every session of that project, and writes it by itself from a session
+(extractMemories, auto-dream, team memory). A session in a git worktree loads
+the main clone's folder, so a member could leave text there that the owner's own
+next session, or another member's, reads as memory, with nothing recording
+where it came from. Three things stand on it:
+
+- **Memory is off in a member's host.** The launcher sets
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and drops the four variables that move
+  memory or run a pass that does not check that switch
+  (`CLAUDE_CODE_POST_TURN_MEMORY`, `CLAUDE_MEMORY_STORES`,
+  `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE`, `CLAUDE_CODE_REMOTE_MEMORY_DIR`). Settings
+  whose `env` names any of them refuse the launch (#65's rule, pinned per name).
+  This rests on two code paths of the recorded host, restated under `memory_off`
+  in `recorded_claude_code_host.json`: file mode returns early on the off switch,
+  and hosted mode needs the dropped variable. A re-recorded host fails CI until
+  someone re-reads them for it.
+- **A member's file tool does not write the owner's memory.** The relay refuses a
+  `Write`, `Edit`, `MultiEdit` or `NotebookEdit` into every project's memory
+  folder under the launcher's config dir and the member's, into the owner's
+  `CLAUDE.md` and `rules/`, into the folders the launcher's environment moves
+  memory to, and into each `autoMemoryDirectory` the policy, user and carried
+  settings name (`src/refuse_a_member_writing_owner_memory/`). Reads are allowed.
+  Links are followed both ways, and to the end: one function resolves every
+  path here, following a link at any level — a `projects` folder that is a link
+  to another disk, a project folder, a project's memory folder, a chain of
+  links, and a link whose target does not exist yet, read from the link itself
+  — so the written path and every place are compared where they finally lead.
+  A chain whose end does not exist yet is followed link by link, and one that
+  runs past eight links, or a link that turns on itself, is refused: no write is
+  allowed while one stands, because the guard cannot tell which folder it would
+  land in. A chain that exists to its end is resolved by the system in one step,
+  up to the system's own limit, and refused when the system cannot resolve it. A project's memory folder is followed at each write,
+  so a link a member makes during its session is caught too.
+- **The host's own pass is refused the same places.** The settings the host is
+  started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
+  each place the relay refuses, as named and as it leads, for the projects
+  folder as it leads, and for where each memory folder that is a link leads at
+  launch (one linked later is the relay's alone), from the same function. They go
+  into the carried `--settings` copy, after the owner's approval was
+  fingerprinted, or into a file the launch writes when none is carried. This
+  layer is for a later host on which the off switch stops holding; on the
+  recorded host the switch holds, and
+  nothing claims this layer was seen working.
+
+What it does not rest on: the publish gate's hook for the memory pass, which
+runs as a fork whose tool calls the hook is not established to see. What it
+leaves open: a `Bash` write into a memory folder, which only a clean member
+holds; a host the owner starts by hand (C1, C2); and OpenCode, not probed for a
+memory of its own.
 
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the

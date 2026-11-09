@@ -18,9 +18,31 @@ import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './
 
 export { CREW_REFRESH }
 
+/** How one host version keeps auto-memory off (martha#136). */
+export interface MemoryOff {
+  /** The host version this was read from: a re-recorded host fails until it is read again. */
+  readonly version: string
+  /** The function that decides file mode, whole: off when the off switch is set. */
+  readonly file_mode_guard: string
+  /** The variable that turns on hosted mode, which does not check the off switch. */
+  readonly hosted_mode_variable: string
+  /**
+   * The function the guard calls on the off switch's value, whole: the values it
+   * holds true are the ones that turn memory off, which the launch's value is
+   * pinned against.
+   */
+  readonly on_check: string
+}
+
 /** What the host binary says, as recorded; the markdown it loads since martha#146. */
 export interface RecordedHost extends MarkdownTheHostLoads {
   readonly host_version: string
+  /**
+   * How the recorded host's auto-memory is kept off, re-read by hand from that
+   * version's code and restated, never derived: the recorder carries it over
+   * and --check leaves it out (martha#136).
+   */
+  readonly memory_off: MemoryOff
   /** The host's SessionStart hook-input schema, as its binary spells it. */
   readonly session_start_schema: string
   /** The engine's mapper from an ingress origin to the one a prompt.submit hook reads. */
