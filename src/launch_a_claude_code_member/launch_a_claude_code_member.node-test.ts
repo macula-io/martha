@@ -18,7 +18,7 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
-import { CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
@@ -29,13 +29,13 @@ import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_throu
 import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { UNPLACED_TOOL_RESULT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from './answer_the_relay.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
@@ -144,6 +144,7 @@ function answering(
     launch: launchOf(place),
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
+    started_with: startedWithTheSwitchesOfTheAdapter(),
     binder: bindNothing,
     handed_at_start,
     hookSettings: hookSettingsWatch({
@@ -1114,6 +1115,62 @@ test('the member, its load check and its version check all run the one file its 
   const calls = readFileSync(fake.callsFile, 'utf8').trimEnd().split('\n')
   assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', '-p'])
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
+})
+
+// --- what the relay is told the host was started with (martha#135) -----------------
+
+/**
+ * A fake `claude` that writes the arguments it was spawned with and the environment it was spawned with, then waits:
+ * the test reads both back, so what the relay holds is measured against the spawned process, not against the code
+ * that builds it.
+ */
+function fakeClaudeThatSaysHowItStarted(place: Place): { readonly command: string; readonly argsFile: string; readonly envFile: string } {
+  const dir = join(place.home, 'fake-says-how-it-started')
+  mkdirSync(dir)
+  const argsFile = join(dir, 'args')
+  const envFile = join(dir, 'env')
+  const command = join(dir, 'claude')
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...hostAnswers(),
+      `printf '%s\\n' "$@" > '${argsFile}'`,
+      // Written beside and moved into place, so the test never reads a dump that is half written.
+      `env > '${envFile}.being-written'`,
+      `mv '${envFile}.being-written' '${envFile}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, argsFile, envFile }
+}
+
+/** What `env` printed, as a record: the first `=` in a line splits the name from the value. */
+const environmentOfDump = (text: string): Record<string, string> =>
+  Object.fromEntries(
+    text
+      .split('\n')
+      .filter((line) => line.includes('='))
+      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+  )
+
+test('the started_with the relay is handed is what the host was spawned with, down to the names the adapter declares (martha#135)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await launchClaudeCodeMember({
+    ...memberLaunch(place, fake.command, place.approved),
+    hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
+  })
+  if (!started.started) assert.fail(started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const spawnedArgs = readFileSync(fake.argsFile, 'utf8').split('\n').filter((line) => line !== '')
+  const spawnedEnv = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  assert.equal(heard.length, 1, 'the launcher handed the relay one place')
+  assert.deepEqual(heard[0]?.started_with, startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, spawnedArgs, spawnedEnv))
 })
 
 test('a member with no owner to answer its host, whose relay never reports its session start, is stopped once its deadline passes, saying why', async (t) => {
@@ -2541,6 +2598,12 @@ test(
     assert.deepEqual(readdirSync(place.relay_root), [])
   },
 )
+
+/** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
+function startedWithTheSwitchesOfTheAdapter(): StartedWith {
+  return startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_READ_ATTACHES_NOTHING.args, CLAUDE_CODE_READ_ATTACHES_NOTHING.env)
+}
+
 
 // martha#129: a `martha run <name>` the launcher allowed is the one call a run binds to; the client asks on
 // RUN_PATH; the receipt is taken once, at tool_answered.
