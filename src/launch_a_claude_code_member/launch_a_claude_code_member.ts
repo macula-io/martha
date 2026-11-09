@@ -81,9 +81,9 @@
 
 import { type ChildProcess, spawn, type StdioOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
@@ -98,7 +98,8 @@ import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
@@ -112,6 +113,7 @@ import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execu
 import {
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
+  claudeSettingsSwitches,
   launchEnvironment,
   prepareLaunch,
   type PreparedLaunch,
@@ -344,7 +346,8 @@ function settingsEnvironment(
 
 /**
  * The settings files the member's host reads, watched for a key that turns
- * Martha's relay off: the owner's user settings, the approved --settings copy,
+ * Martha's relay off: the owner's user settings, the --settings copy the host
+ * starts with (the approved one, or the launch's own, settingsDenyingOwnerMemory),
  * and the managed settings (martha#122), and for a hook or plugin the owner's
  * or the managed ones declare (martha#121); or why the launch is refused: one
  * of them sets such a key or declares one, the environment or the owner's
@@ -356,6 +359,7 @@ export function hookSettingsOf(
   args: readonly string[],
   prepared: Extract<PreparedLaunch, { readonly allow: true }>,
   managed: ManagedSettingsPlace = RECORDED_HOST.managed_settings,
+  approved: string | undefined = prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
 ): HookSettingsWatch | string {
   const user = userSettingsPath(hostEnv)
   if ('refusal' in user) return user.refusal
@@ -365,12 +369,87 @@ export function hookSettingsOf(
   if (pluginDirs !== undefined) return pluginDirs
   const watch = hookSettingsWatch({
     user: user.path,
-    home: hostEnv.HOME ?? homedir(),
-    approved: prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
+    home: hostHome(hostEnv),
+    approved,
     managed,
     switches: CLAUDE_CODE_HOOK_SWITCHES,
   })
   return watch.check() ?? watch
+}
+
+/** The host's home, which a leading `~` resolves against: its HOME, as userSettingsPath reads it. */
+const hostHome = (hostEnv: Readonly<Record<string, string | undefined>>): string => hostEnv.HOME ?? homedir()
+
+/**
+ * Where the owner's sessions load memory and instructions from: the launcher's
+ * config dir and the member's, the folders the launcher's environment moves
+ * memory to, and each memory folder the policy, user and carried settings name
+ * (martha#136); or why the user settings file cannot be told.
+ */
+function ownerMemoryOf(
+  launch: ClaudeCodeMemberLaunch,
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+): OwnerMemoryPlaces | string {
+  const user = userSettingsPath(hostEnv)
+  if ('refusal' in user) return user.refusal
+  const managed = launch.managed_settings ?? RECORDED_HOST.managed_settings
+  return ownerMemoryPlaces({
+    launcher_env: launch.inherited,
+    member_env: hostEnv,
+    home: hostHome(hostEnv),
+    settings_files: [
+      join(managed.dir, managed.file),
+      ...dropInFiles(join(managed.dir, managed.drop_in)),
+      user.path,
+      ...(prepared.carried_files[CLAUDE_SETTINGS] === undefined ? [] : [join(prepared.snapshot_dir, CLAUDE_SETTINGS)]),
+    ],
+  })
+}
+
+/**
+ * Writes the settings the host starts with into the snapshot: the approved
+ * --settings copy, or a file of its own when none is carried, with the rules
+ * that refuse the host's own writes into the owner's memory added to its
+ * permissions.deny (martha#136). Returns the file and the switches that name it
+ * when none was carried; or why the approved copy cannot take the rules.
+ */
+function settingsDenyingOwnerMemory(
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+  ownerMemory: OwnerMemoryPlaces,
+): { readonly path: string; readonly args: readonly string[] } | { readonly refusal: string } {
+  const path = join(prepared.snapshot_dir, CLAUDE_SETTINGS)
+  const approved = prepared.carried_files[CLAUDE_SETTINGS]
+  const settings = settingsWithMemoryDenied(
+    approved === undefined ? undefined : new TextDecoder().decode(approved),
+    memoryDenyRules(ownerMemory),
+    CLAUDE_SETTINGS,
+  )
+  if ('refusal' in settings) return settings
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, settings.text)
+  return { path, args: approved === undefined ? claudeSettingsSwitches(path).args : [] }
+}
+
+/**
+ * The settings the member's host starts with: where the owner's memory is, the
+ * launch's --settings copy that keeps the host's own writes out of it
+ * (martha#136), and the watch on every settings file for a key that turns
+ * Martha's relay off (martha#122); or the refusal.
+ */
+function hostSettingsOf(
+  launch: ClaudeCodeMemberLaunch,
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+):
+  | { readonly ownerMemory: OwnerMemoryPlaces; readonly startSettings: { readonly path: string; readonly args: readonly string[] }; readonly hookSettings: HookSettingsWatch }
+  | { readonly refusal: string } {
+  const ownerMemory = ownerMemoryOf(launch, hostEnv, prepared)
+  if (typeof ownerMemory === 'string') return { refusal: ownerMemory }
+  const startSettings = settingsDenyingOwnerMemory(prepared, ownerMemory)
+  if ('refusal' in startSettings) return startSettings
+  const hookSettings = hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings, startSettings.path)
+  return typeof hookSettings === 'string' ? { refusal: hookSettings } : { ownerMemory, startSettings, hookSettings }
 }
 
 /** A launch the gate allowed, with what the member's environment is built from. */
@@ -383,6 +462,10 @@ interface ReadyLaunch {
   readonly settingsEnv: Readonly<Record<string, string>>
   /** The settings files the host reads, watched for a key that turns Martha's relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
+  /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
+  readonly ownerMemory: OwnerMemoryPlaces
+  /** The switches that name the settings the launch wrote, when no approved copy was carried (martha#136). */
+  readonly settingsArgs: readonly string[]
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -410,11 +493,12 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   }
   const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
-  const hookSettings = hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings)
-  if (typeof hookSettings === 'string') {
+  const settings = hostSettingsOf(launch, hostEnv, prepared)
+  if ('refusal' in settings) {
     removeSnapshot()
-    return `${NOT_STARTED}: ${hookSettings}`
+    return `${NOT_STARTED}: ${settings.refusal}`
   }
+  const { ownerMemory, startSettings, hookSettings } = settings
   const fromSettings = settingsEnvironment(
     hostEnv,
     prepared.carried_files[CLAUDE_SETTINGS],
@@ -426,7 +510,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings }
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings, ownerMemory, settingsArgs: startSettings.args }
 }
 
 /**
@@ -510,6 +594,7 @@ async function servedRelay(
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
     hookSettings: ready.hookSettings,
+    ownerMemory: ready.ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     stopMember: stop,
   })
@@ -561,7 +646,7 @@ async function startedMember(
     await removeWhatTheLaunchMade(made)
     return `${NOT_STARTED}: ${placed}`
   }
-  const memberArgs = [...launch.args, ...prepared.switches.args, '--plugin-dir', made.pluginDir]
+  const memberArgs = [...launch.args, ...prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir]
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
     recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })

@@ -39,6 +39,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'keep_martha_state_outside_the_checkout',
     'keep_what_the_owner_signed',
     'launch_a_claude_code_member',
+    'refuse_a_member_writing_owner_memory',
     'run_an_owner_signed_command',
     'run_the_martha_command',
     'start_a_member',

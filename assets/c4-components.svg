@@ -156,9 +156,10 @@
 <text class="t-code" x="364" y="752">claude_code_host, claude_code_relay</text>
 <text class="t-type" x="364" y="770">[the Claude Code host]</text>
 <text class="t-desc" x="364" y="794">The host contract on Claude Code: the</text>
-<text class="t-desc" x="364" y="810">plugin and its hooks, the relay that</text>
-<text class="t-desc" x="364" y="826">answers over a socket, and the tools</text>
-<text class="t-desc" x="364" y="842">registered in the member's session</text>
+<text class="t-desc" x="364" y="810">plugin, its hooks, the relay on a socket</text>
+<text class="t-desc" x="364" y="826">and the member's tools; refuse_a_member_</text>
+<text class="t-desc" x="364" y="842">writing_owner_memory keeps a member's</text>
+<text class="t-desc" x="364" y="858">writes out of the owner's memory</text>
 <rect class="b-cmp" x="664" y="724" width="300" height="150" rx="10"/>
 <text class="t-code" x="680" y="752">check_nothing_private_gets_in</text>
 <text class="t-type" x="680" y="770">[this repository's own check]</text>

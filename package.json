@@ -37,6 +37,7 @@
       "src/keep_martha_state_outside_the_checkout",
       "src/keep_what_the_owner_signed",
       "src/launch_a_claude_code_member",
+      "src/refuse_a_member_writing_owner_memory",
       "src/run_an_owner_signed_command",
       "src/run_the_martha_command",
       "src/start_a_member"

@@ -9,6 +9,8 @@ import { readCheckoutTree } from './checkout_tree.ts'
 import {
   decideLaunch,
   fingerprintOf,
+  CLAUDE_MEMORY_ELSEWHERE,
+  CLAUDE_MEMORY_OFF,
   HOSTS,
   LAUNCH_FILES_OF_HOST,
   launchEnvironment,
@@ -20,6 +22,8 @@ import {
   type Host,
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -511,6 +515,63 @@ test('a Claude Code launch drops an inherited CLAUDE_CODE_SHELL_PREFIX, which wo
     assert.equal(Object.hasOwn(env, 'CLAUDE_CODE_SHELL_PREFIX'), false, approved ? 'with config carried' : 'with no config')
     assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
   }
+})
+
+test('a Claude Code launch turns the host\'s auto-memory off and drops every variable that moves or bypasses it, whatever is inherited (#136)', (t) => {
+  const [offName, offValue] = Object.entries(CLAUDE_MEMORY_OFF)[0] ?? []
+  assert.ok(offName !== undefined && offValue !== undefined, 'one variable turns memory off')
+  assert.ok(CLAUDE_MEMORY_ELSEWHERE.length > 0, 'the names that move or bypass memory are listed')
+  for (const approved of [false, true]) {
+    const place = scratch(t)
+    if (approved) put(place.checkout, SERVERS, server('echo one'))
+    const { prepared } = prepare('claude-code', place, approved ? approve('claude-code', place) : [])
+    assert.equal(prepared.allow, true)
+    if (!prepared.allow) return
+    const inherited = { [offName]: '0', ...Object.fromEntries(CLAUDE_MEMORY_ELSEWHERE.map((name) => [name, join(place.checkout, name)])), PATH: '/usr/bin' }
+    const env = launchEnvironment(inherited, prepared.switches)
+    const shape = approved ? 'with config carried' : 'with no config'
+    assert.equal(env[offName], offValue, `${shape}: the inherited value never wins`)
+    for (const name of CLAUDE_MEMORY_ELSEWHERE) assert.equal(Object.hasOwn(env, name), false, `${shape}: ${name}`)
+    assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
+  }
+})
+
+test('the off switch and the hosted-mode variable are restated for the recorded host, and the launch sets and drops them (#136)', () => {
+  const { memory_off, host_version } = RECORDED_HOST
+  assert.equal(memory_off.version, host_version, 'a re-recorded host fails until the memory guard is re-read and restated for it')
+  const [offName, offValue] = Object.entries(CLAUDE_MEMORY_OFF)[0] ?? []
+  assert.ok(offName !== undefined && offValue !== undefined)
+  assert.ok(memory_off.file_mode_guard.includes(`process.env.${offName}`), `the recorded guard reads ${offName}`)
+  assert.ok((CLAUDE_MEMORY_ELSEWHERE as readonly string[]).includes(memory_off.hosted_mode_variable), `${memory_off.hosted_mode_variable} is dropped`)
+})
+
+test('the value the launch gives the off switch is one the recorded host reads as off, not one read back from the constant (#136 r=2)', () => {
+  const { file_mode_guard, on_check } = RECORDED_HOST.memory_off
+  // The check, by its own name, and the values it holds true, as the host's code spells them.
+  const checkName = /^function ([\w$]+)\(e\)\{/.exec(on_check)?.[1]
+  const holdsTrue = /return(\[[^\]]*\])\.includes\(n\)\}$/.exec(on_check)?.[1]
+  assert.ok(checkName !== undefined && holdsTrue !== undefined, 'the recorded on check reads as a function holding a list true')
+  const offValues = JSON.parse(holdsTrue) as readonly string[]
+  // The guard returns off when that check holds for the switch it reads.
+  const switchRead = /let e=process\.env\.([A-Z_]+);if\(([\w$]+)\(e\)\)return"off"/.exec(file_mode_guard)
+  const [, offSwitch, guardCalls] = switchRead ?? []
+  assert.ok(offSwitch !== undefined, 'the recorded guard returns off when a check holds for the switch it reads')
+  assert.equal(guardCalls, checkName, 'the guard calls the recorded on check')
+  assert.deepEqual(Object.keys(CLAUDE_MEMORY_OFF), [offSwitch], 'the launch sets the switch the guard reads, and only it')
+  const value = CLAUDE_MEMORY_OFF[offSwitch] ?? ''
+  assert.ok(offValues.includes(value.toLowerCase().trim()), `the launch's value ${JSON.stringify(value)} is one of ${holdsTrue}, which the host reads as off`)
+})
+
+test('the variables the launch sets and drops for memory are exactly those the publish-gate page and row A17 name (#136)', () => {
+  const launched = new Set([...Object.keys(CLAUDE_MEMORY_OFF), ...CLAUDE_MEMORY_ELSEWHERE])
+  const namesIn = (text: string): Set<string> => new Set(text.match(/CLAUDE_[A-Z_]+/g) ?? [])
+  const page = readFileSync(new URL('../../docs/publish-gate.md', import.meta.url), 'utf8')
+  const bullet = /^- \*\*Memory is off in a member's host\.\*\*[\s\S]*?(?=^- \*\*)/m.exec(page)?.[0]
+  assert.ok(bullet !== undefined, "the page's memory-off bullet")
+  assert.deepEqual(namesIn(bullet), launched, 'the page names exactly what the launch sets and drops')
+  const row = INBOUND_PATHS.find((path) => path.id === 'A17')
+  assert.ok(row !== undefined && row.control.kind === 'no-text-reaches-the-model', 'row A17 says why no memory reaches the model')
+  assert.deepEqual(namesIn(row.control.why.split(', and refuses')[0] ?? ''), launched, 'the row names exactly what the launch sets and drops')
 })
 
 test('a planned Claude Code launch starts only the servers it passes', (t) => {

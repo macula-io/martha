@@ -47,6 +47,7 @@ import { ALLOW, TAKEN, type Ran, type RelayEvent, type Refused, type Taken, type
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
+import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
 export type RelayReply =
@@ -76,6 +77,8 @@ export interface MemberRelayPlace {
   readonly handed_at_start: readonly TurnSource[]
   /** The settings files the host reads, watched for a key that turns the relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
+  /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
+  readonly ownerMemory: OwnerMemoryPlaces
   /** The member's signed runs (martha#129); a member without them runs no shape. */
   readonly signed_runs?: SignedRuns
   /** Sends SIGKILL to the member's process group. */
@@ -247,6 +250,8 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (unvouched !== undefined) return denied(unvouched)
   const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
   if (settings !== undefined) return denied(settings)
+  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home)
+  if (memory !== undefined) return denied(memory)
   const verdict = answerToolCall({
     tool: call.tool,
     session,
