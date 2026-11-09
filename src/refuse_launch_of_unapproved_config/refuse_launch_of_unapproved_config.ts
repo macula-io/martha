@@ -50,7 +50,7 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, relative, sep } from 'node:path'
 
-import { readCheckoutTree, realOrResolved, type LaunchHost } from './checkout_tree.ts'
+import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 export type { LaunchHost }
@@ -243,6 +243,18 @@ export interface LaunchState {
   readonly entries: readonly ConfigEntry[]
   /** The checkout's work tree (./checkout_tree.ts), or `null` outside any checkout below the stop. */
   readonly tree: string | null
+  /**
+   * Set when the work tree could not be read at all, or was read and is not the tree the owner approved: the words to
+   * show the owner. A launch with a refusal never passes, whatever any fingerprint says (martha#167).
+   */
+  readonly refusal?: string
+  /** True when the refusal is that the tree the owner approved can no longer be read from the checkout. */
+  readonly the_approved_tree_is_gone?: true
+  /**
+   * Every path that differs between the tree the checkout was read under and the live one, as the launcher's own read
+   * computed them. Empty when they are the same tree.
+   */
+  readonly changes?: readonly TreeChange[]
 }
 
 /** What a launcher asks before it starts a host, and what every tool call asks after (../answer_a_tool_call). */
@@ -269,7 +281,7 @@ export function fingerprintOf({ entries, tree }: LaunchState): string {
 const REFUSED = 'This coding tool is not started here'
 
 /** Whether this host may start here, and if not, the refusal to show the owner. */
-export function decideLaunch({ host, entries, tree, approved_fingerprints }: LaunchRequest): LaunchDecision {
+export function decideLaunch({ host, entries, tree, approved_fingerprints, refusal }: LaunchRequest): LaunchDecision {
   if (!Object.hasOwn(HOSTS, host)) {
     return { allow: false, refusal: `${REFUSED}: Martha does not know which files ${host} starts things from, so it cannot check them.` }
   }
@@ -290,7 +302,11 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints }: Lau
     return { allow: false, refusal: `${REFUSED}: ${unread} was not read, so the config cannot be checked.` }
   }
 
+  // No config needs no approval (rule 5), and a checkout it does not ask about cannot refuse it: nothing approved is
+  // at risk there. Every other launch must have read the tree it would run.
   if (entries.every((entry) => entry.kind === 'absent')) return { allow: true }
+
+  if (refusal !== undefined) return { allow: false, refusal }
 
   const present = entries.filter((entry) => entry.kind !== 'absent').map((entry) => entry.path)
 
@@ -339,7 +355,7 @@ export interface ApprovedLaunch extends LaunchPlace {
  * normal exit fires SessionEnd (npm run probe:launch).
  */
 export function recheckLaunch(launch: ApprovedLaunch, host: LaunchHost): LaunchDecision {
-  return decideLaunch({ ...readLaunchState(launch, host), host: launch.host, approved_fingerprints: launch.approved_fingerprints })
+  return decideLaunch({ ...readLaunchState(launch, host, launch.approved_tree), host: launch.host, approved_fingerprints: launch.approved_fingerprints })
 }
 
 /** The launch gate the registry names. */
@@ -351,6 +367,11 @@ export interface LaunchPlace {
   readonly launch_dir: string
   /** Not read, nor anything above it: the owner's home. */
   readonly stop_dir: string
+  /**
+   * The tree the owner approved, whose attributes the checkout is read under (martha#167). Omitted, the checkout's
+   * own HEAD tree is used: the attributes an approval is first read against, before there is an approval.
+   */
+  readonly approved_tree?: string
 }
 
 /**
@@ -373,10 +394,14 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
 }
 
 /** The config and the work tree, as the gate reads them. */
-export function readLaunchState(place: LaunchPlace, machine: LaunchHost): LaunchState {
+export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
+  const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
   return {
     entries: readLaunchConfig(place, machine),
-    tree: readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine),
+    tree: read.kind === 'tree' ? read.tree : null,
+    ...(read.kind === 'refused' ? { refusal: read.refusal } : {}),
+    ...(read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}),
+    ...(read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}),
   }
 }
 
@@ -404,7 +429,7 @@ export type PreparedLaunch =
  * rather than carried.
  */
 export function prepareLaunch(place: SnapshotPlace, machine: LaunchHost): PreparedLaunch {
-  return snapshotApproved(place, readLaunchState(place, machine), machine)
+  return snapshotApproved(place, readLaunchState(place, machine, place.approved_tree), machine)
 }
 
 /** A launch place, where its snapshots go, and what the owner approved. */

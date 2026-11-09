@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -18,8 +18,9 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS } from '../claude_code_host/claude_code_host.ts'
 import {
   openState,
-  OWN_WRITES_FILE,
-  ownWritesKeptIn,
+  OWN_WRITES_PLACE,
+  ownWritesKeptForLaunch,
+  type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { readCheckoutTree } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
@@ -48,14 +49,18 @@ function git(cwd: string, ...args: string[]): string {
   ).trim()
 }
 
+/** The file one launch's own writes are kept in: the only file in the project's own-writes place at this point. */
+const ownWritesFileOf = (place: Checkout): string =>
+  join(place.state.directory, OWN_WRITES_PLACE, readdirSync(join(place.state.directory, OWN_WRITES_PLACE))[0]!)
+
 interface Checkout {
   readonly home: string
   readonly checkout: string
   readonly launch: ApprovedLaunch
   /** The tree the owner approved, read as the member started on it. */
   readonly start_tree: string
-  /** The file the member's own writes are kept in, one JSON line each. */
-  readonly own_writes_file: string
+  /** Martha's state of the project. */
+  readonly state: MarthaState
   /** What this launch started the host with, as the launcher records it (martha#135). */
   readonly started_with: StartedWith
 }
@@ -80,16 +85,17 @@ function checkoutFor(t: TestContext): Checkout {
   const launch: ApprovedLaunch = {
     ...place,
     approved_fingerprints: [],
-    since_approval: { approved: { entries: started.entries, tree: started.tree }, member: MEMBER, own_writes: ownWritesKeptIn(state), launch_id: LAUNCH },
+    since_approval: { approved: { entries: started.entries, tree: started.tree }, member: MEMBER, own_writes: ownWritesKeptForLaunch(state, LAUNCH), launch_id: LAUNCH },
   }
-  const start_tree = readCheckoutTree(checkout, home, thisMachine)
-  assert.notEqual(start_tree, null)
+  const start = readCheckoutTree(checkout, home, thisMachine)
+  assert.equal(start.kind, 'tree')
+  const start_tree = start.kind === 'tree' ? start.tree : ''
   return {
     home,
     checkout,
     launch,
-    start_tree: start_tree ?? '',
-    own_writes_file: join(state.directory, OWN_WRITES_FILE),
+    start_tree,
+    state,
     // The switches `prepareLaunch` starts the host with, which is what the launcher records.
     started_with: startedWithOf(SWITCHES, SWITCHES.args, SWITCHES.env),
   }
@@ -189,7 +195,7 @@ test('own writes that cannot be read refuse every read: one torn line in the sto
   writeFileSync(file, 'hello\n')
   keptOwnWrite(place, 'hello.txt')
   // A later writer to the store leaves a line that is no own write: what is kept can no longer be told from it.
-  appendFileSync(place.own_writes_file, 'not an own write\n')
+  appendFileSync(ownWritesFileOf(place), 'not an own write\n')
   assert.deepEqual(recordedReading(place, file), ['B4:null'])
 })
 
