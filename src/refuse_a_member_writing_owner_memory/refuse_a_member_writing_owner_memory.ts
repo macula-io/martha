@@ -1,9 +1,10 @@
-// A member never writes the memory, the instructions or the code the owner's own
-// Claude Code sessions load (martha#136, martha#187).
+// A member never writes the memory, the instructions, the text or the code the owner's own Claude Code sessions load,
+// from the owner's user scope or the member's (martha#136, martha#154, martha#187).
 //
-// This exists so text or code a member wrote cannot reach a later session, the
-// owner's or another member's, as memory, as the owner's own instructions, or as
-// something that session runs, with nothing recording where it came from.
+// This exists so text or code a member wrote cannot reach a later session, the owner's or another member's, as memory,
+// as the owner's own instructions, as a skill's description in every session, as an agent's body when it runs, as a
+// command, as an output style, as a resumed transcript read back as the conversation so far, or as something that
+// session runs: nothing records where it came from, and the owner's next session loads it as its own.
 //
 // Claude Code keeps auto-memory in `<config dir>/projects/<project key>/memory/`
 // and loads it into every session of that project. A session in a git worktree
@@ -36,15 +37,22 @@
 //   1. WHOSE CONFIG DIR. The launcher's, from its own environment: the folder the
 //      owner's sessions load. The member's too, when its environment resolves
 //      another. Both are denied.
-//   2. WHAT IS DENIED. In each config dir: every `projects/*/memory/`, `rules/`,
-//      and `CLAUDE.md`; every place the recorded host names as one it runs
-//      (placesTheHostProtects); and the owner's user settings file. One place
-//      sits outside those dirs: the host's global config — `.claude.json` beside
-//      the home folder, or in the config dir when CLAUDE_CONFIG_DIR names one —
-//      which names the owner's user MCP servers. The two
-//      folders that override where memory lives, when the launcher's environment
-//      sets them. Each `autoMemoryDirectory` the policy, user and carried
-//      settings name.
+//   2. WHAT IS DENIED. In each config dir: every project's own folder,
+//      `projects/<any>/**` (a session folder holds its transcript, `subagents/`,
+//      `tool-results/` and its memory), `rules/`, `CLAUDE.md`, and the folders
+//      the host loads the owner's own text from — the markdown kinds the
+//      recording names (`agents`, `commands`, `skills`), and the output-styles
+//      folder it names (martha#154) — with the folder the member's own session
+//      init reports for output styles, which a settings env block may move. Also
+//      every place the recorded host names as one it RUNS (placesTheHostProtects)
+//      and the owner's user settings file (martha#187). One place sits outside
+//      those dirs: the host's global config — `.claude.json` beside the home
+//      folder, or in the config dir when CLAUDE_CONFIG_DIR names one — which
+//      names the owner's user MCP servers. The two folders that override where
+//      memory lives, when the launcher's environment sets them. Each
+//      `autoMemoryDirectory` the policy, user and carried settings name. No name
+//      is typed here: the markdown kinds and the styles folder come from
+//      `RECORDED_HOST`, cut from the host's binary.
 //   3. AS THE HOST RESOLVES IT. A path is trimmed, a leading `~` resolves against
 //      the host's home, the rest against the member's working directory
 //      (../claude_code_host asTheHostResolves). It is denied when either the
@@ -77,8 +85,8 @@ import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
@@ -103,6 +111,12 @@ const MEMORY = 'memory'
 /** Inside a config dir: the owner's instructions for every session. */
 const OWNER_INSTRUCTIONS = 'CLAUDE.md'
 const OWNER_RULES = 'rules'
+
+/** A place a member's file tool may not write, and the issue that put it there. */
+export interface DeniedPlace {
+  readonly what: string
+  readonly issue: string
+}
 
 /** How one name the host records among its protected config-dir places is accounted for (martha#187). */
 export type ProtectedNameOwner =
@@ -173,6 +187,7 @@ export function placesTheHostProtects(recorded: ProtectedConfigPlaces = RECORDED
   return { folders: inPlace('folder'), files: inPlace('file') }
 }
 
+
 /** The variable git takes its repository's git directory from, when the launcher's environment sets it. */
 export const GIT_DIR_VARIABLE = 'GIT_DIR'
 /** The variable git takes the git directory a repository shares its objects and hooks with from. */
@@ -193,12 +208,14 @@ const COMMONDIR = 'commondir'
 
 /** Every place a member's file tool may not write. */
 export interface OwnerMemoryPlaces {
+  /** The config dirs whose whole `projects/` area is denied: the owner's and the member's (martha#154). */
+  readonly config_dirs: readonly string[]
   /** Roots whose `projects/<any>/memory/` is denied. */
   readonly memory_roots: readonly string[]
-  /** Folders denied whole. */
-  readonly folders: readonly string[]
-  /** Files denied. */
-  readonly files: readonly string[]
+  /** Folders denied whole, each with the issue that denies it. */
+  readonly folders: readonly DeniedPlace[]
+  /** Files denied, each with the issue that denies it. */
+  readonly files: readonly DeniedPlace[]
   /**
    * The git configuration files of the owner's own git runs, denied as files
    * (martha#168). The publish gate refuses them; no permission rule names them,
@@ -207,6 +224,20 @@ export interface OwnerMemoryPlaces {
   readonly git_config_files: readonly string[]
   /** The git directories the launcher's environment names, denied whole (martha#168). */
   readonly git_dirs_named_at_launch: readonly string[]
+}
+
+/**
+ * What the recording says the host loads from the owner's user scope, and where the member's own session reports the
+ * styles folder (martha#154). Nothing here is typed by this repository: the kinds and the folder are the recorded
+ * host's own words, and the reported folder is the path the session's init answered with.
+ */
+export interface OwnerUserScope {
+  /** The folders under each config dir the host loads markdown from, by name (`RECORDED_HOST.markdown_kinds`, #146). */
+  readonly markdown_kinds: readonly string[]
+  /** The folder under each config dir the host lists the owner's user output styles from (#154). */
+  readonly output_styles_folder: string
+  /** The folder the member's session init reported for user output styles, after its settings env blocks (#154). */
+  readonly reported_output_styles_dir: string
 }
 
 export interface OwnerMemorySources {
@@ -220,6 +251,8 @@ export interface OwnerMemorySources {
   readonly launch_dir: string
   /** The settings files the host reads that may name a memory folder: policy, user, carried. */
   readonly settings_files: readonly string[]
+  /** The places the host loads from the owner's user scope, from the recording and the member's own init (#154). */
+  readonly user_scope: OwnerUserScope
 }
 
 /** The config dir an environment's host loads, or undefined when it cannot be told (userSettingsPath refuses it). */
@@ -255,6 +288,16 @@ function memoryDirectoryIn(file: string, home: string): string | undefined {
 
 const unique = (paths: ReadonlyArray<string | undefined>): string[] => [...new Set(paths.filter((path) => path !== undefined).map((path) => normalize(path)))]
 
+/** The places, each path once, the first issue that denies it kept, and none left empty. */
+const deniedPlaces = (places: ReadonlyArray<DeniedPlace | string | undefined>): DeniedPlace[] => {
+  const named = places.flatMap((place) => {
+    const one = typeof place === 'string' ? { what: place, issue: '' } : place
+    return one === undefined || one.what.trim() === '' ? [] : [one]
+  })
+  const seen = new Set<string>()
+  return named.filter((place) => (seen.has(normalize(place.what)) ? false : (seen.add(normalize(place.what)), true)))
+}
+
 /** The places the host runs as code under each config dir, the owner's settings file and global config, as paths (martha#187). */
 function codePlacesIn(configDirs: readonly string[], ownerConfigs: readonly string[]): { readonly folders: string[]; readonly files: string[] } {
   const places = placesTheHostProtects()
@@ -264,12 +307,16 @@ function codePlacesIn(configDirs: readonly string[], ownerConfigs: readonly stri
   }
 }
 
+
 /** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1, 2 and 5). */
-export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, settings_files }: OwnerMemorySources): OwnerMemoryPlaces {
+export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, settings_files, user_scope }: OwnerMemorySources): OwnerMemoryPlaces {
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
   const remote = launcher_env[REMOTE_MEMORY_ROOT]
   const override = launcher_env[MEMORY_FOLDER_OVERRIDE]
   const code = codePlacesIn(configDirs, unique([ownerConfigFileIn(launcher_env), ownerConfigFileIn(member_env)]))
+  // The folders under each config dir the host loads the owner's own text from (martha#154): the markdown kinds the
+  // recording names and the output-styles folder it names. None of the two names is typed here.
+  const loaded = configDirs.flatMap((dir) => [...user_scope.markdown_kinds, user_scope.output_styles_folder].map((kind) => join(dir, kind)))
   /** A path the launcher's environment names, resolved as the host resolves it. */
   const named = (variable: string): string | undefined => {
     const value = launcher_env[variable]
@@ -277,14 +324,23 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, 
   }
   const xdg = named(XDG_CONFIG_HOME_VARIABLE)
   return {
+    config_dirs: configDirs,
     memory_roots: unique([...configDirs, remote !== undefined && remote.trim() !== '' ? asTheHostResolves(remote, home, home) : undefined]),
-    folders: unique([
-      ...configDirs.map((dir) => join(dir, OWNER_RULES)),
-      override !== undefined && override.trim() !== '' ? asTheHostResolves(override, home, home) : undefined,
-      ...settings_files.map((file) => memoryDirectoryIn(file, home)),
-      ...code.folders,
+    folders: deniedPlaces([
+      ...loaded.map((what): DeniedPlace => ({ what, issue: 'martha#154' })),
+      { what: user_scope.reported_output_styles_dir, issue: 'martha#154' },
+      ...code.folders.map((what): DeniedPlace => ({ what, issue: 'martha#187' })),
+      ...configDirs.map((dir): DeniedPlace => ({ what: join(dir, OWNER_RULES), issue: 'martha#136' })),
+      ...(override !== undefined && override.trim() !== '' ? [{ what: asTheHostResolves(override, home, home), issue: 'martha#136' }] : []),
+      ...settings_files.map((file): DeniedPlace | undefined => {
+        const folder = memoryDirectoryIn(file, home)
+        return folder === undefined ? undefined : { what: folder, issue: 'martha#136' }
+      }),
     ]),
-    files: unique([...configDirs.map((dir) => join(dir, OWNER_INSTRUCTIONS)), ...code.files]),
+    files: deniedPlaces([
+      ...configDirs.map((dir): DeniedPlace => ({ what: join(dir, OWNER_INSTRUCTIONS), issue: 'martha#136' })),
+      ...code.files.map((what): DeniedPlace => ({ what, issue: 'martha#187' })),
+    ]),
     // Every user-level git config file git 2.56.0 can read: the two the variables
     // name, `~/.gitconfig`, and the XDG one as `$XDG_CONFIG_HOME` spells it and as
     // its own default under `~/.config` (measured: with XDG_CONFIG_HOME unset, git
@@ -361,6 +417,15 @@ export function pathToItsEnd(path: string): string | undefined {
 /** The `projects` folder under a memory root as the host resolves it: it may itself be a link to another disk, followed to its end (martha#136 r=3, r=4). */
 const projectsOf = (root: string): string | undefined => pathToItsEnd(join(root, PROJECTS))
 
+/**
+ * Whether `path` lies inside some project's own folder under a `projects` folder: its transcript, the side files a
+ * session keeps beside it, and its `memory/` — for any project key, one that does not exist yet included (martha#154).
+ */
+function inAProject(path: string, projects: string): boolean {
+  const [project, ...inside] = relative(projects, path).split(sep)
+  return inside.length > 0 && project !== undefined && project !== '' && !project.startsWith('..')
+}
+
 /** Whether `path` lies in some project's memory folder under `root`: the projects folder as spelled and as it leads. */
 function inProjectMemory(path: string, root: string): boolean {
   return unique([join(root, PROJECTS), projectsOf(root)]).some((folder) => {
@@ -399,17 +464,44 @@ function projectMemoryLeadsTo(root: string): string[] {
   }
 }
 
+/**
+ * Where each project's own folder under `root` leads now, when it is a link: the folder a write into the project
+ * would really land in, denied whole like the folder it was named by (martha#154).
+ */
+function projectFolderLeadsTo(root: string): string[] {
+  const projects = join(root, PROJECTS)
+  try {
+    return unique(
+      readdirSync(projects).flatMap((project) => {
+        const leads = whereALinkLeads(join(projects, project))
+        return leads === undefined ? [] : [leads]
+      }),
+    )
+  } catch {
+    return []
+  }
+}
+
 /** The denied place one spelling of a path falls in, or undefined. */
-function placeOf(path: string, places: OwnerMemoryPlaces): string | undefined {
+function placeOf(path: string, places: OwnerMemoryPlaces): DeniedPlace | undefined {
   const root = places.memory_roots.find(
     (candidate) =>
       (spellingsOf(candidate) ?? []).some((spelling) => inProjectMemory(path, spelling)) ||
       projectMemoryLeadsTo(candidate).some((folder) => within(path, folder)),
   )
-  if (root !== undefined) return `a project's memory folder under ${root}`
-  const folder = places.folders.find((candidate) => (spellingsOf(candidate) ?? []).some((spelling) => within(path, spelling)))
+  if (root !== undefined) return { what: `a project's memory folder under ${root}`, issue: 'martha#136' }
+  // Each project's own folder, denied whole: a session folder holds its transcript and the side files beside it,
+  // which a later `--resume` reads (martha#154).
+  const projects = places.config_dirs.find(
+    (dir) =>
+      (spellingsOf(join(dir, PROJECTS)) ?? []).some((folder) => inAProject(path, folder)) ||
+      projectFolderLeadsTo(dir).some((folder) => within(path, folder)),
+  )
+  if (projects !== undefined) return { what: `a project's folder under ${projects}`, issue: 'martha#154' }
+  const folder = places.folders.find((candidate) => (spellingsOf(candidate.what) ?? []).some((spelling) => within(path, spelling)))
   if (folder !== undefined) return folder
-  return places.files.find((candidate) => (spellingsOf(candidate) ?? []).includes(path))
+  const file = places.files.find((candidate) => (spellingsOf(candidate.what) ?? []).includes(path))
+  return file
 }
 
 /** A string with the letters A-Z lowered and nothing else, as git's own comparison of an ASCII name does. */
@@ -572,16 +664,16 @@ function projectEntries(root: string): string[] {
  * cannot tell which folder it lands in (martha#136 r=4, r=5).
  */
 function unfollowablePlace(places: OwnerMemoryPlaces, git: CheckoutGit | undefined): string | undefined {
-  const named = unique([...places.memory_roots, ...places.folders, ...places.files])
+  const named = unique([...places.memory_roots, ...places.config_dirs.map((dir) => join(dir, PROJECTS)), ...places.folders.map((folder) => folder.what), ...places.files.map((file) => file.what)])
   const place = named.find((candidate) => pathToItsEnd(candidate) === undefined)
   if (place !== undefined) return unfollowableMemory(place)
   // The projects folder itself, then every project folder and its memory: a chain of
   // links there is where a write would land, so it is refused like any other place.
-  const projects = places.memory_roots
+  const projects = unique([...places.memory_roots, ...places.config_dirs])
     .flatMap((root) => [join(root, PROJECTS), ...projectEntries(root)])
     .find((folder) => pathToItsEnd(folder) === undefined)
   if (projects !== undefined) return unfollowableMemory(projects)
-  const linked = places.memory_roots.flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
+  const linked = unique([...places.memory_roots, ...places.config_dirs]).flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
   if (linked !== undefined) return unfollowableMemory(linked)
   // The git directory is checked the same way: a chain of links where it should be
   // is no git directory this guard can name, and a write is not allowed while it
@@ -627,7 +719,7 @@ export function writesTheOwnersMemory(
     if (gitDenial !== undefined) return gitDenial
     const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
     if (place !== undefined) {
-      return `${value} is in ${place}, which the owner's own Claude Code sessions load as memory or instructions or run as code: a member does not write there, so neither its text nor its code reaches a later session unrecorded (martha#136, martha#187)`
+      return `${value} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
     }
   }
   return undefined
@@ -649,15 +741,39 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
     return folder === undefined ? [] : [folder]
   })
   const projectFolders = unique([...rootSpellings.map((root) => join(root, PROJECTS)), ...projectLeads])
-  const linkedAway = places.memory_roots
-    .flatMap(projectMemoryLeadsTo)
-    .filter((folder) => !rootSpellings.some((root) => inProjectMemory(folder, root)))
+  // Each config dir's projects folder denies every project's own folder whole (martha#154); a root memory was moved
+  // to keeps the memory folder as its one denied place (martha#136).
+  const configProjectFolders = unique(places.config_dirs.flatMap((dir) => spellingsOf(join(dir, PROJECTS)) ?? [join(dir, PROJECTS)]))
+  const otherProjects = projectFolders.filter((folder) => !configProjectFolders.includes(folder))
+  const linkedAway = unique([...places.memory_roots.flatMap(projectMemoryLeadsTo), ...places.config_dirs.flatMap(projectFolderLeadsTo)]).filter(
+    (folder) => !rootSpellings.some((root) => inProjectMemory(folder, root)) && !configProjectFolders.some((projects) => inAProject(folder, projects)),
+  )
   const globs = new Set([
-    ...projectFolders.map((folder) => `${folder}/*/${MEMORY}/**`),
-    ...[...linkedAway, ...places.folders.flatMap((folder) => spellingsOf(folder) ?? [folder])].map((folder) => `${folder}/**`),
-    ...places.files.flatMap((file) => spellingsOf(file) ?? [file]),
+    ...configProjectFolders.map((folder) => `${folder}/*/**`),
+    // The memory folder under each config dir's projects stays a place of its own (martha#136): a project's own folder
+    // is denied whole above, and this names the folder #136 already closed, where a config dir is reached by a link.
+    ...configProjectFolders.map((folder) => `${folder}/*/${MEMORY}/**`),
+    ...otherProjects.map((folder) => `${folder}/*/${MEMORY}/**`),
+    ...[...linkedAway, ...places.folders.flatMap((folder) => spellingsOf(folder.what) ?? [folder.what])].map((folder) => `${folder}/**`),
+    ...places.files.flatMap((file) => spellingsOf(file.what) ?? [file.what]),
   ])
   return [...globs].flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])
+}
+
+/**
+ * The user-scope places under a home, for a caller that has no launch of its own (martha#154): the recording's own
+ * markdown kinds and output-styles folder, and the styles folder under that home's config dir as the folder the
+ * session would report. Nothing here is a name typed by this repository.
+ */
+export function userScopeUnder(home: string): OwnerUserScope {
+  const settings = userSettingsPath({ HOME: home })
+  // With only a HOME, `userSettingsPath` never refuses; the fallback is the host's own default, never a restated one.
+  const config = 'path' in settings ? dirname(settings.path) : join(home, DEFAULT_CONFIG_DIR)
+  return {
+    markdown_kinds: RECORDED_HOST.markdown_kinds,
+    output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+    reported_output_styles_dir: join(config, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  }
 }
 
 /**
@@ -670,7 +786,7 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
  */
 export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
   const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
-  const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [] })
+  const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [], user_scope: userScopeUnder(probe.home) })
   return writesTheOwnersMemory('Write', { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine) === undefined
 }
 

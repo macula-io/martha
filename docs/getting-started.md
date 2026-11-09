@@ -192,6 +192,30 @@ never saw the diff: do not rely on it. End the reviewer, start it again, and typ
 the hand-off again; Martha's refusal says only a fresh start that reads no
 handover clears it.
 
+## Upgrading Martha
+
+Use Martha's own command, not the bootstrap line:
+
+```sh
+martha install [<version>] [--downgrade] [--digest sha256:<hex>]
+```
+
+It runs the installer the release you are running pins — `installer.json`, its
+name, its version and the npm integrity of the bytes npm serves for it — and
+nothing else, so taking over the npm account cannot put a new installer in front
+of you. It fetches that one version into a temporary directory, with the npm
+beside your node, empty npm config, this registry named explicitly and no install
+scripts; refuses bytes that do not match the pin; runs the installer with your
+words unchanged; and removes the directory afterwards. No terminal is needed: a
+member's shell could already type the bootstrap line, so the pin and the
+signature are what bound an install, not who typed it.
+
+The [README's upgrade section](../README.md#upgrading-an-installed-martha) says
+what each refusal means. Changing `installer/` in the repository needs an npm
+publish before the next Martha release: the release pins the installer version
+this tree carries, and refuses to build when `installer/` is not what that
+version's `installer-v` tag published.
+
 ## What a refusal means
 
 A refusal goes to stderr, prefixed `martha:`, and names the command that fixes
@@ -201,6 +225,9 @@ it:
 |---|---|
 | `... is not inside a git checkout. Run martha in the checkout your crew works in.` | `cd` to your project and run it there |
 | `.../.crew/crew.json already exists, and martha init never writes over a declaration.` | keep it; `martha init` is done |
+| `... carries no readable installer pin ...` | this release predates the pin; upgrade once with the bootstrap line |
+| `... npm does not serve <name>@<version>, which this release pins ...` | that installer version is not on npm; nothing was installed |
+| `... npm served bytes for <name>@<version> that are not the ones this release pins ...` | npm serves other bytes than the release vouched for; nothing was installed |
 | `... is missing. Run martha init to declare a crew here.` | `martha init` |
 | `... is not on this crew (its members are builder, reviewer).` | start a name the crew has |
 | `... you have not approved it as it is now. Run martha approve ...` | `martha approve`, read, answer `yes` |

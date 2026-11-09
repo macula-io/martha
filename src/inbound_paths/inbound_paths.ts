@@ -297,6 +297,16 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A18',
+    what: "the owner's user-scope files the host loads from its config dir at a session's start: the folders it reads its skills, agents and commands from as markdown, the output styles it lists, and every project's own folder, a session's transcript and its side files among them, so text a member wrote there would reach a later session as the owner's own (martha#154)",
+    klass: 'delivered',
+    control: {
+      kind: 'no-text-reaches-the-model',
+      why: "the gate's file-tool deny and the permissions.deny rules in the host's --settings refuse a member's own writes to those folders and to every project's folder under the config dir, on the owner's config dir and on the member's when the two differ; probe:launch shows a write into one refused where the same write by hand lands. No folder is a list in our code: the markdown kinds and the output-styles folder are the recorded host's own loader and init field (../claude_code_host/markdown_the_host_loads), and the styles folder is also the one the member's own session init reports (../refuse_a_member_writing_owner_memory). Not closed: the other places under the config dir that the host runs as code, which martha#187's name map denies, and this row claims none of them; a Bash write into any of these places, which a clean member alone holds (A17's residual); a host the owner starts by hand (C1, C2); OpenCode, unprobed",
+    },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
     what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',

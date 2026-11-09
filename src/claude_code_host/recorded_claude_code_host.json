@@ -36,6 +36,7 @@
     "skills"
   ],
   "output_style_schema": "{name:r_().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:r_().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":_D().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":_D().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}",
+  "user_output_styles_dir": "user_output_styles_dir:o().optional().describe(\"@internal Absolute path of the user-level output-styles directory this CLI lists styles from: the output-styles folder of the config home as the CLI resolves it after the settings env blocks are applied, so a CLAUDE_CONFIG_DIR set in user or managed settings is honored. A host that writes a user-level style file writes it here; absent on older CLIs, where the host falls back to its own reading of CLAUDE_CONFIG_DIR.\")",
   "protected_config_names": [
     "shell-snapshots",
     "session-env",

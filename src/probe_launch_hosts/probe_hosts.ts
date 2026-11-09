@@ -33,6 +33,9 @@ import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
 import { HOOKS_SPELLINGS, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
@@ -54,7 +57,10 @@ interface Place {
 }
 
 /** The command line of one run, given the switches a planned launch adds. */
-type Command = (switches: HostSwitches) => { readonly command: string; readonly args: readonly string[] }
+type Command = (switches: HostSwitches, place: Place) => { readonly command: string; readonly args: readonly string[] }
+
+/** A place for a command that builds nothing from paths: the version banner asks only for the binary's name. */
+const NO_PLACE: Place = { scratch: tmpdir(), checkout: tmpdir(), marker: (name) => join(tmpdir(), name) }
 
 interface Probe {
   readonly what: string
@@ -90,11 +96,23 @@ interface Probe {
    */
   readonly gate_names?: (place: Place) => readonly string[]
   /**
+   * Where a marker lands when it is not the scratch root's own file: a file the host itself writes into a place the
+   * gate denies, whose presence or absence is the row's evidence (martha#154).
+   */
+  readonly markerAt?: (place: Place, name: string) => string
+  /**
    * Also require the host itself to have exited cleanly, for a row whose claim is
    * that something did NOT happen: a host that quits on the config before it gets
    * that far would leave the same markers as one that ran and rightly did nothing.
    */
   readonly host_ok?: true
+  /**
+   * Markers read from what the host printed, for a row whose claim is that the host
+   * TRIED something and was refused (martha#154 r=2): a row that only says the file
+   * is absent is satisfied by a host that never attempted the write at all. The run
+   * is asked for json output, and this reads the refusal out of it.
+   */
+  readonly from_output?: (place: Place, printed: string) => Readonly<Record<string, boolean>>
 }
 
 /** One file of the owner's own markdown, at `<config folder>/<folder>/<name>`. */
@@ -640,13 +658,15 @@ function removeScratch(scratch: string, checkouts: readonly string[]): void {
   rmSync(scratch, { recursive: true, force: true })
 }
 
+/** Where one marker lands: the scratch root's own file, unless the row says the host itself writes it (martha#154). */
+const markerPath = (probe: Probe, place: Place, name: string): string => (probe.markerAt === undefined ? place.marker(name) : probe.markerAt(place, name))
+
 /** What one run left: each marker and whether it was started, and the host's own exit status. */
 interface RunResult {
   readonly markers: Readonly<Record<string, boolean>>
   /** The host's exit status, or null when the launcher's gate refused it and no host ran. */
   readonly status: number | null
 }
-
 /** Each marker and whether it was started, or why the probe could not run. */
 function runProbe(probe: Probe): RunResult | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
@@ -660,27 +680,39 @@ function runProbe(probe: Probe): RunResult | string {
     const inherited = environmentOf(probe, place)
     const switches = switchesFor(probe, place, inherited)
     if (typeof switches === 'string') return `refused by prepareLaunch: ${switches}`
-    if ('gate' in switches) {
-      const refused = gateSeen(probe, place, switches.gate)
-      return typeof refused === 'string' ? refused : { markers: refused, status: null }
-    }
+    if ('gate' in switches) return aRunTheGateRefused(probe, place, switches.gate)
 
-    const { command, args } = probe.command(switches)
+    const { command, args } = probe.command(switches, place)
     const run = spawnSync(command, args, {
       cwd: checkout,
       env: launchEnvironment(inherited, switches),
-      stdio: 'ignore',
+      // Captured for the rows that read the host's own account of what it was refused; the others ignore it.
+      stdio: ['ignore', 'pipe', 'ignore'],
       timeout: RUN_TIMEOUT_MS,
     })
     if (run.error !== undefined) return `could not run: ${run.error.message}`
     spawnSync('sleep', ['1'])
+    const printed = printedText(run.stdout)
     return {
-      markers: Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(place.marker(name))])),
+      markers: {
+        ...Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(markerPath(probe, place, name))])),
+        ...(probe.from_output?.(place, printed) ?? {}),
+      },
       status: run.status,
     }
   } finally {
     removeScratch(scratch, [checkout])
   }
+}
+
+/**
+ * The run a settings-gate refusal leaves: a failure for a row that needs the host to have run, whose claim is about what
+ * the host would have tried, and the refusal's own markers for the others (martha#154 r=2).
+ */
+function aRunTheGateRefused(probe: Probe, place: Place, refusal: string): RunResult | string {
+  if (probe.host_ok === true) return `the launcher's own settings gate refused this run (${refusal}), so the host never ran and the row proves nothing`
+  const seen = gateSeen(probe, place, refusal)
+  return typeof seen === 'string' ? seen : { markers: seen, status: null }
 }
 
 /** The markers of a run the launcher's gate refused: nothing started, and GATE_REFUSED when the refusal names what the probe planted. */
@@ -692,7 +724,7 @@ function gateSeen(probe: Probe, place: Place, refusal: string): Readonly<Record<
 
 const said = (started: boolean) => (started ? 'started' : 'not started')
 
-for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES).command))) {
+for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES, NO_PLACE).command))) {
   console.log(`${command}: ${version(command)}`)
 }
 
@@ -732,12 +764,82 @@ if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
   process.exitCode = 1
 }
 
+// --- the folders the host loads the owner's own text from (martha#154) -------
+//
+// The gate's own rules, `memoryDenyRules(ownerMemoryPlaces(...))` (the same call the launcher makes), go into the
+// settings the host reads, and each row has the host attempt the very write those rules name, in every folder the
+// recorded host loads the owner's user scope from. By hand the same write lands, so the pair shows the rules the launch
+// carries are what refused it, not a host that never tried.
+//
+// The write is asked for with `--permission-mode acceptEdits` and the config folder added, on both runs: without them
+// the host asks the owner for a folder outside the checkout and never attempts the write, and the row would show only
+// that nothing was asked.
+
+/** The config folder each run writes into: the probe's own, named as the owner's by CLAUDE_CONFIG_DIR. */
+const userScopeConfig = (place: Place) => dirname(ownerSettingsPath(place))
+
+/** The places the gate denies, from the call the launcher makes, over this run's own config folder. */
+const userScopePlaces = (place: Place) => {
+  const config = userScopeConfig(place)
+  return ownerMemoryPlaces({
+    launcher_env: { HOME: place.scratch, CLAUDE_CONFIG_DIR: config },
+    member_env: { HOME: place.scratch },
+    home: place.scratch,
+    launch_dir: place.checkout,
+    settings_files: [],
+    user_scope: {
+      markdown_kinds: RECORDED_HOST.markdown_kinds,
+      output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+      reported_output_styles_dir: join(config, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+    },
+  })
+}
+
+/** Every folder under the config dir the host loads the owner's text from, by the recording's names and the field's. */
+const OWNER_SCOPE_FOLDERS: readonly string[] = [...RECORDED_HOST.markdown_kinds, CLAUDE_CODE_OUTPUT_STYLES_FOLDER]
+
+const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder) =>
+  [false, true].map((gated): Probe => {
+    const target = (place: Place) => join(userScopeConfig(place), folder, 'probe-note.md')
+    return {
+      what: `Claude Code ${gated ? 'as martha start starts it, the permission rules the launch carries in the settings it reads' : 'by hand, with none of the launch\'s rules'}: a write into the ${folder} folder of the owner's config dir (martha#154)`,
+      host: 'claude-code',
+      command: (switches, place) => ({
+        command: 'claude',
+        args: [
+          '-p',
+          '--max-turns',
+          '2',
+          '--model',
+          'haiku',
+          '--permission-mode',
+          'acceptEdits',
+          '--output-format',
+          'json',
+          `--add-dir=${userScopeConfig(place)}`,
+          `Use the Write tool to create the file ${target(place)} with the single line: probe. Do nothing else.`,
+          ...switches.args,
+        ],
+      }),
+      approved: () => {},
+      planted: () => {},
+      planned: gated,
+      owner_settings: (place) => (gated ? JSON.stringify({ permissions: { deny: memoryDenyRules(userScopePlaces(place)) } }) : JSON.stringify({})),
+      markerAt: target,
+      // A refused write is the row's claim, and it takes the host itself to have run: a gate refusal, a crash or a
+      // model that did nothing is a failure, not "not started, as claimed" (martha#154 r=2).
+      ...(gated ? { host_ok: true as const, from_output: (place: Place, printed: string) => ({ OWNER_SCOPE_WRITE_DENIED: deniedWriteIn(printed, target(place)) }) } : {}),
+      expected: { OWNER_SCOPE_FILE: !gated, ...(gated ? { OWNER_SCOPE_WRITE_DENIED: true } : {}) },
+    }
+  }),
+)
+
 if (SWITCHES_WITHOUT_A_PROBE.length > 0) {
   console.error(`the recorded host names no key to plant, so nothing probes: ${SWITCHES_WITHOUT_A_PROBE.join(', ')}`)
   process.exitCode = 1
 }
 
-for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES, ...HOST_KEY_PROBES]) reportProbe(probe)
+for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES, ...HOST_KEY_PROBES, ...OWNER_SCOPE_PROBES]) reportProbe(probe)
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every

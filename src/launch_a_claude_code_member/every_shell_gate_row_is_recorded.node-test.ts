@@ -24,10 +24,10 @@ import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
 } from '../claude_code_host/recorded_claude_code_host.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
-import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -36,6 +36,13 @@ import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
+
+/** The user-scope places the recording names, under a home the tests run in (martha#154). */
+const userScopeFor = (home: string): OwnerUserScope => ({
+  markdown_kinds: RECORDED_HOST.markdown_kinds,
+  output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+  reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+})
 
 const bytes = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value))
 
@@ -101,7 +108,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
       switches: CLAUDE_CODE_HOOK_SWITCHES,
       markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [] }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) }),
     stopMember: () => {},
   })
 

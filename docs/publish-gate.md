@@ -920,6 +920,40 @@ records and no test sees, though a change to the array or to those statements
 does fail the recording; a host the owner starts by hand (C1, C2); and OpenCode,
 not probed for a memory of its own.
 
+**A member's writes never reach a later session through the owner's user scope
+(A18, martha#154).** The host loads the owner's own text from its config dir at
+every session's start: the folders it reads skills, agents and commands from as
+markdown, the output-styles folder it lists, and every project's own folder,
+where a session's transcript and the side files beside it live. A member writing
+any of them would leave text the owner's next session, or another member's,
+reads as its own, with nothing recording where it came from.
+
+The gate refuses a member's `Write`, `Edit`, `MultiEdit` or `NotebookEdit` there,
+on the launcher's config dir and on the member's when the two differ
+(`src/refuse_a_member_writing_owner_memory/`). No folder is a list in our code:
+the markdown kinds and the output-styles folder are the recorded host's own
+loader and init field (`markdown_the_host_loads`, #146), and the output-styles
+folder is also the one the member's own session init reports at launch
+(`user_output_styles_dir`), so a `CLAUDE_CONFIG_DIR` in a settings file's `env`
+moves both the folder the host lists from and the folder the gate denies. The
+field is a required part of the recording: a recording without it does not load,
+and a host that reports no such field at launch starts no member here. Every
+project's folder is denied whole, not by the shape of what is in it today: a
+transcript, the files a session keeps beside it, a `subagents/` record and a
+plain file directly under it are one place.
+
+The same places go into the launch's `permissions.deny` rules, so the member's
+tool call is refused by the host as well as by the gate; the host's own writes
+are not a tool call, and are not what the rule refuses. `npm run probe:launch`
+asks the host to write one file in each of those folders, with those rules and
+with none of them: with them nothing is written, and without them the file
+lands.
+
+Not closed: the other places under the config dir that the host runs as code,
+which martha#187's name map denies, and this row claims none of them; a `Bash`
+write into any of these places, which only a clean member holds (A17); a host
+the owner starts by hand (C1, C2); and OpenCode, unprobed.
+
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the
 launcher handing a turn to the model or registering a tool (no slice does

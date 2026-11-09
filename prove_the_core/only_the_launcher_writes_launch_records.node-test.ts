@@ -35,6 +35,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'claude_code_host',
     'claude_code_relay',
     'declare_a_solo_crew',
+    'install_the_pinned_installer',
     'install_the_recorded_mesh_server',
     'keep_martha_state_outside_the_checkout',
     'keep_what_the_owner_signed',
@@ -42,6 +43,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'refuse_a_member_writing_owner_memory',
     'run_an_owner_signed_command',
     'run_the_martha_command',
+    'run_the_nodes_own_npm_alone',
     'start_a_member',
   ])
 })

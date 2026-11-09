@@ -37,14 +37,14 @@
 // (hostTrustsTheFolder), so after a folder's first start the short deadline
 // holds there too.
 
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import type { StdioOptions } from 'node:child_process'
 import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { isatty } from 'node:tty'
 
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 
 /**
  * How long one question to the host may take. The load check reads the relay's
@@ -225,4 +225,115 @@ export async function hostVersionLine(binary: string, env: NodeJS.ProcessEnv, cw
   if (version === recorded) return undefined
   const which = version === undefined ? 'a version it does not say' : `version ${version}`
   return `The host at ${binary} is ${which}; Martha's record of the host is of version ${recorded}. It loads Martha's relay, so the member starts.`
+}
+
+/**
+ * The switches a host answers its session init under (martha#154): print mode, stream-json in and out, verbose,
+ * and no session record written. Asking for the init runs no turn and starts no model call. What it does otherwise is
+ * not to be assumed: on 2.1.321 it starts an MCP server named by `--mcp-config` and runs a user settings file's
+ * SessionStart hook (probed, martha#154 r=2), so `initQuestionArgs` takes that switch away and turns hooks off.
+ */
+export const SESSION_INIT_ARGS = ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--no-session-persistence'] as const
+
+/** The switch that names a file of tool servers for the host to start. The init question is asked without it. */
+export const MCP_CONFIG_SWITCH = '--mcp-config'
+
+/**
+ * The arguments the session-init question is asked with (martha#154 r=2): the switches the member's host starts on,
+ * less `--mcp-config` and the file it names, plus a settings file that turns every hook off, plus the question's own
+ * switches.
+ *
+ * The question has to read the same settings the member will read, because a settings file's `env` block may move the
+ * config dir, and with it the folder the host lists the owner's styles from. Those same settings can name a
+ * SessionStart hook, and `--mcp-config` names a server the host starts before it answers -- and both run with the
+ * launcher's environment, before the launch has placed the recorded server tree (#65, #73). So the question is asked
+ * with `--strict-mcp-config` and no server file, and with hooks turned off by the key the recording names.
+ */
+export function initQuestionArgs(switches: readonly string[], hooksOffSettings: string): string[] {
+  const kept = switches.filter((arg, at) => arg !== MCP_CONFIG_SWITCH && !arg.startsWith(`${MCP_CONFIG_SWITCH}=`) && switches[at - 1] !== MCP_CONFIG_SWITCH)
+  return [...kept, '--settings', hooksOffSettings, ...SESSION_INIT_ARGS]
+}
+
+/** The one control request the init question writes: the engine's `initialize`, which answers with the session's init. */
+const INITIALIZE_REQUEST = JSON.stringify({ type: 'control_request', request_id: 'martha-session-init', request: { subtype: 'initialize' } })
+
+/** The session init one line of the host's output carries, or undefined when the line is not one. */
+function initOf(line: string): Readonly<Record<string, unknown>> | undefined {
+  try {
+    const message: unknown = JSON.parse(line)
+    const response = isRecord(message) && isRecord(message.response) ? message.response : undefined
+    return response !== undefined && isRecord(response.response) ? response.response : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The session-init response a host printed, or undefined when no line is one. */
+export function initResponseIn(printed: string): Readonly<Record<string, unknown>> | undefined {
+  for (const line of printed.split('\n')) {
+    const init = line.includes('control_response') ? initOf(line) : undefined
+    if (init !== undefined) return init
+  }
+  return undefined
+}
+
+/**
+ * The folder the host at `binary` reports for the user-level output styles, from its own session init, run with the
+ * switches the member's host is started with so the settings env blocks that move it are applied (martha#154); or
+ * why the launch is refused. A host that reports no such field does not start a member: the folder is not guessed
+ * from our own reading of the config dir, which is the answer the design refuses.
+ */
+export async function outputStylesDirTheHostReports(
+  binary: string,
+  switches: readonly string[],
+  hooksOffSettings: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  field: string = CLAUDE_CODE_OUTPUT_STYLES_FIELD,
+): Promise<{ readonly dir: string } | { readonly refusal: string }> {
+  const runs = `${binary} does not report the folder it lists the owner's user output styles from, so a member is not started: it could write there and reach a later session`
+  const printed = await askedForItsInit(binary, initQuestionArgs(switches, hooksOffSettings), env, cwd)
+  if ('failure' in printed) return { refusal: `${runs} (asked for its session init, ${printed.failure}).` }
+  const init = initResponseIn(printed.stdout)
+  if (init === undefined) return { refusal: `${runs} (its answer to the session init is no init response).` }
+  const dir = init[field]
+  if (typeof dir !== 'string' || dir.trim() === '') return { refusal: `${runs}: its session init reports no ${field} field.` }
+  return { dir }
+}
+
+/** The host's answer to the init question: what it printed, or why it could not be asked. */
+async function askedForItsInit(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string): Promise<{ readonly stdout: string } | { readonly failure: string }> {
+  return new Promise((done) => {
+    // Detached, so the host leads its own process group and everything it started is in that group (martha#154 r=2).
+    const child = spawn(binary, args, { cwd, env, stdio: ['pipe', 'pipe', 'ignore'], detached: true })
+    let printed = ''
+    let settled = false
+    /** Ends the question: the host and everything it started, by group, so nothing is left running. */
+    const stopHost = (): void => {
+      if (child.pid === undefined) return
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        // The group is already gone, or was never made: the host itself is all that is left.
+        child.kill('SIGKILL')
+      }
+    }
+    const finish = (answer: { readonly stdout: string } | { readonly failure: string }): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      stopHost()
+      done(answer)
+    }
+    const timer = setTimeout(() => finish({ failure: `it did not answer within ${HOST_ANSWER_TIMEOUT_MS} ms` }), HOST_ANSWER_TIMEOUT_MS)
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      printed += chunk.toString()
+      // The answer is one line; the request is closed and the host stopped as soon as it is read.
+      if (initResponseIn(printed) !== undefined) finish({ stdout: printed })
+    })
+    child.once('error', (error) => finish({ failure: `it could not be run (${String((error as NodeJS.ErrnoException).code ?? error.message)})` }))
+    child.once('close', () => finish(printed === '' ? { failure: 'it ended without a word' } : { stdout: printed }))
+    child.stdin?.on('error', () => undefined)
+    child.stdin?.end(`${INITIALIZE_REQUEST}\n`)
+  })
 }
