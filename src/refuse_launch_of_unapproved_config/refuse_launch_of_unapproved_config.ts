@@ -180,6 +180,49 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
 const INSTALLED_PACKAGES = 'node_modules'
 
 /**
+ * What a launch started the host with, down to the names a host's declaration lists (martha#135): its arguments,
+ * and for each name under `env` or `env_dropped`, the value it was started with, or `null` when it was not there at
+ * all. No other name is kept, so the owner's keys and tokens never reach Martha's state, a record or a log.
+ */
+export interface StartedWith {
+  readonly args: readonly string[]
+  readonly env: Readonly<Record<string, string | null>>
+}
+
+/**
+ * Reads the arguments and environment a host is spawned with down to what `switches` names (martha#135); a start with
+ * no declaration to measure against keeps only its arguments. This is what the launcher records beside the start
+ * tree, so the read exemption can ask what really started the host rather than what was meant to.
+ */
+export function startedWithOf(
+  switches: HostSwitches | undefined,
+  args: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+): StartedWith {
+  const names = switches === undefined ? [] : [...new Set([...Object.keys(switches.env), ...switches.env_dropped])]
+  return { args: [...args], env: Object.fromEntries(names.map((name) => [name, env[name] ?? null])) }
+}
+
+/**
+ * True when a launch really started the host with `switches` (martha#135): every declared argument sequence appears in
+ * its arguments as one unbroken run, every declared environment value is the declared one, every dropped name is
+ * absent, and no name outside the declaration was kept. A host whose adapter declares no switches holds none.
+ */
+export function startedWithTheSwitches(started_with: StartedWith | undefined, switches: HostSwitches | undefined): boolean {
+  if (started_with === undefined || switches === undefined) return false
+  const declared = new Set([...Object.keys(switches.env), ...switches.env_dropped])
+  if (!Object.keys(started_with.env).every((name) => declared.has(name))) return false
+  if (!appearsAsOneRun(started_with.args, switches.args)) return false
+  const values = Object.entries(switches.env).every(([name, value]) => started_with.env[name] === value)
+  return values && switches.env_dropped.every((name) => started_with.env[name] === null)
+}
+
+/** True when `run` appears in `args` as one unbroken run, in order. */
+function appearsAsOneRun(args: readonly string[], run: readonly string[]): boolean {
+  return args.some((_, at) => run.every((arg, offset) => args[at + offset] === arg))
+}
+
+/**
  * One thing the host would read, as found on disk. `path` is relative to the
  * directory the host starts in and uses `/`, so a config one directory up reads
  * `../.mcp.json`.

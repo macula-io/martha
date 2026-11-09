@@ -459,7 +459,13 @@ The rules the seam keeps, and a host must not work around:
   started on it (read before the host started), while the checkout still holds
   that tree, or that tree as this member's own recorded writes left it
   (martha#132: a change that is not one of the launch's own writes, byte for
-  byte and in the mode it set, ends the exemption for every path). In a
+  byte and in the mode it set, ends the exemption for every path). The
+  exemption also needs the launch to have really started the host with the
+  switches its adapter declares, the ones under which the host attaches no
+  other file's text to a read (`started_with`, martha#135): a host whose
+  adapter declares none, a launch that recorded no start, one argument of the
+  declaration missing or one dropped name carried, and every read counts
+  again. In a
   checkout with no config nothing was approved, so every read
   counts (decided 2026-11-07). A `CLAUDE.local.md` is ignored, so it is never
   in the approved tree: a read of one is text taken in, and so is any fixed

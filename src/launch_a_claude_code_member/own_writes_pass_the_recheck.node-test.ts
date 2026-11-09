@@ -11,19 +11,13 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { openState, ownWritesKeptIn, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import {
-  decideLaunch,
-  fingerprintOf,
-  readLaunchState,
-  type ApprovedLaunch,
-  type LaunchState,
-} from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { decideLaunch, fingerprintOf, readLaunchState, type ApprovedLaunch, type LaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { OWN_WRITE_MODES, type OwnWrites } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
@@ -86,6 +80,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     launch,
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
+    started_with: startedWithTheSwitchesOfTheAdapter(),
     binder: bindNothing,
     handed_at_start: [],
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, settings_files: [] }),
@@ -362,3 +357,8 @@ test('a start refusal for a checkout the owner has not approved says how to appr
     `This coding tool is not started here: the checkout holds config that starts code by itself (.mcp.json), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprintOf(place.approved)}). Run martha approve, read what it shows, and answer yes.`,
   )
 })
+
+/** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
+function startedWithTheSwitchesOfTheAdapter(): StartedWith {
+  return startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_READ_ATTACHES_NOTHING.args, CLAUDE_CODE_READ_ATTACHES_NOTHING.env)
+}

@@ -70,6 +70,7 @@ import { launchRecordsDirectory } from '../linux_process_identity/launch_records
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { HOSTS, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
 
@@ -207,6 +208,14 @@ export function ownNameOfCalledTool(called: string): string {
  * the shell (../take_in_a_tool_result), so adding a name is a decision that its
  * result is placed right, made the way a name gets onto `READ_ONLY_TOOLS`.
  */
+/**
+ * The switches under which Claude Code attaches no other file's text to a Read of a tracked file (martha#135). Probed
+ * on the recorded host: with project config on, the read of a tracked file brings a nested CLAUDE.md and a nested
+ * ignored CLAUDE.local.md with it; under these it brings neither. These are the very switches that keep project config
+ * off, referenced and never copied, so a change to them is a change to what a read is exempt on.
+ */
+export const CLAUDE_CODE_READ_ATTACHES_NOTHING: HostSwitches = HOSTS['claude-code'].project_config_off
+
 export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
   Read: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
   Edit: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },

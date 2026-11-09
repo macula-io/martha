@@ -93,7 +93,7 @@ import {
   recordMemberLaunch,
   recordMemberStopped,
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
@@ -116,6 +116,7 @@ import {
   claudeSettingsSwitches,
   launchEnvironment,
   prepareLaunch,
+  startedWithOf,
   type PreparedLaunch,
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -576,6 +577,7 @@ async function servedRelay(
   stop: (why: string) => void,
   sessionReported: () => void,
   ready: ReadyLaunch,
+  starting: Starting,
 ): Promise<RelayServer | string> {
   const answering = memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
@@ -588,6 +590,7 @@ async function servedRelay(
     },
     policy: launch.policy,
     names: { ownNameOf: ownNameOfCalledTool },
+    started_with: startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, starting.args, starting.env),
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
     hookSettings: ready.hookSettings,
@@ -624,16 +627,37 @@ interface StartedMember {
   readonly launchRecords: ReturnType<typeof launchRecordsDirectory>
 }
 
+/** What the host is spawned with: its arguments, and its environment with the relay's socket. */
+interface Starting {
+  readonly args: readonly string[]
+  readonly env: Readonly<Record<string, string>>
+}
+
+/**
+ * The arguments and the environment the host starts with, built once (martha#135). The relay records what the
+ * declaration names out of them, and `spawn` gets them unchanged.
+ */
+function whatTheHostStartsWith(
+  launch: ClaudeCodeMemberLaunch,
+  made: Pick<LaunchMade, 'prepared' | 'hostEnv' | 'relayDirectory' | 'emptyDirectory' | 'settingsArgs' | 'pluginDir'>,
+): Starting {
+  return {
+    args: [...launch.args, ...made.prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir],
+    env: {
+      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory)),
+      [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
+    },
+  }
+}
+
 /** Step 4: `claude` in a process group of its own; or why it did not start, with everything the launch made gone. */
 async function startedMember(
   launch: ClaudeCodeMemberLaunch,
   made: LaunchMade,
+  starting: Starting,
 ): Promise<StartedMember | string> {
-  const { prepared, hostEnv, relayDirectory } = made
-  const env = {
-    ...launchEnvironment(hostEnv, switchesThatRunNothingFromACheckout(hostEnv, made.emptyDirectory)),
-    [RELAY_SOCKET_VARIABLE]: relayDirectory.socket_path,
-  }
+  const { prepared, relayDirectory } = made
+  const { args: memberArgs, env } = starting
   // The host hands a server its own environment and then the settings files' env,
   // so the server's is built from both.
   const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, { ...env, ...made.settingsEnv })
@@ -641,7 +665,6 @@ async function startedMember(
     await removeWhatTheLaunchMade(made)
     return `${NOT_STARTED}: ${placed}`
   }
-  const memberArgs = [...launch.args, ...prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir]
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
     recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
@@ -829,7 +852,11 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported, ready)
+  // Built once, here, so what the relay records as what this launch started the host with is the very arguments and
+  // environment `spawn` gets below, never a second guess at them (martha#135).
+  const starting = whatTheHostStartsWith(launch, { ...ready, ...directories })
+
+  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported, ready, starting)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()
@@ -837,7 +864,7 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const made: LaunchMade = { ...ready, ...directories, server, binary: host.binary }
 
-  const started = await startedMember(launch, made)
+  const started = await startedMember(launch, made, starting)
   if (typeof started === 'string') return refuse(started)
   group = started.pid
   const pid = started.pid
