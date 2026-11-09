@@ -200,6 +200,9 @@ export function ownNameOfCalledTool(called: string): string {
   return own === '' ? called : own
 }
 
+/** The name Claude Code gives its shell tool: the one call a `martha run` can be bound to (martha#129). */
+export const CLAUDE_CODE_SHELL_TOOL = 'Bash'
+
 /**
  * What each of Claude Code's own tools returns, for the launcher to record after
  * it ran (martha#127). Keyed by the engine's names, read from each tool's input

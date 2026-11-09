@@ -36,6 +36,19 @@ export const RELAY_PATHS = {
 
 export type RelayEvent = keyof typeof RELAY_PATHS
 
+/**
+ * Where `martha run <name>` asks the launcher to run a shape the owner signed (martha#129). Not a hook event: the
+ * member's shell posts it, and the launcher runs it only for the one `martha run <name>` call its relay saw.
+ */
+export const RUN_PATH = '/run-a-signed-shape'
+
+/** A signed shape ran: its exit status, and its merged output, base64. */
+export interface Ran {
+  readonly ran: 1
+  readonly status: number
+  readonly output: string
+}
+
 /** The launcher took the event in. */
 export interface Taken {
   readonly taken: 1
@@ -75,6 +88,33 @@ const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boo
 
 const isReason = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 
+/**
+ * The largest answer the relay sends the launcher for a tool call (martha#129, design step 4.3). The launcher compares
+ * the whole answer with the one a signed run's receipt builds, so it needs the answer itself; past this the relay
+ * sends the call without it, and the call records A13 rather than a body the launcher stops the member over
+ * (LARGEST_RELAY_BODY, in ../../launch_a_claude_code_member/serve_the_relay.ts, is 32 MiB for the whole body).
+ */
+export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
+
+/**
+ * A `tool_answered` body: the call, and the answer the host showed for it when that answer can cross the socket. An
+ * answer left out is one the launcher cannot compare, so nothing is exempt on it (martha#129): omitting it can only
+ * take the exemption away, never give it.
+ */
+export function answeredBody(session_id: string, call: unknown, answer: unknown): Readonly<Record<string, unknown>> {
+  const body: Record<string, unknown> = { session_id, call }
+  if (answer === undefined) return body
+  let text: string | undefined
+  try {
+    text = JSON.stringify(answer)
+  } catch {
+    // An answer that cannot be written down is one the launcher cannot compare either.
+    text = undefined
+  }
+  if (text !== undefined && text.length <= LARGEST_RELAYED_ANSWER) body['answer'] = answer
+  return body
+}
+
 /** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes. */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
@@ -93,4 +133,22 @@ export function heardVerdict(status: number, text: string): Heard {
   if (exactKeys(value, ['allow']) && value.allow === 1) return YES
   if (exactKeys(value, ['deny']) && isReason(value.deny)) return NO(value.deny)
   return NO(MALFORMED)
+}
+
+/** What `martha run` acts on: the run's status and output, base64, or why there was none. */
+export type HeardRun = { readonly ran: true; readonly status: number; readonly output: string } | { readonly ran: false; readonly why: string }
+
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
+
+const isRan = (value: Record<string, unknown>): value is Record<string, unknown> & Ran =>
+  exactKeys(value, ['ran', 'status', 'output']) && value.ran === 1 && Number.isSafeInteger(value.status) && typeof value.output === 'string' && BASE64.test(value.output)
+
+/** A run's answer, as `martha run` hears it: exactly a Ran, or a refusal with its reason. */
+export function heardRan(status: number, text: string): HeardRun {
+  if (status !== 200) return { ran: false, why: `the launcher answered with status ${status}` }
+  const value = jsonObjectOf(text)
+  if (value === undefined) return { ran: false, why: MALFORMED }
+  if (isRan(value)) return { ran: true, status: value.status, output: value.output }
+  if (exactKeys(value, ['refused']) && isReason(value.refused)) return { ran: false, why: value.refused }
+  return { ran: false, why: MALFORMED }
 }

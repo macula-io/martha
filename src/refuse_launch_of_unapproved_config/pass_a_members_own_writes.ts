@@ -70,8 +70,14 @@ export function recheckLaunchPassingOwnWrites(launch: ApprovedLaunch, host: Laun
   return judgedAgainstApproval(launch, since, live, host)
 }
 
+/** What an own write left at a path: the two things `ownWriteMatches` reads of one. */
+export interface OwnWriteLeft {
+  readonly blob: string
+  readonly mode: string
+}
+
 /** True when this change is the bytes and the mode the member's own write left at that path (martha#132). */
-export const ownWriteMatches = (write: OwnWrite | undefined, change: TreeChange): boolean =>
+export const ownWriteMatches = (write: OwnWriteLeft | undefined, change: TreeChange): boolean =>
   write !== undefined && !change.deleted && write.blob === change.blob && write.mode === change.mode
 
 /** The decision on a live checkout that differs from the approved one. */

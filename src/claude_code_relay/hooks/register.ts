@@ -38,6 +38,7 @@
 // (../claude_code_host), so nothing in this repository imports 'claude-code'.
 
 import {
+  answeredBody,
   RELAY_DEADLINE_MS,
   RELAY_ORIGIN,
   RELAY_PATHS,
@@ -206,7 +207,9 @@ export const register = (on: RelayOn): void => {
     const verdict = await relay($, 'tool_called', { session_id, call: e }, heardVerdict)
     if (!verdict.yes) return { deny: refusal(verdict.why) }
     const result = await next(e)
-    const after = await relay($, 'tool_answered', { session_id, call: e }, heardTaken)
+    // The answer goes with the call (martha#129): the launcher keeps the shell only when the result it reads here is
+    // exactly the one a signed run's receipt builds. A result too big to send is left out, and records A13.
+    const after = await relay($, 'tool_answered', answeredBody(session_id, e, result), heardTaken)
     return after.yes ? result : stopThisMember($, after.why)
   }).catch(async ($, _e, next) =>
     next.called ? stopThisMember($, 'its relay failed after the tool ran') : { deny: refusal('its relay failed before the launcher answered') },
