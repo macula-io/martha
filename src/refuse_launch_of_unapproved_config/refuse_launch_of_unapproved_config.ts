@@ -38,8 +38,8 @@
 //   5. NO CONFIG NEEDS NO APPROVAL. A checkout holding none of the files starts
 //      — still with project config off.
 //
-// The approvals are the owner's, typed in that member's tab and logged, which no
-// model can mint (martha#1, decision 4). They are a same-user file like the
+// The approvals are the owner's, given with `martha approve` at their own
+// terminal and logged, which no model can mint (martha#1, decision 4). They are a same-user file like the
 // roster, which martha#1 decision 2 accepts for now.
 //
 // The gate reaches the machine only through the host contract (martha#26): it
@@ -51,6 +51,7 @@ import { createHash } from 'node:crypto'
 import { dirname, join, relative, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost } from './checkout_tree.ts'
+import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 export type { LaunchHost }
 
@@ -229,13 +230,27 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints }: Lau
 
   return {
     allow: false,
-    refusal: `${REFUSED}: the checkout holds config that starts code by itself (${present.join(', ')}), and the owner has not approved this config with this checkout's files. Read them, then approve fingerprint ${fingerprint} in this member's tab.`,
+    refusal: `${REFUSED}: the checkout holds config that starts code by itself (${present.join(', ')}), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprint}). Run martha approve, read what it shows, and answer yes.`,
   }
+}
+
+/** What a member started on an approval checks its own writes against (./pass_a_members_own_writes.ts, martha#132). */
+export interface SinceApproval {
+  /** The config and the tree the owner approved, as the member was started on them. */
+  readonly approved: LaunchState
+  /** The member's name, so a stop says which member to start again. */
+  readonly member: string
+  /** Where the member's own writes are kept: the host's store, handed in by the adapter that starts it. */
+  readonly own_writes: OwnWritesStore
+  /** This launch, as its own writes name it. */
+  readonly launch_id: string
 }
 
 /** Where a member was started and what the owner approved there, as `prepareLaunch` was given it. */
 export interface ApprovedLaunch extends LaunchPlace {
   readonly approved_fingerprints: readonly string[]
+  /** Set when the member was started on an owner's approval: its own writes then pass the recheck. */
+  readonly since_approval?: SinceApproval
 }
 
 /**
@@ -320,6 +335,8 @@ export function prepareLaunch(place: SnapshotPlace, machine: LaunchHost): Prepar
 export type SnapshotPlace = LaunchPlace & {
   readonly snapshot_root: string
   readonly approved_fingerprints: readonly string[]
+  /** Set when the member is started on an owner's approval: its own writes then pass the recheck (martha#132). */
+  readonly since_approval?: SinceApproval
 }
 
 /**

@@ -32,18 +32,32 @@
 //      never the model's (`isInTheCheckoutTree`). Git history is not in it:
 //      commit messages are B5 even in the member's own checkout.
 //
+//      THE MEMBER'S OWN WRITES ARE PART OF THAT TREE (martha#132, decided
+//      2026-11-07 by Raf): a file this launch's own write left there, unchanged
+//      in bytes and mode, is what the member itself put in the checkout, so it
+//      is no stranger's text and the exemption stands over it. Only that
+//      widens: one path a stranger changed, deleted or put there, or an own
+//      write that cannot be read, and every read in the checkout counts again.
+//
 //   4. A READ THAT NAMES NO PLACE COUNTS. No path, a relative one, or one that
 //      is no text: the launcher cannot say what was read, so it was a stranger's.
+
+import { join } from 'node:path'
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import {
+  changesBetween,
+  checkoutTopOf,
   isInTheCheckoutTree,
   readCheckoutTree,
+  realOrResolved,
   type LaunchHost,
   type ReadSpan,
 } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { ownWriteMatches } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
 import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { ownWritesOfLaunch } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -101,10 +115,34 @@ function sourcesOf(reading: ToolResultReading, result: ToolResult): readonly Tur
   return readOfTheApprovedStartTree(named, SPAN_OF[reading.reads], result) ? [] : [reading.source]
 }
 
-function readOfTheApprovedStartTree(path: unknown, span: ReadSpan, { launch, approved_start, host }: ToolResult): boolean {
-  if (typeof path !== 'string' || approved_start === null) return false
-  if (readCheckoutTree(launch.launch_dir, launch.stop_dir, host) !== approved_start) return false
+function readOfTheApprovedStartTree(path: unknown, span: ReadSpan, result: ToolResult): boolean {
+  if (typeof path !== 'string') return false
+  const { launch, approved_start, host } = result
+  if (approved_start === null) return false
+  if (!holdsTheApprovedStartTree(launch, approved_start, host)) return false
   return isInTheCheckoutTree(launch.launch_dir, launch.stop_dir, path, span, host)
+}
+
+/**
+ * Whether the checkout holds the tree the owner approved, or that tree as this member's own writes left it
+ * (martha#132): every path that differs from the start tree is a file one of this launch's own writes left there,
+ * byte for byte and with the mode it set. What the member wrote itself is not text taken in from a stranger, so the
+ * exemption above stands over it too (decided 2026-11-07, Raf, on martha#132).
+ *
+ * Nothing else widens: a path a stranger changed, deleted, or put there is no own write, and the whole exemption
+ * falls with it. No approval means no own writes and no start tree, so every read counts, as before.
+ */
+function holdsTheApprovedStartTree(launch: ApprovedLaunch, approved_start: string, host: LaunchHost): boolean {
+  const live = readCheckoutTree(launch.launch_dir, launch.stop_dir, host)
+  if (live === approved_start) return true
+  const since = launch.since_approval
+  const top = checkoutTopOf(realOrResolved(host, launch.launch_dir), host)
+  if (live === null || since === undefined || top === undefined) return false
+  const changes = changesBetween(top, approved_start, live, host)
+  const own = ownWritesOfLaunch(since.own_writes, since.launch_id)
+  if (changes === undefined || 'refusal' in own) return false
+  const latest = new Map(own.writes.map((write) => [write.path, write]))
+  return changes.every((change) => ownWriteMatches(latest.get(join(top, change.path)), change))
 }
 
 /** The rows a command's first words name. Only ever added to A13, never instead of it. */
