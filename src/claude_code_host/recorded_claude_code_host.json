@@ -35,5 +35,39 @@
     "commands",
     "skills"
   ],
-  "output_style_schema": "{name:r_().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:r_().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":_D().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":_D().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}"
+  "output_style_schema": "{name:r_().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:r_().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":_D().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":_D().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}",
+  "protected_config_names": [
+    "shell-snapshots",
+    "session-env",
+    "plugins",
+    "hooks",
+    "skills",
+    "workflows",
+    "commands",
+    "agents",
+    "routines",
+    "rules",
+    "output-styles",
+    "scheduled_tasks.json",
+    "launch.json",
+    "CLAUDE.md",
+    "projects",
+    "daemon.json",
+    "policy-limits.json",
+    "policy-limits.json.signature.json",
+    "policy-limits.json.signature-iat.json",
+    "policy-limits.json.stamp.json",
+    "backups"
+  ],
+  "config_code_places": {
+    "folders": [
+      "daemon",
+      "jobs",
+      "session-env",
+      "shell-snapshots"
+    ],
+    "files": [
+      "daemon.json"
+    ]
+  }
 }

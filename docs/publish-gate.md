@@ -824,12 +824,27 @@ where it came from. Three things stand on it:
   in `recorded_claude_code_host.json`: file mode returns early on the off switch,
   and hosted mode needs the dropped variable. A re-recorded host fails CI until
   someone re-reads them for it.
-- **A member's file tool does not write the owner's memory.** The relay refuses a
+- **A member's file tool does not write the owner's memory, or the code the owner's
+  sessions run (martha#187).** The relay refuses a
   `Write`, `Edit`, `MultiEdit` or `NotebookEdit` into every project's memory
   folder under the launcher's config dir and the member's, into the owner's
   `CLAUDE.md` and `rules/`, into the folders the launcher's environment moves
   memory to, and into each `autoMemoryDirectory` the policy, user and carried
   settings name (`src/refuse_a_member_writing_owner_memory/`). Reads are allowed.
+  Under the same config dirs it refuses the places the host runs as code:
+  `shell-snapshots/`, `session-env/`, `jobs/`, `daemon/`, `plugins/`, `hooks/`,
+  `workflows/`, `routines/`, `backups/`, `daemon.json`, `scheduled_tasks.json`,
+  `launch.json`, and the owner's user settings file. Those names are the
+  recorded host's, never typed: `protected_config_names` is the array the host
+  itself walks to protect its config dir, cut whole with its three computed
+  `policy-limits.json` files resolved through the host's own templates, and
+  `config_code_places` is what its "This writes to the Claude Code <name>
+  folder." statements name beside `daemon.json`. One map, name → owner, accounts
+  for every recorded name — denied here, denied by another package (#136's
+  memory places, #154's markdown and transcripts), or excluded with its reason
+  (the signed organisation policy files) — and a test fails by name both on a
+  name the map does not account for and on a map entry the host no longer
+  records, so a later host's new place goes red instead of sitting uncovered.
   Links are followed both ways, and to the end: one function resolves every
   path here, following a link at any level — a `projects` folder that is a link
   to another disk, a project folder, a project's memory folder, a chain of
@@ -840,7 +855,10 @@ where it came from. Three things stand on it:
   allowed while one stands, because the guard cannot tell which folder it would
   land in. A chain that exists to its end is resolved by the system in one step,
   up to the system's own limit, and refused when the system cannot resolve it. A project's memory folder is followed at each write,
-  so a link a member makes during its session is caught too.
+  so a link a member makes during its session is caught too. The settings file
+  goes in this list as well as in `namesTheOwnersSettings` (#122), because that
+  check compares the real path of the one named file and misses a link whose
+  target does not exist yet, while this guard follows the link to its end.
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
   each place the relay refuses, as named and as it leads, for the projects
@@ -854,9 +872,13 @@ where it came from. Three things stand on it:
 
 What it does not rest on: the publish gate's hook for the memory pass, which
 runs as a fork whose tool calls the hook is not established to see. What it
-leaves open: a `Bash` write into a memory folder, which only a clean member
-holds; a host the owner starts by hand (C1, C2); and OpenCode, not probed for a
-memory of its own.
+leaves open: a `Bash` write into a memory folder or any of the code places,
+which only a clean member holds; a plugin or settings file the owner points at
+from outside the config dir, `--plugin-dir` and `--settings` on the owner's own
+command line among them; a place the host introduces that matches neither its
+array nor its statements, which fails the recording loudly rather than sitting
+covered by nothing; a host the owner starts by hand (C1, C2); and OpenCode, not
+probed for a memory of its own.
 
 What the wiring leaves out: A6, until the host passes the attested sender to
 plugins (anthropics/claude-code#107216; the binder stays `bindNothing`); the

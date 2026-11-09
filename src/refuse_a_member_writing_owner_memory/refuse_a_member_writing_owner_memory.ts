@@ -1,9 +1,9 @@
-// A member never writes the memory or the instructions the owner's own Claude
-// Code sessions load (martha#136).
+// A member never writes the memory, the instructions or the code the owner's own
+// Claude Code sessions load (martha#136, martha#187).
 //
-// This exists so text a member wrote cannot reach a later session, the owner's
-// or another member's, as memory or as the owner's own instructions, with
-// nothing recording where it came from.
+// This exists so text or code a member wrote cannot reach a later session, the
+// owner's or another member's, as memory, as the owner's own instructions, or as
+// something that session runs, with nothing recording where it came from.
 //
 // Claude Code keeps auto-memory in `<config dir>/projects/<project key>/memory/`
 // and loads it into every session of that project. A session in a git worktree
@@ -13,15 +13,26 @@
 // the variables that move it (CLAUDE_MEMORY_ELSEWHERE); this is the other half,
 // the publish gate refusing a member's file tool that writes there.
 //
+// Under the same config dirs the host also keeps places it RUNS (martha#187):
+// the shell snapshots every Bash command runs first, the scripts session-env
+// holds, the jobs and daemon services, plugins, hooks, workflows, routines,
+// backups, `daemon.json`, `scheduled_tasks.json` and `launch.json`, and the
+// owner's user settings file. Each is a place where a member's write becomes
+// code the owner's next session runs without asking anyone. The names are the
+// recorded host's, never typed here (PROTECTED_NAME_OWNERS says who accounts for
+// each), and a place the host records that no owner accounts for fails a test.
+//
 // Rules:
 //
 //   1. WHOSE CONFIG DIR. The launcher's, from its own environment: the folder the
 //      owner's sessions load. The member's too, when its environment resolves
 //      another. Both are denied.
 //   2. WHAT IS DENIED. In each config dir: every `projects/*/memory/`, `rules/`,
-//      and `CLAUDE.md`. The two folders that override where memory lives, when
-//      the launcher's environment sets them. Each `autoMemoryDirectory` the
-//      policy, user and carried settings name.
+//      and `CLAUDE.md`; every place the recorded host names as one it runs
+//      (placesTheHostProtects); and the owner's user settings file. The two
+//      folders that override where memory lives, when the launcher's environment
+//      sets them. Each `autoMemoryDirectory` the policy, user and carried
+//      settings name.
 //   3. AS THE HOST RESOLVES IT. A path is trimmed, a leading `~` resolves against
 //      the host's home, the rest against the member's working directory
 //      (../claude_code_host asTheHostResolves). It is denied when either the
@@ -47,9 +58,11 @@
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
-import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import type { ProtectedConfigPlaces } from '../claude_code_host/protected_config_places.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'] as const
@@ -67,6 +80,75 @@ const MEMORY = 'memory'
 /** Inside a config dir: the owner's instructions for every session. */
 const OWNER_INSTRUCTIONS = 'CLAUDE.md'
 const OWNER_RULES = 'rules'
+
+/** How one name the host records among its protected config-dir places is accounted for (martha#187). */
+export type ProtectedNameOwner =
+  | { readonly denied_here: 'folder' | 'file' }
+  | { readonly denied_by: string }
+  | { readonly excluded: string }
+
+/**
+ * Who accounts for each name the recorded host holds among its protected
+ * config-dir places (martha#187). This guard denies the names marked
+ * `denied_here` and no others; a name the host records that no entry here
+ * accounts for, or an entry for a name the host no longer records, fails a test
+ * by that name, so a later host's new place goes red instead of sitting
+ * uncovered, and a name the host drops leaves the map with it.
+ */
+export const PROTECTED_NAME_OWNERS: Readonly<Record<string, ProtectedNameOwner>> = {
+  'shell-snapshots': { denied_here: 'folder' },
+  'session-env': { denied_here: 'folder' },
+  jobs: { denied_here: 'folder' },
+  daemon: { denied_here: 'folder' },
+  plugins: { denied_here: 'folder' },
+  hooks: { denied_here: 'folder' },
+  workflows: { denied_here: 'folder' },
+  routines: { denied_here: 'folder' },
+  backups: { denied_here: 'folder' },
+  'daemon.json': { denied_here: 'file' },
+  'scheduled_tasks.json': { denied_here: 'file' },
+  'launch.json': { denied_here: 'file' },
+  skills: { denied_by: "martha#154's markdown the host loads" },
+  commands: { denied_by: "martha#154's markdown the host loads" },
+  agents: { denied_by: "martha#154's markdown the host loads" },
+  'output-styles': { denied_by: "martha#154's markdown the host loads" },
+  rules: { denied_by: "martha#136's places, above" },
+  'CLAUDE.md': { denied_by: "martha#136's places, above" },
+  projects: { denied_by: "martha#136 each project's memory folder, and martha#154 the transcript streams" },
+  'policy-limits.json': { excluded: "the organisation's policy, read only where its signature files verify, and a member's file tool cannot sign one" },
+  'policy-limits.json.signature.json': { excluded: "a signature over the organisation's policy, which a member cannot produce" },
+  'policy-limits.json.signature-iat.json': { excluded: "a signature over the organisation's policy, which a member cannot produce" },
+  'policy-limits.json.stamp.json': { excluded: "a stamp over the organisation's policy, which a member cannot produce" },
+}
+
+const distinct = (names: readonly string[]): string[] => [...new Set(names)]
+
+/** Every name the recording holds, from the host's protected array and the places its own statements name, without repeats. */
+export function namesInTheRecording({ protected_config_names, config_code_places }: ProtectedConfigPlaces): string[] {
+  return distinct([...protected_config_names, ...config_code_places.folders, ...config_code_places.files])
+}
+
+/** The recorded names no owner accounts for, and the map's entries for names the host no longer records (martha#187). */
+export function gapsInTheNameMap(
+  names: readonly string[],
+  owners: Readonly<Record<string, ProtectedNameOwner>> = PROTECTED_NAME_OWNERS,
+): { readonly unowned: string[]; readonly stale: string[] } {
+  const recorded = new Set(names)
+  return {
+    unowned: [...recorded].filter((name) => owners[name] === undefined).sort(),
+    stale: Object.keys(owners).filter((name) => !recorded.has(name)).sort(),
+  }
+}
+
+/** The recorded places this guard denies, as folders and as files, taken from the map above and never typed again (martha#187). */
+export function placesTheHostProtects(recorded: ProtectedConfigPlaces = RECORDED_HOST): { readonly folders: string[]; readonly files: string[] } {
+  const owned = namesInTheRecording(recorded).flatMap((name) => {
+    const owner = PROTECTED_NAME_OWNERS[name]
+    return owner !== undefined && 'denied_here' in owner ? [{ name, place: owner.denied_here }] : []
+  })
+  const inPlace = (place: 'folder' | 'file') => owned.filter((one) => one.place === place).map((one) => one.name)
+  return { folders: inPlace('folder'), files: inPlace('file') }
+}
 
 /** Every place a member's file tool may not write. */
 export interface OwnerMemoryPlaces {
@@ -108,19 +190,30 @@ function memoryDirectoryIn(file: string, home: string): string | undefined {
 
 const unique = (paths: ReadonlyArray<string | undefined>): string[] => [...new Set(paths.filter((path) => path !== undefined).map((path) => normalize(path)))]
 
+/** The places the host runs as code under each config dir, and the owner's settings file, as paths (martha#187). */
+function codePlacesIn(configDirs: readonly string[]): { readonly folders: string[]; readonly files: string[] } {
+  const places = placesTheHostProtects()
+  return {
+    folders: configDirs.flatMap((dir) => places.folders.map((name) => join(dir, name))),
+    files: configDirs.flatMap((dir) => [join(dir, USER_SETTINGS_FILE), ...places.files.map((name) => join(dir, name))]),
+  }
+}
+
 /** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1 and 2). */
 export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_files }: OwnerMemorySources): OwnerMemoryPlaces {
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
   const remote = launcher_env[REMOTE_MEMORY_ROOT]
   const override = launcher_env[MEMORY_FOLDER_OVERRIDE]
+  const code = codePlacesIn(configDirs)
   return {
     memory_roots: unique([...configDirs, remote !== undefined && remote.trim() !== '' ? asTheHostResolves(remote, home, home) : undefined]),
     folders: unique([
       ...configDirs.map((dir) => join(dir, OWNER_RULES)),
       override !== undefined && override.trim() !== '' ? asTheHostResolves(override, home, home) : undefined,
       ...settings_files.map((file) => memoryDirectoryIn(file, home)),
+      ...code.folders,
     ]),
-    files: unique(configDirs.map((dir) => join(dir, OWNER_INSTRUCTIONS))),
+    files: unique([...configDirs.map((dir) => join(dir, OWNER_INSTRUCTIONS)), ...code.files]),
   }
 }
 
@@ -300,7 +393,7 @@ export function writesTheOwnersMemory(
     }
     const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
     if (place !== undefined) {
-      return `${value} is in ${place}, which the owner's own Claude Code sessions load as memory or instructions: a member does not write there, so its text never reaches a later session unrecorded (martha#136)`
+      return `${value} is in ${place}, which the owner's own Claude Code sessions load as memory or instructions or run as code: a member does not write there, so neither its text nor its code reaches a later session unrecorded (martha#136, martha#187)`
     }
   }
   return undefined

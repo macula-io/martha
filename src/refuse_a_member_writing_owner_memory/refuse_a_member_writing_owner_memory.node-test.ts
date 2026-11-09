@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import {
   FILE_WRITING_TOOLS,
+  gapsInTheNameMap,
   LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
   MEMORY_FOLDER_OVERRIDE,
   memoryDenyRules,
+  namesInTheRecording,
   ownerMemoryPlaces,
+  placesTheHostProtects,
+  PROTECTED_NAME_OWNERS,
   REMOTE_MEMORY_ROOT,
   writesTheOwnersMemory,
   type OwnerMemoryPlaces,
@@ -298,4 +304,91 @@ test('the permission rules name the same places the gate denies, a Write and an 
   assert.ok(rules.includes(`Edit(/${override}/**)`), rules.join(' '))
   assert.ok(rules.includes(`Write(/${join(place.config, 'CLAUDE.md')})`), rules.join(' '))
   assert.ok(rules.every((rule) => /^(Write|Edit)\(\/\//.test(rule)), 'every rule names an absolute path')
+})
+
+/**
+ * The places the host records under a config dir as ones its own sessions run as
+ * code, and which this guard refuses (martha#187). These names are the test's own
+ * statement of what must be refused rather than a read of the recording, so a
+ * place that drops out of the recording still fails here.
+ */
+const CODE_FOLDERS: readonly string[] = ['backups', 'daemon', 'hooks', 'jobs', 'plugins', 'routines', 'session-env', 'shell-snapshots', 'workflows']
+const CODE_FILES: readonly string[] = ['daemon.json', 'launch.json', 'scheduled_tasks.json']
+
+for (const folder of CODE_FOLDERS) {
+  test(`a member may not write the owner's ${folder} folder, whose files the host runs as code (martha#187)`, (t) => {
+    const place = placeFor(t)
+    assertDenied(placesFor(place), place.worktree, place.home, join(place.config, folder, 'run.sh'), `the host runs what is in ${folder}`)
+  })
+}
+
+for (const file of CODE_FILES) {
+  test(`a member may not write the owner's ${file}, which the host acts on as code (martha#187)`, (t) => {
+    const place = placeFor(t)
+    assertDenied(placesFor(place), place.worktree, place.home, join(place.config, file), `the host acts on ${file}`)
+  })
+}
+
+test('a member may not write the owner\'s user settings file, in the launcher\'s config dir and in the member\'s (martha#187 r=2)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const scratchConfig = join(place.root, 'scratch-config')
+  mkdirSync(scratchConfig, { recursive: true })
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home },
+    home: place.home,
+    settings_files: [],
+  })
+  assertDenied(both, place.worktree, place.home, join(scratchConfig, USER_SETTINGS_FILE), 'the launcher\'s settings file')
+  assertDenied(places, place.worktree, place.home, join(place.config, USER_SETTINGS_FILE), 'the member\'s settings file')
+})
+
+test('a link to the owner\'s settings file whose target does not exist yet is refused here, where the settings check cannot see it (martha#187 r=2)', (t) => {
+  const place = placeFor(t)
+  const settings = join(place.config, USER_SETTINGS_FILE)
+  assert.equal(existsSync(settings), false, 'the settings file is absent, so the link has no target')
+  symlinkSync(USER_SETTINGS_FILE, join(place.config, 'sneaky'))
+  const file_path = join(place.config, 'sneaky')
+  assert.equal(namesTheOwnersSettings({ file_path }, settings, place.worktree, place.home), undefined, 'the settings check compares the link itself, not where it leads')
+  assertDenied(placesFor(place), place.worktree, place.home, file_path, 'the link this guard follows to its end')
+})
+
+test('the permission rules carry every place the host runs as code into permissions.deny, a Write rule and an Edit rule each (martha#187)', (t) => {
+  const place = placeFor(t)
+  const rules = memoryDenyRules(placesFor(place))
+  for (const folder of CODE_FOLDERS) {
+    assert.ok(rules.includes(`Write(/${join(place.config, folder)}/**)`), folder)
+    assert.ok(rules.includes(`Edit(/${join(place.config, folder)}/**)`), folder)
+  }
+  for (const file of [...CODE_FILES, USER_SETTINGS_FILE]) {
+    assert.ok(rules.includes(`Write(/${join(place.config, file)})`), file)
+    assert.ok(rules.includes(`Edit(/${join(place.config, file)})`), file)
+  }
+})
+
+test('every name the host records as a protected config-dir place has an owner, and no owner names a place the host has dropped (martha#187)', () => {
+  assert.deepEqual(gapsInTheNameMap(namesInTheRecording(RECORDED_HOST)), { unowned: [], stale: [] })
+})
+
+test('a name a later host records with no owner fails the mapping test by name (martha#187)', () => {
+  const added = [...namesInTheRecording(RECORDED_HOST), 'a-place-a-later-host-added']
+  assert.deepEqual(gapsInTheNameMap(added).unowned, ['a-place-a-later-host-added'])
+  assert.deepEqual(gapsInTheNameMap(added).stale, [])
+})
+
+test('a name the host no longer records fails the mapping test by name (martha#187)', () => {
+  const [dropped, ...rest] = namesInTheRecording(RECORDED_HOST)
+  assert.ok(dropped !== undefined, 'the recording holds at least one name')
+  assert.deepEqual(gapsInTheNameMap(rest).stale, [dropped])
+  assert.deepEqual(gapsInTheNameMap(rest).unowned, [])
+})
+
+test('the places this guard denies are exactly the recorded names it owns, split into folders and files (martha#187)', () => {
+  const owned = namesInTheRecording(RECORDED_HOST).filter((name) => {
+    const owner = PROTECTED_NAME_OWNERS[name]
+    return owner !== undefined && 'denied_here' in owner
+  })
+  const places = placesTheHostProtects()
+  assert.deepEqual([...places.folders, ...places.files].sort(), owned.sort())
 })

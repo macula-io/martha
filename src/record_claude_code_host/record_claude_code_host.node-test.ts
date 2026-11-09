@@ -54,6 +54,38 @@ const MARKDOWN_PARTS: Readonly<Record<string, string>> = {
   output_style_schema: `var Uq=p(()=>u(${RECORDED_HOST.output_style_schema}))`,
 }
 
+const PROTECTED = RECORDED_HOST.protected_config_names
+const CODE_PLACES = RECORDED_HOST.config_code_places
+/** The recorded name the host builds its three signature files from: the one other recorded names extend. */
+const SIGNED_BASE = PROTECTED.find((name) => PROTECTED.some((other) => other.startsWith(`${name}.`)))
+const SIGNED = PROTECTED.filter((name) => SIGNED_BASE !== undefined && name.startsWith(`${SIGNED_BASE}.`))
+const SUFFIXES = SIGNED.map((name) => name.slice((SIGNED_BASE ?? '').length + 1))
+/** The functions the host builds those files with, and the constant the last of them closes over. */
+const BUILDERS = SUFFIXES.map((_suffix, index) => `builtNumber${String(index + 1)}`)
+const SUFFIX_CONSTANT = 'aConstantTheStreamsFileIsBuiltWith'
+
+/**
+ * The protected config places (martha#187), in the shapes the host spells them:
+ * the Set built beside the array and the loop over it, the array the spread
+ * brings in, one function per computed file that returns the host's own
+ * template (the last from a constant it closes over), and the host's own
+ * statements naming the four folders it runs and the file beside them.
+ */
+const PLACE_PARTS: Readonly<Record<string, string>> = {
+  protected_config_names: [
+    `var ${SUFFIX_CONSTANT}=".${SUFFIXES.at(-1) ?? ''}",kept=1`,
+    ...BUILDERS.map((builder, index) =>
+      index === BUILDERS.length - 1 ? `function ${builder}(e){return\`\${e}\${${SUFFIX_CONSTANT}}\`}` : `function ${builder}(e){return\`\${e}.${SUFFIXES[index] ?? ''}\`}`,
+    ),
+    `let spread=[${BUILDERS.map((builder) => `${builder}("${SIGNED_BASE ?? ''}")`).join(',')}],chosen=new Set(["${PROTECTED[0] ?? ''}",...spread])`,
+    `for(let X of[${PROTECTED.map((name) => (SIGNED.includes(name) ? '...spread' : `"${name}"`)).filter((entry, index, all) => entry !== '...spread' || all.indexOf('...spread') === index).join(',')}]){let ue=ei(ut(Be(),X));be.push(chosen.has(X)?ue:So(ue))}`,
+  ].join(';'),
+  config_code_places: [
+    ...CODE_PLACES.folders.flatMap((folder) => [`This writes to the Claude Code ${folder} folder. A file there is run.`, `This writes to the Claude Code ${folder} folder. A file there is run.`]),
+    `So the write may land in the ${CODE_PLACES.folders[0] ?? ''}, ${CODE_PLACES.folders[1] ?? ''}, ${CODE_PLACES.folders[2] ?? ''} or ${CODE_PLACES.folders[3] ?? ''} folder or in ${CODE_PLACES.files[0] ?? ''} of the Claude Code config directory.`,
+  ].join(' '),
+}
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,
   prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
@@ -67,6 +99,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
     `function jw(){return Ce(${MANAGED}(),"${RECORDED_HOST.managed_settings.file}")}`,
   ].join(';'),
   ...MARKDOWN_PARTS,
+  ...PLACE_PARTS,
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
@@ -141,5 +174,31 @@ test('a host whose frontmatter pattern carries a flag, or that has two markdown 
     const run = check(hostHolding(t, { ...RECORDED_PARTS, ...planted }), RECORDED_HOST.host_version)
     assert.equal(run.status, 1, JSON.stringify(Object.keys(planted)))
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+  }
+})
+
+/** A folder the host runs whose name is no part of the file named beside it, so renaming it changes one thing. */
+const RENAMABLE = CODE_PLACES.folders.find((folder) => !(CODE_PLACES.files[0] ?? '').startsWith(folder)) ?? CODE_PLACES.folders[0] ?? ''
+
+test('a host that adds a protected config-dir place, or renames a folder it runs, fails the check naming the field (martha#187)', (t) => {
+  for (const [field, planted] of [
+    ['protected_config_names', PLACE_PARTS.protected_config_names?.replace('...spread,', '"a-place-a-later-host-added",...spread,')],
+    ['config_code_places', PLACE_PARTS.config_code_places?.replaceAll(RENAMABLE, 'a-renamed-place')],
+  ] as const) {
+    assert.notEqual(planted, PLACE_PARTS[field], `the planted ${field} differs`)
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, [field]: planted ?? '' }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, field)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${field}\n`)
+  }
+})
+
+test('a host whose statements and sentence name different places, or that walks two protected arrays, cannot be read, naming the part (martha#187)', (t) => {
+  for (const planted of [
+    { config_code_places: `${PLACE_PARTS.config_code_places ?? ''} This writes to the Claude Code a-new-place folder.` },
+    { protected_config_names: `${PLACE_PARTS.protected_config_names ?? ''};${PLACE_PARTS.protected_config_names ?? ''}` },
+  ]) {
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, ...planted }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, JSON.stringify(Object.keys(planted)))
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
   }
 })

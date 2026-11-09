@@ -14,6 +14,7 @@ import { promptOriginKindsOf } from './claude_code_prompt_origins.ts'
 import { sessionStartSourcesOf } from './claude_code_session_events.ts'
 import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 import type { MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
+import type { ProtectedConfigPlaces } from './protected_config_places.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
 
 export { CREW_REFRESH }
@@ -34,8 +35,8 @@ export interface MemoryOff {
   readonly on_check: string
 }
 
-/** What the host binary says, as recorded; the markdown it loads since martha#146. */
-export interface RecordedHost extends MarkdownTheHostLoads {
+/** What the host binary says, as recorded; the markdown it loads since martha#146, the config-dir places it runs as code since martha#187. */
+export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlaces {
   readonly host_version: string
   /**
    * How the recorded host's auto-memory is kept off, re-read by hand from that

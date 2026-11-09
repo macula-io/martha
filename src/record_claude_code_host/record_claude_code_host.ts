@@ -24,6 +24,7 @@ import { argv, exit, stderr, stdout } from 'node:process'
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
 import { markdownTheHostLoadsIn } from '../claude_code_host/markdown_the_host_loads.ts'
+import { protectedConfigPlacesIn } from '../claude_code_host/protected_config_places.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CARRIED, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 
@@ -37,6 +38,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'hook switches', read: hookSwitchesIn },
   { part: 'managed settings place', read: (text) => ({ managed_settings: managedSettingsPlaceIn(text) }) },
   { part: 'markdown the host loads', read: (text) => markdownTheHostLoadsIn(text, managedFolderFunctionIn(text)) },
+  { part: 'protected config places', read: protectedConfigPlacesIn },
 ]
 
 /** The function that builds the hook set, and each function an exit of it calls (martha#122). */
