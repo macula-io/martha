@@ -6,6 +6,7 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import {
   FILE_WRITING_TOOLS,
@@ -354,6 +355,65 @@ test('a link to the owner\'s settings file whose target does not exist yet is re
   assertDenied(placesFor(place), place.worktree, place.home, file_path, 'the link this guard follows to its end')
 })
 
+test('a member may not write the owner\'s user MCP config, in the config dir or beside the home folder, in the launcher\'s environment and the member\'s (martha#187 r=2)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const scratchConfig = join(place.root, 'scratch-config')
+  mkdirSync(scratchConfig, { recursive: true })
+  // CLAUDE_CONFIG_DIR unset: the host's global config is beside the home folder, not in ~/.claude.
+  assertDenied(places, place.worktree, place.home, join(place.home, HOST_TRUST_RECORD_FILE), 'beside the home folder')
+  // CLAUDE_CONFIG_DIR set on either side: the file is in that dir, and both dirs are denied.
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home },
+    home: place.home,
+    settings_files: [],
+  })
+  assertDenied(both, place.worktree, place.home, join(scratchConfig, HOST_TRUST_RECORD_FILE), 'in the launcher\'s config dir')
+  assertDenied(both, place.worktree, place.home, join(place.home, HOST_TRUST_RECORD_FILE), 'the member\'s own global config')
+})
+
+test('a link at the owner\'s user MCP config whose target does not exist yet is denied where it will write (martha#187 r=2)', (t) => {
+  const place = placeFor(t)
+  const target = join(place.root, 'not-yet', HOST_TRUST_RECORD_FILE)
+  symlinkSync(target, join(place.home, HOST_TRUST_RECORD_FILE))
+  const places = placesFor(place)
+  assertDenied(places, place.worktree, place.home, join(place.home, HOST_TRUST_RECORD_FILE), 'the link where the host reads the config')
+  assertDenied(places, place.worktree, place.home, target, 'the file the link will write')
+})
+
+/**
+ * A write a member would make inside each place the map says another package
+ * denies (martha#187 r=2), relative to a config dir. The test's own statement, so
+ * a name marked `denied_by` with no write here fails by name; and each of these
+ * must be refused through the gate before #187 lands — #154 is what refuses the
+ * markdown folders, the output styles and the transcript streams.
+ */
+const A_WRITE_INTO: Readonly<Record<string, string>> = {
+  skills: 'skills/deploy.md',
+  commands: 'commands/deploy.md',
+  agents: 'agents/deploy.md',
+  'output-styles': 'output-styles/deploy.md',
+  rules: 'rules/deploy.md',
+  'CLAUDE.md': 'CLAUDE.md',
+  projects: 'projects/-home-owner-work/session.jsonl',
+}
+
+test('every place the map says another package denies is refused through the real gate (martha#187 r=2)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const deniedBy = Object.entries(PROTECTED_NAME_OWNERS)
+    .filter(([, owner]) => 'denied_by' in owner)
+    .map(([name]) => name)
+  assert.deepEqual(deniedBy.sort(), Object.keys(A_WRITE_INTO).sort(), 'every name the map says another package denies has a write this test makes')
+  // The gate is known to run: a write outside every place is allowed.
+  assert.equal(writesTheOwnersMemory('Write', write(join(place.worktree, 'notes.md')), places, place.worktree, place.home), undefined, 'a write outside every place')
+  for (const name of deniedBy) {
+    const file_path = join(place.config, A_WRITE_INTO[name] ?? '')
+    assert.notEqual(writesTheOwnersMemory('Write', write(file_path), places, place.worktree, place.home), undefined, `${name}: ${file_path} is refused`)
+  }
+})
+
 test('the permission rules carry every place the host runs as code into permissions.deny, a Write rule and an Edit rule each (martha#187)', (t) => {
   const place = placeFor(t)
   const rules = memoryDenyRules(placesFor(place))
@@ -365,6 +425,9 @@ test('the permission rules carry every place the host runs as code into permissi
     assert.ok(rules.includes(`Write(/${join(place.config, file)})`), file)
     assert.ok(rules.includes(`Edit(/${join(place.config, file)})`), file)
   }
+  const config = join(place.home, HOST_TRUST_RECORD_FILE)
+  assert.ok(rules.includes(`Write(/${config})`), `Write(/${config}) in ${rules.join(' ')}`)
+  assert.ok(rules.includes(`Edit(/${config})`), `Edit(/${config}) in ${rules.join(' ')}`)
 })
 
 test('every name the host records as a protected config-dir place has an owner, and no owner names a place the host has dropped (martha#187)', () => {

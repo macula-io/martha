@@ -16,9 +16,11 @@
 // Under the same config dirs the host also keeps places it RUNS (martha#187):
 // the shell snapshots every Bash command runs first, the scripts session-env
 // holds, the jobs and daemon services, plugins, hooks, workflows, routines,
-// backups, `daemon.json`, `scheduled_tasks.json` and `launch.json`, and the
-// owner's user settings file. Each is a place where a member's write becomes
-// code the owner's next session runs without asking anyone. The names are the
+// backups, `daemon.json`, `scheduled_tasks.json` and `launch.json`, the owner's
+// user settings file, and the host's global config — `.claude.json`, which names
+// the owner's user MCP servers, so a server entered there starts in the owner's
+// next session without asking anyone. Each is a place where a member's write
+// becomes code the owner's next session runs. The names are the
 // recorded host's, never typed here (PROTECTED_NAME_OWNERS says who accounts for
 // each), and a place the host records that no owner accounts for fails a test.
 //
@@ -29,7 +31,10 @@
 //      another. Both are denied.
 //   2. WHAT IS DENIED. In each config dir: every `projects/*/memory/`, `rules/`,
 //      and `CLAUDE.md`; every place the recorded host names as one it runs
-//      (placesTheHostProtects); and the owner's user settings file. The two
+//      (placesTheHostProtects); and the owner's user settings file. One place
+//      sits outside those dirs: the host's global config — `.claude.json` beside
+//      the home folder, or in the config dir when CLAUDE_CONFIG_DIR names one —
+//      which names the owner's user MCP servers. The two
 //      folders that override where memory lives, when the launcher's environment
 //      sets them. Each `autoMemoryDirectory` the policy, user and carried
 //      settings name.
@@ -56,12 +61,14 @@
 // gate's hook firing for that pass, which runs as a fork (Pluto, martha#136 r=2).
 
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import type { ProtectedConfigPlaces } from '../claude_code_host/protected_config_places.ts'
 
 /** The file tools a member writes a file with. */
@@ -177,6 +184,20 @@ function configDirOf(env: Readonly<Record<string, string | undefined>>): string 
   return 'path' in settings ? dirname(settings.path) : undefined
 }
 
+/**
+ * The file the host keeps its global config in, where the owner's user MCP
+ * servers live: `join(CLAUDE_CONFIG_DIR || homedir(), HOST_TRUST_RECORD_FILE)`,
+ * the host's own `globalConfig` — in the config dir when the variable names one,
+ * beside the home folder when it does not (martha#187 r=2). The name is the trust
+ * record's, which is the same file, not typed again here. Undefined when the
+ * variable cannot be told, as for the settings file.
+ */
+function ownerConfigFileIn(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const settings = userSettingsPath(env)
+  if (!('path' in settings)) return undefined
+  return join(env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir(), HOST_TRUST_RECORD_FILE)
+}
+
 /** The memory folder a settings file names, or undefined. */
 function memoryDirectoryIn(file: string, home: string): string | undefined {
   try {
@@ -190,12 +211,12 @@ function memoryDirectoryIn(file: string, home: string): string | undefined {
 
 const unique = (paths: ReadonlyArray<string | undefined>): string[] => [...new Set(paths.filter((path) => path !== undefined).map((path) => normalize(path)))]
 
-/** The places the host runs as code under each config dir, and the owner's settings file, as paths (martha#187). */
-function codePlacesIn(configDirs: readonly string[]): { readonly folders: string[]; readonly files: string[] } {
+/** The places the host runs as code under each config dir, the owner's settings file and global config, as paths (martha#187). */
+function codePlacesIn(configDirs: readonly string[], ownerConfigs: readonly string[]): { readonly folders: string[]; readonly files: string[] } {
   const places = placesTheHostProtects()
   return {
     folders: configDirs.flatMap((dir) => places.folders.map((name) => join(dir, name))),
-    files: configDirs.flatMap((dir) => [join(dir, USER_SETTINGS_FILE), ...places.files.map((name) => join(dir, name))]),
+    files: unique([...configDirs.flatMap((dir) => [join(dir, USER_SETTINGS_FILE), ...places.files.map((name) => join(dir, name))]), ...ownerConfigs]),
   }
 }
 
@@ -204,7 +225,7 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_fil
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
   const remote = launcher_env[REMOTE_MEMORY_ROOT]
   const override = launcher_env[MEMORY_FOLDER_OVERRIDE]
-  const code = codePlacesIn(configDirs)
+  const code = codePlacesIn(configDirs, unique([ownerConfigFileIn(launcher_env), ownerConfigFileIn(member_env)]))
   return {
     memory_roots: unique([...configDirs, remote !== undefined && remote.trim() !== '' ? asTheHostResolves(remote, home, home) : undefined]),
     folders: unique([

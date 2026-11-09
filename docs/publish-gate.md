@@ -834,17 +834,27 @@ where it came from. Three things stand on it:
   Under the same config dirs it refuses the places the host runs as code:
   `shell-snapshots/`, `session-env/`, `jobs/`, `daemon/`, `plugins/`, `hooks/`,
   `workflows/`, `routines/`, `backups/`, `daemon.json`, `scheduled_tasks.json`,
-  `launch.json`, and the owner's user settings file. Those names are the
+  `launch.json`, the owner's user settings file, and the host's global config —
+  `<config dir>/.claude.json` when `CLAUDE_CONFIG_DIR` names one and
+  `<home>/.claude.json` when it does not, where the owner's user MCP servers live,
+  so a server there starts in the owner's next session without asking. Its name is
+  `HOST_TRUST_RECORD_FILE`'s, the file the trust record is read from, never typed
+  again. Those names are the
   recorded host's, never typed: `protected_config_names` is the array the host
   itself walks to protect its config dir, cut whole with its three computed
   `policy-limits.json` files resolved through the host's own templates, and
   `config_code_places` is what its "This writes to the Claude Code <name>
   folder." statements name beside `daemon.json`. One map, name → owner, accounts
   for every recorded name — denied here, denied by another package (#136's
-  memory places, #154's markdown and transcripts), or excluded with its reason
-  (the signed organisation policy files) — and a test fails by name both on a
-  name the map does not account for and on a map entry the host no longer
-  records, so a later host's new place goes red instead of sitting uncovered.
+  memory places), or excluded with its reason (the signed organisation policy
+  files) — and a test fails by name both on a name the map does not account for
+  and on a map entry the host no longer records, so a later host's new place goes
+  red instead of sitting uncovered. A place another package owns is entered as
+  `denied_by`, and a test writes into every one of them through this gate and
+  expects a refusal, with a write outside every place allowed as the control: the
+  markdown folders, the output styles and the transcript streams are `#154`'s, so
+  until #154 lands they are refused by nothing and that test fails by name, which
+  holds this change behind it.
   Links are followed both ways, and to the end: one function resolves every
   path here, following a link at any level — a `projects` folder that is a link
   to another disk, a project folder, a project's memory folder, a chain of
@@ -876,8 +886,9 @@ leaves open: a `Bash` write into a memory folder or any of the code places,
 which only a clean member holds; a plugin or settings file the owner points at
 from outside the config dir, `--plugin-dir` and `--settings` on the owner's own
 command line among them; a place the host introduces that matches neither its
-array nor its statements, which fails the recording loudly rather than sitting
-covered by nothing; a host the owner starts by hand (C1, C2); and OpenCode, not
+array nor its statements, which nothing records and no test sees, though a change
+to the array or to those statements does fail the recording; a host the owner
+starts by hand (C1, C2); and OpenCode, not
 probed for a memory of its own.
 
 What the wiring leaves out: A6, until the host passes the attested sender to
