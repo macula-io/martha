@@ -312,8 +312,8 @@ test('a removal survives a launch snapshot dir that is gone between the chmod th
   /** @param {string} dir */
   const vanishes = (dir) => Object.assign(new Error(`ENOENT: no such file or directory, scandir '${dir}'`), { code: 'ENOENT' })
   removeEvenReadOnly(root, {
-    chmodSync: (/** @type {string} */ dir, /** @type {number} */ mode) => { chmodSync(dir, mode); opened.add(dir) },
-    readdirSync: (/** @type {string} */ dir, /** @type {object} */ options) => {
+    chmodSync: (dir, mode) => { chmodSync(dir, mode); opened.add(dir) },
+    readdirSync: (dir, options) => {
       if (opened.has(dir) && dir === gone) throw vanishes(dir)
       return readdirSync(dir, options)
     },
@@ -331,7 +331,7 @@ test('a removal that cannot read a directory that is there fails, so a tree left
   assert.throws(
     () => removeEvenReadOnly(root, {
       chmodSync,
-      readdirSync: (/** @type {string} */ dir, /** @type {object} */ options) => {
+      readdirSync: (dir, options) => {
         if (dir === unreadable) throw denied
         return readdirSync(dir, options)
       },

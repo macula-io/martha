@@ -276,16 +276,23 @@ export function scratchMachine () {
   return { home, places: placesOnThisMachine(home, undefined), close: () => removeEvenReadOnly(home) }
 }
 
-/** Whether an error is the file system saying the path is no longer there (martha#189). */
+/**
+ * Whether an error is the file system saying the path is no longer there (martha#189).
+ * @param {unknown} error
+ */
 const isGone = (error) => error instanceof Error && /** @type {{ code?: unknown }} */ (error).code === 'ENOENT'
 
 /**
  * The file-system calls one removal makes. A test passes its own to stand in for a directory that vanishes between
  * the chmod that opens it and the read that lists it, which is what an interrupted launch does (martha#189).
- * @typedef {{ chmodSync: typeof chmodSync, readdirSync: typeof readdirSync, rmSync: typeof rmSync }} RemovalReads
+ * @typedef {{
+ *   chmodSync: (path: string, mode: number) => void,
+ *   readdirSync: (path: string, options: { withFileTypes: true }) => import('node:fs').Dirent[],
+ *   rmSync: (path: string, options: { recursive: true, force: true }) => void
+ * }} RemovalReads
  */
 
-/** The file system a removal reads, unchanged: the calls this module already imports. */
+/** The file system a removal reads, unchanged: the calls this module already imports. @type {RemovalReads} */
 export const THIS_MACHINES_FILES = { chmodSync, readdirSync, rmSync }
 
 /**
