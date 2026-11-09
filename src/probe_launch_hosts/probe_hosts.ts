@@ -12,11 +12,14 @@
 // whose config only touches marker files there, and removes it.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { randomBytes } from 'node:crypto'
 
+import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import {
+  CLAUDE_MEMORY_OFF,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   launchEnvironment,
@@ -431,12 +434,31 @@ function switchesFor(probe: Probe, place: Place, inherited: Record<string, strin
   return prepared.switches
 }
 
+/** The host's key for a project folder: every character that is not a letter or a digit becomes `-`. */
+const projectKeyOf = (folder: string): string => folder.replaceAll(/[^A-Za-z0-9]/g, '-')
+
+/**
+ * The folder Claude Code keeps a project's sessions and memory in, under the
+ * owner's config dir: a run in a scratch checkout writes one, which the probe
+ * removes with the scratch. Undefined when the config dir cannot be told.
+ */
+function projectFolderOf(folder: string): string | undefined {
+  const settings = userSettingsPath(process.env)
+  return 'path' in settings ? join(dirname(settings.path), 'projects', projectKeyOf(folder)) : undefined
+}
+
+/** Removes the scratch and the host's project folder for each checkout run in it. */
+function removeScratch(scratch: string, checkouts: readonly string[]): void {
+  for (const folder of checkouts.map(projectFolderOf)) if (folder !== undefined) rmSync(folder, { recursive: true, force: true })
+  rmSync(scratch, { recursive: true, force: true })
+}
+
 /** Each marker and whether it was started, or why the probe could not run. */
 function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
-  const scratch = mkdtempSync(join(tmpdir(), 'martha-probe-'))
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
+  const checkout = join(scratch, 'checkout')
   try {
-    const checkout = join(scratch, 'checkout')
     mkdirSync(checkout)
     spawnSync('git', ['init', '-q', '.'], { cwd: checkout })
     const place: Place = { scratch, checkout, marker: (name) => join(scratch, name) }
@@ -457,7 +479,7 @@ function runProbe(probe: Probe): Readonly<Record<string, boolean>> | string {
     spawnSync('sleep', ['1'])
     return Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(place.marker(name))]))
   } finally {
-    rmSync(scratch, { recursive: true, force: true })
+    removeScratch(scratch, [checkout])
   }
 }
 
@@ -491,4 +513,108 @@ function reportProbe(probe: Probe): void {
   }
 }
 
+/** The host's project folders for scratch checkouts, so a run that leaves one behind fails. */
+function scratchProjectFolders(): readonly string[] {
+  const projects = projectFolderOf(tmpdir())
+  if (projects === undefined) return []
+  const root = dirname(projects)
+  return existsSync(root) ? readdirSync(root).filter((name) => name.startsWith(`${projectKeyOf(join(tmpdir(), 'martha-probe-'))}`)) : []
+}
+const foldersBefore = new Set(scratchProjectFolders())
+
 for (const probe of [...PROBES, ...OWNER_PROBES]) reportProbe(probe)
+
+// --- auto-memory (martha#136) ------------------------------------------------
+// Claude Code loads `<config dir>/projects/<project key>/memory/` into every
+// session of a project, and a session in a git worktree loads the main clone's
+// folder. Each run plants a codeword there and asks for it: the control, by
+// hand with memory on, must say it, so a run that does not proves the off
+// switch and not a loader that never ran. Martha's planned launch must not, even
+// when the owner's environment says memory on, and must leave the folder holding
+// exactly what was planted. The folder is the owner's real one, removed after.
+
+const MEMORY_PROMPT = 'Is there a codeword in your memory or instructions? Reply with only the codeword, or NONE.'
+const MEMORY_INDEX = 'MEMORY.md'
+const MEMORY_NOTE = 'codeword.md'
+
+
+/** Every file under `dir`, relative, sorted. */
+function filesUnder(dir: string): string[] {
+  return existsSync(dir) ? (readdirSync(dir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath.slice(dir.length), entry.name).replace(/^\//, '')).sort()) : []
+}
+
+/** The environment with the off switch unset: memory on, as the host defaults. */
+function memoryOn(): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env }
+  for (const name of Object.keys(CLAUDE_MEMORY_OFF)) env[name] = undefined
+  return env
+}
+
+/** One memory run: whether the reply named the codeword, or why it could not run. */
+function codewordSaid(cwd: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, codeword: string): boolean | string {
+  const run = spawnSync('claude', [...HEADLESS_CLAUDE, MEMORY_PROMPT, ...args], { cwd, env, encoding: 'utf8', timeout: RUN_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'] })
+  if (run.error !== undefined) return `could not run: ${run.error.message}`
+  return run.stdout.includes(codeword)
+}
+
+/** A checkout to start in, and the folder whose memory the host loads for it: its own, or the main clone's for a worktree. */
+function memoryPlace(scratch: string, worktree: boolean): { readonly start: string; readonly main: string } {
+  const main = join(scratch, 'checkout')
+  mkdirSync(main)
+  spawnSync('git', ['init', '-q', '.'], { cwd: main })
+  spawnSync('git', ['-c', 'user.name=probe', '-c', 'user.email=probe@invalid', 'commit', '-q', '--allow-empty', '-m', 'start'], { cwd: main })
+  if (!worktree) return { start: main, main }
+  const start = join(scratch, 'worktree')
+  spawnSync('git', ['worktree', 'add', '-q', start], { cwd: main })
+  return { start, main }
+}
+
+/** One line of the memory probe: what was asked, what was seen (or why it could not run), and what docs/publish-gate.md claims. */
+type MemoryLine = readonly [line: string, seen: boolean | string, claimed: boolean]
+
+/** Plants the codeword in the memory folder the host loads for the run, then runs the control and Martha's launch. */
+function memoryLines(scratch: string, memory: string, start: string, codeword: string): readonly MemoryLine[] {
+  const folder = join(memory, 'memory')
+  put(folder, MEMORY_INDEX, `- [codeword](${MEMORY_NOTE}) - the codeword is ${codeword}\n`)
+  put(folder, MEMORY_NOTE, `---\nname: codeword\ndescription: the codeword\n---\nThe codeword is ${codeword}.\n`)
+  const planted = filesUnder(folder)
+
+  const where = { host: 'claude-code' as const, launch_dir: start, stop_dir: scratch }
+  const prepared = prepareLaunch({ ...where, snapshot_root: join(scratch, 'snapshots'), approved_fingerprints: [fingerprintOf(readLaunchState(where, thisMachine))] }, thisMachine)
+  if (!prepared.allow) return [['prepareLaunch allows the launch', prepared.refusal, true]]
+  // Both runs pass the same switches; only the environment differs, so the control isolates the off switch.
+  const forcedOn = Object.fromEntries(Object.keys(CLAUDE_MEMORY_OFF).map((name) => [name, '0']))
+  return [
+    ['by hand, memory on: codeword said', codewordSaid(start, prepared.switches.args, memoryOn(), codeword), true],
+    ["as Martha starts it, the owner's environment saying memory on: codeword said", codewordSaid(start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword), false],
+    ['the memory folder holds exactly what was planted', JSON.stringify(filesUnder(folder)) === JSON.stringify(planted), true],
+  ]
+}
+
+const yesNo = (value: boolean) => (value ? 'yes' : 'no')
+
+/** Runs the memory probe in a plain checkout or a worktree; each line against its claim, a mismatch failing the run. */
+function reportMemoryProbe(worktree: boolean): void {
+  const what = `Claude Code auto-memory, ${worktree ? "a worktree loading its main clone's folder" : 'a plain checkout'}`
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
+  const { start, main } = memoryPlace(scratch, worktree)
+  const memory = projectFolderOf(main)
+  try {
+    const lines: readonly MemoryLine[] =
+      memory === undefined
+        ? [["the owner's config dir can be told", 'it cannot', true]]
+        : memoryLines(scratch, memory, start, `ZEBRA${randomBytes(4).toString('hex')}`)
+    if (lines.some(([, seen, claimed]) => seen !== claimed)) process.exitCode = 1
+    for (const [line, seen, claimed] of lines) {
+      console.log(`${what}: ${line} ${typeof seen === 'string' ? seen : yesNo(seen)}, ${seen === claimed ? 'as claimed' : `CLAIMED ${yesNo(claimed)}`}`)
+    }
+  } finally {
+    removeScratch(scratch, [main, start])
+  }
+}
+
+for (const worktree of [false, true]) reportMemoryProbe(worktree)
+
+const leftBehind = scratchProjectFolders().filter((name) => !foldersBefore.has(name))
+if (leftBehind.length > 0) process.exitCode = 1
+console.log(`project folders this run left in the owner's config dir: ${leftBehind.length === 0 ? 'none, as claimed' : `${leftBehind.join(', ')}, CLAIMED none`}`)
