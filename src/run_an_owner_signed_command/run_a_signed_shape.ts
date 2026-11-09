@@ -11,7 +11,7 @@ import { realpathSync, rmSync } from 'node:fs'
 import { relative, sep } from 'node:path'
 
 import { blobUnderTheTree } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
-import { ownWritesKeptIn, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { ownWritesKeptForTheHistory, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import type { CommandShape, SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import { dependenciesTheRunMaySee, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { treeTheRunMaySee, type BaseEntry, type FileTheRunMaySee, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
@@ -71,7 +71,7 @@ function judgeTheCheckout(run: ShapeToRun): Judged | string {
   if (typeof base === 'string') return base
   const read = readTheCheckoutOnce(run.checkout, base.format, run.inherited)
   if (typeof read === 'string') return read
-  const own = ownWritesKeptIn(run.state).all()
+  const own = ownWritesKeptForTheHistory(run.state).all()
   if ('refusal' in own) return own.refusal
   // Asked of git only for a file whose own bytes vouched for nothing, and asked in the launcher's repository: the
   // checkout's config and attributes are a member's to write (../hash_a_file_under_a_tree).
@@ -83,7 +83,10 @@ function judgeTheCheckout(run: ShapeToRun): Judged | string {
   const tree = treeTheRunMaySee({ base: base.entries, own_writes: ownWritesUnder(run.checkout, own.writes), live: read.live, blobUnderTheTreeOf })
   const dependencies = judgeTheDependencies(run.checkout, base, read)
   const refusals = [...tree.refusals.map((refused) => `${refused.path}: ${refused.why}`), ...dependencies.refusals]
-  if (refusals.length > 0) return `nothing ran: ${refusals.join('; ')}`
+  // A launch's file the history passed over vouches for nothing (martha#162 r=4): what its member wrote is not an own
+  // write here, so a path behind one of those writes refuses above by name. This names the file that was passed over
+  // and why, and it refuses nothing by itself.
+  if (refusals.length > 0) return `nothing ran: ${[...refusals, ...own.unread].join('; ')}`
   const packages = readThePackages(run.checkout, dependencies.packages)
   if (typeof packages === 'string') return packages
   return { files: filesToWrite(tree.files, read, base), packages, dependencies }

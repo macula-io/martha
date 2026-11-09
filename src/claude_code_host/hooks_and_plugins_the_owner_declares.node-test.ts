@@ -174,6 +174,19 @@ test('a frontmatter that opens and never closes is refused as cannot-be-told; a 
   assert.equal(hooksInFrontmatterOf({ path: AGENT_FILE, text: undefined, managed: false }, PATTERN), undefined)
 })
 
+// Two spellings the list above deliberately leaves out, because the host does
+// not read either as the key `hooks`: the probe rows in ../probe_launch_hosts
+// record what it does with each (martha#174). A widening of the list that
+// refuses one of them fails here, and the plain key beside them is refused here,
+// so this check is shown to be able to tell the two answers apart.
+test('the two spellings the host does not read as the key hooks are passed, and the plain key beside them is refused (martha#174)', () => {
+  for (const frontmatter of ['!!binary aG9va3M=: {SessionStart: []}', '[hooks] # c\n: {SessionStart: []}']) {
+    assert.equal(hooksInFrontmatterOf(md(withFrontmatter(frontmatter)), PATTERN), undefined, `refused, but the host does not read it as hooks: ${frontmatter}`)
+  }
+  const plain = hooksInFrontmatterOf(md(withFrontmatter('hooks: {SessionStart: []}')), PATTERN) ?? ''
+  assert.ok(plain.includes(AGENT_FILE) && plain.includes('the key hooks'), plain === '' ? 'not refused' : plain)
+})
+
 const HOOKED = withFrontmatter('hooks:\n  PreToolUse: []')
 
 test('the watch refuses a hooked agent, skill or command in each user and managed folder the host loads, a synced skill included, and lets it go once removed', (t) => {

@@ -51,6 +51,23 @@ export interface OwnWritesStore {
   all(): OwnWrites
 }
 
+/**
+ * A project's whole history of own writes: every launch's, in the order kept, and the launch files a read could not
+ * trust, named with the refusal each one gave (martha#162). A refused file gives no writes and stops no other: what
+ * its member wrote is vouched for by nothing, so a path one of those writes is behind refuses by name instead.
+ */
+export type OwnWritesOfTheHistory =
+  | { readonly writes: readonly OwnWrite[]; readonly unread: readonly string[] }
+  | Refused
+
+/** Where a host keeps a project's whole history of own writes, every launch in the one place (martha#162). */
+export interface OwnWritesHistoryStore {
+  /** Keeps one more own write in its launch's file; why it could not be kept, or undefined. */
+  append(write: OwnWrite): string | undefined
+  /** Every launch's own writes still kept; or why the whole history could not be read at all. */
+  all(): OwnWritesOfTheHistory
+}
+
 /** The fields of a record, in the order a line is written. */
 export const OWN_WRITE_FIELDS: readonly (keyof OwnWrite)[] = ['path', 'blob', 'mode', 'tool', 'tool_use_id', 'session', 'launch', 'recorded_at']
 const NAMING_FIELDS = ['tool', 'tool_use_id', 'session', 'launch'] as const
