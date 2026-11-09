@@ -109,6 +109,13 @@ test('a command that cannot be started ends with exit code null', (t) => {
   assert.equal(runNow({ command: 'martha-no-such-command', args: [], cwd: place(t) }).exit_code, null)
 })
 
+test('the text given to a process is what it reads, and its input ends after it', (t) => {
+  const dir = place(t)
+  const outcome = runNow({ command: 'sh', args: ['-c', 'cat; echo end'], cwd: dir, input: 'one\ntwo\n' })
+  assert.equal(outcome.stdout, 'one\ntwo\nend\n')
+  assert.equal(runNow({ command: 'sh', args: ['-c', 'cat; echo end'], cwd: dir }).stdout, 'end\n', 'a process given no text reads an input that ends at once')
+})
+
 test('the environment drops every variable with a named prefix, then sets what is asked', (t) => {
   const inherited = 'MARTHA_TEST_INHERITED'
   process.env[inherited] = 'kept'
