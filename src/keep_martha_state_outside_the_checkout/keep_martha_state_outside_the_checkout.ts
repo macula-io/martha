@@ -18,6 +18,11 @@
 // last record, are pruned when a launch starts, so the state of a project no longer grows with every launch it
 // ever had.
 //
+// Residual, stated: pruning can take a running launch's file when OWN_WRITES_LAUNCHES_KEPT other launches of the same
+// project have written since it last did. Its next write makes the file again, and the paths it wrote before then are
+// no longer own writes, so its next recheck stops it and names martha approve: a running launch is lost, not a change
+// waved through.
+//
 // The checks are speed bumps, not a boundary: a member runs as the owner's OS user, so its shell can write
 // here. It is the residual martha#1 decision 2 accepts for the roster and the launch records
 // (../linux_process_identity/launch_records_directory.ts).
