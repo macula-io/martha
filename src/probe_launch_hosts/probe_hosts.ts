@@ -472,9 +472,11 @@ const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.map(({ rule }, at
 //
 // The control writes the key as `hooks`, so a run in which the host ran no
 // agent's own hooks at all cannot pass for one in which it does not read a
-// spelling: nothing here is proved by an absence alone. The config folder holds
-// no login, so the host stops before any model call, after the hooks an agent
-// file declares before the turn have run.
+// spelling: nothing here is proved by an absence alone. These rows take Martha's
+// switches alone, with the launcher's settings gate skipped, because that gate
+// refuses the control: `martha start` would not start any of the three. The
+// config folder holds no login, so the host stops before any model call, after
+// the hooks an agent file declares before the turn have run.
 //
 // What 2.1.319 answers: a binary-tagged scalar used as the key is not the key
 // `hooks` — the host names the frontmatter key it read as the base64 text — and
@@ -501,19 +503,19 @@ const HOST_KEY_CASES: ReadonlyArray<{
   readonly expected: Readonly<Record<string, boolean>>
 }> = [
   {
-    what: 'Claude Code as martha start starts it: a user-scope agent whose frontmatter writes the key as `hooks` (the control for the two below)',
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as `hooks` (the control for the two below)',
     name: 'hooks-key-control',
     keyLine: (value) => `hooks: ${value}`,
     expected: { AGENT_HOOK: true, AGENT_NOT_FOUND: false },
   },
   {
-    what: 'Claude Code as martha start starts it: a user-scope agent whose frontmatter writes the key as a binary-tagged scalar',
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as a binary-tagged scalar',
     name: 'hooks-key-binary-tagged',
     keyLine: (value) => `!!binary aG9va3M=: ${value}`,
     expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: false },
   },
   {
-    what: 'Claude Code as martha start starts it: a user-scope agent whose frontmatter writes the key as a flow sequence with a comment before its colon',
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as a flow sequence with a comment before its colon',
     name: 'hooks-key-commented',
     keyLine: (value) => `[hooks] # c\n: ${value}`,
     expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: true },

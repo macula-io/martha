@@ -111,7 +111,8 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 // parse a flow sequence key whose colon the next line opens, so that whole file
 // is ignored. `npm run probe:launch` carries a row for each, beside a control
 // that writes the key itself and whose hooks run, so a host that starts reading
-// one of them fails its row instead of passing quietly (martha#174).
+// one of them fails its row instead of passing quietly, and a test beside this
+// module pins that the list goes on passing both (martha#174).
 //   - the text `hooks` with a colon after it, anywhere: bare, quoted, tagged
 //     (`!<tag:yaml.org,2002:str>"hooks":`), in flow style, or with a line break
 //     before the colon. `githooks:` counts too, a refusal the owner can read;
