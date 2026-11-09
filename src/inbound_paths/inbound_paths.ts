@@ -143,6 +143,8 @@ export const INSTRUCTION_FILES = {
  * so the table cannot claim a fact the row stopped saying.
  */
 export const INSTRUCTION_TEXT_WORDING = {
+  /** A checkout's fixed text is not only the top one: a file read below the top loads that directory's. */
+  nested: 'any below it that the host loads once a file there is read',
   /** A checkout's fixed text is not only its own folder's: the directories above it count too. */
   above: 'the directories above it',
   /** Whether a host loads an AGENTS.md at all is not observed, so that text is not pinned. */
@@ -257,7 +259,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A16',
-    what: `a checkout's fixed text: its ${INSTRUCTION_FILES.checkout} or ${INSTRUCTION_FILES.agents} files, the top one, any below it that the host loads once a file there is read, and those of ${INSTRUCTION_TEXT_WORDING.above}, and the agents it defines (.claude/agents), whose frontmatter may name hooks and tool servers (martha#121, martha#135)`,
+    what: `a checkout's fixed text: its ${INSTRUCTION_FILES.checkout} or ${INSTRUCTION_FILES.agents} files, the top one, ${INSTRUCTION_TEXT_WORDING.nested}, and those of ${INSTRUCTION_TEXT_WORDING.above}, and the agents it defines (.claude/agents), whose frontmatter may name hooks and tool servers (martha#121, martha#135)`,
     klass: 'delivered',
     control: {
       kind: 'no-text-reaches-the-model',
@@ -271,7 +273,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     klass: 'delivered',
     control: {
       kind: 'no-text-reaches-the-model',
-      why: "the launcher sets CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 and drops CLAUDE_CODE_POST_TURN_MEMORY, CLAUDE_MEMORY_STORES, CLAUDE_COWORK_MEMORY_PATH_OVERRIDE and CLAUDE_CODE_REMOTE_MEMORY_DIR, and refuses settings whose env names any of them, so a member's host neither loads memory nor runs a memory pass; probe:launch shows the loader running with memory on and not with Martha's launch. That rests on two code paths of the recorded host (memory_off in recorded_claude_code_host.json): file mode returns early on the off switch, and hosted mode needs the dropped variable. It does not rest on the publish gate, whose hook is not established to fire for the memory pass, which runs as a fork. The gate's file-tool deny and the permissions.deny rules in the host's --settings keep a member's own writes out of every project's memory folder and out of the owner's own instruction file at the config dir's root and its rules/ (owner_instructions, ../refuse_a_member_writing_owner_memory; that file is not a checkout's, which A16 owns). Not closed: a Bash write into a memory folder, which a clean member alone holds; a host the owner starts by hand (C1, C2); OpenCode, unprobed for a memory of its own",
+      why: "the launcher sets CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 and drops CLAUDE_CODE_POST_TURN_MEMORY, CLAUDE_MEMORY_STORES, CLAUDE_COWORK_MEMORY_PATH_OVERRIDE and CLAUDE_CODE_REMOTE_MEMORY_DIR, and refuses settings whose env names any of them, so a member's host neither loads memory nor runs a memory pass; probe:launch shows the loader running with memory on and not with Martha's launch. That rests on two code paths of the recorded host (memory_off in recorded_claude_code_host.json): file mode returns early on the off switch, and hosted mode needs the dropped variable. It does not rest on the publish gate, whose hook is not established to fire for the memory pass, which runs as a fork. The gate's file-tool deny and the permissions.deny rules in the host's --settings keep a member's own writes out of every project's memory folder and out of the owner's own instruction file at the config dir's root and its rules/ (OWNER_INSTRUCTIONS, ../refuse_a_member_writing_owner_memory; that file is not a checkout's, which A16 owns). Not closed: a Bash write into a memory folder, which a clean member alone holds; a host the owner starts by hand (C1, C2); OpenCode, unprobed for a memory of its own",
     },
     attestation: 'none',
   },
@@ -390,7 +392,7 @@ export interface InstructionText {
 }
 
 export const INSTRUCTION_TEXT_OWNERS: readonly InstructionText[] = [
-  { text: 'NESTED_CLAUDE_MD', file: INSTRUCTION_FILES.checkout, owner: 'A16', words: [] },
+  { text: 'NESTED_CLAUDE_MD', file: INSTRUCTION_FILES.checkout, owner: 'A16', words: [INSTRUCTION_TEXT_WORDING.nested] },
   { text: 'ABOVE_CLAUDE_MD', file: INSTRUCTION_FILES.checkout, owner: 'A16', words: [INSTRUCTION_TEXT_WORDING.above] },
   { text: 'NESTED_LOCAL_MD', file: INSTRUCTION_FILES.local, owner: 'B4', words: [] },
   { text: 'ROOT_LOCAL_MD', file: INSTRUCTION_FILES.local, owner: 'B4', words: [] },
@@ -427,7 +429,9 @@ function ownerOf(file: string, owners: readonly InstructionText[]): string | und
  * inside it owns every file it names. `(CLAUDE.md: see A16)` points at the
  * owner; `(CLAUDE.md: see C1)` in B4's row, `(CLAUDE.md: see B4)` in B4's own
  * row, or a parenthetical naming a file with no row id at all, is a claim and
- * stays counted.
+ * stays counted. A claim made inside a correctly addressed parenthetical is
+ * stripped with the rest of it: `(a member's CLAUDE.md loads too: see A16)`
+ * sends the reader to the owner, which is what the pointer rule asks for.
  */
 function pointsAtTheOwner(inside: string, files: readonly string[], owners: readonly InstructionText[]): boolean {
   const named = filesNamedIn(inside, files)

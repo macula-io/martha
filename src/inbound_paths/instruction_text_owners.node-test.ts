@@ -80,6 +80,20 @@ test("a pointer at its own row claims another row's file, so the check fails", (
   ])
 })
 
+test('a pointer naming two rows, only one of which owns the file, is a claim: every id in it must own', () => {
+  const rows = [aCheckoutsFixedText('the host loads none of them'), row('B4', `files a read takes in (a ${INSTRUCTION_FILES.checkout}: see A16, B4)`)]
+  assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16')]), [
+    { text: INSTRUCTION_FILES.checkout, why: 'row B4 names it too, and A16 is its owner' },
+  ])
+})
+
+test("an owner that stops saying a file below the top loads that directory's makes the check fail, naming the phrase", () => {
+  const rows = [aCheckoutsFixedText('the host loads none of them, here or below')]
+  assert.deepEqual(gapsInInstructionTextOwnership(rows, [text('A16', INSTRUCTION_FILES.checkout, [INSTRUCTION_TEXT_WORDING.nested])]), [
+    { text: 'A_TEXT', why: `its owner A16 does not say "${INSTRUCTION_TEXT_WORDING.nested}", which this text requires of it` },
+  ])
+})
+
 test('an owner that says every phrase its text requires passes, read exactly as the phrase is written', () => {
   const said = `each of ${INSTRUCTION_TEXT_WORDING.above} is planted, and ${INSTRUCTION_TEXT_WORDING.not_observed} here`
   const words = [INSTRUCTION_TEXT_WORDING.above, INSTRUCTION_TEXT_WORDING.not_observed]
