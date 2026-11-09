@@ -9,7 +9,7 @@
 // fetch fails (offline), the commit it last fetched itself is the base; with none, there is no base.
 //
 // The repository is made with the checkout's object format, so the ids `ls-tree` prints compare with the blob ids
-// computed from the checkout's bytes (../remember_a_members_own_writes, gitBlobIdOf).
+// git gives the checkout's own files (../read_the_checkout_once).
 
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -18,8 +18,14 @@ import { join } from 'node:path'
 import type { SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import type { BaseEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { GIT_OBJECT_FORMATS, type GitObjectFormat } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
+/**
+ * The object formats git names a checkout's objects in (`git rev-parse --show-object-format`). The launcher's own
+ * repository of the base is made in the checkout's, so the ids `ls-tree` prints compare with the ids git gives the
+ * checkout's files (../read_the_checkout_once, blobAsGitAdds).
+ */
+const GIT_OBJECT_FORMATS = ['sha1', 'sha256'] as const
+type GitObjectFormat = (typeof GIT_OBJECT_FORMATS)[number]
 /** The launcher's own repository of the signed base, inside the project's state directory. */
 export const SIGNED_BASE_REPOSITORY = 'signed_base.git'
 /** The ref the signed branch is fetched into: the launcher's, never a remote-tracking ref. */
@@ -59,7 +65,7 @@ function gitWith(where: readonly string[], inherited: Readonly<Record<string, st
 }
 
 /** The checkout's object format, as git names it, or why it cannot be read. */
-export function objectFormatOf(checkout: string, inherited: Readonly<Record<string, string | undefined>>): GitObjectFormat | string {
+function objectFormatOf(checkout: string, inherited: Readonly<Record<string, string | undefined>>): GitObjectFormat | string {
   const said = gitWith(['-C', checkout], inherited)(['rev-parse', '--show-object-format']).out.toString('utf8').trim()
   return GIT_OBJECT_FORMATS.find((format) => format === said) ?? `the checkout's object format cannot be read (${said})`
 }

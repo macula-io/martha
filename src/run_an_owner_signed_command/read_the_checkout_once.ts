@@ -8,6 +8,12 @@
 // judged against the base and the own writes. Each path is `lstat`ed under the checkout's real top: a path whose
 // directory resolves elsewhere (a directory swapped for a link) or that is not a regular file is not a regular
 // file here, and the tree rule refuses it. A path that is gone is a deletion.
+//
+// A regular file's blob is the one `git add` would give it, not one of its raw bytes (martha#132): the tree it is
+// judged against is git's, so attributes, clean filters and line-end settings must be applied the same way, by the
+// same git. A checkout whose working tree holds CRLF under `text=auto` is the plain case: hashed raw it matches
+// nothing git stores. git is given the bytes this file read, never the path again, so what is judged is what the
+// run is written from even if the checkout changes under it.
 
 import { spawnSync } from 'node:child_process'
 import { lstatSync, readdirSync, readFileSync, realpathSync, type Stats } from 'node:fs'
@@ -15,7 +21,7 @@ import { dirname, join, sep } from 'node:path'
 
 import { DEPENDENCIES, INSTALLED_LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import type { LiveEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
-import { OWN_WRITE_MODES, gitBlobIdOf, type GitObjectFormat } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 const [REGULAR_MODE, EXECUTABLE_MODE] = OWN_WRITE_MODES
 const ANY_EXECUTE_BIT = 0o111
@@ -28,12 +34,24 @@ export interface CheckoutRead {
   readonly bytes: ReadonlyMap<string, Buffer>
 }
 
-/** Every path git would see in the checkout, or why git could not list them. */
+/** Every path git sees in the checkout, or why git could not list them. */
 function pathsGitSees(top: string, inherited: Readonly<Record<string, string | undefined>>): readonly string[] | string {
   const env = { PATH: inherited['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG }
   const run = spawnSync('git', ['-C', top, '-c', 'core.fsmonitor=false', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { env, maxBuffer: Number.MAX_SAFE_INTEGER })
   if (run.status !== 0) return `git cannot list the checkout (${run.stderr?.toString('utf8').trim() ?? String(run.error)})`
   return [...new Set(run.stdout.toString('utf8').split(RECORD).filter((path) => path !== ''))]
+}
+
+/**
+ * The blob `git add` would give `bytes` at `path` in the checkout at `top`: the attributes, clean filters and
+ * line-end settings for that path applied by the same git, to the bytes this read took. Undefined when git cannot
+ * hash them.
+ */
+function blobAsGitAdds(top: string, path: string, bytes: Buffer, inherited: Readonly<Record<string, string | undefined>>): string | undefined {
+  const env = { PATH: inherited['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG }
+  const run = spawnSync('git', ['-C', top, '-c', 'core.fsmonitor=false', 'hash-object', `--path=${path}`, '--stdin'], { env, input: bytes, maxBuffer: Number.MAX_SAFE_INTEGER })
+  const blob = run.status === 0 ? run.stdout.toString('utf8').trim() : ''
+  return blob === '' ? undefined : blob
 }
 
 /** Whether `path`'s directory, resolved, is where it is named under `top`: no component is a link out. */
@@ -45,15 +63,16 @@ function staysUnder(top: string, path: string): boolean {
   }
 }
 
-/** One path read: a regular file's entry and bytes, something else, or undefined when it is gone. */
-function readOne(top: string, path: string, format: GitObjectFormat): { readonly entry: LiveEntry; readonly bytes?: Buffer } | undefined {
-  if (!staysUnder(top, path)) return { entry: { path, regular: false } }
+/** One path as it stands on disk: a regular file with its bytes and mode, something else, or gone. */
+type OnDisk = { readonly kind: 'file'; readonly mode: string; readonly bytes: Buffer } | { readonly kind: 'other' } | { readonly kind: 'gone' }
+
+function readOne(top: string, path: string): OnDisk {
+  if (!staysUnder(top, path)) return { kind: 'other' }
   const status = lstatOrGone(join(top, path))
-  if (status === undefined) return undefined
-  if (!status.isFile()) return { entry: { path, regular: false } }
-  const bytes = readFileSync(join(top, path))
+  if (status === undefined) return { kind: 'gone' }
+  if (!status.isFile()) return { kind: 'other' }
   const mode = (status.mode & ANY_EXECUTE_BIT) === 0 ? REGULAR_MODE : EXECUTABLE_MODE
-  return { entry: { path, regular: true, mode, blob: gitBlobIdOf(bytes, format) }, bytes }
+  return { kind: 'file', mode, bytes: readFileSync(join(top, path)) }
 }
 
 function lstatOrGone(path: string): Stats | undefined {
@@ -65,18 +84,29 @@ function lstatOrGone(path: string): Stats | undefined {
   }
 }
 
+/** One path of the live tree as the read holds it: its entry, and the bytes when it is a regular file. */
+type ReadEntry = { readonly entry: LiveEntry; readonly bytes?: Buffer }
+
 /** Read every path git sees in the checkout at `top` once; or why it cannot be read. */
-export function readTheCheckoutOnce(top: string, format: GitObjectFormat, inherited: Readonly<Record<string, string | undefined>>): CheckoutRead | string {
+export function readTheCheckoutOnce(top: string, inherited: Readonly<Record<string, string | undefined>>): CheckoutRead | string {
   const real = realpathSync(top)
   const paths = pathsGitSees(real, inherited)
   if (typeof paths === 'string') return paths
-  const read = paths.flatMap((path) => {
-    const one = readOne(real, path, format)
-    return one === undefined ? [] : [one]
-  })
+  const entries: ReadEntry[] = []
+  for (const path of paths) {
+    const one = readOne(real, path)
+    if (one.kind === 'gone') continue
+    if (one.kind === 'other') {
+      entries.push({ entry: { path, regular: false } })
+      continue
+    }
+    const blob = blobAsGitAdds(real, path, one.bytes, inherited)
+    if (blob === undefined) return `git cannot give ${path} the blob it would add`
+    entries.push({ entry: { path, regular: true, mode: one.mode, blob }, bytes: one.bytes })
+  }
   return {
-    live: read.map((one) => one.entry),
-    bytes: new Map(read.flatMap((one) => (one.bytes === undefined ? [] : [[one.entry.path, one.bytes] as const]))),
+    live: entries.map((one) => one.entry),
+    bytes: new Map(entries.flatMap((one) => (one.bytes === undefined ? [] : [[one.entry.path, one.bytes] as const]))),
   }
 }
 

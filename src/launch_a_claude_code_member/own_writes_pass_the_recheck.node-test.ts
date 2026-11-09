@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -143,6 +143,14 @@ test("a member's Write of a tracked file passes the recheck after that very call
   assert.deepEqual(place.stops, [])
 })
 
+test("a member's own Write of a new file keeps the shell: what it wrote itself is the member's own text, not a stranger's", async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  assert.deepEqual(await wrote(place, 'hello.txt', 'hello\n'), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(place.stops, [])
+})
+
 test('an own write is kept with its eight fields: the real path, the blob and mode on disk, the call, the session and the launch', async (t) => {
   const place = checkoutFor(t)
   await started(place)
@@ -239,6 +247,25 @@ test('own write A, then own write B, then the file put back to A by someone else
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('hello.txt')))
 })
 
+test("an own Write that git changes as it adds it (text=auto over CRLF) passes: the blob is kept as git would add it", async (t) => {
+  const place = checkoutFor(t, { files: { '.gitattributes': '* text=auto\n' } })
+  await started(place)
+  assert.deepEqual(await wrote(place, 'windows.txt', 'one\r\ntwo\r\n'), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_called', call('Read')), ALLOW_REPLY)
+  const kept = allOwnWrites(place.state)
+  assert.ok('writes' in kept)
+  assert.equal(kept.writes[0]?.blob, blobOf(place, 'windows.txt'))
+  assert.deepEqual(place.stops, [])
+})
+
+test("an own write whose mode someone else changes after it (chmod +x) stops the member, naming the path", async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  assert.deepEqual(await wrote(place, 'run.sh', 'echo hello\n'), TAKEN_REPLY)
+  chmodSync(join(place.checkout, 'run.sh'), 0o755)
+  assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('run.sh')))
+})
+
 test("a Write whose bytes on disk are not the call's content is not kept, and the member is stopped", async (t) => {
   const place = checkoutFor(t)
   await started(place)
@@ -253,6 +280,16 @@ test('a link put in the checkout is never an own write, even where the member wr
   assert.deepEqual(await wrote(place, 'hello.txt', 'hello\n'), TAKEN_REPLY)
   symlinkSync('hello.txt', join(place.checkout, 'link.txt'))
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('link.txt')))
+})
+
+test('a directory named by a Write is not an own write: nothing is kept, and the call does not read it', async (t) => {
+  const place = checkoutFor(t)
+  await started(place)
+  const directory = join(place.checkout, 'notes')
+  mkdirSync(directory)
+  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: directory, content: 'hello\n' })), TAKEN_REPLY)
+  assert.deepEqual(allOwnWrites(place.state), { writes: [] })
+  assert.deepEqual(place.stops, [])
 })
 
 test('a branch checked out mid-session that drops the config and adds a file stops the member (martha#142)', async (t) => {

@@ -14,11 +14,11 @@ import { ownWritesKeptIn, stateSubdirectory, type MarthaState } from '../keep_ma
 import type { CommandShape, SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import { dependenciesTheRunMaySee, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { treeTheRunMaySee, type BaseEntry, type LiveEntry, type OwnWriteSeen } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
-import { GIT_OBJECT_FORMATS, type GitObjectFormat, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { installedLockOf, namesUnder, readPackageOnce, readTheCheckoutOnce, type CheckoutRead, type PackageFile } from './read_the_checkout_once.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type FileToWrite, type RunEnded } from './run_in_a_sandbox.ts'
-import { objectFormatOf, openSignedBase, type OpenedBase } from './signed_base.ts'
+import { openSignedBase, type OpenedBase } from './signed_base.ts'
 
 /** The folder in the project's state directory that holds the run directories while they run. */
 export const RUNS_DIRECTORY = 'runs'
@@ -33,8 +33,6 @@ export interface ShapeToRun {
   /** The launcher's environment: only PATH (for git) and what the base fetch keeps are read from it. */
   readonly inherited: Readonly<Record<string, string | undefined>>
 }
-
-const isObjectFormat = (value: string): value is GitObjectFormat => (GIT_OBJECT_FORMATS as readonly string[]).includes(value)
 
 /** What a judged checkout gives the run: its files and its packages, or why nothing runs. */
 type Judged = { readonly files: readonly FileToWrite[]; readonly packages: readonly PackageFile[]; readonly dependencies: ReturnType<typeof dependenciesTheRunMaySee> }
@@ -67,11 +65,9 @@ export async function runAKeptShape(state: MarthaState, checkout: string, inheri
 
 /** The base, the checkout read once, both rules: the bytes the run may see, or every reason it may not run. */
 function judgeTheCheckout(run: ShapeToRun): Judged | string {
-  const format = objectFormatOf(run.checkout, run.inherited)
-  if (!isObjectFormat(format)) return format
   const base = openSignedBase(run.state, run.checkout, run.base, run.inherited)
   if (typeof base === 'string') return base
-  const read = readTheCheckoutOnce(run.checkout, format, run.inherited)
+  const read = readTheCheckoutOnce(run.checkout, run.inherited)
   if (typeof read === 'string') return read
   const own = ownWritesKeptIn(run.state).all()
   if ('refusal' in own) return own.refusal

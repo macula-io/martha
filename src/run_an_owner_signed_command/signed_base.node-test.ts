@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { gitBlobIdOf } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { BASE_REF, openSignedBase } from './signed_base.ts'
 
 const GIT_ENV = { PATH: process.env['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' }
@@ -40,7 +39,7 @@ test('the signed branch opens to its commit, its entries with their modes, and b
   assert.deepEqual(opened.entries.map((e) => [e.path, e.mode]), [['a.ts', '100644'], ['package-lock.json', '100644']])
   const entry = opened.entries.find((e) => e.path === 'a.ts')!
   assert.equal(opened.blob(entry.blob)?.toString('utf8'), 'one\n')
-  assert.equal(gitBlobIdOf(Buffer.from('one\n'), 'sha1'), entry.blob)
+  assert.equal(git(p.remote, 'rev-parse', 'HEAD:a.ts'), entry.blob)
 })
 
 test('origin re-pointed, its HEAD moved and its URL rewritten in the checkout do not move the base', (t) => {

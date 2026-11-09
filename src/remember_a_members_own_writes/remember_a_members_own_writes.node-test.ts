@@ -1,17 +1,9 @@
 // The record of a member's own write and its rules, with no file under them (martha#132, #129).
-//
-// Real git for the blob ids, in temporary repositories removed after each test.
 
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { test, type TestContext } from 'node:test'
+import { test } from 'node:test'
 
 import {
-  GIT_OBJECT_FORMATS,
-  gitBlobIdOf,
   latestOfLaunch,
   lineOfOwnWrite,
   OWN_WRITE_MODES,
@@ -54,23 +46,3 @@ test("a store's refusal is the launch's refusal: nothing is read from a store th
   const refusing: OwnWritesStore = { append: () => undefined, all: () => ({ refusal: 'not trusted' }) }
   assert.deepEqual(ownWritesOfLaunch(refusing, 'launch-1'), { refusal: 'not trusted' })
 })
-
-function gitHashObject(t: TestContext, format: string, bytes: Buffer): string {
-  const repository = mkdtempSync(join(tmpdir(), 'martha-blob-'))
-  t.after(() => rmSync(repository, { recursive: true, force: true }))
-  execFileSync('git', ['init', '--quiet', `--object-format=${format}`, repository])
-  return execFileSync('git', ['-C', repository, 'hash-object', '--stdin'], { input: bytes, encoding: 'utf8' }).trim()
-}
-
-const CONTENTS: readonly Buffer[] = [
-  Buffer.alloc(0),
-  Buffer.from('hello\n'),
-  Buffer.from('a line\r\nanother\r\n'),
-  Buffer.from([0, 1, 2, 255, 254, 10, 0]),
-]
-
-for (const format of GIT_OBJECT_FORMATS) {
-  test(`a blob id is the one git names for the same bytes in a ${format} checkout`, (t) => {
-    for (const bytes of CONTENTS) assert.equal(gitBlobIdOf(bytes, format), gitHashObject(t, format, bytes))
-  })
-}

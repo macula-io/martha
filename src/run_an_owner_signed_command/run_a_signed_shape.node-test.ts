@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +8,7 @@ import { test } from 'node:test'
 
 import { openState, ownWritesKeptIn } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { gitBlobIdOf, OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
 import { skipWithoutTheSandbox } from './sandbox_under_test.ts'
 
@@ -17,10 +18,17 @@ const MARKER = 'stranger-marker-129'
 const GIT_ENV = { PATH: process.env['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' }
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8' }).trim()
 
+/**
+ * The blob `git add` gives the file `path` in `checkout`, as the reader under test asks git for it: the ground
+ * truth for an own write recorded by hand here, never a value the reader computes for itself.
+ */
+const blobOf = (checkout: string, path: string): string => git(checkout, 'hash-object', `--path=${path}`, '--', path)
+
 // One dependency, `tool`, with two bin names, pinned by the base lock and installed to match it.
 const TOOL = { version: '1.0.0', resolved: 'https://registry.example.invalid/tool-1.0.0.tgz', integrity: 'sha512-tool', bin: { tool: 'cli.sh', 'tool-too': 'cli.sh' } }
 const lockOf = (packages: Record<string, unknown>) => JSON.stringify({ name: 'p', lockfileVersion: LOCKFILE_VERSION, packages })
 const BASE_FILES = {
+  '.gitattributes': '* text=auto\n',
   '.gitignore': 'node_modules/\n',
   [MANIFEST]: JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: 'tool && tool-too && cat a.txt && ls -a' } }),
   [LOCK]: lockOf({ '': { name: 'p', version: '1.0.0' }, 'node_modules/tool': TOOL }),
@@ -89,7 +97,7 @@ test('a file neither base nor own write runs nothing, and is named; written thro
   assert.match(String(await runASignedShape(p.run)), /nothing ran: planted\.txt/)
   const refused = ownWritesKeptIn(p.state).append({
     path: join(p.checkout, 'planted.txt'),
-    blob: gitBlobIdOf(Buffer.from(MARKER), 'sha1'),
+    blob: blobOf(p.checkout, 'planted.txt'),
     mode: REGULAR,
     tool: 'Write',
     tool_use_id: 'toolu_01',
@@ -103,10 +111,25 @@ test('a file neither base nor own write runs nothing, and is named; written thro
   assert.equal(ended.status, 0)
 })
 
+test('an own write git changes as it adds it still passes: the blob judged is the one git would give it (martha#132)', { skip: unavailable }, async (t) => {
+  const p = place(t)
+  const windows = 'one\r\ntwo\r\n'
+  writeFileSync(join(p.checkout, 'windows.txt'), windows)
+  // Under `text=auto` git stores LF for a CRLF working tree, so the raw bytes hash to an id no tree holds. An own
+  // write recorded as git gives it passes; one the reader compared by raw bytes could never match this file.
+  const raw = createHash('sha1').update(`blob ${Buffer.byteLength(windows)}\0`).update(windows).digest('hex')
+  const kept = blobOf(p.checkout, 'windows.txt')
+  assert.notEqual(kept, raw)
+  assert.equal(ownWritesKeptIn(p.state).append({ path: join(p.checkout, 'windows.txt'), blob: kept, mode: REGULAR, tool: 'Write', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
+  const ended = await runASignedShape(p.run)
+  assert.ok(typeof ended !== 'string', String(ended))
+  assert.equal(ended.status, 0, said(ended))
+})
+
 test('an own write of another checkout does not vouch for a file at the same path here', { skip: unavailable }, async (t) => {
   const p = place(t)
   writeFileSync(join(p.checkout, 'planted.txt'), MARKER)
-  const elsewhere = { path: join(p.top, 'elsewhere', 'planted.txt'), blob: gitBlobIdOf(Buffer.from(MARKER), 'sha1'), mode: REGULAR, tool: 'Write', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() } as const
+  const elsewhere = { path: join(p.top, 'elsewhere', 'planted.txt'), blob: blobOf(p.checkout, 'planted.txt'), mode: REGULAR, tool: 'Write', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() } as const
   assert.equal(ownWritesKeptIn(p.state).append(elsewhere), undefined)
   assert.match(String(await runASignedShape(p.run)), /nothing ran: planted\.txt/)
 })
@@ -115,7 +138,7 @@ test('a test script redefined in the checkout runs nothing, even written by the 
   const p = place(t)
   const manifest = JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: `echo ${MARKER}` } })
   writeFileSync(join(p.checkout, MANIFEST), manifest)
-  assert.equal(ownWritesKeptIn(p.state).append({ path: join(p.checkout, MANIFEST), blob: gitBlobIdOf(Buffer.from(manifest), 'sha1'), mode: REGULAR, tool: 'Edit', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
+  assert.equal(ownWritesKeptIn(p.state).append({ path: join(p.checkout, MANIFEST), blob: blobOf(p.checkout, MANIFEST), mode: REGULAR, tool: 'Edit', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
   const ended = await runASignedShape(p.run)
   assert.equal(typeof ended, 'string')
   assert.match(String(ended), new RegExp(MANIFEST.replace('.', '\\.')))

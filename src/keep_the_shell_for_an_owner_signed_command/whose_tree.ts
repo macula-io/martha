@@ -8,6 +8,8 @@
 // a regular file, in the base or in the live tree, is refused: a symlink or a gitlink has no blob, and a symlink
 // can resolve to a file no rule looked at. A refusal names the path, so the owner can see what took the shell.
 
+import { ownWriteMatches, type OwnWriteLeft } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
+import type { TreeChange } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 /** The modes of a regular file, as git writes them: the only entries a run sees, as the only own writes. */
@@ -58,9 +60,9 @@ const entryKey = (mode: string, blob: string) => `${mode} ${blob}`
 /** The files a run may see, and every path that takes the exemption away. */
 export function treeTheRunMaySee(tree: TreeToJudge): TreeTheRunMaySee {
   const base = new Map(tree.base.map((entry) => [entry.path, entryKey(entry.mode, entry.blob)]))
-  const own = new Map<string, Set<string>>()
+  const own = new Map<string, OwnWriteLeft[]>()
   for (const write of tree.own_writes.filter((w) => REGULAR_MODES.has(w.mode))) {
-    own.set(write.path, (own.get(write.path) ?? new Set()).add(entryKey(write.mode, write.blob)))
+    own.set(write.path, [...(own.get(write.path) ?? []), write])
   }
   const base_refusals = tree.base
     .filter((entry) => !REGULAR_MODES.has(entry.mode))
@@ -72,10 +74,11 @@ export function treeTheRunMaySee(tree: TreeToJudge): TreeTheRunMaySee {
   }
 }
 
-function judgeLive(entry: LiveEntry, base: ReadonlyMap<string, string>, own: ReadonlyMap<string, ReadonlySet<string>>): { file: FileTheRunMaySee } | { refusal: PathRefused } {
+function judgeLive(entry: LiveEntry, base: ReadonlyMap<string, string>, own: ReadonlyMap<string, readonly OwnWriteLeft[]>): { file: FileTheRunMaySee } | { refusal: PathRefused } {
   if (!entry.regular) return { refusal: { path: entry.path, why: `${entry.path} is not a regular file` } }
-  const key = entryKey(entry.mode, entry.blob)
-  const vouched = REGULAR_MODES.has(entry.mode) && (base.get(entry.path) === key || own.get(entry.path)?.has(key) === true)
+  const asChange: TreeChange = { path: entry.path, deleted: false, mode: entry.mode, blob: entry.blob }
+  const ownHere = own.get(entry.path) ?? []
+  const vouched = REGULAR_MODES.has(entry.mode) && (base.get(entry.path) === entryKey(entry.mode, entry.blob) || ownHere.some((write) => ownWriteMatches(write, asChange)))
   if (!vouched) return { refusal: { path: entry.path, why: `${entry.path} is neither the base's nor the member's own write` } }
   return { file: { path: entry.path, mode: entry.mode, blob: entry.blob } }
 }
