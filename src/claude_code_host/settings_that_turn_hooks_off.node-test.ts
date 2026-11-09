@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { RECORDED_HOST, CLAUDE_CODE_HOOK_SWITCHES } from './recorded_claude_code_host.ts'
+import { RECORDED_HOST, CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from './recorded_claude_code_host.ts'
 import {
   hookExitCallsIn,
   hookSettingsWatch,
@@ -198,6 +198,7 @@ test('the watch reads the user file, the approved copy, the managed file and eac
     approved,
     managed: { dir: managedDir, file: 'managed.json', drop_in: 'drop-in' },
     switches: SWITCHES,
+    markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
   })
   assert.equal(watch.check(), undefined)
   const [key] = SWITCHES.every_source
