@@ -2,7 +2,7 @@
 // (martha#65): npm installs it from the recorded lock with no outside config,
 // the member starts it by path, and a tree that changed since is refused.
 //
-// Every test runs npm against a registry on the loopback (./fake_mesh_registry.ts)
+// Every test runs npm against a registry on the loopback (../run_the_nodes_own_npm_alone/fake_npm_registry.ts)
 // and counts what reached a second registry standing for every other source.
 
 import assert from 'node:assert/strict'
@@ -22,7 +22,7 @@ import {
   refusalOfEnvironmentReads,
   type MeshTreeRecording,
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { fakeMeshRegistry, type FakePackage, type FakeRegistry } from './fake_mesh_registry.ts'
+import { fakeNpmRegistry, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { placeRecordedMeshServers, recordMeshTree, SERVER_NEEDS } from './install_the_recorded_mesh_server.ts'
 
 const VERSION = '7.8.9'
@@ -103,8 +103,8 @@ const scratch = (t: TestContext, what: string): string => {
 }
 
 async function registries(t: TestContext): Promise<{ good: FakeRegistry; evil: FakeRegistry }> {
-  const good = await fakeMeshRegistry(RECORDED)
-  const evil = await fakeMeshRegistry(PLANTED)
+  const good = await fakeNpmRegistry(RECORDED)
+  const evil = await fakeNpmRegistry(PLANTED)
   t.after(() => Promise.all([good.stop(), evil.stop()]))
   return { good, evil }
 }
@@ -229,7 +229,7 @@ const readingDependency: FakePackage = {
 const READING_PATH = `node_modules/${DEPENDENCY}/${READING_FILE}`
 
 async function readingRegistry(t: TestContext): Promise<FakeRegistry> {
-  const registry = await fakeMeshRegistry([serverOf(RECORDED_MARK), readingDependency])
+  const registry = await fakeNpmRegistry([serverOf(RECORDED_MARK), readingDependency])
   t.after(() => registry.stop())
   return registry
 }

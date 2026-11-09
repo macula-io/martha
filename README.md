@@ -107,6 +107,52 @@ Name the installer's exact version: npm never lets a published version be
 replaced, so that line is what you trust. What the installer checks before it
 writes anything is in [the installer's README](installer/README.md).
 
+### Upgrading an installed Martha
+
+Once Martha is installed, upgrade it with its own command, never with the
+bootstrap line above:
+
+```sh
+martha install [<version>] [--downgrade] [--digest sha256:<hex>]
+```
+
+`martha install` runs the installer **the release you are running pins**, and no
+other. Each release carries a pin — `installer.json`, three fields: the
+installer's name, its version, and the npm integrity of the bytes npm serves for
+it. The release job writes it from npm's own provenance, and refuses to build a
+release unless the bytes it pins were published by this repository's installer
+workflow at its own `installer-v` tag, from this tree's `installer/`. So taking
+over the npm account cannot put a new installer in front of you: the release
+that vouched for those bytes is signed, and its pin names them by hash.
+
+What it does, in order: reads the pin from the running release (missing or
+malformed is a refusal, before anything is fetched); fetches exactly that
+version into a temporary directory with the npm that ships beside your node,
+empty user and global config, this registry named explicitly, its own cache and
+`--ignore-scripts`; refuses bytes that do not match the pin and never retries
+them; runs the installer with your arguments unchanged; and removes the
+temporary directory whatever happens.
+
+It needs no terminal: a member with a shell can already type the bootstrap line,
+so the pin and the signature are what bound an install, not who typed it.
+
+What a refusal means:
+
+| What you see | What it means |
+|---|---|
+| `... carries no readable installer pin ...` | this release predates the pin; upgrade once with the bootstrap line above |
+| `... the installer pin in this release carries no <field> ...` | the release's pin is damaged: do not run it, install a good release |
+| `... pins <name>, and Martha's installer is <name>.` | the pin names a package this release does not accept: do not run it |
+| `... npm does not serve <name>@<version>, which this release pins ...` | that installer version is gone from npm, or never published; nothing was installed |
+| `... npm served bytes for <name>@<version> that are not the ones this release pins ...` | npm is serving other bytes than the release vouched for; nothing was installed |
+| `... the npm of this node is not at <path> ...` | your Node came without npm; use the bootstrap line, or a Node that carries npm |
+
+**Changing `installer/` needs an npm publish before the next Martha release.**
+The release pins the installer version this tree carries, and refuses to build
+when `installer/` is not what that version's `installer-v` tag published — a fix
+merged there without a version bump and a publish stops the release, in words,
+instead of quietly never reaching anyone.
+
 Then follow [getting started](docs/getting-started.md): a crew of two on your
 own project.
 

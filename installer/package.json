@@ -59,6 +59,7 @@
     "releaseTagPrefix": "v",
     "installerTagPrefix": "installer-v",
     "releaseFolder": "martha",
-    "dryRunTagPrefix": "dry-run-"
+    "dryRunTagPrefix": "dry-run-",
+    "installerPublishWorkflow": ".github/workflows/installer.yml"
   }
 }

@@ -1,5 +1,5 @@
 // The `martha` command a stranger types (martha#98): `martha init`, `martha approve`, `martha start <member>`,
-// and `martha --version`.
+// `martha install`, and `martha --version`.
 //
 // This exists so a person who installed Martha gets a solo crew running without writing code or knowing its
 // internals. It is the one place that reads the machine's environment, and only to find places: the project
@@ -24,6 +24,7 @@ import { createInterface } from 'node:readline/promises'
 import { isatty } from 'node:tty'
 
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
+import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.ts'
@@ -42,7 +43,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha run <shape> | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -104,9 +105,12 @@ function placesOf(io: CommandIo): Places | string {
   return 'refusal' in state ? state.refusal : { root, home, state }
 }
 
+/** The root of the release this command is part of: its package.json, and the pin that release carries. */
+const releaseTree = (): string => join(import.meta.dirname, '..', '..')
+
 /** The version of the release this command is part of. */
 function version(): string {
-  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as { version?: unknown }
+  const manifest = JSON.parse(readFileSync(join(releaseTree(), 'package.json'), 'utf8')) as { version?: unknown }
   return String(manifest.version)
 }
 
@@ -154,6 +158,15 @@ async function start(io: CommandIo, places: Places, member: string, args: readon
   return exitOf(await started.stopped)
 }
 
+/**
+ * `martha install`: the installer this release pins, run with the words typed here unchanged (martha#84). It runs
+ * before any place is read, so an installed machine with no checkout can still upgrade.
+ */
+function install(io: CommandIo, args: readonly string[]): number {
+  const outcome = installThePinnedInstaller({ args, tree: releaseTree(), env: io.env, stdio: io.stdio })
+  return 'refusal' in outcome ? refused(io, outcome.refusal) : outcome.status
+}
+
 /** `martha run <shape>`: the launcher's run of a shape the owner signed, its output on stdout as is, its status. */
 async function run(io: CommandIo, name: string): Promise<number> {
   const heard = await askTheLauncherToRun(io.env, name)
@@ -199,6 +212,10 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 const ACTS_ALONE: readonly string[] = ['init', 'approve', '--version']
 /** The acts that take exactly one argument (martha#129). */
 const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes']
+/** The switches `martha install` passes through to the installer; any other is no way the command is used. */
+const INSTALL_SWITCHES: readonly string[] = ['--downgrade', '-h', '--help']
+/** The switch that takes the next word as its value. */
+const INSTALL_SWITCH_OF_A_VALUE = '--digest'
 
 type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[] }
 
@@ -207,7 +224,22 @@ function actOf(argv: readonly string[]): Asked | undefined {
   if (act === undefined) return undefined
   if (ACTS_ALONE.includes(act)) return argv.length === 1 ? { act, args: [] } : undefined
   if (ACTS_OF_ONE.includes(act)) return actOfOne(act, argv)
+  if (act === 'install') return installOf(act, argv)
   return act === 'start' ? startOf(act, argv) : undefined
+}
+
+/** `install [<version>] [--downgrade] [--digest sha256:<hex>]`: one version at most, and no other switch. */
+function installOf(act: string, argv: readonly string[]): Asked | undefined {
+  const words = argv.slice(1)
+  let hasVersion = false
+  for (let at = 0; at < words.length; at++) {
+    const word = words[at] ?? ''
+    if (word === INSTALL_SWITCH_OF_A_VALUE) at++
+    else if (INSTALL_SWITCHES.includes(word)) continue
+    else if (word.startsWith('-') || hasVersion) return undefined
+    else hasVersion = true
+  }
+  return { act, args: words }
 }
 
 /** `start <member> [-- <claude arguments>]`. */
@@ -263,13 +295,23 @@ async function runAct(argv: readonly string[], io: CommandIo): Promise<number> {
     io.err(USAGE)
     return EXIT_USAGE
   }
+  return actOfPlaces(asked, io)
+}
+
+/** The acts that need no place: a version, a shape the launcher runs, and an install, which must work with no checkout. */
+async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
   if (asked.act === '--version') {
     io.out(version())
     return EXIT_DONE
   }
   if (asked.act === 'run') return run(io, asked.args[0]!)
+  if (asked.act === 'install') return install(io, asked.args)
   const places = placesOf(io)
-  if (typeof places === 'string') return refused(io, places)
+  return typeof places === 'string' ? refused(io, places) : actIn(asked, places, io)
+}
+
+/** The acts that work inside a project: the owner's two, and the three that read or start a member. */
+async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<number> {
   if (asked.act === 'pin-key') return pinKey(io, places, asked.args[0]!)
   if (asked.act === 'keep-shapes') return keepShapes(io, places, asked.args[0]!)
   if (asked.act === 'init') return init(io, places)

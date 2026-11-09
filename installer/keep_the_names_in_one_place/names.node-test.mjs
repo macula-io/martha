@@ -3,7 +3,7 @@
 // held to it: the tag globs and guard inputs each job passes, the signer sha every signing job calls, the version
 // files the guard reads, the installer's repository.url, and the install line a reader copies.
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
@@ -289,4 +289,31 @@ test('the guard-input reader bites: a planted prefix is read as planted', () => 
   const planted = workflow.release.replace(/tag-prefix: v\n/, 'tag-prefix: x\n')
   assert.equal(callInputs(planted, 'release-guard.yml')['tag-prefix'], 'x')
   assert.equal(basename(INSTALLER), INSTALLER_DIR)
+})
+
+test('the workflow that publishes the installer is a file of this repository, and cuts its tag as the names say', () => {
+  assert.ok(existsSync(join(ROOT, NAMES.installerPublishWorkflow)), `${NAMES.installerPublishWorkflow} is not a file of this repository`)
+  const published = read(NAMES.installerPublishWorkflow)
+  assert.ok(published.includes(NAMES.installerTagPrefix), `${NAMES.installerPublishWorkflow} never names the tag prefix ${NAMES.installerTagPrefix}`)
+  assert.ok(published.includes('--provenance'), `${NAMES.installerPublishWorkflow} publishes without provenance, so no release could pin it (martha#84)`)
+})
+
+test('the release tree names the installer package the installer names itself, so the client can hold a pin to it', () => {
+  assert.equal(rootManifest.martha.installerPackage, NAMES.npmName, 'the root package.json names another installer than the installer package')
+  assert.equal(installerManifest.name, NAMES.npmName, 'the installer package is not the one the root names')
+  assert.match(rootManifest.martha.installerPackage, /^@[a-z0-9-]+\/[a-z0-9-]+$/, 'the installer package is a scoped npm name')
+})
+
+test('a pin is generated, never committed: no installer.json is in the tracked tree', () => {
+  const every = readdirSync(ROOT, { recursive: true, encoding: 'utf8' })
+    .filter((path) => !path.split('/').some((part) => part === 'node_modules' || part === '.git'))
+  const pins = every.filter((path) => path.split('/').at(-1) === 'installer.json')
+  assert.deepEqual(pins, [], `a release's pin is written by pack_a_release, never committed: ${pins.join(', ')}`)
+})
+
+test('the client runs the bin the installer package publishes', () => {
+  const client = read('src/install_the_pinned_installer/install_the_pinned_installer.ts')
+  const bin = installerManifest.bin[`${NAMES.command}-install`]
+  assert.ok(bin, `the installer publishes no ${NAMES.command}-install bin`)
+  assert.ok(client.includes(`'${bin}'`), `the client runs another bin than ${bin}, which the installer publishes`)
 })
