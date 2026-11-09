@@ -14,7 +14,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { openState, ownWritesKeptIn, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, ownWritesKeptForLaunch, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   decideLaunch,
@@ -77,7 +77,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
   const launch: ApprovedLaunch = {
     ...place,
     approved_fingerprints: [fingerprintOf(started)],
-    since_approval: { approved: started, member: MEMBER, own_writes: ownWritesKeptIn(state), launch_id: LAUNCH },
+    since_approval: { approved: started, member: MEMBER, own_writes: ownWritesKeptForLaunch(state, LAUNCH), launch_id: LAUNCH },
   }
   const stops: string[] = []
   const relay = memberRelay({
@@ -118,7 +118,7 @@ async function wrote(place: Checkout, path: string, content: string, on_disk = c
 }
 
 const blobOf = (place: Checkout, path: string): string => git(place.checkout, 'hash-object', '--', path)
-const allOwnWrites = (state: MarthaState): OwnWrites => ownWritesKeptIn(state).all()
+const allOwnWrites = (state: MarthaState): OwnWrites => ownWritesKeptForTheHistory(state).all()
 
 const MOVED = (paths: string): string =>
   `The checkout changed since the owner approved it, and not by this member's own file writes: ${paths}. ` +
@@ -234,7 +234,7 @@ test("another launch's record of the same bytes does not pass a path", async (t)
     launch: 'another-launch',
     recorded_at: new Date().toISOString(),
   }
-  assert.equal(ownWritesKeptIn(place.state).append(elsewhere), undefined)
+  assert.equal(ownWritesKeptForTheHistory(place.state).append(elsewhere), undefined)
   assert.deepEqual(await place.relay.answer('tool_called', call('Read')), DENIED_BEFORE_A_CALL(MOVED('outsider.txt')))
 })
 

@@ -5,10 +5,18 @@
 // `<state root>/<sha256 of the project's real path>`.
 //
 // The state root and each project's directory are made mode 0700. Every file in them is mode 0600, written
-// whole under a staging name and renamed into place, or (the approvals) appended to. Each time it is opened,
-// the directory is refused unless it is a real directory, not a link, owned by this user and written by no
-// one else; each file is refused unless it is a regular file owned by this user that no one else may read or
+// whole under a staging name and renamed into place, or (the approvals, the own writes) appended to. Each time it
+// is opened, the directory is refused unless it is a real directory, not a link, owned by this user and written by
+// no one else; each file is refused unless it is a regular file owned by this user that no one else may read or
 // write. A file that does not parse is refused whole, never read in part.
+//
+// A launch's own writes are one file per launch, under OWN_WRITES_PLACE (martha#162). One launch's file cannot stop
+// another launch, which is what a torn record used to do to a whole project. An append counts the bytes it wrote and
+// cuts a record that was kept only in part back off, so a short write is refused as it happens rather than at the
+// next read; a file whose last line was never finished, left by a crash, is refused for that launch alone, and the
+// way back is a new start, which keeps a file of its own. The files past OWN_WRITES_LAUNCHES_KEPT, newest by their
+// last record, are pruned when a launch starts, so the state of a project no longer grows with every launch it
+// ever had.
 //
 // The checks are speed bumps, not a boundary: a member runs as the owner's OS user, so its shell can write
 // here. It is the residual martha#1 decision 2 accepts for the roster and the launch records
@@ -41,8 +49,14 @@ export const MEMBERS_FILE = 'members.json'
 /** The owner's approvals, one JSON line each. */
 export const APPROVALS_FILE = 'approvals.jsonl'
 
-/** The members' own writes, one JSON line each (martha#132, ../remember_a_members_own_writes). */
-export const OWN_WRITES_FILE = 'own_writes.jsonl'
+/** The directory inside Martha's state that holds each launch's own writes, one file per launch (martha#132, #162). */
+export const OWN_WRITES_PLACE = 'own-writes'
+
+/** What ends the name of one launch's own-writes file. */
+export const OWN_WRITES_SUFFIX = '.jsonl'
+
+/** How many launches' own writes are kept: the newest by the last record each kept, so a reader of the history has one. */
+export const OWN_WRITES_LAUNCHES_KEPT = 64
 
 /** How many random bytes a node id holds: 64 hex digits, the shape NODE_ID accepts. */
 const NODE_ID_BYTES = 32
@@ -218,7 +232,12 @@ export function readApprovals(state: MarthaState): { readonly approvals: readonl
   return { approvals: approvals as Approval[] }
 }
 
-const APPEND = fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
+const NEWLINE = '\n'
+
+/** The byte a line ends with, which is what tells a record that was finished from one that was not. */
+const NEWLINE_BYTE = NEWLINE.charCodeAt(0)
+
+const APPEND = fs.constants.O_RDWR | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
 
 /** A state file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
 function openForAppend(path: string, what: string): { readonly descriptor: number } | Refused {
@@ -235,44 +254,206 @@ function openForAppend(path: string, what: string): { readonly descriptor: numbe
   return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no ${what} in it.` }
 }
 
-/** Keeps `line` at the end of the state file `name`; or why it could not be kept. `what` names what one line holds. */
-function appendStateLine(state: MarthaState, name: string, line: string, what: string): Refused | undefined {
-  const opened = openForAppend(join(state.directory, name), what)
+/**
+ * Cuts a last line that was never finished off the file, so the next record is not appended after a torn one
+ * (martha#162). A crash mid-append, or a write cut short, leaves one; what it held is never kept, and a launch that
+ * lost a record this way is refused the path it named at its next recheck.
+ */
+function cutOffAnUnfinishedLine(descriptor: number): void {
+  const size = fs.fstatSync(descriptor).size
+  if (size === 0) return
+  const last = Buffer.alloc(1)
+  fs.readSync(descriptor, last, 0, 1, size - 1)
+  if (last[0] === NEWLINE_BYTE) return
+  fs.ftruncateSync(descriptor, fs.readFileSync(descriptor, 'utf8').lastIndexOf(NEWLINE) + 1)
+}
+
+/**
+ * Keeps `line` at the end of the state file at `path`; or why it could not be kept. `what` names what one line
+ * holds. The bytes written are counted (martha#162): a record kept only in part is cut back off the file and refused
+ * here, so a short write never leaves half a record for the next read to trip over.
+ */
+function appendStateLine(path: string, line: string, what: string): Refused | undefined {
+  const opened = openForAppend(path, what)
   if ('refusal' in opened) return opened
+  const { descriptor } = opened
   try {
-    fs.writeSync(opened.descriptor, `${line}\n`)
+    cutOffAnUnfinishedLine(descriptor)
+    const text = `${line}${NEWLINE}`
+    const bytes = Buffer.byteLength(text)
+    const before = fs.fstatSync(descriptor).size
+    const written = writtenBy(() => fs.writeSync(descriptor, text))
+    if (typeof written === 'string') {
+      fs.ftruncateSync(descriptor, before)
+      return { refusal: `${path} could not be written (${written}), so Martha keeps no ${what} in it.` }
+    }
+    if (written !== bytes) {
+      fs.ftruncateSync(descriptor, before)
+      return { refusal: `${path} kept only ${written} of the ${bytes} bytes of an ${what}, so Martha keeps none of it.` }
+    }
+    fs.fsyncSync(descriptor)
     return undefined
   } finally {
-    fs.closeSync(opened.descriptor)
+    fs.closeSync(descriptor)
+  }
+}
+
+/** The bytes `write` wrote, or the error's code when it could not write at all. */
+function writtenBy(write: () => number): number | string {
+  try {
+    return write()
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code ?? String(error)
   }
 }
 
 /** Keeps one more approval, as one line at the end of the file; or why it could not be kept. */
 export function appendApproval(state: MarthaState, approval: Approval): Refused | undefined {
-  return appendStateLine(state, APPROVALS_FILE, JSON.stringify(approval), 'approval')
+  return appendStateLine(join(state.directory, APPROVALS_FILE), JSON.stringify(approval), 'approval')
 }
 
 /** What one own write is called in a refusal. */
 const ONE_OWN_WRITE = 'own write'
 
-/** Every own write kept for this project, in the order kept; a missing file is none, and one bad line refuses the file whole. */
-function readOwnWrites(state: MarthaState): OwnWrites {
-  const path = join(state.directory, OWN_WRITES_FILE)
+/** An own write kept under no launch at all, which is no place to keep one. */
+const NOT_UNDER_A_LAUNCH = 'An own write is kept under the launch that made it, and an empty name is not a launch.'
+
+/** The own writes' directory in this project's state, made mode 0700 when missing; or why it may not be used. */
+function ownWritesDirectory(state: MarthaState): { readonly path: string } | Refused {
+  const made = stateSubdirectory(state, OWN_WRITES_PLACE)
+  return made
+}
+
+/** The name one launch's own writes are kept under: never a path, and never a dot a person or git could steer with. */
+function ownWritesFileNameOf(launch: string): string | undefined {
+  return launch === '' ? undefined : `${encodeURIComponent(launch).replaceAll('.', '%2E')}${OWN_WRITES_SUFFIX}`
+}
+
+/** The launch a file name keeps own writes for, or undefined when the name is not one this file writes. */
+function launchOfOwnWritesFileName(name: string): string | undefined {
+  if (!name.endsWith(OWN_WRITES_SUFFIX)) return undefined
+  try {
+    const launch = decodeURIComponent(name.slice(0, -OWN_WRITES_SUFFIX.length))
+    return ownWritesFileNameOf(launch) === name ? launch : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Why one launch's own writes are not trusted, and the way back that needs no hand-edited state file. */
+const startAgain = (path: string, why: string): Refused => ({
+  refusal: `${path} ${why}, so Martha reads none of this launch's own writes. Start the member again: each start keeps a file of its own.`,
+})
+
+/** The own writes kept in one launch's file, in the order kept; a missing file is none, and one bad line refuses it whole. */
+function readOwnWritesOf(path: string): OwnWrites {
   const read = readStateFile(path)
   if ('refusal' in read) return read
+  if (read.text !== '' && !read.text.endsWith(NEWLINE)) return startAgain(path, 'ends in a line that was never finished')
   const writes = read.text
-    .split('\n')
+    .split(NEWLINE)
     .filter((line) => line !== '')
     .map(ownWriteOfLine)
   const bad = writes.indexOf(undefined)
-  if (bad !== -1) return { refusal: `${path} line ${bad + 1} is not an ${ONE_OWN_WRITE}, so Martha reads none of it.` }
+  if (bad !== -1) return startAgain(path, `line ${bad + 1} is not an ${ONE_OWN_WRITE}`)
   return { writes: writes as OwnWrite[] }
 }
 
-/** The project's own writes, kept as one line each at the end of OWN_WRITES_FILE in its state. */
-export function ownWritesKeptIn(state: MarthaState): OwnWritesStore {
+/** Keeps one own write at the end of the file its launch keeps (martha#162); or why it could not be kept. */
+function appendOwnWriteOf(directory: string, write: OwnWrite): string | undefined {
+  const name = ownWritesFileNameOf(write.launch)
+  if (name === undefined) return NOT_UNDER_A_LAUNCH
+  return appendStateLine(join(directory, name), lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal
+}
+
+/**
+ * The own writes of one launch, kept one line each in a file of that launch's own: the only file a recheck of the
+ * launch reads, and the only one a torn record in it can refuse (martha#162).
+ */
+export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnWritesStore {
+  const directory = ownWritesDirectory(state)
+  const name = ownWritesFileNameOf(launch)
+  if ('refusal' in directory) return { append: () => directory.refusal, all: () => directory }
+  if (name === undefined) return { append: () => NOT_UNDER_A_LAUNCH, all: () => ({ refusal: NOT_UNDER_A_LAUNCH }) }
+  const path = join(directory.path, name)
   return {
-    append: (write) => appendStateLine(state, OWN_WRITES_FILE, lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal,
-    all: () => readOwnWrites(state),
+    append: (write) =>
+      write.launch === launch ? appendStateLine(path, lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal : `An own write of another launch is not kept in ${path}.`,
+    all: () => readOwnWritesOf(path),
   }
+}
+
+/**
+ * Every own write still kept, launch by launch in the order each launch kept them, and the launches in the order of
+ * their first record: the whole history a reader of it (#129) asks for (martha#162).
+ */
+export function ownWritesKeptForTheHistory(state: MarthaState): OwnWritesStore {
+  return {
+    append: (write) => {
+      const directory = ownWritesDirectory(state)
+      return 'refusal' in directory ? directory.refusal : appendOwnWriteOf(directory.path, write)
+    },
+    all: () => readOwnWritesKeptForTheHistory(state),
+  }
+}
+
+/** What one launch kept, read back whole. */
+interface LaunchOwnWrites {
+  readonly launch: string
+  readonly writes: readonly OwnWrite[]
+}
+
+function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWrites {
+  const directory = ownWritesDirectory(state)
+  if ('refusal' in directory) return directory
+  let names: string[]
+  try {
+    names = fs.readdirSync(directory.path)
+  } catch (error) {
+    return { refusal: `${directory.path} could not be read (${(error as NodeJS.ErrnoException).code ?? String(error)}).` }
+  }
+  const kept: LaunchOwnWrites[] = []
+  for (const [name, launch] of names.sort().map((name) => [name, launchOfOwnWritesFileName(name)] as const)) {
+    if (launch === undefined) continue
+    const read = readOwnWritesOf(join(directory.path, name))
+    if ('refusal' in read) return read
+    kept.push({ launch, writes: read.writes })
+  }
+  const firstRecord = (one: LaunchOwnWrites): string => one.writes[0]?.recorded_at ?? ''
+  // The names are read in order, and this sort is stable, so two launches whose first record is the same instant are
+  // read in the order of their names, and the same history comes back every time.
+  return { writes: kept.sort((one, other) => firstRecord(one).localeCompare(firstRecord(other))).flatMap((one) => one.writes) }
+}
+
+/**
+ * Removes the own writes of the launches past the newest OWN_WRITES_LAUNCHES_KEPT, by the last record each kept, so a
+ * project's state stops growing with every launch it ever had (martha#162); what could not be removed, and why.
+ */
+export function pruneOwnWritesOfOldLaunches(state: MarthaState): readonly string[] {
+  const directory = ownWritesDirectory(state)
+  if ('refusal' in directory) return [directory.refusal]
+  let names: string[]
+  try {
+    names = fs.readdirSync(directory.path).filter((name) => launchOfOwnWritesFileName(name) !== undefined)
+  } catch (error) {
+    return [`${directory.path} could not be read (${(error as NodeJS.ErrnoException).code ?? String(error)}).`]
+  }
+  if (names.length <= OWN_WRITES_LAUNCHES_KEPT) return []
+  const byLastRecord = names
+    .map((name) => ({ name, path: join(directory.path, name), last: lastRecordTimeOf(join(directory.path, name)) }))
+    .sort((one, other) => other.last - one.last || one.name.localeCompare(other.name))
+  return byLastRecord.slice(OWN_WRITES_LAUNCHES_KEPT).flatMap(({ path }) => {
+    try {
+      fs.rmSync(path)
+      return []
+    } catch (error) {
+      return [`${path} could not be removed (${(error as NodeJS.ErrnoException).code ?? String(error)}).`]
+    }
+  })
+}
+
+/** When the last record was kept in an own-writes file: the file's own last change, or 0 when it cannot be told. */
+function lastRecordTimeOf(path: string): number {
+  const found = fs.lstatSync(path, { throwIfNoEntry: false })
+  return found === undefined ? 0 : found.mtimeMs
 }
