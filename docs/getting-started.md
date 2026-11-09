@@ -111,8 +111,11 @@ If the `claude` in your PATH is not the version Martha's adapter was recorded
 against, one more line sits between those two. It is information, not a refusal:
 
 ```text
-martha: The host at /usr/local/bin/claude is version 2.1.319; Martha's record of the host is of version 2.1.318. It loads Martha's relay, so the member starts.
+martha: The host at /usr/local/bin/claude is version 2.1.318; Martha's record of the host is of version 2.1.319. It loads Martha's relay, so the member starts.
 ```
+
+The two numbers are ones you can check: `claude --version` prints the first, and
+the second command under [What you need](#what-you-need) prints the other.
 
 Before it starts the member, Martha asks that same binary whether it loads
 Martha's relay, using the host's own loader, and refuses the start when it does
@@ -173,8 +176,14 @@ review main..first-task
 ```
 
 That is a message to the reviewer, not a Martha command: the reviewer reads the
-range with `git` in your checkout and answers with a verdict and its findings.
-Name the base your project actually uses if it is not `main`.
+range in your checkout and answers with a verdict and its findings. Name the
+base your project actually uses if it is not `main`.
+
+If Claude Code hands the review to its own background agent, Martha refuses that
+member's shell commands for the rest of the session once the agent's text
+arrives ([issue #170](https://github.com/macula-io/martha/issues/170)). The
+member can still read files, and the review still comes back; start the reviewer
+again if you want it to run commands.
 
 ## What a refusal means
 
@@ -202,9 +211,11 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
 - `.crew/crew.json` in your checkout: the crew's declaration. Commit it or not,
   as you prefer; it holds names and roles, no secrets.
 - `$XDG_STATE_HOME/martha`, or `~/.local/state/martha`: one directory per
-  project, named by a hash of the project's path. In it are each member's node
-  id (`members.json`) and the approvals you gave (`approvals.jsonl`). Nothing in
-  your checkout holds either.
+  project, named by a hash of the project's path, holding what Martha keeps for
+  that project — each member's node id (`members.json`), the approvals you gave
+  (`approvals.jsonl`), each launch's copy of the config it started on, and the
+  record of what a member wrote itself. Nothing in your checkout holds any of
+  it.
 - `$XDG_RUNTIME_DIR/martha-<your uid>`, or `/tmp/martha-<your uid>`: the sockets
   a running member answers over. Made 0700, and refused if it is not yours
   alone.
