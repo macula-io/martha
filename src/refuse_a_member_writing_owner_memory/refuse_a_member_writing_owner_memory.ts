@@ -311,8 +311,10 @@ const HFS_IGNORES = new Set([0x200c, 0x200d, 0x200e, 0x200f, 0x202a, 0x202b, 0x2
 
 /** The name git's own check compares a `.git` segment against. */
 const DOT_GIT = '.git'
-/** The characters git's NTFS check ends a segment at, besides the end: a `:` (an alternate data stream) and a `\` (a separator on NTFS). */
+/** The characters git's NTFS check ends a name at, besides the end: a `:` (an alternate data stream) and a `\` (a separator on NTFS). */
 const NTFS_ENDS_A_SEGMENT = new Set([':', '\\'])
+/** The separator git's NTFS check may see inside a path segment written on a POSIX machine (read-cache.c:1051, below). */
+const NTFS_SEPARATOR = '\\'
 
 /**
  * Whether a path segment is `.git` to git's HFS+ check (`is_hfs_dotgit` ->
@@ -326,14 +328,14 @@ function isGitOnHfs(segment: string): boolean {
 }
 
 /**
- * Whether a path segment is `.git` to git's NTFS check (`is_ntfs_dotgit`,
- * path.c, 2.56.0): `.` then g, i, t in either ASCII case, or g, i, t in either
- * ASCII case then `~1`, followed by nothing but `.` and ` ` up to the end of the
- * segment, a `:` or a `\`. `git~2` and the other short names git keeps for
- * `.gitmodules` and its like are not `.git`.
+ * Whether one name is `.git` to git's NTFS check (`is_ntfs_dotgit`, path.c,
+ * 2.56.0): `.` then g, i, t in either ASCII case, or g, i, t in either ASCII
+ * case then `~1`, followed by nothing but `.` and ` ` up to the end of the name,
+ * a `:` or a `\`. `git~2` and the other short names git keeps for `.gitmodules`
+ * and its like are not `.git`.
  */
-function isGitOnNtfs(segment: string): boolean {
-  const folded = asciiLowered(segment)
+function isGitOnNtfsName(name: string): boolean {
+  const folded = asciiLowered(name)
   const rest = folded.startsWith(DOT_GIT) ? folded.slice(DOT_GIT.length) : folded.startsWith('git~1') ? folded.slice('git~1'.length) : undefined
   if (rest === undefined) return false
   for (const point of rest) {
@@ -341,6 +343,23 @@ function isGitOnNtfs(segment: string): boolean {
     return NTFS_ENDS_A_SEGMENT.has(point)
   }
   return true
+}
+
+/**
+ * Whether a path segment is `.git` to git's NTFS check as read-cache.c runs it
+ * on a POSIX machine (2.56.0, verify_path_internal): a `\` inside the name is a
+ * separator to git too, and the check runs again on what follows it —
+ *
+ *     } else if (c == '\\' &&
+ *                repo_protect_ntfs(the_repository)) {
+ *             if (is_ntfs_dotgit(path))
+ *                     return PATH_INVALID;
+ *
+ * — so `src/a\.git` and `src/a\git~1` are `.git` although the name git would
+ * find on this disk is not. Every part of the segment is checked.
+ */
+function isGitOnNtfs(segment: string): boolean {
+  return segment.split(NTFS_SEPARATOR).some(isGitOnNtfsName)
 }
 
 /**

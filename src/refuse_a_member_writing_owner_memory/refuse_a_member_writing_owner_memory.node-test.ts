@@ -360,6 +360,19 @@ test('git\'s own .git synonyms are refused: any ASCII case, the points HFS+ igno
   }
 })
 
+test('a backslash is a separator to git\'s NTFS check too, so src/a\\.git and src/a\\git~1 are refused (#168)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const named = (name: string) => join(place.worktree, 'src', name)
+  // read-cache.c:1051-1054 (git 2.56.0): inside a path, a `\` makes git run
+  // is_ntfs_dotgit again on what follows it, so the name it finds on this disk is not the one it judges.
+  assertRefusedAsGit(places, place.worktree, place.home, named('a\\.git'), 'a .git after a backslash')
+  assertRefusedAsGit(places, place.worktree, place.home, named('a\\git~1'), 'a git~1 after a backslash')
+  assertRefusedAsGit(places, place.worktree, place.home, named('a\\.git\\hooks'), 'a .git between two backslashes')
+  assertAdmitted(places, place.worktree, place.home, named('a\\b.ts'), 'an ordinary name holding a backslash')
+  assertAdmitted(places, place.worktree, place.home, named('a\\.gitignore'), 'a .gitignore after a backslash is no .git')
+})
+
 test('a .git file naming a git directory outside the checkout is refused there, and where a linked worktree shares one (#168)', (t) => {
   const place = placeFor(t)
   const elsewhere = join(place.root, 'on-another-disk')
