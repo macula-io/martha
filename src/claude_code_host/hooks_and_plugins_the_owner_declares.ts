@@ -103,6 +103,15 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 // this refuses, not a claim to hold every way YAML has to write the key: r=3
 // found one this list was missing, and a spelling that turns up later is
 // another round of the same work.
+//
+// Nor does it hold every spelling that looks like the key, and it must not
+// refuse the ones the host does not read as one: #174 asked the host about two
+// of those, and it reads neither as `hooks`. It names the frontmatter key of a
+// binary-tagged scalar by the base64 text it was written as, and it does not
+// parse a flow sequence key whose colon the next line opens, so that whole file
+// is ignored. `npm run probe:launch` carries a row for each, beside a control
+// that writes the key itself and whose hooks run, so a host that starts reading
+// one of them fails its row instead of passing quietly (martha#174).
 //   - the text `hooks` with a colon after it, anywhere: bare, quoted, tagged
 //     (`!<tag:yaml.org,2002:str>"hooks":`), in flow style, or with a line break
 //     before the colon. `githooks:` counts too, a refusal the owner can read;
