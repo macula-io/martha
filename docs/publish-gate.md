@@ -287,6 +287,14 @@ What the plan leaves out, stated rather than hidden:
   merge key, or an alias used as a key. The refusal names the file and the
   spelling (martha#146). `npm run probe:launch` carries one row per spelling,
   each refused by the launcher's own gate with nothing started.
+  Two spellings that look like that key are not refused, because the host does
+  not read either of them as `hooks`: a binary tag that decodes to it, and a
+  collection key whose colon the next line opens. `npm run probe:launch` starts
+  the host as an agent for each of the two, beside a control that writes the key
+  itself and whose hooks do run, and records what the host does — it names the
+  first as a key it does not recognize, by the base64 text it was written as,
+  and of the second it says the frontmatter does not parse and ignores the file,
+  so there is no agent by that name; neither runs a hook (martha#174).
 - **A tool server's instruction block** (A11), handed to the model at start.
   The mesh server's block is code of its recorded tree, which `treeUnlike`
   compares file by file with the recorded one, through
