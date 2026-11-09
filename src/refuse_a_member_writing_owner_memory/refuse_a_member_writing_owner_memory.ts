@@ -1,9 +1,10 @@
-// A member never writes the memory or the instructions the owner's own Claude
-// Code sessions load (martha#136).
+// A member never writes the memory, the instructions or the text the owner's own Claude Code sessions load, from the
+// owner's user scope or the member's (martha#136, martha#154).
 //
-// This exists so text a member wrote cannot reach a later session, the owner's
-// or another member's, as memory or as the owner's own instructions, with
-// nothing recording where it came from.
+// This exists so text a member wrote cannot reach a later session, the owner's or another member's, as memory, as the
+// owner's own instructions, as a skill's description in every session, as an agent's body when it runs, as a command,
+// as an output style, or as a resumed transcript read back as the conversation so far: nothing records where it came
+// from, and the owner's next session loads it as its own.
 //
 // Claude Code keeps auto-memory in `<config dir>/projects/<project key>/memory/`
 // and loads it into every session of that project. A session in a git worktree
@@ -18,10 +19,17 @@
 //   1. WHOSE CONFIG DIR. The launcher's, from its own environment: the folder the
 //      owner's sessions load. The member's too, when its environment resolves
 //      another. Both are denied.
-//   2. WHAT IS DENIED. In each config dir: every `projects/*/memory/`, `rules/`,
-//      and `CLAUDE.md`. The two folders that override where memory lives, when
-//      the launcher's environment sets them. Each `autoMemoryDirectory` the
-//      policy, user and carried settings name.
+//   2. WHAT IS DENIED. In each config dir: every project's own folder,
+//      `projects/<any>/**` (a session folder holds its transcript, `subagents/`,
+//      `tool-results/` and its memory), `rules/`, `CLAUDE.md`, and the folders
+//      the host loads the owner's own text from — the markdown kinds the
+//      recording names (`agents`, `commands`, `skills`), and the output-styles
+//      folder it names (martha#154) — with the folder the member's own session
+//      init reports for output styles, which a settings env block may move. The
+//      two folders that override where memory lives, when the launcher's
+//      environment sets them. Each `autoMemoryDirectory` the policy, user and
+//      carried settings name. No name is typed here: the markdown kinds and the
+//      styles folder come from `RECORDED_HOST`, cut from the host's binary.
 //   3. AS THE HOST RESOLVES IT. A path is trimmed, a leading `~` resolves against
 //      the host's home, the rest against the member's working directory
 //      (../claude_code_host asTheHostResolves). It is denied when either the
@@ -68,14 +76,36 @@ const MEMORY = 'memory'
 const OWNER_INSTRUCTIONS = 'CLAUDE.md'
 const OWNER_RULES = 'rules'
 
+/** A place a member's file tool may not write, and the issue that put it there. */
+export interface DeniedPlace {
+  readonly what: string
+  readonly issue: string
+}
+
 /** Every place a member's file tool may not write. */
 export interface OwnerMemoryPlaces {
+  /** The config dirs whose whole `projects/` area is denied: the owner's and the member's (martha#154). */
+  readonly config_dirs: readonly string[]
   /** Roots whose `projects/<any>/memory/` is denied. */
   readonly memory_roots: readonly string[]
-  /** Folders denied whole. */
-  readonly folders: readonly string[]
+  /** Folders denied whole, each with the issue that denies it. */
+  readonly folders: readonly DeniedPlace[]
   /** Files denied. */
   readonly files: readonly string[]
+}
+
+/**
+ * What the recording says the host loads from the owner's user scope, and where the member's own session reports the
+ * styles folder (martha#154). Nothing here is typed by this repository: the kinds and the folder are the recorded
+ * host's own words, and the reported folder is the path the session's init answered with.
+ */
+export interface OwnerUserScope {
+  /** The folders under each config dir the host loads markdown from, by name (`RECORDED_HOST.markdown_kinds`, #146). */
+  readonly markdown_kinds: readonly string[]
+  /** The folder under each config dir the host lists the owner's user output styles from (#154). */
+  readonly output_styles_folder: string
+  /** The folder the member's session init reported for user output styles, after its settings env blocks (#154). */
+  readonly reported_output_styles_dir: string
 }
 
 export interface OwnerMemorySources {
@@ -87,6 +117,8 @@ export interface OwnerMemorySources {
   readonly home: string
   /** The settings files the host reads that may name a memory folder: policy, user, carried. */
   readonly settings_files: readonly string[]
+  /** The places the host loads from the owner's user scope, from the recording and the member's own init (#154). */
+  readonly user_scope: OwnerUserScope
 }
 
 /** The config dir an environment's host loads, or undefined when it cannot be told (userSettingsPath refuses it). */
@@ -108,17 +140,36 @@ function memoryDirectoryIn(file: string, home: string): string | undefined {
 
 const unique = (paths: ReadonlyArray<string | undefined>): string[] => [...new Set(paths.filter((path) => path !== undefined).map((path) => normalize(path)))]
 
+/** The places, each path once, the first issue that denies it kept, and none left empty. */
+const deniedPlaces = (places: ReadonlyArray<DeniedPlace | string | undefined>): DeniedPlace[] => {
+  const named = places.flatMap((place) => {
+    const one = typeof place === 'string' ? { what: place, issue: '' } : place
+    return one === undefined || one.what.trim() === '' ? [] : [one]
+  })
+  const seen = new Set<string>()
+  return named.filter((place) => (seen.has(normalize(place.what)) ? false : (seen.add(normalize(place.what)), true)))
+}
+
 /** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1 and 2). */
-export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_files }: OwnerMemorySources): OwnerMemoryPlaces {
+export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_files, user_scope }: OwnerMemorySources): OwnerMemoryPlaces {
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
   const remote = launcher_env[REMOTE_MEMORY_ROOT]
   const override = launcher_env[MEMORY_FOLDER_OVERRIDE]
+  // The folders under each config dir the host loads the owner's own text from (martha#154): the markdown kinds the
+  // recording names and the output-styles folder it names. None of the two names is typed here.
+  const loaded = configDirs.flatMap((dir) => [...user_scope.markdown_kinds, user_scope.output_styles_folder].map((kind) => join(dir, kind)))
   return {
+    config_dirs: configDirs,
     memory_roots: unique([...configDirs, remote !== undefined && remote.trim() !== '' ? asTheHostResolves(remote, home, home) : undefined]),
-    folders: unique([
-      ...configDirs.map((dir) => join(dir, OWNER_RULES)),
-      override !== undefined && override.trim() !== '' ? asTheHostResolves(override, home, home) : undefined,
-      ...settings_files.map((file) => memoryDirectoryIn(file, home)),
+    folders: deniedPlaces([
+      ...loaded.map((what): DeniedPlace => ({ what, issue: 'martha#154' })),
+      { what: user_scope.reported_output_styles_dir, issue: 'martha#154' },
+      ...configDirs.map((dir): DeniedPlace => ({ what: join(dir, OWNER_RULES), issue: 'martha#136' })),
+      ...(override !== undefined && override.trim() !== '' ? [{ what: asTheHostResolves(override, home, home), issue: 'martha#136' }] : []),
+      ...settings_files.map((file): DeniedPlace | undefined => {
+        const folder = memoryDirectoryIn(file, home)
+        return folder === undefined ? undefined : { what: folder, issue: 'martha#136' }
+      }),
     ]),
     files: unique(configDirs.map((dir) => join(dir, OWNER_INSTRUCTIONS))),
   }
@@ -184,6 +235,15 @@ export function pathToItsEnd(path: string): string | undefined {
 /** The `projects` folder under a memory root as the host resolves it: it may itself be a link to another disk, followed to its end (martha#136 r=3, r=4). */
 const projectsOf = (root: string): string | undefined => pathToItsEnd(join(root, PROJECTS))
 
+/**
+ * Whether `path` lies inside some project's own folder under a `projects` folder: its transcript, the side files a
+ * session keeps beside it, and its `memory/` — for any project key, one that does not exist yet included (martha#154).
+ */
+function inAProject(path: string, projects: string): boolean {
+  const [project, ...inside] = relative(projects, path).split(sep)
+  return inside.length > 0 && project !== undefined && project !== '' && !project.startsWith('..')
+}
+
 /** Whether `path` lies in some project's memory folder under `root`: the projects folder as spelled and as it leads. */
 function inProjectMemory(path: string, root: string): boolean {
   return unique([join(root, PROJECTS), projectsOf(root)]).some((folder) => {
@@ -222,17 +282,44 @@ function projectMemoryLeadsTo(root: string): string[] {
   }
 }
 
+/**
+ * Where each project's own folder under `root` leads now, when it is a link: the folder a write into the project
+ * would really land in, denied whole like the folder it was named by (martha#154).
+ */
+function projectFolderLeadsTo(root: string): string[] {
+  const projects = join(root, PROJECTS)
+  try {
+    return unique(
+      readdirSync(projects).flatMap((project) => {
+        const leads = whereALinkLeads(join(projects, project))
+        return leads === undefined ? [] : [leads]
+      }),
+    )
+  } catch {
+    return []
+  }
+}
+
 /** The denied place one spelling of a path falls in, or undefined. */
-function placeOf(path: string, places: OwnerMemoryPlaces): string | undefined {
+function placeOf(path: string, places: OwnerMemoryPlaces): DeniedPlace | undefined {
   const root = places.memory_roots.find(
     (candidate) =>
       (spellingsOf(candidate) ?? []).some((spelling) => inProjectMemory(path, spelling)) ||
       projectMemoryLeadsTo(candidate).some((folder) => within(path, folder)),
   )
-  if (root !== undefined) return `a project's memory folder under ${root}`
-  const folder = places.folders.find((candidate) => (spellingsOf(candidate) ?? []).some((spelling) => within(path, spelling)))
+  if (root !== undefined) return { what: `a project's memory folder under ${root}`, issue: 'martha#136' }
+  // Each project's own folder, denied whole: a session folder holds its transcript and the side files beside it,
+  // which a later `--resume` reads (martha#154).
+  const projects = places.config_dirs.find(
+    (dir) =>
+      (spellingsOf(join(dir, PROJECTS)) ?? []).some((folder) => inAProject(path, folder)) ||
+      projectFolderLeadsTo(dir).some((folder) => within(path, folder)),
+  )
+  if (projects !== undefined) return { what: `a project's folder under ${projects}`, issue: 'martha#154' }
+  const folder = places.folders.find((candidate) => (spellingsOf(candidate.what) ?? []).some((spelling) => within(path, spelling)))
   if (folder !== undefined) return folder
-  return places.files.find((candidate) => (spellingsOf(candidate) ?? []).includes(path))
+  const file = places.files.find((candidate) => (spellingsOf(candidate) ?? []).includes(path))
+  return file === undefined ? undefined : { what: file, issue: 'martha#136' }
 }
 
 /** Every project's memory folder under `root` that is a link, whether or not its target exists yet (martha#136 r=4). */
@@ -265,16 +352,16 @@ function projectEntries(root: string): string[] {
  * cannot tell which folder it lands in (martha#136 r=4, r=5).
  */
 function unfollowablePlace(places: OwnerMemoryPlaces): string | undefined {
-  const named = unique([...places.memory_roots, ...places.folders, ...places.files])
+  const named = unique([...places.memory_roots, ...places.config_dirs.map((dir) => join(dir, PROJECTS)), ...places.folders.map((folder) => folder.what), ...places.files])
   const place = named.find((candidate) => pathToItsEnd(candidate) === undefined)
   if (place !== undefined) return place
   // The projects folder itself, then every project folder and its memory: a chain of
   // links there is where a write would land, so it is refused like any other place.
-  const projects = places.memory_roots
+  const projects = unique([...places.memory_roots, ...places.config_dirs])
     .flatMap((root) => [join(root, PROJECTS), ...projectEntries(root)])
     .find((folder) => pathToItsEnd(folder) === undefined)
   if (projects !== undefined) return projects
-  return places.memory_roots.flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
+  return unique([...places.memory_roots, ...places.config_dirs]).flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
 }
 
 /** Why a member's tool call writes the owner's memory or instructions, or undefined (rules 3 and 4). */
@@ -300,7 +387,7 @@ export function writesTheOwnersMemory(
     }
     const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
     if (place !== undefined) {
-      return `${value} is in ${place}, which the owner's own Claude Code sessions load as memory or instructions: a member does not write there, so its text never reaches a later session unrecorded (martha#136)`
+      return `${value} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so its text never reaches a later session unrecorded (${place.issue})`
     }
   }
   return undefined
@@ -322,12 +409,20 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
     return folder === undefined ? [] : [folder]
   })
   const projectFolders = unique([...rootSpellings.map((root) => join(root, PROJECTS)), ...projectLeads])
-  const linkedAway = places.memory_roots
-    .flatMap(projectMemoryLeadsTo)
-    .filter((folder) => !rootSpellings.some((root) => inProjectMemory(folder, root)))
+  // Each config dir's projects folder denies every project's own folder whole (martha#154); a root memory was moved
+  // to keeps the memory folder as its one denied place (martha#136).
+  const configProjectFolders = unique(places.config_dirs.flatMap((dir) => spellingsOf(join(dir, PROJECTS)) ?? [join(dir, PROJECTS)]))
+  const otherProjects = projectFolders.filter((folder) => !configProjectFolders.includes(folder))
+  const linkedAway = unique([...places.memory_roots.flatMap(projectMemoryLeadsTo), ...places.config_dirs.flatMap(projectFolderLeadsTo)]).filter(
+    (folder) => !rootSpellings.some((root) => inProjectMemory(folder, root)) && !configProjectFolders.some((projects) => inAProject(folder, projects)),
+  )
   const globs = new Set([
-    ...projectFolders.map((folder) => `${folder}/*/${MEMORY}/**`),
-    ...[...linkedAway, ...places.folders.flatMap((folder) => spellingsOf(folder) ?? [folder])].map((folder) => `${folder}/**`),
+    ...configProjectFolders.map((folder) => `${folder}/*/**`),
+    // The memory folder under each config dir's projects stays a place of its own (martha#136): a project's own folder
+    // is denied whole above, and this names the folder #136 already closed, where a config dir is reached by a link.
+    ...configProjectFolders.map((folder) => `${folder}/*/${MEMORY}/**`),
+    ...otherProjects.map((folder) => `${folder}/*/${MEMORY}/**`),
+    ...[...linkedAway, ...places.folders.flatMap((folder) => spellingsOf(folder.what) ?? [folder.what])].map((folder) => `${folder}/**`),
     ...places.files.flatMap((file) => spellingsOf(file) ?? [file]),
   ])
   return [...globs].flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])

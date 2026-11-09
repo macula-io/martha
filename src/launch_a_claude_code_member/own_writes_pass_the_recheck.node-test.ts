@@ -12,10 +12,10 @@ import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { openState, ownWritesKeptForLaunch, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   decideLaunch,
@@ -29,6 +29,13 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
+
+/** The user-scope places the recording names, under a home the tests run in (martha#154). */
+const userScopeFor = (home: string): OwnerUserScope => ({
+  markdown_kinds: RECORDED_HOST.markdown_kinds,
+  output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+  reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+})
 
 const MEMBER = 'builder'
 const SESSION = 'session-1'
@@ -88,7 +95,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
     handed_at_start: [],
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, settings_files: [] }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, settings_files: [], user_scope: userScopeFor(home) }),
     hookSettings: hookSettingsWatch({
       user: join(home, '.claude', 'settings.json'),
       home,

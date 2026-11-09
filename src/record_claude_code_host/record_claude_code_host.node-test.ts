@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
@@ -52,6 +52,9 @@ const MARKDOWN_PARTS: Readonly<Record<string, string>> = {
     `let h=Lg(${MANAGED}(),".claude","${RECORDED_HOST.markdown_kinds[0] ?? ''}"),k=1;t(\`Loading skills from: managed=\${h}\`)`,
   ].join(';'),
   output_style_schema: `var Uq=p(()=>u(${RECORDED_HOST.output_style_schema}))`,
+  // The session-init response's field the launcher reads the owner's styles folder from (martha#154), in the shape a
+  // schema object literal spells it: among other members, so the field must be found where it is not the only one.
+  user_output_styles_dir: `var Vq=p(()=>u({session_id:j(),model:j(),${RECORDED_HOST.user_output_styles_dir},output_style:j()}))`,
 }
 
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
@@ -96,6 +99,17 @@ test('a host that says what the recording says passes the check, and the recordi
   assert.equal(run.status, 0, run.stdout)
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\n`)
   assert.deepEqual(readFileSync(RECORDING), before)
+})
+
+// The field is required of the recording itself (martha#154): the fold-in the reviewer asked for, a recording that
+// lost it is not one this build runs on, rather than a gate that refuses every launch while the field is missing.
+test('a recording the user-output-styles field is cut from does not load (martha#154)', () => {
+  const recording = JSON.parse(readFileSync(RECORDING, 'utf8')) as Record<string, unknown>
+  assert.equal(typeof recording['user_output_styles_dir'], 'string')
+  const { user_output_styles_dir: _dropped, ...without } = recording
+  assert.throws(() => recordedHostFrom(JSON.stringify(without)), /user-output-styles field/)
+  // The whole recording loads, and the field it names is the one the launch reads.
+  assert.equal(recordedHostFrom(JSON.stringify(recording)).host_version, RECORDED_HOST.host_version)
 })
 
 test('a host whose code differs fails the check, naming the field and nothing of the host\'s code', (t) => {

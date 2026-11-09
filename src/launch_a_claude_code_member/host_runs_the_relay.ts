@@ -37,14 +37,14 @@
 // (hostTrustsTheFolder), so after a folder's first start the short deadline
 // holds there too.
 
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import type { StdioOptions } from 'node:child_process'
 import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { isatty } from 'node:tty'
 
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 
 /**
  * How long one question to the host may take. The load check reads the relay's
@@ -225,4 +225,80 @@ export async function hostVersionLine(binary: string, env: NodeJS.ProcessEnv, cw
   if (version === recorded) return undefined
   const which = version === undefined ? 'a version it does not say' : `version ${version}`
   return `The host at ${binary} is ${which}; Martha's record of the host is of version ${recorded}. It loads Martha's relay, so the member starts.`
+}
+
+/**
+ * The switches a host answers its session init under (martha#154): print mode, stream-json in and out, verbose,
+ * and no session record written. Asking for the init runs no turn and starts no model call; on 2.1.321 the settings'
+ * own SessionStart hooks do not run either (a probe, see docs/publish-gate.md), and the request is closed as soon as
+ * the answer is read.
+ */
+export const SESSION_INIT_ARGS = ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--no-session-persistence'] as const
+
+/** The one control request the init question writes: the engine's `initialize`, which answers with the session's init. */
+const INITIALIZE_REQUEST = JSON.stringify({ type: 'control_request', request_id: 'martha-session-init', request: { subtype: 'initialize' } })
+
+/** The session-init response a host printed, or undefined when no line is one. */
+export function initResponseIn(printed: string): Readonly<Record<string, unknown>> | undefined {
+  for (const line of printed.split('\n')) {
+    if (!line.includes('control_response')) continue
+    try {
+      const message: unknown = JSON.parse(line)
+      const response = isRecord(message) && isRecord(message.response) ? message.response : undefined
+      const init = response !== undefined && isRecord(response.response) ? response.response : undefined
+      if (init !== undefined) return init
+    } catch {
+      continue
+    }
+  }
+  return undefined
+}
+
+/**
+ * The folder the host at `binary` reports for the user-level output styles, from its own session init, run with the
+ * switches the member's host is started with so the settings env blocks that move it are applied (martha#154); or
+ * why the launch is refused. A host that reports no such field does not start a member: the folder is not guessed
+ * from our own reading of the config dir, which is the answer the design refuses.
+ */
+export async function outputStylesDirTheHostReports(
+  binary: string,
+  switches: readonly string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  field: string = CLAUDE_CODE_OUTPUT_STYLES_FIELD,
+): Promise<{ readonly dir: string } | { readonly refusal: string }> {
+  const runs = `${binary} does not report the folder it lists the owner's user output styles from, so a member is not started: it could write there and reach a later session`
+  const printed = await askedForItsInit(binary, [...switches, ...SESSION_INIT_ARGS], env, cwd)
+  if ('failure' in printed) return { refusal: `${runs} (asked for its session init, ${printed.failure}).` }
+  const init = initResponseIn(printed.stdout)
+  if (init === undefined) return { refusal: `${runs} (its answer to the session init is no init response).` }
+  const dir = init[field]
+  if (typeof dir !== 'string' || dir.trim() === '') return { refusal: `${runs}: its session init reports no ${field} field.` }
+  return { dir }
+}
+
+/** The host's answer to the init question: what it printed, or why it could not be asked. */
+async function askedForItsInit(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string): Promise<{ readonly stdout: string } | { readonly failure: string }> {
+  return new Promise((done) => {
+    const child = spawn(binary, args, { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] })
+    let printed = ''
+    let settled = false
+    const finish = (answer: { readonly stdout: string } | { readonly failure: string }): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.kill('SIGKILL')
+      done(answer)
+    }
+    const timer = setTimeout(() => finish({ failure: `it did not answer within ${HOST_ANSWER_TIMEOUT_MS} ms` }), HOST_ANSWER_TIMEOUT_MS)
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      printed += chunk.toString()
+      // The answer is one line; the request is closed and the host stopped as soon as it is read.
+      if (initResponseIn(printed) !== undefined) finish({ stdout: printed })
+    })
+    child.once('error', (error) => finish({ failure: `it could not be run (${String((error as NodeJS.ErrnoException).code ?? error.message)})` }))
+    child.once('close', () => finish(printed === '' ? { failure: 'it ended without a word' } : { stdout: printed }))
+    child.stdin?.on('error', () => undefined)
+    child.stdin?.end(`${INITIALIZE_REQUEST}\n`)
+  })
 }

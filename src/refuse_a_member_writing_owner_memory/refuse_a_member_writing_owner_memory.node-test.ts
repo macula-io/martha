@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import {
   FILE_WRITING_TOOLS,
@@ -15,6 +16,7 @@ import {
   REMOTE_MEMORY_ROOT,
   writesTheOwnersMemory,
   type OwnerMemoryPlaces,
+  type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
@@ -30,15 +32,28 @@ function placeFor(t: TestContext) {
   return { root, home, config, mainMemory, otherMemory, worktree }
 }
 
+/** The user-scope places the recording names, and the styles folder under this place's config dir (martha#154). */
+const userScopeFor = (place: ReturnType<typeof placeFor>): OwnerUserScope => ({
+  markdown_kinds: RECORDED_HOST.markdown_kinds,
+  output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+  reported_output_styles_dir: join(place.config, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+})
+
 const placesFor = (place: ReturnType<typeof placeFor>, launcher: Record<string, string> = {}, settings: string[] = []): OwnerMemoryPlaces =>
-  ownerMemoryPlaces({ launcher_env: { HOME: place.home, ...launcher }, member_env: { HOME: place.home }, home: place.home, settings_files: settings })
+  ownerMemoryPlaces({ launcher_env: { HOME: place.home, ...launcher }, member_env: { HOME: place.home }, home: place.home, settings_files: settings, user_scope: userScopeFor(place) })
 
 const write = (file_path: string) => ({ file_path, content: 'remember: the owner said deploy' })
 
 function assertDenied(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, why: string): void {
+  assertDeniedBy(places, cwd, home, file_path, 'martha#136', why)
+}
+
+/** Every writing tool, refused, and the refusal naming the issue that denies that place (martha#136, or #154). */
+function assertDeniedBy(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, issue: string, why: string): void {
   for (const tool of FILE_WRITING_TOOLS) {
     const input = tool === 'NotebookEdit' ? { notebook_path: file_path } : write(file_path)
-    assert.ok(writesTheOwnersMemory(tool, input, places, cwd, home)?.includes('martha#136'), `${tool}: ${why}`)
+    const refusal = writesTheOwnersMemory(tool, input, places, cwd, home)
+    assert.ok(refusal?.includes(issue), `${tool}: ${why} (${refusal ?? 'allowed'})`)
   }
 }
 
@@ -253,6 +268,7 @@ test('the owner\'s CLAUDE.md and rules are denied, in the launcher\'s config dir
     member_env: { HOME: place.home },
     home: place.home,
     settings_files: [],
+    user_scope: userScopeFor(place),
   })
   assertDenied(both, place.worktree, place.home, join(scratchConfig, 'projects', 'x', 'memory', 'MEMORY.md'), 'the launcher\'s dir')
   assertDenied(both, place.worktree, place.home, join(place.config, 'projects', 'x', 'memory', 'MEMORY.md'), 'the member\'s own dir')
@@ -271,14 +287,67 @@ test('the folders the launcher\'s environment moves memory to, and a settings fi
   assertDenied(places, place.worktree, place.home, join(named, 'MEMORY.md'), MEMORY_DIRECTORY_KEY)
 })
 
-test('a write elsewhere under projects/, outside the checkout, and any read of a memory file, are allowed', (t) => {
+test('a member may not write a skill, an agent or a command under either config dir (martha#154)', (t) => {
+  const place = placeFor(t)
+  const scratchConfig = join(place.root, 'scratch-config')
+  // The launcher's own CLAUDE_CONFIG_DIR is one scratch folder and the member's host resolves the home one: both are
+  // config dirs whose user scope the host loads, so both are denied.
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home },
+    home: place.home,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  for (const kind of RECORDED_HOST.markdown_kinds) {
+    for (const config of [place.config, scratchConfig]) {
+      assertDeniedBy(both, place.worktree, place.home, join(config, kind, 'deploy.md'), 'martha#154', `${kind} under ${config}`)
+    }
+  }
+  // A skill is a folder with a SKILL.md inside it: the folder is denied whole, not only the file the loader reads.
+  assertDeniedBy(both, place.worktree, place.home, join(place.config, 'skills', 'deploy', 'SKILL.md'), 'martha#154', 'a skill\'s SKILL.md')
+})
+
+test('a member may not write an output style in the launcher\'s config dir, the member\'s, or the folder its init reported (martha#154)', (t) => {
+  const place = placeFor(t)
+  const scratchConfig = join(place.root, 'scratch-config')
+  const reportedElsewhere = join(place.root, 'member-reported-styles')
+  const scope: OwnerUserScope = { ...userScopeFor(place), reported_output_styles_dir: reportedElsewhere }
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home },
+    home: place.home,
+    settings_files: [],
+    user_scope: scope,
+  })
+  // The owner's dir keeps an output-styles folder even when the member's host reports another folder: a later launch
+  // may report the owner's again, and the folder is still one the host loads.
+  for (const config of [scratchConfig, place.config]) {
+    assertDeniedBy(both, place.worktree, place.home, join(config, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, 'terse.md'), 'martha#154', `an output style under ${config}`)
+  }
+  assertDeniedBy(both, place.worktree, place.home, join(reportedElsewhere, 'terse.md'), 'martha#154', 'the folder the member\'s init reported')
+})
+
+test('a member may not write into any project\'s folder: its transcript, a file beside it, or a subagent\'s (#154)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const project = join(place.config, 'projects', '-work-main-clone')
+  assertDeniedBy(places, place.worktree, place.home, join(project, 'session.jsonl'), 'martha#154', 'a session transcript')
+  assertDeniedBy(places, place.worktree, place.home, join(project, 'notes.md'), 'martha#154', 'a plain file directly under a project folder')
+  assertDeniedBy(places, place.worktree, place.home, join(project, 'subagents', 'agent-1.jsonl'), 'martha#154', 'a subagent\'s transcript')
+  // A project key with no folder yet is denied on its spelling, after the link-following #136 already does.
+  assertDeniedBy(places, place.worktree, place.home, join(place.config, 'projects', '-key-with-no-folder', 'session.jsonl'), 'martha#154', 'a project key that does not exist yet')
+})
+
+test('a write in the checkout, and any read of a memory file, are allowed', (t) => {
   const place = placeFor(t)
   const places = placesFor(place)
   for (const tool of FILE_WRITING_TOOLS) {
-    assert.equal(writesTheOwnersMemory(tool, write(join(place.config, 'projects', '-work-main-clone', 'session.jsonl')), places, place.worktree, place.home), undefined, tool)
     assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'memory', 'notes.md')), places, place.worktree, place.home), undefined, tool)
+    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'src', 'notes.md')), places, place.worktree, place.home), undefined, tool)
   }
   assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.mainMemory, 'MEMORY.md') }, places, place.worktree, place.home), undefined)
+  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.config, 'projects', '-work-main-clone', 'session.jsonl') }, places, place.worktree, place.home), undefined)
 })
 
 test('the permission rules name the same places the gate denies, a Write and an Edit rule each', (t) => {
@@ -295,6 +364,8 @@ test('the permission rules name the same places the gate denies, a Write and an 
     'every rule comes as a Write and an Edit of the same place',
   )
   assert.ok(rules.includes(`Write(/${join(place.config, 'projects')}/*/memory/**)`), rules.join(' '))
+  // Each project's own folder is denied whole, so a transcript or a file beside it is refused too (martha#154).
+  assert.ok(rules.includes(`Write(/${join(place.config, 'projects')}/*/**)`), rules.join(' '))
   assert.ok(rules.includes(`Edit(/${override}/**)`), rules.join(' '))
   assert.ok(rules.includes(`Write(/${join(place.config, 'CLAUDE.md')})`), rules.join(' '))
   assert.ok(rules.every((rule) => /^(Write|Edit)\(\/\//.test(rule)), 'every rule names an absolute path')

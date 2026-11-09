@@ -13,7 +13,7 @@ import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across
 import { promptOriginKindsOf } from './claude_code_prompt_origins.ts'
 import { sessionStartSourcesOf } from './claude_code_session_events.ts'
 import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
-import type { MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
+import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
 
 export { CREW_REFRESH }
@@ -60,9 +60,25 @@ export interface RecordedHost extends MarkdownTheHostLoads {
 }
 
 /** The recording this repository carries. */
-export const RECORDED_HOST: RecordedHost = JSON.parse(
-  readFileSync(new URL('./recorded_claude_code_host.json', import.meta.url), 'utf8'),
-) as RecordedHost
+export const RECORDED_HOST: RecordedHost = recordedHostFrom(readFileSync(new URL('./recorded_claude_code_host.json', import.meta.url), 'utf8'))
+
+/**
+ * A recording, read from its text; or a refusal to load it.
+ *
+ * The fields a launch cannot do without are checked here, so a recording that lost one is not a recording this build
+ * runs on: `user_output_styles_dir` names the field the session-init response reports the owner's styles folder in,
+ * and a recording without it cannot say where a member must not write (martha#154). The recorder cuts the same field,
+ * and a recording that cannot be cut is a failed recording; this is the other half, a text that loads.
+ */
+export function recordedHostFrom(text: string): RecordedHost {
+  const recording = JSON.parse(text) as RecordedHost
+  if (typeof recording.user_output_styles_dir !== 'string' || recording.user_output_styles_dir.trim() === '') {
+    throw new Error('The recording does not hold the session-init response\'s user-output-styles field, so where a member may not write the owner\'s styles cannot be told (martha#154).')
+  }
+  outputStylesFieldIn(recording.user_output_styles_dir)
+  outputStylesFolderIn(recording.user_output_styles_dir)
+  return recording
+}
 
 /** Every SessionStart source the recorded host sends. */
 export const CLAUDE_CODE_SESSION_START_SOURCES: readonly string[] = sessionStartSourcesOf(RECORDED_HOST.session_start_schema)
@@ -81,3 +97,12 @@ export const CLAUDE_CODE_OWNERS_MARKDOWN: OwnersMarkdown = {
   frontmatter_pattern: RECORDED_HOST.frontmatter_pattern,
   kinds: RECORDED_HOST.markdown_kinds,
 }
+
+/**
+ * The folder under each config dir the host lists the owner's user-level output styles from, from the recording's
+ * own statement about it (martha#154): never a name typed here.
+ */
+export const CLAUDE_CODE_OUTPUT_STYLES_FOLDER: string = outputStylesFolderIn(RECORDED_HOST.user_output_styles_dir)
+
+/** The session-init response's field the folder is reported in, as the recorded statement declares it (martha#154). */
+export const CLAUDE_CODE_OUTPUT_STYLES_FIELD: string = outputStylesFieldIn(RECORDED_HOST.user_output_styles_dir)

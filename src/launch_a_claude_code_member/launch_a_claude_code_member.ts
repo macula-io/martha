@@ -97,7 +97,7 @@ import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
@@ -125,6 +125,7 @@ import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import {
   hostTrustsTheFolder,
   hostVersionLine,
+  outputStylesDirTheHostReports,
   ownerCanAnswerTheHost,
   refusalToLoadTheRelay,
   resolvedHostCommand,
@@ -382,15 +383,17 @@ export function hookSettingsOf(
 const hostHome = (hostEnv: Readonly<Record<string, string | undefined>>): string => hostEnv.HOME ?? homedir()
 
 /**
- * Where the owner's sessions load memory and instructions from: the launcher's
- * config dir and the member's, the folders the launcher's environment moves
- * memory to, and each memory folder the policy, user and carried settings name
- * (martha#136); or why the user settings file cannot be told.
+ * Where the owner's sessions load memory, instructions and their own text from: the launcher's config dir and the
+ * member's, each project's own folder, the folders the host loads markdown and output styles from, the folder the
+ * member's own session init reported for output styles, the folders the launcher's environment moves memory to, and
+ * each memory folder the policy, user and carried settings name (martha#136, martha#154); or why the user settings
+ * file cannot be told.
  */
 function ownerMemoryOf(
   launch: ClaudeCodeMemberLaunch,
   hostEnv: Readonly<Record<string, string | undefined>>,
   prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+  reported_output_styles_dir: string,
 ): OwnerMemoryPlaces | string {
   const user = userSettingsPath(hostEnv)
   if ('refusal' in user) return user.refusal
@@ -405,6 +408,11 @@ function ownerMemoryOf(
       user.path,
       ...(prepared.carried_files[CLAUDE_SETTINGS] === undefined ? [] : [join(prepared.snapshot_dir, CLAUDE_SETTINGS)]),
     ],
+    user_scope: {
+      markdown_kinds: RECORDED_HOST.markdown_kinds,
+      output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+      reported_output_styles_dir,
+    },
   })
 }
 
@@ -433,24 +441,15 @@ function settingsDenyingOwnerMemory(
 }
 
 /**
- * The settings the member's host starts with: where the owner's memory is, the
- * launch's --settings copy that keeps the host's own writes out of it
- * (martha#136), and the watch on every settings file for a key that turns
- * Martha's relay off (martha#122); or the refusal.
+ * The watch on every settings file for a key that turns Martha's relay off (martha#122); or the refusal. The launch's
+ * own --settings copy is watched at the path it is written to, whether or not the host is started with it.
  */
 function hostSettingsOf(
   launch: ClaudeCodeMemberLaunch,
   hostEnv: Readonly<Record<string, string | undefined>>,
   prepared: Extract<PreparedLaunch, { readonly allow: true }>,
-):
-  | { readonly ownerMemory: OwnerMemoryPlaces; readonly startSettings: { readonly path: string; readonly args: readonly string[] }; readonly hookSettings: HookSettingsWatch }
-  | { readonly refusal: string } {
-  const ownerMemory = ownerMemoryOf(launch, hostEnv, prepared)
-  if (typeof ownerMemory === 'string') return { refusal: ownerMemory }
-  const startSettings = settingsDenyingOwnerMemory(prepared, ownerMemory)
-  if ('refusal' in startSettings) return startSettings
-  const hookSettings = hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings, startSettings.path)
-  return typeof hookSettings === 'string' ? { refusal: hookSettings } : { ownerMemory, startSettings, hookSettings }
+): HookSettingsWatch | string {
+  return hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings, join(prepared.snapshot_dir, CLAUDE_SETTINGS))
 }
 
 /** A launch the gate allowed, with what the member's environment is built from. */
@@ -463,10 +462,6 @@ interface ReadyLaunch {
   readonly settingsEnv: Readonly<Record<string, string>>
   /** The settings files the host reads, watched for a key that turns Martha's relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
-  /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
-  readonly ownerMemory: OwnerMemoryPlaces
-  /** The switches that name the settings the launch wrote, when no approved copy was carried (martha#136). */
-  readonly settingsArgs: readonly string[]
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -478,6 +473,10 @@ interface LaunchMade extends ReadyLaunch {
   /** The launch's read-only copy of the relay, which --plugin-dir names (martha#117). */
   readonly pluginDir: string
   readonly server: RelayServer
+  /** Where the owner's own text is, which a member does not write (martha#136, martha#154). */
+  readonly ownerMemory: OwnerMemoryPlaces
+  /** The switches that name the settings the launch wrote, when no approved copy was carried (martha#136). */
+  readonly settingsArgs: readonly string[]
 }
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
@@ -494,12 +493,11 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   }
   const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
-  const settings = hostSettingsOf(launch, hostEnv, prepared)
-  if ('refusal' in settings) {
+  const hookSettings = hostSettingsOf(launch, hostEnv, prepared)
+  if (typeof hookSettings === 'string') {
     removeSnapshot()
-    return `${NOT_STARTED}: ${settings.refusal}`
+    return `${NOT_STARTED}: ${hookSettings}`
   }
-  const { ownerMemory, startSettings, hookSettings } = settings
   const fromSettings = settingsEnvironment(
     hostEnv,
     prepared.carried_files[CLAUDE_SETTINGS],
@@ -511,19 +509,37 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings, ownerMemory, settingsArgs: startSettings.args }
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings }
 }
 
 /**
- * Step 2b: the file the host's command resolves to, which must load the launch's copy of the relay;
- * or the refusal. A host of another version than the recording is told to the
- * owner and refuses nothing (host_runs_the_relay.ts).
+ * Step 2c: where the owner's own text is, which a member does not write: the places the launcher's and the member's
+ * config dirs hold, and the folder for output styles the member's own session init reported (martha#136, martha#154).
+ * The settings the host starts with are written here, carrying the rules that refuse the host's own writes into the
+ * same places. Or the refusal.
+ */
+function placesAwayFromTheOwner(
+  launch: ClaudeCodeMemberLaunch,
+  ready: ReadyLaunch,
+  reported_output_styles_dir: string,
+): { readonly ownerMemory: OwnerMemoryPlaces; readonly settingsArgs: readonly string[] } | { readonly refusal: string } {
+  const ownerMemory = ownerMemoryOf(launch, ready.hostEnv, ready.prepared, reported_output_styles_dir)
+  if (typeof ownerMemory === 'string') return { refusal: ownerMemory }
+  const startSettings = settingsDenyingOwnerMemory(ready.prepared, ownerMemory)
+  if ('refusal' in startSettings) return startSettings
+  return { ownerMemory, settingsArgs: startSettings.args }
+}
+
+/**
+ * Step 2b: the file the host's command resolves to, which must load the launch's copy of the relay, and the folder
+ * it reports for the owner's user output styles (martha#154); or the refusal. A host of another version than the
+ * recording is told to the owner and refuses nothing (host_runs_the_relay.ts).
  */
 async function hostThatRunsTheRelay(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
   pluginDir: string,
-): Promise<{ readonly binary: string } | string> {
+): Promise<{ readonly binary: string; readonly reported_output_styles_dir: string } | string> {
   const cwd = launch.place.launch_dir
   const resolved = resolvedHostCommand(launch.command, ready.hostEnv.PATH, cwd)
   if ('refusal' in resolved) return `${NOT_STARTED}: ${resolved.refusal}`
@@ -533,7 +549,11 @@ async function hostThatRunsTheRelay(
   if (refused !== undefined) return `${NOT_STARTED}: ${refused}`
   const drift = await hostVersionLine(resolved.binary, env, cwd)
   if (drift !== undefined) launch.tellOwner(drift)
-  return resolved
+  // The styles folder the member's own session reports, asked with the switches its host starts on so the settings
+  // env blocks that move it are applied (martha#154).
+  const reported = await outputStylesDirTheHostReports(resolved.binary, ready.prepared.switches.args, env, cwd)
+  if ('refusal' in reported) return `${NOT_STARTED}: ${reported.refusal}`
+  return { binary: resolved.binary, reported_output_styles_dir: reported.dir }
 }
 
 /** Step 2: the relay socket's directory, the empty directory and the relay's copy inside it; or the refusal, with all gone. */
@@ -580,6 +600,7 @@ async function servedRelay(
   stop: (why: string) => void,
   sessionReported: () => void,
   ready: ReadyLaunch,
+  ownerMemory: OwnerMemoryPlaces,
 ): Promise<RelayServer | string> {
   const answering = memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
@@ -595,7 +616,7 @@ async function servedRelay(
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
     hookSettings: ready.hookSettings,
-    ownerMemory: ready.ownerMemory,
+    ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     stopMember: stop,
   })
@@ -825,6 +846,13 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     ready.removeSnapshot()
     return refuse(host)
   }
+  // The owner's own text, and the settings that keep the host's own writes out of those places (martha#136, #154).
+  const places = placesAwayFromTheOwner(launch, ready, host.reported_output_styles_dir)
+  if ('refusal' in places) {
+    directories.relayDirectory.remove()
+    ready.removeSnapshot()
+    return refuse(`${NOT_STARTED}: ${places.refusal}`)
+  }
 
   let group: number | undefined
   let stoppedBecause: string | null = null
@@ -835,13 +863,13 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
   }
   const backstop = relayBackstop(sessionStartDeadline(launch, ready.hostEnv), stop)
 
-  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported, ready)
+  const server = await servedRelay(launch, directories.relayDirectory.socket_path, stop, backstop.reported, ready, places.ownerMemory)
   if (typeof server === 'string') {
     directories.relayDirectory.remove()
     ready.removeSnapshot()
     return refuse(server)
   }
-  const made: LaunchMade = { ...ready, ...directories, server, binary: host.binary }
+  const made: LaunchMade = { ...ready, ...directories, ...places, server, binary: host.binary }
 
   const started = await startedMember(launch, made)
   if (typeof started === 'string') return refuse(started)

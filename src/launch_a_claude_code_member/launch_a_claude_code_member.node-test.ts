@@ -29,7 +29,7 @@ import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_throu
 import { fakeMeshRegistry, type FakeRegistry } from '../install_the_recorded_mesh_server/fake_mesh_registry.ts'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -40,8 +40,8 @@ import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
-import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
@@ -53,7 +53,14 @@ import { HOST_EXIT_COMMAND, HOST_TERMINAL, RECORDED_HOST_VARIABLE } from './driv
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
-import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+
+/** The user-scope places the recording names, under a home the tests run in (martha#154). */
+const userScopeFor = (home: string): OwnerUserScope => ({
+  markdown_kinds: RECORDED_HOST.markdown_kinds,
+  output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
+  reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+})
 
 // --- a member's places ----------------------------------------------------------
 
@@ -154,7 +161,7 @@ function answering(
       switches: CLAUDE_CODE_HOOK_SWITCHES,
       markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [] }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [], user_scope: userScopeFor(place.home) }),
     ...(signed_runs === undefined ? {} : { signed_runs }),
     stopMember: (why) => void stops.push(why),
   })
@@ -897,7 +904,8 @@ function fakeClaude(
     command,
     [
       '#!/bin/sh',
-      ...hostAnswers({ callsFile: files.callsFile, ...answers }),
+      // The session init reports the folder the launcher must deny: this place's own config dir (#154).
+      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
       `: > '${files.ranFile}'`,
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `printf '%s' "$${RELAY_SOCKET_VARIABLE}" > '${files.envFile}'`,
@@ -1100,7 +1108,23 @@ test('a host of another version than the recording starts its member, after one 
   assert.equal(named.length, 1, lines.join('\n'))
 })
 
-test('the member, its load check and its version check all run the one file its command resolves to', async (t) => {
+test('a host whose session init reports no output-styles folder starts nothing (#154)', async (t) => {
+  const place = placeFor(t)
+  // An init response with no folder in it: the launcher cannot tell which folder to deny, so it starts no member.
+  const fake = fakeClaude(place, {
+    initAnswer: JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: 'martha-session-init', response: {} } }),
+  })
+  const lines: string[] = []
+  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.startsWith(NOT_STARTED), refusal)
+  assert.ok(refusal.includes(CLAUDE_CODE_OUTPUT_STYLES_FIELD), refusal)
+  assert.equal(existsSync(fake.ranFile), false, 'the member itself never ran')
+})
+
+test('the member, its load check, its version check and its session init all run the one file its command resolves to', async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
   const onPath = join(place.home, 'on-path')
@@ -1112,7 +1136,10 @@ test('the member, its load check and its version check all run the one file its 
   t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '', t)
   const calls = readFileSync(fake.callsFile, 'utf8').trimEnd().split('\n')
-  assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', '-p'])
+  // The member's start is preceded by the three questions the launcher asks its host: the relay's load check, its
+  // version, and the session init the styles folder is read from, which runs on the switches a member starts on (#154).
+  const [firstSwitch] = HOSTS['claude-code'].project_config_off.args
+  assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', firstSwitch, '-p'])
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
 })
 
@@ -1580,7 +1607,7 @@ for (const [shape, carried, kept] of [
     const fake = fakeClaude(place)
     const launch = memberLaunch(place, fake.command, place.approved, [], recording)
     const settings = await settingsTheHostStartedWith(t, place, fake, launch)
-    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, settings_files: [] })
+    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, settings_files: [], user_scope: userScopeFor(place.home) })
     const permissions = settings.permissions as { deny: string[]; allow?: string[] }
     assert.deepEqual(permissions.deny, [...kept, ...memoryDenyRules(places)])
     if (carried !== undefined) {
