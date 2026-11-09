@@ -46,6 +46,7 @@
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import type { Processes, Stores } from '../host_contract/host_contract.ts'
+import { judgeTheCheckout, objectFormatOf } from './the_launcher_judges_the_tree.ts'
 
 /** The parts of the host contract the launch gate reads the machine through. */
 export interface LaunchHost {
@@ -56,63 +57,74 @@ export interface LaunchHost {
 /** The variables git would take a repository, an index or a config from; none is inherited. */
 const GIT_VARIABLES = 'GIT_'
 
-/**
- * The tree id of the checkout holding `dir`, with its uncommitted and untracked
- * (unignored) changes included, or `null` when `dir` is in no git checkout, the
- * checkout's top is `stop_dir` or a directory above it, or git cannot read it.
- */
-export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost): string | null {
-  const top = git(host, dir, ['rev-parse', '--show-toplevel'])
-  if (top === undefined || holds(realOrResolved(host, top), realOrResolved(host, stop_dir))) return null
-  return (hidesAChangeFromStatus(host, top) ? undefined : cleanTree(host, top)) ?? stagedTree(host, top)
-}
-
-/** An index tag `git ls-files -v` prints for an entry git status does not look at: skip-worktree. */
-const SKIP_WORKTREE_TAG = 'S'
+/** What a read of the checkout's tree came to. */
+export type TreeRead =
+  | { readonly kind: 'tree'; readonly tree: string; readonly changes?: readonly TreeChange[] }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'refused'; readonly refusal: string; readonly the_approved_tree?: true }
 
 /**
- * Whether any index entry carries a flag that makes git status skip it:
- * assume-unchanged (a lowercase tag) or skip-worktree (`S`). An index git
- * cannot list counts as hiding one.
+ * The tree id of the checkout holding `dir`, with its uncommitted and untracked (unignored) changes included, read as
+ * the launcher runs git and not as the checkout configures it (./the_launcher_judges_the_tree.ts).
+ *
+ * `none` when `dir` is in no git checkout on disk, the checkout's top is `stop_dir` or a directory above it, or the
+ * checkout names no object format. `refused`, with the words to show the owner, when the checkout cannot be read, or
+ * when a file on disk is not the file the owner approved: the bytes differ from the approved blob and the only reason
+ * they still hash to it is a conversion.
+ *
+ * `attribute_tree` is the tree whose attributes the read obeys — the tree the owner approved. Omitted, HEAD's own
+ * tree is used, which is what an approval is read against while there is no approval yet.
  */
-function hidesAChangeFromStatus(host: LaunchHost, top: string): boolean {
-  const listed = git(host, top, ['ls-files', '-v', '-z'])
-  if (listed === undefined) return true
-  return listed
-    .split('\0')
-    .filter((entry) => entry !== '')
-    .some((entry) => {
-      const tag = entry.charAt(0)
-      return tag === SKIP_WORKTREE_TAG || tag !== tag.toUpperCase()
-    })
+export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost, attribute_tree?: string): TreeRead {
+  const found = checkoutOnDisk(dir, host)
+  if (found === undefined) return { kind: 'none' }
+  if (holds(realOrResolved(host, found.top), realOrResolved(host, stop_dir))) return { kind: 'none' }
+  const format = objectFormatOf(found.git_dir, host)
+  if (format === undefined) {
+    return { kind: 'refused', refusal: `The checkout at ${found.top} does not say which object format it holds, so the files a member would run cannot be judged (martha#167); approve the checkout again.` }
+  }
+  const read = judgeTheCheckout({ top: realOrResolved(host, found.top), git_dir: found.git_dir, attribute_tree: attribute_tree ?? null }, format, host)
+  return read.kind === 'refused' ? { kind: 'refused', refusal: read.refusal, ...(read.the_approved_tree === true ? { the_approved_tree: true as const } : {}) } : { kind: 'tree', tree: read.tree, changes: read.changes }
 }
 
-/** HEAD's tree when git reports nothing changed and nothing untracked, else `undefined`. */
-function cleanTree(host: LaunchHost, top: string): string | undefined {
-  const changes = git(host, top, [
-    '--no-optional-locks',
-    'status',
-    '--porcelain=v2',
-    '--untracked-files=all',
-    '--ignore-submodules=none',
-  ])
-  if (changes !== '') return undefined
-  return git(host, top, ['rev-parse', '--verify', '--quiet', 'HEAD^{tree}'])
-}
-
-/** The tree git would write with every change staged, in a scratch index. */
-function stagedTree(host: LaunchHost, top: string): string | null {
-  const scratch = host.stores.scratch.make(null, 'martha-tree-')
-  try {
-    const index = { GIT_INDEX_FILE: join(scratch.path, 'index') }
-    const seeded = git(host, top, ['read-tree', 'HEAD'], index) ?? git(host, top, ['read-tree', '--empty'], index)
-    if (seeded === undefined) return null
-    if (git(host, top, ['-c', 'core.sparseCheckout=false', 'add', '--all', '--', '.'], index) === undefined) return null
-    return git(host, top, ['write-tree'], index) ?? null
-  } finally {
-    scratch.remove()
+/**
+ * The checkout holding `dir`, found by walking up for a `.git` entry on disk: a directory, or a file naming the git
+ * dir of a worktree. Never `rev-parse --show-toplevel`, whose answer the checkout's own `core.worktree` decides.
+ */
+function checkoutOnDisk(dir: string, host: LaunchHost): { readonly top: string; readonly git_dir: string } | undefined {
+  for (let here = realOrResolved(host, dir); ; here = dirname(here)) {
+    const found = entryOrAbsent(host, join(here, '.git'))
+    if (found !== undefined && found.kind === 'directory') return { top: here, git_dir: join(here, '.git') }
+    const named = found !== undefined && found.kind === 'file' ? gitDirNamedIn(join(here, '.git'), host) : undefined
+    if (named !== undefined) return { top: here, git_dir: named }
+    const up = dirname(here)
+    if (up === here) return undefined
   }
 }
+
+/** What is at a path, or undefined when nothing is or it cannot be read. */
+function entryOrAbsent(host: LaunchHost, path: string): ReturnType<LaunchHost['stores']['files']['kindOf']> | undefined {
+  try {
+    const found = host.stores.files.kindOf(path)
+    return found.kind === 'absent' ? undefined : found
+  } catch {
+    return undefined
+  }
+}
+
+/** The git dir a `.git` file names (`gitdir: <path>`), with every link resolved. */
+function gitDirNamedIn(dotGit: string, host: LaunchHost): string | undefined {
+  try {
+    const text = Buffer.from(host.stores.files.bytesOf(dotGit)).toString('utf8')
+    const named = text.startsWith(GITDIR_PREFIX) ? text.slice(GITDIR_PREFIX.length).trim() : ''
+    return named === '' ? undefined : realOrResolved(host, resolve(dirname(dotGit), named))
+  } catch {
+    return undefined
+  }
+}
+
+/** What the file a worktree has in place of a `.git` directory starts with. */
+const GITDIR_PREFIX = 'gitdir: '
 
 /** Whether `dir` is `path` or a directory above it. */
 function holds(dir: string, path: string): boolean {

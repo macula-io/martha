@@ -73,9 +73,10 @@ function checkoutFor(t: TestContext): Checkout {
     approved_fingerprints: [],
     since_approval: { approved: { entries: started.entries, tree: started.tree }, member: MEMBER, own_writes: ownWritesKeptIn(state), launch_id: LAUNCH },
   }
-  const start_tree = readCheckoutTree(checkout, home, thisMachine)
-  assert.notEqual(start_tree, null)
-  return { home, checkout, launch, start_tree: start_tree ?? '', own_writes_file: join(state.directory, OWN_WRITES_FILE) }
+  const start = readCheckoutTree(checkout, home, thisMachine)
+  assert.equal(start.kind, 'tree')
+  const start_tree = start.kind === 'tree' ? start.tree : ''
+  return { home, checkout, launch, start_tree, own_writes_file: join(state.directory, OWN_WRITES_FILE) }
 }
 
 /** The member's own write of a file, kept as the launcher keeps one after the call ran. */

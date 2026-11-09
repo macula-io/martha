@@ -157,7 +157,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
  * every read in it counts (decided 2026-11-07, martha#127).
  */
 function approvedStartTree(launch: ApprovedLaunch): string | null {
-  const state = readLaunchState(launch, thisMachine)
+  const state = readLaunchState(launch, thisMachine, launch.approved_tree)
   return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
 }
 

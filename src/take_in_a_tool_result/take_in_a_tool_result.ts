@@ -133,16 +133,16 @@ function readOfTheApprovedStartTree(path: unknown, span: ReadSpan, result: ToolR
  * falls with it. No approval means no own writes and no start tree, so every read counts, as before.
  */
 function holdsTheApprovedStartTree(launch: ApprovedLaunch, approved_start: string, host: LaunchHost): boolean {
-  const live = readCheckoutTree(launch.launch_dir, launch.stop_dir, host)
-  if (live === approved_start) return true
+  const read = readCheckoutTree(launch.launch_dir, launch.stop_dir, host, approved_start)
+  if (read.kind !== 'tree') return false
+  if (read.tree === approved_start) return true
   const since = launch.since_approval
   const top = checkoutTopOf(realOrResolved(host, launch.launch_dir), host)
-  if (live === null || since === undefined || top === undefined) return false
-  const changes = changesBetween(top, approved_start, live, host)
+  if (since === undefined || top === undefined || read.changes === undefined) return false
   const own = ownWritesOfLaunch(since.own_writes, since.launch_id)
-  if (changes === undefined || 'refusal' in own) return false
+  if ('refusal' in own) return false
   const latest = new Map(own.writes.map((write) => [write.path, write]))
-  return changes.every((change) => ownWriteMatches(latest.get(join(top, change.path)), change))
+  return read.changes.every((change) => ownWriteMatches(latest.get(join(top, change.path)), change))
 }
 
 /** The rows a command's first words name. Only ever added to A13, never instead of it. */

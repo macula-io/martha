@@ -99,6 +99,6 @@ export async function approveConfig(request: ApproveRequest): Promise<ApproveOut
   showConfig(request, launch, fingerprint)
   const answer = (await request.terminal.ask(QUESTION)).trim()
   if (answer !== YES) return { kind: 'refused', refusal: `Not approved: only ${YES} approves, and nothing was kept.` }
-  const unkept = appendApproval(request.state, { fingerprint, approved_at: request.now().toISOString(), ...launch })
+  const unkept = appendApproval(request.state, { fingerprint, approved_at: request.now().toISOString(), entries: launch.entries, tree: launch.tree })
   return unkept === undefined ? { kind: 'approved', fingerprint } : { kind: 'refused', refusal: unkept.refusal }
 }

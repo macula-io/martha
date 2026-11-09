@@ -22,7 +22,7 @@
 import { join, relative } from 'node:path'
 
 import { ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
-import { changesBetween, checkoutTopOf, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
+import { checkoutTopOf, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import {
   decideLaunch,
   fingerprintOf,
@@ -58,9 +58,10 @@ const noCheckout = (member: string): LaunchDecision => ({
  * own writes. A launch started on no approval is checked as the gate checks it.
  */
 export function recheckLaunchPassingOwnWrites(launch: ApprovedLaunch, host: LaunchHost): LaunchDecision {
-  const live = readLaunchState(launch, host)
+  const live = readLaunchState(launch, host, launch.since_approval?.approved.tree ?? launch.approved_tree)
   const since = launch.since_approval
   if (since === undefined) return decideLaunch({ ...live, host: launch.host, approved_fingerprints: launch.approved_fingerprints })
+  if (live.the_approved_tree_is_gone === true) return approvedTreeGone(since)
   const fingerprint = fingerprintOf(live)
   const shape = decideLaunch({ ...live, host: launch.host, approved_fingerprints: [fingerprint] })
   if (!shape.allow) return shape
@@ -80,12 +81,17 @@ export interface OwnWriteLeft {
 export const ownWriteMatches = (write: OwnWriteLeft | undefined, change: TreeChange): boolean =>
   write !== undefined && !change.deleted && write.blob === change.blob && write.mode === change.mode
 
+/** What is said when the tree the owner approved is no longer in the checkout at all. */
+function approvedTreeGone(since: SinceApproval): LaunchDecision {
+  return since.approved.tree === null ? noCheckout(since.member) : unreadTree(since.approved.tree, since.member)
+}
+
 /** The decision on a live checkout that differs from the approved one. */
 function judgedAgainstApproval(launch: ApprovedLaunch, since: SinceApproval, live: LaunchState, host: LaunchHost): LaunchDecision {
   const approved_tree = since.approved.tree
   const top = checkoutTopOf(realOrResolved(host, launch.launch_dir), host)
   if (approved_tree === null || live.tree === null || top === undefined) return noCheckout(since.member)
-  const changes = changesBetween(top, approved_tree, live.tree, host)
+  const changes = live.changes
   if (changes === undefined) return unreadTree(approved_tree, since.member)
   const own = ownWritesOfLaunch(since.own_writes, since.launch_id)
   if ('refusal' in own) return { allow: false, refusal: `${own.refusal} ${approveAgain(since.member)}` }
