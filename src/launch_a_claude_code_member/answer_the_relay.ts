@@ -250,7 +250,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (unvouched !== undefined) return denied(unvouched)
   const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
   if (settings !== undefined) return denied(settings)
-  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home)
+  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
   if (memory !== undefined) return denied(memory)
   const verdict = answerToolCall({
     tool: call.tool,

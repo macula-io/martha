@@ -88,7 +88,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     names: { ownNameOf: ownNameOfCalledTool },
     binder: bindNothing,
     handed_at_start: [],
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, settings_files: [] }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, launch_dir: home, settings_files: [] }),
     hookSettings: hookSettingsWatch({
       user: join(home, '.claude', 'settings.json'),
       home,

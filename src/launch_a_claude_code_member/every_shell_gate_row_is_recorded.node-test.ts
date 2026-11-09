@@ -100,7 +100,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
       switches: CLAUDE_CODE_HOOK_SWITCHES,
       markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [] }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [] }),
     stopMember: () => {},
   })
 

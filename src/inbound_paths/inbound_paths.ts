@@ -84,6 +84,16 @@ export const ARGUMENT_GATES = {
 export type KnownArgumentGate = keyof typeof ARGUMENT_GATES
 
 /**
+ * The path gates a row may name: a control that checks every path a member's
+ * own file tools name (martha#168). The function behind the name is built where
+ * the machine is reachable, in the host adapter that holds the guard
+ * (../refuse_a_member_writing_owner_memory, admitsAWriteNoLaterGitRunReads), and
+ * the coverage check takes it as an argument — a slice may import no adapter, so
+ * the name is all that can stand here.
+ */
+export type KnownPathGate = 'nothing-a-later-git-run-reads'
+
+/**
  * What stops outsider text on this path from being acted on.
  *
  * - `delivery-gate` — a deterministic check on the sender runs before the text
@@ -103,6 +113,10 @@ export type KnownArgumentGate = keyof typeof ARGUMENT_GATES
  *   pass refuses the start, so none reaches the model or the host's config.
  *   Only a `delivered` row may declare it.
  * - `none` — no control. A row in this state fails CI on purpose.
+ * - `check_every_path_is_gated` — a member's own file tools are refused, path by
+ *   path, by the gate the row names: the owner's memory and instructions, and
+ *   what a later git run of the owner's reads (martha#168). `also` names the
+ *   controls that stand on the same path beside it, each judged by its own rule.
  */
 export type Control =
   | { readonly kind: 'delivery-gate'; readonly gate: KnownDeliveryGate }
@@ -110,6 +124,7 @@ export type Control =
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
   | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
+  | { readonly kind: 'check_every_path_is_gated'; readonly gate: KnownPathGate; readonly also: readonly Control[] }
   | { readonly kind: 'none' }
 
 export interface InboundPath {
@@ -238,9 +253,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A13',
-    what: "code an untrusted checkout runs through the member's own commands",
+    what: "code an untrusted checkout runs through the member's own commands, and a member's file-tool write into the checkout's git directory or the owner's own git configuration, which a later git run of the owner's would then run or obey (martha#168)",
     klass: 'delivered',
-    control: { kind: 'shell-gate' },
+    control: {
+      kind: 'check_every_path_is_gated',
+      gate: 'nothing-a-later-git-run-reads',
+      also: [{ kind: 'shell-gate' }],
+    },
     attestation: 'none',
   },
   {
