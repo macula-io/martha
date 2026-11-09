@@ -275,6 +275,18 @@ What the plan leaves out, stated rather than hidden:
   the member when one appears. `npm run probe:launch` shows a hook and a plugin
   folder in the owner's user settings running on Martha's switches alone, and
   the launcher's own gate refusing both, with nothing started.
+  The owner's own agents, skills and commands are loaded from the user scope as
+  well (`<user config folder>/agents`, `skills` and `commands`, and
+  `<managed folder>/.claude/` beside them), and their frontmatter can carry
+  hooks that run while that agent, skill or command runs, with what they print
+  reaching the member and no row recording it. So a member does not start while
+  any file in those folders declares hooks in one of the spellings the launcher
+  reads: the key `hooks` with a colon after it (bare, quoted, tagged, escaped,
+  flow style), a collection used as the key (`[hooks]:`, which the host reads as
+  the key itself, `[hooks,]:`, `[[hooks]]:`, `{hooks: x}:`), an explicit key, a
+  merge key, or an alias used as a key. The refusal names the file and the
+  spelling (martha#146). `npm run probe:launch` carries one row per spelling,
+  each refused by the launcher's own gate with nothing started.
 - **A tool server's instruction block** (A11), handed to the model at start.
   The mesh server's block is code of its recorded tree, which `treeUnlike`
   compares file by file with the recorded one, through
