@@ -785,9 +785,11 @@ where it came from. Three things stand on it:
   to another disk, a project folder, a project's memory folder, a chain of
   links, and a link whose target does not exist yet, read from the link itself
   — so the written path and every place are compared where they finally lead.
-  A chain longer than eight links, or a link that turns on itself, is refused:
-  no write is allowed while one stands, because the guard cannot tell which
-  folder it would land in. A project's memory folder is followed at each write,
+  A chain whose end does not exist yet is followed link by link, and one that
+  runs past eight links, or a link that turns on itself, is refused: no write is
+  allowed while one stands, because the guard cannot tell which folder it would
+  land in. A chain that exists to its end is resolved by the system in one step,
+  up to the system's own limit, and refused when the system cannot resolve it. A project's memory folder is followed at each write,
   so a link a member makes during its session is caught too.
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for

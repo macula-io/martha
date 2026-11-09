@@ -30,9 +30,12 @@
 //      resolved by one function, pathToItsEnd, which follows a link at any level
 //      to its end: a chain of links, a link whose target does not exist yet (read
 //      from the link itself), and a `projects` folder that is a link to another
-//      disk are all followed (martha#136 r=3, r=4). A chain longer than LINK_HOPS,
-//      or one that turns on itself, is REFUSED: the write is not allowed, since
-//      the guard cannot tell which folder it lands in (martha#136 r=4).
+//      disk are all followed (martha#136 r=3, r=4). A chain whose end does not
+//      exist yet is followed link by link, and past LINK_HOPS — or one that turns
+//      on itself — it is REFUSED: the write is not allowed, since the guard cannot
+//      tell which folder it lands in (martha#136 r=4, r=5). A chain that exists to
+//      its end is resolved by the system in one step, up to the system's own
+//      limit, and refused when the system cannot resolve it.
 //   4. WRITES, NOT READS. Only the tools that write a file are refused. Reading a
 //      memory file is not a path from a member to a later session.
 //
@@ -123,7 +126,7 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_fil
 /** Whether `path` is `folder` or inside it. */
 const within = (path: string, folder: string): boolean => path === folder || path.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`)
 
-/** How many links one path may be followed through: a chain at the cap is followed, one past it is refused (martha#136 r=4). */
+/** How many links a chain is followed through when its end does not exist yet: at the cap followed, one past it refused (martha#136 r=4, r=5). */
 export const LINK_HOPS = 8
 
 /** The target of the link at `path`, or undefined when `path` is not a link (martha#136 r=4). */
@@ -242,16 +245,34 @@ function projectMemoryLinks(root: string): string[] {
   }
 }
 
+/** Every project's folder and memory folder under `root`, as named: each is followed before a write is allowed (martha#136 r=5). */
+function projectEntries(root: string): string[] {
+  try {
+    return readdirSync(join(root, PROJECTS)).flatMap((project) => {
+      const folder = join(root, PROJECTS, project)
+      return [folder, join(folder, MEMORY)]
+    })
+  } catch {
+    return []
+  }
+}
+
 /**
- * A place the guard must check that cannot be followed to its end (past LINK_HOPS,
- * or a link that turns on itself), or undefined when every place resolves. A write
- * is refused while one stands, never allowed, since the guard cannot tell which
- * folder it lands in (martha#136 r=4).
+ * A place the guard must check that cannot be followed to its end — past LINK_HOPS
+ * with no end yet, or a link that turns on itself — or undefined when every place
+ * resolves. A write is refused while one stands, never allowed, since the guard
+ * cannot tell which folder it lands in (martha#136 r=4, r=5).
  */
 function unfollowablePlace(places: OwnerMemoryPlaces): string | undefined {
   const named = unique([...places.memory_roots, ...places.folders, ...places.files])
   const place = named.find((candidate) => pathToItsEnd(candidate) === undefined)
   if (place !== undefined) return place
+  // The projects folder itself, then every project folder and its memory: a chain of
+  // links there is where a write would land, so it is refused like any other place.
+  const projects = places.memory_roots
+    .flatMap((root) => [join(root, PROJECTS), ...projectEntries(root)])
+    .find((folder) => pathToItsEnd(folder) === undefined)
+  if (projects !== undefined) return projects
   return places.memory_roots.flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
 }
 
