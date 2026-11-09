@@ -90,8 +90,11 @@ export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost
 /**
  * The checkout holding `dir`, found by walking up for a `.git` entry on disk: a directory, or a file naming the git
  * dir of a worktree. Never `rev-parse --show-toplevel`, whose answer the checkout's own `core.worktree` decides.
+ *
+ * The member's write guard reads its git dir from here too (../refuse_a_member_writing_owner_memory, martha#168),
+ * so the checkout's git dir is found one way in both places.
  */
-function checkoutOnDisk(dir: string, host: LaunchHost): { readonly top: string; readonly git_dir: string } | undefined {
+export function checkoutOnDisk(dir: string, host: LaunchHost): { readonly top: string; readonly git_dir: string } | undefined {
   for (let here = realOrResolved(host, dir); ; here = dirname(here)) {
     const found = entryOrAbsent(host, join(here, '.git'))
     if (found !== undefined && found.kind === 'directory') return { top: here, git_dir: join(here, '.git') }

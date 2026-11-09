@@ -13,6 +13,13 @@
 // the variables that move it (CLAUDE_MEMORY_ELSEWHERE); this is the other half,
 // the publish gate refusing a member's file tool that writes there.
 //
+// It also refuses a member's write into what a later git run of the owner's
+// reads (martha#168): a `.git` segment anywhere in the path, the checkout's own
+// git directory (and the one a linked worktree shares), and the git
+// configuration files of the owner's own runs. A hook, a config or an object a
+// member put there starts or shapes the owner's next git command, and the
+// member never typed one.
+//
 // Rules:
 //
 //   1. WHOSE CONFIG DIR. The launcher's, from its own environment: the folder the
@@ -38,6 +45,12 @@
 //      limit, and refused when the system cannot resolve it.
 //   4. WRITES, NOT READS. Only the tools that write a file are refused. Reading a
 //      memory file is not a path from a member to a later session.
+//   5. WHAT A LATER GIT RUN READS (martha#168). A path segment git would take for
+//      its own `.git` directory — its own checks, not the name exactly — and the
+//      checkout's git directory, found on disk and never by `rev-parse`, are
+//      denied; so is the git configuration of the owner's own runs. The git
+//      directory is read from disk at each call, so a checkout or a git
+//      directory that appears during the session is covered from the next call.
 //
 // The permission rules (memoryDenyRules) carry the same places into the
 // settings the host is started with: the host's own memory pass stands down
@@ -50,6 +63,9 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'] as const
@@ -68,6 +84,24 @@ const MEMORY = 'memory'
 const OWNER_INSTRUCTIONS = 'CLAUDE.md'
 const OWNER_RULES = 'rules'
 
+/** The variable git takes its repository's git directory from, when the launcher's environment sets it. */
+export const GIT_DIR_VARIABLE = 'GIT_DIR'
+/** The variable git takes the git directory a repository shares its objects and hooks with from. */
+export const GIT_COMMON_DIR_VARIABLE = 'GIT_COMMON_DIR'
+/** The variable that names the one user-level git config file git reads instead of the default ones. */
+export const GIT_CONFIG_GLOBAL_VARIABLE = 'GIT_CONFIG_GLOBAL'
+/** The variable that names the system-level git config file git reads. */
+export const GIT_CONFIG_SYSTEM_VARIABLE = 'GIT_CONFIG_SYSTEM'
+/** The variable whose `git/config` is the user-level config file, when it is set. */
+export const XDG_CONFIG_HOME_VARIABLE = 'XDG_CONFIG_HOME'
+
+/** The user-level git config file, under the home git reads it from. */
+const OWNERS_GITCONFIG = '.gitconfig'
+/** The user-level git config file's path under `$XDG_CONFIG_HOME` (and under `~/.config` when that is unset). */
+const GIT_CONFIG_UNDER_XDG = ['git', 'config'] as const
+/** The file in a worktree's git dir that names the git dir it shares, relative to its own. */
+const COMMONDIR = 'commondir'
+
 /** Every place a member's file tool may not write. */
 export interface OwnerMemoryPlaces {
   /** Roots whose `projects/<any>/memory/` is denied. */
@@ -76,6 +110,14 @@ export interface OwnerMemoryPlaces {
   readonly folders: readonly string[]
   /** Files denied. */
   readonly files: readonly string[]
+  /**
+   * The git configuration files of the owner's own git runs, denied as files
+   * (martha#168). The publish gate refuses them; no permission rule names them,
+   * because the host runs no pass that writes one by itself.
+   */
+  readonly git_config_files: readonly string[]
+  /** The git directories the launcher's environment names, denied whole (martha#168). */
+  readonly git_dirs_named_at_launch: readonly string[]
 }
 
 export interface OwnerMemorySources {
@@ -85,6 +127,8 @@ export interface OwnerMemorySources {
   readonly member_env: Readonly<Record<string, string | undefined>>
   /** The host's home, which a leading `~` resolves against. */
   readonly home: string
+  /** Where the launcher starts the member: the checkout a git dir is found from, and what a relative variable resolves against. */
+  readonly launch_dir: string
   /** The settings files the host reads that may name a memory folder: policy, user, carried. */
   readonly settings_files: readonly string[]
 }
@@ -108,11 +152,17 @@ function memoryDirectoryIn(file: string, home: string): string | undefined {
 
 const unique = (paths: ReadonlyArray<string | undefined>): string[] => [...new Set(paths.filter((path) => path !== undefined).map((path) => normalize(path)))]
 
-/** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1 and 2). */
-export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_files }: OwnerMemorySources): OwnerMemoryPlaces {
+/** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1, 2 and 5). */
+export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, settings_files }: OwnerMemorySources): OwnerMemoryPlaces {
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
   const remote = launcher_env[REMOTE_MEMORY_ROOT]
   const override = launcher_env[MEMORY_FOLDER_OVERRIDE]
+  /** A path the launcher's environment names, resolved as the host resolves it. */
+  const named = (variable: string): string | undefined => {
+    const value = launcher_env[variable]
+    return value !== undefined && value.trim() !== '' ? asTheHostResolves(value, launch_dir, home) : undefined
+  }
+  const xdg = named(XDG_CONFIG_HOME_VARIABLE)
   return {
     memory_roots: unique([...configDirs, remote !== undefined && remote.trim() !== '' ? asTheHostResolves(remote, home, home) : undefined]),
     folders: unique([
@@ -121,6 +171,19 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, settings_fil
       ...settings_files.map((file) => memoryDirectoryIn(file, home)),
     ]),
     files: unique(configDirs.map((dir) => join(dir, OWNER_INSTRUCTIONS))),
+    // Every user-level git config file git 2.56.0 can read: the two the variables
+    // name, `~/.gitconfig`, and the XDG one as `$XDG_CONFIG_HOME` spells it and as
+    // its own default under `~/.config` (measured: with XDG_CONFIG_HOME unset, git
+    // reads `~/.config/git/config`). Denying all of them costs nothing, and it
+    // holds on a git whose default differs from this one's.
+    git_config_files: unique([
+      named(GIT_CONFIG_GLOBAL_VARIABLE),
+      named(GIT_CONFIG_SYSTEM_VARIABLE),
+      join(home, OWNERS_GITCONFIG),
+      join(home, '.config', ...GIT_CONFIG_UNDER_XDG),
+      xdg === undefined ? undefined : join(xdg, ...GIT_CONFIG_UNDER_XDG),
+    ]),
+    git_dirs_named_at_launch: unique([named(GIT_DIR_VARIABLE), named(GIT_COMMON_DIR_VARIABLE)]),
   }
 }
 
@@ -235,6 +298,136 @@ function placeOf(path: string, places: OwnerMemoryPlaces): string | undefined {
   return places.files.find((candidate) => (spellingsOf(candidate) ?? []).includes(path))
 }
 
+/** A string with the letters A-Z lowered and nothing else, as git's own comparison of an ASCII name does. */
+const asciiLowered = (text: string): string => text.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+
+/**
+ * The code points git 2.56.0's HFS+ reader drops before comparing a name:
+ * `next_hfs_char` in utf8.c ignores 0x200c, 0x200d, 0x200e, 0x200f, 0x202a,
+ * 0x202b, 0x202c, 0x202d, 0x202e, 0x206a, 0x206b, 0x206c, 0x206d, 0x206e,
+ * 0x206f and 0xfeff, and returns 0 on malformed UTF-8, which is never `.git`.
+ */
+const HFS_IGNORES = new Set([0x200c, 0x200d, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x206a, 0x206b, 0x206c, 0x206d, 0x206e, 0x206f, 0xfeff])
+
+/** The name git's own check compares a `.git` segment against. */
+const DOT_GIT = '.git'
+/** The characters git's NTFS check ends a name at, besides the end: a `:` (an alternate data stream) and a `\` (a separator on NTFS). */
+const NTFS_ENDS_A_SEGMENT = new Set([':', '\\'])
+/** The separator git's NTFS check may see inside a path segment written on a POSIX machine (read-cache.c:1051, below). */
+const NTFS_SEPARATOR = '\\'
+
+/**
+ * Whether a path segment is `.git` to git's HFS+ check (`is_hfs_dotgit` ->
+ * `is_hfs_dot_generic`, utf8.c, 2.56.0): the code points HFS+ ignores dropped,
+ * each remaining code point lowered only as `tolower()` lowers ASCII (one above
+ * 127 is no `.git`), and then exactly `.git` to the end of the segment.
+ */
+function isGitOnHfs(segment: string): boolean {
+  const kept = [...segment].filter((point) => !HFS_IGNORES.has(point.codePointAt(0) ?? 0))
+  return asciiLowered(kept.join('')) === DOT_GIT
+}
+
+/**
+ * Whether one name is `.git` to git's NTFS check (`is_ntfs_dotgit`, path.c,
+ * 2.56.0): `.` then g, i, t in either ASCII case, or g, i, t in either ASCII
+ * case then `~1`, followed by nothing but `.` and ` ` up to the end of the name,
+ * a `:` or a `\`. `git~2` and the other short names git keeps for `.gitmodules`
+ * and its like are not `.git`.
+ */
+function isGitOnNtfsName(name: string): boolean {
+  const folded = asciiLowered(name)
+  const rest = folded.startsWith(DOT_GIT) ? folded.slice(DOT_GIT.length) : folded.startsWith('git~1') ? folded.slice('git~1'.length) : undefined
+  if (rest === undefined) return false
+  for (const point of rest) {
+    if (point === '.' || point === ' ') continue
+    return NTFS_ENDS_A_SEGMENT.has(point)
+  }
+  return true
+}
+
+/**
+ * Whether a path segment is `.git` to git's NTFS check as read-cache.c runs it
+ * on a POSIX machine (2.56.0, verify_path_internal): a `\` inside the name is a
+ * separator to git too, and the check runs again on what follows it —
+ *
+ *     } else if (c == '\\' &&
+ *                repo_protect_ntfs(the_repository)) {
+ *             if (is_ntfs_dotgit(path))
+ *                     return PATH_INVALID;
+ *
+ * — so `src/a\.git` and `src/a\git~1` are `.git` although the name git would
+ * find on this disk is not. Every part of the segment is checked.
+ */
+function isGitOnNtfs(segment: string): boolean {
+  return segment.split(NTFS_SEPARATOR).some(isGitOnNtfsName)
+}
+
+/**
+ * The segment of `path` git would take for its own `.git` directory, or
+ * undefined (martha#168, design r=3). Both of git's checks are applied, on
+ * every platform and whatever `core.protectHFS` and `core.protectNTFS` say
+ * there: both default off on Linux, where the member runs, and the checkout can
+ * be read later on a machine where they are on. A name git does not track is no
+ * loss to a member, and it is exactly the name that becomes `.git` elsewhere.
+ */
+export function gitSegmentIn(path: string): string | undefined {
+  return path.split(sep).find((segment) => isGitOnHfs(segment) || isGitOnNtfs(segment))
+}
+
+/** The checkout a member works in, as its git directory is found on disk (martha#168). */
+export interface CheckoutGit {
+  /** The checkout's top. */
+  readonly top: string
+  /** Its git directory, and the one a linked worktree shares with it. */
+  readonly dirs: readonly string[]
+}
+
+/**
+ * The git directory of the checkout holding `dir`, and the one it shares, read
+ * from disk at each call and never by `rev-parse` (../refuse_launch_of_unapproved_config
+ * finds the checkout the same way); or undefined when `dir` is in no checkout.
+ */
+export function checkoutGitOf(dir: string, host: LaunchHost): CheckoutGit | undefined {
+  const found = checkoutOnDisk(dir, host)
+  if (found === undefined) return undefined
+  return { top: found.top, dirs: unique([found.git_dir, sharedGitDirOf(found.git_dir, host)]) }
+}
+
+/**
+ * The git dir a linked worktree shares its objects and hooks with, from the
+ * `commondir` file in its own (git 2.56.0: `<main>/.git/worktrees/<name>` holds
+ * `commondir` with `../..`); or undefined for a checkout that has none.
+ */
+function sharedGitDirOf(git_dir: string, host: LaunchHost): string | undefined {
+  try {
+    const named = new TextDecoder().decode(host.stores.files.bytesOf(join(git_dir, COMMONDIR))).trim()
+    return named === '' ? undefined : realOrResolved(host, resolve(git_dir, named))
+  } catch {
+    return undefined
+  }
+}
+
+/** Why a write the member spells `value` reads or starts a later git run of the owner's, or undefined (rule 5). */
+function gitDenialOf(value: string, path: string, git: CheckoutGit | undefined, places: OwnerMemoryPlaces): string | undefined {
+  const segment = gitSegmentIn(path)
+  if (segment !== undefined) {
+    return `${value} names ${segment} as one of its path segments, and git takes that for the .git directory it reads from there: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+  }
+  const dir = git?.dirs.find((candidate) => (spellingsOf(candidate) ?? []).some((spelling) => within(path, spelling)))
+  if (dir !== undefined) {
+    return `${value} is in ${dir}, the git directory of the checkout at ${git?.top ?? dir}, which holds the hooks, the config and the objects a later git run of the owner's reads: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+  }
+  const named = places.git_dirs_named_at_launch.find((candidate) => (spellingsOf(candidate) ?? []).some((spelling) => within(path, spelling)))
+  if (named !== undefined) {
+    return `${value} is in ${named}, a git directory the launcher's environment names, which holds what a later git run of the owner's reads: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+  }
+  const file = places.git_config_files.find((candidate) => (spellingsOf(candidate) ?? []).includes(path))
+  if (file !== undefined) {
+    return `${value} is ${file}, one of the git configuration files the owner's own git runs read, and everything one names runs: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+  }
+  return undefined
+}
+
 /** Every project's memory folder under `root` that is a link, whether or not its target exists yet (martha#136 r=4). */
 function projectMemoryLinks(root: string): string[] {
   try {
@@ -264,32 +457,50 @@ function projectEntries(root: string): string[] {
  * resolves. A write is refused while one stands, never allowed, since the guard
  * cannot tell which folder it lands in (martha#136 r=4, r=5).
  */
-function unfollowablePlace(places: OwnerMemoryPlaces): string | undefined {
+function unfollowablePlace(places: OwnerMemoryPlaces, git: CheckoutGit | undefined): string | undefined {
   const named = unique([...places.memory_roots, ...places.folders, ...places.files])
   const place = named.find((candidate) => pathToItsEnd(candidate) === undefined)
-  if (place !== undefined) return place
+  if (place !== undefined) return unfollowableMemory(place)
   // The projects folder itself, then every project folder and its memory: a chain of
   // links there is where a write would land, so it is refused like any other place.
   const projects = places.memory_roots
     .flatMap((root) => [join(root, PROJECTS), ...projectEntries(root)])
     .find((folder) => pathToItsEnd(folder) === undefined)
-  if (projects !== undefined) return projects
-  return places.memory_roots.flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
+  if (projects !== undefined) return unfollowableMemory(projects)
+  const linked = places.memory_roots.flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
+  if (linked !== undefined) return unfollowableMemory(linked)
+  // The git directory is checked the same way: a chain of links where it should be
+  // is no git directory this guard can name, and a write is not allowed while it
+  // stands (martha#168).
+  const gitDir = unique([...(git?.dirs ?? []), ...places.git_dirs_named_at_launch]).find((dir) => pathToItsEnd(dir) === undefined)
+  return gitDir === undefined
+    ? undefined
+    : `${gitDir} is a git directory a later git run of the owner's reads, and it is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so no write is allowed while it stands: which directory a write lands in cannot be told (martha#168)`
 }
 
-/** Why a member's tool call writes the owner's memory or instructions, or undefined (rules 3 and 4). */
+/** Why a memory place that cannot be followed to its end refuses every write, in the words of #136. */
+function unfollowableMemory(place: string): string {
+  return `${place} is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so no write is allowed while it stands: which folder a write lands in cannot be told (martha#136)`
+}
+
+/**
+ * Why a member's tool call writes the owner's memory, instructions, or what a
+ * later git run of the owner's reads, or undefined (rules 3, 4 and 5).
+ */
 export function writesTheOwnersMemory(
   tool: string,
   input: Readonly<Record<string, unknown>>,
   places: OwnerMemoryPlaces,
   cwd: string,
   home: string,
+  host: LaunchHost,
 ): string | undefined {
   if (!(FILE_WRITING_TOOLS as readonly string[]).includes(tool)) return undefined
-  const unfollowable = unfollowablePlace(places)
-  if (unfollowable !== undefined) {
-    return `${unfollowable} is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so no write is allowed while it stands: which folder a write lands in cannot be told (martha#136)`
-  }
+  // Read at each call, not at launch: a checkout or a git directory that appears
+  // during the session is covered from the next call (martha#168).
+  const git = checkoutGitOf(cwd, host)
+  const unfollowable = unfollowablePlace(places, git)
+  if (unfollowable !== undefined) return unfollowable
   for (const argument of FILE_ARGUMENTS) {
     const value = input[argument]
     if (typeof value !== 'string' || value.trim() === '') continue
@@ -298,6 +509,8 @@ export function writesTheOwnersMemory(
     if (end === undefined) {
       return `${value} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told: a member does not write there (martha#136)`
     }
+    const gitDenial = unique([spelled, end]).map((path) => gitDenialOf(value, path, git, places)).find((found) => found !== undefined)
+    if (gitDenial !== undefined) return gitDenial
     const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
     if (place !== undefined) {
       return `${value} is in ${place}, which the owner's own Claude Code sessions load as memory or instructions: a member does not write there, so its text never reaches a later session unrecorded (martha#136)`
@@ -331,6 +544,20 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
     ...places.files.flatMap((file) => spellingsOf(file) ?? [file]),
   ])
   return [...globs].flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])
+}
+
+/**
+ * The guard as the coverage check drives it (../check_every_path_is_gated,
+ * martha#168): true only for a path a member's file tool may write, which is to
+ * say not the owner's memory, not the owner's instructions, and nothing a later
+ * git run of the owner's reads. It lives here, not beside the register, because
+ * it reads the machine and a slice may import no adapter; whoever runs the check
+ * passes it in.
+ */
+export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
+  const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
+  const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [] })
+  return writesTheOwnersMemory('Write', { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine) === undefined
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)

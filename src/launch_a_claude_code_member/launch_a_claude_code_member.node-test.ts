@@ -155,7 +155,7 @@ function answering(
       switches: CLAUDE_CODE_HOOK_SWITCHES,
       markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
-    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [] }),
+    ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [] }),
     ...(signed_runs === undefined ? {} : { signed_runs }),
     stopMember: (why) => void stops.push(why),
   })
@@ -1637,7 +1637,7 @@ for (const [shape, carried, kept] of [
     const fake = fakeClaude(place)
     const launch = memberLaunch(place, fake.command, place.approved, [], recording)
     const settings = await settingsTheHostStartedWith(t, place, fake, launch)
-    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, settings_files: [] })
+    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [] })
     const permissions = settings.permissions as { deny: string[]; allow?: string[] }
     assert.deepEqual(permissions.deny, [...kept, ...memoryDenyRules(places)])
     if (carried !== undefined) {
@@ -1649,7 +1649,7 @@ for (const [shape, carried, kept] of [
       const glob = /^(?:Write|Edit)\(\/(.*)\)$/.exec(rule)?.[1]
       assert.ok(glob !== undefined, rule)
       const inside = glob.replace('/*/', '/some-project/').replace(/\/\*\*$/, '/note.md')
-      assert.ok(writesTheOwnersMemory('Write', { file_path: inside }, places, place.checkout, place.home) !== undefined, `${rule}: ${inside}`)
+      assert.ok(writesTheOwnersMemory('Write', { file_path: inside }, places, place.checkout, place.home, thisMachine) !== undefined, `${rule}: ${inside}`)
     }
   })
 }
