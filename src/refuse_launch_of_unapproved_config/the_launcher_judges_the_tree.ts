@@ -11,15 +11,15 @@
 //     so nothing the checkout's config says can start a program or move a read;
 //   - `info/attributes` and `info/exclude` are empty, so the checkout's own are never consulted;
 //   - the attributes a file is converted under come from ONE tree, the one passed in: the tree the owner approved, or
-//     HEAD's own while there is no approval yet. `GIT_ATTR_SOURCE` names it, and it is materialised in this git dir
-//     first, verified, so a later swap of the checkout's copy of that object cannot change what is read;
+//     HEAD's own while there is no approval yet. `GIT_ATTR_SOURCE` names it;
 //   - every inherited `GIT_*` variable is dropped, so the caller cannot point git at another repository or index.
 //
-// The checkout's object store is offered to the two `read-tree` calls only, as `GIT_ALTERNATE_OBJECT_DIRECTORIES`.
-// The `write-tree` that follows runs without it, so the tree objects it writes are written HERE, recomputed from the
-// index. When the id git computes is not the id it was asked to read, the object under that id was not the object its
-// name says it is, and the launch is refused: the owner approves again rather than the gate judging against an id
-// nobody can read back honestly.
+// The checkout's object store is offered read-only, through the alternates file of the git dir the launcher makes, and
+// nothing else of the checkout is. Before either tree is used it is read into an index and written back: `write-tree`
+// recomputes every tree id from that index, so when the id git computes is not the id it was asked to read, the object
+// under that id was not the object its name says it is, and the launch is refused rather than judged against it. The
+// live tree is then written into the checkout's own object store, as `git add` left it, because the id the owner
+// approves has to be readable again by a later process.
 //
 // Every file is then judged once, by `blobUnderTheTree` (../hash_a_file_under_a_tree): its own bytes are hashed in this
 // process first, and when that id is the approved tree's blob at that path, no program runs and the file is the object
