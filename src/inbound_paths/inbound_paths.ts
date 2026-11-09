@@ -228,11 +228,11 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A16',
-    what: "a checkout's fixed text: its CLAUDE.md or AGENTS.md files, the top one and any below it that the host loads once a file there is read, and the agents it defines (.claude/agents), whose frontmatter may name hooks and tool servers (martha#121)",
+    what: "a checkout's fixed text: its CLAUDE.md or AGENTS.md files, the top one, any below it that the host loads once a file there is read, and those of the directories above it, and the agents it defines (.claude/agents), whose frontmatter may name hooks and tool servers (martha#121, martha#135)",
     klass: 'delivered',
     control: {
       kind: 'no-text-reaches-the-model',
-      why: "Martha starts the host with project config switched off (project_config_off, ../refuse_launch_of_unapproved_config), and with it the host loads no project CLAUDE.md, nested or not, and no project agent: npm run probe:launch plants each and sees none load, while the same checkout started by hand loads them (Claude Code 2.1.319). Whether the host loads an AGENTS.md is not observed: the probe plants none, and the martha#135 stand-in saw none load in any run, the control included, so it cannot tell an AGENTS.md that is switched off from one the host never reads. A host the owner starts by hand loads them before any of Martha runs, as with C1 and C2, so the adapter must refuse that session a place in the crew",
+      why: "Martha starts the host with project config switched off (project_config_off, ../refuse_launch_of_unapproved_config), and with it the host loads no project CLAUDE.md, nested or not, and no project agent: npm run probe:launch plants each and sees none load, while the same checkout started by hand loads them (Claude Code 2.1.319). Whether the host loads an AGENTS.md is not observed: no run, not even with project config on, saw one load, so this is not pinned, and it cannot tell an AGENTS.md that is switched off from one the host never reads (martha#135). A host the owner starts by hand loads them before any of Martha runs, as with C1 and C2, so the adapter must refuse that session a place in the crew",
     },
     attestation: 'none',
   },
@@ -262,7 +262,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'B4',
-    what: "files in a checkout, read, edited or searched through the host's own tools: a file git puts in the tree the owner approved, as the member started on it, while the launch checkout still holds that tree, is not text taken in, because the owner approved that tree to run as the owner; in a checkout with no config nothing was approved, so every read counts (decided 2026-11-07, martha#127); an ignored file, a link that leads out, git's own directory and every other place are",
+    what: "files in a checkout, read, edited or searched through the host's own tools: a file git puts in the tree the owner approved, as the member started on it, while the launch checkout still holds that tree, is not text taken in, because the owner approved that tree to run as the owner; in a checkout with no config nothing was approved, so every read counts (decided 2026-11-07, martha#127); an ignored file is text taken in, a CLAUDE.local.md among them, since a member can write one and the owner approved no such text; a fixed-text file that a read attaches belongs to A16, and this row claims none of it; a link that leads out, git's own directory and every other place are",
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',
@@ -323,6 +323,113 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
 ]
+
+/**
+ * The files a host reads as instructions around a member's session, named once
+ * here and taken from here by every other module (martha#121, martha#135).
+ *
+ * - `checkout` — a checkout's own instructions: the top file, any below it a
+ *   read reaches, and those of the directories above the checkout. A16 owns it.
+ * - `local` — the same folder's local instructions. Git ignores one, so a
+ *   member can write it and no owner approved it. B4 owns it.
+ * - `agents` — what another engine reads in the same places. A16 owns it, and
+ *   no run has seen one load, which A16's `why` says.
+ */
+export const INSTRUCTION_FILES = {
+  checkout: 'CLAUDE.md',
+  local: 'CLAUDE.local.md',
+  agents: 'AGENTS.md',
+} as const
+
+/**
+ * One text a host can attach to a member's session, and the single row of
+ * INBOUND_PATHS that owns it (martha#135).
+ *
+ * Two rows used to be able to claim the same text — A16 the fixed text of a
+ * checkout, B4 the exemption for a read of an approved file — and a reader of
+ * the table could be told two different things about one file. This names the
+ * owner of each text, and `gapsInInstructionTextOwnership` fails CI when the
+ * rows disagree with it.
+ */
+export interface InstructionText {
+  /** The text, named as the case that plants it names its marker. */
+  readonly text: string
+  /** The file it comes from: one of INSTRUCTION_FILES, never a retyped name. */
+  readonly file: string
+  /** The row that owns it: the only row whose text may name the file. */
+  readonly owner: string
+  /** Whether any run saw it load. A16's `why` says of AGENTS.md that none did. */
+  readonly observed: boolean
+}
+
+export const INSTRUCTION_TEXT_OWNERS: readonly InstructionText[] = [
+  { text: 'NESTED_CLAUDE_MD', file: INSTRUCTION_FILES.checkout, owner: 'A16', observed: true },
+  { text: 'ABOVE_CLAUDE_MD', file: INSTRUCTION_FILES.checkout, owner: 'A16', observed: true },
+  { text: 'NESTED_LOCAL_MD', file: INSTRUCTION_FILES.local, owner: 'B4', observed: true },
+  { text: 'ROOT_LOCAL_MD', file: INSTRUCTION_FILES.local, owner: 'B4', observed: true },
+  { text: 'NESTED_AGENTS_MD', file: INSTRUCTION_FILES.agents, owner: 'A16', observed: false },
+  { text: 'ABOVE_AGENTS_MD', file: INSTRUCTION_FILES.agents, owner: 'A16', observed: false },
+]
+
+export interface TextOwnershipGap {
+  readonly text: string
+  readonly why: string
+}
+
+/** Every row id, so a parenthetical that names one can be told from prose. */
+const ROW_ID = /\b[ABC][0-9]{1,2}\b/
+
+/** What a row says a member may take in: its `what`, and its `why` where it has one. */
+function saidBy(path: InboundPath): string {
+  return path.control.kind === 'no-text-reaches-the-model' ? `${path.what} ${path.control.why}` : path.what
+}
+
+/** What a row says, without the pointers it makes to another row: `(see A16)` names no text. */
+function withoutPointers(said: string): string {
+  return said.replace(/\([^()]*\)/g, (inside) => (ROW_ID.test(inside) ? '' : inside))
+}
+
+/**
+ * Every way the ownership table and INBOUND_PATHS disagree (martha#135): a text
+ * with no owner or with two, an owner that is not a row, an owner whose text
+ * does not name its file, a file two rows claim, and a row that names a file it
+ * does not own. The test beside this module plants each case, so a check that
+ * stops seeing one fails by name.
+ */
+export function gapsInInstructionTextOwnership(
+  paths: readonly InboundPath[] = INBOUND_PATHS,
+  owners: readonly InstructionText[] = INSTRUCTION_TEXT_OWNERS,
+): readonly TextOwnershipGap[] {
+  const rows = new Map(paths.map((path) => [path.id, path]))
+  const files = [...new Set(owners.map((entry) => entry.file))]
+  return [...owners.flatMap((entry) => gapsInOneText(entry, owners, rows)), ...files.flatMap((file) => gapsInOneFile(file, owners, paths))]
+}
+
+/** The ways one text's own entry is wrong: two owners, an owner no row answers to, an owner that does not name the file. */
+function gapsInOneText(entry: InstructionText, owners: readonly InstructionText[], rows: ReadonlyMap<string, InboundPath>): readonly TextOwnershipGap[] {
+  const gaps: TextOwnershipGap[] = []
+  const owned = owners.filter((other) => other.text === entry.text).length
+  if (owned !== 1) gaps.push({ text: entry.text, why: `it is owned ${owned} times, and a text has exactly one owner` })
+  const owner = rows.get(entry.owner)
+  if (owner === undefined) gaps.push({ text: entry.text, why: `its owner ${entry.owner} is not a row in INBOUND_PATHS` })
+  else if (!saidBy(owner).includes(entry.file)) gaps.push({ text: entry.text, why: `its owner ${entry.owner} does not name ${entry.file}` })
+  return gaps
+}
+
+/** The ways one file's ownership is wrong: two rows own it, or a row that does not own it names it. */
+function gapsInOneFile(file: string, owners: readonly InstructionText[], paths: readonly InboundPath[]): readonly TextOwnershipGap[] {
+  const owning = [...new Set(owners.filter((entry) => entry.file === file).map((entry) => entry.owner))].sort()
+  const [owner = ''] = owning
+  if (owning.length !== 1) return [{ text: file, why: `it is owned by ${owning.join(', ') || 'no row'}, and a file has exactly one owning row` }]
+  return paths
+    .filter((path) => namesTextOfAnotherRow(path, owner, file))
+    .map((path) => ({ text: file, why: `row ${path.id} names it too, and ${owner} is its owner` }))
+}
+
+/** True when a row says the file's name and is not the row that owns it. */
+function namesTextOfAnotherRow(path: InboundPath, owner: string, file: string): boolean {
+  return path.id !== owner && withoutPointers(saidBy(path)).includes(file)
+}
 
 /** The attestation a path's sender has, or `none` for a path nobody declared. */
 export function attestationOf(path_id: string): SenderAttestation {
