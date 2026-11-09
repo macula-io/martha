@@ -36,7 +36,7 @@ const gateRefuses = (path: string) =>
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 16 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 17 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 8 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]

@@ -266,6 +266,16 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A17',
+    what: "auto-memory the host loads at a session's start, and writes by itself from the session (extractMemories, auto-dream, team memory), from a memory folder outside the checkout: text a member wrote there would reach a later session, the owner's or another member's, with nothing recording where it came from (martha#136)",
+    klass: 'delivered',
+    control: {
+      kind: 'no-text-reaches-the-model',
+      why: "the launcher sets CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 and drops CLAUDE_CODE_POST_TURN_MEMORY, CLAUDE_MEMORY_STORES, CLAUDE_COWORK_MEMORY_PATH_OVERRIDE and CLAUDE_CODE_REMOTE_MEMORY_DIR, and refuses settings whose env names any of them, so a member's host neither loads memory nor runs a memory pass; probe:launch shows the loader running with memory on and not with Martha's launch. That rests on two code paths of the recorded host (memory_off in recorded_claude_code_host.json): file mode returns early on the off switch, and hosted mode needs the dropped variable. It does not rest on the publish gate, whose hook is not established to fire for the memory pass, which runs as a fork. The gate's file-tool deny and the permissions.deny rules in the host's --settings keep a member's own writes out of every project's memory folder and the owner's CLAUDE.md and rules/ (../refuse_a_member_writing_owner_memory). Not closed: a Bash write into a memory folder, which a clean member alone holds; a host the owner starts by hand (C1, C2); OpenCode, unprobed for a memory of its own",
+    },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
     what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',
