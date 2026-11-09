@@ -15,8 +15,10 @@
 //   - every inherited `GIT_*` variable is dropped, so the caller cannot point git at another repository or index.
 //
 // The checkout's object store is offered through the alternates file of the git dir the launcher makes, and nothing
-// else of the checkout is: git reads the objects it is asked for by id from there, and writes nothing into it except
-// the live tree, once it has been judged (below).
+// else of the checkout is: git reads the objects it is asked for by id from there. Through that file it is read only.
+// The one thing of the checkout's this module writes is the live tree, and it writes it through
+// `GIT_OBJECT_DIRECTORY` instead (below): its blobs and its trees are in the checkout's store before any file has
+// been judged, and a refusal does not take them back out.
 //
 // No tree is trusted for the name it was asked by. `read-tree` fills an index and, beside the entries, a cache-tree
 // holding the tree ids it was handed: `write-tree` on that index answers with the id it was asked for without
@@ -26,9 +28,11 @@
 // and the launch is refused rather than judged against it. What the gate then decides on is the entries it read into
 // that second index itself, never a second listing of a store a member can write.
 //
-// The live tree is written into the checkout's own object store, blobs and trees both, as `git add` left it there:
-// the id the owner approves has to be readable again by a later process, and the blob of a file the checkout never
-// carried has no other store to live in once the launcher's scratch directory is gone.
+// The live tree is written into the checkout's own object store, blobs and trees both, before any file is judged:
+// `git add` writes the blobs and `write-tree` the trees, through `GIT_OBJECT_DIRECTORY` rather than the alternates
+// file, and a refused launch leaves them there. The id the owner approves has to be readable again by a later
+// process, and the blob of a file the checkout never carried has no other store to live in once the launcher's
+// scratch directory is gone.
 //
 // Every file is then judged once, by `blobUnderTheTree` (../hash_a_file_under_a_tree): its own bytes are hashed in this
 // process first, and when that id is the approved tree's blob at that path, no program runs and the file is the object
@@ -197,8 +201,11 @@ function makeTheLaunchersGitDir(host: JudgeHost, scratch: ScratchDirectory, judg
   scratch.write('judge.git/HEAD', Buffer.from('ref: refs/heads/martha\n'))
   scratch.write('judge.git/info/attributes', Buffer.from(''))
   scratch.write('judge.git/info/exclude', Buffer.from(''))
-  // The checkout's objects, read-only behind every judgement: it serves blobs and the trees it is asked for by the id
-  // the launcher verified, and never a config, an attribute file or an ignore file of its own.
+  // The checkout's objects, offered through the alternates file: read only by this path, which resolves the blobs and
+  // the trees it is asked for by the id the launcher verified and never reads the checkout's config, attribute file or
+  // ignore file. That file is not the only way this module reaches these objects — the live tree's blobs and trees are
+  // written into the same directory through `GIT_OBJECT_DIRECTORY` (writeTheLiveTree, below) — so read only describes
+  // what this path does with them, not the directory.
   scratch.write('judge.git/objects/info/alternates', Buffer.from(`${join(checkout_git_dir, 'objects')}\n`))
   return undefined
 }
