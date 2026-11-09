@@ -23,5 +23,17 @@
     "dir": "/etc/claude-code",
     "file": "managed-settings.json",
     "drop_in": "managed-settings.d"
-  }
+  },
+  "frontmatter_pattern": "^---\\s*\\n([\\s\\S]*?)---\\s*\\n?",
+  "frontmatter_reader": [
+    "function td(e,n,r){let s=e;e=iE(e);let h=e.indexOf(\"---\",3)<0?null:e.match(pv);",
+    "function iE(e){return e.charCodeAt(0)===65279?e.slice(1):e}"
+  ],
+  "markdown_loader": "async function S1o(e,n,r,s){let h=Date.now(),y=of(),S=y===null?null:OF(y,e),w=OF(YS(),\".claude\",e),H=await rde(e,n),z=new Set(await Promise.all(H.map(async(Mt)=>Ap(await $Se(Mt).catch(()=>Mt))))),Y=e===\"agents\"?L(await Promise.all(zl().map(async(Mt)=>{let Tt=OF(rYe(Mt),\".claude\",e),wt=await $Se(Tt).catch(()=>Tt);return await YVe(Tt)?void 0:wt}))).filter((Mt)=>Mt!==void 0&&!z.has(Ap(Mt))):[],ke=H.length;sYe(H,e,n);for(let Mt=H.length-1;Mt>=ke;Mt--)if(await YVe(H[Mt]))H.splice(Mt,1);let ne=e===\"agents\"&&ud(\"agents\"),Ee=Vt(\"projectSettings\")&&!ne,Ce=s||Bee();if(Ce&&!q())t(`${w}: not read: this session takes its managed settings from its organization, and its own account could have written the managed folder`);let[Ae,xe,He,Ne]=await Promise.all([(q()||Ce?Promise.resolve([]):MU(w,r)).then((Mt)=>Mt.map((Tt)=>({...Tt,baseDir:w,source:\"policySettings\"}))),S!==null&&Vt(\"userSettings\")&&!ne?(r?b1o(e,S,r):MU(S)).then((Mt)=>Mt.map((Tt)=>({...Tt,baseDir:S,source:\"userSettings\"}))):Promise.resolve([]),Ee?Promise.all(H.map((Mt)=>MU(Mt,r).then((Tt)=>Tt.map((wt)=>({...wt,baseDir:Mt,source:\"projectSettings\"}))))):Promise.resolve([]),Ee?Promise.all(Y.map((Mt)=>MU(Mt,r).then((Tt)=>Tt.map((wt)=>({...wt,baseDir:Mt,source:\"projectSettings\",fromAdditionalDirectory:!0}))))):Promise.resolve([])]),Ye=He.flat(),Xe=Ne.flat(),pt=[...Abo(Ae),...xe,...Xe,...Ye],ot=await Promise.all(pt.map((Mt)=>_1o(Mt.filePath))),Ze=new Map,gt=[];for(let[Mt,Tt]of pt.entries()){let wt=ot[Mt]??null;if(wt===null){gt.push(Tt);continue}let It=Ze.get(wt);if(It!==void 0){t(`Skipping duplicate file '${Tt.filePath}' from ${Tt.source} (same inode already loaded from ${It})`);continue}Ze.set(wt,Tt.source),gt.push(Tt)}let Rt=pt.length-gt.length;if(Rt>0)t(`Deduplicated ${Rt} files in ${e} (same inode via symlinks or hard links)`);return l(\"tengu_dir_search\",{durationMs:Date.now()-h,managedFilesFound:Ae.length,userFilesFound:xe.length,projectFilesFound:Ye.length,projectDirsSearched:H.length,subdir:f(e)}),gt}",
+  "markdown_kinds": [
+    "agents",
+    "commands",
+    "skills"
+  ],
+  "output_style_schema": "{name:My().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:My().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":CI().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":CI().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}"
 }

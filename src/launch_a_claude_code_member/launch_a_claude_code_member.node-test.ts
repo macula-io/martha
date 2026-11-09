@@ -41,7 +41,7 @@ import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/si
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, type HostAnswers, refusesTheRelay } from './host_stand_in.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
@@ -152,6 +152,7 @@ function answering(
       approved: undefined,
       managed: managedSettingsOf(place),
       switches: CLAUDE_CODE_HOOK_SWITCHES,
+      markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, settings_files: [] }),
     ...(signed_runs === undefined ? {} : { signed_runs }),

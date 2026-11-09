@@ -97,7 +97,7 @@ import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { meshServerInstallsIn } from '../claude_code_host/mesh_server_install.ts'
 import { environmentFromSettings, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
@@ -373,6 +373,7 @@ export function hookSettingsOf(
     approved,
     managed,
     switches: CLAUDE_CODE_HOOK_SWITCHES,
+    markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
   })
   return watch.check() ?? watch
 }
