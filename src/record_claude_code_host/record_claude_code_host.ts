@@ -25,7 +25,6 @@ import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
 import { markdownTheHostLoadsIn } from '../claude_code_host/markdown_the_host_loads.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import type { RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CARRIED, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)

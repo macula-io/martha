@@ -99,10 +99,19 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 // commands whose frontmatter can carry hooks, and a member started on Martha's
 // switches runs them (probed live on 2.1.319). Martha has no YAML parser and
 // takes none for this, so a frontmatter counts as declaring hooks when it holds
-// any way YAML has to spell the key `hooks` (Pluto's reviews, r=1 and r=2):
+// one of these spellings (Pluto's reviews, r=1 to r=3). These are the spellings
+// this refuses, not every way YAML has to write the key: a flow sequence used
+// as the key reaches the host as the key itself (`[hooks]: {...}` is live on
+// 2.1.319 and declares hooks like `hooks:` does), which is what r=3 found this
+// list missing.
 //   - the text `hooks` with a colon after it, anywhere: bare, quoted, tagged
 //     (`!<tag:yaml.org,2002:str>"hooks":`), in flow style, or with a line break
 //     before the colon. `githooks:` counts too, a refusal the owner can read;
+//   - a collection used as a key, `]` or `}` with a colon after it: a flow
+//     sequence used as the key reaches the host as the key itself (`[hooks]:
+//     {...}` is live on 2.1.319 and declares hooks like `hooks:` does), and
+//     this rule takes that whole class — `[hooks,]:`, `[[hooks]]:` and
+//     `{hooks: x}:` with it;
 //   - a backslash anywhere, since a double-quoted escape (`"hoo\x6bs"`) or a
 //     line continuation can build the key with no `hooks` in the text;
 //   - an explicit key (`?` as a line's first character after blanks);
@@ -119,6 +128,7 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 /** The spellings by which a frontmatter can declare hooks, each with the words a refusal names it by. */
 export const HOOKS_SPELLINGS: ReadonlyArray<{ readonly rule: string; readonly found: RegExp }> = [
   { rule: 'the key hooks', found: /hooks["']?\s*:/ },
+  { rule: 'a collection used as a key', found: /[\]}]\s*:/ },
   { rule: 'a backslash, which can spell any key', found: /\\/ },
   { rule: 'an explicit key (?)', found: /^\s*\?/m },
   { rule: 'a merge key (<<)', found: /<</ },

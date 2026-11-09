@@ -426,6 +426,7 @@ const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] =>
 /** A frontmatter that spells the key `hooks` by one rule alone, keyed by the words its refusal names it by. */
 const SPELLED_AS: Readonly<Record<string, string>> = {
   'the key hooks': '!<tag:yaml.org,2002:str>"hooks": {PreToolUse: []}',
+  'a collection used as a key': '[hooks]: {PreToolUse: []}',
   'a backslash, which can spell any key': '"hoo\\x6bs": {}',
   'an explicit key (?)': '? name2\n: x',
   'a merge key (<<)': '<<: {}',

@@ -46,7 +46,7 @@
 // refusal that names the file and the key.
 
 import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 import { asTheHostResolves } from './claude_code_file_tools.ts'
 

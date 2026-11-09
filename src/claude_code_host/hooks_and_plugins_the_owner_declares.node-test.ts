@@ -99,6 +99,7 @@ const withFrontmatter = (frontmatter: string) => `---\nname: helper\n${frontmatt
 /** Each spelling, as a frontmatter only that one rule catches; every rule has exactly one. */
 const ONLY_BY: Readonly<Record<string, string>> = {
   'the key hooks': 'hooks: {}',
+  'a collection used as a key': '[other]: {}',
   'a backslash, which can spell any key': '"hoo\\x6bs": {}',
   'an explicit key (?)': '? name2\n: x',
   'a merge key (<<)': '<<: {}',
@@ -115,7 +116,7 @@ test('every spelling rule has a frontmatter only it catches, and the refusal nam
   }
 })
 
-test('the key hooks is refused however YAML writes it, a verbatim tag and githooks included', () => {
+test('the key hooks is refused in every spelling this rule covers, a collection used as the key included', () => {
   for (const frontmatter of [
     'hooks:\n  PreToolUse: []',
     '"hooks": {}',
@@ -132,6 +133,23 @@ test('the key hooks is refused however YAML writes it, a verbatim tag and githoo
     'a: &k hooks\n*k: {}',
   ]) {
     assert.ok(hooksInFrontmatterOf(md(withFrontmatter(frontmatter)), PATTERN)?.includes(AGENT_FILE), `not refused: ${frontmatter}`)
+  }
+})
+
+test('a collection used as the key is refused in every shape inside that class, a flow mapping and a tagged sequence included', () => {
+  for (const frontmatter of [
+    '[hooks]: {PreToolUse: []}',
+    '[ hooks ]: {PreToolUse: []}',
+    '["hooks"]: {PreToolUse: []}',
+    '[hooks,]: {PreToolUse: []}',
+    '[[hooks]]: {PreToolUse: []}',
+    '[hooks] : {PreToolUse: []}',
+    '{hooks: x}: {PreToolUse: []}',
+    '!<tag:yaml.org,2002:seq>[hooks]: {PreToolUse: []}',
+  ]) {
+    const refusal = hooksInFrontmatterOf(md(withFrontmatter(frontmatter)), PATTERN) ?? ''
+    assert.ok(refusal.includes(AGENT_FILE), `not refused: ${frontmatter}`)
+    assert.ok(refusal.includes('a collection used as a key'), `refused without naming the rule: ${frontmatter}`)
   }
 })
 
