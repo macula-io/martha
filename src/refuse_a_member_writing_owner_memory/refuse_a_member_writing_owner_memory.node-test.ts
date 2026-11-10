@@ -1246,6 +1246,29 @@ test('a glob two shells down protects its folder (#192 r=5)', (t) => {
   assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'J1: an ordinary file')
 })
 
+// K1, K2 and K3 as Mercurius measured them on git 2.56.0 (martha#192 r=6): the same text
+// is a different word in each shell that reads it — quoted at the outer shell it is
+// literal, and the glob of it is the next shell's — so a word is remembered by its whole
+// self, what it says and what it computes, and not by its text alone. Keyed by text, the
+// second shell's word was dropped as one already seen and the folder went unprotected.
+test('the same text is a new word in the shell that expands it (#192 r=6)', (t) => {
+  const place = placeFor(t)
+  const cases: readonly (readonly [string, string, string])[] = [
+    ['[alias]\n\tp = !sh -c \'tools/*.sh\'\n', join('tools', 'g.sh'), 'K1: a glob quoted at the outer shell'],
+    ['[alias]\n\tp = !sh -c \\"tools/*.sh\\"\n', join('tools', 'g.sh'), 'K2: the same glob in a double quote'],
+  ]
+  for (const [config, written, why] of cases) {
+    const checkout = checkoutWith(place, { config })
+    assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, written), why)
+    assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), `${why}: an ordinary file`)
+  }
+
+  // K3: the glob is three shells down, and the last of them expands it.
+  const deep = checkoutWith(place, { config: '[alias]\n\tp = !sh -c "sh -c \'tools/*.sh\'"\n' })
+  assertRefusedAs192(placesFor(place), deep, place.home, join(deep, 'tools', 'g.sh'), 'K3: a glob three shells down')
+  assertAdmitted(placesFor(place), deep, place.home, join(deep, 'src', 'a.ts'), 'K3: an ordinary file')
+})
+
 test('a plain path two shells down is named, with nothing computed in it (#192 r=5)', (t) => {
   const place = placeFor(t)
   const checkout = checkoutWith(place, { config: '[alias]\n\tp = !sh -c \\"sh -c \'sh tools/x.sh\'\\"\n' })

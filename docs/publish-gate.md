@@ -965,7 +965,9 @@ where it came from. Three things stand on it:
   `"!tools/y.sh&&true"` name the scripts they run — and a word a shell hands
   another one (`sh -c '<line>'`) is read again as that shell would read it, so a
   glob, a quote join or a substitution inside it is not text either, and a line
-  that hides a further one the same way is read on until no new word appears; a
+  that hides a further one the same way is read on until no new word appears — a
+  word being new when what it computes is new too, since a text one shell reads
+  literally (`sh -c 'tools/*.sh'`) is a glob to the next; a
   value nested past `SHELL_DEPTH_CAP` shells (eight) is one whose next shell the
   guard cannot vouch for, and every write into that checkout is refused rather
   than read further — and the

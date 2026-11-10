@@ -521,16 +521,27 @@ function upToMatchingParen(value: string, at: number): string {
  * and `pastTheCap` says so rather than stopping short. A rule that names too much
  * refuses too much, which is the direction this guard takes; one that names too little
  * fails open.
+ *
+ * A word is new when its whole self is new, and not when its text is (r=6): a text a
+ * shell reads literally is a glob to the next one, so `sh -c 'tools/*.sh'` is two words
+ * — the quoted literal, which computes nothing, and the shell's own, which writes its
+ * name in `tools/`. Remembered by its text alone, the second would be dropped as the
+ * first, and the folder it names would go unprotected.
  */
 function wordsTakenByAShell(value: string): WordsAValueIsReadAs {
   const words = new Map<string, ShellWord>()
   let fresh = shellWordsIn(value)
   for (let depth = 0; fresh.length > 0; depth += 1) {
     if (depth >= SHELL_DEPTH_CAP) return { kind: 'pastTheCap' }
-    for (const word of fresh) words.set(word.text, word)
-    fresh = fresh.flatMap((word) => shellWordsIn(word.text)).filter((word) => !words.has(word.text))
+    for (const word of fresh) words.set(wholeOf(word), word)
+    fresh = fresh.flatMap((word) => shellWordsIn(word.text)).filter((word) => !words.has(wholeOf(word)))
   }
   return { kind: 'words', words: [...words.values()] }
+}
+
+/** A word as the reading remembers it: what it says and what its shell works out of it, which is what makes it that word. */
+function wholeOf(word: ShellWord): string {
+  return JSON.stringify([word.text, word.computed?.writtenBefore ?? null, word.computed?.what ?? null])
 }
 
 /** What reading a value through the shells it reaches came to: every word it runs, or the cap run out. */
