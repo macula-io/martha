@@ -22,6 +22,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { journalNeverWritten } from './drive_the_recorded_host.ts'
 import {
   GAVE_UP_BEFORE_ALLOW,
   NO_JOURNAL,
@@ -269,11 +270,20 @@ test('#240: a launcher that stops answering is named as the launcher, not as the
 test('#240: a call the launcher denied never opens, so nothing is named for it', async (t) => {
   const host = aHostOfTheTests()
   const { journal, read } = aJournalOfTheTests(t, host)
+  const denied_at = host.now()
   journal.received('tool_called', THE_CALL).answered('deny', 'the call writes outside the checkout')
+  // The wait opens a minute after the deny, so the figure the red reports is the time since the answer and not the
+  // silence this wait has counted on its own (martha#240 r=1).
+  await host.sleep(60_000)
   const why = await theRed(host, read)
   assert.ok(why !== undefined, 'a denied call and then nothing must still fail the wait')
   assert.match(why.message, /showed nothing new/, 'a denied call was spent as if something were running')
-  assert.match(why.message, /The launcher last answered tool_called \d+ ms ago/, 'the red does not say what the launcher was doing when the host went quiet')
+  assert.match(
+    why.message,
+    new RegExp(`The launcher last answered tool_called ${host.now() - denied_at} ms ago`),
+    'the red counts only its own silence, not the time since the launcher answered, so a reader is told a number that is too small',
+  )
+  assert.ok(host.now() - denied_at > HOST_SILENCE_MS, 'the case never waited past the deny by more than the silence budget, so the number it pins could be the budget alone')
   assert.doesNotMatch(why.message, new RegExp(THE_TOOL), 'the red named a tool the launcher had refused')
 })
 
@@ -312,4 +322,20 @@ test('#240: a run whose launcher keeps no journal behaves exactly as it did befo
     assert.ok(why !== undefined, `${what}: the wait did not fail at all`)
     assert.match(why.message, asBefore, `${what}: the red says something the run never said before #240`)
   }
+})
+
+// --- martha#240 r=1: the run says so when it reads no journal ---------------------------------------------------------
+
+test('#240: a run that read no journal by the host\'s first model request fails by name, and one that read a line goes on', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const heard = [{ number: 1, body: {} }]
+  assert.equal(journalNeverWritten([], directory), undefined, 'a run no request has arrived in yet was failed for a journal it has not needed')
+  assert.match(
+    journalNeverWritten(heard, directory) ?? '',
+    /wrote no line to the journal at .+ by the host's first model request/,
+    'a request arrived and the journal the run watches had no line in it, and the run said nothing: the wait would fall back to the terminal alone, and the false red #240 fixes would come back unnamed',
+  )
+  relayJournalKeptIn(directory, 'launch-of-the-test').received('session_started', {})
+  assert.equal(journalNeverWritten(heard, directory), undefined, 'a journal with a line in it was read as no journal')
 })

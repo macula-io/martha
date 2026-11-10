@@ -34,10 +34,19 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 
 import { RELAY_DEADLINE_MS, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { STATE_FILE_MODE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { projectStateDirectory, STATE_FILE_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The directory inside Martha's state that holds the launcher's journals, one file per launch. */
 export const RELAY_JOURNAL_PLACE = 'relay-journal'
+
+/**
+ * Where a launch keeps its journals, as a run watching it derives it: the project's state under the state home the run
+ * handed the launcher — its own XDG_STATE_HOME — so a run reads the path the launcher was given, and the two cannot
+ * drift into a run that reads no journal without a word (martha#240 r=1).
+ */
+export function relayJournalDirectory(state_home: string, checkout: string): string {
+  return join(projectStateDirectory(join(state_home, STATE_ROOT_NAME), checkout), RELAY_JOURNAL_PLACE)
+}
 
 /** The extension of one launch's journal. */
 export const RELAY_JOURNAL_SUFFIX = '.json'

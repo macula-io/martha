@@ -72,12 +72,16 @@ export interface ProgressWait extends HostWhileWaiting {
  * The red for a run that showed nothing new: the silence, the run's own time, and — when the launcher kept a journal —
  * the last event it answered and how long ago, so a reader is told what the run was doing when it stopped.
  */
-function wentSilent(wait: ProgressWait, journal: RelayJournalRead, written_at: number, now: number): string {
+function wentSilent(wait: ProgressWait, journal: RelayJournalRead, now: number): string {
   const taken = now - wait.run_started_at
   const said = `No ${wait.what} for ${wait.silence_ms} ms: the host showed nothing new in that time, and the run has taken ${taken} ms in all`
   const last = [...journal.events].reverse().find((line) => line.phase === 'answered')
   if (last === undefined) return said
-  return `${said}. The launcher last answered ${last.event} ${now - written_at} ms ago`
+  // Counted from the answer line's own time, on the machine's clock, not from when this wait began: a wait that opens
+  // after the launcher's last answer would report its own silence and be too small (martha#240 r=1). A line whose time
+  // cannot be read is named without a figure rather than with a wrong one.
+  const answered_at = Date.parse(last.at)
+  return Number.isNaN(answered_at) ? `${said}. The launcher last answered ${last.event}` : `${said}. The launcher last answered ${last.event} ${now - answered_at} ms ago`
 }
 
 /** The red for one stretch that has run out: which of the three it was, its budget, and the run's own time. */
@@ -99,8 +103,6 @@ interface Sightings {
   written: number
   /** When anything last moved. */
   moved_at: number
-  /** When the journal last grew, so a red can say how long since the launcher last answered. */
-  written_at: number
 }
 
 /**
@@ -114,7 +116,6 @@ function lookAt(wait: ProgressWait, seen: Sightings, journal: RelayJournalRead |
   const moved = showing !== seen.shown || hearing !== seen.heard || writing !== seen.written
   seen.shown = showing
   seen.heard = hearing
-  if (writing !== seen.written) seen.written_at = now
   seen.written = writing
   if (moved) seen.moved_at = now
   return moved
@@ -150,12 +151,12 @@ function enterStretch(seen: Sightings, held: Held, open: Stretch | undefined, no
 /** The red this look's state owes, or undefined while the run may go on: one budget, whichever held it. */
 function redFor(wait: ProgressWait, seen: Sightings, held: Held, journal: RelayJournalRead | undefined, now: number): string | undefined {
   if (held.stretch !== undefined) return now - held.since > OPEN_WORK_MS ? stuckIn(held.stretch, now - held.since, now - wait.run_started_at) : undefined
-  return now - seen.moved_at > wait.silence_ms ? wentSilent(wait, journal ?? NO_JOURNAL, seen.written_at, now) : undefined
+  return now - seen.moved_at > wait.silence_ms ? wentSilent(wait, journal ?? NO_JOURNAL, now) : undefined
 }
 
 export async function waitWhileTheHostKeepsShowing(wait: ProgressWait): Promise<void> {
   const opened = wait.now()
-  const seen: Sightings = { shown: wait.shown().length, heard: wait.heard(), written: journalNow(wait)?.written ?? 0, moved_at: opened, written_at: opened }
+  const seen: Sightings = { shown: wait.shown().length, heard: wait.heard(), written: journalNow(wait)?.written ?? 0, moved_at: opened }
   // A stretch is timed from when this wait first saw it open, so a case that starts in the middle of one counts only
   // the time it watched (martha#240).
   const held: Held = { stretch: stretchNow(journalNow(wait)), since: opened }
