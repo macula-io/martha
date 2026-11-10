@@ -907,7 +907,10 @@ where it came from. Three things stand on it:
   either side of it into one word, so `tools/x''.sh` is `tools/x.sh` and
   `'tools/my x.sh'` is one word with a space in it, and only the whitespace and
   the operators outside quotes end one, so `!sh -c 'tools/x.sh'` and
-  `"!tools/y.sh&&true"` name the scripts they run — and the value whole is taken
+  `"!tools/y.sh&&true"` name the scripts they run — and a word a shell hands a
+  second one (`sh -c '<line>'`) is read again as that shell would read it, so a
+  glob, a quote join or a substitution inside it is not text either — and the
+  value whole is taken
   as a path too, so a hooks folder (`core.hooksPath = .husky`), an alias's command
   (`alias.fmt = !tools/x.sh`), a config hook's command, a filter, an attributes
   file, and an `include.path` or `includeIf.*.path` are all covered by one rule — a
@@ -924,9 +927,14 @@ where it came from. Three things stand on it:
   (martha#79), so a checkout reached through a link is caught however the value
   spells it; includes are followed, and `%(prefix)` is refused rather than guessed. A name a
   shell works out rather than reads — a variable of the owner's, a command
-  substitution, a glob — protects the folder written before it: `tools/*.sh` and
-  `tools/$V/run.sh` both protect `<top>/tools`, since a word names one name in a
-  folder and that folder is what a member would have to write into. A word with
+  substitution, a glob, or a brace expansion — protects the folder written before
+  it: `tools/*.sh`, `tools/$V/run.sh` and `tools/{x,y}.sh` all protect
+  `<top>/tools`, since a word names one name in a folder and that folder is what a
+  member would have to write into. A brace counts only where bash expands one — a
+  list (`{x,y}`) or a range (`{a..c}`) in the same word — because git runs an
+  alias with `/bin/sh`, which is bash on many Linux machines; the `{` that opens a
+  function body is text and names nothing, so the standard
+  `alias.co = !f() { git checkout "$1"; }; f` stays admitted. A word with
   nothing written before it (`$HOME/x`, `$(dirname x)/…`) refuses every write into
   that checkout. A positional or special parameter is the owner's own argument or
   shell state, not a path a member can steer, so `$1` to `$9`, `$@`, `$*`, `$#`,

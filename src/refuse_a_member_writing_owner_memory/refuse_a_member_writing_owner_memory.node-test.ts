@@ -1068,6 +1068,53 @@ test('the owner\'s own argument is let through, and anything else protects the f
   assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'a variable whose folder is outside the checkout')
 })
 
+// H1, H2, H3 and H5 as Mercurius measured them on git 2.56.0 (martha#192 r=4): `sh -c
+// '<line>'` hands a second shell a line of its own words, and in each case a real git run
+// of the owner's started the member's file. The line is read by that shell's tokenizer —
+// its quotes join, and a glob or substitution in it names the folder written before it —
+// and not only at the spaces the outer shell left in the word (r=3).
+test('a line a value hands a second shell is read with that shell\'s own words (#192 r=4)', (t) => {
+  const place = placeFor(t)
+  // The quotes of H2 and H5 are escaped in the file (`\"`), as Mercurius wrote them and as
+  // git reads them: an escaped quote stays a quote in the value, where a bare one would be
+  // git's own quoting and would take the quote out of what the second shell reads.
+  const cases: readonly (readonly [string, string, string])[] = [
+    ['[alias]\n\tp = !sh -c \'sh tools/*.sh\'\n', join('tools', 'g.sh'), 'H1: a glob inside sh -c'],
+    ['[alias]\n\tp = !sh -c \\"sh tools/x\'\'.sh\\"\n', join('tools', 'x.sh'), 'H2: a pair of quotes joined inside sh -c'],
+    ['[alias]\n\tp = !sh -c \'sh \\"tools/my x.sh\\"\'\n', join('tools', 'my x.sh'), 'H5: a quoted space inside sh -c'],
+  ]
+  for (const [config, written, why] of cases) {
+    const checkout = checkoutWith(place, { config })
+    assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, written), why)
+    assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), `${why}: an ordinary file`)
+  }
+
+  // H3: the substitution stands with nothing written before it, so it names a path the
+  // guard cannot place at all and every write into that checkout is refused — the second
+  // shell's word is not text, and the refusal says which spelling it was.
+  assertWholeCheckoutRefused(place, '[alias]\n\tp = !sh -c \'sh $(printf tools/x%s .sh)\'\n', 'H3: a command substitution inside sh -c', ['alias.p', '$(printf tools/x%s .sh)', 'with nothing written before it'])
+})
+
+// H4 as Mercurius measured it (martha#192 r=4): git runs an alias with /bin/sh, which is
+// bash on this machine, and bash expands `{x,y}` even called as sh, so the brace names the
+// folder written before it. The control is the standard alias: the `{` that opens a
+// function body has no list and no range in it, is text, and names nothing.
+test('a brace expansion protects the folder written before it, and a function body\'s brace does not (#192 r=4)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[alias]\n\tp = !sh tools/{x,y}.sh\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'x.sh'), 'H4: a brace expansion')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'H4: an ordinary file')
+
+  writeFileSync(join(checkout, '.git', 'config'), '[alias]\n\tco = "!f() { git checkout \\"$1\\"; }; f"\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'the brace that opens a function body')
+
+  // And a brace holding no list and no range is text to bash (`{x}` is not expanded), so
+  // the file that runs is `tools/{x}.sh` itself and a write beside it is nobody's.
+  writeFileSync(join(checkout, '.git', 'config'), '[alias]\n\tp = !sh tools/{x}.sh\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'tools', 'x.sh'), 'a brace holding neither a list nor a range')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', '{x}.sh'), 'the file a brace with no list names literally')
+})
+
 test('a key on the line of its section header is read as git reads it (#192 r=2)', (t) => {
   const place = placeFor(t)
   // git reads `[core] hooksPath = .hk` as the entry `core.hooksPath = .hk`

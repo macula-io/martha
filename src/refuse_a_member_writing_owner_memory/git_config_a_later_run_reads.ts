@@ -21,9 +21,12 @@
 // special parameter (`$1`, `$@`, `$$`, …) is the owner's own argument or shell
 // state, and the alias `!f() { git checkout "$1"; }; f` is the standard way to write
 // an alias that takes one. Anything else the shell works out — another variable, a
-// command substitution, a glob — protects the folder written before it (r=3): a word
-// names one name in a folder, and that folder is what a member would have to write
-// into to steer it.
+// command substitution, a glob, or a brace expansion (r=4: git runs an alias with
+// /bin/sh, which is bash on many Linux machines, and `{x,y}` is a name there) —
+// protects the folder written before it: a word names one name in a folder, and that
+// folder is what a member would have to write into to steer it. A line the outer
+// shell hands a second one (`!sh -c '<line>'`) is read by that shell's words too
+// (r=4), so a glob, quote or substitution inside it is not text.
 //
 // The parser models a measured subset of git's syntax — the section and key forms,
 // the comments, the continuation, the quoting and the escape set git itself takes —
@@ -207,17 +210,21 @@ function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: Launc
 
 /**
  * The folders a value's shell words work a path out in, and the refusal that stands
- * when nothing is written before one of them (martha#192 r=3). A word names one name
- * in the folder written before the character the shell resolves, so that folder —
+ * when nothing is written before one of them (martha#192 r=3, r=4). A word names one
+ * name in the folder written before the character the shell resolves, so that folder —
  * and, when the folder holds the checkout rather than standing inside it, the
  * checkout with it — is what a member would have to write into to steer the word.
  * A word with nothing written before it (`$HOME/x`, `$(dirname x)/…`, `*.sh`) names
  * a thing the guard cannot place at all, and refusing every write into that checkout
  * is the direction that cannot fail open.
+ *
+ * The words are those of every shell the value reaches: the outer one, and the second
+ * a line handed to `sh -c` starts (r=4) — a glob there names its folder as a glob at
+ * the outer level does.
  */
 function computedPlacesIn(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[] } | { readonly kind: 'refused'; readonly refusal: string } {
   const places: ConfigNamedPlace[] = []
-  for (const word of shellWordsIn(withoutTheSignIn(entry.value))) {
+  for (const word of wordsTakenByAShell(withoutTheSignIn(entry.value))) {
     if (word.computed === undefined) continue
     const { writtenBefore, what } = word.computed
     if (writtenBefore === '') {
@@ -292,8 +299,8 @@ const DOUBLE_QUOTE_ESCAPES = '"\\$`'
 /** The characters a shell expands into a name, outside quotes: the globs. */
 const SHELL_GLOB = '*?['
 
-/** Where a word is split again when a shell runs it a second time: the spaces and the operators inside it. */
-const SHELL_BREAKS_INSIDE_A_WORD = /[ \t\n\v\f\r;&|()<>]+/
+/** The characters that quote text for a shell. */
+const SHELL_QUOTES = '\'"'
 
 /**
  * The words a shell would run from a value (martha#192 r=3). A word is not a split on
@@ -386,12 +393,44 @@ function takeLiteral(value: string, at: number, word: WordUnderScan): number {
   return 2
 }
 
-/** Whether a shell works a name out at this character rather than reading it: a substitution, a variable or a glob. */
+/** Whether a shell works a name out at this character rather than reading it: a substitution, a variable, a glob or a brace expansion. */
 function worksOutAt(value: string, at: number): boolean {
   const letter = value.charAt(at)
   if (letter === '`') return true
   if (letter === '$') return ownerParameterAt(value, at) === 0
+  if (letter === '{') return beginsABraceExpansion(value, at)
   return SHELL_GLOB.includes(letter)
+}
+
+/**
+ * Whether a `{` starts a brace expansion in the word it stands in (martha#192 r=4). git runs
+ * an alias with `/bin/sh`, which is bash on this machine and on many Linux machines, and
+ * bash expands `{x,y}` and `{a..c}` into a name while any other brace is text — the `{`
+ * that opens an alias's function body is one of those, so it names nothing.
+ *
+ * The word is bash's own: a space or an operator ends it, outside quotes, and a quote keeps
+ * what stands between them (`{"my x",y}` is one word). A `}` after it holds a comma or a
+ * range, and it is the closing brace of the expansion only when what stands between holds
+ * one of those; `{x}` and `{}` are text.
+ */
+function beginsABraceExpansion(value: string, at: number): boolean {
+  let quote: string | undefined
+  for (let step = at + 1; step < value.length; step += 1) {
+    const letter = value.charAt(step)
+    if (quote !== undefined) {
+      quote = letter === quote ? undefined : quote
+      continue
+    }
+    if (SHELL_QUOTES.includes(letter)) quote = letter
+    else if (letter === '}') return holdsABraceList(value.slice(at + 1, step))
+    else if (SHELL_SPACE.test(letter) || SHELL_OPERATOR.includes(letter)) return false
+  }
+  return false
+}
+
+/** Whether the text between a brace expansion's braces is a list (`x,y`) or a range (`a..c`). */
+function holdsABraceList(inside: string): boolean {
+  return inside.includes(',') || inside.includes('..')
 }
 
 /** The first thing a word works out, and everything written before it in that word. */
@@ -460,6 +499,20 @@ function upToMatchingParen(value: string, at: number): string {
 }
 
 /**
+ * The words every shell a value reaches would run from it (martha#192 r=4): the outer
+ * shell's words, and each word read again as a line a shell hands a second one. What
+ * runs is sometimes a word the shell splits again — `sh -c 'sh tools/*.sh'` hands `sh`
+ * a line of its own words, and `tools/*.sh` is what the second shell expands — so both
+ * readings are taken, and the second is the tokenizer's own with its quotes joining and
+ * its globs, variables and substitutions marking the folder written before them. A rule
+ * that names too much refuses too much, which is the direction this guard takes; one
+ * that names too little fails open.
+ */
+function wordsTakenByAShell(value: string): ShellWord[] {
+  return shellWordsIn(value).flatMap((word) => [word, ...shellWordsIn(word.text)])
+}
+
+/**
  * The paths one value could name: the value whole as git read it, every word of it,
  * and — for a value git hands to a shell, which an alias writes with a leading `!` —
  * the value and its words without that sign, since git runs what follows it and
@@ -472,23 +525,17 @@ function upToMatchingParen(value: string, at: number): string {
  * value whole keeps the spaces git keeps, so a path that starts with one
  * (`hooksPath = " hk"`) is the folder `<top>/ hk` and not `<top>/hk`.
  *
- * A word is also taken in pieces, split at the spaces and operators inside it. What
- * runs is sometimes a word the shell splits again — `sh -c 'tools/h.sh --fix'` hands
- * `sh` a line of its own words, and `tools/h.sh` is what runs — so the whole word and
- * its pieces are both candidates. A rule that names too much refuses too much, which
- * is the direction this guard takes; one that names too little fails open.
+ * A word is also taken as the line a second shell would read it as (r=4): `sh -c
+ * 'sh tools/h.sh --fix'` hands `sh` a line of its own words, and `tools/h.sh` is
+ * what runs, however that line spells it — a glob, a quote or a substitution there
+ * is the second shell's, not text.
  */
 function candidatesIn(entry: ConfigEntry): string[] {
   const whole = entry.value
   if (whole === '') return []
   const withoutTheSign = withoutTheSignIn(whole)
-  const words = isAnInclude(entry) ? [] : shellWordsIn(withoutTheSign).flatMap((word) => [word.text, ...piecesOfWord(word.text)])
+  const words = isAnInclude(entry) ? [] : wordsTakenByAShell(withoutTheSign).map((word) => word.text)
   return [...new Set([whole, ...(withoutTheSign === whole ? [] : [withoutTheSign]), ...words])]
-}
-
-/** The pieces a word falls into at the spaces and operators inside it, where a shell inside it would split it again. */
-function piecesOfWord(word: string): string[] {
-  return word.split(SHELL_BREAKS_INSIDE_A_WORD).filter((piece) => piece !== '')
 }
 
 /** A value git hands to a shell, which an alias writes with a leading `!`, and the words without that sign. */
