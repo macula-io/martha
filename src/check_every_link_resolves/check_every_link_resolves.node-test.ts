@@ -94,6 +94,19 @@ test('a 404 fails at once, with no second scan and no wait', async () => {
   assert.deepEqual(slept, [])
 })
 
+test('a 404 fails the very scan that also names a 408, and both are named', async () => {
+  const slept: number[] = []
+  const gone = { file: 'docs/x.md', url: 'https://example.invalid/gone', code: 404 }
+  const scans = scanning([{ exitCode: 2, report: reportOf([shields, gone]) }])
+  const verdict = await checkEveryLinkResolves(scans.scan, optionsWith(slept))
+  assert.equal(verdict.verdict, 'unresolved')
+  const unresolved = verdict.verdict === 'unresolved' ? verdict.failures : []
+  assert.equal(verdict.verdict === 'unresolved' ? verdict.scans : 0, 1)
+  assert.equal(scans.asked, 1)
+  assert.deepEqual(slept, [])
+  assert.deepEqual(unresolved.map((failure) => failure.url), [shields.url, gone.url])
+})
+
 test('a file that is not there is not a slow host', async () => {
   const slept: number[] = []
   const scans = scanning([{ exitCode: 2, report: reportOf([{ file: 'README.md', url: 'file:///nowhere/missing-page.md' }]) }])

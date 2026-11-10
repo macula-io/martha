@@ -43,6 +43,12 @@ jobs:
       LYCHEE_OPTIONS: '--no-progress --include-fragments --max-retries 4 --retry-wait-time 3 --timeout 30'
     steps:
       - uses: actions/checkout@v7
+      # This job runs this repository's own Node code now (check_every_link_resolves),
+      # so it runs on the Node the other Node jobs pin rather than on whatever the
+      # runner image happens to ship. No npm ci: the check imports nothing.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
       # The self-test plants a link to a file that is not there, outside the
       # checkout so the scan below never sees it, and holds the same options to
       # it: the job must still go red, and name that link when it does.
