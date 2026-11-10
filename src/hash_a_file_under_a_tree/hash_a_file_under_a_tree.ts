@@ -21,6 +21,7 @@
 import { createHash } from 'node:crypto'
 
 import type { Processes, ScratchDirectories } from '../host_contract/host_contract.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The object formats git names a repository's objects in (`git rev-parse --show-object-format`). */
 export const GIT_OBJECT_FORMATS = ['sha1', 'sha256'] as const
@@ -75,7 +76,7 @@ function askedOfGit(store: LauncherStore, path: string, bytes: Buffer): string |
     const content = scratch.write('content', bytes)
     const run = store.processes.runNow({
       command: 'git',
-      args: ['--git-dir', store.repository, '-c', 'core.fsmonitor=false', 'hash-object', '-w', `--path=${path}`, '--', content],
+      args: ['--git-dir', store.repository, ...marthasOwnGitArgs(['hash-object', '-w', `--path=${path}`, '--', content])],
       cwd: store.repository,
       environment: {
         drop_prefixes: [GIT_VARIABLES],

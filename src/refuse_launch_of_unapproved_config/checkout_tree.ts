@@ -46,6 +46,7 @@
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import type { Processes, Stores } from '../host_contract/host_contract.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { judgeTheCheckout, objectFormatOf } from './the_launcher_judges_the_tree.ts'
 
 /** The parts of the host contract the launch gate reads the machine through. */
@@ -159,7 +160,7 @@ function git(host: LaunchHost, cwd: string, args: readonly string[], set: Readon
 function gitRaw(host: LaunchHost, cwd: string, args: readonly string[], set: Readonly<Record<string, string>> = {}): string | undefined {
   const run = host.processes.runNow({
     command: 'git',
-    args: ['-c', 'core.fsmonitor=false', ...args],
+    args: marthasOwnGitArgs(args),
     cwd,
     environment: { drop_prefixes: [GIT_VARIABLES], set },
   })

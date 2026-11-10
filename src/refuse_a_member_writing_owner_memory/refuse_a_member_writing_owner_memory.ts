@@ -101,6 +101,7 @@ import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import type { ProtectedConfigPlaces } from '../claude_code_host/protected_config_places.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { whatALaterGitRunReads, type WhatALaterGitRunReads } from './git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 
@@ -692,6 +693,94 @@ export function gitSegmentIn(path: string): string | undefined {
   return path.split(sep).find((segment) => isGitOnHfs(segment) || isGitOnNtfs(segment))
 }
 
+/** The names git's own check reads a directory as a git directory by (martha#192), and the one it joins two with. */
+const HEAD_NAME = 'HEAD'
+const OBJECTS_NAME = 'objects'
+const REFS_NAME = 'refs'
+const A_HEAD_NAMING_A_REF = /^ref:\s*\S+$/
+const A_FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
+
+/** The bytes at a path through the host contract, or undefined when nothing there can be read. */
+function bytesAt(path: string, host: LaunchHost): string | undefined {
+  try {
+    return new TextDecoder().decode(host.stores.files.bytesOf(path))
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether a path is a directory, as the host reports it. */
+function isADirectory(path: string, host: LaunchHost): boolean {
+  try {
+    return host.stores.files.kindOf(path).kind === 'directory'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether `dir` is a git directory once the write that names `writing` has landed:
+ * git's own check (martha#192) — a `HEAD` naming a ref or a full object id, and
+ * `objects/` and `refs/` beside it, or in the directory its `commondir` names — with
+ * the write itself counted, since a write is refused before it lands and the path
+ * that creates `refs/` is the one that completes the directory. A `config` beside
+ * them is optional: git takes the three names alone. A `HEAD` this write would put
+ * there is taken as one git accepts, and the write refused.
+ */
+function completesAGitDirectoryAt(dir: string, writing: string, host: LaunchHost): boolean {
+  if (!holdsAHead(dir, writing, host)) return false
+  if (holdsBothFolders(dir, writing, host)) return true
+  return theSharedHalfHoldsThem(dir, host)
+}
+
+/**
+ * Whether the directory would hold a `HEAD` git accepts, counting the write itself:
+ * a write to `HEAD` is the `HEAD` the directory is completed with, whatever stands
+ * there now — a file git does not accept is no git directory, and overwriting it is
+ * how one becomes one (r=2, R1).
+ */
+function holdsAHead(dir: string, writing: string, host: LaunchHost): boolean {
+  if (provides(dir, HEAD_NAME, writing)) return true
+  const head = bytesAt(join(dir, HEAD_NAME), host)?.trim()
+  return head !== undefined && (A_HEAD_NAMING_A_REF.test(head) || A_FULL_OBJECT_ID.test(head))
+}
+
+/** Whether `objects/` and `refs/` would be there, counting the folder the write itself lands in. */
+function holdsBothFolders(dir: string, writing: string, host: LaunchHost): boolean {
+  return holdsAFolder(dir, OBJECTS_NAME, writing, host) && holdsAFolder(dir, REFS_NAME, writing, host)
+}
+
+/** Whether one of the two folders is there, or is the one the write lands in or below. */
+function holdsAFolder(dir: string, name: string, writing: string, host: LaunchHost): boolean {
+  return isADirectory(join(dir, name), host) || provides(dir, name, writing)
+}
+
+/** Whether the other half of a split git directory holds the two folders the first half leaves to it. */
+function theSharedHalfHoldsThem(dir: string, host: LaunchHost): boolean {
+  const shared = bytesAt(join(dir, COMMONDIR), host)?.trim()
+  if (shared === undefined || shared === '') return false
+  const other = resolve(dir, shared)
+  return isADirectory(join(other, OBJECTS_NAME), host) && isADirectory(join(other, REFS_NAME), host)
+}
+
+/** Whether the write at `writing` is the name `child` itself, or lands below it. */
+function provides(dir: string, name: string, writing: string): boolean {
+  const child = join(dir, name)
+  return writing === child || within(writing, child)
+}
+
+/**
+ * The git directory this write completes, if it completes one at the folder it lands
+ * in or above it up to the checkout's top: the write that finishes `HEAD` with the
+ * two folders is what makes the directory one a later git run reads (martha#192).
+ */
+function theGitDirectoryAWriteCompletesAt(path: string, top: string, host: LaunchHost): string | undefined {
+  for (let dir = dirname(path); ; dir = dirname(dir)) {
+    if (completesAGitDirectoryAt(dir, path, host)) return dir
+    if (dir === top || dirname(dir) === dir) return undefined
+  }
+}
+
 /** The checkout a member works in, as its git directory is found on disk (martha#168). */
 export interface CheckoutGit {
   /** The checkout's top. */
@@ -726,7 +815,7 @@ function sharedGitDirOf(git_dir: string, host: LaunchHost): string | undefined {
 }
 
 /** Why a write the member spells `value` reads or starts a later git run of the owner's, or undefined (rule 5). */
-function gitDenialOf(value: string, path: string, git: CheckoutGit | undefined, places: OwnerMemoryPlaces): string | undefined {
+function gitDenialOf(value: string, path: string, git: CheckoutGit | undefined, places: OwnerMemoryPlaces, later: WhatALaterGitRunReads | undefined, host: LaunchHost): string | undefined {
   const segment = gitSegmentIn(path)
   if (segment !== undefined) {
     return `${value} names ${segment} as one of its path segments, and git takes that for the .git directory it reads from there: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
@@ -743,7 +832,33 @@ function gitDenialOf(value: string, path: string, git: CheckoutGit | undefined, 
   if (file !== undefined) {
     return `${value} is ${file}, one of the git configuration files the owner's own git runs read, and everything one names runs: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
   }
+  if (insideTheCheckout(path, git)) return theGitDenialInsideTheTree(value, path, git, later, host)
   return undefined
+}
+
+/** Whether a path is at the checkout's top or below it. */
+function insideTheCheckout(path: string, git: CheckoutGit | undefined): git is CheckoutGit {
+  return git !== undefined && within(path, git.top)
+}
+
+/**
+ * Why a write inside the checkout at `git.top` is refused for what a later git run
+ * of the owner's reads there (martha#192): the file `commondir` a split git
+ * directory is assembled with, the git directory a write completes, and the paths
+ * a configuration value names. The configuration is read at each call, so a value
+ * written into any file it reads is covered from the next call.
+ */
+function theGitDenialInsideTheTree(value: string, path: string, git: CheckoutGit, later: WhatALaterGitRunReads | undefined, host: LaunchHost): string | undefined {
+  if (basename(path) === COMMONDIR) {
+    return `${value} is a file named ${COMMONDIR} inside the checkout at ${git.top}, and a later git run of the owner's reads that name only as the other half of a git directory, whose config it then starts: a member does not write there, so nothing a later git run starts is something the member put there (martha#192)`
+  }
+  const completed = theGitDirectoryAWriteCompletesAt(path, git.top, host)
+  if (completed !== undefined) {
+    return `${value} completes a git directory at ${completed}: with ${HEAD_NAME} naming a ref or an object id, and ${OBJECTS_NAME}/ and ${REFS_NAME}/ beside it or in the directory its ${COMMONDIR} names, a later git run made at or below it reads that directory's config and starts what the config names: a member does not write there, so nothing a later git run starts is something the member put there (martha#192)`
+  }
+  const named = later?.places.find((place) => within(path, place.what))
+  if (named === undefined) return undefined
+  return `${value} is ${named.what}, which ${named.why}: a member does not write there, so nothing a later git run starts is something the member put there (martha#192). If this checkout is meant to be writable, ask the owner to take that value out of their own git configuration`
 }
 
 /** Every project's memory folder under `root` that is a link, whether or not its target exists yet (martha#136 r=4). */
@@ -801,6 +916,12 @@ function unfollowableMemory(place: string): string {
   return `${place} is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so no write is allowed while it stands: which folder a write lands in cannot be told (martha#136)`
 }
 
+/** The refusal a config that cannot be read stands for, when the write would land inside the checkout it belongs to. */
+function refusalFromAConfig(later: WhatALaterGitRunReads | undefined, git: CheckoutGit | undefined, paths: readonly string[]): string | undefined {
+  if (later?.refusal === undefined || git === undefined) return undefined
+  return paths.some((path) => within(path, git.top)) ? later.refusal : undefined
+}
+
 /**
  * Why a member's tool call writes the owner's memory, instructions, or what a
  * later git run of the owner's reads, or undefined (rules 3, 4 and 5).
@@ -817,24 +938,34 @@ export function writesTheOwnersMemory(
   // Read at each call, not at launch: a checkout or a git directory that appears
   // during the session is covered from the next call (martha#168).
   const git = checkoutGitOf(cwd, host)
+  // What a later git run of the owner's takes from the configuration it reads is
+  // read at each call too, and a config this guard cannot read refuses every write
+  // into the checkout rather than passing one (martha#192).
+  const later = git === undefined ? undefined : whatALaterGitRunReads(git.top, git.dirs, places.git_config_files, home, LINK_HOPS, host)
   const unfollowable = unfollowablePlace(places, git)
   if (unfollowable !== undefined) return unfollowable
   for (const argument of FILE_ARGUMENTS) {
-    const value = input[argument]
-    if (typeof value !== 'string' || value.trim() === '') continue
-    const spelled = asTheHostResolves(value, cwd, home)
-    const end = pathToItsEnd(spelled)
-    if (end === undefined) {
-      return `${value} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told: a member does not write there (martha#136)`
-    }
-    const gitDenial = unique([spelled, end]).map((path) => gitDenialOf(value, path, git, places)).find((found) => found !== undefined)
-    if (gitDenial !== undefined) return gitDenial
-    const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
-    if (place !== undefined) {
-      return `${value} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
-    }
+    const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, cwd, home)
+    if (why !== undefined) return why
   }
   return undefined
+}
+
+/** Why one argument a file tool is given names a place a member does not write, or undefined when it names none. */
+function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, cwd: string, home: string): string | undefined {
+  if (typeof argument !== 'string' || argument.trim() === '') return undefined
+  const spelled = asTheHostResolves(argument, cwd, home)
+  const end = pathToItsEnd(spelled)
+  if (end === undefined) {
+    return `${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told: a member does not write there (martha#136)`
+  }
+  const configRefusal = refusalFromAConfig(later, git, unique([spelled, end]))
+  if (configRefusal !== undefined) return configRefusal
+  const gitDenial = unique([spelled, end]).map((path) => gitDenialOf(argument, path, git, places, later, host)).find((found) => found !== undefined)
+  if (gitDenial !== undefined) return gitDenial
+  const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
+  if (place === undefined) return undefined
+  return `${argument} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
 }
 
 /**

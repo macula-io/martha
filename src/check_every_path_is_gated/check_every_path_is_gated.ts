@@ -139,12 +139,13 @@ export function gapsInGateCoverage(
   launch_gates: Readonly<Record<string, LaunchGate>> = LAUNCH_GATES,
   argument_gates: Readonly<Record<string, ArgumentGate>> = ARGUMENT_GATES,
   path_gates: Readonly<Record<string, PathGate>> = {},
+  config_stand_in?: (probe: ConfigPathProbe) => PathProbe,
 ): readonly Gap[] {
   const gaps: Gap[] = []
   const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates }
 
   for (const path of paths) {
-    const why = gapOfRow(path, gateRefuses, gates)
+    const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
     if (why !== undefined) gaps.push({ path: path.id, why })
   }
 
@@ -163,7 +164,7 @@ interface Gates {
  * Why one row is a gap, or undefined when its control stands on it. Each kind
  * of control is judged by its own rule, and the first rule that applies decides.
  */
-function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gates: Gates): string | undefined {
+function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gates: Gates, standIn?: (probe: ConfigPathProbe) => PathProbe): string | undefined {
   const control: InboundPath['control'] | undefined = path.control
 
   if (control === undefined) return 'no control is declared'
@@ -178,7 +179,7 @@ function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gat
 
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
-  if (control.kind === 'check_every_path_is_gated') return gatedPathRowGap(path, control, gateRefuses, gates)
+  if (control.kind === 'check_every_path_is_gated') return gatedPathRowGap(path, control, gateRefuses, gates, standIn)
 
   return claimedControlGap(path, control, gateRefuses, gates.delivery)
 }
@@ -193,6 +194,7 @@ function gatedPathRowGap(
   control: Extract<Control, { kind: 'check_every_path_is_gated' }>,
   gateRefuses: (path: string) => boolean,
   gates: Gates,
+  standIn: ((probe: ConfigPathProbe) => PathProbe) | undefined,
 ): string | undefined {
   const gate = gates.path[control.gate]
   if (gate === undefined) return `names a path gate nobody has built: ${control.gate}`
@@ -200,7 +202,11 @@ function gatedPathRowGap(
   if (failed !== undefined) {
     return failed.admits ? `the gate ${control.gate} refuses ${failed.what}` : `the gate ${control.gate} admits ${failed.what}`
   }
-  return control.also.map((also) => gapOfRow({ ...path, control: also }, gateRefuses, gates)).find((why) => why !== undefined)
+  // A gate's questions about a path it is given are not every question it answers:
+  // these two shapes need a configuration on disk to mean anything (martha#192).
+  const configFailed = standIn === undefined ? undefined : gapsInConfigPathCoverage(gate, standIn)
+  if (configFailed !== undefined) return `the gate ${control.gate} ${configFailed.replace(/^the gate /, '')}`
+  return control.also.map((also) => gapOfRow({ ...path, control: also }, gateRefuses, gates, standIn)).find((why) => why !== undefined)
 }
 
 /** Why a row naming an argument gate is a gap: it is not delivered text, or its gate fails a question. */
@@ -259,6 +265,45 @@ export const PATH_PROBES: readonly PathProbe[] = [
   { admits: false, what: 'a .git a member would add, spelled as a case-insensitive disk reads it', path: join(PROBE_CHECKOUT, 'src', '.GIT'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
   { admits: false, what: "the owner's own git configuration", path: join(PROBE_HOME, '.gitconfig'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
 ]
+
+/**
+ * A shape a path alone cannot express (martha#192): a configuration on disk names a
+ * tree path, so only a checkout whose config holds that line says whether a gate
+ * refuses the write. The caller stands the checkout — a slice touches no machine —
+ * and the check asks the gate in the directory it made.
+ */
+export interface ConfigPathProbe {
+  /** Whether the gate must admit the write. */
+  readonly admits: boolean
+  readonly what: string
+  /** The lines the checkout's `.git/config` holds when the gate is asked. */
+  readonly config: readonly string[]
+  /** The path the member's Write names, relative to the checkout's top. */
+  readonly writes: string
+}
+
+/**
+ * The questions a gate that reads a checkout's configuration must answer: an
+ * ordinary file admitted beside the values, and the two shapes a value names —
+ * a hooks folder and a program — refused. The first is admitted, so a gate that
+ * refuses every write into any checkout is caught.
+ */
+export const CONFIG_PATH_PROBES: readonly ConfigPathProbe[] = [
+  { admits: true, what: 'an ordinary file in a checkout whose config names a tree hooks folder', config: ['[core]', '\thooksPath = .husky'], writes: join('src', 'a.ts') },
+  { admits: false, what: 'the hooks folder a tree config names', config: ['[core]', '\thooksPath = .husky'], writes: join('.husky', 'pre-commit') },
+  { admits: false, what: 'the program a tree config names through an alias', config: ['[alias]', '\tfmt = !tools/x.sh'], writes: join('tools', 'x.sh') },
+]
+
+/**
+ * Why a gate that reads a configuration fails one of the questions above, or
+ * undefined when it answers them all: `standIn` builds the checkout a probe needs
+ * and says where the member stands in it.
+ */
+export function gapsInConfigPathCoverage(gate: PathGate, standIn: (probe: ConfigPathProbe) => PathProbe): string | undefined {
+  const failed = CONFIG_PATH_PROBES.find((probe) => gate(standIn(probe)) !== probe.admits)
+  if (failed === undefined) return undefined
+  return failed.admits ? `the gate refuses ${failed.what}` : `the gate admits ${failed.what}`
+}
 
 /**
  * The questions every argument gate is asked, one per class of word the host

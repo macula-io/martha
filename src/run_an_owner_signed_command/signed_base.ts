@@ -19,6 +19,7 @@ import { GIT_OBJECT_FORMATS, type GitObjectFormat } from '../hash_a_file_under_a
 import type { SignedBase } from '../keep_the_shell_for_an_owner_signed_command/command_shapes.ts'
 import type { BaseEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
 import { stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The launcher's own repository of the signed base, inside the project's state directory. */
 export const SIGNED_BASE_REPOSITORY = 'signed_base.git'
@@ -57,7 +58,7 @@ function gitWith(where: readonly string[], inherited: Readonly<Record<string, st
   const kept = Object.fromEntries(FETCH_KEEPS.flatMap((name) => (inherited[name] === undefined ? [] : [[name, inherited[name]!]])))
   const env = { ...kept, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG, GIT_ALLOW_PROTOCOL: BASE_PROTOCOLS, GIT_TERMINAL_PROMPT: '0', ...also }
   return (args, input) => {
-    const run = spawnSync('git', [...where, '-c', 'core.fsmonitor=false', ...args], { env, input, maxBuffer: Number.MAX_SAFE_INTEGER })
+    const run = spawnSync('git', [...where, ...marthasOwnGitArgs(args)], { env, input, maxBuffer: Number.MAX_SAFE_INTEGER })
     return { ok: run.status === 0, out: run.stdout ?? Buffer.alloc(0), err: run.stderr?.toString('utf8').trim() ?? String(run.error) }
   }
 }

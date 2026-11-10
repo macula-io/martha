@@ -23,6 +23,7 @@ import process from 'node:process'
 import { createInterface } from 'node:readline/promises'
 import { isatty } from 'node:tty'
 
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -89,7 +90,7 @@ const absolute = (path: string | undefined): string | undefined => (path !== und
 
 /** git's answer in `cwd`, or undefined when git gave none. */
 function gitSays(cwd: string, ...args: string[]): string | undefined {
-  const run = spawnSync('git', args, { cwd, encoding: 'utf8' })
+  const run = spawnSync('git', marthasOwnGitArgs(args), { cwd, encoding: 'utf8' })
   const said = run.status === 0 ? run.stdout.trim() : ''
   return said === '' ? undefined : said
 }

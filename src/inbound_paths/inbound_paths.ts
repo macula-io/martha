@@ -253,7 +253,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A13',
-    what: "code an untrusted checkout runs through the member's own commands, and a member's file-tool write into the checkout's git directory or the owner's own git configuration, which a later git run of the owner's would then run or obey (martha#168)",
+    what: "code an untrusted checkout runs through the member's own commands, and a member's file-tool write into the checkout's git directory or the owner's own git configuration, which a later git run of the owner's would then run or obey (martha#168); and the same for what a configuration value names inside the tree — a hooks folder, an alias or hook command, a filter, an attributes file, an include, any word or whole value that resolves there, whatever key names it — and for the git directory a write completes or joins with a `commondir` file (martha#192, closed for the member's file tools: a shell command writing the same paths is still A13)",
     klass: 'delivered',
     control: {
       kind: 'check_every_path_is_gated',
