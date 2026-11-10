@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -579,8 +579,13 @@ test('a member may not write any name in the global config\'s family, beside the
   const upperCased = (GLOBAL_CONFIG_FAMILY[1] ?? '').replace(GLOBAL_CONFIG_STEM, GLOBAL_CONFIG_STEM.toUpperCase())
   assertDeniedBy(placesFor(place), place.worktree, place.home, join(place.home, upperCased), 'martha#202', `the upper-case stem: ${upperCased}`)
   // The folder is compared as the name is: on a case-insensitive disk these two spellings are one folder, and the host
-  // resolves either to the same file (Uranus, martha#202 r=1).
-  const upperHome = place.home.replace('/home', '/HOME')
+  // resolves either to the same file (Uranus, martha#202 r=1, r=3). The row proves case only if the two paths really
+  // differ, and proves THIS folder only if nothing above it changed, so both are asserted rather than assumed of the
+  // place's layout — a spelling that came out the same would otherwise be refused by the row that came before it.
+  const upperHome = join(place.root, 'HOME')
+  assert.notEqual(upperHome, place.home, 'the row names a folder spelled another way, not the home folder itself')
+  assert.equal(dirname(upperHome), dirname(place.home), 'only the folder\'s own name is spelled differently, not where it sits')
+  assert.equal(basename(upperHome).toLowerCase(), basename(place.home).toLowerCase(), 'the two spellings differ in case alone')
   assertDeniedBy(placesFor(place), place.worktree, place.home, join(upperHome, GLOBAL_CONFIG_FAMILY[1] ?? ''), 'martha#202', `a folder spelled with different case: ${upperHome}`)
 })
 
