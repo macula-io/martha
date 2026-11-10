@@ -221,6 +221,9 @@ export const plainTextOf = (shown: string): string =>
  * `run.silence_ms`, with the last screen (martha#210).
  */
 export async function driveTheRecordedHost(run: RecordedHostRun): Promise<RecordedHostRan> {
+  // When the run began, for the elapsed figure a silence is reported with: four waits follow, and each counts its own
+  // silence, so none of them may call its own time the run's (martha#210 r=1).
+  const run_started_at = Date.now()
   const heard: ModelRequest[] = []
   let failure: string | undefined
   const model = await standIn(run.script, heard, (why) => void (failure ??= why))
@@ -242,6 +245,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
         shown: () => shown,
         heard: () => heard.length,
         silence_ms: run.silence_ms,
+        run_started_at,
         now: Date.now,
         sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
       })

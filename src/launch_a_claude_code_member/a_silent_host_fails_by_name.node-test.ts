@@ -57,6 +57,9 @@ const countingLooks = (host: HostOfTheTests, onLook: () => void): ((ms: number) 
 
 test('#210: a host that goes silent fails by name, saying how long nothing came and how long the run took', async () => {
   const host = aHostOfTheTests()
+  // The run began a minute before this wait did, and this is the run's third wait: the figure the red reports is the
+  // run's own time, so it must count that minute and not start again at this wait (martha#210 r=1).
+  const run_started_at = host.now() - 60_000
   const started = host.now()
   const why = await waitWhileTheHostKeepsShowing({
     what: 'model request 3',
@@ -64,6 +67,7 @@ test('#210: a host that goes silent fails by name, saying how long nothing came 
     shown: host.shown,
     heard: host.heard,
     silence_ms: HOST_SILENCE_MS,
+    run_started_at,
     now: host.now,
     sleep: countingLooks(host, () => {}),
   }).then(
@@ -72,9 +76,13 @@ test('#210: a host that goes silent fails by name, saying how long nothing came 
   )
   assert.ok(why !== undefined, 'a host that shows nothing and sends nothing must fail the wait')
   assert.match(why.message, /showed nothing new/, 'the red names silence, not a total time that passed')
-  assert.match(why.message, /has taken \d+ ms in all/, 'the red says how long the run took, so a reader can tell a slow machine from a dead one')
   const taken = host.now() - started
   assert.ok(taken >= HOST_SILENCE_MS && taken < HOST_SILENCE_MS + 2 * POLL_MS, `the wait gave up after ${taken} ms, which is not the budget it was given`)
+  assert.match(
+    why.message,
+    /has taken 180100 ms in all/,
+    'the red reports the run\'s own time: the minute before this wait plus the silence it gave up on',
+  )
 })
 
 test('#210: a host that stays slow but keeps showing new output is not cut off by how long it takes', async () => {
@@ -87,6 +95,7 @@ test('#210: a host that stays slow but keeps showing new output is not cut off b
     shown: host.shown,
     heard: host.heard,
     silence_ms: HOST_SILENCE_MS,
+    run_started_at: started,
     now: host.now,
     sleep: countingLooks(host, () => host.draw('.')),
   }).then(
@@ -107,6 +116,7 @@ test('#210: a host that draws nothing but keeps sending model requests is progre
     shown: host.shown,
     heard: host.heard,
     silence_ms: HOST_SILENCE_MS,
+    run_started_at: started,
     now: host.now,
     sleep: countingLooks(host, () => host.saysARequest()),
   }).then(
@@ -126,6 +136,7 @@ test('#210: what ruled a run out is said at once, and is not reported as silence
     shown: host.shown,
     heard: host.heard,
     silence_ms: HOST_SILENCE_MS,
+    run_started_at: before,
     now: host.now,
     sleep: countingLooks(host, () => {}),
   }).then(

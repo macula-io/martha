@@ -39,6 +39,11 @@ export interface ProgressWait extends HostWhileWaiting {
   readonly cannotHappen?: () => string | undefined
   /** How long the host may show nothing new before the wait gives up on it. */
   readonly silence_ms: number
+  /**
+   * When the run began. A run makes several waits and each begins its own silence budget, so a wait cannot count its
+   * own time and call it the run's: this is the figure the red reports, and it is the run's (martha#210 r=1).
+   */
+  readonly run_started_at: number
   readonly now: () => number
   readonly sleep: (ms: number) => Promise<void>
 }
@@ -48,15 +53,14 @@ const wentSilent = (what: string, silence_ms: number, taken: number): string =>
 
 /**
  * Waits for `wait.holds`, and gives up when the host has shown nothing new for `wait.silence_ms`. The message names
- * the silence and reports how long the run had taken in all, so a reader can tell a slow machine — which is never cut
- * off — from a host that stopped working.
+ * the silence and reports how long the run had taken in all — from the run's own start, not from this wait's — so a
+ * reader can tell a slow machine, which is never cut off, from a host that stopped working.
  */
 export async function waitWhileTheHostKeepsShowing(wait: ProgressWait): Promise<void> {
-  const started = wait.now()
   // What the host has shown only ever grows, so its length is enough to see it moved, and costs nothing to compare.
   let seen = wait.shown().length
   let heard = wait.heard()
-  let last_shown_at = started
+  let last_shown_at = wait.now()
   while (!wait.holds()) {
     const ruledOut = wait.cannotHappen?.()
     if (ruledOut !== undefined) throw new Error(ruledOut)
@@ -67,7 +71,7 @@ export async function waitWhileTheHostKeepsShowing(wait: ProgressWait): Promise<
     seen = showing
     heard = hearing
     if (advanced) last_shown_at = now
-    if (now - last_shown_at > wait.silence_ms) throw new Error(wentSilent(wait.what, wait.silence_ms, now - started))
+    if (now - last_shown_at > wait.silence_ms) throw new Error(wentSilent(wait.what, wait.silence_ms, now - wait.run_started_at))
     await wait.sleep(POLL_MS)
   }
 }
