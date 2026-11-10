@@ -903,19 +903,31 @@ where it came from. Three things stand on it:
   itself.
   The paths a configuration **names** are refused the same way (martha#192), and
   not by a list of keys: every value of every key the owner's git would read is
-  split into words, and the value whole is taken as a path too, so a hooks folder
-  (`core.hooksPath = .husky`), an alias's command (`alias.fmt = !tools/x.sh`), a
-  config hook's command, a filter, an attributes file, and an `include.path` or
-  `includeIf.*.path` are all covered by one rule — a word or value that resolves
-  inside the checkout makes that path, and everything below it, one a member does
-  not write. Relative words resolve against the top of the work tree, an include
+  split into the words a **shell** would run from it — the quotes, the operators
+  and the redirections are breaks, so `!sh -c 'tools/x.sh'` and
+  `"!tools/y.sh&&true"` name the scripts they run — and the value whole is taken
+  as a path too, so a hooks folder (`core.hooksPath = .husky`), an alias's command
+  (`alias.fmt = !tools/x.sh`), a config hook's command, a filter, an attributes
+  file, and an `include.path` or `includeIf.*.path` are all covered by one rule — a
+  word or value that resolves inside the checkout makes that path, and everything
+  below it, one a member does not write. A value is read as git reads it, quotes
+  and all: the spaces inside a quote belong to the path (`core.hooksPath = " hk"`
+  names the folder ` hk`), the whitespace outside them is trimmed, a backslash
+  ends a value's line and not a comment's, a key written on the line of its own
+  section header (`[core] hooksPath = .hk`) is that key, and a backslash, a quote
+  or a comment anywhere else is refused rather than read another way.
+  Relative words resolve against the top of the work tree, an include
   path against the directory of the file that holds it, `~/` against the owner's
   home; a value is placed as the write is, every link on the way resolved
   (martha#79), so a checkout reached through a link is caught however the value
-  spells it; includes are followed, and a value holding `%(prefix)` is refused
+  spells it; includes are followed, and a value holding `%(prefix)`, a variable or
+  a command substitution — a path a shell works out only when it runs — is refused
   rather than guessed. The files read are the checkout's own `config`, its
   `config.worktree` when `extensions.worktreeConfig` is on, and the owner's
-  system, global and XDG files. A file the guard cannot read as git reads it — a
+  system, global and XDG files. The extension is read where git keeps it, in the
+  shared config, so a linked worktree's own `config.worktree` — the file
+  `git config --worktree` writes, and the one a member's own worktree holds — is
+  read too. A file the guard cannot read as git reads it — a
   form it does not model, an escape git itself refuses, an unterminated quote, an
   include chain past its cap — refuses **every** write into that checkout, naming
   the file and line, rather than passing one.

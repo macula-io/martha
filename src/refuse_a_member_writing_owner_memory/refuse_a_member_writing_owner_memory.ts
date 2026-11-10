@@ -629,11 +629,16 @@ function completesAGitDirectoryAt(dir: string, writing: string, host: LaunchHost
   return theSharedHalfHoldsThem(dir, host)
 }
 
-/** Whether the directory would hold a `HEAD` git accepts, counting the write itself. */
+/**
+ * Whether the directory would hold a `HEAD` git accepts, counting the write itself:
+ * a write to `HEAD` is the `HEAD` the directory is completed with, whatever stands
+ * there now — a file git does not accept is no git directory, and overwriting it is
+ * how one becomes one (r=2, R1).
+ */
 function holdsAHead(dir: string, writing: string, host: LaunchHost): boolean {
+  if (provides(dir, HEAD_NAME, writing)) return true
   const head = bytesAt(join(dir, HEAD_NAME), host)?.trim()
-  if (head !== undefined) return A_HEAD_NAMING_A_REF.test(head) || A_FULL_OBJECT_ID.test(head)
-  return provides(dir, HEAD_NAME, writing)
+  return head !== undefined && (A_HEAD_NAMING_A_REF.test(head) || A_FULL_OBJECT_ID.test(head))
 }
 
 /** Whether `objects/` and `refs/` would be there, counting the folder the write itself lands in. */

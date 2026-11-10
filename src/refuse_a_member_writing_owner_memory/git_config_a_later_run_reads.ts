@@ -14,7 +14,9 @@
 // tree, except an include path, which resolves against the directory of the file
 // that holds it; `~/` expands from the home the guard was given; `%(prefix)` is a
 // path this module cannot place without asking git, so a value holding it is a
-// refusal rather than a guess.
+// refusal rather than a guess. So is a value a shell computes a path from — a
+// variable, a command substitution (martha#192 r=2): the path is not in the file,
+// and a rule that cannot read the path refuses rather than passing it.
 //
 // The parser models a measured subset of git's syntax — the section and key forms,
 // the comments, the continuation, the quoting and the escape set git itself takes —
@@ -67,7 +69,7 @@ export interface ConfigEntry {
   readonly line: number
   /** The key as git reads it: its section and key lowercased, its quoted subsection as spelled. */
   readonly key: string
-  /** The value as git reads it: quotes and escapes resolved, a comment removed, both ends trimmed. */
+  /** The value as git reads it: quotes and escapes resolved, a comment removed, the whitespace outside the quotes trimmed and the spaces inside them kept. */
   readonly value: string
 }
 
@@ -91,7 +93,7 @@ export function whatALaterGitRunReads(
   const seen = new Set<string>()
   const reading = { refusal: undefined as string | undefined }
 
-  const files = [...git_dirs.flatMap((dir) => configFilesIn(dir, host)), ...owner_config_files]
+  const files = [...configFilesOf(git_dirs, host), ...owner_config_files]
   for (const file of files) {
     readOne(file, top, home, places, seen, hop_cap, reading, host)
     if (reading.refusal !== undefined) return { places: [], refusal: reading.refusal }
@@ -99,21 +101,40 @@ export function whatALaterGitRunReads(
   return { places }
 }
 
-/** The configuration files one git directory is read from, the second only when git would read it. */
-function configFilesIn(git_dir: string, host: LaunchHost): string[] {
-  const main = join(git_dir, CONFIG)
-  return worktreeConfigIsOn(main, host) ? [main, join(git_dir, CONFIG_WORKTREE)] : [main]
+/**
+ * The configuration files the checkout's git directories are read from, the second
+ * file only when git would read it.
+ *
+ * git reads `config.worktree` from the directory the work tree's own git directory
+ * is — the first one here, which for a linked worktree is `<main>/.git/worktrees/<name>`
+ * — and decides whether to read it at all from `extensions.worktreeConfig`, which
+ * lives in the shared config (r=2, R2). A guard that looked for the extension beside
+ * the second file finds no config there in the common case, a member working in a
+ * linked worktree, and skips the very file `git config --worktree` writes.
+ */
+function configFilesOf(git_dirs: readonly string[], host: LaunchHost): string[] {
+  const on = git_dirs.some((dir) => worktreeConfigIsOn(join(dir, CONFIG), host))
+  return git_dirs.flatMap((dir, at) => (on && at === 0 ? [join(dir, CONFIG), join(dir, CONFIG_WORKTREE)] : [join(dir, CONFIG)]))
 }
 
 /**
- * Whether the git directory's config turns `extensions.worktreeConfig` on. A config
- * this cannot be read from is taken as on, so the second file is read rather than
- * skipped: refusing more is the safe direction.
+ * Whether the git directory's config turns `extensions.worktreeConfig` on, read as
+ * git reads a boolean: `true`, `yes` and `on` in any case, a key with no value, and
+ * any number but zero (r=2, R2). A config this cannot be read from, and a value git
+ * itself would refuse as no boolean, are taken as on: the second file is read rather
+ * than skipped, which is the safe direction.
  */
 function worktreeConfigIsOn(file: string, host: LaunchHost): boolean {
   const read = entriesIn(file, host)
   if (read.kind === 'refused') return true
-  return read.entries.some((entry) => entry.key === WORKTREE_CONFIG_KEY && entry.value.trim().toLowerCase() === 'true')
+  return read.entries.some((entry) => entry.key === WORKTREE_CONFIG_KEY && !isAGitFalse(entry.value))
+}
+
+/** Whether a value git reads where a boolean is wanted is false, in the forms git accepts as false. */
+function isAGitFalse(value: string): boolean {
+  const word = value.toLowerCase()
+  if (word === 'false' || word === 'no' || word === 'off') return true
+  return /^[+-]?\d+$/.test(word) && Number(word) === 0
 }
 
 /** One file, its includes followed, its paths and those of every file it chains to collected. */
@@ -163,6 +184,13 @@ function isAnInclude(entry: ConfigEntry): boolean {
 
 /** What one entry names: the places it names inside the checkout, and the config files it includes. */
 function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } | { readonly kind: 'refused'; readonly refusal: string } {
+  const computed = whatComputesAPath(entry.value)
+  if (computed !== undefined) {
+    return {
+      kind: 'refused',
+      refusal: `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, which ${computed}: a path worked out when the shell runs is one this guard cannot follow, so a member does not write into that checkout while it stands (martha#192)`,
+    }
+  }
   const places: ConfigNamedPlace[] = []
   const includes: string[] = []
   for (const candidate of candidatesIn(entry)) {
@@ -172,6 +200,18 @@ function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: Launc
     if (one.inside) places.push({ what: one.path, why: whyTheValueIsRefused(entry) })
   }
   return { kind: 'places', places, includes }
+}
+
+/**
+ * What a value holds that computes a path at run time, in the guard's words, or
+ * undefined when every path it names is written out in it. A variable and a command
+ * substitution are answered by a shell when it runs, so the path they name is not in
+ * the file the guard reads; refusing is the direction that cannot fail open.
+ */
+function whatComputesAPath(value: string): string | undefined {
+  if (value.includes('$')) return 'holds a variable or a command substitution'
+  if (value.includes('`')) return 'holds a command substitution'
+  return undefined
 }
 
 /** One word of a value, or the value whole: where it lands, and whether that is inside the checkout. */
@@ -191,19 +231,32 @@ function whyTheValueIsRefused(entry: ConfigEntry): string {
   return `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, which a later git run of the owner's reads and starts`
 }
 
+/** The characters a shell breaks a word at: the quotes, the operators, the redirections, and the spaces. */
+const SHELL_BREAK = /[ \t\n\v\f\r'"`;&|()<>]+/
+
 /**
- * The paths one value could name: the whole value, every word of it, and — for a
- * value git hands to a shell, which an alias writes with a leading `!` — the whole
- * value and its words without that sign, since git runs what follows it and never
- * the word with the sign on it (measured: `alias.fmt = !tools/x.sh` ran
+ * The paths one value could name: the value whole as git read it, every word of it,
+ * and — for a value git hands to a shell, which an alias writes with a leading `!` —
+ * the value and its words without that sign, since git runs what follows it and
+ * never the word with the sign on it (measured: `alias.fmt = !tools/x.sh` ran
  * `tools/x.sh`, and never `<top>/!tools/x.sh`).
+ *
+ * The words are the shell's own, and not a whitespace split: `!sh -c 'tools/x.sh'`
+ * runs `tools/x.sh`, so the quotes and the operators are breaks here as they are to
+ * a shell (r=2, R3). The value whole keeps the spaces git keeps, so a path that
+ * starts with one (`hooksPath = " hk"`) is the folder `<top>/ hk` and not `<top>/hk`.
  */
 function candidatesIn(entry: ConfigEntry): string[] {
-  const whole = entry.value.trim()
+  const whole = entry.value
   if (whole === '') return []
-  const withoutTheSign = whole.startsWith('!') ? whole.slice(1).trim() : whole
-  const words = isAnInclude(entry) ? [] : [withoutTheSign, ...withoutTheSign.split(/\s+/)].filter((word) => word !== '')
+  const withoutTheSign = whole.startsWith('!') ? whole.slice(1) : whole
+  const words = isAnInclude(entry) ? [] : shellWordsIn(withoutTheSign)
   return [...new Set([whole, ...(withoutTheSign === whole ? [] : [withoutTheSign]), ...words])]
+}
+
+/** The words a shell would run from a value, its quotes and its operators dropped. */
+function shellWordsIn(value: string): string[] {
+  return value.split(SHELL_BREAK).filter((word) => word !== '')
 }
 
 /** `~/x` as the home the guard was given, and anything else as it stands. */
@@ -235,10 +288,18 @@ function insideTheTree(path: string, top: string): boolean {
 }
 
 /** The git configuration syntax this guard models, and everything it does not. */
-const SECTION = /^\[\s*([A-Za-z0-9.-]+)\s*\]$/
-const SECTION_WITH_QUOTED = /^\[\s*([A-Za-z0-9-]+)\s+"([^"\\]*)"\s*\]$/
+const SECTION = /^\[\s*([A-Za-z0-9.-]+)\s*\]/
+const SECTION_WITH_QUOTED = /^\[\s*([A-Za-z0-9-]+)\s+"([^"\\]*)"\s*\]/
 const KEY = /^[A-Za-z][A-Za-z0-9-]*$/
 const ESCAPES: Readonly<Record<string, string>> = { n: '\n', t: '\t', b: '\b', '"': '"', '\\': '\\' }
+
+/** The whitespace git itself takes as space (C's isspace), and never the other spaces JavaScript's `trim` also drops. */
+const GIT_SPACE = ' \t\n\v\f\r'
+
+/** Whether a letter is one of git's own spaces (`isspace` in the C locale, which a value's whitespace is trimmed by). */
+function isGitSpace(letter: string): boolean {
+  return GIT_SPACE.includes(letter)
+}
 
 /**
  * The entries one config file holds, read as git reads them, or the refusal that
@@ -257,33 +318,71 @@ export function entriesIn(file: string, host: LaunchHost): ConfigRead {
   return entriesInText(file, bytes.toString('utf8'))
 }
 
-/** The entries a config text holds, or the refusal naming the line this does not model. */
+/**
+ * The entries a config text holds, or the refusal naming the line this does not
+ * model. The lines are git's own: a blank line and a comment are skipped whole, and
+ * a backslash continues a value alone — a comment continues nothing, and the key on
+ * the line after it is git's to read (martha#192).
+ */
 export function entriesInText(file: string, text: string): ConfigRead {
   const entries: ConfigEntry[] = []
+  const lines = text.split('\n').map((line) => line.replace(/\r$/, ''))
   let section = ''
-  for (const { line, at } of continued(text)) {
-    const read = entryOfLine(file, at, line, section)
+  let at = 0
+  while (at < lines.length) {
+    const read = lineAt(file, lines, at, section)
     if (read.kind === 'refused') return read
     if (read.kind === 'section') section = read.section
-    if (read.kind === 'entry') entries.push(read.entry)
+    if (read.kind === 'entry') {
+      entries.push(read.entry)
+      section = read.opened ?? section
+    }
+    at = read.next
   }
   return { kind: 'entries', entries }
 }
 
-/** What one line of a config holds: a section header, an entry, a line to skip, or the refusal. */
-function entryOfLine(file: string, at: number, line: string, section: string): { readonly kind: 'section'; readonly section: string } | { readonly kind: 'entry'; readonly entry: ConfigEntry } | { readonly kind: 'skip' } | { readonly kind: 'refused'; readonly refusal: string } {
-  const trimmed = line.trim()
-  if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith(';')) return { kind: 'skip' }
-  if (trimmed.startsWith('[')) {
-    const named = sectionOf(trimmed)
-    return named === undefined ? { kind: 'refused', refusal: unmodelled(file, at) } : { kind: 'section', section: named }
-  }
-  if (section === '') return { kind: 'refused', refusal: `${file}:${at} holds a key before any section, which no git run takes as configuration: a member does not write into that checkout while it stands (martha#192)` }
-  const split = keyAndValue(trimmed)
-  if (!KEY.test(split.key)) return { kind: 'refused', refusal: unmodelled(file, at) }
-  const value = valueOf(split.value)
-  if (value.kind === 'refused') return { kind: 'refused', refusal: `${file}:${at} ${value.refusal}: a member does not write into that checkout while it stands (martha#192)` }
-  return { kind: 'entry', entry: { file, line: at, key: `${section}.${split.key.toLowerCase()}`, value: value.text } }
+/** One line of a config: a section header, an entry, a line to skip, or the refusal, and where reading goes next. */
+type ALineRead =
+  | { readonly kind: 'section'; readonly section: string; readonly next: number }
+  | { readonly kind: 'entry'; readonly entry: ConfigEntry; readonly next: number; readonly opened: string | undefined }
+  | { readonly kind: 'skip'; readonly next: number }
+  | { readonly kind: 'refused'; readonly refusal: string }
+
+/** What one line of a config holds, and where the line after it is. */
+function lineAt(file: string, lines: readonly string[], at: number, section: string): ALineRead {
+  const number = at + 1
+  const line = withoutLeadingSpace(lines[at]!)
+  const next = at + 1
+  if (line === '' || line.startsWith('#') || line.startsWith(';')) return { kind: 'skip', next }
+  if (line.startsWith('[')) return headerLine(file, line, number, lines, next)
+  if (section === '') return { kind: 'refused', refusal: `${file}:${number} holds a key before any section, which no git run takes as configuration: a member does not write into that checkout while it stands (martha#192)` }
+  return entryLine(file, line, section, number, lines, next, undefined)
+}
+
+/** A line that opens sections, and the entry git reads on it when anything follows the last one. */
+function headerLine(file: string, line: string, number: number, lines: readonly string[], next: number): ALineRead {
+  const opened = headersOn(line)
+  if (opened === undefined) return { kind: 'refused', refusal: unmodelled(file, number) }
+  const section = opened.sections[opened.sections.length - 1]!
+  if (opened.rest === '') return { kind: 'section', section, next }
+  return entryLine(file, opened.rest, section, number, lines, next, section)
+}
+
+/** A key and its value, read from the text after a section's name whether it stands on its own line or the header's, and the section the line opened. */
+function entryLine(file: string, text: string, section: string, number: number, lines: readonly string[], next: number, opened: string | undefined): ALineRead {
+  const split = keyAndValue(text)
+  if (!KEY.test(split.key)) return { kind: 'refused', refusal: unmodelled(file, number) }
+  const value = valueFrom(split.value, lines, next)
+  if (value.kind === 'refused') return { kind: 'refused', refusal: `${file}:${number} ${value.refusal}: a member does not write into that checkout while it stands (martha#192)` }
+  return { kind: 'entry', entry: { file, line: number, key: `${section}.${split.key.toLowerCase()}`, value: value.text }, next: next + value.taken, opened }
+}
+
+/** The line with git's leading whitespace dropped, and everything after it kept as written. */
+function withoutLeadingSpace(line: string): string {
+  let at = 0
+  while (at < line.length && isGitSpace(line[at]!)) at += 1
+  return line.slice(at)
 }
 
 /** The line a refusal is about, in the guard's words. */
@@ -291,17 +390,34 @@ function unmodelled(file: string, at: number): string {
   return `${file}:${at} holds a form this guard does not model as git configuration, so which paths a later git run of the owner's takes from it cannot be told: a member does not write into that checkout while it stands (martha#192)`
 }
 
-/** A section header's key: its name lowercased, and a subsection spelled as git keeps it. */
-function sectionOf(line: string): string | undefined {
+/** A section header's key, and the text after it on the same line, or undefined when the line opens no header. */
+function headerOf(line: string): { readonly section: string; readonly rest: string } | undefined {
   const quoted = SECTION_WITH_QUOTED.exec(line)
-  if (quoted !== null) return `${quoted[1]!.toLowerCase()}.${quoted[2]!}`
+  if (quoted !== null) return { section: `${quoted[1]!.toLowerCase()}.${quoted[2]!}`, rest: line.slice(quoted[0].length) }
   const plain = SECTION.exec(line)
   if (plain === null) return undefined
   const name = plain[1]!
-  const dot = name.indexOf('.')
   // An old-style subsection is part of the name and is lowercased with it; a
   // subsection quoted after the name keeps its case, and is the branch above.
-  return dot === -1 ? name.toLowerCase() : `${name.slice(0, dot).toLowerCase()}.${name.slice(dot + 1)}`
+  return { section: name.toLowerCase(), rest: line.slice(plain[0].length) }
+}
+
+/**
+ * The sections a line opens, and what follows them: a `[name]` header is a whole
+ * line to this guard, but git reads what follows one as configuration too, so
+ * `[core] hooksPath = .hk` is the entry `core.hooksPath = .hk` (measured on
+ * git 2.56.0), and `[core] [alias]` opens `alias`.
+ */
+function headersOn(line: string): { readonly sections: readonly string[]; readonly rest: string } | undefined {
+  const sections: string[] = []
+  let rest = withoutLeadingSpace(line)
+  while (rest.startsWith('[')) {
+    const header = headerOf(rest)
+    if (header === undefined) return undefined
+    sections.push(header.section)
+    rest = withoutLeadingSpace(header.rest)
+  }
+  return { sections, rest }
 }
 
 /** A key line split at its first `=`, or the key alone when it has none. */
@@ -311,68 +427,117 @@ function keyAndValue(line: string): { readonly key: string; readonly value: stri
   return { key: line.slice(0, at).trim(), value: line.slice(at + 1) }
 }
 
-/** git's own reading of a value: quotes, escapes and comments resolved, both ends trimmed, or the refusal. */
-function valueOf(raw: string): { readonly kind: 'text'; readonly text: string } | { readonly kind: 'refused'; readonly refusal: string } {
-  let text = ''
-  let quoted = false
-  for (let at = 0; at < raw.length; at += 1) {
-    const step = stepOf(raw, at, quoted)
-    if (step.kind === 'refused') return step
-    text += step.text
-    quoted = step.quoted
-    at += step.consumed
+/** Where the reading of a value is up to: what it has, the whitespace waiting for a letter after it, and git's own three states. */
+interface ValueState {
+  readonly text: string
+  readonly pending: string
+  readonly quoted: boolean
+  readonly comment: boolean
+  readonly continuing: boolean
+}
+
+/** What reading a value came to: the letters git keeps, and how many of the following lines it took. */
+type AValueRead = { readonly kind: 'text'; readonly text: string; readonly taken: number } | { readonly kind: 'refused'; readonly refusal: string }
+
+/**
+ * git's own reading of a value (`parse_value`, git 2.56.0): the double quotes
+ * resolved, the escapes expanded, a comment ended, the whitespace outside the quotes
+ * trimmed and every letter inside them kept — a space a quote holds is part of the
+ * path (`hooksPath = " hk"` is the folder ` hk`, measured), and a character
+ * JavaScript's `trim` also drops (a non-breaking space) is not whitespace to git.
+ *
+ * A backslash at the end of a line continues the value onto the next one, whether or
+ * not a quote is open; a comment continues nothing, so the key below a comment
+ * ending in a backslash is git's to read. Every letter beyond that is kept as
+ * written, so the value judged here is the string git hands where it runs one.
+ */
+function valueFrom(first: string, lines: readonly string[], after: number): AValueRead {
+  let state: ValueState = { text: '', pending: '', quoted: false, comment: false, continuing: false }
+  let piece = first
+  let column = 0
+  let taken = 0
+  for (;;) {
+    const outcome = nextOutcome(state, piece, column, taken, lines, after)
+    if (outcome.kind !== 'read-on') return outcome
+    state = outcome.state
+    piece = outcome.piece
+    column = outcome.column
+    taken = outcome.taken
   }
-  return quoted ? { kind: 'refused', refusal: 'holds an unterminated quote, which git itself refuses' } : { kind: 'text', text: text.trim() }
 }
 
-/** One letter of a value: what it adds, whether a quote is open, and how many letters after it it consumed. */
-function stepOf(raw: string, at: number, quoted: boolean): { readonly kind: 'text'; readonly text: string; readonly quoted: boolean; readonly consumed: number } | { readonly kind: 'refused'; readonly refusal: string } {
-  const letter = raw[at]!
-  if (letter === '\\') return escapeAt(raw, at, quoted)
-  if (letter === '"') return { kind: 'text', text: '', quoted: !quoted, consumed: 0 }
-  const endsTheValue = !quoted && (letter === '#' || letter === ';')
-  return { kind: 'text', text: endsTheValue ? '' : letter, quoted, consumed: 0 }
+/** What reading a value came to next: the refusal, the value ended, or where the reading stands one letter on. */
+type ANextRead =
+  | { readonly kind: 'refused'; readonly refusal: string }
+  | { readonly kind: 'text'; readonly text: string; readonly taken: number }
+  | { readonly kind: 'read-on'; readonly state: ValueState; readonly piece: string; readonly column: number; readonly taken: number }
+
+/** The next thing in a value: a letter at this position, or the end of the line it is on. */
+function nextOutcome(state: ValueState, piece: string, column: number, taken: number, lines: readonly string[], after: number): ANextRead {
+  if (column >= piece.length) return afterTheLine(state, taken, lines[after + taken])
+  const stepped = afterTheLetter(state, piece, column)
+  if ('refusal' in stepped) return { kind: 'refused', refusal: stepped.refusal }
+  return { kind: 'read-on', state: stepped.state, piece, column: stepped.column, taken }
 }
 
-/** `\x` as git resolves it, or the refusal for an escape git itself refuses. */
-function escapeAt(raw: string, at: number, quoted: boolean): { readonly kind: 'text'; readonly text: string; readonly quoted: boolean; readonly consumed: number } | { readonly kind: 'refused'; readonly refusal: string } {
-  const next = raw[at + 1]
-  const resolved = next === undefined ? undefined : ESCAPES[next]
-  if (resolved === undefined) return { kind: 'refused', refusal: `holds the escape \\${next ?? ''}, which git itself refuses` }
-  return { kind: 'text', text: resolved, quoted, consumed: 1 }
+/** What the end of a value's line does: continue onto the line after it, end the value, or the refusal. */
+function afterTheLine(state: ValueState, taken: number, next: string | undefined): ANextRead {
+  const ended = lineEnded(state, next)
+  if (ended.kind === 'refused') return { kind: 'refused', refusal: ended.refusal }
+  if (ended.kind === 'done') return { kind: 'text', text: state.text, taken }
+  return { kind: 'read-on', state: ended.state, piece: ended.piece, column: 0, taken: taken + 1 }
+}
+
+/** Where the reading stands after the letter at `column`, or the refusal for an escape git itself refuses. */
+function afterTheLetter(state: ValueState, piece: string, column: number): { readonly state: ValueState; readonly column: number } | { readonly refusal: string } {
+  const step = letterTaken(state, piece[column]!, column + 1 < piece.length ? piece[column + 1] : undefined)
+  if ('refusal' in step) return step
+  return { state: step.state, column: column + 1 + step.consumed }
+}
+
+/** What one letter did: the state after it, and how many letters after it it took with it. */
+interface AStep {
+  readonly state: ValueState
+  readonly consumed: number
 }
 
 /**
- * The text with its continuation lines joined, each carrying the line number it
- * started on: git drops a trailing backslash and the newline after it, and keeps
- * what follows as it stands (martha#192).
+ * What one letter of a value does: the state after it and the letters after it it
+ * took with it, or the refusal for an escape git itself refuses.
  */
-function continued(text: string): readonly { readonly line: string; readonly at: number }[] {
-  const raw = text.split('\n').map((line) => line.replace(/\r$/, ''))
-  const lines: { line: string; at: number }[] = []
-  for (let at = 0; at < raw.length; at += 1) {
-    const startedAt = at + 1
-    const joined = joinedFrom(raw, at)
-    at = joined.at
-    lines.push({ line: joined.line, at: startedAt })
-  }
-  return lines
+function letterTaken(state: ValueState, letter: string, next: string | undefined): AStep | { readonly refusal: string } {
+  if (state.comment) return { state, consumed: 0 }
+  if (state.quoted) return kept(state, letter, next)
+  if (isGitSpace(letter)) return { state: { ...state, pending: state.text === '' ? '' : `${state.pending}${letter}` }, consumed: 0 }
+  if (letter === '#' || letter === ';') return { state: { ...state, comment: true }, consumed: 0 }
+  return kept(state, letter, next)
 }
 
-/** A line with every line it continues onto joined, and where reading carries on from. */
-function joinedFrom(raw: readonly string[], from: number): { readonly line: string; readonly at: number } {
-  let at = from
-  let line = raw[at]!
-  while (endsInABackslash(line) && at + 1 < raw.length) {
-    at += 1
-    line = `${line.slice(0, -1)}${raw[at]!}`
-  }
-  return { line: endsInABackslash(line) ? line.slice(0, -1) : line, at }
+/** A letter git keeps as written, or the two that are not: a quote, and an escape. */
+function kept(state: ValueState, letter: string, next: string | undefined): AStep | { readonly refusal: string } {
+  if (letter === '"') return { state: { ...state, quoted: !state.quoted }, consumed: 0 }
+  if (letter !== '\\') return { state: { ...state, text: `${state.text}${state.pending}${letter}`, pending: '' }, consumed: 0 }
+  // git empties its waiting whitespace before it reads an escape, so `hooksPath = hk \`
+  // is the folder `hk ` and not `hk` (measured at a continuation, and at the end of a
+  // file): the space is before the backslash and belongs to the value.
+  const flushed = { ...state, text: `${state.text}${state.pending}`, pending: '' }
+  return next === undefined ? { state: { ...flushed, continuing: true }, consumed: 0 } : escapeTaken(flushed, next)
 }
 
-/** Whether the line continues onto the next one: a backslash that is not itself escaped. */
-function endsInABackslash(line: string): boolean {
-  let count = 0
-  for (let at = line.length - 1; at >= 0 && line[at] === '\\'; at -= 1) count += 1
-  return count % 2 === 1
+/** `\x` as git resolves it, with the whitespace before it kept, or the refusal for an escape git itself refuses. */
+function escapeTaken(state: ValueState, next: string): AStep | { readonly refusal: string } {
+  const resolved = ESCAPES[next]
+  if (resolved === undefined) return { refusal: `holds the escape \\${next}, which git itself refuses` }
+  return { state: { ...state, text: `${state.text}${state.pending}${resolved}`, pending: '' }, consumed: 1 }
 }
+
+/**
+ * What the end of a line does: continue onto the line after it, end the value, or
+ * the refusal for a quote git itself refuses to leave open at a line's end.
+ */
+function lineEnded(state: ValueState, next: string | undefined): { readonly kind: 'refused'; readonly refusal: string } | { readonly kind: 'done' } | { readonly kind: 'continue'; readonly state: ValueState; readonly piece: string } {
+  if (state.continuing) return next === undefined ? { kind: 'done' } : { kind: 'continue', state: { ...state, continuing: false }, piece: next }
+  if (state.quoted) return { kind: 'refused', refusal: 'holds an unterminated quote, which git itself refuses' }
+  return { kind: 'done' }
+}
+

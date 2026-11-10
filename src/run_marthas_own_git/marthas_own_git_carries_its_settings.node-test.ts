@@ -7,12 +7,16 @@
 // past, whichever spelling it chose.
 
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { GIT_SETTINGS_VARIABLE, switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { blobAsGitAdds } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import { readTheCheckoutOnce } from '../run_an_owner_signed_command/read_the_checkout_once.ts'
 import { MARTHAS_OWN_GIT_SETTINGS, marthasOwnGitArgs, marthasOwnGitSettingsArgs } from './run_marthas_own_git.ts'
@@ -69,6 +73,24 @@ test('a run through spawnSync refuses a planted bare directory (#192)', (t) => {
   const read = readTheCheckoutOnce(dir, 'sha1', { PATH: process.env['PATH'] ?? '' })
   assert.equal(typeof read, 'string', `the checkout cannot be listed out of a planted bare directory (${typeof read})`)
   assert.ok((read as string).includes('cannot use bare repository'), `the refusal is git\'s own (${String(read)})`)
+})
+
+test('the switch stays off the member\'s environment, where a bare checkout is a legitimate place to work (#192)', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'martha-192-a-members-git-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const bare = join(dir, 'bare')
+  mkdirSync(join(bare, 'objects'), { recursive: true })
+  mkdirSync(join(bare, 'refs', 'heads'), { recursive: true })
+  writeFileSync(join(bare, 'HEAD'), 'ref: refs/heads/main\n')
+  mkdirSync(join(dir, 'empty'), { recursive: true })
+  // The environment a launch gives the member: the switches that keep a checkout
+  // from running code, and nothing of Martha's own git settings among them.
+  const env = launchEnvironment({ PATH: process.env['PATH'] }, switchesThatRunNothingFromACheckout({ PATH: process.env['PATH'] }, join(dir, 'empty')))
+  assert.ok(!(env[GIT_SETTINGS_VARIABLE] ?? '').includes(THE_SWITCH), `the member\'s git settings do not carry ${THE_SWITCH} (${env[GIT_SETTINGS_VARIABLE] ?? ''})`)
+  // And a member's own git in a directory that is a bare checkout still answers:
+  // moving the switch into the launch environment is what this test fails on.
+  const answered = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: bare, env, encoding: 'utf8' }).trim()
+  assert.equal(answered, realPathOf(bare), `a member\'s git in a bare checkout answers (${answered})`)
 })
 
 // --- every way this repository starts git ------------------------------------------
