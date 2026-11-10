@@ -904,8 +904,15 @@ where it came from. Three things stand on it:
   again; the second is cut from the host's binary
   (`legacy_global_config_names`), the literal the one chooser joins to the config
   dir, which the host also holds as a constant of its own, so a renamed file fails
-  the recording instead of leaving the guard denying a name nothing reads. Those
-  names are the
+  the recording instead of leaving the guard denying a name nothing reads. The
+  host builds that first name as `.claude${suffix}.json` — `""` for production
+  and one suffix per OAuth endpoint — so the whole family is denied too, by
+  shape: every file in the folder the config lives in whose name begins with the
+  recorded name's stem and ends with its extension, compared without regard to
+  case as the host compares names. Nothing is recorded about which suffixes the
+  host can build, and a suffix a later host adds needs no code, no recording and
+  no test change; the launch carries the same shape as one
+  `Edit(//<dir>/.claude*.json)` rule per folder (martha#202). Those names are the
   recorded host's, never typed: `protected_config_names` is the array the host
   itself walks to protect its config dir, cut whole with its three computed
   `policy-limits.json` files resolved through the host's own templates, and
@@ -988,12 +995,8 @@ settings file the owner points at from outside the config dir, `--plugin-dir` an
 `--settings` on the owner's own command line among them; a place the host
 introduces that matches neither its array nor its statements, which nothing
 records and no test sees, though a change to the array or to those statements
-does fail the recording; the global config files the host suffixes for an OAuth
-endpoint (`CLAUDE_CODE_CUSTOM_OAUTH_URL` gives `.claude-custom-oauth.json`, and
-the binary lists the staging and local variants beside it), which an owner behind
-one of those keeps their MCP servers in too, since this guard denies
-`.claude.json` and `.config.json` and not those; a host the owner starts by hand
-(C1, C2); and OpenCode, not probed for a memory of its own.
+does fail the recording; a host the owner starts by hand (C1, C2); and OpenCode,
+not probed for a memory of its own.
 
 **A member's writes never reach a later session through the owner's user scope
 (A18, martha#154).** The host loads the owner's own text from its config dir at
