@@ -58,8 +58,6 @@ CONTAINER_PREFIX='martha-clean-install'
 MOUNTS_FORMAT='{{len .Mounts}}'
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
 NO_RELEASE_WORDS='carries no version'
-# The command an installed release puts on PATH (installer/package.json, martha.command).
-COMMAND='martha'
 
 USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] | --self-test'
 
@@ -545,6 +543,8 @@ main() {
     || { printf 'prove_a_clean_install_in_a_throwaway_container: installer/package.json names no package\n' >&2; exit 2; }
   INSTALLER_VERSION="$(json_field "${INSTALLER_PACKAGE}" 'version')" \
     || { printf 'prove_a_clean_install_in_a_throwaway_container: installer/package.json declares no version\n' >&2; exit 2; }
+  COMMAND="$(json_field "${INSTALLER_PACKAGE}" 'martha.command')" \
+    || { printf 'prove_a_clean_install_in_a_throwaway_container: installer/package.json names no command\n' >&2; exit 2; }
   RELEASE_VERSION="$(json_field "${RELEASE_PACKAGE}" 'version')" \
     || { printf 'prove_a_clean_install_in_a_throwaway_container: package.json declares no version\n' >&2; exit 2; }
   trap finish EXIT
