@@ -87,3 +87,14 @@ test('a pin carrying one field more than the published installer is refused, and
   assert.deepEqual(pinFieldsThatDiffer({ ...published, extra: 'x' }, published), ['extra is "x", not undefined'])
   assert.deepEqual(pinFieldsThatDiffer({ name: published.name, version: published.version }, published), ['integrity is undefined, not "sha512-aaaa"'], 'a field the pin leaves out is named too')
 })
+
+test('a pin carrying a field the published installer does not name is refused even when the field is "__proto__"', () => {
+  const published = { name: '@macula-io/martha', version: '1.0.2', integrity: 'sha512-aaaa' }
+  // Built with JSON.parse on purpose: in an object literal "__proto__" sets the prototype and adds no field, so a pin
+  // carrying one can only arrive from JSON — which is exactly how a pin reaches this comparison. Read off the
+  // prototype chain, both sides answer Object.prototype and serialise alike, and the smuggled field would pass.
+  const smuggled = JSON.parse('{"name":"@macula-io/martha","version":"1.0.2","integrity":"sha512-aaaa","__proto__":{}}')
+  assert.ok(Object.hasOwn(smuggled, '__proto__'), 'the pin names the field itself')
+  assert.deepEqual(pinFieldsThatDiffer(smuggled, published), ['__proto__ is {}, not undefined'], 'a field only the pin names is a difference')
+  assert.deepEqual(pinFieldsThatDiffer(published, smuggled), ['__proto__ is undefined, not {}'], 'and it differs whichever side carries it')
+})

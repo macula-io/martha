@@ -85,12 +85,24 @@ const fieldsOf = (pin, published) => [...new Set([...Object.keys(pin ?? {}), ...
 const asRead = (value) => JSON.stringify(value)
 
 /**
+ * Whether the object itself names a field, rather than inheriting it. A JSON pin can hold an own "__proto__", and
+ * read off the prototype chain instead, both objects answer Object.prototype and serialise alike: the smuggled field
+ * would pass as agreement.
+ * @param {any} value @param {string} field @returns {boolean}
+ */
+const names = (value, field) => Object.hasOwn(Object(value ?? {}), field)
+
+/** A field's value as the object names it — undefined for a field it does not name, inherited names included.
+ * @param {any} value @param {string} field @returns {any} */
+const named = (value, field) => (names(value, field) ? value[field] : undefined)
+
+/**
  * Which fields of the pin are not the installer npm serves, each with both values; empty when the pin is that
  * installer's, and every field either object names when the layer holds no pin at all.
  * @param {any} pin the pin as the layer holds it @param {any} published what pin_the_installer would write
  */
 export function pinFieldsThatDiffer (pin, published) {
   return fieldsOf(pin, published)
-    .filter((field) => asRead(pin?.[field]) !== asRead(published?.[field]))
-    .map((field) => `${field} is ${asRead(pin?.[field])}, not ${asRead(published?.[field])}`)
+    .filter((field) => asRead(named(pin, field)) !== asRead(named(published, field)))
+    .map((field) => `${field} is ${asRead(named(pin, field))}, not ${asRead(named(published, field))}`)
 }
