@@ -36,6 +36,7 @@ import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_se
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
+import { answerIn } from './what_the_host_answered.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { absencesWithoutAHostProof, judgeRow } from './an_absence_row_proves_the_host_ran.ts'
 
@@ -48,7 +49,12 @@ const RUN_TIMEOUT_MS = 120_000
 const LINGER_SECONDS = 3
 
 const PROMPT = 'Reply with the single word ok.'
-const HEADLESS_CLAUDE = ['-p', '--max-turns', '1', '--model', 'haiku']
+/**
+ * A headless run with room for one tool call before the reply (martha#223). At one turn a
+ * host that spends it on a tool call exits non-zero, and every row that reads the host's
+ * exit — or reading the model's answer — reports that as a failure of the tree under test.
+ */
+const HEADLESS_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku']
 
 /** One scratch checkout: where its files go and where markers land. */
 interface Place {
@@ -800,8 +806,11 @@ const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder
         command: 'claude',
         args: [
           '-p',
+          // Room for a turn that does not reach the Write (martha#223): a model that spends
+          // both turns elsewhere exits non-zero, and this row's host_ok reads that as the
+          // launch having failed rather than as the write never being tried.
           '--max-turns',
-          '2',
+          '4',
           '--model',
           'haiku',
           '--permission-mode',
@@ -836,6 +845,18 @@ export const ALL_PROBES: readonly Probe[] = [
   ...OWNER_SCOPE_PROBES,
 ]
 
+/**
+ * The turn budget each row starts the model with, by the row's own words, so a test reads the
+ * commands the probe really builds rather than a constant restated beside it (martha#223).
+ */
+export function turnBudgets(): readonly { readonly what: string; readonly maxTurns: number | undefined }[] {
+  return ALL_PROBES.map((probe) => {
+    const { args } = probe.command(NO_SWITCHES, NO_PLACE)
+    const at = args.indexOf('--max-turns')
+    return { what: probe.what, maxTurns: at < 0 ? undefined : Number(args[at + 1]) }
+  })
+}
+
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
 // session of a project, and a session in a git worktree loads the main clone's
@@ -848,6 +869,15 @@ export const ALL_PROBES: readonly Probe[] = [
 const MEMORY_PROMPT = 'Is there a codeword in your memory or instructions? Reply with only the codeword, or NONE.'
 const MEMORY_INDEX = 'MEMORY.md'
 const MEMORY_NOTE = 'codeword.md'
+
+/**
+ * The memory control's own run (martha#223): a look-up can take two tool calls — the index,
+ * then the note it names — before the answer, and the answer is asked for as json so a run
+ * that never answered can be told from one that answered "no codeword". The second reading
+ * matters: silence used to be read as "the codeword was not said", which is the row the off
+ * switch is supposed to make.
+ */
+export const MEMORY_CLAUDE: readonly string[] = ['-p', '--max-turns', '4', '--model', 'haiku', '--output-format', 'json']
 
 
 /** Every file under `dir`, relative, sorted. */
@@ -862,11 +892,21 @@ function memoryOn(): Record<string, string | undefined> {
   return env
 }
 
+/**
+ * What one memory run showed: whether it named the codeword, or why there was no answer to
+ * judge (martha#223). A run that stopped on its turn budget is not a run that answered "no",
+ * and the row says which of the two it saw.
+ */
+export function codewordVerdict(printed: string, codeword: string): boolean | string {
+  const answer = answerIn(printed)
+  return answer.answered ? answer.text.includes(codeword) : `no answer to judge: ${answer.why}`
+}
+
 /** One memory run: whether the reply named the codeword, or why it could not run. */
 function codewordSaid(cwd: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, codeword: string): boolean | string {
-  const run = spawnSync('claude', [...HEADLESS_CLAUDE, MEMORY_PROMPT, ...args], { cwd, env, encoding: 'utf8', timeout: RUN_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'] })
+  const run = spawnSync('claude', [...MEMORY_CLAUDE, MEMORY_PROMPT, ...args], { cwd, env, encoding: 'utf8', timeout: RUN_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'] })
   if (run.error !== undefined) return `could not run: ${run.error.message}`
-  return run.stdout.includes(codeword)
+  return codewordVerdict(run.stdout, codeword)
 }
 
 /** A checkout to start in, and the folder whose memory the host loads for it: its own, or the main clone's for a worktree. */
