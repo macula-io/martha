@@ -14,9 +14,16 @@
 // tree, except an include path, which resolves against the directory of the file
 // that holds it; `~/` expands from the home the guard was given; `%(prefix)` is a
 // path this module cannot place without asking git, so a value holding it is a
-// refusal rather than a guess. So is a value a shell computes a path from — a
-// variable, a command substitution (martha#192 r=2): the path is not in the file,
-// and a rule that cannot read the path refuses rather than passing it.
+// refusal rather than a guess. So is a variable or a command substitution with
+// nothing written before it (martha#192 r=2, r=3): the path is worked out when the
+// shell runs, so it is not in the file, and a rule that cannot read the path refuses
+// rather than passing it. One the owner cannot steer is let through: a positional or
+// special parameter (`$1`, `$@`, `$$`, …) is the owner's own argument or shell
+// state, and the alias `!f() { git checkout "$1"; }; f` is the standard way to write
+// an alias that takes one. Anything else the shell works out — another variable, a
+// command substitution, a glob — protects the folder written before it (r=3): a word
+// names one name in a folder, and that folder is what a member would have to write
+// into to steer it.
 //
 // The parser models a measured subset of git's syntax — the section and key forms,
 // the comments, the continuation, the quoting and the escape set git itself takes —
@@ -184,13 +191,6 @@ function isAnInclude(entry: ConfigEntry): boolean {
 
 /** What one entry names: the places it names inside the checkout, and the config files it includes. */
 function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } | { readonly kind: 'refused'; readonly refusal: string } {
-  const computed = whatComputesAPath(entry.value)
-  if (computed !== undefined) {
-    return {
-      kind: 'refused',
-      refusal: `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, which ${computed}: a path worked out when the shell runs is one this guard cannot follow, so a member does not write into that checkout while it stands (martha#192)`,
-    }
-  }
   const places: ConfigNamedPlace[] = []
   const includes: string[] = []
   for (const candidate of candidatesIn(entry)) {
@@ -199,19 +199,59 @@ function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: Launc
     if (isAnInclude(entry)) includes.push(one.path)
     if (one.inside) places.push({ what: one.path, why: whyTheValueIsRefused(entry) })
   }
+  const computed = computedPlacesIn(entry, top, home, host)
+  if (computed.kind === 'refused') return computed
+  places.push(...computed.places)
   return { kind: 'places', places, includes }
 }
 
 /**
- * What a value holds that computes a path at run time, in the guard's words, or
- * undefined when every path it names is written out in it. A variable and a command
- * substitution are answered by a shell when it runs, so the path they name is not in
- * the file the guard reads; refusing is the direction that cannot fail open.
+ * The folders a value's shell words work a path out in, and the refusal that stands
+ * when nothing is written before one of them (martha#192 r=3). A word names one name
+ * in the folder written before the character the shell resolves, so that folder —
+ * and, when the folder holds the checkout rather than standing inside it, the
+ * checkout with it — is what a member would have to write into to steer the word.
+ * A word with nothing written before it (`$HOME/x`, `$(dirname x)/…`, `*.sh`) names
+ * a thing the guard cannot place at all, and refusing every write into that checkout
+ * is the direction that cannot fail open.
  */
-function whatComputesAPath(value: string): string | undefined {
-  if (value.includes('$')) return 'holds a variable or a command substitution'
-  if (value.includes('`')) return 'holds a command substitution'
-  return undefined
+function computedPlacesIn(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[] } | { readonly kind: 'refused'; readonly refusal: string } {
+  const places: ConfigNamedPlace[] = []
+  for (const word of shellWordsIn(withoutTheSignIn(entry.value))) {
+    if (word.computed === undefined) continue
+    const { writtenBefore, what } = word.computed
+    if (writtenBefore === '') {
+      return {
+        kind: 'refused',
+        refusal: `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, which holds ${what} with nothing written before it: a path worked out when the shell runs is one this guard cannot follow, so a member does not write into that checkout while it stands (martha#192)`,
+      }
+    }
+    const folder = resolvedPathOf(folderWrittenBefore(writtenBefore), entry, top, home, host)
+    if (reachesTheTree(folder, top)) places.push({ what: folder, why: whyTheValueIsRefused(entry) })
+  }
+  return { kind: 'places', places }
+}
+
+/**
+ * The folder a word's literal prefix stands in: a shell works the character out as a
+ * name, so a prefix ending in a separator names its own folder (`tools/` is `tools`)
+ * and one that does not names a name in the folder that holds it (`tools/x` is
+ * `tools`). A prefix with no separator names something in the top of the work tree.
+ */
+function folderWrittenBefore(prefix: string): string {
+  const withoutTrailingSeparators = prefix.replace(/\/+$/, '')
+  if (withoutTrailingSeparators !== prefix) return withoutTrailingSeparators
+  const cut = prefix.lastIndexOf('/')
+  return cut < 0 ? '' : prefix.slice(0, cut)
+}
+
+/**
+ * Whether a folder is the checkout, stands inside it, or holds it: an expansion in
+ * any of the three can name the checkout or something in it (`/$X` names the
+ * checkout when the checkout is a name in `/`).
+ */
+function reachesTheTree(folder: string, top: string): boolean {
+  return insideTheTree(folder, top) || insideTheTree(top, folder)
 }
 
 /** One word of a value, or the value whole: where it lands, and whether that is inside the checkout. */
@@ -231,8 +271,193 @@ function whyTheValueIsRefused(entry: ConfigEntry): string {
   return `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, which a later git run of the owner's reads and starts`
 }
 
-/** The characters a shell breaks a word at: the quotes, the operators, the redirections, and the spaces. */
-const SHELL_BREAK = /[ \t\n\v\f\r'"`;&|()<>]+/
+/**
+ * One word of a value as a shell would run it, and the first character in it the
+ * shell works out at run time (martha#192 r=3).
+ */
+interface ShellWord {
+  /** The word with its quoted pieces joined: `tools/x''.sh` is the word `tools/x.sh`. */
+  readonly text: string
+  /** The first thing in it the shell works out, and the text written before that. */
+  readonly computed: { readonly writtenBefore: string; readonly what: string } | undefined
+}
+
+/** The characters a shell ends a word at, outside quotes: the whitespace and the operators. */
+const SHELL_SPACE = /[ \t\n\v\f\r]/
+const SHELL_OPERATOR = ';&|()<>'
+
+/** The characters a backslash protects inside double quotes, as POSIX spells them. */
+const DOUBLE_QUOTE_ESCAPES = '"\\$`'
+
+/** The characters a shell expands into a name, outside quotes: the globs. */
+const SHELL_GLOB = '*?['
+
+/** Where a word is split again when a shell runs it a second time: the spaces and the operators inside it. */
+const SHELL_BREAKS_INSIDE_A_WORD = /[ \t\n\v\f\r;&|()<>]+/
+
+/**
+ * The words a shell would run from a value (martha#192 r=3). A word is not a split on
+ * punctuation: a quote joins the text on either side of it into one word
+ * (`tools/x''.sh` is `tools/x.sh`, and `'tools/my x.sh'` is one word with a space in
+ * it), and only the whitespace and the operators outside quotes end one. Each word
+ * also carries the first thing in it the shell works out rather than reads: a
+ * variable, a command substitution, or a glob, and the text written before it, which
+ * is what a member would have to write into to steer it.
+ *
+ * A positional or special parameter is not one of those: `$1` .. `$9`, `$@`, `$*`,
+ * `$#`, `$?`, `$$`, `$!`, `$-` and `$0` are the owner's own argument or shell state,
+ * which a member cannot write (an alias taking `"$1"` is the standard way to spell
+ * one, and refusing it refused every write into every checkout). A `$` or a glob
+ * inside single quotes is a shell's literal text, not an expansion.
+ */
+function shellWordsIn(value: string): ShellWord[] {
+  const words: ShellWord[] = []
+  const word: WordUnderScan = { text: '', computed: undefined, quote: undefined }
+  for (let at = 0; at < value.length; at += stepThrough(value, at, word, words)) continue
+  finishWord(word, words)
+  return words
+}
+
+/** A word while it is being read, and the quote the next character is read in. */
+interface WordUnderScan {
+  text: string
+  computed: ShellWord['computed']
+  quote: "'" | '"' | undefined
+}
+
+/** Read the character at `at` and say how many it took: two when a backslash took the next one as text. */
+function stepThrough(value: string, at: number, word: WordUnderScan, words: ShellWord[]): number {
+  if (word.quote === "'") return stepInSingleQuotes(value, at, word)
+  if (word.quote === '"') return stepInDoubleQuotes(value, at, word)
+  return stepOutsideQuotes(value, at, word, words)
+}
+
+/** Outside any quote: a space or an operator ends the word, and a quote opens one. */
+function stepOutsideQuotes(value: string, at: number, word: WordUnderScan, words: ShellWord[]): number {
+  const letter = value.charAt(at)
+  if (SHELL_SPACE.test(letter) || SHELL_OPERATOR.includes(letter)) {
+    finishWord(word, words)
+    return 1
+  }
+  if (letter === "'" || letter === '"') {
+    word.quote = letter
+    return 1
+  }
+  return letter === '\\' ? takeLiteral(value, at, word) : takeLetter(value, at, word)
+}
+
+/** In single quotes every character is text: a shell reads no name, substitution or glob there. */
+function stepInSingleQuotes(value: string, at: number, word: WordUnderScan): number {
+  if (value.charAt(at) === "'") word.quote = undefined
+  else word.text += value.charAt(at)
+  return 1
+}
+
+/** In double quotes: a name and a substitution are still the shell's, and a glob is text. */
+function stepInDoubleQuotes(value: string, at: number, word: WordUnderScan): number {
+  const letter = value.charAt(at)
+  if (letter === '"') {
+    word.quote = undefined
+    return 1
+  }
+  if (letter === '\\' && DOUBLE_QUOTE_ESCAPES.includes(value.charAt(at + 1))) return takeLiteral(value, at, word)
+  return takeLetter(value, at, word)
+}
+
+/**
+ * One character as a shell hands it on, and how many it took: the names and
+ * substitutions it works out are recorded first, and a whole parameter is taken at
+ * once, so the `*` of `$*` is never read as a glob of its own.
+ */
+function takeLetter(value: string, at: number, word: WordUnderScan): number {
+  if (worksOutAt(value, at)) recordComputation(value, at, word)
+  const parameter = value.charAt(at) === '$' ? ownerParameterAt(value, at) : 0
+  if (parameter === 0) {
+    word.text += value.charAt(at)
+    return 1
+  }
+  word.text += value.slice(at, at + parameter)
+  return parameter
+}
+
+/** A backslash and the character it protects, taken as text: two characters read. */
+function takeLiteral(value: string, at: number, word: WordUnderScan): number {
+  word.text += value.charAt(at + 1)
+  return 2
+}
+
+/** Whether a shell works a name out at this character rather than reading it: a substitution, a variable or a glob. */
+function worksOutAt(value: string, at: number): boolean {
+  const letter = value.charAt(at)
+  if (letter === '`') return true
+  if (letter === '$') return ownerParameterAt(value, at) === 0
+  return SHELL_GLOB.includes(letter)
+}
+
+/** The first thing a word works out, and everything written before it in that word. */
+function recordComputation(value: string, at: number, word: WordUnderScan): void {
+  if (word.computed !== undefined) return
+  word.computed = { writtenBefore: word.text, what: computedTokenAt(value, at) }
+}
+
+/** End the word being read, and start the next one. */
+function finishWord(word: WordUnderScan, words: ShellWord[]): void {
+  if (word.text !== '') words.push({ text: word.text, computed: word.computed })
+  word.text = ''
+  word.computed = undefined
+}
+
+/**
+ * How many characters a `$` at `at` takes when it names the owner's own argument or
+ * shell state, and 0 when it names something else the shell works out.
+ */
+function ownerParameterAt(value: string, at: number): number {
+  const next = value[at + 1]
+  if (next === undefined) return 0
+  if ('0123456789@*#?$!-'.includes(next)) return 2
+  const close = value.indexOf('}', at + 2)
+  if (next !== '{' || close < 0) return 0
+  return /^[0-9]+$/.test(value.slice(at + 2, close)) ? close - at + 1 : 0
+}
+
+/** The name or substitution a character the shell works out at `at` starts, as the value spells it. */
+function computedTokenAt(value: string, at: number): string {
+  if (value.charAt(at) === '`') return upToClosingBacktick(value, at)
+  if (value.charAt(at) === '$') return dollarTokenAt(value, at)
+  return value.slice(at)
+}
+
+/** A `$` and what it names: a command substitution, a bracketed name, or a bare one. */
+function dollarTokenAt(value: string, at: number): string {
+  if (value.charAt(at + 1) === '(') return upToMatchingParen(value, at)
+  if (value.charAt(at + 1) === '{') return upToClosingBracket(value, at + 2, '}')
+  let end = at + 1
+  while (end < value.length && /[A-Za-z0-9_]/.test(value.charAt(end))) end += 1
+  return value.slice(at, end)
+}
+
+/** A substitution from its backtick to the one that closes it. */
+function upToClosingBacktick(value: string, at: number): string {
+  return upToClosingBracket(value, at + 1, '`')
+}
+
+/** The text from `at` to the first `close` after it, or to the end when there is none. */
+function upToClosingBracket(value: string, from: number, close: string): string {
+  const end = value.indexOf(close, from)
+  return end < 0 ? value.slice(from - 1) : value.slice(from - 1, end + 1)
+}
+
+/** A command substitution from its `$` to the bracket that closes it, counting the ones inside it. */
+function upToMatchingParen(value: string, at: number): string {
+  let depth = 0
+  for (let step = at + 1; step < value.length; step += 1) {
+    if (value[step] === '(') depth += 1
+    if (value[step] !== ')') continue
+    depth -= 1
+    if (depth === 0) return value.slice(at, step + 1)
+  }
+  return value.slice(at)
+}
 
 /**
  * The paths one value could name: the value whole as git read it, every word of it,
@@ -242,21 +467,33 @@ const SHELL_BREAK = /[ \t\n\v\f\r'"`;&|()<>]+/
  * `tools/x.sh`, and never `<top>/!tools/x.sh`).
  *
  * The words are the shell's own, and not a whitespace split: `!sh -c 'tools/x.sh'`
- * runs `tools/x.sh`, so the quotes and the operators are breaks here as they are to
- * a shell (r=2, R3). The value whole keeps the spaces git keeps, so a path that
- * starts with one (`hooksPath = " hk"`) is the folder `<top>/ hk` and not `<top>/hk`.
+ * runs `tools/x.sh`, so the quotes join and the operators end a word as they do for
+ * a shell (r=2, R3; a quoted piece joins the text on either side of it, r=3). The
+ * value whole keeps the spaces git keeps, so a path that starts with one
+ * (`hooksPath = " hk"`) is the folder `<top>/ hk` and not `<top>/hk`.
+ *
+ * A word is also taken in pieces, split at the spaces and operators inside it. What
+ * runs is sometimes a word the shell splits again — `sh -c 'tools/h.sh --fix'` hands
+ * `sh` a line of its own words, and `tools/h.sh` is what runs — so the whole word and
+ * its pieces are both candidates. A rule that names too much refuses too much, which
+ * is the direction this guard takes; one that names too little fails open.
  */
 function candidatesIn(entry: ConfigEntry): string[] {
   const whole = entry.value
   if (whole === '') return []
-  const withoutTheSign = whole.startsWith('!') ? whole.slice(1) : whole
-  const words = isAnInclude(entry) ? [] : shellWordsIn(withoutTheSign)
+  const withoutTheSign = withoutTheSignIn(whole)
+  const words = isAnInclude(entry) ? [] : shellWordsIn(withoutTheSign).flatMap((word) => [word.text, ...piecesOfWord(word.text)])
   return [...new Set([whole, ...(withoutTheSign === whole ? [] : [withoutTheSign]), ...words])]
 }
 
-/** The words a shell would run from a value, its quotes and its operators dropped. */
-function shellWordsIn(value: string): string[] {
-  return value.split(SHELL_BREAK).filter((word) => word !== '')
+/** The pieces a word falls into at the spaces and operators inside it, where a shell inside it would split it again. */
+function piecesOfWord(word: string): string[] {
+  return word.split(SHELL_BREAKS_INSIDE_A_WORD).filter((piece) => piece !== '')
+}
+
+/** A value git hands to a shell, which an alias writes with a leading `!`, and the words without that sign. */
+function withoutTheSignIn(value: string): string {
+  return value.startsWith('!') ? value.slice(1) : value
 }
 
 /** `~/x` as the home the guard was given, and anything else as it stands. */
@@ -285,6 +522,11 @@ function resolvedPathOf(candidate: string, entry: ConfigEntry, top: string, home
 function insideTheTree(path: string, top: string): boolean {
   if (path === top) return true
   return path.startsWith(top.endsWith(sep) ? top : `${top}${sep}`)
+}
+
+/** Whether a line, or what is left of one, is a comment: the two characters git reads one from. */
+function isAComment(text: string): boolean {
+  return text.startsWith('#') || text.startsWith(';')
 }
 
 /** The git configuration syntax this guard models, and everything it does not. */
@@ -354,7 +596,7 @@ function lineAt(file: string, lines: readonly string[], at: number, section: str
   const number = at + 1
   const line = withoutLeadingSpace(lines[at]!)
   const next = at + 1
-  if (line === '' || line.startsWith('#') || line.startsWith(';')) return { kind: 'skip', next }
+  if (line === '' || isAComment(line)) return { kind: 'skip', next }
   if (line.startsWith('[')) return headerLine(file, line, number, lines, next)
   if (section === '') return { kind: 'refused', refusal: `${file}:${number} holds a key before any section, which no git run takes as configuration: a member does not write into that checkout while it stands (martha#192)` }
   return entryLine(file, line, section, number, lines, next, undefined)
@@ -365,7 +607,7 @@ function headerLine(file: string, line: string, number: number, lines: readonly 
   const opened = headersOn(line)
   if (opened === undefined) return { kind: 'refused', refusal: unmodelled(file, number) }
   const section = opened.sections[opened.sections.length - 1]!
-  if (opened.rest === '') return { kind: 'section', section, next }
+  if (opened.rest === '' || isAComment(opened.rest)) return { kind: 'section', section, next }
   return entryLine(file, opened.rest, section, number, lines, next, section)
 }
 

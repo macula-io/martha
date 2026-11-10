@@ -903,8 +903,10 @@ where it came from. Three things stand on it:
   itself.
   The paths a configuration **names** are refused the same way (martha#192), and
   not by a list of keys: every value of every key the owner's git would read is
-  split into the words a **shell** would run from it — the quotes, the operators
-  and the redirections are breaks, so `!sh -c 'tools/x.sh'` and
+  split into the words a **shell** would run from it — a quote joins the text on
+  either side of it into one word, so `tools/x''.sh` is `tools/x.sh` and
+  `'tools/my x.sh'` is one word with a space in it, and only the whitespace and
+  the operators outside quotes end one, so `!sh -c 'tools/x.sh'` and
   `"!tools/y.sh&&true"` name the scripts they run — and the value whole is taken
   as a path too, so a hooks folder (`core.hooksPath = .husky`), an alias's command
   (`alias.fmt = !tools/x.sh`), a config hook's command, a filter, an attributes
@@ -920,9 +922,18 @@ where it came from. Three things stand on it:
   path against the directory of the file that holds it, `~/` against the owner's
   home; a value is placed as the write is, every link on the way resolved
   (martha#79), so a checkout reached through a link is caught however the value
-  spells it; includes are followed, and a value holding `%(prefix)`, a variable or
-  a command substitution — a path a shell works out only when it runs — is refused
-  rather than guessed. The files read are the checkout's own `config`, its
+  spells it; includes are followed, and `%(prefix)` is refused rather than guessed. A name a
+  shell works out rather than reads — a variable of the owner's, a command
+  substitution, a glob — protects the folder written before it: `tools/*.sh` and
+  `tools/$V/run.sh` both protect `<top>/tools`, since a word names one name in a
+  folder and that folder is what a member would have to write into. A word with
+  nothing written before it (`$HOME/x`, `$(dirname x)/…`) refuses every write into
+  that checkout. A positional or special parameter is the owner's own argument or
+  shell state, not a path a member can steer, so `$1` to `$9`, `$@`, `$*`, `$#`,
+  `$?`, `$$`, `$!`, `$-` and `$0` are let through: without that, the ordinary
+  `alias.co = !f() { git checkout "$1"; }; f` in an owner's `~/.gitconfig` refused
+  every write into every checkout. A `$` or a glob inside single quotes is text to
+  a shell, and is read as text here. The files read are the checkout's own `config`, its
   `config.worktree` when `extensions.worktreeConfig` is on, and the owner's
   system, global and XDG files. The extension is read where git keeps it, in the
   shared config, so a linked worktree's own `config.worktree` — the file
@@ -940,7 +951,13 @@ where it came from. Three things stand on it:
   call site, so none of them can be taken in by a planted bare directory either.
   A refusal that names a *whole checkout* is usually the owner's own configuration
   naming its top — `git maintenance register` and `safe.directory` write exactly
-  that — and the refusal says which file, key and value to change. The member's
+  that — and the refusal says which file, key and value to change.
+  One exposure is **stated rather than closed**, and accepted as such: a value
+  that starts a tool which then reads the checkout's own files (`alias.b = !make`,
+  `!npm test`) hands that tool a `Makefile` or a `package.json` a member wrote. The
+  rule protects `<top>/make`, not `Makefile`, because the file is read by the tool
+  and never named in the configuration. That is the same exposure as the owner
+  running their own build in that checkout, which row A13 already accepts. The member's
   own **shell** writes are outside this: a `printf` into `.husky/` is recorded as
   A13, and this closes the file-tool half of it (martha#192).
 - **The host's own pass is refused the same places.** The settings the host is

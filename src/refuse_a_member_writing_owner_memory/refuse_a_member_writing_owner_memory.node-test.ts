@@ -1002,12 +1002,70 @@ function assertWholeCheckoutRefused(place: ReturnType<typeof placeFor>, config: 
 test('a value that computes a path at run time refuses every write into that checkout (#192 r=2)', (t) => {
   const place = placeFor(t)
   // A command substitution: the path is only known when a shell runs it.
-  assertWholeCheckoutRefused(place, '[alias]\n\tfmt = !sh -c "$(dirname x)/tools/z.sh"\n', 'a command substitution', [join('.git', 'config'), ':2', 'alias.fmt', '$(dirname x)'])
-  // And where no word of the value lands inside the tree at all, which is what
-  // isolates this rule from the word rule beside it: an absolute path with a
-  // variable in it resolves outside as written, and is another path when the shell
-  // runs it.
-  assertWholeCheckoutRefused(place, '[core]\n\tpager = /usr/bin/$ARCH/pager\n', 'a variable in an absolute path', ['core.pager', '$ARCH'])
+  // The refusal says what stands in the value, not only that the write is refused:
+  // a member who reads it learns which spelling put the checkout out of reach.
+  assertWholeCheckoutRefused(place, '[alias]\n\tfmt = !sh -c "$(dirname x)/tools/z.sh"\n', 'a command substitution', [join('.git', 'config'), ':2', 'alias.fmt', '$(dirname x)', 'with nothing written before it'])
+  // And where nothing is written before the variable, which is what isolates this
+  // rule from the word rule beside it: the word lands at `<top>/$PAGER/run.sh`, a
+  // path no member writes, and the file the shell runs is not that one (r=3 narrowed
+  // the rule to this case: a folder written before the variable is protected instead).
+  assertWholeCheckoutRefused(place, '[core]\n\tpager = $PAGER/run.sh\n', 'a variable with nothing written before it', ['core.pager', '$PAGER', 'with nothing written before it'])
+})
+
+// G2, G3 and G4 as Mercurius measured them on git 2.56.0 (martha#192 r=3): in each
+// case a real git run of the owner's started the member's file, and the guard admitted
+// the write. A word is not split at a quote — the quote joins the text on either side
+// of it into one word — and a word holding a glob names a file the value does not
+// spell, so the folder written before the glob is what is protected.
+test('a shell word joins its quoted pieces, and a quoted space stays in it (#192 r=3)', (t) => {
+  const place = placeFor(t)
+  // G2: the shell joins the pieces into `tools/x.sh`, which runs.
+  const checkout = checkoutWith(place, { config: '[alias]\n\tfa = !sh tools/x\'\'.sh\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'x.sh'), 'a word joined across an empty pair of quotes')
+
+  // G3: a quoted space is part of the word, so the folder named is `tools/my x.sh`.
+  writeFileSync(join(checkout, '.git', 'config'), '[alias]\n\tfb = !sh \'tools/my x.sh\'\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'my x.sh'), 'a path with a quoted space in it')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'an ordinary file in the same checkout')
+})
+
+test('a glob protects the folder written before it, and nothing else (#192 r=3)', (t) => {
+  const place = placeFor(t)
+  // G4: the shell expands `tools/*.sh` to `tools/g.sh`, which no literal path in the
+  // value names, so the folder the glob writes its name in is the place to protect.
+  const checkout = checkoutWith(place, { config: '[alias]\n\tfc = !sh tools/*.sh\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'g.sh'), 'a file a glob in a value reaches')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'an ordinary file in the same checkout')
+
+  // And a value whose glob names nothing in the work tree costs no write: a clone's
+  // own fetch refspec protects `<top>/+refs/heads`, a path that is nobody's.
+  writeFileSync(join(checkout, '.git', 'config'), '[remote "origin"]\n\tfetch = +refs/heads/*:refs/heads/*\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'a refspec whose glob names nothing in the work tree')
+})
+
+test('the owner\'s own argument is let through, and anything else protects the folder before it (#192 r=3)', (t) => {
+  const place = placeFor(t)
+  // G5: the standard alias that takes an argument. `$1` is the owner's own, so an
+  // ordinary write into the checkout stays the member's: refusing it refused every
+  // write into every checkout whose owner writes aliases that way.
+  const checkout = checkoutWith(place, { config: '[alias]\n\tco = "!f() { git checkout \\"$1\\"; }; f"\n' })
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'an ordinary write with an alias taking "$1"')
+
+  // Every positional and special parameter is the owner's own shell state. Each is
+  // quoted here because git reads an unquoted `#` as a comment, as it does in a
+  // shell (measured, 2.56.0: `echo $#; }` is the value `echo $`).
+  for (const parameter of ['$1', '$9', '$0', '$@', '$*', '$#', '$?', '$$', '$!', '$-', '${1}']) {
+    writeFileSync(join(checkout, '.git', 'config'), `[alias]\n\tx = !f() { echo "${parameter}"; }\n`)
+    assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), `the owner's parameter ${parameter}`)
+  }
+
+  // A variable with a folder written before it protects that folder.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\tpager = tools/$PAGER/run.sh\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'other.sh'), 'a folder a variable in the value writes into')
+
+  // And one whose folder is outside the checkout is nobody's to steer.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\tpager = /usr/bin/$ARCH/pager\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'a variable whose folder is outside the checkout')
 })
 
 test('a key on the line of its section header is read as git reads it (#192 r=2)', (t) => {
@@ -1025,6 +1083,23 @@ test('a key on the line of its section header is read as git reads it (#192 r=2)
   // And a second header on the line opens a section, as git reads it.
   writeFileSync(join(checkout, '.git', 'config'), '[core] [alias]\n\tfmt = !tools/y.sh\n')
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'y.sh'), 'a second header on the line')
+})
+
+// Mercurius's G6 (martha#192 r=3): git reads `[core] ; note` as the header and
+// nothing else — the key on the next line is its own entry (measured, 2.56.0, and in
+// five spellings: `; note`, `;note`, `# note`, `#note`, and either one stuck to the
+// bracket). The guard called the line an unmodelled form and refused every write into
+// the checkout, which is the refusing side but refuses a config git reads perfectly.
+test('a comment after a section header is no entry, and the key below it is git\'s (#192 r=3)', (t) => {
+  assert.deepEqual(entriesInText('/scratch/config', '[core] ; note\n\tkey = v\n'), { kind: 'entries', entries: [{ file: '/scratch/config', line: 2, key: 'core.key', value: 'v' }] })
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core] ; note\n\thooksPath = hk6\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk6', 'pre-commit'), 'a key under a header that ends in a comment')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'an ordinary file in the same checkout')
+
+  // The same in the spelling with the comment stuck to the bracket, and with `#`.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]#note\n\thooksPath = hk6b\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk6b', 'pre-commit'), 'a comment stuck to the header')
 })
 
 test('an old-style subsection is lowercased as git lowercases it (#192 r=2)', () => {
