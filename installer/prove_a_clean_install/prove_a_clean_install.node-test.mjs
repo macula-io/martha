@@ -341,6 +341,46 @@ test('a removal that cannot read a directory that is there fails, so a tree left
   )
 })
 
+// martha#137: the chmod half of the same walk, which #189 left unpinned. A directory can go between the read that
+// lists its parent and the chmod that opens it, one call earlier than the window above, and a directory that is there
+// but cannot be opened is named by the caller rather than reported as removed. Both stand in for the call, no race.
+test('a removal whose chmod finds a directory gone skips it, and the tree is removed (martha#137)', (t) => {
+  const root = scratch(t)
+  const gone = join(root, 'state', 'martha', 'a project', 'snapshots', 'launch-Q0Ggs3')
+  mkdirSync(gone, { recursive: true })
+  writeFileSync(join(gone, 'a snapshot'), 'x')
+  /** @param {string} dir */
+  const vanishes = (dir) => Object.assign(new Error(`ENOENT: no such file or directory, chmod '${dir}'`), { code: 'ENOENT' })
+  removeEvenReadOnly(root, {
+    chmodSync: (dir, mode) => {
+      if (dir === gone) throw vanishes(dir)
+      chmodSync(dir, mode)
+    },
+    readdirSync,
+    rmSync
+  })
+  assert.equal(existsSync(root), false, 'the tree is gone, and the removal did not fail on the directory that went')
+})
+
+test('a removal whose chmod is refused names the directory and the reason, and the tree is left (martha#137)', (t) => {
+  const root = scratch(t)
+  const locked = join(root, 'a release still read-only')
+  mkdirSync(locked)
+  const refused = Object.assign(new Error(`EPERM: operation not permitted, chmod '${locked}'`), { code: 'EPERM' })
+  assert.throws(
+    () => removeEvenReadOnly(root, {
+      chmodSync: (dir, mode) => {
+        if (dir === locked) throw refused
+        chmodSync(dir, mode)
+      },
+      readdirSync,
+      rmSync
+    }),
+    /EPERM: operation not permitted, chmod /
+  )
+  assert.equal(existsSync(root), true, 'the tree left behind is still there for the caller to name')
+})
+
 // Where a run as a command is interrupted: early, before anything of the crew exists, and while the second member's
 // start is in flight — the run parks there until the signal arrives, so the interrupt lands at the state the test
 // names rather than wherever the run had reached when the signal happened to arrive (martha#189); `named` is how many
