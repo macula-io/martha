@@ -5,18 +5,27 @@
 // `<state root>/<sha256 of the project's real path>`.
 //
 // The state root and each project's directory are made mode 0700. Every file in them is mode 0600, written
-// whole under a staging name and renamed into place, or (the approvals, the own writes) appended to. Each time it
+// whole under a staging name and renamed into place, or (the approvals) appended to. Each time it
 // is opened, the directory is refused unless it is a real directory, not a link, owned by this user and written by
 // no one else; each file is refused unless it is a regular file owned by this user that no one else may read or
 // write. A file that does not parse is refused whole, never read in part.
 //
-// A launch's own writes are one file per launch, under OWN_WRITES_PLACE (martha#162). One launch's file cannot stop
-// another launch, which is what a torn record used to do to a whole project. An append counts the bytes it wrote and
-// cuts a record that was kept only in part back off, so a short write is refused as it happens rather than at the
-// next read; a file whose last line was never finished, left by a crash, is refused for that launch alone, and the
-// way back is a new start, which keeps a file of its own. The files past OWN_WRITES_LAUNCHES_KEPT, newest by their
-// last record, are pruned when a launch starts, so the state of a project no longer grows with every launch it
-// ever had.
+// A launch's own writes are one file per launch, under OWN_WRITES_PLACE (martha#162), and each file keeps one line
+// for each path that launch wrote (martha#157): a write replaces the line for its own path, so a launch that writes
+// one file a thousand times costs what its paths cost, not what its writes cost, and the file is read whole to be
+// rewritten whole, under a staging name and renamed into place. What that gives a reader is what it already asked
+// for — the latest write at each path — so the launch's recheck is answered as it was before, and a reader of the
+// history gets each launch's latest write at each path rather than every write at it.
+//
+// A file is refused whole only for a line that was finished and is not an own write, or a short write caught as it
+// happened. A last line the writer never finished is read as a record when it is one whole record whose newline the
+// disk did not take, and dropped when the write was cut short (martha#157): a partial record never counts, a whole
+// one is not lost to a crash, and a path behind a record that was cut short is vouched for by nothing, so it refuses
+// by name and the rest of the launch goes on.
+//
+// One launch's file cannot stop another launch, which is what a torn record used to do to a whole project, and the
+// files past OWN_WRITES_LAUNCHES_KEPT, newest by their last record, are pruned when a launch starts, so the state of
+// a project no longer grows with every launch it ever had.
 //
 // Residual, stated: pruning can take a running launch's file when OWN_WRITES_LAUNCHES_KEPT other launches of the same
 // project have written since it last did. Its next write makes the file again, and the paths it wrote before then are
@@ -29,12 +38,13 @@
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { getuid } from 'node:process'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
+  latestAtEachPath,
   lineOfOwnWrite,
   ownWriteOfLine,
   type OwnWrite,
@@ -262,9 +272,9 @@ function openForAppend(path: string, what: string): { readonly descriptor: numbe
 }
 
 /**
- * Cuts a last line that was never finished off the file, so the next record is not appended after a torn one
- * (martha#162). A crash mid-append, or a write cut short, leaves one; what it held is never kept, and a launch that
- * lost a record this way is refused the path it named at its next recheck.
+ * Cuts a last line that was never finished off an appended-to file, so the next record is not appended after a torn
+ * one (martha#162). A crash mid-append, or a write cut short, leaves one, and what it held is never kept. Only the
+ * approvals are appended to: a launch's own writes are written whole (martha#157).
  */
 function cutOffAnUnfinishedLine(descriptor: number): void {
   const size = fs.fstatSync(descriptor).size
@@ -281,7 +291,7 @@ function cutOffAnUnfinishedLine(descriptor: number): void {
  * Keeps `line` at the end of the state file at `path`; or why it could not be kept. `what` names what one line
  * holds. The bytes written are counted (martha#162): a record kept only in part is cut back off the file and refused
  * here, so a short write never leaves half a record for the next read to trip over. The path is the caller's rather
- * than `state.directory` plus a name, because a launch's own writes are kept in a directory of their own (martha#162).
+ * than `state.directory` plus a name, so a caller that keeps its file elsewhere, as the own writes once did, can.
  */
 export function appendStateLine(path: string, line: string, what: string): Refused | undefined {
   const opened = openForAppend(path, what)
@@ -354,7 +364,7 @@ const untrusted = (path: string, why: string, remedy: string): Refused => ({
   refusal: `${path} ${why}, so Martha reads none of this launch's own writes. ${remedy}`,
 })
 
-/** The way back for a launch's own recheck: a new start keeps a file of its own, and the torn one is left behind. */
+/** The way back for a launch's own recheck: a new start keeps a file of its own, and the refused one is left behind. */
 export const START_AGAIN = 'Start the member again: each start keeps a file of its own.'
 
 /**
@@ -364,30 +374,101 @@ export const START_AGAIN = 'Start the member again: each start keeps a file of i
  */
 export const WHAT_A_SIGNED_RUN_NEEDS = "A run sees a file only when the signed branch holds it or a member's own write vouches for it: commit it to the signed branch, or remove it."
 
-/** The own writes kept in one launch's file, in the order kept; a missing file is none, and one bad line refuses it whole. */
-function readOwnWritesOf(path: string, remedy: string): OwnWrites {
-  const read = readStateFile(path)
-  if ('refusal' in read) return read
-  if (read.text !== '' && !read.text.endsWith(NEWLINE)) return untrusted(path, 'ends in a line that was never finished', remedy)
-  const writes = read.text
+/** What the text of a launch's file holds: its records, the first finished line that is not one, and its unfinished tail. */
+interface RecordsOfText {
+  readonly writes: readonly OwnWrite[]
+  /** The number of the first line that was finished and is not an own write, or undefined when every one of them is. */
+  readonly badLine: number | undefined
+  /** The last line, when the writer never finished it: '' when it did. */
+  readonly unfinished: string
+}
+
+/** The text of a launch's file, read as the records it holds. */
+function recordsOf(text: string): RecordsOfText {
+  const finished = text.endsWith(NEWLINE) ? text : text.slice(0, text.lastIndexOf(NEWLINE) + 1)
+  const parsed = finished
     .split(NEWLINE)
     .filter((line) => line !== '')
     .map(ownWriteOfLine)
-  const bad = writes.indexOf(undefined)
-  if (bad !== -1) return untrusted(path, `line ${bad + 1} is not an ${ONE_OWN_WRITE}`, remedy)
-  return { writes: writes as OwnWrite[] }
-}
-
-/** Keeps one own write at the end of the file its launch keeps (martha#162); or why it could not be kept. */
-function appendOwnWriteOf(directory: string, write: OwnWrite): string | undefined {
-  const name = ownWritesFileNameOf(write.launch)
-  if (name === undefined) return NOT_UNDER_A_LAUNCH
-  return appendStateLine(join(directory, name), lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal
+  const bad = parsed.indexOf(undefined)
+  return { writes: parsed.filter((write): write is OwnWrite => write !== undefined), badLine: bad === -1 ? undefined : bad + 1, unfinished: text.slice(finished.length) }
 }
 
 /**
- * The own writes of one launch, kept one line each in a file of that launch's own: the only file a recheck of the
- * launch reads, and the only one a torn record in it can refuse (martha#162).
+ * The own writes kept in one launch's file, in the order kept; a missing file is none, and one bad line that was
+ * finished refuses it whole. A last line the writer never finished is a record when it is one whole record whose
+ * newline the disk did not take, and dropped when the write was cut short (martha#157): it can only ever be the
+ * last, so what was finished before it is read as it was.
+ */
+function readOwnWritesOf(path: string, remedy: string): OwnWrites {
+  const read = readStateFile(path)
+  if ('refusal' in read) return read
+  const { writes, badLine, unfinished } = recordsOf(read.text)
+  if (badLine !== undefined) return untrusted(path, `line ${badLine} is not an ${ONE_OWN_WRITE}`, remedy)
+  const last = unfinished === '' ? undefined : ownWriteOfLine(unfinished)
+  return { writes: last === undefined ? writes : [...writes, last] }
+}
+
+/**
+ * Keeps `write` in the file at `path`, which keeps one line for each path the launch wrote (martha#157): the write
+ * takes the place of the line for its own path, at the position of the last write, which is the order a reader of
+ * that launch's writes asks for. The file is written whole under a staging name and renamed into place, so a write
+ * the disk does not take leaves the file as it was, and a file that cannot be trusted is refused, never rewritten.
+ */
+function keepOwnWriteAt(path: string, write: OwnWrite, what: string): Refused | undefined {
+  const read = readStateFile(path)
+  if ('refusal' in read) return read
+  const { writes, badLine } = recordsOf(read.text)
+  if (badLine !== undefined) return { refusal: `${path} line ${badLine} is not an ${ONE_OWN_WRITE}, so Martha keeps no ${what} in it.` }
+  const text = latestAtEachPath([...writes, write])
+    .map((kept) => `${lineOfOwnWrite(kept)}${NEWLINE}`)
+    .join('')
+  return keepWhole(path, text, what)
+}
+
+/** Writes `text` to `path` whole: under a staging name beside it, every byte counted, then renamed into place. */
+function keepWhole(path: string, text: string, what: string): Refused | undefined {
+  const staged = join(dirname(path), `${STAGING_PREFIX}${randomUUID()}`)
+  const refused = keepStaged(staged, text, path, what)
+  if (refused !== undefined) {
+    fs.rmSync(staged, { force: true })
+    return refused
+  }
+  fs.renameSync(staged, path)
+  return undefined
+}
+
+/** `text` written whole to the staging file `staged`, counting every byte; or why it was not. */
+function keepStaged(staged: string, text: string, path: string, what: string): Refused | undefined {
+  let descriptor: number
+  try {
+    descriptor = fs.openSync(staged, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, STATE_FILE_MODE)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return { refusal: `${path} could not be written (${code ?? String(error)}), so Martha keeps no ${what} in it.` }
+  }
+  try {
+    const bytes = Buffer.byteLength(text)
+    const written = writtenBy(() => fs.writeSync(descriptor, text))
+    if (typeof written === 'string') return { refusal: `${path} could not be written (${written}), so Martha keeps no ${what} in it.` }
+    if (written !== bytes) return { refusal: `${path} kept only ${written} of the ${bytes} bytes of an ${what}, so Martha keeps none of it.` }
+    fs.fsyncSync(descriptor)
+    return undefined
+  } finally {
+    fs.closeSync(descriptor)
+  }
+}
+
+/** Keeps one own write in the file its launch keeps (martha#162, #157); or why it could not be kept. */
+function appendOwnWriteOf(directory: string, write: OwnWrite): string | undefined {
+  const name = ownWritesFileNameOf(write.launch)
+  if (name === undefined) return NOT_UNDER_A_LAUNCH
+  return keepOwnWriteAt(join(directory, name), write, ONE_OWN_WRITE)?.refusal
+}
+
+/**
+ * The own writes of one launch, kept one line for each path it wrote in a file of that launch's own: the only file a
+ * recheck of the launch reads, and the only one a bad line in it can refuse (martha#162, #157).
  */
 export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnWritesStore {
   const directory = ownWritesDirectory(state)
@@ -397,14 +478,15 @@ export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnW
   const path = join(directory.path, name)
   return {
     append: (write) =>
-      write.launch === launch ? appendStateLine(path, lineOfOwnWrite(write), ONE_OWN_WRITE)?.refusal : `An own write of another launch is not kept in ${path}.`,
+      write.launch === launch ? keepOwnWriteAt(path, write, ONE_OWN_WRITE)?.refusal : `An own write of another launch is not kept in ${path}.`,
     all: () => readOwnWritesOf(path, START_AGAIN),
   }
 }
 
 /**
- * Every own write still kept, launch by launch in the order each launch kept them, and the launches in the order of
- * their first record: the whole history a reader of it (#129) asks for (martha#162).
+ * Every own write still kept, launch by launch, and the launches in the order of their first record: the history a
+ * reader of it (#129) asks for. At each path a launch keeps the last write it made there rather than every write,
+ * since that is the write whose bytes the checkout holds (martha#162, #157).
  *
  * One launch's file that cannot be read does not take the history with it (martha#162 r=4): the history reads the
  * other launches and names the file it passed over. Nothing that launch's member wrote is an own write then, so a

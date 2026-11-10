@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { openState, OWN_WRITES_PLACE, OWN_WRITES_SUFFIX, ownWritesKeptForTheHistory, WHAT_A_SIGNED_RUN_NEEDS, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, OWN_WRITES_PLACE, OWN_WRITES_SUFFIX, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
@@ -138,39 +138,25 @@ test('a file neither base nor own write runs nothing, and is named; written thro
   assert.equal(ended.status, 0)
 })
 
-test('a torn own-writes file of an older launch stops neither the run nor another launch, and is named when its paths refuse (martha#162 r=4)', { skip: unavailable }, async (t) => {
+test("a torn last line in an older launch's file takes neither the run nor the launch's finished writes with it (martha#157)", { skip: unavailable }, async (t) => {
   const p = place(t)
   const history = ownWritesKeptForTheHistory(p.state)
-  // The older launch's write, kept, and then its file left torn by a crash mid-append.
+  // The older launch's write, kept, and then its file left with a last line a crash cut short.
   writeFileSync(join(p.checkout, 'older.txt'), MARKER)
   assert.equal(history.append(ownWriteOf(p.checkout, 'older.txt', 'the-older-launch')), undefined)
-  writeFileSync(ownWritesFileOf(p.state, 'the-older-launch'), '{"path":"/project/ole', { flag: 'a' })
+  writeFileSync(ownWritesFileOf(p.state, 'the-older-launch'), '{"path":"/checkout/cut-off.txt","blob":"ce01', { flag: 'a' })
   // The newer launch's write, kept cleanly.
   writeFileSync(join(p.checkout, 'newer.txt'), MARKER)
   assert.equal(history.append(ownWriteOf(p.checkout, 'newer.txt', 'the-newer-launch')), undefined)
-  // What the newer launch wrote still runs: one launch's torn file is not the project's refusal, and a new start is
-  // no answer to it, so the run must not be stopped at all.
-  rmSync(join(p.checkout, 'older.txt'))
-  const ended = await runASignedShape({ ...p.run, shapes: [{ name: 'test', argv: ['/bin/sh', '-c', 'cat newer.txt'] }] })
+  // What the older launch finished still vouches for older.txt, and what the newer one wrote for newer.txt: a line the
+  // writer never finished is dropped, and no longer refuses the file it is in (martha#157).
+  const ended = await runASignedShape({ ...p.run, shapes: [{ name: 'test', argv: ['/bin/sh', '-c', 'cat older.txt newer.txt'] }] })
   assert.ok(typeof ended !== 'string', `the run must run: ${String(ended)}`)
-  assert.equal(ended.output.toString('utf8'), MARKER)
-  // Put back what the older launch's member wrote: no own write vouches for it, so it refuses by name, and the file
-  // the history passed over is named with it — and with the way back that works in a signed run, never a new start,
-  // which cannot help here (martha#162 r=5).
-  writeFileSync(join(p.checkout, 'older.txt'), MARKER)
-  const olderWrites = ownWritesFileOf(p.state, 'the-older-launch')
-  assert.equal(
-    String(await runASignedShape(p.run)),
-    `nothing ran: older.txt: older.txt is neither the base's nor the member's own write; ${olderWrites} ends in a line that was never finished, so Martha reads none of this launch's own writes. ${WHAT_A_SIGNED_RUN_NEEDS}`,
-  )
-  // Walk the remedy it names: once the signed branch holds the file, the run goes.
-  const remote = join(p.top, 'remote')
-  writeFileSync(join(remote, 'older.txt'), MARKER)
-  git(remote, 'add', '-A')
-  git(remote, 'commit', '--quiet', '-m', 'the owner takes the file the older launch wrote')
-  const ran = await runASignedShape({ ...p.run, shapes: [{ name: 'test', argv: ['/bin/sh', '-c', 'cat older.txt newer.txt'] }] })
-  assert.ok(typeof ran !== 'string', `the run must run: ${String(ran)}`)
-  assert.equal(ran.output.toString('utf8'), `${MARKER}${MARKER}`)
+  assert.equal(ended.output.toString('utf8'), `${MARKER}${MARKER}`)
+  // A path the cut line would have named is vouched for by nothing, so it refuses by name, and no file is named as one
+  // passed over, because no file was.
+  writeFileSync(join(p.checkout, 'cut-off.txt'), MARKER)
+  assert.equal(String(await runASignedShape(p.run)), "nothing ran: cut-off.txt: cut-off.txt is neither the base's nor the member's own write")
 })
 
 test('an own write git changes as it adds it still passes: the blob judged is the one git would give it (martha#132)', { skip: unavailable }, async (t) => {
