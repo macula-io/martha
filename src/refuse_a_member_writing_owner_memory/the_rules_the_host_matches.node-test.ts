@@ -14,6 +14,7 @@ import process from 'node:process'
 import { test } from 'node:test'
 
 import { RECORDED_HOST_VARIABLE } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
+import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { whatTheHostSaysWithTheseSettings } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
 
@@ -61,6 +62,6 @@ test('the recorded host matches every rule the launch writes, and names an inert
   mkdirSync(join(home, '.claude'), { recursive: true })
   writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify({ permissions: { deny: [anInertTwinOf(written[0] ?? '')] } }))
   const ownersSaid = await whatItSaysAbout(written)
-  assert.match(ownersSaid, /is not matched by file permission checks/, `the host said nothing about the owner's own dead rule, so this proves nothing: ${ownersSaid.slice(-800)}`)
+  assert.match(ownersSaid, new RegExp(NOT_MATCHED_MARK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `the host said nothing about the owner's own dead rule, so this proves nothing: ${ownersSaid.slice(-800)}`)
   assert.deepEqual(hostLinesNamingARule(ownersSaid, written), [], `the owner's own rule is read as one of ours: ${hostLinesNamingARule(ownersSaid, written).join(' | ')}`)
 })

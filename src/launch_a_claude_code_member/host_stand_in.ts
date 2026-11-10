@@ -9,6 +9,7 @@
 // whether the member itself ran.
 
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { RELAY_MANIFEST } from './relay_copy.ts'
 
 /** The folder a stand-in's session init reports for the owner's user output styles, unless a test gives another (#154). */
@@ -91,7 +92,7 @@ function callsTheFirstRuleDead(): string {
     `prev=''; found=''`,
     `for a in "$@"; do if [ "$prev" = --settings ]; then found="$a"; fi; prev="$a"; done`,
     `rule=$(grep -o '"[A-Za-z]*(/[^"]*)"' "$found" 2>/dev/null | head -n 1 | tr -d '"')`,
-    `if [ -n "$rule" ]; then printf 'Permission deny rule (%s): %s is not matched by file permission checks\\n' "$found" "$rule" >&2; fi`,
+    `if [ -n "$rule" ]; then printf 'Permission deny rule (%s): %s ${NOT_MATCHED_MARK}\\n' "$found" "$rule" >&2; fi`,
   ].join('; ')
 }
 
@@ -109,7 +110,7 @@ function namesAnOwnersTwinDead(): string {
     `prev=''; found=''`,
     `for a in "$@"; do if [ "$prev" = --settings ]; then found="$a"; fi; prev="$a"; done`,
     `rule=$(grep -o '"[A-Za-z]*(/[^"]*)"' "$found" 2>/dev/null | head -n 1 | tr -d '"')`,
-    `if [ -n "$rule" ]; then twin="Write(\${rule#*(}"; line="Permission deny rule (.claude/settings.json): $twin is not matched by file permission checks — only Edit(path) rules are. Use $rule instead (Edit rules cover all file-editing tools)."; printf '%s\\n%s\\n' "$line" "$line" >&2; fi`,
+    `if [ -n "$rule" ]; then twin="Write(\${rule#*(}"; line="Permission deny rule (.claude/settings.json): $twin ${NOT_MATCHED_MARK} — only Edit(path) rules are. Use $rule instead (Edit rules cover all file-editing tools)."; printf '%s\\n%s\\n' "$line" "$line" >&2; fi`,
   ].join('; ')
 }
 
