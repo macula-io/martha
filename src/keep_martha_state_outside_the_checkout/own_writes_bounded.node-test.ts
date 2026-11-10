@@ -69,6 +69,11 @@ test('a complete last line whose newline was lost is kept, so a crash does not d
   mkdirSync(ownWritesDirectory(state), { recursive: true, mode: 0o700 })
   writeFileSync(filePath(state, 'launch-1'), `${JSON.stringify(first)}${NEWLINE}${JSON.stringify(lost)}`, { mode: STATE_FILE_MODE })
   assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [first, lost] })
+  // The next write keeps it too, and gives it back the newline it lost rather than dropping it (martha#157).
+  const next = ownWrite({ path: '/project/third.txt', tool_use_id: 'toolu_3' })
+  kept(state, next)
+  assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [first, lost, next] })
+  assert.equal(readFileSync(filePath(state, 'launch-1'), 'utf8'), `${JSON.stringify(first)}${NEWLINE}${JSON.stringify(lost)}${NEWLINE}${JSON.stringify(next)}${NEWLINE}`)
 })
 
 test('a bad line with a newline after it still refuses the file, whether it is last or in the middle (martha#157)', (t) => {

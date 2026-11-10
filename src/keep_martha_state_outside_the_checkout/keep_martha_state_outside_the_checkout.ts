@@ -374,13 +374,12 @@ export const START_AGAIN = 'Start the member again: each start keeps a file of i
  */
 export const WHAT_A_SIGNED_RUN_NEEDS = "A run sees a file only when the signed branch holds it or a member's own write vouches for it: commit it to the signed branch, or remove it."
 
-/** What the text of a launch's file holds: its records, the first finished line that is not one, and its unfinished tail. */
+/** What the text of a launch's file holds: its records, and the first finished line that is not one. */
 interface RecordsOfText {
+  /** The records kept, a whole one whose newline the writer never finished counting with them. */
   readonly writes: readonly OwnWrite[]
   /** The number of the first line that was finished and is not an own write, or undefined when every one of them is. */
   readonly badLine: number | undefined
-  /** The last line, when the writer never finished it: '' when it did. */
-  readonly unfinished: string
 }
 
 /** The text of a launch's file, read as the records it holds. */
@@ -391,7 +390,11 @@ function recordsOf(text: string): RecordsOfText {
     .filter((line) => line !== '')
     .map(ownWriteOfLine)
   const bad = parsed.indexOf(undefined)
-  return { writes: parsed.filter((write): write is OwnWrite => write !== undefined), badLine: bad === -1 ? undefined : bad + 1, unfinished: text.slice(finished.length) }
+  const kept = parsed.filter((write): write is OwnWrite => write !== undefined)
+  // A whole record whose newline the disk did not take is a record, and is counted with the rest, so a rewrite of
+  // the file keeps it rather than dropping it (martha#157).
+  const last = finished === text ? undefined : ownWriteOfLine(text.slice(finished.length))
+  return { writes: last === undefined ? kept : [...kept, last], badLine: bad === -1 ? undefined : bad + 1 }
 }
 
 /**
@@ -403,10 +406,9 @@ function recordsOf(text: string): RecordsOfText {
 function readOwnWritesOf(path: string, remedy: string): OwnWrites {
   const read = readStateFile(path)
   if ('refusal' in read) return read
-  const { writes, badLine, unfinished } = recordsOf(read.text)
+  const { writes, badLine } = recordsOf(read.text)
   if (badLine !== undefined) return untrusted(path, `line ${badLine} is not an ${ONE_OWN_WRITE}`, remedy)
-  const last = unfinished === '' ? undefined : ownWriteOfLine(unfinished)
-  return { writes: last === undefined ? writes : [...writes, last] }
+  return { writes }
 }
 
 /**
