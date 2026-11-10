@@ -547,7 +547,8 @@ const isUnder = (path: string, folder: string): boolean => path === folder || pa
  */
 function hooksInMarkdown(user: string, managed: ManagedSettingsPlace, markdown: OwnersMarkdown, syncedOff: boolean): string[] {
   const syncedFolder = join(dirname(user), SKILLS_KIND, SYNCED_SKILLS_FOLDER)
-  const walked = markdownFolders(user, managed, markdown.kinds).map((folder) => markdownUnder(folder, new Set(), TRASH_FOLDER))
+  const skillsFolders = new Set([join(dirname(user), SKILLS_KIND), join(managed.dir, MANAGED_MARKDOWN_FOLDER, SKILLS_KIND)])
+  const walked = markdownFolders(user, managed, markdown.kinds).map((folder) => markdownUnder(folder, new Set(), skillsFolders.has(folder) ? TRASH_FOLDER : undefined))
   const read = walked
     .flatMap((one) => one.files)
     .filter((path) => !(syncedOff && isUnder(path, syncedFolder)))

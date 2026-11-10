@@ -360,3 +360,12 @@ test('a synced skill is judged until the owner or the admin turns account sync o
   writeFileSync(approved, JSON.stringify({ syncClaudeAiSkills: false }))
   assert.ok(watch.check()?.includes(synced), "the approved copy is Martha's own: the setting there must not take the owner's account skills away without the owner")
 })
+
+test('the trash depth is the skills folder’s alone: a file below an entry of a trash under agents or commands is still read, because the host loads those at any depth', (t) => {
+  const { watch, skills } = watchOver(t, {})
+  const agents = join(dirname(skills), 'agents')
+  const below = join(agents, TRASH_FOLDER, 'entry', 'helper.md')
+  mkdirSync(dirname(below), { recursive: true })
+  writeFileSync(below, HOOKED)
+  assert.ok(watch.check()?.includes(below), watch.check() ?? 'not read')
+})
