@@ -188,8 +188,10 @@ Claude Code may hand the review to its own agent. Martha follows that agent:
 its start, its stop and every call it makes are recorded, so the answer it
 hands back is placed by that record. While an agent is between its start and
 its stop, the reviewer's shell commands are refused — the agent's text has no
-call to be placed on yet — though it can still read files, and once the agent
-stops and Martha saw every call it made answered, the shell comes back.
+call to be placed on yet — though it can still read files. Once the agent
+stops, the shell comes back if Martha saw every call the agent made and
+answered all of them; an agent whose calls Martha saw none of is one it cannot
+vouch for, and the shell stays closed.
 
 What that costs: a review that reads outside the approved tree still closes the
 reviewer's shell on that read, as any other text from a stranger does. A review

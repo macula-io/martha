@@ -42,7 +42,8 @@ import {
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
-import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { arrivalOfPrompt, CLAUDE_CODE_COMPLETION_ORIGIN, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries, type PromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { completionInANotification } from '../name_the_completion_of_an_agent/name_the_completion_of_an_agent.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
@@ -117,15 +118,20 @@ interface RelayState {
   readonly broken: Map<string, string>
   /** The agents this host has started under a session, by the id the host stamps (martha#170). */
   readonly agents: Map<string, AgentRun>
+  /**
+   * The spawns the member's own calls made, by the call's `tool_use_id` and the agent it started, session by session
+   * (martha#170): what a completion notice is checked against, since nothing else ties the notice to this member.
+   */
+  readonly spawned: Map<string, Map<string, string>>
 }
 
 /**
  * One agent the host started under a member's session (martha#170), and whether it may be vouched for.
  *
- * The host stamps `agent_id` on a SubagentStart and a SubagentStop, and on every tool call the agent makes under the
- * member's own session id; the member's own calls carry none. So the launcher can name an agent and can count what it
- * did, which is what "vouched" needs: seen to start, seen to stop, every call it made answered here, and nothing those
- * calls read that the gate counts.
+ * The host stamps `agent_id` on a SubagentStart and a SubagentStop, and `agentId` on every tool call the agent makes
+ * under the member's own session id; the member's own calls carry neither. So the launcher can name an agent and can
+ * count what it did, which is what "vouched" needs: seen to start, seen to stop, every call it made answered here,
+ * and nothing those calls read that the gate counts.
  */
 interface AgentRun {
   readonly session_id: string
@@ -147,22 +153,33 @@ interface AgentRun {
  * Whether an agent may be vouched for: seen to start, seen to stop, every call it made answered here, and nothing those
  * calls read that the gate counts — an agent's answer is its own work on the member's own inputs only if it read no
  * text from outside them.
+ *
+ * At least one call must also have been seen. An empty set of calls is what a launcher reading the wrong field sees
+ * as well, so it is never agreement: the launcher has to have watched this agent answer something (martha#170's
+ * finding, where `calls_seen=0` vouched for everything).
  */
 function vouchedRun(run: AgentRun | undefined): boolean {
   return (
-    run !== undefined && run.started && run.stopped && run.calls_recorded.length === 0 && [...run.calls_seen].every((id) => run.calls_answered.has(id))
+    run !== undefined &&
+    run.started &&
+    run.stopped &&
+    run.calls_recorded.length === 0 &&
+    run.calls_seen.size > 0 &&
+    [...run.calls_seen].every((id) => run.calls_answered.has(id))
   )
 }
 
-/** The agent a call names, if the host stamped one: absent for the member's own calls. */
+/** The agent a call names, if the host stamped one: `agentId` on a call the agent made, absent on the member's own. */
 function agentIdOf(call: Body): string | undefined {
-  const id = call['agent_id']
+  const id = call['agentId']
   return isText(id) ? id : undefined
 }
 
-/** How this launcher knows the agent a tool result hands back (martha#170). */
-function agentStateOf(state: RelayState, id: unknown): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  if (!isText(id)) return undefined
+/** What this launcher knows of one agent, as an answer that belongs to it is placed by it (martha#170). */
+type AgentPlace = { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' }
+
+/** How this launcher knows the agent a tool result hands back, from what it holds and never from what the call claims. */
+function placeOf(state: RelayState, id: string): AgentPlace {
   const run = state.agents.get(id)
   if (run === undefined) return { id, state: 'unknown' }
   if (vouchedRun(run)) return { id, state: 'vouched' }
@@ -179,9 +196,10 @@ function agentsRunning(state: RelayState, session: HostSession): readonly string
 /**
  * The agent a tool result belongs to, however the host names it (martha#170).
  *
- * The host stamps the id on the answer for the member's own call (`tool_response.agentId`). When the *agent* makes
- * the call it stamps the id on the call instead and the answer carries none: a real `SubagentHandback` is the agent's
- * own report to its caller, its output is `{success, message}`, and the only id is the one on the call.
+ * The host stamps the id on the answer for the member's own call (`tool_response.agentId`, which the relay carries at
+ * `result`). When the *agent* makes the call it stamps the id on the call instead and the answer carries none: a real
+ * `SubagentHandback` is the agent's own report to its caller, its output is `{success, message}`, and the only id is
+ * the one on the call.
  *
  * The id on the call is looked up in the launcher's own run table, exactly as the answer's id is: whatever the call
  * carries, the answer is placed by what this launcher knows of that agent and never by the fact that a call named one.
@@ -190,15 +208,20 @@ function agentsRunning(state: RelayState, session: HostSession): readonly string
  * vouched, is unknown and records on B7 at once.
  * So a handback cannot be used to hand text into the turn and be done with it: vouched, it is the agent's own work on
  * the member's own inputs; anything else, the shell closes on its text.
+ *
+ * The host answers a background spawn the moment it launches, before that agent's own start reaches the launcher, so
+ * the answer's id is the one case a run is made rather than looked for: the member's own spawn is an agent the
+ * launcher holds — the shell is refused until its stop — not one it never saw (martha#170's finding 2).
  */
-function agentOfAResult(
-  state: RelayState,
-  call: { readonly agent_id: string | undefined },
-  answer: unknown,
-): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  const fromTheAnswer = agentIdIn(answer)
-  if (fromTheAnswer !== undefined) return agentStateOf(state, fromTheAnswer)
-  return call.agent_id === undefined ? undefined : agentStateOf(state, call.agent_id)
+function agentOfAResult(state: RelayState, session: HostSession, call: NamedCall, answer: unknown): AgentPlace | undefined {
+  const spawned = agentIdIn(answer)
+  if (spawned !== undefined) {
+    const howItWasAsked = call.input['tool_use_id']
+    if (isText(howItWasAsked)) spawnsOf(state, session.id).set(howItWasAsked, spawned)
+    runOf(state, session, spawned)
+    return placeOf(state, spawned)
+  }
+  return call.agent === undefined ? undefined : placeOf(state, call.agent)
 }
 
 /** The launcher's answers for one member. */
@@ -209,6 +232,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
     sessions: new Map<string, HostSession>(),
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
+    spawned: new Map<string, Map<string, string>>(),
   }
   let queue: Promise<unknown> = Promise.resolve()
 
@@ -330,21 +354,67 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   if (typeof body.text !== 'string' || !isBody(origin) || !isText(origin.kind)) {
     return refused('the prompt carries no text or no origin the engine stamped')
   }
-  const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
+  const carries = whatAPromptCarries(body)
+  // A completion this launcher can place is the agent's own work on the member's own inputs, like any other vouched
+  // answer: it records nothing, and the shell stays (martha#170). Every other task notification stays another
+  // session's message, which is what the declaration above says.
+  if (origin.kind === CLAUDE_CODE_COMPLETION_ORIGIN && aCompletionThisLauncherVouches(state, session, body.text, carries)) {
+    return answered(TAKEN)
+  }
+  const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, carries)
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   return why === undefined ? answered(TAKEN) : refused(why)
 }
 
-function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined } | undefined {
+/**
+ * Whether this prompt is a background agent's completion this launcher can place (martha#170).
+ *
+ * The engine stamps `task-notification` on a finished background task and also on a GitHub webhook, a PR steward and
+ * the session inbox from any sender, so the origin says only "a task notification". What settles it is the pair the
+ * notice carries: the task it is about, and the call that started it. The launcher holds that pair only when it
+ * answered that spawn itself, and the task must be an agent it vouched for. The notice's own words decide nothing.
+ */
+function aCompletionThisLauncherVouches(state: RelayState, session: HostSession, text: string, carries: PromptCarries): boolean {
+  // A turn the engine marked as carrying a command's expansion or anything else it wrote is never placed here, as
+  // every prompt marked that way is not (rule 5, ../name_the_source_of_a_prompt).
+  if (carries.command || carries.meta) return false
+  const completion = completionInANotification(text)
+  if (completion === undefined) return false
+  if (spawnsOf(state, session.id).get(completion.tool_use_id) !== completion.task_id) return false
+  const run = state.agents.get(completion.task_id)
+  return run !== undefined && run.session_id === session.id && vouchedRun(run)
+}
+
+/** A tool call the relay named, and the agent that made it when the host stamped one (martha#170). */
+interface NamedCall {
+  readonly tool: string
+  /** The call's own fields, the tool's name left out. */
+  readonly input: Body
+  /** The agent that made this call: absent on every one of the member's own calls. */
+  readonly agent: string | undefined
+}
+
+function callOf(body: Body): NamedCall | undefined {
   const call = body.call
   if (!isBody(call) || !isText(call.tool)) return undefined
   const { tool, ...input } = call
-  return { tool, input, agent_id: agentIdOf(call) }
+  return { tool, input, agent: agentIdOf(call) }
 }
 
-/** The agent a tool result hands back, as the host stamps it: `tool_response.agentId` (martha#170). */
-function agentIdIn(answer: unknown): unknown {
-  return isBody(answer) ? answer['agentId'] : undefined
+/** The agent a tool result belongs to, as the host stamps it: `tool_response.agentId`, which the relay carries at `result` (martha#170). */
+function agentIdIn(answer: unknown): string | undefined {
+  const response = isBody(answer) ? answer['result'] : undefined
+  const id = isBody(response) ? response['agentId'] : undefined
+  return isText(id) ? id : undefined
+}
+
+/** The spawns the member's own calls made, by the call's `tool_use_id` and the agent it started (martha#170). */
+function spawnsOf(state: RelayState, session_id: string): Map<string, string> {
+  const held = state.spawned.get(session_id)
+  if (held !== undefined) return held
+  const made = new Map<string, string>()
+  state.spawned.set(session_id, made)
+  return made
 }
 
 /** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
@@ -427,11 +497,17 @@ async function subagentStarted(state: RelayState, body: Body): Promise<RelayRepl
  *
  * A vouched agent's answer is nothing new and the shell stays. Any other agent's answer is a subagent's text: it is
  * recorded on B7 here, so the shell closes from this moment on, whichever call the member makes next.
+ *
+ * One stop is not an agent's answer at all: the host fires a further `SubagentStop` when the member's own turn ends,
+ * naming an id it never started, with no agent type on it and pointing at a transcript it never wrote (martha#170's
+ * finding 4). Recording that closed the shell on the member's own turn-end, so an id this launcher holds no run of
+ * and no type for records nothing. Anything the host does name — a type, or an agent it started — is placed as before.
  */
 async function subagentStopped(state: RelayState, body: Body): Promise<RelayReply> {
   const session = sessionNamed(state, body.session_id)
   if (typeof session === 'string') return refused(session)
   if (!isText(body.agent_id)) return refused('the agent stop names no agent')
+  if (state.agents.get(body.agent_id) === undefined && !isText(body.agent_type)) return answered(TAKEN)
   const run = runOf(state, session, body.agent_id)
   run.stopped = true
   if (vouchedRun(run)) return answered(TAKEN)
@@ -500,11 +576,11 @@ function recheckBeforeRecording(place: MemberRelayPlace, session: HostSession, c
 async function recordToolResult(
   state: RelayState,
   session: HostSession,
-  call: { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined },
+  call: NamedCall,
   answer: unknown,
 ): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
   const { place } = state
-  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
+  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, session, call, answer) : undefined
   const taken = isMcpToolCall(call.tool)
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(

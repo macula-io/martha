@@ -508,18 +508,23 @@ The rules the seam keeps, and a host must not work around:
   it. Martha's hooks record the agent's start, its stop, and every tool call it
   makes, so that answer is placed by the record rather than by the tool's name.
   It is **vouched for** when the launcher saw the host say the agent started
-  under this session, saw it stop, answered every call the agent made, and none
-  of those calls read text this gate counts: then the answer records nothing
-  and the shell stays. Anything less — an agent it never saw start, one still
-  running, a call it did not answer, an agent that read a file outside the
-  approved tree or ran a command — places the answer on B7, and the shell
-  closes as for any other subagent result. Nothing of the stranger's reaches
-  an agent except through its own calls, and each of those is answered here,
-  so a vouched answer is the member's own work on the member's own inputs.
+  under this session, saw it stop, saw at least one call the agent made and
+  answered every one of them, and none of those calls read text this gate
+  counts: then the answer records nothing and the shell stays. Anything less —
+  an agent it never saw start, one still running, one whose calls it saw none
+  of, a call it did not answer, an agent that read a file outside the approved
+  tree or ran a command — places the answer on B7, and the shell closes as for
+  any other subagent result. Nothing of the stranger's reaches an agent except
+  through its own calls, and each of those is answered here, so a vouched
+  answer is the member's own work on the member's own inputs. An agent whose
+  calls the launcher saw none of is never vouched for, even though "every call
+  it made was answered" would hold over an empty set: an empty set is also what
+  a launcher reading the wrong field sees, so it is never taken as agreement.
   The id that places an answer comes from the answer when the member spawned
-  the agent (`tool_response.agentId`), and from the call when the agent hands
-  its report back itself: a real `SubagentHandback` carries `agent_id` on the
-  call and its output is `{success, message}` with no id on it. That id is
+  the agent (`tool_response.agentId`, which the relay carries at `result`), and
+  from the call when the agent hands its report back itself: a real
+  `SubagentHandback` carries `agentId` on the call and its output is
+  `{success, message}` with no id on it. That id is
   looked up in the launcher's own record like any other, never believed
   because a call carried it: a handback naming an agent the launcher has a
   run of and has not seen stop records nothing there and the stop decides,
@@ -528,6 +533,31 @@ The rules the seam keeps, and a host must not work around:
   way to hand text into the turn and be done: vouched, it is the agent's own
   work on the member's own inputs; anything else, the shell closes on its
   text.
+  A spawn is the one case where the id makes a run rather than looking one up.
+  The host answers a background spawn the moment it launches — `async_launched`,
+  with the agent's id — and only afterwards says that agent started, so the
+  answer for the member's own `Agent` call is placed as an agent the launcher
+  holds, and the shell is refused until its stop, rather than recorded as an
+  unknown agent's answer on the spot.
+  **The completion arrives as a `task-notification`.** That is the origin the
+  engine stamps on a finished background task, and it is the same origin it
+  stamps on a GitHub webhook, a PR steward and the session inbox from any
+  sender, so the origin alone places nothing. What settles it is the pair the
+  notice carries: the task it is about, and the tool call that started it. Both
+  are looked up in the launcher's own record — the call one it answered, the
+  task the agent that call's answer named — and the task must be an agent it
+  vouched for. The notice must also be the whole of the prompt, name exactly
+  one task and one call, and carry neither a command nor an engine meta mark.
+  A notification that fails any of that stays another session's message (A6),
+  exactly as it does for a stranger's GitHub comment. The notice's own words
+  otherwise decide nothing: it is accepted only as the answer of an agent whose
+  every call was already accounted for.
+  **One stop is not an agent's answer.** When the member's own turn ends, the
+  host fires a further `SubagentStop` naming an id it never started, carrying
+  no agent type and pointing at a transcript it never wrote. That is the host's
+  own report of the turn, not text an agent handed over, and it records
+  nothing. A stop that names an agent type, or one for an agent the launcher
+  holds a run of, is placed as any other stop.
   Two consequences are worth saying plainly. While any agent of the session is
   between its start and its stop, the shell is refused: the agent's text has no
   call to be placed on, so the launcher reads the state it has, and reading
@@ -778,11 +808,11 @@ Every later start in that folder is held to `SESSION_START_DEADLINE_MS`.
 | Host event (the relay) | The launcher's call |
 |---|---|
 | settings `SessionStart` (`classic.SessionStart`: the host's `source` and `session_id`) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`; the mod's own `session.start` carries neither field |
-| `prompt.submit` (`text`, and the `origin` the engine stamped where it queued the prompt) | `takeInTurn(session, arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind), bindNothing)`; a prompt Martha itself submits comes back as `plugin`, and is recorded like any other |
+| `prompt.submit` (`text`, and the `origin` the engine stamped where it queued the prompt) | `takeInTurn(session, arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind), bindNothing)`; a prompt Martha itself submits comes back as `plugin`, and is recorded like any other. A `task-notification` whose task and call are ones the launcher holds, and whose agent is vouched for, is the completion of an agent's answer and records nothing (martha#170) |
 | `tool.call`, before `next` | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
 | `tool.call`, after `next` | `recheckLaunch(launch)`, then for an `mcp__` tool `takeInTurn(session, { source: 'mcp_result' }, bindNothing)` |
 | `classic.SubagentStart` (`agent_id`, `agent_type`, the member's `session_id`) | the agent is recorded as started under that session, by id (martha#170) |
-| `classic.SubagentStop`, and the completion it carries | the agent is recorded as stopped; a vouched agent's answer records nothing and any other's is `takeInTurn(session, { source: 'subagent' }, …)`, which is B7 |
+| `classic.SubagentStop`, and the completion it carries | the agent is recorded as stopped; a vouched agent's answer records nothing and any other's is `takeInTurn(session, { source: 'subagent' }, …)`, which is B7. A stop for an id the launcher holds no run of, with no agent type on it, is the host's own turn-end report and records nothing (martha#170) |
 
 The launcher starts the host as `prepareLaunch` says, with the owner's
 arguments first (`--mcp-config` takes every argument after it up to the next

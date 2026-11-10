@@ -3091,30 +3091,78 @@ test('a name the owner did not sign is not exempt, even with a receipt and the r
 // A background agent hands its answer into the member's turn with no tool result to place it on, so the launcher's
 // own record of the agent — its start, its calls, its stop — is what places that answer: on nothing when the agent is
 // vouched for, on B7 when it is not.
+//
+// Every shape below is the host's own, taken from a live run of Claude Code 2.1.322 (martha#170's finding): the id on
+// a call an agent makes is `agentId`; the id on the member's own spawn is at `result.agentId`, and the spawn's answer
+// arrives before the agent's start; the completion is delivered as a prompt whose origin is `task-notification` and
+// whose text names the task and the call that started it; and the host fires one further `SubagentStop` at the end of
+// the member's own turn, for an id it never started and with no agent type on it.
 
-/** One agent's answer as the host stamps it: `tool_response.agentId`, on the member's own call (martha#170). */
-const anAgentsAnswer = (agentId: string, status = 'completed') => ({ agentId, status, content: [{ type: 'text', text: 'reviewed' }] })
+/** A call an agent made: the host stamps `agentId` on it, and none at all on the member's own calls. */
+const anAgentCall = (agent_id: string, tool_use_id: string, more: Record<string, unknown> = {}) => ({
+  agentId: agent_id,
+  tool_use_id,
+  ...more,
+})
+
+/** The member's own spawn's answer as the relay carries it: the host's `tool_response` is at `result` (martha#170). */
+const aSpawnAnswer = (agentId: string, status = 'async_launched', isAsync = true) => ({
+  ref: 1,
+  result: { isAsync, status, agentId },
+  text: 'Async agent launched successfully.',
+})
+
+/** The host's completion of a foreground agent's call, as `tool_response` (martha#170). */
+const aFinishedAnswer = (agentId: string) => aSpawnAnswer(agentId, 'completed', false)
 
 const agentStart = (agent_id: string, session_id = SESSION) => ({ session_id, agent_id, agent_type: 'general-purpose' })
-const agentStop = (agent_id: string, session_id = SESSION) => ({ session_id, agent_id, agent_type: 'general-purpose', last_assistant_message: 'no findings' })
+const agentStop = (agent_id: string, session_id = SESSION, agent_type = 'general-purpose') => ({
+  session_id,
+  agent_id,
+  agent_type,
+  last_assistant_message: 'Finished reading.',
+})
+
+/** The host's own turn-end report (martha#170): an id it never started, an empty agent type, and no transcript. */
+const theHostsTurnEndReport = (session_id = SESSION) => ({
+  session_id,
+  agent_id: 'ag-the-hosts-own-turn',
+  agent_type: '',
+  last_assistant_message: 'Done.',
+})
+
+/** The notice the engine delivers into the member's turn, in its own words (martha#170). */
+const theCompletion = (task_id: string, tool_use_id: string, result = 'Finished reading.') => `<task-notification>
+<task-id>${task_id}</task-id>
+<tool-use-id>${tool_use_id}</tool-use-id>
+<output-file>/srv/project/sessions/tasks/${task_id}.output</output-file>
+<status>completed</status>
+<summary>Agent "Read the notes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>${result}</result>
+<usage><subagent_tokens>7</subagent_tokens><tool_uses>1</tool_uses><duration_ms>417</duration_ms></usage>
+</task-notification>`
 
 /** A session started, an agent started under it, and the agent's one call answered or left unanswered. */
-async function anAgentUnderASession(t: TestContext, options: { readonly answerItsCall: boolean }): Promise<{ asking: Answering; session_id: string; agent_id: string }> {
+async function anAgentUnderASession(
+  t: TestContext,
+  options: { readonly answerItsCall: boolean; readonly agent_id?: string; readonly session_id?: string },
+): Promise<{ asking: Answering; session_id: string; agent_id: string; inside: string }> {
   const place = placeFor(t)
   const asking = answering(place)
-  const session_id = 'agent-session-1'
-  const agent_id = 'ag-0000000000001'
+  const session_id = options.session_id ?? 'agent-session-1'
+  const agent_id = options.agent_id ?? 'ag-0000000000001'
   await asking.relay.answer('session_started', start('startup', session_id))
   assert.deepEqual(await asking.relay.answer('subagent_started', agentStart(agent_id, session_id)), TAKEN_REPLY)
   // The agent reads a file in the tree the owner approved, which records nothing: a review of the approved tree is the
   // case this design is for, and a command's output would record A13 and close the shell on its own row (martha#127).
   const inside = join(place.checkout, 'README.md')
-  const itsCall = { session_id, call: { tool: 'Read', tool_use_id: 'tu-agent-1', agent_id, file_path: inside } }
+  const itsCall = { session_id, call: anAgentCall(agent_id, 'tu-agent-1', { tool: 'Read', file_path: inside }) }
   assert.deepEqual(await asking.relay.answer('tool_called', itsCall), ALLOW_REPLY)
   if (options.answerItsCall) {
-    assert.equal((await asking.relay.answer('tool_answered', { session_id, call: itsCall.call, answer: { file: { filePath: inside, content: 'a checkout' } } })).answered, true)
+    assert.equal((await asking.relay.answer('tool_answered', { session_id, call: itsCall.call, answer: { result: { type: 'text' } } })).answered, true)
   }
-  return { asking, session_id, agent_id }
+  return { asking, session_id, agent_id, inside }
 }
 
 /** The launcher's answer to the member's own shell call after all of the above. */
@@ -3131,6 +3179,28 @@ test('a background agent’s completion from an agent the launcher cannot vouch 
   assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('B7:null'), 'the completion is recorded on B7')
 })
 
+test('an agent’s own calls are the ones the launcher counts, by the field the host stamps on them (martha#170)', async (t) => {
+  // The host spells the id `agentId` on a call its agent makes, and not `agent_id`. Both halves below pin that
+  // spelling: a call left unanswered is not vouched for, and one answered call is what makes an agent vouched for at
+  // all — a launcher reading the wrong field sees no call, and so never vouches for anyone (martha#170's finding 1).
+  const unanswered = await anAgentUnderASession(t, { answerItsCall: false })
+  assert.ok(isDenied(await afterTheAgent(unanswered, unanswered.agent_id, true), /subagent/), 'a call left unanswered is not vouched for')
+  const answered = await anAgentUnderASession(t, { answerItsCall: true, agent_id: 'ag-0000000000002', session_id: 'agent-session-2' })
+  assert.deepEqual(await afterTheAgent(answered, answered.agent_id, true), ALLOW_REPLY, 'the agent whose one call was answered keeps the shell')
+})
+
+test('an agent that made no call at all is never vouched for: an empty set is what a misread field looks like too (martha#170)', async (t) => {
+  const place = placeFor(t)
+  const asking = answering(place)
+  const session_id = 'agent-session-no-calls'
+  await asking.relay.answer('session_started', start('startup', session_id))
+  await asking.relay.answer('subagent_started', agentStart('ag-never-called', session_id))
+  assert.deepEqual(await asking.relay.answer('subagent_stopped', agentStop('ag-never-called', session_id)), TAKEN_REPLY)
+  const denied = await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
+  assert.ok((await recordedPaths(asking.rows, session_id)).includes('B7:null'), 'the stop records what it cannot vouch for')
+})
+
 test('a vouched agent’s completion keeps the shell (martha#170, case 2)', async (t) => {
   const pair = await anAgentUnderASession(t, { answerItsCall: true })
   assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY)
@@ -3145,32 +3215,68 @@ test('while an agent is between its start and its stop the shell is refused, and
   assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY)
 })
 
-test('the member’s own Agent result is placed by tool_response.agentId, never by the tool name (martha#170, case 4)', async (t) => {
-  const vouched = await anAgentUnderASession(t, { answerItsCall: true })
-  const spawnResult = await vouched.asking.relay.answer('tool_answered', {
-    session_id: vouched.session_id,
-    call: { tool: 'Agent', tool_use_id: 'tu-spawn', prompt: 'review' },
-    answer: anAgentsAnswer(vouched.agent_id),
-  })
-  assert.equal(spawnResult.answered, true)
-  assert.deepEqual(await afterTheAgent(vouched, vouched.agent_id, true), ALLOW_REPLY, 'a vouched agent’s answer adds nothing')
-
-  const stranger = answering(placeFor(t))
-  await stranger.relay.answer('session_started', start('startup', 'agent-session-2'))
-  await stranger.relay.answer('tool_answered', {
-    session_id: 'agent-session-2',
-    call: { tool: 'Agent', tool_use_id: 'tu-spawn-2', prompt: 'review' },
-    answer: anAgentsAnswer('ag-never-seen-00001'),
-  })
-  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, 'agent-session-2'))
-  assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
+test('the member’s own spawn is placed by the id the host stamps at result.agentId, and holds the shell until that agent stops (martha#170, case 4)', async (t) => {
+  // The host answers a background spawn the moment it launches, before the agent's own start reaches the launcher
+  // (martha#170's finding 2). Recording that answer on B7 closed the shell on the member's own spawn; treating the id
+  // as an agent the launcher holds, not one it has never seen, is what lets the stop decide.
+  const place = placeFor(t)
+  const asking = answering(place)
+  const session_id = 'agent-session-spawn'
+  const inside = join(place.checkout, 'README.md')
+  await asking.relay.answer('session_started', start('startup', session_id))
+  const spawn = { session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn', prompt: 'review the range' } }
+  assert.deepEqual(await asking.relay.answer('tool_called', spawn), ALLOW_REPLY)
+  const answered = await asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer('ag-spawned-0001') })
+  assert.deepEqual(answered, TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(asking.rows, session_id), [], 'the spawn’s own answer records nothing while its agent runs')
+  // The shell is held while that agent runs, and reading is not.
+  assert.ok(isDenied(await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)), /has not stopped/))
+  assert.deepEqual(await asking.relay.answer('tool_called', call('Read', { file_path: inside }, session_id)), ALLOW_REPLY)
+  // The agent starts, reads inside the approved tree, and stops: the spawn the member made is the agent it vouched for.
+  await asking.relay.answer('subagent_started', agentStart('ag-spawned-0001', session_id))
+  const itsCall = { session_id, call: anAgentCall('ag-spawned-0001', 'tu-agent-9', { tool: 'Read', file_path: inside }) }
+  assert.deepEqual(await asking.relay.answer('tool_called', itsCall), ALLOW_REPLY)
+  await asking.relay.answer('tool_answered', { session_id, call: itsCall.call, answer: { result: { type: 'text' } } })
+  assert.deepEqual(await asking.relay.answer('subagent_stopped', agentStop('ag-spawned-0001', session_id)), TAKEN_REPLY)
+  assert.deepEqual(await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)), ALLOW_REPLY)
 })
 
-test('a handback the agent makes itself is placed by the agent_id on its call, and a vouched agent keeps the shell (martha#170, case 5)', async (t) => {
+test('a spawn whose agent the host never starts, and never stops, holds the member’s shell rather than recording a stranger’s answer (martha#170)', async (t) => {
+  const place = placeFor(t)
+  const asking = answering(place)
+  const session_id = 'agent-session-spawn-2'
+  await asking.relay.answer('session_started', start('startup', session_id))
+  const spawn = { session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn-2', prompt: 'review' } }
+  await asking.relay.answer('tool_called', spawn)
+  await asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer('ag-never-started-1') })
+  assert.deepEqual(await recordedPaths(asking.rows, session_id), [])
+  assert.ok(isDenied(await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)), /never saw start/))
+})
+
+test('a foreground agent’s result is placed by the same key: result.agentId on a call that carries none (martha#170, case 4)', async (t) => {
+  // The member spawned this one and its work is done by the time the answer lands: the id is on the answer, never on
+  // the member's own call, and the run is vouched for only once its start, its calls and its stop were all seen.
+  const place = placeFor(t)
+  const asking = answering(place)
+  const session_id = 'agent-session-foreground'
+  const inside = join(place.checkout, 'README.md')
+  await asking.relay.answer('session_started', start('startup', session_id))
+  await asking.relay.answer('subagent_started', agentStart('ag-foreground-01', session_id))
+  const itsCall = { session_id, call: anAgentCall('ag-foreground-01', 'tu-agent-f', { tool: 'Read', file_path: inside }) }
+  await asking.relay.answer('tool_called', itsCall)
+  await asking.relay.answer('tool_answered', { session_id, call: itsCall.call, answer: { result: { type: 'text' } } })
+  await asking.relay.answer('subagent_stopped', agentStop('ag-foreground-01', session_id))
+  const spawn = { session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn-f', prompt: 'review' } }
+  await asking.relay.answer('tool_called', spawn)
+  assert.deepEqual(await asking.relay.answer('tool_answered', { ...spawn, answer: aFinishedAnswer('ag-foreground-01') }), TAKEN_REPLY)
+  assert.deepEqual(await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)), ALLOW_REPLY)
+})
+
+test('a handback the agent makes itself is placed by the agentId on its call, and a vouched agent keeps the shell (martha#170, case 5)', async (t) => {
   const pair = await anAgentUnderASession(t, { answerItsCall: true })
-  // The real shape (Claude Code 2.1.322): the subagent calls SubagentHandback itself, so the call carries the
-  // hook-level agent_id and the answer is `{success, message}` with no agentId on it at all.
-  const itsHandback = { session_id: pair.session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback', agent_id: pair.agent_id, message: 'my findings' } }
+  // The agent calls SubagentHandback itself, so the call carries the host's id and the answer is `{success, message}`
+  // with no agent id on it at all.
+  const itsHandback = { session_id: pair.session_id, call: anAgentCall(pair.agent_id, 'tu-handback', { tool: 'SubagentHandback', message: 'my findings' }) }
   assert.deepEqual(await pair.asking.relay.answer('tool_called', itsHandback), ALLOW_REPLY)
   const handback = await pair.asking.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
   assert.equal(handback.answered, true)
@@ -3187,7 +3293,7 @@ test('a handback from an agent the launcher never saw start holds the shell whil
   const session_id = 'agent-session-3'
   const agent_id = 'ag-never-seen-00002'
   await stranger.relay.answer('session_started', start('startup', session_id))
-  const itsHandback = { session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-2', agent_id, message: 'my findings' } }
+  const itsHandback = { session_id, call: anAgentCall(agent_id, 'tu-handback-2', { tool: 'SubagentHandback', message: 'my findings' }) }
   assert.deepEqual(await stranger.relay.answer('tool_called', itsHandback), ALLOW_REPLY)
   await stranger.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
   // A handback records nothing by itself, so the stop is what places the text: until it lands the agent holds the
@@ -3207,7 +3313,7 @@ test('a handback naming an agent the launcher has no run of records B7 and refus
   const stranger = answering(placeFor(t))
   const session_id = 'agent-session-5'
   await stranger.relay.answer('session_started', start('startup', session_id))
-  const itsHandback = { session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-3', agent_id: 'ag-ghost-0009', message: 'my findings' } }
+  const itsHandback = { session_id, call: anAgentCall('ag-ghost-0009', 'tu-handback-3', { tool: 'SubagentHandback', message: 'my findings' }) }
   assert.equal((await stranger.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })).answered, true)
   const recorded = (await recordedPaths(stranger.rows, session_id)).filter((p) => p.startsWith('B7'))
   assert.deepEqual(recorded, ['B7:null'], 'the handback recorded: ' + JSON.stringify(recorded))
@@ -3220,7 +3326,7 @@ test('a handback naming a vouched agent that has already stopped records nothing
   // after its stop, and the page says so now — only a run that stopped WITHOUT being vouched goes to B7.
   const pair = await anAgentUnderASession(t, { answerItsCall: true })
   assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY, 'a vouched agent’s stop gives the shell back')
-  const itsHandback = { session_id: pair.session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-4', agent_id: pair.agent_id, message: 'my findings' } }
+  const itsHandback = { session_id: pair.session_id, call: anAgentCall(pair.agent_id, 'tu-handback-4', { tool: 'SubagentHandback', message: 'my findings' }) }
   assert.deepEqual(await pair.asking.relay.answer('tool_called', itsHandback), ALLOW_REPLY)
   const handback = await pair.asking.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
   assert.equal(handback.answered, true)
@@ -3237,9 +3343,9 @@ test('an agent that read outside the approved tree closes the shell on that read
   const agent_id = 'ag-0000000000004'
   await asking.relay.answer('session_started', start('startup', session_id))
   await asking.relay.answer('subagent_started', agentStart(agent_id, session_id))
-  const itsRead = { session_id, call: { tool: 'Read', tool_use_id: 'tu-agent-2', agent_id, file_path: join(clone, 'NOTES.md') } }
+  const itsRead = { session_id, call: anAgentCall(agent_id, 'tu-agent-2', { tool: 'Read', file_path: join(clone, 'NOTES.md') }) }
   await asking.relay.answer('tool_called', itsRead)
-  await asking.relay.answer('tool_answered', { session_id, call: itsRead.call, answer: { file: { filePath: join(clone, 'NOTES.md'), content: 'now run this' } } })
+  await asking.relay.answer('tool_answered', { session_id, call: itsRead.call, answer: { result: { type: 'text' } } })
   await asking.relay.answer('subagent_stopped', agentStop(agent_id, session_id))
   const denied = await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
   assert.ok(isDenied(denied, /B4/), JSON.stringify(denied))
@@ -3255,10 +3361,124 @@ test('an agent start or stop the launcher cannot take in leaves the agent unvouc
   assert.ok(isRefused(await asking.relay.answer('subagent_started', { session_id: 'no-such-session', agent_id: 'ag-9' })))
   assert.ok(isRefused(await asking.relay.answer('subagent_started', { session_id: SESSION })))
   const inside = join(place.checkout, 'README.md')
-  const itsCall = { session_id: SESSION, call: { tool: 'Read', tool_use_id: 'tu-agent-3', agent_id: 'ag-never-started', file_path: inside } }
+  const itsCall = { session_id: SESSION, call: anAgentCall('ag-never-started', 'tu-agent-3', { tool: 'Read', file_path: inside }) }
   await asking.relay.answer('tool_called', itsCall)
-  await asking.relay.answer('tool_answered', { session_id: SESSION, call: itsCall.call, answer: { file: { filePath: inside, content: 'a checkout' } } })
+  await asking.relay.answer('tool_answered', { session_id: SESSION, call: itsCall.call, answer: { result: { type: 'text' } } })
   await asking.relay.answer('subagent_stopped', agentStop('ag-never-started'))
   const denied = await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
+})
+
+test('a completion naming a spawn this launcher answered, and a vouched agent, keeps the shell (martha#170, case 2)', async (t) => {
+  // The completion arrives as a prompt whose origin is `task-notification` — the same origin the engine stamps on a
+  // GitHub webhook or the session inbox from any sender — so the text is placed by the two ids it carries, both of
+  // them looked up in the launcher's own record, never by the origin or by the notice's word for itself.
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  const spawn = { session_id: pair.session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn-n', prompt: 'review the range' } }
+  await pair.asking.relay.answer('tool_called', spawn)
+  await pair.asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer(pair.agent_id) })
+  assert.deepEqual(await pair.asking.relay.answer('subagent_stopped', agentStop(pair.agent_id, pair.session_id)), TAKEN_REPLY)
+  const before = await recordedPaths(pair.asking.rows, pair.session_id)
+  assert.deepEqual(await pair.asking.relay.answer('prompt_submitted', prompt('task-notification', theCompletion(pair.agent_id, 'tu-spawn-n'), pair.session_id)), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(pair.asking.rows, pair.session_id), before, 'a vouched completion records nothing')
+  assert.deepEqual(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), ALLOW_REPLY)
+})
+
+test('a completion naming a call this launcher never answered stays another session’s message (martha#170, case 3)', async (t) => {
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  await pair.asking.relay.answer('subagent_stopped', agentStop(pair.agent_id, pair.session_id))
+  // Nothing here spawned this agent: there is no tool-use id in the launcher's record to match, so the notice is the
+  // text of whoever else sent it.
+  await pair.asking.relay.answer('prompt_submitted', prompt('task-notification', theCompletion(pair.agent_id, 'tu-never-answered'), pair.session_id))
+  assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('A6:null'), 'an unplaceable notification is another session’s message')
+  assert.ok(isDenied(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), /A6/))
+})
+
+test('a completion whose task id is not the agent that call spawned stays another session’s message (martha#170, case 3)', async (t) => {
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  const spawn = { session_id: pair.session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn-x', prompt: 'review' } }
+  await pair.asking.relay.answer('tool_called', spawn)
+  await pair.asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer(pair.agent_id) })
+  await pair.asking.relay.answer('subagent_stopped', agentStop(pair.agent_id, pair.session_id))
+  // A second agent, vouched for on its own id and started by nobody here: the one case a call-shaped check would let
+  // through. The call matches and the task is an agent the launcher vouches for, but the notice is not about the
+  // agent that call started, so it places nothing.
+  const another = 'ag-someone-else'
+  await pair.asking.relay.answer('subagent_started', agentStart(another, pair.session_id))
+  const itsCall = { session_id: pair.session_id, call: anAgentCall(another, 'tu-agent-else', { tool: 'Read', file_path: pair.inside }) }
+  await pair.asking.relay.answer('tool_called', itsCall)
+  await pair.asking.relay.answer('tool_answered', { session_id: pair.session_id, call: itsCall.call, answer: { result: { type: 'text' } } })
+  await pair.asking.relay.answer('subagent_stopped', agentStop(another, pair.session_id))
+  await pair.asking.relay.answer('prompt_submitted', prompt('task-notification', theCompletion(another, 'tu-spawn-x'), pair.session_id))
+  assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('A6:null'))
+})
+
+test('a completion naming an agent the launcher cannot vouch for stays another session’s message (martha#170, case 1)', async (t) => {
+  const pair = await anAgentUnderASession(t, { answerItsCall: false })
+  const spawn = { session_id: pair.session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn-u', prompt: 'review' } }
+  await pair.asking.relay.answer('tool_called', spawn)
+  await pair.asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer(pair.agent_id) })
+  await pair.asking.relay.answer('subagent_stopped', agentStop(pair.agent_id, pair.session_id))
+  await pair.asking.relay.answer('prompt_submitted', prompt('task-notification', theCompletion(pair.agent_id, 'tu-spawn-u'), pair.session_id))
+  assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('A6:null'), 'an agent it cannot vouch for places nothing')
+  assert.ok(isDenied(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), /subagent/))
+})
+
+test('a completion carrying a command or a meta mark is never placed as an agent’s answer (martha#170, case 3)', async (t) => {
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  const spawn = { session_id: pair.session_id, call: { tool: 'Agent', tool_use_id: 'tu-spawn-m', prompt: 'review' } }
+  await pair.asking.relay.answer('tool_called', spawn)
+  await pair.asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer(pair.agent_id) })
+  await pair.asking.relay.answer('subagent_stopped', agentStop(pair.agent_id, pair.session_id))
+  const marked = prompt('task-notification', theCompletion(pair.agent_id, 'tu-spawn-m'), pair.session_id, { isMeta: true })
+  await pair.asking.relay.answer('prompt_submitted', marked)
+  assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('A6:null'), 'a marked notification is not the agent’s')
+})
+
+test('the host’s own turn-end report records nothing, while a stop that names an agent type still does (martha#170, fix 4)', async (t) => {
+  // The host fires one more SubagentStop at the end of the member's own turn, for an id it never started and with no
+  // agent type on it (martha#170's finding 4). Recording that as an agent's answer closed the shell on the member's
+  // own turn-end; a stop that names a type, or one for an agent this launcher saw, is placed as before.
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY, 'a vouched agent’s stop gives the shell back')
+  const before = await recordedPaths(pair.asking.rows, pair.session_id)
+  assert.deepEqual(await pair.asking.relay.answer('subagent_stopped', theHostsTurnEndReport(pair.session_id)), TAKEN_REPLY)
+  assert.deepEqual(await recordedPaths(pair.asking.rows, pair.session_id), before, 'the host’s own report records nothing')
+  assert.deepEqual(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), ALLOW_REPLY)
+  // A stop for an id this launcher never started, but naming an agent type, is still an agent's text on B7.
+  const typed = agentStop('ag-never-started-typed', pair.session_id)
+  assert.deepEqual(await pair.asking.relay.answer('subagent_stopped', typed), TAKEN_REPLY)
+  assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('B7:null'), 'a typed stop with no start still records B7')
+})
+
+test('the background review that closed this gate on 2.1.322 now keeps it: the observed run, replayed (martha#170)', async (t) => {
+  // Every event below is the order the recorded host raised them in, hit for hit, for the run whose `touch ran.txt`
+  // was refused on B7 (martha#170's finding). The agent reads inside the approved tree and every call it makes is
+  // answered, so its completion keeps the shell and the member's own command runs.
+  const place = placeFor(t)
+  const asking = answering(place)
+  const session_id = 'agent-session-observed'
+  const agent_id = 'ag-a75775446143dc5cb'
+  const inside = join(place.checkout, 'README.md')
+  await asking.relay.answer('session_started', start('startup', session_id))
+  assert.deepEqual(await asking.relay.answer('prompt_submitted', prompt('composer', 'Do the first task.', session_id)), TAKEN_REPLY)
+  const spawn = { session_id, call: { description: 'Read the notes', prompt: 'Read the notes file.', subagent_type: 'general-purpose', tool: 'Agent', tool_use_id: 'tu-standin-1' } }
+  assert.deepEqual(await asking.relay.answer('tool_called', spawn), ALLOW_REPLY)
+  assert.deepEqual(await asking.relay.answer('tool_answered', { ...spawn, answer: aSpawnAnswer(agent_id) }), TAKEN_REPLY)
+  assert.deepEqual(await asking.relay.answer('subagent_started', agentStart(agent_id, session_id)), TAKEN_REPLY)
+  const membersRead = { session_id, call: { file_path: inside, tool: 'Read', tool_use_id: 'tu-standin-2' } }
+  assert.deepEqual(await asking.relay.answer('tool_called', membersRead), ALLOW_REPLY)
+  const itsRead = { session_id, call: anAgentCall(agent_id, 'tu-standin-3', { file_path: inside, tool: 'Read' }) }
+  assert.deepEqual(await asking.relay.answer('tool_called', itsRead), ALLOW_REPLY)
+  await asking.relay.answer('tool_answered', { session_id, call: membersRead.call, answer: { result: { type: 'text' } } })
+  await asking.relay.answer('tool_answered', { session_id, call: itsRead.call, answer: { result: { type: 'text', file: { filePath: inside, content: 'a project' } } } })
+  const lastRead = { session_id, call: { file_path: inside, tool: 'Read', tool_use_id: 'tu-standin-4' } }
+  assert.deepEqual(await asking.relay.answer('tool_called', lastRead), ALLOW_REPLY)
+  assert.deepEqual(await asking.relay.answer('subagent_stopped', agentStop(agent_id, session_id)), TAKEN_REPLY)
+  await asking.relay.answer('tool_answered', { session_id, call: lastRead.call, answer: { result: { type: 'text' } } })
+  assert.deepEqual(await asking.relay.answer('prompt_submitted', prompt('task-notification', theCompletion(agent_id, 'tu-standin-1'), session_id)), TAKEN_REPLY)
+  assert.deepEqual(await asking.relay.answer('tool_called', { session_id, call: { command: 'touch ran.txt', tool: 'Bash', tool_use_id: 'tu-standin-6' } }), ALLOW_REPLY)
+  assert.deepEqual(await asking.relay.answer('subagent_stopped', theHostsTurnEndReport(session_id)), TAKEN_REPLY)
+  const recorded = await recordedPaths(asking.rows, session_id)
+  assert.deepEqual(recorded, [OWNER_TYPED], 'the record holds the owner’s own turn and nothing this run took in')
 })

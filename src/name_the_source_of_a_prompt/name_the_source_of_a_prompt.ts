@@ -98,7 +98,10 @@ export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
     // An unpromoted task notification: besides a background task finishing, the
     // engine stamps it on a GitHub webhook, a PR steward, a signal subscription,
     // other triggers and the session inbox from any sender. A stranger's GitHub
-    // comment must not read as a subagent's result.
+    // comment must not read as a subagent's result, so this declaration places
+    // every one of them as another session's message. A launcher that holds the
+    // agent the notice is about may place that one on its own record instead
+    // (CLAUDE_CODE_COMPLETION_ORIGIN, martha#170).
     'task-notification': 'cross_session',
     // Another session's model wrote it.
     peer: 'cross_session',
@@ -124,6 +127,14 @@ export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
     plugin: 'mcp_result',
   },
 }
+
+/**
+ * The origin kind a background agent's completion arrives on when the engine has no subkind to promote it to
+ * (martha#170). The declaration above places that kind as another session's message, and rightly: the same kind
+ * carries texts from senders this member never saw. A launcher that can name the agent the notice is about — the task
+ * and the call its own record holds, and that agent vouched for — places that one on the agent's own record instead.
+ */
+export const CLAUDE_CODE_COMPLETION_ORIGIN = 'task-notification'
 
 /** Where a prompt with this origin kind, carrying this, came from, in the contract's words. */
 export function arrivalOfPrompt(declared: HostPromptOrigins, kind: string, carries: PromptCarries): Arrival {

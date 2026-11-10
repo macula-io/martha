@@ -311,8 +311,9 @@ const pageAsWords = (path: string): readonly string[] => sentencesIn(readFileSyn
 test('the getting-started guide says a vouched agent keeps the shell, and what still closes it (martha#170)', () => {
   const guide = pageAsWords('../../docs/getting-started.md')
   const claims = [
-    "While an agent is between its start and its stop, the reviewer's shell commands are refused — the agent's text has no call to be placed on yet — though it can still read files, and once the agent stops and Martha saw every call it made answered, the shell comes back.",
-    "What that costs: a review that reads outside the approved tree still closes the reviewer's shell on that read, as any other text from a stranger does.",
+    "While an agent is between its start and its stop, the reviewer's shell commands are refused — the agent's text has no call to be placed on yet — though it can still read files.",
+    'Once the agent stops, the shell comes back if Martha saw every call the agent made and answered all of them; an agent whose calls Martha saw none of is one it cannot vouch for, and the shell stays closed.',
+    'What that costs: a review that reads outside the approved tree still closes the reviewer\'s shell on that read, as any other text from a stranger does.',
   ]
   for (const claim of claims) assert.ok(guide.includes(claim), `the guide says: ${claim}`)
 })
@@ -320,10 +321,15 @@ test('the getting-started guide says a vouched agent keeps the shell, and what s
 test('the publish gate says what vouched for means, and what an agent that is not records (martha#170)', () => {
   const page = pageAsWords('../../docs/publish-gate.md')
   const claims = [
-    'It is vouched for when the launcher saw the host say the agent started under this session, saw it stop, answered every call the agent made, and none of those calls read text this gate counts: then the answer records nothing and the shell stays.',
-    'Anything less — an agent it never saw start, one still running, a call it did not answer, an agent that read a file outside the approved tree or ran a command — places the answer on B7, and the shell closes as for any other subagent result.',
-    'The id that places an answer comes from the answer when the member spawned the agent (tool_response.agentId), and from the call when the agent hands its report back itself: a real SubagentHandback carries agent_id on the call and its output is {success, message} with no id on it.',
+    'It is vouched for when the launcher saw the host say the agent started under this session, saw it stop, saw at least one call the agent made and answered every one of them, and none of those calls read text this gate counts: then the answer records nothing and the shell stays.',
+    'Anything less — an agent it never saw start, one still running, one whose calls it saw none of, a call it did not answer, an agent that read a file outside the approved tree or ran a command — places the answer on B7, and the shell closes as for any other subagent result.',
+    'An agent whose calls the launcher saw none of is never vouched for, even though "every call it made was answered" would hold over an empty set: an empty set is also what a launcher reading the wrong field sees, so it is never taken as agreement.',
+    'The id that places an answer comes from the answer when the member spawned the agent (tool_response.agentId, which the relay carries at result), and from the call when the agent hands its report back itself: a real SubagentHandback carries agentId on the call and its output is {success, message} with no id on it.',
     "That id is looked up in the launcher's own record like any other, never believed because a call carried it: a handback naming an agent the launcher has a run of and has not seen stop records nothing there and the stop decides, while one naming an id the launcher has no run of, or whose run stopped without being vouched, places its text on B7 at once.",
+    'A spawn is the one case where the id makes a run rather than looking one up.',
+    'The host answers a background spawn the moment it launches — async_launched, with the agent\'s id — and only afterwards says that agent started, so the answer for the member\'s own Agent call is placed as an agent the launcher holds, and the shell is refused until its stop, rather than recorded as an unknown agent\'s answer on the spot.',
+    'What settles it is the pair the notice carries: the task it is about, and the tool call that started it.',
+    'That is the host\'s own report of the turn, not text an agent handed over, and it records nothing.',
     "That hold is on the member's own calls: an agent's own calls are the ones being recorded, so a nested agent's shell is not held while its own child runs.",
     'A stop the launcher never sees leaves its agent holding the shell for the rest of the session, and nothing in the session lifts it: like any other closed row, the owner\'s way out is to stop the member and start a fresh one, which reads no handover.',
   ]

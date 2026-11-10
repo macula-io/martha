@@ -146,7 +146,9 @@
 <text class="t-desc" x="680" y="628">the turn: attribute_a_cross_session_sender,</text>
 <text class="t-desc" x="680" y="644">carry_taint_across_a_refresh, and the shell</text>
 <text class="t-desc" x="680" y="660">gate's reading; trust_only_signed_lists is</text>
-<text class="t-desc" x="680" y="676">how every list a gate trusts is opened</text>
+<text class="t-desc" x="680" y="676">how every list a gate trusts is opened;</text>
+<text class="t-desc" x="680" y="692">name_the_completion_of_an_agent reads the</text>
+<text class="t-desc" x="680" y="708">notice that names the agent it is about</text>
 <rect class="b-cmp" x="32" y="890" width="300" height="140" rx="10"/>
 <text class="t-code" x="48" y="918">install_the_pinned_installer</text>
 <text class="t-type" x="48" y="936">[the installer this release pins]</text>
