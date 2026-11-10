@@ -176,6 +176,28 @@ function agentsRunning(state: RelayState, session: HostSession): readonly string
     .map((run) => (run.started ? 'an agent' : 'an agent this launcher never saw start'))
 }
 
+/**
+ * The agent a tool result belongs to, however the host names it (martha#170).
+ *
+ * The host stamps the id on the answer for the member's own call (`tool_response.agentId`). When the *agent* makes
+ * the call it stamps the id on the call instead and the answer carries none: a real `SubagentHandback` is the agent's
+ * own report to its caller, its output is `{success, message}`, and the only id is the one on the call.
+ *
+ * Such a call is made from inside the agent's run, so its answer is placed as a running agent's answer: it records
+ * nothing, and the `SubagentStop` decides, exactly as it does for every other answer of a running agent. Nothing
+ * slips past that: an agent this launcher never saw start holds the member's shell for as long as it runs and records
+ * B7 when it stops, so a handback cannot be used to hand text into the turn and be done with it.
+ */
+function agentOfAResult(
+  state: RelayState,
+  call: { readonly agent_id: string | undefined },
+  answer: unknown,
+): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
+  const fromTheAnswer = agentIdIn(answer)
+  if (fromTheAnswer !== undefined) return agentStateOf(state, fromTheAnswer)
+  return call.agent_id === undefined ? undefined : { id: call.agent_id, state: 'running' }
+}
+
 /** The launcher's answers for one member. */
 export function memberRelay(place: MemberRelayPlace): MemberRelay {
   const state: RelayState = {
@@ -310,11 +332,11 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   return why === undefined ? answered(TAKEN) : refused(why)
 }
 
-function callOf(body: Body): { readonly tool: string; readonly input: Body } | undefined {
+function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined } | undefined {
   const call = body.call
   if (!isBody(call) || !isText(call.tool)) return undefined
   const { tool, ...input } = call
-  return { tool, input }
+  return { tool, input, agent_id: agentIdOf(call) }
 }
 
 /** The agent a tool result hands back, as the host stamps it: `tool_response.agentId` (martha#170). */
@@ -475,11 +497,11 @@ function recheckBeforeRecording(place: MemberRelayPlace, session: HostSession, c
 async function recordToolResult(
   state: RelayState,
   session: HostSession,
-  call: { readonly tool: string; readonly input: Body; readonly agent_id?: string },
+  call: { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined },
   answer: unknown,
 ): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
   const { place } = state
-  const agent = isAnAgentsAnswerTool(call.tool) ? agentStateOf(state, agentIdIn(answer)) : undefined
+  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
   const taken = isMcpToolCall(call.tool)
     ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
     : takeInToolResult(
@@ -494,7 +516,8 @@ async function recordToolResult(
           read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
           host: thisMachine,
           // An agent's answer is placed by the agent, not by the tool's name alone (martha#170): the id is the one the
-          // host stamps on the result (`tool_response.agentId`), for the member's own Agent call and for a handback.
+          // host stamps on the answer (`tool_response.agentId`) for the member's own Agent call, and the one on the
+          // call itself when the agent hands its report back.
           ...(agent === undefined ? {} : { agent }),
         },
         place.binder,

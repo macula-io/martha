@@ -516,12 +516,33 @@ The rules the seam keeps, and a host must not work around:
   closes as for any other subagent result. Nothing of the stranger's reaches
   an agent except through its own calls, and each of those is answered here,
   so a vouched answer is the member's own work on the member's own inputs.
+  The id that places an answer comes from the answer when the member spawned
+  the agent (`tool_response.agentId`), and from the call when the agent hands
+  its report back itself: a real `SubagentHandback` carries `agent_id` on the
+  call and its output is `{success, message}` with no id on it. Such a handback
+  is an answer of a *running* agent — it records nothing there, and the stop
+  decides, which is also what keeps it from being a way to hand text into the
+  turn and be done: an agent this launcher never saw start holds the shell for
+  as long as it runs and records B7 when it stops.
   Two consequences are worth saying plainly. While any agent of the session is
   between its start and its stop, the shell is refused: the agent's text has no
   call to be placed on, so the launcher reads the state it has, and reading
-  files is still allowed. And a review that reads outside the approved tree — a
-  PR body, a `gh` comment — still closes the member's shell on its own row
-  (B3/B6); what #170 fixes is a review of the approved tree.
+  files is still allowed. That hold is on the **member's own** calls: an
+  agent's own calls are the ones being recorded, so a nested agent's shell is
+  not held while its own child runs. The leftover is small by construction —
+  whatever a child hands back reaches its parent as text on the parent's own
+  row, and the member's next call is answered from the session's record, so it
+  is taint-at-read, not a door. And a review that reads outside the approved
+  tree — a PR body, a `gh` comment — still closes the member's shell on its own
+  row (B3/B6); what #170 fixes is a review of the approved tree. A stop the
+  launcher never sees leaves its agent holding the shell for the rest of the
+  session, and nothing in the session lifts it: like any other closed row, the
+  owner's way out is to stop the member and start a fresh one, which reads no
+  handover. One residual is stated rather than proved: the recordings that fix
+  the host's order are separate files with no timestamps, so if a background
+  spawn's result reached the relay before its `SubagentStart`, that launch
+  would be placed on B7 — it fails closed, and no recording pins the order
+  either way.
 - **There is no release.** A member tainted once stays tainted through every
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the

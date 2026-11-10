@@ -301,6 +301,7 @@ function sentencesIn(page: string): readonly string[] {
   return page
     .replace(/\s+/g, ' ')
     .replace(/\*\*/g, '')
+    .replace(/`/g, '')
     .split(/(?<=[.!?]) /)
     .map((sentence) => sentence.trim())
 }
@@ -321,6 +322,9 @@ test('the publish gate says what vouched for means, and what an agent that is no
   const claims = [
     'It is vouched for when the launcher saw the host say the agent started under this session, saw it stop, answered every call the agent made, and none of those calls read text this gate counts: then the answer records nothing and the shell stays.',
     'Anything less — an agent it never saw start, one still running, a call it did not answer, an agent that read a file outside the approved tree or ran a command — places the answer on B7, and the shell closes as for any other subagent result.',
+    'The id that places an answer comes from the answer when the member spawned the agent (tool_response.agentId), and from the call when the agent hands its report back itself: a real SubagentHandback carries agent_id on the call and its output is {success, message} with no id on it.',
+    "That hold is on the member's own calls: an agent's own calls are the ones being recorded, so a nested agent's shell is not held while its own child runs.",
+    'A stop the launcher never sees leaves its agent holding the shell for the rest of the session, and nothing in the session lifts it: like any other closed row, the owner\'s way out is to stop the member and start a fresh one, which reads no handover.',
   ]
   for (const claim of claims) assert.ok(page.includes(claim), `the page says: ${claim}`)
 })

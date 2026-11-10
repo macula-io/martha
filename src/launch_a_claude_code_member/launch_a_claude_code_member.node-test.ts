@@ -3099,7 +3099,7 @@ const agentStart = (agent_id: string, session_id = SESSION) => ({ session_id, ag
 const agentStop = (agent_id: string, session_id = SESSION) => ({ session_id, agent_id, agent_type: 'general-purpose', last_assistant_message: 'no findings' })
 
 /** A session started, an agent started under it, and the agent's one call answered or left unanswered. */
-async function anAgentUnderASession(t: TestContext, options: { readonly answerItsCall: boolean; readonly handback: boolean }): Promise<{ asking: Answering; session_id: string; agent_id: string }> {
+async function anAgentUnderASession(t: TestContext, options: { readonly answerItsCall: boolean }): Promise<{ asking: Answering; session_id: string; agent_id: string }> {
   const place = placeFor(t)
   const asking = answering(place)
   const session_id = 'agent-session-1'
@@ -3125,19 +3125,19 @@ const afterTheAgent = async (pair: { asking: Answering; session_id: string }, ag
 
 test('a background agent’s completion from an agent the launcher cannot vouch for closes the shell (martha#170, case 1)', async (t) => {
   // Its one call was never answered here, so the agent is not vouched for.
-  const pair = await anAgentUnderASession(t, { answerItsCall: false, handback: false })
+  const pair = await anAgentUnderASession(t, { answerItsCall: false })
   const denied = await afterTheAgent(pair, pair.agent_id, true)
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
   assert.ok((await recordedPaths(pair.asking.rows, pair.session_id)).includes('B7:null'), 'the completion is recorded on B7')
 })
 
 test('a vouched agent’s completion keeps the shell (martha#170, case 2)', async (t) => {
-  const pair = await anAgentUnderASession(t, { answerItsCall: true, handback: false })
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
   assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY)
 })
 
 test('while an agent is between its start and its stop the shell is refused, and the stop gives it back (martha#170, case 3)', async (t) => {
-  const pair = await anAgentUnderASession(t, { answerItsCall: true, handback: false })
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
   const whileRunning = await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id))
   assert.ok(isDenied(whileRunning, /has not stopped/), JSON.stringify(whileRunning))
   const readOnly = await pair.asking.relay.answer('tool_called', call('Read', { file_path: join(tmpdir(), 'anything.md') }, pair.session_id))
@@ -3146,7 +3146,7 @@ test('while an agent is between its start and its stop the shell is refused, and
 })
 
 test('the member’s own Agent result is placed by tool_response.agentId, never by the tool name (martha#170, case 4)', async (t) => {
-  const vouched = await anAgentUnderASession(t, { answerItsCall: true, handback: false })
+  const vouched = await anAgentUnderASession(t, { answerItsCall: true })
   const spawnResult = await vouched.asking.relay.answer('tool_answered', {
     session_id: vouched.session_id,
     call: { tool: 'Agent', tool_use_id: 'tu-spawn', prompt: 'review' },
@@ -3166,25 +3166,38 @@ test('the member’s own Agent result is placed by tool_response.agentId, never 
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
 })
 
-test('a real SubagentHandback is placed the same way, vouched or not (martha#170, case 5)', async (t) => {
-  const vouched = await anAgentUnderASession(t, { answerItsCall: true, handback: true })
-  const handback = await vouched.asking.relay.answer('tool_answered', {
-    session_id: vouched.session_id,
-    call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback', message: 'my findings' },
-    answer: anAgentsAnswer(vouched.agent_id),
-  })
+test('a handback the agent makes itself is placed by the agent_id on its call, and a vouched agent keeps the shell (martha#170, case 5)', async (t) => {
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  // The real shape (Claude Code 2.1.322): the subagent calls SubagentHandback itself, so the call carries the
+  // hook-level agent_id and the answer is `{success, message}` with no agentId on it at all.
+  const itsHandback = { session_id: pair.session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback', agent_id: pair.agent_id, message: 'my findings' } }
+  assert.deepEqual(await pair.asking.relay.answer('tool_called', itsHandback), ALLOW_REPLY)
+  const handback = await pair.asking.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
   assert.equal(handback.answered, true)
-  assert.deepEqual(await afterTheAgent(vouched, vouched.agent_id, true), ALLOW_REPLY)
+  const recorded = (await recordedPaths(pair.asking.rows, pair.session_id)).filter((p) => p.startsWith('B7'))
+  assert.deepEqual(recorded, [], 'the handback recorded: ' + JSON.stringify(recorded))
+  // The agent is still inside its run when it hands back, so the shell stays held until its stop — and a vouched
+  // agent's stop gives it back.
+  assert.ok(isDenied(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), /has not stopped/))
+  assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY)
+})
 
+test('a handback from an agent the launcher never saw start holds the shell while it runs and records B7 when it stops (martha#170, case 5)', async (t) => {
   const stranger = answering(placeFor(t))
-  await stranger.relay.answer('session_started', start('startup', 'agent-session-3'))
-  await stranger.relay.answer('tool_answered', {
-    session_id: 'agent-session-3',
-    call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-2', message: 'my findings' },
-    answer: anAgentsAnswer('ag-never-seen-00002'),
-  })
-  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, 'agent-session-3'))
+  const session_id = 'agent-session-3'
+  const agent_id = 'ag-never-seen-00002'
+  await stranger.relay.answer('session_started', start('startup', session_id))
+  const itsHandback = { session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-2', agent_id, message: 'my findings' } }
+  assert.deepEqual(await stranger.relay.answer('tool_called', itsHandback), ALLOW_REPLY)
+  await stranger.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
+  // A handback records nothing by itself, so the stop is what places the text: until it lands the agent holds the
+  // shell, and when it lands an agent this launcher never saw start records B7.
+  const whileRunning = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  assert.ok(isDenied(whileRunning, /never saw start/), JSON.stringify(whileRunning))
+  assert.deepEqual(await stranger.relay.answer('subagent_stopped', agentStop(agent_id, session_id)), TAKEN_REPLY)
+  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
+  assert.ok((await recordedPaths(stranger.rows, session_id)).includes('B7:null'), 'the stop records the text it cannot vouch for')
 })
 
 test('an agent that read outside the approved tree closes the shell on that read, whatever its stop says (martha#170, case 7)', async (t) => {
