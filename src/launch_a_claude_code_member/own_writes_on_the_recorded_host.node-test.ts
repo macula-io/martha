@@ -22,14 +22,13 @@ import {
   type ModelScript,
   type RecordedHostRan,
 } from './drive_the_recorded_host.ts'
+import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
 
 const recordedHost = process.env[RECORDED_HOST_VARIABLE]
 const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
-/** How long one run may take, start to end, on a hosted runner. */
-const RUN_DEADLINE_MS = 120_000
 const CRLF_FILE = 'windows.txt'
 const OUTSIDER_BRANCH = 'outsider'
 /**
@@ -94,7 +93,7 @@ async function run(project: Project, requests: number, script: ModelScript): Pro
     owner_turn: OWNER_TURN,
     script,
     requests,
-    deadline_ms: RUN_DEADLINE_MS,
+    silence_ms: HOST_SILENCE_MS,
   })
 }
 
