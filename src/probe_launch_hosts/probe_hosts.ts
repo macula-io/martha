@@ -12,7 +12,7 @@
 // whose config only touches marker files there, and removes it.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -45,7 +45,7 @@ import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_se
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
-import { answerIn } from './what_the_host_answered.ts'
+import { memoryTheHostLoaded } from './what_the_host_loaded.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { absencesWithoutAHostProof, judgeRow } from './an_absence_row_proves_the_host_ran.ts'
 
@@ -720,8 +720,30 @@ interface RunResult {
   /** The host's exit status, or null when the launcher's gate refused it and no host ran. */
   readonly status: number | null
 }
-/** Each marker and whether it was started, or why the probe could not run. */
+
+/**
+ * How many times a row whose claim rests on the host's clean exit is made before its result
+ * stands (martha#223). A host that spent every turn it was given, or the model service failing,
+ * is not evidence about the tree: on one live run in five a row read `the host exited CLAIMED
+ * cleanly but exited 1` on an unchanged tree. A row that is really wrong is wrong in every
+ * attempt and is still reported.
+ */
+const ATTEMPTS_FOR_A_CLEAN_EXIT = 3
+
+/** Whether to make this run again instead of judging it: only a row that needs the host to have exited cleanly. */
+const worthTryingAgain = (probe: Probe, run: RunResult | string): boolean => probe.host_ok === true && typeof run !== 'string' && run.status !== 0
+
+/** One probe's row, made again where its claim is the host's clean exit and it did not get one. */
 function runProbe(probe: Probe): RunResult | string {
+  for (let attempt = 1; attempt < ATTEMPTS_FOR_A_CLEAN_EXIT; attempt += 1) {
+    const run = oneRunOfAProbe(probe)
+    if (!worthTryingAgain(probe, run)) return run
+  }
+  return oneRunOfAProbe(probe)
+}
+
+/** One run of a probe's host, in a scratch of its own. */
+function oneRunOfAProbe(probe: Probe): RunResult | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
   const checkout = join(scratch, 'checkout')
@@ -893,25 +915,24 @@ export function turnBudgets(): readonly { readonly what: string; readonly maxTur
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
 // session of a project, and a session in a git worktree loads the main clone's
-// folder. Each run plants a codeword there and asks for it: the control, by
-// hand with memory on, must say it, so a run that does not proves the off
-// switch and not a loader that never ran. Martha's planned launch must not, even
-// when the owner's environment says memory on, and must leave the folder holding
-// exactly what was planted. The folder is the owner's real one, removed after.
+// folder. Each run plants a codeword there and starts the host once: the control,
+// by hand with memory on, must be seen loading it, so a run that shows nothing
+// proves the off switch and not a loader that never ran. Martha's planned launch
+// must show nothing, even when the owner's environment says memory on, and must
+// leave the folder holding exactly what was planted. The folder is the owner's real
+// one, removed after.
+//
+// What was loaded is read from the host's own record of the session (martha#223),
+// not from an answer: the transcript quotes each file the host read in. Asking the
+// model used to be the row, and the model sometimes spent every turn it was given
+// without answering — one run in five, whatever the budget — so a tree where
+// nothing was wrong went red.
 
-const MEMORY_PROMPT = 'Is there a codeword in your memory or instructions? Reply with only the codeword, or NONE.'
 const MEMORY_INDEX = 'MEMORY.md'
 const MEMORY_NOTE = 'codeword.md'
 
-/**
- * The memory control's own run (martha#223): a look-up can take two tool calls — the index,
- * then the note it names — before the answer, and the answer is asked for as json so a run
- * that never answered can be told from one that answered "no codeword". The second reading
- * matters: silence used to be read as "the codeword was not said", which is the row the off
- * switch is supposed to make.
- */
-export const MEMORY_CLAUDE: readonly string[] = ['-p', '--max-turns', '4', '--model', 'haiku', '--output-format', 'json']
-
+/** The record the host writes its session into: a transcript, one json line per entry. */
+const SESSION_RECORD = '.jsonl'
 
 /** Every file under `dir`, relative, sorted. */
 function filesUnder(dir: string): string[] {
@@ -925,18 +946,25 @@ function memoryOn(): Record<string, string | undefined> {
   return env
 }
 
-/**
- * What one memory run showed: whether it named the codeword, or why there was no answer to
- * judge (martha#223). A run that stopped on its turn budget is not a run that answered "no",
- * and the row says which of the two it saw.
- */
-export function codewordVerdict(printed: string, codeword: string): boolean | string {
-  const answer = answerIn(printed)
-  return answer.answered ? answer.text.includes(codeword) : `no answer to judge: ${answer.why}`
+/** Every session record under the projects root, by path: what the host has written there so far. */
+function theRecordsUnder(root: string | undefined): readonly string[] {
+  if (root === undefined || !existsSync(root)) return []
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(SESSION_RECORD))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort()
 }
 
-/** One memory run: whether the reply named the codeword, or why it could not run. */
-function codewordSaid(
+/**
+ * What one memory run showed: whether the host recorded reading the codeword in, or why there
+ * was no record to read (martha#223). The record is written when the session starts, so a run
+ * whose model spent every turn still answers this row; a run that wrote no record at all is
+ * named, never read as "the codeword was not loaded".
+ *
+ * Only the records that appear while THIS run is the one running are read: both arms write into
+ * the same projects folder, and the other arm's record is not this run's answer.
+ */
+function theCodewordWasLoaded(
   scratch: string,
   cwd: string,
   args: readonly string[],
@@ -946,15 +974,19 @@ function codewordSaid(
 ): boolean | string {
   // Read before the host starts, so the folder it writes is one this run can name and take away.
   const before = theProjectFoldersThere(env)
+  const recordsBefore = new Set(theRecordsUnder(before.root))
   try {
-    const run = runTheHost('claude', [...MEMORY_CLAUDE, MEMORY_PROMPT, ...args], {
+    const run = runTheHost('claude', [...HEADLESS_CLAUDE, PROMPT, ...args], {
       cwd,
       env,
       timeout_ms: RUN_TIMEOUT_MS,
       pid_file,
     })
     if (run.error !== undefined) return `could not run: ${run.error}`
-    return codewordVerdict(printedText(run.stdout), codeword)
+    const written = theRecordsUnder(before.root).filter((path) => !recordsBefore.has(path))
+    if (written.length === 0) return 'the host wrote no session record, so there is nothing to read'
+    const record = written.map((path) => readFileSync(path, 'utf8')).join('\n')
+    return memoryTheHostLoaded(record).some((file) => file.text.includes(codeword))
   } finally {
     // The scratch itself goes when the whole memory probe is done; its folders go with each run.
     stopTheProcessesLeftIn(scratch)
@@ -991,8 +1023,8 @@ function memoryLines(scratch: string, memory: string, start: string, codeword: s
   const forcedOn = Object.fromEntries(Object.keys(CLAUDE_MEMORY_OFF).map((name) => [name, '0']))
   const group = (at: number) => join(scratch, `host-group-${at}`)
   return [
-    ['by hand, memory on: codeword said', codewordSaid(scratch, start, prepared.switches.args, memoryOn(), codeword, group(1)), true],
-    ["as Martha starts it, the owner's environment saying memory on: codeword said", codewordSaid(scratch, start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
+    ['by hand, memory on: the host recorded reading the codeword in', theCodewordWasLoaded(scratch, start, prepared.switches.args, memoryOn(), codeword, group(1)), true],
+    ["as Martha starts it, the owner's environment saying memory on: the host recorded reading the codeword in", theCodewordWasLoaded(scratch, start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
     ['the memory folder holds exactly what was planted', JSON.stringify(filesUnder(folder)) === JSON.stringify(planted), true],
   ]
 }
