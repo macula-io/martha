@@ -21,6 +21,16 @@ jobs:
   # Every link in every document resolves, relative ones included. A host that
   # answers slowly is retried before its link is called broken; the badge URLs
   # are scanned like any other link, so a renamed workflow still fails here.
+  #
+  # Two kinds of slowness, two retries. lychee's own `--max-retries` covers a
+  # request that TIMED OUT. It does not cover a host that answers 408/429/5xx:
+  # once a response is a RejectedStatusCode, lychee 0.24.2 retries 429 alone, so
+  # a 408 from shields.io failed this job in 10.7 s with no retry made
+  # (martha#231, after martha#40). `check_every_link_resolves` therefore repeats
+  # a run that failed only on those statuses, and fails at once -- by name -- on
+  # a failure no host recovers from, a 404 or a file that is not there. The
+  # planted dead link is held to both halves: lychee must refuse it, and so must
+  # the command the scan actually runs.
   links:
     name: links resolve
     runs-on: ubuntu-latest
@@ -33,6 +43,12 @@ jobs:
       LYCHEE_OPTIONS: '--no-progress --include-fragments --max-retries 4 --retry-wait-time 3 --timeout 30'
     steps:
       - uses: actions/checkout@v7
+      # This job runs this repository's own Node code now (check_every_link_resolves),
+      # so it runs on the Node the other Node jobs pin rather than on whatever the
+      # runner image happens to ship. No npm ci: the check imports nothing.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
       # The self-test plants a link to a file that is not there, outside the
       # checkout so the scan below never sees it, and holds the same options to
       # it: the job must still go red, and name that link when it does.
@@ -42,9 +58,10 @@ jobs:
           printf '[a page that is not there](missing-page.md)\n' > "${{ runner.temp }}/links-self-test/dead-link.md"
       - name: the check bites
         id: self_test
-        # The action version is anchored here and aliased below, so a hand bump
-        # cannot move one step and leave the other on the old action.
-        uses: &lychee_action lycheeverse/lychee-action@v2.9.0
+        # Pinned like every other action here. It also puts the pinned lychee on
+        # PATH for this job, which is the checker the scan below runs, so the two
+        # steps can never disagree about which lychee they mean.
+        uses: lycheeverse/lychee-action@v2.9.0
         with:
           args: ${{ env.LYCHEE_OPTIONS }} '${{ runner.temp }}/links-self-test/*.md'
           fail: false
@@ -61,11 +78,24 @@ jobs:
           test -n "$EXIT_CODE" \
             && test "$EXIT_CODE" -ne 0 \
             && grep -q missing-page.md "${{ runner.temp }}/links-self-test/report.md"
+      - name: the check below refuses it too, and names it
+        # lychee refusing the dead link is not enough: the scan below is this
+        # command, and a verdict that passed a dead link would be a check that
+        # cannot fail. Exit 1 (refused) is required, not any non-zero: exit 2 is
+        # "could not look", which must never read as a bite either.
+        run: |
+          status=0
+          npm run --silent check:links -- '${{ runner.temp }}/links-self-test/*.md' \
+            > "${{ runner.temp }}/links-self-test/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then
+            cat "${{ runner.temp }}/links-self-test/verdict.txt"
+            exit 1
+          fi
+          grep -q missing-page.md "${{ runner.temp }}/links-self-test/verdict.txt"
       - name: every link resolves
-        uses: *lychee_action
-        with:
-          args: ${{ env.LYCHEE_OPTIONS }} '**/*.md'
-          fail: true
+        # The check itself, and its retry of a host that said "not now". A green
+        # here means every link was seen to resolve; a red names the links.
+        run: npm run --silent check:links -- '**/*.md'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
