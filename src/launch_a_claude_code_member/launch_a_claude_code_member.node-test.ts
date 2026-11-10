@@ -3200,6 +3200,21 @@ test('a handback from an agent the launcher never saw start holds the shell whil
   assert.ok((await recordedPaths(stranger.rows, session_id)).includes('B7:null'), 'the stop records the text it cannot vouch for')
 })
 
+test('a handback naming an agent the launcher has no run of records B7 and refuses the shell at once (martha#170, case 5)', async (t) => {
+  // Uranus's probe r2: the answer arrives with no start and no tool_called before it, so the launcher has no run for
+  // this id at all. Placing it as a running agent's answer would let the handback hand text into the turn and record
+  // nothing, which is the hole r=2 opened; an id with no run is unknown, and unknown records on B7 (martha#170).
+  const stranger = answering(placeFor(t))
+  const session_id = 'agent-session-5'
+  await stranger.relay.answer('session_started', start('startup', session_id))
+  const itsHandback = { session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-3', agent_id: 'ag-ghost-0009', message: 'my findings' } }
+  assert.equal((await stranger.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })).answered, true)
+  const recorded = (await recordedPaths(stranger.rows, session_id)).filter((p) => p.startsWith('B7'))
+  assert.deepEqual(recorded, ['B7:null'], 'the handback recorded: ' + JSON.stringify(recorded))
+  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
+})
+
 test('an agent that read outside the approved tree closes the shell on that read, whatever its stop says (martha#170, case 7)', async (t) => {
   const place = placeFor(t)
   const clone = anotherClone(place)

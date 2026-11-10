@@ -183,10 +183,12 @@ function agentsRunning(state: RelayState, session: HostSession): readonly string
  * the call it stamps the id on the call instead and the answer carries none: a real `SubagentHandback` is the agent's
  * own report to its caller, its output is `{success, message}`, and the only id is the one on the call.
  *
- * Such a call is made from inside the agent's run, so its answer is placed as a running agent's answer: it records
- * nothing, and the `SubagentStop` decides, exactly as it does for every other answer of a running agent. Nothing
- * slips past that: an agent this launcher never saw start holds the member's shell for as long as it runs and records
- * B7 when it stops, so a handback cannot be used to hand text into the turn and be done with it.
+ * The id on the call is looked up in the launcher's own run table, exactly as the answer's id is: whatever the call
+ * carries, the answer is placed by what this launcher knows of that agent and never by the fact that a call named one.
+ * A run it saw start and has not stopped places the answer as a running agent's: it records nothing, and the
+ * `SubagentStop` decides. An id it has no run of, or one whose run has stopped, is unknown and records on B7 at once.
+ * So a handback cannot be used to hand text into the turn and be done with it: vouched, it is the agent's own work on
+ * the member's own inputs; anything else, the shell closes on its text.
  */
 function agentOfAResult(
   state: RelayState,
@@ -195,7 +197,7 @@ function agentOfAResult(
 ): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
   const fromTheAnswer = agentIdIn(answer)
   if (fromTheAnswer !== undefined) return agentStateOf(state, fromTheAnswer)
-  return call.agent_id === undefined ? undefined : { id: call.agent_id, state: 'running' }
+  return call.agent_id === undefined ? undefined : agentStateOf(state, call.agent_id)
 }
 
 /** The launcher's answers for one member. */
