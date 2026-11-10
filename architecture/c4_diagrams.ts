@@ -398,8 +398,8 @@ export function components(): Diagram {
     desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] })
   d.box({ kind: 'b-cmp', x: 348, y: 724, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'refuse_a_member_writing_owner_memory'], type: '[the Claude Code host]', code: true,
     desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools; refuse_a_member_', 'writing_owner_memory keeps a member\'s', 'writes out of the owner\'s memory'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 150, name: 'check_nothing_private_gets_in', names: ['check_nothing_private_gets_in'], type: '[this repository\'s own check]', code: true,
-    desc: ['A link to a private issue, an internal', 'host name or a private remote fails CI', 'by name, with a self-test that proves', 'the check still bites'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 150, name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves'], type: '[this repository\'s own checks]', code: true,
+    desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; a badge host that answers 408 is', 'asked again before its link is broken.', 'Each has a self-test that proves it bites'] })
 
   d.notes(24, 1058, [
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
