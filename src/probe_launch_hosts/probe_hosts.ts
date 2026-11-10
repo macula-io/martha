@@ -37,6 +37,7 @@ import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { absencesWithoutAHostProof, judgeRow } from './an_absence_row_proves_the_host_ran.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -128,6 +129,9 @@ function put(dir: string, name: string, content: string): void {
 }
 
 const linger = (marker: string) => `touch ${marker}; sleep ${LINGER_SECONDS}`
+
+/** The name a planted tool server is declared under, read back where a row needs the host to have listed it (martha#188). */
+const PLANTED_SERVER_NAME = 'planted'
 
 const claudeServer = (name: string, marker: string) =>
   JSON.stringify({ mcpServers: { [name]: { command: 'sh', args: ['-c', linger(marker)] } } })
@@ -299,8 +303,11 @@ const PROBES: readonly Probe[] = [
     what: 'Claude Code by hand, interactive health check: a project tool server',
     host: 'claude-code',
     command: claude('mcp', 'list'),
-    planted: (place) => put(place.checkout, CLAUDE_SERVERS, claudeServer('planted', place.marker('PLANTED_SERVER'))),
-    expected: { PLANTED_SERVER: false },
+    planted: (place) => put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER'))),
+    // The list it prints is the proof it ran and read this checkout's config: the claim is about the server it did NOT
+    // start, and a host that quit on the config would print no list at all (martha#188).
+    from_output: (_place: Place, printed: string) => ({ LISTED_SERVER: printed.includes(PLANTED_SERVER_NAME) }),
+    expected: { PLANTED_SERVER: false, LISTED_SERVER: true },
     planned: false,
   },
   {
@@ -308,7 +315,7 @@ const PROBES: readonly Probe[] = [
     host: 'claude-code',
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     planted: (place) => {
-      put(place.checkout, CLAUDE_SERVERS, claudeServer('planted', place.marker('PLANTED_SERVER')))
+      put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
       put(place.checkout, CLAUDE_SETTINGS, claudeHook(place.marker('PLANTED_HOOK')))
     },
     expected: { PLANTED_SERVER: true, PLANTED_HOOK: true },
@@ -319,7 +326,7 @@ const PROBES: readonly Probe[] = [
     host: 'opencode',
     command: opencode('debug', 'config'),
     planted: (place) => {
-      put(place.checkout, OPENCODE_CONFIG, opencodeServer('planted', place.marker('PLANTED_SERVER')))
+      put(place.checkout, OPENCODE_CONFIG, opencodeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
       put(place.checkout, join(OPENCODE_DIR, 'plugin', 'probe.ts'), opencodePlugin(place.marker('PLANTED_PLUGIN')))
     },
     expected: { PLANTED_SERVER: true, PLANTED_PLUGIN: true },
@@ -335,7 +342,7 @@ const PROBES: readonly Probe[] = [
       put(place.checkout, CLAUDE_SETTINGS, claudeHook(place.marker('APPROVED_HOOK')))
     },
     planted: (place) => {
-      put(place.checkout, CLAUDE_SERVERS, claudeServer('planted', place.marker('PLANTED_SERVER')))
+      put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
       put(place.checkout, CLAUDE_SETTINGS, claudeHook(place.marker('PLANTED_HOOK')))
     },
     expected: { APPROVED_SERVER: true, APPROVED_HOOK: true, PLANTED_SERVER: false, PLANTED_HOOK: false },
@@ -348,7 +355,7 @@ const PROBES: readonly Probe[] = [
     approved: (place) =>
       put(place.checkout, OPENCODE_CONFIG, opencodeServer('approved', place.marker('APPROVED_SERVER'))),
     planted: (place) => {
-      put(place.checkout, OPENCODE_CONFIG, opencodeServer('planted', place.marker('PLANTED_SERVER')))
+      put(place.checkout, OPENCODE_CONFIG, opencodeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
       put(place.checkout, join(OPENCODE_DIR, 'plugin', 'probe.ts'), opencodePlugin(place.marker('PLANTED_PLUGIN')))
     },
     expected: { APPROVED_SERVER: true, PLANTED_SERVER: false, PLANTED_PLUGIN: false },
@@ -361,7 +368,7 @@ const PROBES: readonly Probe[] = [
     approved: (place) =>
       put(place.checkout, OPENCODE_CONFIG, opencodeServer('approved', place.marker('APPROVED_SERVER'))),
     planted: (place) => {
-      put(place.checkout, OPENCODE_CONFIG, opencodeServer('planted', place.marker('PLANTED_SERVER')))
+      put(place.checkout, OPENCODE_CONFIG, opencodeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
       put(place.checkout, join(OPENCODE_DIR, 'plugin', 'probe.ts'), opencodePlugin(place.marker('PLANTED_PLUGIN')))
     },
     inherited: { OPENCODE_CONFIG_PROJECT_DISABLE: '0', OPENCODE_DISABLE_PROJECT_CONFIG: '0' },
@@ -569,6 +576,8 @@ const HOST_KEY_CASES: ReadonlyArray<{
   readonly name: string
   readonly keyLine: (value: string) => string
   readonly expected: Readonly<Record<string, boolean>>
+  /** A SessionStart hook in the owner's user settings, which proves the host ran while this agent's own hooks did not (martha#188). */
+  readonly owner_hook?: true
 }> = [
   {
     what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as `hooks` (the control for the two below)',
@@ -580,7 +589,10 @@ const HOST_KEY_CASES: ReadonlyArray<{
     what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as a binary-tagged scalar',
     name: 'hooks-key-binary-tagged',
     keyLine: (value) => `!!binary aG9va3M=: ${value}`,
-    expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: false },
+    // Both its own claims are absences, so the row also plants a SessionStart hook in the owner's user settings: that
+    // marker is the host reaching the session, and without it a host that quit on the agent file would pass (martha#188).
+    owner_hook: true,
+    expected: { OWNER_HOOK: true, AGENT_HOOK: false, AGENT_NOT_FOUND: false },
   },
   {
     what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key as a flow sequence with a comment before its colon',
@@ -597,7 +609,7 @@ const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
   approved: () => {},
   planted: () => {},
   planned: true,
-  owner_settings: () => JSON.stringify({}),
+  owner_settings: (place: Place) => JSON.stringify(one.owner_hook === true ? { hooks: touchAtStart(place.marker('OWNER_HOOK')) } : {}),
   owner_markdown: (place: Place): readonly OwnerMarkdownFile[] => [hostKeyAgent(place, one.name, one.keyLine)],
   expected: one.expected,
 }))
@@ -722,12 +734,6 @@ function gateSeen(probe: Probe, place: Place, refusal: string): Readonly<Record<
   return Object.fromEntries(Object.keys(probe.expected).map((name) => [name, name === 'GATE_REFUSED']))
 }
 
-const said = (started: boolean) => (started ? 'started' : 'not started')
-
-for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES, NO_PLACE).command))) {
-  console.log(`${command}: ${version(command)}`)
-}
-
 /** Runs one probe and prints each marker against its claim; a probe that cannot run, or a marker that differs, fails the run. */
 function reportProbe(probe: Probe): void {
   const run = runProbe(probe)
@@ -736,18 +742,10 @@ function reportProbe(probe: Probe): void {
     process.exitCode = 1
     return
   }
-  for (const [name, claimed] of Object.entries(probe.expected)) {
-    const matches = run.markers[name] === claimed
-    if (!matches) process.exitCode = 1
-    console.log(
-      `${probe.what}: ${name} ${said(run.markers[name] === true)}, ${matches ? 'as claimed' : `CLAIMED ${said(claimed)}`}`,
-    )
+  for (const line of judgeRow(probe, run)) {
+    if (line.failed) process.exitCode = 1
+    console.log(line.text)
   }
-  // A row whose claim is that nothing happened also says the host was there to not do it.
-  if (probe.host_ok !== true) return
-  const exitedOk = run.status === 0
-  if (!exitedOk) process.exitCode = 1
-  console.log(`${probe.what}: the host exited ${exitedOk ? 'cleanly, as claimed' : `CLAIMED cleanly but exited ${run.status ?? 'not at all'}`}`)
 }
 
 /** The host's project folders for scratch checkouts, so a run that leaves one behind fails. */
@@ -756,12 +754,6 @@ function scratchProjectFolders(): readonly string[] {
   if (projects === undefined) return []
   const root = dirname(projects)
   return existsSync(root) ? readdirSync(root).filter((name) => name.startsWith(`${projectKeyOf(join(tmpdir(), 'martha-probe-'))}`)) : []
-}
-const foldersBefore = new Set(scratchProjectFolders())
-
-if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
-  console.error(`no probe row for the spelling rule(s): ${SPELLINGS_WITHOUT_A_PROBE.join(', ')}`)
-  process.exitCode = 1
 }
 
 // --- the folders the host loads the owner's own text from (martha#154) -------
@@ -834,12 +826,15 @@ const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder
   }),
 )
 
-if (SWITCHES_WITHOUT_A_PROBE.length > 0) {
-  console.error(`the recorded host names no key to plant, so nothing probes: ${SWITCHES_WITHOUT_A_PROBE.join(', ')}`)
-  process.exitCode = 1
-}
-
-for (const probe of [...PROBES, ...OWNER_PROBES, ...SWITCH_PROBES, ...MARKDOWN_HOOK_PROBES, ...HOST_KEY_PROBES, ...OWNER_SCOPE_PROBES]) reportProbe(probe)
+/** Every row this run reports; the absence check reads the same list the run does, so a test can judge the real rows. */
+export const ALL_PROBES: readonly Probe[] = [
+  ...PROBES,
+  ...OWNER_PROBES,
+  ...SWITCH_PROBES,
+  ...MARKDOWN_HOOK_PROBES,
+  ...HOST_KEY_PROBES,
+  ...OWNER_SCOPE_PROBES,
+]
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
@@ -930,8 +925,31 @@ function reportMemoryProbe(worktree: boolean): void {
   }
 }
 
-for (const worktree of [false, true]) reportMemoryProbe(worktree)
+/** Everything the run does once its rows exist. A test imports the rows, so none of this may run on import. */
+function main(): void {
+  for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES, NO_PLACE).command))) {
+    console.log(`${command}: ${version(command)}`)
+  }
+  if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
+    console.error(`no probe row for the spelling rule(s): ${SPELLINGS_WITHOUT_A_PROBE.join(', ')}`)
+    process.exitCode = 1
+  }
+  if (SWITCHES_WITHOUT_A_PROBE.length > 0) {
+    console.error(`the recorded host names no key to plant, so nothing probes: ${SWITCHES_WITHOUT_A_PROBE.join(', ')}`)
+    process.exitCode = 1
+  }
+  const unproven = absencesWithoutAHostProof(ALL_PROBES)
+  if (unproven.length > 0) {
+    console.error(`a row whose claim is an absence proves nothing that the host ran, so a host that never ran would pass it: ${unproven.join(' | ')}`)
+    process.exitCode = 1
+  }
+  const foldersBefore = new Set(scratchProjectFolders())
+  for (const probe of ALL_PROBES) reportProbe(probe)
+  for (const worktree of [false, true]) reportMemoryProbe(worktree)
 
-const leftBehind = scratchProjectFolders().filter((name) => !foldersBefore.has(name))
-if (leftBehind.length > 0) process.exitCode = 1
-console.log(`project folders this run left in the owner's config dir: ${leftBehind.length === 0 ? 'none, as claimed' : `${leftBehind.join(', ')}, CLAIMED none`}`)
+  const leftBehind = scratchProjectFolders().filter((name) => !foldersBefore.has(name))
+  if (leftBehind.length > 0) process.exitCode = 1
+  console.log(`project folders this run left in the owner's config dir: ${leftBehind.length === 0 ? 'none, as claimed' : `${leftBehind.join(', ')}, CLAIMED none`}`)
+}
+
+if (import.meta.main) main()
