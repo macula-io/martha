@@ -1,6 +1,6 @@
 {
   "name": "@macula-io/martha",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Install Martha from its signed public package: verifies the release's sigstore signature, then installs it",
   "type": "module",
   "license": "Apache-2.0",

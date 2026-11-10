@@ -21,8 +21,10 @@
 **Goal:** one developer, or a whole team, runs a crew of coding agents that
 plans, builds, reviews and releases software, with one method and one tool.
 
-> **Status: design.** Nothing is published yet. What follows is what Martha
-> will be; the design is open in [issue #1](https://github.com/macula-io/martha/issues/1).
+> **Status: the installer is published.** `@macula-io/martha` is on npm and
+> installs Martha from its signed package; the first Martha release is not out
+> yet. What follows is what Martha is; the design is open in
+> [issue #1](https://github.com/macula-io/martha/issues/1).
 > How the existing crew conductor moves in, slice by slice, is in
 > [the port map](docs/port-map.md). What Martha talks to and what it is made
 > of is drawn in [the architecture](architecture/README.md).
@@ -80,11 +82,9 @@ Those files are where the versions are set: upgrade Node to the one the first
 names, and sign in to the coding tool the second names (`claude --version` is
 what you have).
 
-**Nothing is published yet.** Martha ships as `@macula-io/martha` on npm once the
-publish gate ([issue #2](https://github.com/macula-io/martha/issues/2)) is met
-and the signed package
-([issue #21](https://github.com/macula-io/martha/issues/21)) exists. Until then,
-install from a checkout:
+**The installer is published; a Martha release is not.** `@macula-io/martha` is
+on npm and needs nothing but Node; what it still waits for is a signed Martha
+release to install. Until the first one is tagged, install from a checkout:
 
 ```sh
 git clone https://github.com/macula-io/martha.git
@@ -97,7 +97,7 @@ martha --version
 `martha --version` prints the release's version. If your shell cannot find
 `martha`, put `~/.local/bin` on your `PATH`.
 
-Once it is published, it is installed from the signed package, with Node alone:
+Once a release is tagged, it is installed from the signed package, with Node alone:
 
 ```sh
 npx -y --ignore-scripts @macula-io/martha@<exact version>
