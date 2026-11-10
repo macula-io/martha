@@ -620,8 +620,8 @@ async function recordToolResult(
           read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
           host: thisMachine,
           // An agent's answer is placed by the agent, not by the tool's name alone (martha#170): the id is the one the
-          // host stamps on the answer (`tool_response.agentId`) for the member's own Agent call, and the one on the
-          // call itself when the agent hands its report back.
+          // host stamps on the answer (`result.agentId`) for the member's own Agent call, and the one on the call
+          // itself when the agent hands its report back.
           ...(agent === undefined ? {} : { agent }),
         },
         place.binder,

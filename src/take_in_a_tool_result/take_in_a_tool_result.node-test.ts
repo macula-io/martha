@@ -336,6 +336,7 @@ test('the publish gate says what vouched for means, and what an agent that is no
     'Two more shapes come from the same live run and are placed by lookups, not by belief.',
     "A background agent's completion arrives as a prompt whose origin is task-notification, which the engine also stamps on GitHub webhooks, PR stewards and session inboxes from any sender, so the origin alone is a cross-session message (A6).",
     "The notice is taken in as the agent's own only when every part of it is found in the launcher's record: its <tool-use-id> names a call the member itself made whose answer named this agent, the agent is vouched for, and the words it carries in <result> are exactly the words the agent's stop reported.",
+    "Anything short of that is A6, and the shell closes — including a text that carries the right ids and the right words with words of its own between the host's elements: the notice is read as the host's own sequence of elements and nothing between them, because those ids and words sit in the member's transcript on disk, so a session on the same machine can build a text that names them.",
     "And after that completion the host fires a second SubagentStop, for an id it never started, naming no agent type, listing none of its own background tasks, and carrying the member's own last words: that is the host reporting its own turn end, not an agent's answer, and it records nothing.",
     "A stop that names a type, or that the host lists among its background tasks, is decided as any other agent's.",
     // The hold, and what lifts it.

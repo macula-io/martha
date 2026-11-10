@@ -170,6 +170,41 @@ test('an answer too big to send is left out of the tool_answered body, and the c
   assert.deepEqual(alsoFake.posted.filter(({ url }) => url.endsWith(RELAY_PATHS.tool_answered)).map(({ body }) => body), [{ session_id: SESSION, call: CALL }])
 })
 
+test('the relay sends an agent’s start and stop with every field the launcher places them by, its background task list included (martha#170)', async () => {
+  // The launcher decides the host's own turn end from this list: a stop it names no type for but that the host lists
+  // among its background tasks is still an agent's, so the list must cross the socket unchanged.
+  const fake = fakeEngine(sayYes)
+  const agent_id = 'a75775446143dc5cb'
+  const started = next<Record<string, unknown>>({})
+  await hooksOfTheRelay().get('classic.SubagentStart')?.hook(fake.$, { session_id: SESSION, agent_id, agent_type: 'general-purpose', hook_event_name: 'SubagentStart' }, started.fn)
+  const stopped = next<Record<string, unknown>>({})
+  await hooksOfTheRelay().get('classic.SubagentStop')?.hook(
+    fake.$,
+    {
+      session_id: SESSION,
+      agent_id,
+      agent_type: 'general-purpose',
+      last_assistant_message: 'Finished reading.',
+      background_tasks: [{ id: agent_id, type: 'subagent', status: 'running', description: 'Read the notes' }],
+      hook_event_name: 'SubagentStop',
+    },
+    stopped.fn,
+  )
+  assert.deepEqual(fake.posted.map(({ url, body }) => ({ url, body })), [
+    { url: `${RELAY_ORIGIN}${RELAY_PATHS.subagent_started}`, body: { session_id: SESSION, agent_id, agent_type: 'general-purpose' } },
+    {
+      url: `${RELAY_ORIGIN}${RELAY_PATHS.subagent_stopped}`,
+      body: {
+        session_id: SESSION,
+        agent_id,
+        agent_type: 'general-purpose',
+        last_assistant_message: 'Finished reading.',
+        background_tasks: [{ id: agent_id, type: 'subagent', status: 'running', description: 'Read the notes' }],
+      },
+    },
+  ])
+})
+
 test('the relay sends a prompt\'s command and meta mark unchanged, so the launcher can tell typing from an expansion (#51)', async () => {
   const fake = fakeEngine(sayYes)
   const expanded = { text: '/review', origin: { kind: 'composer' }, command: { name: 'review' }, isMeta: false }

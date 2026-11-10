@@ -10,8 +10,11 @@
 // agent's own, is the launcher's question (../launch_a_claude_code_member/answer_the_relay) — never this module's,
 // and never taken from the text.
 //
-// A text that is not exactly one notice — not wrapped in the notice's own element, or missing one of the three
-// fields — is no notice at all, and its prompt stays what its origin says it is.
+// ONE NOTICE, OR NOTHING. The host writes a fixed sequence of elements and nothing between them; a text that pads any
+// gap with words of its own is no notice at all, and its prompt stays what its origin says it is (a cross-session
+// message, A6). This is the point of matching the whole sequence rather than finding three fields in a text: the ids
+// and the agent's words are in the member's own transcript on disk, so a session on the same machine can build a text
+// that names them, and padding it is exactly how it would carry words of its own past the gate (martha#170 r=2).
 
 /** A completion notice's fields, as the host writes them. */
 export interface CompletionNotice {
@@ -23,8 +26,23 @@ export interface CompletionNotice {
   readonly words: string
 }
 
-const NOTICE =
-  /^<task-notification>\n<task-id>([^<\n]+)<\/task-id>\n<tool-use-id>([^<\n]+)<\/tool-use-id>\n[\s\S]*?<result>([\s\S]*)<\/result>[\s\S]*<\/task-notification>$/
+/**
+ * The host's own sequence, element by element, with a newline and nothing else between any two of them: the task, the
+ * member's call, the output file, the status, the summary, the note (a host release may leave it out), the agent's
+ * words, and the usage line. A field never holds `<`, so a tag opened inside one ends the match rather than passing.
+ */
+const NOTICE = new RegExp(
+  '^<task-notification>\\n' +
+    '<task-id>([^<\\n]+)</task-id>\\n' +
+    '<tool-use-id>([^<\\n]+)</tool-use-id>\\n' +
+    '<output-file>[^<\\n]+</output-file>\\n' +
+    '<status>[^<\\n]+</status>\\n' +
+    '<summary>[^<]*</summary>\\n' +
+    '(?:<note>[^<]*</note>\\n)?' +
+    '<result>([^<]*)</result>\\n' +
+    '<usage><subagent_tokens>\\d+</subagent_tokens><tool_uses>\\d+</tool_uses><duration_ms>\\d+</duration_ms></usage>\\n' +
+    '</task-notification>$',
+)
 
 /** The notice a prompt's text is, or `undefined` when the text is not one notice exactly. */
 export function completionNoticeOf(text: string): CompletionNotice | undefined {
