@@ -1,3 +1,6 @@
 # What a release packs is `git archive` of the tagged tree (martha#21). The installer ships on npm, from its own
-# tag, and is never part of a release.
+# tag, and is never part of a release. rehearse_a_release/ is the dry run's own half, run from the checkout against
+# the image it pushed: it imports the installer, which no release carries, so a copy packed into a layer is a module
+# that could not load there, and nothing installed needs it (martha#207).
 installer/ export-ignore
+rehearse_a_release/ export-ignore

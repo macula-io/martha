@@ -9,7 +9,8 @@ none of it: that is the npm page, [the installer's README](../installer/README.m
 1. The release dry run (`release-dry-run.yml`, started by hand on a branch) pushes the packed tree into the release
    package under a `dry-run-<run>-<attempt>` tag, which is never a version, so no install ever takes it. It signs it
    through the same signing workflow, then checks that the signature verifies for that branch and is refused for
-   `refs/tags/v<version>`, that an unsigned image is refused, and that the layer is exactly the committed tree.
+   `refs/tags/v<version>`, that an unsigned image is refused, and that the layer is exactly the committed tree plus
+   the installer pin the packer generates after it.
    Its two tags are kept in the public package, not pruned: one pair per run, and runs are started by hand.
    Neither is ever installed: no tag of that shape is a version, and the signature is for a branch, so an install,
    which demands `refs/tags/v<version>`, refuses it. Pruning would need a workflow that can delete package versions,

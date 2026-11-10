@@ -17,6 +17,7 @@ const manifest = createRequire(import.meta.url)('../package.json')
  * @property {string} issuer            the OIDC issuer of the signing certificate
  * @property {string} command           the command an installed release puts on PATH
  * @property {string} releaseFolder     the one top-level folder a release's layer holds
+ * @property {string} pinFile           the file the packer generates in that folder: the installer a release pins
  * @property {string} releaseTagPrefix  what a release tag starts with
  * @property {string} installerTagPrefix what an installer tag starts with
  * @property {string} installerPublishWorkflow the workflow whose run publishes this installer, and signs that publish

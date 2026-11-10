@@ -30,7 +30,8 @@ const PROVENANCE = 'https://slsa.dev/provenance/v1'
 const IN_TOTO_STATEMENT = 'https://in-toto.io/Statement/v1'
 const IN_TOTO_PAYLOAD = 'application/vnd.in-toto+json'
 const INSTALLER_DIRECTORY = 'installer'
-const PIN_FILE = 'installer.json'
+/** The file the pin is written to, named where the release folder is (installer/keep_the_names_in_one_place). */
+const PIN_FILE = NAMES.pinFile
 /** The registry a public npm name is published to. The release's own dry run names its local one instead. */
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org/'
 /** The repository this script lives in, which is the tree being released. */
@@ -330,16 +331,22 @@ function installerDrift (repo, version) {
 }
 
 /**
- * Writes the three fields into the release folder of the packed context, and nothing else; a pin already there is refused.
- * @param {string} context @param {{ name: string, version: string }} manifest @param {string} integrity
+ * The three fields of a pin, from the tree's own manifest and npm's own document for that version.
+ * @param {Manifest} manifest @param {any} document
+ * @returns {{ name: string, version: string, integrity: string }}
+ */
+const pinOf = (manifest, document) => ({ name: manifest.name, version: manifest.version, integrity: document.dist.integrity })
+
+/**
+ * Writes the pin into the release folder of the packed context, and nothing else; a pin already there is refused.
+ * @param {string} context @param {{ name: string, version: string, integrity: string }} pin
  * @returns {{ file: string, pin: { name: string, version: string, integrity: string } }}
  */
-function writePin (context, { name, version }, integrity) {
+function writePin (context, pin) {
   const folder = join(context, NAMES.releaseFolder)
   const file = join(folder, PIN_FILE)
   if (existsSync(file)) refuse(`${file} already holds a pin: a release's pin is generated here, never packed with the tree; nothing was pinned`)
   mkdirSync(folder, { recursive: true })
-  const pin = { name, version, integrity }
   writeFileSync(file, `${JSON.stringify(pin, null, 2)}\n`)
   return { file, pin }
 }
@@ -362,7 +369,19 @@ export async function pinTheInstaller ({ context, repo = REPO, registry = PUBLIC
   const expected = { ...manifest, ref, digest, commit }
   certified(signer, expected)
   attested(statementOf(bundle), expected)
-  return writePin(context, manifest, document.dist.integrity)
+  return writePin(context, pinOf(manifest, document))
+}
+
+/**
+ * The pin this tree's installer would be pinned at, without writing anything: the fields a packed layer must hold, read
+ * where the packer reads them and from nowhere else (martha#207, the dry run's rehearsal of the layer).
+ * @param {{ repo?: string, registry?: string, fetch?: typeof globalThis.fetch }} [request]
+ * @returns {Promise<{ name: string, version: string, integrity: string }>}
+ */
+export async function pinFor ({ repo = REPO, registry = PUBLIC_REGISTRY, fetch = globalThis.fetch } = {}) {
+  const manifest = installerManifestOf(repo)
+  const document = await versionDocument({ name: manifest.name, version: manifest.version, registry, fetch })
+  return pinOf(manifest, document)
 }
 
 if (import.meta.main) {

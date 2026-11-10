@@ -304,11 +304,16 @@ test('the release tree names the installer package the installer names itself, s
   assert.match(rootManifest.martha.installerPackage, /^@[a-z0-9-]+\/[a-z0-9-]+$/, 'the installer package is a scoped npm name')
 })
 
-test('a pin is generated, never committed: no installer.json is in the tracked tree', () => {
+test('a pin is generated, never committed: no pin file is in the tracked tree', () => {
   const every = readdirSync(ROOT, { recursive: true, encoding: 'utf8' })
     .filter((path) => !path.split('/').some((part) => part === 'node_modules' || part === '.git'))
-  const pins = every.filter((path) => path.split('/').at(-1) === 'installer.json')
+  const pins = every.filter((path) => path.split('/').at(-1) === NAMES.pinFile)
   assert.deepEqual(pins, [], `a release's pin is written by pack_a_release, never committed: ${pins.join(', ')}`)
+})
+
+test('the release tree reads the pin file the installer names, so the pin written here is the one it reads', () => {
+  const client = read('src/install_the_pinned_installer/install_the_pinned_installer.ts')
+  assert.ok(client.includes(`export const PIN_FILE = '${NAMES.pinFile}'`), `the release tree names another pin file than ${NAMES.pinFile}, which the packer writes`)
 })
 
 test('the client runs the bin the installer package publishes', () => {
