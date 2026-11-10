@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -526,6 +526,122 @@ test('the global config file this guard denies is the recording\'s own name, wha
   const recorded = placesTheHostProtects({ ...RECORDED_HOST, legacy_global_config_names: [renamed] })
   assert.deepEqual(recorded.files.filter((file) => file === renamed), [renamed])
   assert.equal(recorded.files.some((file) => CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES.includes(file)), false, 'the name the recording no longer holds is not denied')
+})
+
+// The host builds its global config's name as `<stem><suffix><extension>`, and the suffixes it can build are its own
+// business: proving what a minified bundle can produce needs a binder and a dataflow pass, and each round of that proof
+// closed its holes while the next opened new ones (martha#202). So the guard denies the SHAPE, and the stem and the
+// extension are the recorded name's own, cut here the same way the guard cuts them. The suffixes below are THIS TEST'S
+// FIXTURES and not the host's list: nothing records that list any more, and the guard reads none of it — the four are the
+// three the host held when this landed and one no host holds yet, which stands for the next one it adds.
+const GLOBAL_CONFIG_AT = HOST_TRUST_RECORD_FILE.lastIndexOf('.')
+const GLOBAL_CONFIG_STEM = HOST_TRUST_RECORD_FILE.slice(0, GLOBAL_CONFIG_AT)
+const GLOBAL_CONFIG_EXTENSION = HOST_TRUST_RECORD_FILE.slice(GLOBAL_CONFIG_AT)
+const GLOBAL_CONFIG_FAMILY: readonly string[] = ['', '-staging-oauth', '-local-oauth', '-custom-oauth', '-a-suffix-no-host-holds-yet'].map(
+  (suffix) => `${GLOBAL_CONFIG_STEM}${suffix}${GLOBAL_CONFIG_EXTENSION}`,
+)
+
+test('a member may not write any name in the global config\'s family, beside the home folder and in every config dir (martha#202)', (t) => {
+  const place = placeFor(t)
+  const scratchConfig = join(place.root, 'scratch-config')
+  const memberConfig = join(place.root, 'member-config')
+  for (const dir of [scratchConfig, memberConfig]) mkdirSync(dir, { recursive: true })
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home, CLAUDE_CONFIG_DIR: memberConfig },
+    home: place.home,
+    launch_dir: place.worktree,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  const launcherOnly = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home },
+    home: place.home,
+    launch_dir: place.worktree,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  for (const name of GLOBAL_CONFIG_FAMILY) {
+    // The name itself keeps the rule and the issue that landed it (#187); the shape is what denies every other member of
+    // the family, and the pattern the launch writes covers the bare name too (asserted with the rules, below).
+    const issue = name === HOST_TRUST_RECORD_FILE ? 'martha#187' : 'martha#202'
+    // CLAUDE_CONFIG_DIR unset: the host's global config is beside the home folder, not in ~/.claude.
+    assertDeniedBy(placesFor(place), place.worktree, place.home, join(place.home, name), issue, `beside the home folder: ${name}`)
+    // Set on both sides: each dir the environments name denies the whole family.
+    assertDeniedBy(both, place.worktree, place.home, join(scratchConfig, name), issue, `the launcher's config dir: ${name}`)
+    assertDeniedBy(both, place.worktree, place.home, join(memberConfig, name), issue, `the member's config dir: ${name}`)
+    // Set on the launcher's side only: the member's own host keeps its config beside the home folder, as #187 has it.
+    assertDeniedBy(launcherOnly, place.worktree, place.home, join(place.home, name), issue, `the member's own config beside the home folder: ${name}`)
+  }
+  // The host matches a name without regard to case (measured on 2.1.322), and on a case-insensitive file system the
+  // upper-case spelling IS the config file. The gate refuses it too, so the member is told why and not left to the
+  // host's own answer alone (martha#202).
+  const upperCased = (GLOBAL_CONFIG_FAMILY[1] ?? '').replace(GLOBAL_CONFIG_STEM, GLOBAL_CONFIG_STEM.toUpperCase())
+  assertDeniedBy(placesFor(place), place.worktree, place.home, join(place.home, upperCased), 'martha#202', `the upper-case stem: ${upperCased}`)
+  // The folder is compared as the name is: on a case-insensitive disk these two spellings are one folder, and the host
+  // resolves either to the same file (Uranus, martha#202 r=1, r=3). The row proves case only if the two paths really
+  // differ, and proves THIS folder only if nothing above it changed, so both are asserted rather than assumed of the
+  // place's layout — a spelling that came out the same would otherwise be refused by the row that came before it.
+  const upperHome = join(place.root, 'HOME')
+  assert.notEqual(upperHome, place.home, 'the row names a folder spelled another way, not the home folder itself')
+  assert.equal(dirname(upperHome), dirname(place.home), 'only the folder\'s own name is spelled differently, not where it sits')
+  assert.equal(basename(upperHome).toLowerCase(), basename(place.home).toLowerCase(), 'the two spellings differ in case alone')
+  assertDeniedBy(placesFor(place), place.worktree, place.home, join(upperHome, GLOBAL_CONFIG_FAMILY[1] ?? ''), 'martha#202', `a folder spelled with different case: ${upperHome}`)
+})
+
+test('a name that only looks like the global config\'s family is admitted (martha#202)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  // A name whose `*` would have to cross a `/`, another stem, and a name past the extension: `*` is one name's worth
+  // of characters and the extension anchors the end (both measured on 2.1.322).
+  const admitted = [join(place.home, '.claudex', 'src', 'a.json'), join(place.home, `.not${HOST_TRUST_RECORD_FILE}`), join(place.home, `${HOST_TRUST_RECORD_FILE}.bak`)]
+  for (const file_path of admitted) {
+    assert.equal(writesTheOwnersMemory('Write', write(file_path), places, place.worktree, place.home, thisMachine), undefined, `${file_path} is a name of its own, not the global config`)
+  }
+})
+
+test('a write into the family through a folder that links to the home is refused on the resolved name (martha#202)', (t) => {
+  const place = placeFor(t)
+  const elsewhere = join(place.root, 'elsewhere')
+  mkdirSync(elsewhere, { recursive: true })
+  symlinkSync(place.home, join(elsewhere, 'hl'))
+  const places = placesFor(place)
+  // The gate runs through that link: a name of its own, written the same way, is allowed.
+  assert.equal(writesTheOwnersMemory('Write', write(join(elsewhere, 'hl', `.not${HOST_TRUST_RECORD_FILE}`)), places, place.worktree, place.home, thisMachine), undefined, 'a name of its own through the same folder link')
+  assertDeniedBy(places, place.worktree, place.home, join(elsewhere, 'hl', GLOBAL_CONFIG_FAMILY[1] ?? ''), 'martha#202', 'through a folder link, on the name it resolves to')
+})
+
+test('a link in the checkout pointing at a name in the family is refused at the gate, on the file it leads to (martha#202)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  // The host refuses to write through a link at all, so it never sends one: this is the gate's own case, for the target
+  // path the host tells a member to write instead (measured on 2.1.322). The link's target need not exist yet.
+  symlinkSync(join(place.home, `.not${HOST_TRUST_RECORD_FILE}`), join(place.worktree, 'fine.json'))
+  symlinkSync(join(place.home, GLOBAL_CONFIG_FAMILY[1] ?? ''), join(place.worktree, 'innocent.json'))
+  // The gate runs through a checkout link: a link to a name of its own is allowed.
+  assert.equal(writesTheOwnersMemory('Write', write(join(place.worktree, 'fine.json')), places, place.worktree, place.home, thisMachine), undefined, 'a link to a name of its own')
+  assertDeniedBy(places, place.worktree, place.home, join(place.worktree, 'innocent.json'), 'martha#202', 'a link to a file in the family, on the file it leads to')
+  assertDeniedBy(places, place.worktree, place.home, join(place.home, GLOBAL_CONFIG_FAMILY[1] ?? ''), 'martha#202', 'the target the link names')
+})
+
+test('the permission rules deny the whole family by pattern, one rule for each directory the host keeps the config in (martha#202)', (t) => {
+  const place = placeFor(t)
+  const memberConfig = join(place.root, 'member-config')
+  mkdirSync(memberConfig, { recursive: true })
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home },
+    member_env: { HOME: place.home, CLAUDE_CONFIG_DIR: memberConfig },
+    home: place.home,
+    launch_dir: place.worktree,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  const rules = memoryDenyRules(both)
+  const patternFor = (dir: string): string => `${CLAUDE_CODE_FILE_RULE_TOOL}(/${join(dir, `${GLOBAL_CONFIG_STEM}*${GLOBAL_CONFIG_EXTENSION}`)})`
+  for (const dir of [place.home, memberConfig]) assert.ok(rules.includes(patternFor(dir)), `${patternFor(dir)} in ${rules.join(' ')}`)
+  // The name itself keeps its own rule beside the pattern, as #187 landed it.
+  assert.ok(rules.includes(`${CLAUDE_CODE_FILE_RULE_TOOL}(/${join(place.home, HOST_TRUST_RECORD_FILE)})`), 'the exact name keeps its rule beside the pattern')
 })
 
 /**

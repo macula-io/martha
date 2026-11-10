@@ -353,7 +353,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'B7',
-    what: 'a subagent result, and a review answer relaunched onto another session',
+    what: 'a subagent result this member cannot be vouched for, and a review answer relaunched onto another session',
     klass: 'fetched',
     control: { kind: 'shell-gate' },
     attestation: 'none',

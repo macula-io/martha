@@ -44,6 +44,7 @@ import {
   RELAY_PATHS,
   heardTaken,
   heardVerdict,
+  subagentBody,
   type Heard,
   type RelayEvent,
 } from './relay_protocol.ts'
@@ -89,6 +90,9 @@ export interface RelayOn {
 
 /** The settings SessionStart hook's input: the host's own fields, relayed whole. */
 export type ClassicSessionStart = Readonly<Record<string, unknown>>
+
+/** A SubagentStart/SubagentStop hook's input (martha#170): the host's own fields, relayed whole. */
+export type ClassicSubagent = Readonly<Record<string, unknown>>
 
 /**
  * A prompt as the engine submits it: its text, the origin it stamped, and the
@@ -201,6 +205,25 @@ export const register = (on: RelayOn): void => {
     const heard = await relay($, 'prompt_submitted', { session_id, text: e.text, origin: e.origin, ...marks }, heardTaken)
     return heard.yes ? next(e) : { drop: refusal(heard.why) }
   }).catch(async (_$, e, next) => (next.called ? next(e) : { drop: refusal('its relay failed before the launcher answered') }))
+
+  // An agent the host starts under this session, and its stop (martha#170). The stop is the only report of a
+  // background agent's answer: the host delivers that text into the member's turn with no tool result to place it on.
+  // A relay that cannot be heard lets the event through here, as the session start does: the launcher then holds an
+  // agent it never saw start, and refuses the shell rather than passing the agent's text.
+  //
+  // The two are spelled out, not looped: the host's own plugin validator reads this file and refuses a relay whose
+  // `on(...)` names its event by anything but a string literal, so `for (const event of …)` would not load at all.
+  on<ClassicSubagent, unknown>('classic.SubagentStart', async ($, e, next) => {
+    const session_id = await $.session.id()
+    const heard = await relay($, 'subagent_started', subagentBody(session_id, e), heardTaken)
+    return heard.yes ? next(e) : { drop: refusal(heard.why) }
+  }).catch(async (_$, e, next) => next(e))
+
+  on<ClassicSubagent, unknown>('classic.SubagentStop', async ($, e, next) => {
+    const session_id = await $.session.id()
+    const heard = await relay($, 'subagent_stopped', subagentBody(session_id, e), heardTaken)
+    return heard.yes ? next(e) : { drop: refusal(heard.why) }
+  }).catch(async (_$, e, next) => next(e))
 
   on<ToolCalled, ToolAnswer>('tool.call', async ($, e, next) => {
     const session_id = await $.session.id()

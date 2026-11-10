@@ -52,7 +52,11 @@
 //      folder, or in the config dir when CLAUDE_CONFIG_DIR names one — which
 //      names the owner's user MCP servers; and inside each config dir the file
 //      the host prefers over that one when it is there and not empty, whose name
-//      is cut from the binary (martha#187 r=3). The two folders that override
+//      is cut from the binary (martha#187 r=3). The host builds the config's name
+//      as `.claude${suffix}.json` — `""` for production, and one suffix per OAuth
+//      endpoint — so the whole family is denied by shape, without recording what
+//      suffixes the host can build: a host that adds one tomorrow writes a name
+//      this already refuses (martha#202). The two folders that override
 //      where memory lives, when the launcher's environment sets them. Each
 //      `autoMemoryDirectory` the policy, user and carried settings name. No name
 //      is typed here: the markdown kinds and the styles folder come from
@@ -120,6 +124,26 @@ const OWNER_RULES = 'rules'
 
 /** A place a member's file tool may not write, and the issue that put it there. */
 export interface DeniedPlace {
+  readonly what: string
+  readonly issue: string
+}
+
+/**
+ * A family of names denied in one folder, by shape rather than by name: every
+ * file in `folder` whose name begins with `prefix` and ends with `extension`,
+ * compared without regard to case, because the host compares them that way and
+ * on a case-insensitive file system two spellings are one file (martha#202).
+ * The host builds its global config's name as `<prefix><suffix><extension>` and
+ * the suffixes it can build are its own business, so a host that adds one
+ * tomorrow writes a name this already denies.
+ */
+export interface NameShape {
+  /** The folder the names are read in. */
+  readonly folder: string
+  /** The literal start of the name, from the recorded name's own stem. */
+  readonly prefix: string
+  /** The literal end of the name, from the recorded name's own extension. */
+  readonly extension: string
   readonly what: string
   readonly issue: string
 }
@@ -226,6 +250,11 @@ export interface OwnerMemoryPlaces {
   /** Files denied, each with the issue that denies it. */
   readonly files: readonly DeniedPlace[]
   /**
+   * Families of names denied by shape in the folders the host keeps its global
+   * config in, so no suffix the host can build escapes the guard (martha#202).
+   */
+  readonly name_shapes: readonly NameShape[]
+  /**
    * The git configuration files of the owner's own git runs, denied as files
    * (martha#168). The publish gate refuses them; no permission rule names them,
    * because the host runs no pass that writes one by itself.
@@ -271,6 +300,16 @@ function configDirOf(env: Readonly<Record<string, string | undefined>>): string 
 }
 
 /**
+ * The folder the host keeps its global config in: the one `CLAUDE_CONFIG_DIR`
+ * names, or the home folder when it names none (martha#187 r=2, martha#202).
+ * Undefined when the variable cannot be told, as for the settings file.
+ */
+function globalConfigFolderIn(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const settings = userSettingsPath(env)
+  return 'path' in settings ? (env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir()) : undefined
+}
+
+/**
  * The file the host keeps its global config in, where the owner's user MCP
  * servers live: `join(CLAUDE_CONFIG_DIR || homedir(), HOST_TRUST_RECORD_FILE)`,
  * the host's own `globalConfig` — in the config dir when the variable names one,
@@ -279,9 +318,8 @@ function configDirOf(env: Readonly<Record<string, string | undefined>>): string 
  * variable cannot be told, as for the settings file.
  */
 function ownerConfigFileIn(env: Readonly<Record<string, string | undefined>>): string | undefined {
-  const settings = userSettingsPath(env)
-  if (!('path' in settings)) return undefined
-  return join(env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir(), HOST_TRUST_RECORD_FILE)
+  const folder = globalConfigFolderIn(env)
+  return folder === undefined ? undefined : join(folder, HOST_TRUST_RECORD_FILE)
 }
 
 /** The memory folder a settings file names, or undefined. */
@@ -317,6 +355,44 @@ function codePlacesIn(configDirs: readonly string[], ownerConfigs: readonly stri
 }
 
 
+/** A character a rule's glob would read as syntax; nothing in the recorded name holds one, and a name that did could not be denied faithfully (martha#202). */
+const A_GLOB_CHARACTER = /[*?[\]{}]/
+
+/**
+ * The recorded global config's name cut at its own extension: the stem every suffix the host builds starts from, and the
+ * extension every one ends with (martha#202). The host builds `<stem><suffix><extension>`, so the two halves are all the
+ * guard needs to deny every suffix it can build — and every one a later host adds, with nothing recorded.
+ */
+function familyOfTheGlobalConfig(name: string): { readonly stem: string; readonly extension: string } {
+  const at = name.lastIndexOf('.')
+  if (at <= 0 || at === name.length - 1) {
+    throw new Error(`The host's global config is called ${JSON.stringify(name)}, which has no extension to take the family's end from, so the names it can build cannot be told (martha#202)`)
+  }
+  const stem = name.slice(0, at)
+  const extension = name.slice(at)
+  if (A_GLOB_CHARACTER.test(stem) || A_GLOB_CHARACTER.test(extension)) {
+    throw new Error(`The host's global config is called ${JSON.stringify(name)}, which holds a character a permission rule reads as syntax, so the names it can build cannot be denied faithfully (martha#202)`)
+  }
+  return { stem, extension }
+}
+
+/**
+ * The families of names the guard denies in the folders the host keeps its global
+ * config in: the launcher's environment's folder and the member's, which is the
+ * home folder when `CLAUDE_CONFIG_DIR` names none (martha#202). Both environments
+ * are covered by the same shape, so neither needs a rule of its own.
+ */
+function globalConfigFamiliesIn(launcher_env: Readonly<Record<string, string | undefined>>, member_env: Readonly<Record<string, string | undefined>>): NameShape[] {
+  const { stem, extension } = familyOfTheGlobalConfig(HOST_TRUST_RECORD_FILE)
+  return unique([globalConfigFolderIn(launcher_env), globalConfigFolderIn(member_env)]).map((folder) => ({
+    folder,
+    prefix: stem,
+    extension,
+    what: `the family of global config names (${stem}…${extension}) in ${folder}`,
+    issue: 'martha#202',
+  }))
+}
+
 /** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1, 2 and 5). */
 export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, settings_files, user_scope }: OwnerMemorySources): OwnerMemoryPlaces {
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
@@ -350,6 +426,7 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, 
       ...configDirs.map((dir): DeniedPlace => ({ what: join(dir, OWNER_INSTRUCTIONS), issue: 'martha#136' })),
       ...code.files.map((what): DeniedPlace => ({ what, issue: 'martha#187' })),
     ]),
+    name_shapes: globalConfigFamiliesIn(launcher_env, member_env),
     // Every user-level git config file git 2.56.0 can read: the two the variables
     // name, `~/.gitconfig`, and the XDG one as `$XDG_CONFIG_HOME` spells it and as
     // its own default under `~/.config` (measured: with XDG_CONFIG_HOME unset, git
@@ -510,7 +587,34 @@ function placeOf(path: string, places: OwnerMemoryPlaces): DeniedPlace | undefin
   const folder = places.folders.find((candidate) => (spellingsOf(candidate.what) ?? []).some((spelling) => within(path, spelling)))
   if (folder !== undefined) return folder
   const file = places.files.find((candidate) => (spellingsOf(candidate.what) ?? []).includes(path))
-  return file
+  if (file !== undefined) return file
+  // The name's own shape, last: the exact global config keeps the rule and the issue that landed it (#187), and the
+  // rest of the family — every suffix the host builds today and every one it adds later — is denied here (#202).
+  const shape = places.name_shapes.find((candidate) =>
+    (spellingsOf(candidate.folder) ?? [candidate.folder]).some((folder) => sameFolder(dirname(path), folder) && nameHasShape(basename(path), candidate)),
+  )
+  return shape === undefined ? undefined : { what: shape.what, issue: shape.issue }
+}
+
+/**
+ * Whether two folders are the same path as the system resolved them: a shape is read in one folder, never below it.
+ * Compared without regard to case, as the name is, because on a case-insensitive disk two spellings of one folder are
+ * one folder and a write by either reaches the same file (Uranus, martha#202 r=1). On a case-sensitive disk this refuses
+ * a path spelled with a folder whose name differs only in case, which is no folder the host keeps its config in.
+ */
+const sameFolder = (one: string, other: string): boolean => asciiLowered(normalize(one)) === asciiLowered(normalize(other))
+
+/**
+ * Whether `name` is one of the family's: the recorded stem at its start and the recorded extension at its end, compared
+ * without regard to case, as the host compares a name against its rules and as a case-insensitive file system compares
+ * two names (measured on 2.1.322, martha#202). The `*` between them is one name's worth of characters: a `/` ends it,
+ * so a folder whose name only starts like the stem is not swallowed (also measured).
+ */
+function nameHasShape(name: string, shape: NameShape): boolean {
+  const lowered = asciiLowered(name)
+  const stem = asciiLowered(shape.prefix)
+  const extension = asciiLowered(shape.extension)
+  return lowered.length >= stem.length + extension.length && lowered.startsWith(stem) && lowered.endsWith(extension)
 }
 
 /** A string with the letters A-Z lowered and nothing else, as git's own comparison of an ASCII name does. */
@@ -901,6 +1005,12 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
     ...otherProjects.map((folder) => `${folder}/*/${MEMORY}/**`),
     ...[...linkedAway, ...places.folders.flatMap((folder) => spellingsOf(folder.what) ?? [folder.what])].map((folder) => `${folder}/**`),
     ...places.files.flatMap((file) => spellingsOf(file.what) ?? [file.what]),
+    // Every name in the global config's family, as one pattern per folder: the stem, the host's own `*` for whatever
+    // suffix it builds, and the extension. `*` was measured to match nothing as well as something and never to cross a
+    // `/` (2.1.322), so one rule covers the empty suffix and a suffix a later host adds, with nothing recorded (#202).
+    ...places.name_shapes.flatMap((shape) =>
+      (spellingsOf(shape.folder) ?? [shape.folder]).map((folder) => join(folder, `${shape.prefix}*${shape.extension}`)),
+    ),
   ])
   return [...globs].map((glob) => `${CLAUDE_CODE_FILE_RULE_TOOL}(/${glob})`)
 }

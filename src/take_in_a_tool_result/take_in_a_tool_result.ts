@@ -75,12 +75,21 @@ export type ToolResultReading =
   | { readonly reads: 'a_command'; readonly source: 'checkout_run'; readonly field: string }
   /** Text from one known source, whatever the call asked. */
   | { readonly reads: 'a_source'; readonly source: TurnSource }
+  /**
+   * An agent's answer, on B7 unless the agent is vouched (martha#170): the host's own agent, started under this
+   * session and seen to stop, with every call it made answered. A vouched answer is text of the member's own making
+   * about its own inputs, so it records nothing; any other agent's answer is a subagent's text and closes the shell.
+   */
+  | { readonly reads: 'an_agents_answer'; readonly source: 'subagent' }
 
 /** How a host places its tools' results, by the tool's name as the host calls it. */
 export type ToolResultRows = Readonly<Record<string, ToolResultReading>>
 
-/** What the record holds for a tool result the host did not place. */
-export const UNPLACED_TOOL_RESULT: Ingestion = { path: 'tool-result-unplaced', from_node_id: null }
+/** What the record holds for a tool result the host did not place, naming the tool so the gap is visible (martha#170). */
+export const unplacedToolResult = (tool: string): Ingestion => ({ path: `${UNPLACED_TOOL_RESULT}: ${tool}`, from_node_id: null })
+
+/** What the record holds for a tool result the host did not place, before the tool is known. */
+const UNPLACED_TOOL_RESULT = 'tool-result-unplaced'
 
 /** The command whose first word names the GitHub CLI: its output is B3's. */
 export const GITHUB_CLI = 'gh'
@@ -115,20 +124,42 @@ export interface ToolResult {
    */
   readonly read_attaches_nothing: HostSwitches | undefined
   readonly host: LaunchHost
+  /**
+   * The agent this result hands back, as the host stamps it (`tool_response.agentId` on Claude Code), and how this
+   * launcher knows that agent (martha#170): `vouched` when it saw the agent start and stop and answered every call it
+   * made; `running` while it is between the two, when its text may already be in the turn and the shell is refused
+   * on that account; `unknown` when the launcher never saw the agent at all, and then its answer is B7.
+   */
+  readonly agent?: { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' }
 }
 
 /** The session after a tool of its host ran, with what the tool returned recorded. */
 export function takeInToolResult(session: HostSession, result: ToolResult, binder: Binder): HostSession {
   const reading = Object.hasOwn(result.rows, result.tool) ? result.rows[result.tool] : undefined
-  if (reading === undefined) return { ...session, gate: recordIngestion(session.gate, [UNPLACED_TOOL_RESULT]) }
+  if (reading === undefined) return { ...session, gate: recordIngestion(session.gate, [unplacedToolResult(result.tool)]) }
   return sourcesOf(reading, result).reduce((taken, source) => takeInTurn(taken, { source }, binder), session)
 }
 
 function sourcesOf(reading: ToolResultReading, result: ToolResult): readonly TurnSource[] {
   if (reading.reads === 'a_source') return [reading.source]
+  if (reading.reads === 'an_agents_answer') return answerOfAnAgent(result)
   const named = result.input[reading.field]
   if (reading.reads === 'a_command') return [reading.source, ...labelsOf(named)]
   return readOfTheApprovedStartTree(named, SPAN_OF[reading.reads], result) ? [] : [reading.source]
+}
+
+/**
+ * What an agent's answer records (martha#170). A vouched agent's answer is nothing new: every door into that agent —
+ * its own tool calls on their own rows, the owner's own hooks and the host's own configuration for the rest — was
+ * accounted for before the answer arrived, so the record already holds whatever the agent took in.
+ *
+ * A running agent's answer is nothing new either, and for a different reason: its text may already be in the turn,
+ * and the shell is refused until the agent stops. An agent this launcher never saw, or one that stopped without every
+ * call it made being answered, is a subagent's text on B7 and closes the shell, as a subagent's answer always did.
+ */
+function answerOfAnAgent(result: ToolResult): readonly TurnSource[] {
+  const state = result.agent !== undefined && result.agent.id !== '' ? result.agent.state : 'unknown'
+  return state === 'vouched' || state === 'running' ? [] : ['subagent']
 }
 
 function readOfTheApprovedStartTree(path: unknown, span: ReadSpan, result: ToolResult): boolean {
