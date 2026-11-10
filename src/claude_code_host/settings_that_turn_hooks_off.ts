@@ -50,7 +50,7 @@ import { basename, dirname, join } from 'node:path'
 
 import { asTheHostResolves } from './claude_code_file_tools.ts'
 
-import { hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, MANAGED_MARKDOWN_FOLDER, type OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
+import { hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, MANAGED_MARKDOWN_FOLDER, SKILLS_KIND, SYNCED_SKILLS_FOLDER, SYNC_OFF_SETTING, TRASH_FOLDER, type OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 
 /** How safe mode is switched on: by a variable in the host's environment, or by a flag on its command line. */
 export interface SafeMode {
@@ -383,6 +383,8 @@ export interface HookSettingsFile {
   readonly text: string | undefined
   /** A managed file, where the host honours every switch. */
   readonly managed: boolean
+  /** A skill the host synced from the owner's Claude account, which it writes again at every start (martha#243). */
+  readonly synced?: boolean
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -462,19 +464,27 @@ function missingOr(path: string, error: unknown): Walked {
   return { files: [], unread: [`${path} cannot be read (${typeof code === 'string' ? code : String(error)}), so whether an agent, skill or command in it declares hooks cannot be told`] }
 }
 
-/** One entry of a folder: a markdown file, a folder to walk, or nothing; links followed as the host follows them. */
-function entryUnder(path: string, seen: Set<string>): Walked {
+/**
+ * One entry of a folder: a markdown file, a folder to walk, or nothing; links
+ * followed as the host follows them. A folder the host does not descend into is
+ * read at its top level only (martha#243).
+ */
+function entryUnder(path: string, seen: Set<string>, notBelow: boolean): Walked {
   try {
     const stat = statSync(path)
-    if (stat.isDirectory()) return markdownUnder(path, seen)
+    if (stat.isDirectory()) return notBelow ? markdownAtTop(path) : markdownUnder(path, seen)
     return stat.isFile() && path.endsWith('.md') ? { files: [path], unread: [] } : NOTHING
   } catch (error) {
     return missingOr(path, error)
   }
 }
 
-/** Every .md file under a folder at any depth, each folder walked once: a superset of what the host loads from it. */
-function markdownUnder(folder: string, seen: Set<string>): Walked {
+/**
+ * Every .md file under a folder at any depth, each folder walked once: a superset
+ * of what the host loads from it, except for the one folder named as one the host
+ * reads at its top level only (martha#243).
+ */
+function markdownUnder(folder: string, seen: Set<string>, notBelow?: string): Walked {
   let real: string
   let names: string[]
   try {
@@ -485,7 +495,26 @@ function markdownUnder(folder: string, seen: Set<string>): Walked {
   }
   if (seen.has(real)) return NOTHING
   seen.add(real)
-  const found = names.map((name) => entryUnder(join(folder, name), seen))
+  const found = names.map((name) => entryUnder(join(folder, name), seen, name === notBelow))
+  return { files: found.flatMap((one) => one.files), unread: found.flatMap((one) => one.unread) }
+}
+
+/** The .md files directly in a folder, the folders below it not read: what the host loads of a folder it does not descend (martha#243). */
+function markdownAtTop(folder: string): Walked {
+  let names: string[]
+  try {
+    names = readdirSync(folder).sort()
+  } catch (error) {
+    return missingOr(folder, error)
+  }
+  const found = names.map((name): Walked => {
+    const path = join(folder, name)
+    try {
+      return statSync(path).isFile() && path.endsWith('.md') ? { files: [path], unread: [] } : NOTHING
+    } catch (error) {
+      return missingOr(path, error)
+    }
+  })
   return { files: found.flatMap((one) => one.files), unread: found.flatMap((one) => one.unread) }
 }
 
@@ -504,12 +533,27 @@ export function markdownFolders(user: string, managed: ManagedSettingsPlace, kin
   return kinds.flatMap((kind) => [join(dirname(user), kind), join(managed.dir, MANAGED_MARKDOWN_FOLDER, kind)])
 }
 
-/** Why an agent, skill or command the host loads from the user or managed scope brings hooks in, each file named; and every part that cannot be read. */
-function hooksInMarkdown(user: string, managed: ManagedSettingsPlace, markdown: OwnersMarkdown): string[] {
-  const walked = markdownFolders(user, managed, markdown.kinds).map((folder) => markdownUnder(folder, new Set()))
-  const read = walked.flatMap((one) => one.files).map((path) => markdownTextOf(path))
+/** Whether a path is at or below a folder. */
+const isUnder = (path: string, folder: string): boolean => path === folder || path.startsWith(`${folder}/`)
+
+/**
+ * Why an agent, skill or command the host loads from the user or managed scope
+ * brings hooks in, each file named; and every part that cannot be read.
+ *
+ * Two places are read as the host reads them (martha#243): the trash under the
+ * owner's skills folder, which the host loads at its top level only, and the
+ * folder the host syncs from the owner's account, which it hides and will not
+ * run once the owner or the admin turns that sync off with a real false.
+ */
+function hooksInMarkdown(user: string, managed: ManagedSettingsPlace, markdown: OwnersMarkdown, syncedOff: boolean): string[] {
+  const syncedFolder = join(dirname(user), SKILLS_KIND, SYNCED_SKILLS_FOLDER)
+  const walked = markdownFolders(user, managed, markdown.kinds).map((folder) => markdownUnder(folder, new Set(), TRASH_FOLDER))
+  const read = walked
+    .flatMap((one) => one.files)
+    .filter((path) => !(syncedOff && isUnder(path, syncedFolder)))
+    .map((path) => markdownTextOf(path))
   const declared = read.flatMap((one): Array<string | undefined> =>
-    'path' in one ? [hooksInFrontmatterOf({ ...one, managed: false }, markdown.frontmatter_pattern)] : [...one.unread],
+    'path' in one ? [hooksInFrontmatterOf({ ...one, managed: false, synced: isUnder(one.path, syncedFolder) }, markdown.frontmatter_pattern)] : [...one.unread],
   )
   return [...walked.flatMap((one) => one.unread), ...declared].filter((reason) => reason !== undefined)
 }
@@ -557,10 +601,31 @@ export function hookSettingsWatch({ user, home, approved, managed, switches, mar
     // folder in its env) is recorded at session start by sourcesALaunchHandsTheModel; every other file is the
     // owner's or the admin's (martha#121).
     const owners = files.filter((file) => file.path !== approved).map(hooksAndPluginsDeclaredIn)
-    const reasons = [...unread, settingsTurningHooksOff(files, switches), ...owners, ...hooksInMarkdown(user, managed, markdown)].filter((reason) => reason !== undefined)
+    const reasons = [...unread, settingsTurningHooksOff(files, switches), ...owners, ...hooksInMarkdown(user, managed, markdown, accountSyncOff(files, approved))].filter((reason) => reason !== undefined)
     return reasons.length > 0 ? reasons.join('; ') : undefined
   }
   return { owners_file: user, home, check }
+}
+
+/**
+ * Whether the host hides the skills it syncs from the owner's account: any
+ * settings file it reads there holds the setting as a real `false`, which is how
+ * the host turns it off (a `true` elsewhere cannot win, and a string `"false"`
+ * or a `0` is not the false it reads). The approved copy is Martha's own and is
+ * not a source: putting the key there would take the owner's account skills from
+ * every member without the owner choosing it (martha#243).
+ */
+function accountSyncOff(files: readonly HookSettingsFile[], approved: string | undefined): boolean {
+  return files
+    .filter((file) => file.path !== approved && file.text !== undefined)
+    .some((file) => {
+      try {
+        const settings: unknown = JSON.parse(file.text ?? '')
+        return isObject(settings) && settings[SYNC_OFF_SETTING] === false
+      } catch {
+        return false
+      }
+    })
 }
 
 /** A path as the file system resolves it: links followed as far as the path exists. */
