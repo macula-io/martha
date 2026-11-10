@@ -23,6 +23,8 @@ export interface RowRun {
 export interface RowLine {
   readonly text: string
   readonly failed: boolean
+  /** What the line is about: one of the row's markers, or the host's own exit. */
+  readonly about: 'a marker' | 'the exit'
 }
 
 const said = (started: boolean) => (started ? 'started' : 'not started')
@@ -45,7 +47,7 @@ export function absencesWithoutAHostProof(rows: readonly RowClaims[]): readonly 
 /** One marker against its claim. */
 function claimLine(row: RowClaims, name: string, claimed: boolean, seen: boolean): RowLine {
   const matches = seen === claimed
-  return { text: `${row.what}: ${name} ${said(seen)}, ${matches ? 'as claimed' : `CLAIMED ${said(claimed)}`}`, failed: !matches }
+  return { text: `${row.what}: ${name} ${said(seen)}, ${matches ? 'as claimed' : `CLAIMED ${said(claimed)}`}`, failed: !matches, about: 'a marker' }
 }
 
 /** The host's exit, against the claim that it was clean. */
@@ -54,6 +56,7 @@ function exitLine(row: RowClaims, status: number | null): RowLine {
   return {
     text: `${row.what}: the host exited ${exitedOk ? 'cleanly, as claimed' : `CLAIMED cleanly but exited ${status ?? 'not at all'}`}`,
     failed: !exitedOk,
+    about: 'the exit',
   }
 }
 

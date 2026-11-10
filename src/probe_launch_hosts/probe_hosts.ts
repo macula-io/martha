@@ -45,9 +45,9 @@ import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_se
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
-import { memoryTheHostLoaded } from './what_the_host_loaded.ts'
+import { memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { absencesWithoutAHostProof, judgeRow } from './an_absence_row_proves_the_host_ran.ts'
+import { absencesWithoutAHostProof, judgeRow, type RowClaims } from './an_absence_row_proves_the_host_ran.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -719,6 +719,8 @@ interface RunResult {
   readonly markers: Readonly<Record<string, boolean>>
   /** The host's exit status, or null when the launcher's gate refused it and no host ran. */
   readonly status: number | null
+  /** How many times the host was made before this result stood; absent or 1 means once. */
+  readonly attempts?: number
 }
 
 /**
@@ -730,16 +732,29 @@ interface RunResult {
  */
 const ATTEMPTS_FOR_A_CLEAN_EXIT = 3
 
-/** Whether to make this run again instead of judging it: only a row that needs the host to have exited cleanly. */
-const worthTryingAgain = (probe: Probe, run: RunResult | string): boolean => probe.host_ok === true && typeof run !== 'string' && run.status !== 0
+/**
+ * Whether to make this run again instead of judging it (martha#223): only when the host's exit
+ * is the attempt's **only** red. A row whose marker already came out wrong is this row's answer
+ * and stands at once — a write that got through and then exited 1 is an intermittent failure of
+ * the deny rules, which is the defect these rows exist to find, and making it again in a fresh
+ * scratch would hide it.
+ */
+export function onlyTheExitFailed(probe: RowClaims, run: RunResult | string): boolean {
+  if (probe.host_ok !== true || typeof run === 'string') return false
+  const failed = judgeRow(probe, run).filter((line) => line.failed)
+  return failed.length === 1 && failed[0]?.about === 'the exit'
+}
 
-/** One probe's row, made again where its claim is the host's clean exit and it did not get one. */
+/** A run, with how many times the host was made before this result stood. */
+const afterAttempts = (run: RunResult | string, attempts: number): RunResult | string => (typeof run === 'string' ? run : { ...run, attempts })
+
+/** One probe's row, made again only while the host's exit is the only thing that failed. */
 function runProbe(probe: Probe): RunResult | string {
   for (let attempt = 1; attempt < ATTEMPTS_FOR_A_CLEAN_EXIT; attempt += 1) {
     const run = oneRunOfAProbe(probe)
-    if (!worthTryingAgain(probe, run)) return run
+    if (!onlyTheExitFailed(probe, run)) return afterAttempts(run, attempt)
   }
-  return oneRunOfAProbe(probe)
+  return afterAttempts(oneRunOfAProbe(probe), ATTEMPTS_FOR_A_CLEAN_EXIT)
 }
 
 /** One run of a probe's host, in a scratch of its own. */
@@ -815,6 +830,8 @@ function reportProbe(probe: Probe): void {
     if (line.failed) process.exitCode = 1
     console.log(line.text)
   }
+  // A row that needed the host made again reads differently from one that did not (martha#223).
+  if (run.attempts !== undefined && run.attempts > 1) console.log(`${probe.what}: the host was made ${run.attempts} times before this result stood`)
 }
 
 // --- the folders the host loads the owner's own text from (martha#154) -------
@@ -946,12 +963,17 @@ function memoryOn(): Record<string, string | undefined> {
   return env
 }
 
-/** Every session record under the projects root, by path: what the host has written there so far. */
-function theRecordsUnder(root: string | undefined): readonly string[] {
-  if (root === undefined || !existsSync(root)) return []
-  return readdirSync(root, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(SESSION_RECORD))
-    .map((entry) => join(entry.parentPath, entry.name))
+/**
+ * The session records the host has written in the project folders given, by path. Only the
+ * folders a run's own checkouts key are ever passed (martha#223 r=2): the owner's projects root
+ * holds every session on the machine, and a transcript some other session started there is not
+ * this run's record — reading the whole root once made a Martha arm that wrote nothing read
+ * `no, as claimed` as soon as a neighbour started a session.
+ */
+export function theRecordsIn(folders: readonly (string | undefined)[]): readonly string[] {
+  return folders
+    .flatMap((folder) => (folder !== undefined && existsSync(folder) ? readdirSync(folder).map((name) => join(folder, name)) : []))
+    .filter((path) => path.endsWith(SESSION_RECORD))
     .sort()
 }
 
@@ -961,12 +983,14 @@ function theRecordsUnder(root: string | undefined): readonly string[] {
  * whose model spent every turn still answers this row; a run that wrote no record at all is
  * named, never read as "the codeword was not loaded".
  *
- * Only the records that appear while THIS run is the one running are read: both arms write into
- * the same projects folder, and the other arm's record is not this run's answer.
+ * The record is looked for in the project folders this run's own checkouts key — the folder it
+ * started the host in, and the main clone's for a worktree, which is where the host keeps a
+ * worktree session — and only in the files that appear while this run is the one running.
  */
 function theCodewordWasLoaded(
   scratch: string,
-  cwd: string,
+  start: string,
+  main: string,
   args: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
   codeword: string,
@@ -974,19 +998,20 @@ function theCodewordWasLoaded(
 ): boolean | string {
   // Read before the host starts, so the folder it writes is one this run can name and take away.
   const before = theProjectFoldersThere(env)
-  const recordsBefore = new Set(theRecordsUnder(before.root))
+  const ourFolders = [start, main].map((folder) => projectFolderFor(env, folder))
+  const recordsBefore = new Set(theRecordsIn(ourFolders))
   try {
     const run = runTheHost('claude', [...HEADLESS_CLAUDE, PROMPT, ...args], {
-      cwd,
+      cwd: start,
       env,
       timeout_ms: RUN_TIMEOUT_MS,
       pid_file,
     })
     if (run.error !== undefined) return `could not run: ${run.error}`
-    const written = theRecordsUnder(before.root).filter((path) => !recordsBefore.has(path))
-    if (written.length === 0) return 'the host wrote no session record, so there is nothing to read'
+    const written = theRecordsIn(ourFolders).filter((path) => !recordsBefore.has(path))
+    if (written.length === 0) return 'the host wrote no session record in its own project folder, so there is nothing to read'
     const record = written.map((path) => readFileSync(path, 'utf8')).join('\n')
-    return memoryTheHostLoaded(record).some((file) => file.text.includes(codeword))
+    return memoryTheHostLoadedFor(record, start).some((file) => file.text.includes(codeword))
   } finally {
     // The scratch itself goes when the whole memory probe is done; its folders go with each run.
     stopTheProcessesLeftIn(scratch)
@@ -1010,7 +1035,7 @@ function memoryPlace(scratch: string, worktree: boolean): { readonly start: stri
 type MemoryLine = readonly [line: string, seen: boolean | string, claimed: boolean]
 
 /** Plants the codeword in the memory folder the host loads for the run, then runs the control and Martha's launch. */
-function memoryLines(scratch: string, memory: string, start: string, codeword: string): readonly MemoryLine[] {
+function memoryLines(scratch: string, memory: string, main: string, start: string, codeword: string): readonly MemoryLine[] {
   const folder = join(memory, 'memory')
   put(folder, MEMORY_INDEX, `- [codeword](${MEMORY_NOTE}) - the codeword is ${codeword}\n`)
   put(folder, MEMORY_NOTE, `---\nname: codeword\ndescription: the codeword\n---\nThe codeword is ${codeword}.\n`)
@@ -1023,8 +1048,8 @@ function memoryLines(scratch: string, memory: string, start: string, codeword: s
   const forcedOn = Object.fromEntries(Object.keys(CLAUDE_MEMORY_OFF).map((name) => [name, '0']))
   const group = (at: number) => join(scratch, `host-group-${at}`)
   return [
-    ['by hand, memory on: the host recorded reading the codeword in', theCodewordWasLoaded(scratch, start, prepared.switches.args, memoryOn(), codeword, group(1)), true],
-    ["as Martha starts it, the owner's environment saying memory on: the host recorded reading the codeword in", theCodewordWasLoaded(scratch, start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
+    ['by hand, memory on: the host recorded reading the codeword in', theCodewordWasLoaded(scratch, start, main, prepared.switches.args, memoryOn(), codeword, group(1)), true],
+    ["as Martha starts it, the owner's environment saying memory on: the host recorded reading the codeword in", theCodewordWasLoaded(scratch, start, main, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
     ['the memory folder holds exactly what was planted', JSON.stringify(filesUnder(folder)) === JSON.stringify(planted), true],
   ]
 }
@@ -1047,7 +1072,7 @@ function reportMemoryProbe(worktree: boolean): void {
     const lines: readonly MemoryLine[] =
       memory === undefined
         ? [["the owner's config dir can be told", 'it cannot', true]]
-        : memoryLines(scratch, memory, start, `ZEBRA${randomBytes(4).toString('hex')}`)
+        : memoryLines(scratch, memory, main, start, `ZEBRA${randomBytes(4).toString('hex')}`)
     if (lines.some(([, seen, claimed]) => seen !== claimed)) process.exitCode = 1
     for (const [line, seen, claimed] of lines) {
       console.log(`${what}: ${line} ${typeof seen === 'string' ? seen : yesNo(seen)}, ${seen === claimed ? 'as claimed' : `CLAIMED ${yesNo(claimed)}`}`)
