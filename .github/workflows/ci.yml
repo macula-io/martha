@@ -206,6 +206,21 @@ jobs:
       - run: npm ci
       - run: prove_the_recorded_host_is_current/prove_the_drift_check_bites.sh
 
+  # The clean-install proof removes its container whatever happens (martha#69). It runs against a host given as a
+  # parameter, and this job names none: the script's own stand-ins answer ssh and podman, so the cases run here are
+  # the ones a runner can hold -- a passing install half, a refusal, no release, a container that would not go, and
+  # an interrupted run, whose container is removed anyway. The image, the container's own answers and the installer
+  # are the case's, so a change to the script's own logic fails here by the case that broke.
+  clean-install:
+    name: the clean-install proof removes its container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh --self-test
+
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects
   # never runs, and the only sign is a failed run with no jobs, which nobody reads.
   # The release workflows run on a tag or by hand only, so this is where a broken
