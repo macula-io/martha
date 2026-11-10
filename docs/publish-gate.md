@@ -501,6 +501,52 @@ The rules the seam keeps, and a host must not work around:
   then reads as exempt. After a member's
   first command, nothing that executes or writes runs again until a fresh
   start; giving the shell back is martha#129.
+- **An agent the host starts under the member is vouched for, or it is a
+  subagent result (martha#170).** Claude Code can hand a member's work to its
+  own agent — the code-review skill does exactly this — and a background
+  agent's answer then arrives in the member's turn with no tool result under
+  it. Martha's hooks record the agent's start, its stop, and every tool call it
+  makes, so that answer is placed by the record rather than by the tool's name.
+  It is **vouched for** when the launcher saw the host say the agent started
+  under this session, saw it stop, answered every call the agent made, and none
+  of those calls read text this gate counts: then the answer records nothing
+  and the shell stays. Anything less — an agent it never saw start, one still
+  running, a call it did not answer, an agent that read a file outside the
+  approved tree or ran a command — places the answer on B7, and the shell
+  closes as for any other subagent result. Nothing of the stranger's reaches
+  an agent except through its own calls, and each of those is answered here,
+  so a vouched answer is the member's own work on the member's own inputs.
+  The id that places an answer comes from the answer when the member spawned
+  the agent (`tool_response.agentId`), and from the call when the agent hands
+  its report back itself: a real `SubagentHandback` carries `agent_id` on the
+  call and its output is `{success, message}` with no id on it. That id is
+  looked up in the launcher's own record like any other, never believed
+  because a call carried it: a handback naming an agent the launcher has a
+  run of and has not seen stop records nothing there and the stop decides,
+  while one naming an id the launcher has no run of, or whose run stopped
+  without being vouched, places its text on B7 at once. So a handback is no
+  way to hand text into the turn and be done: vouched, it is the agent's own
+  work on the member's own inputs; anything else, the shell closes on its
+  text.
+  Two consequences are worth saying plainly. While any agent of the session is
+  between its start and its stop, the shell is refused: the agent's text has no
+  call to be placed on, so the launcher reads the state it has, and reading
+  files is still allowed. That hold is on the **member's own** calls: an
+  agent's own calls are the ones being recorded, so a nested agent's shell is
+  not held while its own child runs. The leftover is small by construction —
+  whatever a child hands back reaches its parent as text on the parent's own
+  row, and the member's next call is answered from the session's record, so it
+  is taint-at-read, not a door. And a review that reads outside the approved
+  tree — a PR body, a `gh` comment — still closes the member's shell on its own
+  row (B3/B6); what #170 fixes is a review of the approved tree. A stop the
+  launcher never sees leaves its agent holding the shell for the rest of the
+  session, and nothing in the session lifts it: like any other closed row, the
+  owner's way out is to stop the member and start a fresh one, which reads no
+  handover. One residual is stated rather than proved: the recordings that fix
+  the host's order are separate files with no timestamps, so if a background
+  spawn's result reached the relay before its `SubagentStart`, that launch
+  would be placed on B7 — it fails closed, and no recording pins the order
+  either way.
 - **There is no release.** A member tainted once stays tainted through every
   refresh until a fresh start that reads no handover. An owner release would be
   the owner's own signed act, never a model's; it is not built (martha#2, the
@@ -735,6 +781,8 @@ Every later start in that folder is held to `SESSION_START_DEADLINE_MS`.
 | `prompt.submit` (`text`, and the `origin` the engine stamped where it queued the prompt) | `takeInTurn(session, arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind), bindNothing)`; a prompt Martha itself submits comes back as `plugin`, and is recorded like any other |
 | `tool.call`, before `next` | the session's stored record read back, then `answerToolCall({ tool, session, policy, input, launch, names })` |
 | `tool.call`, after `next` | `recheckLaunch(launch)`, then for an `mcp__` tool `takeInTurn(session, { source: 'mcp_result' }, bindNothing)` |
+| `classic.SubagentStart` (`agent_id`, `agent_type`, the member's `session_id`) | the agent is recorded as started under that session, by id (martha#170) |
+| `classic.SubagentStop`, and the completion it carries | the agent is recorded as stopped; a vouched agent's answer records nothing and any other's is `takeInTurn(session, { source: 'subagent' }, …)`, which is B7 |
 
 The launcher starts the host as `prepareLaunch` says, with the owner's
 arguments first (`--mcp-config` takes every argument after it up to the next

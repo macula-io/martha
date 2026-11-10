@@ -70,7 +70,7 @@ const COMMANDS: readonly string[] = ['ls', GITHUB_CLI, ...HISTORY_SUBCOMMANDS.ma
 const BUILT_IN_CALLS: readonly Readonly<Record<string, unknown>>[] = Object.entries(CLAUDE_CODE_TOOL_RESULT_ROWS).flatMap(
   ([tool, row]) => {
     if (row.reads === 'a_command') return COMMANDS.map((command) => ({ tool, [row.field]: command }))
-    if (row.reads === 'a_source') return [{ tool }]
+    if (row.reads === 'a_source' || row.reads === 'an_agents_answer') return [{ tool }]
     return [{ tool, [row.field]: OUTSIDE_THE_TREE }]
   },
 )
