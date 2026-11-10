@@ -33,6 +33,12 @@ export interface Ingestion {
    * checkout file, a server's instruction block, a compaction summary).
    */
   readonly from_node_id: string | null
+  /**
+   * Why the recorder could not attribute it, when it knows (martha#247): a ring's
+   * answer says which branch carried no id, so the refusal names it rather than
+   * leaving the member to guess. Never a party to the decision, only its wording.
+   */
+  readonly why?: string
 }
 
 /**
@@ -127,7 +133,8 @@ function refusalFor(ingest: Ingestion, path: InboundPath | undefined, policy: Po
   }
 
   if (ingest.from_node_id === null) {
-    return `${tool}: text from an unattributed sender arrived on path ${path.id} (${path.what}) and is still readable here. ${WHAT_CLEARS_IT}`
+    const why = ingest.why === undefined ? '' : `: ${ingest.why}`
+    return `${tool}: text from an unattributed sender arrived on path ${path.id} (${path.what})${why} and is still readable here. ${WHAT_CLEARS_IT}`
   }
 
   const sender = ingest.from_node_id.toLowerCase()

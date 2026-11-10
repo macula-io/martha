@@ -107,11 +107,16 @@ export function sessionRecordsIn(rows: RowStore): SessionRecords {
 
 const streamOf = (session_id: string): string => `${SESSION_RECORD_STREAM}${session_id}`
 
+/** The third key a stored ingestion may carry beside its path and sender: the reason, one sentence (martha#247). */
+const isWhy = (entry: Readonly<Record<string, unknown>>): boolean =>
+  Object.hasOwn(entry, 'why') && typeof entry.why === 'string'
+
 const isIngestion = (value: unknown): value is Ingestion => {
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
+  const keys = Object.keys(entry).length
   return (
-    Object.keys(entry).length === 2 &&
+    (keys === 2 || (keys === 3 && isWhy(entry))) &&
     typeof entry.path === 'string' &&
     (entry.from_node_id === null || typeof entry.from_node_id === 'string')
   )
@@ -121,5 +126,11 @@ const isIngestion = (value: unknown): value is Ingestion => {
 export function recordOf(row: Row): Session {
   const ingested = row.ingested
   if (Object.keys(row).length !== 1 || !Array.isArray(ingested) || !ingested.every(isIngestion)) return LOST
-  return { ingested: ingested.map((entry) => ({ path: entry.path, from_node_id: entry.from_node_id })) }
+  return {
+    ingested: ingested.map((entry) => ({
+      path: entry.path,
+      from_node_id: entry.from_node_id,
+      ...(entry.why === undefined ? {} : { why: entry.why }),
+    })),
+  }
 }

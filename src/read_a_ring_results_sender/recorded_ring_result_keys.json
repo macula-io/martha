@@ -1,0 +1,58 @@
+{
+  "_why": "The keys of the two ring results, read from the server itself: for each version a member may install, two of its servers are started as two agents on one station, one rings the other, the other answers, and the keys each answered result carried are written down (martha#247). The gate reads one key per row (to on A5, peer on A4) and the marker that proves the branch answered (answer, caller_notified); check_every_path_is_gated fails CI by name when a recorded version stops carrying one, so a release that renames a field is recorded again in a reviewed commit rather than quietly costing a member its shell. Record a version with: npm run record:ring-results -- <.tgz npm pack wrote> <its server bin>. Retire one by removing its record.",
+  "server": "@macula-io/mcp",
+  "versions": [
+    {
+      "server_version": "0.51.0",
+      "integrity": "sha512-gELqCzCAfNbt4XIdTm2hqAKV1HDqrN9Gi2FuL6ReK9hzcau5onnYyhwE6LYJqYYfDISXPKURlqHN0pIG7YdCZw==",
+      "results": {
+        "mesh_ring": [
+          "answer",
+          "answer_label",
+          "next_step",
+          "reason",
+          "ring_id",
+          "room_topic",
+          "to",
+          "to_petname"
+        ],
+        "mesh_answer_ring": [
+          "answer",
+          "caller_notified",
+          "next_step",
+          "peer",
+          "peer_petname",
+          "ring_id",
+          "room_topic"
+        ]
+      },
+      "not_an_acknowledgement": "caller answered with something that is not an acknowledgement"
+    },
+    {
+      "server_version": "0.51.2",
+      "integrity": "sha512-BuY1vN12QFm8vTpic5h/frvNDBYlOyFYhVmUjtR1PgypQwPqKrIDSTHr+gTKGx3gHlSqQI0gvt0EGPyGw59C5A==",
+      "results": {
+        "mesh_ring": [
+          "answer",
+          "answer_label",
+          "next_step",
+          "reason",
+          "ring_id",
+          "room_topic",
+          "to",
+          "to_petname"
+        ],
+        "mesh_answer_ring": [
+          "answer",
+          "caller_notified",
+          "next_step",
+          "peer",
+          "peer_petname",
+          "ring_id",
+          "room_topic"
+        ]
+      },
+      "not_an_acknowledgement": "caller answered with something that is not an acknowledgement"
+    }
+  ]
+}

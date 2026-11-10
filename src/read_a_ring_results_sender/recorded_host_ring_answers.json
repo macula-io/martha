@@ -1,0 +1,35 @@
+{
+  "_why": "The host's answer for the two ring tools, taken live, so the parse is pinned to the shape Claude Code really keeps rather than to a shape typed here (martha#247). Taken on 2.1.322 (Claude Code) with @macula-io/mcp 0.51.2 as the session's one MCP server and a PostToolUse hook that kept its own body: one ring placed at another agent (answer 2, declined), one pending ring answered (answer 2, caller_notified 1). Each entry is that hook's tool_response, which is the value the relay's seam reads as body.answer: a bare one-block array [{type:'text', text}], with the whole block one JSON object, and a plain string on error. Every node id, petname, ring id and room topic was replaced with a synthetic value so no real one is in this public repository; nothing else was changed. Regenerate by taking the same two calls through a real host and rewriting the values.",
+  "host": "2.1.322 (Claude Code)",
+  "server": "@macula-io/mcp 0.51.2",
+  "taken_at": "2026-11-10",
+  "answers": {
+    "mesh_ring": {
+      "tool_name": "mcp__macula__mesh_ring",
+      "tool_input": {
+        "to": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "purpose": "recording the shape of a ring result"
+      },
+      "tool_response": [
+        {
+          "type": "text",
+          "text": "{\n  \"ring_id\": \"recorded_ring_id_one\",\n  \"to\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"room_topic\": \"agents.room.recorded_one\",\n  \"answer\": 2,\n  \"answer_label\": \"declined\",\n  \"reason\": \"declined: not on this agent's allowlist\",\n  \"next_step\": \"Declined. Leave the room if you opened it for this.\",\n  \"to_petname\": \"recorded_petname_member\"\n}"
+        }
+      ]
+    },
+    "mesh_answer_ring": {
+      "tool_name": "mcp__macula__mesh_answer_ring",
+      "tool_input": {
+        "ring_id": "recorded_ring_id_two",
+        "answer": 2,
+        "reason": "recording the shape of an answered ring"
+      },
+      "tool_response": [
+        {
+          "type": "text",
+          "text": "{\n  \"ring_id\": \"recorded_ring_id_two\",\n  \"answer\": 2,\n  \"peer\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"room_topic\": \"agents.room.recorded_two\",\n  \"caller_notified\": 1,\n  \"peer_petname\": \"recorded_petname_member\",\n  \"next_step\": \"Declined and recorded. Nothing more to do.\"\n}"
+        }
+      ]
+    }
+  }
+}

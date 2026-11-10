@@ -751,6 +751,16 @@ test('a session record nobody loaded, or whose last row is no record, reads as l
   assert.equal(records.store.read('unreadable'), LOST, 'a record that fails is dropped, and the session reads as lost')
 })
 
+test('a record that says why it lost a sender is a record, and keeps the reason (martha#247)', async (t) => {
+  const place = placeFor(t)
+  const rows = rowStreamsDirectory(place.rows)
+  const records = sessionRecordsIn(rows)
+  const said = 'the answer was recorded but the caller could not be told'
+  await rows.append(`${SESSION_RECORD_STREAM}explained`, { ingested: [{ path: 'A4', from_node_id: null, why: said }] })
+  await records.load('explained')
+  assert.deepEqual(records.store.read('explained'), { ingested: [{ path: 'A4', from_node_id: null, why: said }] })
+})
+
 // --- the relay socket's directory -----------------------------------------------
 
 test('the relay directory is made new, 0700, and removed', (t) => {

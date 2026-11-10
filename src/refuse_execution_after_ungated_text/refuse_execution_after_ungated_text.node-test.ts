@@ -197,6 +197,14 @@ test('the refusal names the path and says what clears it, in business words', ()
   assert.doesNotMatch(why, /undefined|null|NaN/)
 })
 
+test('a recorder that knows why it has no sender says so in the refusal, so a ring names which branch carried none (martha#247)', () => {
+  const said = 'the ring was not answered: its result carries no answer of 1, 2 or 3'
+  const why = refusal('Bash', [{ path: 'A5', from_node_id: null, why: said }])
+  assert.ok(why.includes(said), `the refusal repeats what the recorder said (${why})`)
+  assert.match(why, /A5/)
+  assert.doesNotMatch(why, /undefined|null|NaN/)
+})
+
 // --- the owner's own typed turn (#51) ------------------------------------------
 //
 // Raf's ruling 2026-11-06: a turn the host engine stamps as typed at the member's

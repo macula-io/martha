@@ -30,7 +30,9 @@
 import { join } from 'node:path'
 
 import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
-import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
+import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
+import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import type { ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
@@ -48,6 +50,7 @@ import {
   MESH_TOOLS_REFUSED,
   MESH_TOOLS_THAT_RUN,
   MESH_TOOL_PREFIX,
+  sourceOfAMeshToolResult,
 } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 export interface Gap {
@@ -634,4 +637,67 @@ export function shellGateRowsNothingRecords(
  */
 export function claimsTheShellGate(control: Control): boolean {
   return control.kind === 'shell-gate' || (control.kind === 'check_every_path_is_gated' && control.also.some(claimsTheShellGate))
+}
+
+/**
+ * Rows that stand on an attestation nothing supplies (martha#247).
+ *
+ * A registry row says who vouches for a sender: the crew roster, the mesh
+ * station, the host's binder or engine. A row whose attestation is not `none`
+ * and whose recording carries no node id is a promise the gate never keeps: the
+ * shell refuses on it every time, so the row's whole purpose is lost in silence.
+ * This is #121's mirror — there a row named a control nothing recorded, here it
+ * names an attestation nothing supplies.
+ *
+ * `recorded` is every ingestion a host's production code recorded when driven
+ * with what really produces each source (../launch_a_claude_code_member's own
+ * test drives it), and a row the registry declares no turn source is not asked
+ * for one, as in shellGateRowsNothingRecords.
+ */
+export function rowsWhoseAttestationNothingSupplies(
+  recorded: readonly Ingestion[],
+  paths: readonly InboundPath[] = INBOUND_PATHS,
+  not_turn_sources: readonly string[] = REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES,
+): readonly Gap[] {
+  const gaps: Gap[] = []
+  for (const path of paths) {
+    if (path.attestation === 'none' || not_turn_sources.includes(path.id)) continue
+    const unattributed = recorded.filter((ingest) => ingest.path === path.id && ingest.from_node_id === null)
+    if (unattributed.length > 0) {
+      const why = unattributed[0]?.why
+      gaps.push({
+        path: path.id,
+        why: `stands on the ${path.attestation} attestation, and the recording it is driven with carries no node id${why === undefined ? '' : ` (${why})`}`,
+      })
+    }
+  }
+  return gaps
+}
+
+/**
+ * Every recorded mesh server version whose ring results no longer carry the keys
+ * the parse reads (martha#247), named with the registry row each key belongs to.
+ *
+ * The gate reads `to` on A5 and `peer` on A4, and the marker that proves the
+ * branch answered (`answer`, `caller_notified`). Those names are the server's, so
+ * a release that renames one leaves the parse reading nothing: the row then
+ * records no sender and the member loses its shell in silence. The fix is a
+ * recording in a reviewed commit, the same act as recording a version at all.
+ */
+export function gapsInRingResultKeys(
+  recorded: readonly { readonly server_version: string; readonly results: Readonly<Record<string, readonly string[]>> }[] = RECORDED_RING_RESULT_KEYS,
+  keys: Readonly<Record<string, { readonly id: string; readonly marker: string }>> = RING_RESULT_KEYS,
+): readonly Gap[] {
+  const reads = Object.entries(keys).flatMap(([tool, read]) =>
+    [read.marker, read.id].map((key) => ({ tool, key, row: PATH_OF_SOURCE[sourceOfAMeshToolResult(tool)] })),
+  )
+  const missing = recorded.flatMap((version) =>
+    reads
+      .filter(({ tool, key }) => !(version.results[tool] ?? []).includes(key))
+      .map(({ tool, key, row }) => ({
+        path: row,
+        why: `its recorded ${tool} result for ${version.server_version} carries no ${key}, so the parse reads nothing and the row records no sender`,
+      })),
+  )
+  return missing
 }

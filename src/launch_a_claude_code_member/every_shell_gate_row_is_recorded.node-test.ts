@@ -29,6 +29,7 @@ import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { GIT, GITHUB_CLI, HISTORY_SUBCOMMANDS } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -131,14 +132,16 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
       await relay.answer('prompt_submitted', { session_id: id, text: 'hello', origin: { kind }, ...carries })
     }
   }
+  // A ring tool's own result is driven from the recorded host answer (martha#247), so the row that reads a
+  // sender out of it is reached with one; a result the host never produces would stop the member instead.
   const calls = [
-    ...MESH_TOOLS_THAT_RUN.map((own) => ({ tool: MESH_SERVER_TOOL(own) })),
-    { tool: ANOTHER_SERVER_TOOL },
-    ...BUILT_IN_CALLS,
+    ...MESH_TOOLS_THAT_RUN.map((own) => ({ call: { tool: MESH_SERVER_TOOL(own), ...RECORDED_RING_ANSWERS[own]?.tool_input }, answer: RECORDED_RING_ANSWERS[own]?.tool_response })),
+    { call: { tool: ANOTHER_SERVER_TOOL }, answer: undefined },
+    ...BUILT_IN_CALLS.map((call) => ({ call, answer: undefined })),
   ]
-  for (const call of calls) {
+  for (const { call, answer } of calls) {
     const id = await session(`tool-${String(call.tool)}`)
-    await relay.answer('tool_answered', { session_id: id, call })
+    await relay.answer('tool_answered', { session_id: id, call, answer })
   }
 
   const lasts = await Promise.all(sessions.map(async (id) => (await rows.read(`${SESSION_RECORD_STREAM}${id}`)).at(-1)))

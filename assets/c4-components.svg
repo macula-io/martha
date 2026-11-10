@@ -119,8 +119,10 @@
 <text class="t-type" x="680" y="422">[recorded trees]</text>
 <text class="t-desc" x="680" y="446">A tree by bytes, never by version:</text>
 <text class="t-desc" x="680" y="462">record_mesh_server_tools records it,</text>
-<text class="t-desc" x="680" y="478">prove_the_mesh_server_bytes compares it</text>
-<text class="t-desc" x="680" y="494">again, and the launcher installs it</text>
+<text class="t-desc" x="680" y="478">record_ring_results rings one server</text>
+<text class="t-desc" x="680" y="494">with another and keeps the keys,</text>
+<text class="t-desc" x="680" y="510">prove_the_mesh_server_bytes compares it</text>
+<text class="t-desc" x="680" y="526">again, and the launcher installs it</text>
 <rect class="b-cmp" x="32" y="542" width="300" height="170" rx="10"/>
 <text class="t-code" x="48" y="570">inbound_paths</text>
 <text class="t-type" x="48" y="588">[every path, and its control]</text>
@@ -134,10 +136,10 @@
 <text class="t-type" x="364" y="606">[the shell gate]</text>
 <text class="t-desc" x="364" y="630">A turn or a tool's result: take_in_a_turn,</text>
 <text class="t-desc" x="364" y="646">take_in_a_tool_result, shell_tools,</text>
-<text class="t-desc" x="364" y="662">answer_a_tool_call, refuse_execution_</text>
-<text class="t-desc" x="364" y="678">after_ungated_text, trust_only_framed_</text>
-<text class="t-desc" x="364" y="694">envelopes; a signed run keeps the shell:</text>
-<text class="t-desc" x="364" y="710">keep_the_shell_for_an_owner_signed_command;</text>
+<text class="t-desc" x="364" y="662">answer_a_tool_call, read_a_ring_results_</text>
+<text class="t-desc" x="364" y="678">sender, refuse_execution_after_ungated_</text>
+<text class="t-desc" x="364" y="694">text, trust_only_framed_envelopes; keep_</text>
+<text class="t-desc" x="364" y="710">the_shell_for_an_owner_signed_command;</text>
 <text class="t-desc" x="364" y="726">hash_a_file_under_a_tree, what a file is</text>
 <rect class="b-cmp" x="664" y="542" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="570">name_the_source_of_a_prompt</text>

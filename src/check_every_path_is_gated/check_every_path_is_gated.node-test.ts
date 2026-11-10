@@ -19,10 +19,11 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
-import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
+import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInRingResultKeys, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
+import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { ANSWERS_A_RING, MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX, RINGS_AND_RETURNS_THE_ANSWER, sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { RECORDED_RING_RESULT_KEYS, type RecordedRingResultKeys } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
@@ -708,4 +709,46 @@ test('the gate answers the configuration questions too, and a gate that lost the
   }
   const wired = gapsInGateCoverage([row], gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': lostTheRule }, standIn)
   assert.ok(wired.some((gap) => gap.why.includes('admits the hooks folder a tree config names')), `the register pass names the lost value rule (${wired.map((gap) => gap.why).join('; ') || 'no gap'})`)
+})
+
+// --- the ring results still carry the keys the parse reads (martha#247) ---------
+//
+// The parse reads `to` on A5 and `peer` on A4, and keys each branch on the success
+// marker beside it (`answer`, `caller_notified`). Those names are the pinned mesh
+// server's, so a release that renames one leaves the parse reading nothing: the row
+// then records no sender and the member loses its shell in silence. The check runs
+// against the recorded key sets, and names the row and the version that lost one.
+
+const NEWEST_RING_KEYS = RECORDED_RING_RESULT_KEYS.at(-1) as RecordedRingResultKeys
+const WITHOUT = (recorded: RecordedRingResultKeys, tool: string, key: string): RecordedRingResultKeys => ({
+  ...recorded,
+  results: { ...recorded.results, [tool]: (recorded.results[tool] ?? []).filter((carried) => carried !== key) },
+})
+
+test('every recorded mesh server version still carries the keys the ring parse reads', () => {
+  assert.ok(RECORDED_RING_RESULT_KEYS.length > 0, 'no mesh server version recorded the ring results')
+  assert.deepEqual(gapsInRingResultKeys(), [])
+})
+
+test('a recorded version that has lost a key is named with the row it belongs to, the key and the version', () => {
+  const reads = [
+    { tool: RINGS_AND_RETURNS_THE_ANSWER, key: 'to' },
+    { tool: RINGS_AND_RETURNS_THE_ANSWER, key: 'answer' },
+    { tool: ANSWERS_A_RING, key: 'peer' },
+    { tool: ANSWERS_A_RING, key: 'caller_notified' },
+  ].map(({ tool, key }) => ({ tool, key, row: PATH_OF_SOURCE[sourceOfAMeshToolResult(tool)] }))
+  for (const { tool, key, row } of reads) {
+    const gaps = gapsInRingResultKeys([WITHOUT(NEWEST_RING_KEYS, tool, key)])
+    assert.deepEqual(gaps.map((gap) => gap.path), [row], `${tool} without ${key}`)
+    assert.match(gaps[0]?.why ?? '', new RegExp(`carries no ${key}`))
+    assert.ok(gaps[0]?.why.includes(NEWEST_RING_KEYS.server_version), `the gap names the version (${gaps[0]?.why ?? ''})`)
+  }
+})
+
+test('a version that lost nothing is named for nothing, and a renamed key is not read as the one asked for', () => {
+  assert.deepEqual(gapsInRingResultKeys([NEWEST_RING_KEYS, { ...NEWEST_RING_KEYS, server_version: '0.0.1' }]), [])
+  const renamed = WITHOUT(NEWEST_RING_KEYS, RINGS_AND_RETURNS_THE_ANSWER, 'to')
+  const row = PATH_OF_SOURCE[sourceOfAMeshToolResult(RINGS_AND_RETURNS_THE_ANSWER)]
+  const gaps = gapsInRingResultKeys([renamed])
+  assert.equal(gaps.filter((gap) => gap.path === row).length, 1, 'one gap for the one row that lost its key')
 })

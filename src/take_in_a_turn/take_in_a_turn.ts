@@ -148,8 +148,9 @@ export function rememberSession(store: SessionRecordStore, session: HostSession)
 export function takeInTurn(session: HostSession, arrival: Arrival, binder: Binder): HostSession {
   const path = pathOf(arrival)
   const identity = identityOf(path, arrival, binder)
+  const why = identity === null && 'why' in arrival ? arrival.why : undefined
 
-  return { ...session, gate: recordIngestion(session.gate, [{ path, from_node_id: identity }]) }
+  return { ...session, gate: recordIngestion(session.gate, [{ path, from_node_id: identity, ...(why === undefined ? {} : { why }) }]) }
 }
 
 /** The registry rows that are not a turn source the host reports. */

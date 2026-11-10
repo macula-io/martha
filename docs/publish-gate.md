@@ -438,7 +438,7 @@ A host does these things, and the core does the rest:
 | before running any tool | `answerToolCall({ tool, session, policy, input, launch, names: host.tools })`, where `launch` is the place and approvals `prepareLaunch` was given and `names` is the host's own split of a called tool's name — return the `{ deny }` as the hook's answer. It checks the launch again first: the snapshot's hooks and servers run scripts that still live in the checkout, so a call that changes the tree (a `gh pr checkout`, a pull) is followed by a refusal of every call after it. What is left is the hooks of the one call that changed the tree |
 | after every tool call | `recheckLaunch(launch)` — on a refusal the hook asks the launcher to stop the member and does not return: the launcher sends SIGKILL to the member's whole process group (the host and its tool servers), which ends the hook with it. A hook that returned would let the host fire its next hooks (`Stop` at the end of the turn), and a SIGTERM or normal exit fires `SessionEnd` |
 | a member reads a room | `readRoomThroughItsGate({ session, room, envelopes, rosters, self_node_id })` — the raw mesh reads are refused |
-| after any MCP tool result | `takeInTurn(session, { source: sourceOfAMeshToolResult(tool) }, binder)` — a mesh tool that runs hands back text with no sender to admit, so the shell gate judges it: `mesh_ring` records the ring's answer (A5), `mesh_answer_ring` what answering returns (A4), every other tool result B2 |
+| after any MCP tool result | `takeInTurn(session, arrivalOfAMeshToolResult(ownName, input, answer), binder)` — the shell gate judges every result. A ring tool's result carries the node id its own result attests, read by `senderOfARingResult` (../read_a_ring_results_sender, martha#247) from the host's one text block when its whole text is one JSON object: `mesh_ring` records the node it dialled (A5), from `to`, only when its result carries an `answer` of 1, 2 or 3; `mesh_answer_ring` records the peer the server checked against its verified caller (A4), from `peer`, only when `caller_notified` is 1. Every other result of those two tools records no sender **and says which branch it was** — not answered, not notified, or a result that is not the recorded shape — and every other mesh tool result is B2, which carries no sender to admit |
 | when a member's session starts | `takeInTurn` once per source `sourcesALaunchHandsTheModel(carried_files)` returns: A7 when the carried settings declare a hook or enable a plugin, A11 for a server outside the recorded mesh tree or a plugin |
 | a turn arrives, from any source | `takeInTurn(session, arrival, binder)`: `bindNothing` on a host that cannot attest who sent a cross-session message |
 | the launcher starts or stops a member | `recordMemberLaunch(launcherRecords, host.processes, launched)`, `recordMemberStopped(launcherRecords, member_name)`, with the writable store the adapter holds as the launcher's seam; slices get only `host.stores.launches`, which reads (#42) |
@@ -455,7 +455,12 @@ The rules the seam keeps, and a host must not work around:
   station (A4, A5), or the host's binder (A6, martha#14). Every other path drops
   the identity the host offers, so a commit authored under the supervisor's node
   id, a `gh` login, or an envelope's `from` attribute buys nothing. A host that
-  holds no identity records an unattributed arrival, which taints.
+  holds no identity records an unattributed arrival, which taints. The station's
+  word on the two ring rows is the field its own result carries and nothing else
+  (martha#247): `to` on A5, `peer` on A4, read from one recorded JSON shape and
+  only on the branch whose marker proves an answer, so a renamed field, an error
+  result, or a result that quotes the other side's payload records no sender and
+  the refusal says why.
 - **The record is persisted per session id and reloaded on start.** Held only in
   memory, it fails open on every process restart: a resumed transcript would come
   back to an empty record. A session that expects a record and cannot read one is

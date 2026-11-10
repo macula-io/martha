@@ -40,8 +40,9 @@ import {
   type SessionStartHookInput,
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -250,6 +251,13 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
   }
+}
+
+/** What a mesh tool's result is taken in as: its row, and the node id the result itself attests where the row's station attestation is really there (martha#247). */
+function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unknown): Arrival {
+  const source = sourceOfAMeshToolResult(own_name)
+  const sender = senderOfARingResult(own_name, input, answer)
+  return sender === undefined ? { source: source as Exclude<TurnSource, 'cross_session'> } : { source: source as Exclude<TurnSource, 'cross_session'>, ...sender }
 }
 
 /**
@@ -506,7 +514,7 @@ async function recordToolResult(
   const { place } = state
   const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
   const taken = isMcpToolCall(call.tool)
-    ? takeInTurn(session, { source: sourceOfAMeshToolResult(place.names.ownNameOf(call.tool)) }, place.binder)
+    ? takeInTurn(session, arrivalOfAMeshToolResult(place.names.ownNameOf(call.tool), call.input, answer), place.binder)
     : takeInToolResult(
         session,
         {

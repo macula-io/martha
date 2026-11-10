@@ -300,6 +300,12 @@ export type Arrival =
       readonly source: Exclude<TurnSource, BoundSource>
       /** The identity the host holds for the sender; omitted or null means it holds none. */
       readonly from_identity?: string | null
+      /**
+       * Why the host holds none, when it knows (martha#247): a ring's result says
+       * which branch carried no id. Said in the gate's refusal; never a party to
+       * the decision, and dropped whenever an identity is carried.
+       */
+      readonly why?: string
     }
   | {
       /** The host knows it was a cross-session delivery. */
