@@ -629,6 +629,21 @@ const HOST_KEY_CASES: ReadonlyArray<{
     keyLine: (value) => `[hooks] # c\n: ${value}`,
     expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: true },
   },
+  // The two spellings that made the narrowed scan enter a value where a key opens: an anchor and a local tag ending in
+  // a colon. Each runs, so the gate's refusal of them is warranted, and a host that stopped reading one fails its row
+  // (martha#243).
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key behind an anchor ending in a colon',
+    name: 'hooks-key-anchored',
+    keyLine: (value) => `&x: "hoo\\x6bs": ${value}`,
+    expected: { AGENT_HOOK: true, AGENT_NOT_FOUND: false },
+  },
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key behind a local tag ending in a colon',
+    name: 'hooks-key-tagged',
+    keyLine: (value) => `!x: "hoo\\x6bs": ${value}`,
+    expected: { AGENT_HOOK: true, AGENT_NOT_FOUND: false },
+  },
 ]
 
 const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
