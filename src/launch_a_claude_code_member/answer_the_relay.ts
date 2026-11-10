@@ -43,7 +43,7 @@ import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_h
 import type { ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { completionNoticeOf } from '../name_the_completion_of_an_agent/name_the_completion_of_an_agent.ts'
+import { completionNoticeOf, summaryOfAnAgent } from '../name_the_completion_of_an_agent/name_the_completion_of_an_agent.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
@@ -130,8 +130,11 @@ interface RelayState {
  */
 interface AgentRun {
   readonly session_id: string
-  /** The member's own calls whose answer named this agent: the launches this agent's notices may complete. */
-  readonly asked_by: Set<string>
+  /**
+   * The member's own calls whose answer named this agent, each with the description that call carried: the launches
+   * this agent's notices may complete, and the words the host's summary of it must hold.
+   */
+  readonly asked_by: Map<string, string>
   /** The tool calls the agent made, by the host's own `tool_use_id`. */
   readonly calls_seen: Set<string>
   /** Those of them this launcher answered. */
@@ -222,11 +225,11 @@ function agentsRunning(state: RelayState, session: HostSession): readonly string
 function agentOfAResult(
   state: RelayState,
   session: HostSession,
-  call: { readonly tool_use_id: string | undefined; readonly agentId: string | undefined },
+  call: { readonly input: Body; readonly tool_use_id: string | undefined; readonly agentId: string | undefined },
   answer: unknown,
 ): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
   const asked = agentIdIn(answer)
-  if (isText(asked)) return theAgentTheMemberAskedFor(state, session, call.tool_use_id, asked)
+  if (isText(asked)) return theAgentTheMemberAskedFor(state, session, call, asked)
   return call.agentId === undefined ? undefined : agentStateOf(state, call.agentId)
 }
 
@@ -245,11 +248,11 @@ function agentOfAResult(
 function theAgentTheMemberAskedFor(
   state: RelayState,
   session: HostSession,
-  tool_use_id: string | undefined,
+  call: { readonly input: Body; readonly tool_use_id: string | undefined },
   id: string,
 ): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } {
   const run = runOf(state, session, id)
-  if (tool_use_id !== undefined) run.asked_by.add(tool_use_id)
+  if (call.tool_use_id !== undefined) run.asked_by.set(call.tool_use_id, isText(call.input['description']) ? call.input['description'] : '')
   return agentStateOf(state, id) ?? { id, state: 'unknown' }
 }
 
@@ -405,7 +408,9 @@ function isTheCompletionOfAVouchedAgent(state: RelayState, session: HostSession,
   if (notice === undefined) return false
   const run = state.agents.get(notice.task_id)
   if (run === undefined || run.session_id !== session.id || !vouchedRun(run)) return false
-  return run.asked_by.has(notice.tool_use_id) && run.its_last_words === notice.words
+  const asked = run.asked_by.get(notice.tool_use_id)
+  if (asked === undefined) return false
+  return notice.summary === summaryOfAnAgent(asked) && run.its_last_words === notice.words
 }
 
 /** The completion notice a prompt carries, or `undefined` when the prompt is not one under this session's record. */
@@ -443,7 +448,7 @@ function isAnAgentsAnswerTool(tool: string): boolean {
 function runOf(state: RelayState, session: HostSession, agent_id: string): AgentRun {
   const existing = state.agents.get(agent_id)
   if (existing !== undefined) return existing
-  const run: AgentRun = { session_id: session.id, asked_by: new Set(), calls_seen: new Set(), calls_answered: new Set(), started: false, stopped: false, calls_recorded: [] }
+  const run: AgentRun = { session_id: session.id, asked_by: new Map(), calls_seen: new Set(), calls_answered: new Set(), started: false, stopped: false, calls_recorded: [] }
   state.agents.set(agent_id, run)
   return run
 }
