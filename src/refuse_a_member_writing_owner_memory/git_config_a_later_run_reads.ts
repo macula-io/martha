@@ -196,13 +196,15 @@ function isAnInclude(entry: ConfigEntry): boolean {
 function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } | { readonly kind: 'refused'; readonly refusal: string } {
   const places: ConfigNamedPlace[] = []
   const includes: string[] = []
-  for (const candidate of candidatesIn(entry)) {
+  const read = wordsTakenByAShell(withoutTheSignIn(entry.value))
+  if (read.kind === 'pastTheCap') return { kind: 'refused', refusal: pastTheCapIn(entry) }
+  for (const candidate of candidatesIn(entry, read.words)) {
     const one = oneCandidate(candidate, entry, top, home, host)
     if (one.kind === 'refused') return one
     if (isAnInclude(entry)) includes.push(one.path)
     if (one.inside) places.push({ what: one.path, why: whyTheValueIsRefused(entry) })
   }
-  const computed = computedPlacesIn(entry, top, home, host)
+  const computed = computedPlacesIn(entry, read.words, top, home, host)
   if (computed.kind === 'refused') return computed
   places.push(...computed.places)
   return { kind: 'places', places, includes }
@@ -218,13 +220,13 @@ function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: Launc
  * a thing the guard cannot place at all, and refusing every write into that checkout
  * is the direction that cannot fail open.
  *
- * The words are those of every shell the value reaches: the outer one, and the second
- * a line handed to `sh -c` starts (r=4) — a glob there names its folder as a glob at
- * the outer level does.
+ * The words are those of every shell the value reaches: the outer one, and each line one
+ * shell hands the next (r=4, r=5) — a glob there names its folder as a glob at the outer
+ * level does.
  */
-function computedPlacesIn(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[] } | { readonly kind: 'refused'; readonly refusal: string } {
+function computedPlacesIn(entry: ConfigEntry, words: readonly ShellWord[], top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[] } | { readonly kind: 'refused'; readonly refusal: string } {
   const places: ConfigNamedPlace[] = []
-  for (const word of wordsTakenByAShell(withoutTheSignIn(entry.value))) {
+  for (const word of words) {
     if (word.computed === undefined) continue
     const { writtenBefore, what } = word.computed
     if (writtenBefore === '') {
@@ -301,6 +303,14 @@ const SHELL_GLOB = '*?['
 
 /** The characters that quote text for a shell. */
 const SHELL_QUOTES = '\'"'
+
+/**
+ * How many shells deep one value's words are read (martha#192 r=5). A word handed to
+ * `sh -c` is a line a second shell reads, and a word of that line is again a line for
+ * a third, so the reading repeats until no new word appears. Past this many readings
+ * the guard refuses the whole checkout rather than read a line it cannot vouch for.
+ */
+export const SHELL_DEPTH_CAP = 8
 
 /**
  * The words a shell would run from a value (martha#192 r=3). A word is not a split on
@@ -499,17 +509,36 @@ function upToMatchingParen(value: string, at: number): string {
 }
 
 /**
- * The words every shell a value reaches would run from it (martha#192 r=4): the outer
- * shell's words, and each word read again as a line a shell hands a second one. What
- * runs is sometimes a word the shell splits again — `sh -c 'sh tools/*.sh'` hands `sh`
- * a line of its own words, and `tools/*.sh` is what the second shell expands — so both
- * readings are taken, and the second is the tokenizer's own with its quotes joining and
- * its globs, variables and substitutions marking the folder written before them. A rule
- * that names too much refuses too much, which is the direction this guard takes; one
- * that names too little fails open.
+ * The words every shell a value reaches would run from it (martha#192 r=4, r=5): the
+ * outer shell's words, and each word read again as a line a shell hands another one.
+ * What runs is sometimes a word the shell splits again — `sh -c 'sh tools/*.sh'` hands
+ * `sh` a line of its own words, and `tools/*.sh` is what the second shell expands — so
+ * both readings are taken, and the second is the tokenizer's own with its quotes
+ * joining and its globs, variables and substitutions marking the folder written before
+ * them. A line can hide the next one the same way (`sh -c "sh -c 'sh tools/*.sh'"`), so
+ * the reading repeats until no new word appears, and `SHELL_DEPTH_CAP` bounds how many
+ * times: a value that outlasts it is one whose next shell the guard cannot vouch for,
+ * and `pastTheCap` says so rather than stopping short. A rule that names too much
+ * refuses too much, which is the direction this guard takes; one that names too little
+ * fails open.
  */
-function wordsTakenByAShell(value: string): ShellWord[] {
-  return shellWordsIn(value).flatMap((word) => [word, ...shellWordsIn(word.text)])
+function wordsTakenByAShell(value: string): WordsAValueIsReadAs {
+  const words = new Map<string, ShellWord>()
+  let fresh = shellWordsIn(value)
+  for (let depth = 0; fresh.length > 0; depth += 1) {
+    if (depth >= SHELL_DEPTH_CAP) return { kind: 'pastTheCap' }
+    for (const word of fresh) words.set(word.text, word)
+    fresh = fresh.flatMap((word) => shellWordsIn(word.text)).filter((word) => !words.has(word.text))
+  }
+  return { kind: 'words', words: [...words.values()] }
+}
+
+/** What reading a value through the shells it reaches came to: every word it runs, or the cap run out. */
+type WordsAValueIsReadAs = { readonly kind: 'words'; readonly words: readonly ShellWord[] } | { readonly kind: 'pastTheCap' }
+
+/** The refusal for a value nested deeper than the shells this guard reads through (martha#192 r=5). */
+function pastTheCapIn(entry: ConfigEntry): string {
+  return `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, one shell past the ${SHELL_DEPTH_CAP} shells a value is read through, so what the next one runs cannot be told: a member does not write into that checkout while it stands (martha#192)`
 }
 
 /**
@@ -525,17 +554,19 @@ function wordsTakenByAShell(value: string): ShellWord[] {
  * value whole keeps the spaces git keeps, so a path that starts with one
  * (`hooksPath = " hk"`) is the folder `<top>/ hk` and not `<top>/hk`.
  *
- * A word is also taken as the line a second shell would read it as (r=4): `sh -c
- * 'sh tools/h.sh --fix'` hands `sh` a line of its own words, and `tools/h.sh` is
- * what runs, however that line spells it — a glob, a quote or a substitution there
- * is the second shell's, not text.
+ * A word is also taken as the line a second shell would read it as, and that line's
+ * words as a third's (r=4, r=5): `sh -c 'sh tools/h.sh --fix'` hands `sh` a line of
+ * its own words, and `tools/h.sh` is what runs, however that line spells it — a glob,
+ * a quote or a substitution there is the shell's that reads it, not text. The words
+ * come from the caller, which has already read the value through every shell it
+ * reaches and refused it when it outlasts `SHELL_DEPTH_CAP`.
  */
-function candidatesIn(entry: ConfigEntry): string[] {
+function candidatesIn(entry: ConfigEntry, words: readonly ShellWord[]): string[] {
   const whole = entry.value
   if (whole === '') return []
   const withoutTheSign = withoutTheSignIn(whole)
-  const words = isAnInclude(entry) ? [] : wordsTakenByAShell(withoutTheSign).map((word) => word.text)
-  return [...new Set([whole, ...(withoutTheSign === whole ? [] : [withoutTheSign]), ...words])]
+  const named = isAnInclude(entry) ? [] : words.map((word) => word.text)
+  return [...new Set([whole, ...(withoutTheSign === whole ? [] : [withoutTheSign]), ...named])]
 }
 
 /** A value git hands to a shell, which an alias writes with a leading `!`, and the words without that sign. */

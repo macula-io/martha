@@ -962,9 +962,13 @@ where it came from. Three things stand on it:
   either side of it into one word, so `tools/x''.sh` is `tools/x.sh` and
   `'tools/my x.sh'` is one word with a space in it, and only the whitespace and
   the operators outside quotes end one, so `!sh -c 'tools/x.sh'` and
-  `"!tools/y.sh&&true"` name the scripts they run — and a word a shell hands a
-  second one (`sh -c '<line>'`) is read again as that shell would read it, so a
-  glob, a quote join or a substitution inside it is not text either — and the
+  `"!tools/y.sh&&true"` name the scripts they run — and a word a shell hands
+  another one (`sh -c '<line>'`) is read again as that shell would read it, so a
+  glob, a quote join or a substitution inside it is not text either, and a line
+  that hides a further one the same way is read on until no new word appears; a
+  value nested past `SHELL_DEPTH_CAP` shells (eight) is one whose next shell the
+  guard cannot vouch for, and every write into that checkout is refused rather
+  than read further — and the
   value whole is taken
   as a path too, so a hooks folder (`core.hooksPath = .husky`), an alias's command
   (`alias.fmt = !tools/x.sh`), a config hook's command, a filter, an attributes

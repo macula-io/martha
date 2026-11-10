@@ -10,7 +10,7 @@ import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { entriesInText } from './git_config_a_later_run_reads.ts'
+import { entriesInText, SHELL_DEPTH_CAP } from './git_config_a_later_run_reads.ts'
 import {
   FILE_WRITING_TOOLS,
   gapsInTheNameMap,
@@ -1230,6 +1230,61 @@ test('a brace expansion protects the folder written before it, and a function bo
   assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'tools', 'x.sh'), 'a brace holding neither a list nor a range')
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', '{x}.sh'), 'the file a brace with no list names literally')
 })
+
+// J1 and J2 as Mercurius measured them on git 2.56.0 (martha#192 r=5): the second shell
+// hands a third one a line of its own, and that third one ran the member's file. Reading
+// each word again once reaches the second shell and never the third, so a value is read
+// through its shells until no new word appears — and `SHELL_DEPTH_CAP` is how far, past
+// which nothing the guard says about the next shell can be trusted.
+//
+// The quote of the second shell is escaped in the file (`\"`), as Mercurius wrote it and
+// as git reads it: a bare one is git's own quoting, and the shell never sees it.
+test('a glob two shells down protects its folder (#192 r=5)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[alias]\n\tp = !sh -c \\"sh -c \'sh tools/*.sh\'\\"\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'g.sh'), 'J1: a glob two shells down')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'J1: an ordinary file')
+})
+
+test('a plain path two shells down is named, with nothing computed in it (#192 r=5)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[alias]\n\tp = !sh -c \\"sh -c \'sh tools/x.sh\'\\"\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'x.sh'), 'J2: a plain path two shells down')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'J2: an ordinary file')
+})
+
+test('a value nested past the shells the guard reads through refuses the checkout (#192 r=5)', (t) => {
+  const place = placeFor(t)
+  // A shell past the cap: what it runs cannot be told, so every write into that
+  // checkout is refused rather than read further.
+  assertWholeCheckoutRefused(place, `[alias]\n\tp = !${asTheConfigFileHoldsIt(nestedUnderShells(SHELL_DEPTH_CAP + 1, 'tools/x.sh'))}\n`, 'one shell past the depth a value is read through', ['alias.p', `${SHELL_DEPTH_CAP} shells`, 'martha#192'])
+
+  // The control: as deep as the cap allows is still read, so the file it names is
+  // refused and an ordinary write beside it is not.
+  const atTheCap = checkoutWith(place, { config: `[alias]\n\tp = !${asTheConfigFileHoldsIt(nestedUnderShells(SHELL_DEPTH_CAP, 'tools/x.sh'))}\n` })
+  assertRefusedAs192(placesFor(place), atTheCap, place.home, join(atTheCap, 'tools', 'x.sh'), 'a value nested as deep as the cap allows')
+  assertAdmitted(placesFor(place), atTheCap, place.home, join(atTheCap, 'src', 'a.ts'), 'an ordinary file beside a value at the cap')
+})
+
+/**
+ * `command` run by `depth` shells one inside the next (`sh -c "sh -c \"…\""`), each
+ * layer's quote escaped for the one outside it, as a shell spelling that nests is.
+ */
+function nestedUnderShells(depth: number, command: string): string {
+  let line = command
+  for (let at = 0; at < depth; at += 1) line = `sh -c "${escapedForDoubleQuotes(line)}"`
+  return line
+}
+
+/** `line` with every character a double quote would work out or end it on escaped. */
+function escapedForDoubleQuotes(line: string): string {
+  return line.replace(/[\\"$`]/g, (letter) => `\\${letter}`)
+}
+
+/** A value as the config file holds it: git reads `\"` as a quote and `\\` as a backslash. */
+function asTheConfigFileHoldsIt(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
 
 test('a key on the line of its section header is read as git reads it (#192 r=2)', (t) => {
   const place = placeFor(t)
