@@ -22,14 +22,13 @@ import {
   type ModelScript,
   type RecordedHostRan,
 } from './drive_the_recorded_host.ts'
+import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
 
 const recordedHost = process.env[RECORDED_HOST_VARIABLE]
 const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
-/** How long the host may show nothing new before a run gives up on it: a host that is working is never cut off. */
-const HOST_SILENCE_MS = 120_000
 const CRLF_FILE = 'windows.txt'
 const OUTSIDER_BRANCH = 'outsider'
 /**

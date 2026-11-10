@@ -11,10 +11,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { POLL_MS, waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
-
-/** The budget the relay job gives one run, in the driver the test cases above use. */
-const BUDGET_MS = 120_000
+import { HOST_SILENCE_MS, POLL_MS, waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
 
 /** Looks a wait may take before the test calls it a wait that never gives up, rather than asking the harness.
  * Far above the slowest case here (ten budgets of looks, 12 000), so only a wait that never ends reaches it. */
@@ -66,7 +63,7 @@ test('#210: a host that goes silent fails by name, saying how long nothing came 
     holds: () => false,
     shown: host.shown,
     heard: host.heard,
-    silence_ms: BUDGET_MS,
+    silence_ms: HOST_SILENCE_MS,
     now: host.now,
     sleep: countingLooks(host, () => {}),
   }).then(
@@ -77,19 +74,19 @@ test('#210: a host that goes silent fails by name, saying how long nothing came 
   assert.match(why.message, /showed nothing new/, 'the red names silence, not a total time that passed')
   assert.match(why.message, /has taken \d+ ms in all/, 'the red says how long the run took, so a reader can tell a slow machine from a dead one')
   const taken = host.now() - started
-  assert.ok(taken >= BUDGET_MS && taken < BUDGET_MS + 2 * POLL_MS, `the wait gave up after ${taken} ms, which is not the budget it was given`)
+  assert.ok(taken >= HOST_SILENCE_MS && taken < HOST_SILENCE_MS + 2 * POLL_MS, `the wait gave up after ${taken} ms, which is not the budget it was given`)
 })
 
 test('#210: a host that stays slow but keeps showing new output is not cut off by how long it takes', async () => {
   const host = aHostOfTheTests()
   const started = host.now()
-  const slow_run = 10 * BUDGET_MS
+  const slow_run = 10 * HOST_SILENCE_MS
   const why = await waitWhileTheHostKeepsShowing({
     what: 'model request 3',
     holds: () => host.now() - started >= slow_run,
     shown: host.shown,
     heard: host.heard,
-    silence_ms: BUDGET_MS,
+    silence_ms: HOST_SILENCE_MS,
     now: host.now,
     sleep: countingLooks(host, () => host.draw('.')),
   }).then(
@@ -103,13 +100,13 @@ test('#210: a host that stays slow but keeps showing new output is not cut off b
 test('#210: a host that draws nothing but keeps sending model requests is progress too', async () => {
   const host = aHostOfTheTests()
   const started = host.now()
-  const slow_run = 5 * BUDGET_MS
+  const slow_run = 5 * HOST_SILENCE_MS
   const why = await waitWhileTheHostKeepsShowing({
     what: 'end of martha start',
     holds: () => host.now() - started >= slow_run,
     shown: host.shown,
     heard: host.heard,
-    silence_ms: BUDGET_MS,
+    silence_ms: HOST_SILENCE_MS,
     now: host.now,
     sleep: countingLooks(host, () => host.saysARequest()),
   }).then(
@@ -128,7 +125,7 @@ test('#210: what ruled a run out is said at once, and is not reported as silence
     cannotHappen: () => 'the stand-in could not answer: a planted fault',
     shown: host.shown,
     heard: host.heard,
-    silence_ms: BUDGET_MS,
+    silence_ms: HOST_SILENCE_MS,
     now: host.now,
     sleep: countingLooks(host, () => {}),
   }).then(

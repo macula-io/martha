@@ -14,6 +14,13 @@
 /** How long the wait sleeps between looks: short enough that an event is noticed at once. */
 export const POLL_MS = 100
 
+/**
+ * How long the relay job lets the recorded host show nothing new before it gives up on it: the budget #210 moved
+ * from the whole run onto silence. Named here, where the rule that spends it is, and taken from here by the cases
+ * that run a host and by the cases that only run the rule.
+ */
+export const HOST_SILENCE_MS = 120_000
+
 /** What a run gives the wait: what the host has shown so far, and how many model requests it has sent. */
 export interface HostWhileWaiting {
   /** Everything the host has shown so far: its terminal. More than last time is the host working. */
