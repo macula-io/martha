@@ -849,9 +849,15 @@ where it came from. Three things stand on it:
   `launch.json`, the owner's user settings file, and the host's global config —
   `<config dir>/.claude.json` when `CLAUDE_CONFIG_DIR` names one and
   `<home>/.claude.json` when it does not, where the owner's user MCP servers live,
-  so a server there starts in the owner's next session without asking. Its name is
+  so a server there starts in the owner's next session without asking, and the
+  file the host prefers over that one whenever it is there and not empty,
+  `<config dir>/.config.json`, whose servers it reads instead. The first name is
   `HOST_TRUST_RECORD_FILE`'s, the file the trust record is read from, never typed
-  again. Those names are the
+  again; the second is cut from the host's binary
+  (`legacy_global_config_names`), the literal the one chooser joins to the config
+  dir, which the host also holds as a constant of its own, so a renamed file fails
+  the recording instead of leaving the guard denying a name nothing reads. Those
+  names are the
   recorded host's, never typed: `protected_config_names` is the array the host
   itself walks to protect its config dir, cut whole with its three computed
   `policy-limits.json` files resolved through the host's own templates, and
@@ -864,9 +870,8 @@ where it came from. Three things stand on it:
   red instead of sitting uncovered. A place another package owns is entered as
   `denied_by`, and a test writes into every one of them through this gate and
   expects a refusal, with a write outside every place allowed as the control: the
-  markdown folders, the output styles and the transcript streams are `#154`'s, so
-  until #154 lands they are refused by nothing and that test fails by name, which
-  holds this change behind it.
+  markdown folders, the output styles and the transcript streams are `#154`'s,
+  which refuses them on main, and that test checks that it does.
   Links are followed both ways, and to the end: one function resolves every
   path here, following a link at any level — a `projects` folder that is a link
   to another disk, a project folder, a project's memory folder, a chain of
@@ -917,8 +922,12 @@ settings file the owner points at from outside the config dir, `--plugin-dir` an
 `--settings` on the owner's own command line among them; a place the host
 introduces that matches neither its array nor its statements, which nothing
 records and no test sees, though a change to the array or to those statements
-does fail the recording; a host the owner starts by hand (C1, C2); and OpenCode,
-not probed for a memory of its own.
+does fail the recording; the global config files the host suffixes for an OAuth
+endpoint (`CLAUDE_CODE_CUSTOM_OAUTH_URL` gives `.claude-custom-oauth.json`, and
+the binary lists the staging and local variants beside it), which an owner behind
+one of those keeps their MCP servers in too, since this guard denies
+`.claude.json` and `.config.json` and not those; a host the owner starts by hand
+(C1, C2); and OpenCode, not probed for a memory of its own.
 
 **A member's writes never reach a later session through the owner's user scope
 (A18, martha#154).** The host loads the owner's own text from its config dir at

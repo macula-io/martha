@@ -78,6 +78,9 @@ export function recordedHostFrom(text: string): RecordedHost {
   }
   outputStylesFieldIn(recording.user_output_styles_dir)
   outputStylesFolderIn(recording.user_output_styles_dir)
+  if (!Array.isArray(recording.legacy_global_config_names) || recording.legacy_global_config_names.length === 0) {
+    throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
+  }
   return recording
 }
 
@@ -107,3 +110,11 @@ export const CLAUDE_CODE_OUTPUT_STYLES_FOLDER: string = outputStylesFolderIn(REC
 
 /** The session-init response's field the folder is reported in, as the recorded statement declares it (martha#154). */
 export const CLAUDE_CODE_OUTPUT_STYLES_FIELD: string = outputStylesFieldIn(RECORDED_HOST.user_output_styles_dir)
+
+/**
+ * The names the host gives the global config file it prefers over `.claude.json`
+ * under each config dir (martha#187 r=3), cut from the binary: the file the
+ * owner's user MCP servers are read from when it is there and not empty, so a
+ * member's write there starts a server in the owner's next session unasked.
+ */
+export const CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES: readonly string[] = RECORDED_HOST.legacy_global_config_names

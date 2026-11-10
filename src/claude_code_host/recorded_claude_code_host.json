@@ -70,5 +70,8 @@
     "files": [
       "daemon.json"
     ]
-  }
+  },
+  "legacy_global_config_names": [
+    ".config.json"
+  ]
 }

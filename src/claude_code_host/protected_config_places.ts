@@ -17,7 +17,11 @@
 //   - `config_code_places`: the places the host's own statements say it runs:
 //     the four folders its "This writes to the Claude Code <name> folder."
 //     statements name, and the file named beside them, in the sentence that
-//     spells the same four out with it. The two must agree.
+//     spells the same four out with it. The two must agree;
+//   - `legacy_global_config_names`: the file the host prefers over `.claude.json`
+//     for its global config at the config dir's root, where the owner's user MCP
+//     servers are read from: the literal its one chooser joins to the config dir,
+//     which the host also holds as a constant of its own (martha#187 r=3).
 
 /** The places under a config dir the host names as ones it runs. */
 export interface ConfigCodePlaces {
@@ -33,6 +37,12 @@ export interface ProtectedConfigPlaces {
   readonly protected_config_names: readonly string[]
   /** The places the host's own statements name as ones it runs. */
   readonly config_code_places: ConfigCodePlaces
+  /**
+   * The names the host gives the global config file it prefers over `.claude.json`
+   * at a config dir's root, where the owner's user MCP servers are read from when
+   * that file is there and not empty (martha#187 r=3).
+   */
+  readonly legacy_global_config_names: readonly string[]
 }
 
 const escaped = (name: string): string => name.replaceAll('$', '\\$')
@@ -149,11 +159,43 @@ function codePlacesIn(text: string): ConfigCodePlaces {
   return { folders: stated, files: [file] }
 }
 
-/** The protected config-dir names and the code places the host names, cut from its text. */
+/** `text` as a regular expression reads it, for a name cut from the host rather than typed here. */
+const asALiteral = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * The shape in which the host builds the path of the global config file it
+ * prefers over `.claude.json`: its config dir joined with the file's name, then a
+ * stat of what it built, inside the one function that chooses between the two
+ * files (martha#187 r=3).
+ */
+const PREFERRED_GLOBAL_CONFIG = /let ([\w$]+)=([\w$]+)\(([\w$]+)\(\),\"([^\"]+)\"\),([\w$]+)=([\w$]+)\(\);try\{let ([\w$]+)=([\w$]+)\(\)\.statSync\(\1\)/g
+
+/**
+ * The names the host gives the global config file it prefers over `.claude.json`
+ * at a config dir's root (martha#187 r=3), cut and never typed: the literal the
+ * one chooser joins to the config dir, which the host must also hold as a
+ * constant of its own. A host that drops the chooser, renames the file or holds
+ * two choosers fails here, so the guard cannot go on denying a name nothing reads.
+ */
+export function legacyGlobalConfigNamesIn(text: string): string[] {
+  const choosers = [...text.matchAll(PREFERRED_GLOBAL_CONFIG)].map((match) => match[4] ?? '')
+  if (choosers.length !== 1) {
+    throw new Error(`The host holds ${String(choosers.length)} choosers of the global config file it prefers over .claude.json, not one, so the file the owner's user MCP servers are read from cannot be told.`)
+  }
+  const found = sortedUnique(choosers)
+  const [name = ''] = found
+  if (![...text.matchAll(new RegExp(`[,;{ ][\\w$]+="${asALiteral(name)}"`, 'g'))].length) {
+    throw new Error(`The host joins ${name} to its config dir but holds it as no constant of its own, so the file it reads the owner's user MCP servers from cannot be told.`)
+  }
+  return found
+}
+
+/** The protected config-dir names, the code places and the preferred global config the host names, cut from its text. */
 export function protectedConfigPlacesIn(text: string): ProtectedConfigPlaces {
   const array = protectedArrayIn(text)
   return {
     protected_config_names: entriesOf(array.source).flatMap((entry) => namesOfEntry(text, entry, array.at)),
     config_code_places: codePlacesIn(text),
+    legacy_global_config_names: legacyGlobalConfigNamesIn(text),
   }
 }

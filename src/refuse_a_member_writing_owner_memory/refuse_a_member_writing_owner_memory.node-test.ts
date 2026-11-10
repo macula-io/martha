@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
@@ -463,6 +463,46 @@ test('a link at the owner\'s user MCP config whose target does not exist yet is 
   assertDeniedBy(places, place.worktree, place.home, target, 'martha#187', 'the file the link will write')
 })
 
+test('a member may not write the global config the host prefers at a config dir\'s root, in the launcher\'s config dir and in the member\'s (martha#187 r=3)', (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const scratchConfig = join(place.root, 'scratch-config')
+  mkdirSync(scratchConfig, { recursive: true })
+  const both = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home, CLAUDE_CONFIG_DIR: scratchConfig },
+    member_env: { HOME: place.home },
+    home: place.home,
+    launch_dir: place.worktree,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  for (const name of CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES) {
+    // CLAUDE_CONFIG_DIR unset on either side: the file is at that side's own config dir.
+    assertDeniedBy(places, place.worktree, place.home, join(place.config, name), 'martha#187', 'the member\'s config dir')
+    // Set on the launcher's side: both config dirs are denied.
+    assertDeniedBy(both, place.worktree, place.home, join(scratchConfig, name), 'martha#187', 'the launcher\'s config dir')
+    assertDeniedBy(both, place.worktree, place.home, join(place.config, name), 'martha#187', 'the member\'s config dir, beside the launcher\'s')
+  }
+})
+
+test('a link at the global config the host prefers, whose target does not exist yet, is denied where it will write (martha#187 r=3)', (t) => {
+  const place = placeFor(t)
+  for (const name of CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES) {
+    const target = join(place.root, 'not-yet', name)
+    symlinkSync(target, join(place.config, name))
+    const places = placesFor(place)
+    assertDeniedBy(places, place.worktree, place.home, join(place.config, name), 'martha#187', 'the link where the host reads it')
+    assertDeniedBy(places, place.worktree, place.home, target, 'martha#187', 'the file the link will write')
+  }
+})
+
+test('the global config file this guard denies is the recording\'s own name, whatever the host calls it (martha#187 r=3)', () => {
+  const renamed = 'a-renamed-global-config.json'
+  const recorded = placesTheHostProtects({ ...RECORDED_HOST, legacy_global_config_names: [renamed] })
+  assert.deepEqual(recorded.files.filter((file) => file === renamed), [renamed])
+  assert.equal(recorded.files.some((file) => CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES.includes(file)), false, 'the name the recording no longer holds is not denied')
+})
+
 /**
  * A write a member would make inside each place the map says another package
  * denies (martha#187 r=2), relative to a config dir. The test's own statement, so
@@ -502,7 +542,7 @@ test('the permission rules carry every place the host runs as code into permissi
     assert.ok(rules.includes(`Write(/${join(place.config, folder)}/**)`), folder)
     assert.ok(rules.includes(`Edit(/${join(place.config, folder)}/**)`), folder)
   }
-  for (const file of [...CODE_FILES, USER_SETTINGS_FILE]) {
+  for (const file of [...CODE_FILES, USER_SETTINGS_FILE, ...CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES]) {
     assert.ok(rules.includes(`Write(/${join(place.config, file)})`), file)
     assert.ok(rules.includes(`Edit(/${join(place.config, file)})`), file)
   }
@@ -528,13 +568,14 @@ test('a name the host no longer records fails the mapping test by name (martha#1
   assert.deepEqual(gapsInTheNameMap(rest).unowned, [])
 })
 
-test('the places this guard denies are exactly the recorded names it owns, split into folders and files (martha#187)', () => {
+test('the places this guard denies are exactly the recorded names it owns, split into folders and files, and the global config it prefers (martha#187)', () => {
   const owned = namesInTheRecording(RECORDED_HOST).filter((name) => {
     const owner = PROTECTED_NAME_OWNERS[name]
     return owner !== undefined && 'denied_here' in owner
   })
+  // The global config the host prefers is no name in its protected array: it is cut from its own chooser (r=3).
   const places = placesTheHostProtects()
-  assert.deepEqual([...places.folders, ...places.files].sort(), owned.sort())
+  assert.deepEqual([...places.folders, ...places.files].sort(), [...owned, ...RECORDED_HOST.legacy_global_config_names].sort())
 })
 
 // --- what a later git run of the owner's reads (martha#168) -----------------------

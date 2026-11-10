@@ -20,7 +20,9 @@
 // backups, `daemon.json`, `scheduled_tasks.json` and `launch.json`, the owner's
 // user settings file, and the host's global config — `.claude.json`, which names
 // the owner's user MCP servers, so a server entered there starts in the owner's
-// next session without asking anyone. Each is a place where a member's write
+// next session without asking anyone, and the file the host prefers over it at
+// the config dir's root whenever that one is there and not empty (martha#187
+// r=3), which holds the same servers. Each is a place where a member's write
 // becomes code the owner's next session runs. The names are the
 // recorded host's, never typed here (PROTECTED_NAME_OWNERS says who accounts for
 // each), and a place the host records that no owner accounts for fails a test.
@@ -48,8 +50,10 @@
 //      and the owner's user settings file (martha#187). One place sits outside
 //      those dirs: the host's global config — `.claude.json` beside the home
 //      folder, or in the config dir when CLAUDE_CONFIG_DIR names one — which
-//      names the owner's user MCP servers. The two folders that override where
-//      memory lives, when the launcher's environment sets them. Each
+//      names the owner's user MCP servers; and inside each config dir the file
+//      the host prefers over that one when it is there and not empty, whose name
+//      is cut from the binary (martha#187 r=3). The two folders that override
+//      where memory lives, when the launcher's environment sets them. Each
 //      `autoMemoryDirectory` the policy, user and carried settings name. No name
 //      is typed here: the markdown kinds and the styles folder come from
 //      `RECORDED_HOST`, cut from the host's binary.
@@ -184,7 +188,10 @@ export function placesTheHostProtects(recorded: ProtectedConfigPlaces = RECORDED
     return owner !== undefined && 'denied_here' in owner ? [{ name, place: owner.denied_here }] : []
   })
   const inPlace = (place: 'folder' | 'file') => owned.filter((one) => one.place === place).map((one) => one.name)
-  return { folders: inPlace('folder'), files: inPlace('file') }
+  // The global config file the host prefers over `.claude.json` sits at each config dir's
+  // root and is cut from the binary rather than named in the map, which accounts for the
+  // host's protected array only (martha#187 r=3).
+  return { folders: inPlace('folder'), files: [...inPlace('file'), ...recorded.legacy_global_config_names] }
 }
 
 

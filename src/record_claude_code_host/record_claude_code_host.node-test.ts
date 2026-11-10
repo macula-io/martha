@@ -66,13 +66,18 @@ const SUFFIXES = SIGNED.map((name) => name.slice((SIGNED_BASE ?? '').length + 1)
 /** The functions the host builds those files with, and the constant the last of them closes over. */
 const BUILDERS = SUFFIXES.map((_suffix, index) => `builtNumber${String(index + 1)}`)
 const SUFFIX_CONSTANT = 'aConstantTheStreamsFileIsBuiltWith'
+/** The global config file the host prefers over `.claude.json`, as recorded (martha#187 r=3). */
+const PREFERRED_GLOBAL_CONFIG = RECORDED_HOST.legacy_global_config_names[0] ?? ''
+const PREFERRED_CONSTANT = 'aNameOnlyTheHostDefines'
 
 /**
  * The protected config places (martha#187), in the shapes the host spells them:
  * the Set built beside the array and the loop over it, the array the spread
  * brings in, one function per computed file that returns the host's own
- * template (the last from a constant it closes over), and the host's own
- * statements naming the four folders it runs and the file beside them.
+ * template (the last from a constant it closes over), the host's own
+ * statements naming the four folders it runs and the file beside them, and the
+ * one chooser that builds the global config file it prefers from a constant it
+ * defines (martha#187 r=3).
  */
 const PLACE_PARTS: Readonly<Record<string, string>> = {
   protected_config_names: [
@@ -87,6 +92,10 @@ const PLACE_PARTS: Readonly<Record<string, string>> = {
     ...CODE_PLACES.folders.flatMap((folder) => [`This writes to the Claude Code ${folder} folder. A file there is run.`, `This writes to the Claude Code ${folder} folder. A file there is run.`]),
     `So the write may land in the ${CODE_PLACES.folders[0] ?? ''}, ${CODE_PLACES.folders[1] ?? ''}, ${CODE_PLACES.folders[2] ?? ''} or ${CODE_PLACES.folders[3] ?? ''} folder or in ${CODE_PLACES.files[0] ?? ''} of the Claude Code config directory.`,
   ].join(' '),
+  legacy_global_config_names: [
+    `var ${PREFERRED_CONSTANT}="${PREFERRED_GLOBAL_CONFIG}",kept=1`,
+    `function aChooserOfTheGlobalConfig(){if(aCheck())return{file:noConfig()};let o=aJoin(theConfigDir(),"${PREFERRED_GLOBAL_CONFIG}"),_=noConfig();try{let E=aStat().statSync(o);if(!E.isFile())return{file:_}}catch{}return{file:_}}`,
+  ].join(';'),
 }
 
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
@@ -189,6 +198,17 @@ test('a host whose frontmatter pattern carries a flag, or that has two markdown 
     assert.equal(run.status, 1, JSON.stringify(Object.keys(planted)))
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
   }
+})
+
+test('a host that renames the global config it prefers fails the check naming the field, and one with two choosers cannot be read (martha#187 r=3)', (t) => {
+  const renamed = PLACE_PARTS.legacy_global_config_names?.replaceAll(PREFERRED_GLOBAL_CONFIG, 'a-renamed-global-config.json') ?? ''
+  assert.equal(renamed.includes(PREFERRED_GLOBAL_CONFIG), false, 'the renamed host names only the new file')
+  const differs = check(hostHolding(t, { ...RECORDED_PARTS, legacy_global_config_names: renamed }), RECORDED_HOST.host_version)
+  assert.equal(differs.status, 1, differs.stdout)
+  assert.equal(differs.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: legacy_global_config_names\n`)
+  const two = check(hostHolding(t, { ...RECORDED_PARTS, legacy_global_config_names: `${PLACE_PARTS.legacy_global_config_names ?? ''};${PLACE_PARTS.legacy_global_config_names ?? ''}` }), RECORDED_HOST.host_version)
+  assert.equal(two.status, 1)
+  assert.equal(two.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
 })
 
 /** A folder the host runs whose name is no part of the file named beside it, so renaming it changes one thing. */
