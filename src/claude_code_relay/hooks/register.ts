@@ -210,16 +210,20 @@ export const register = (on: RelayOn): void => {
   // background agent's answer: the host delivers that text into the member's turn with no tool result to place it on.
   // A relay that cannot be heard lets the event through here, as the session start does: the launcher then holds an
   // agent it never saw start, and refuses the shell rather than passing the agent's text.
-  for (const [event, kind] of [
-    ['classic.SubagentStart', 'subagent_started'],
-    ['classic.SubagentStop', 'subagent_stopped'],
-  ] as const) {
-    on<ClassicSubagent, unknown>(event, async ($, e, next) => {
-      const session_id = await $.session.id()
-      const heard = await relay($, kind, subagentBody(session_id, e), heardTaken)
-      return heard.yes ? next(e) : { drop: refusal(heard.why) }
-    }).catch(async (_$, e, next) => next(e))
-  }
+  //
+  // The two are spelled out, not looped: the host's own plugin validator reads this file and refuses a relay whose
+  // `on(...)` names its event by anything but a string literal, so `for (const event of …)` would not load at all.
+  on<ClassicSubagent, unknown>('classic.SubagentStart', async ($, e, next) => {
+    const session_id = await $.session.id()
+    const heard = await relay($, 'subagent_started', subagentBody(session_id, e), heardTaken)
+    return heard.yes ? next(e) : { drop: refusal(heard.why) }
+  }).catch(async (_$, e, next) => next(e))
+
+  on<ClassicSubagent, unknown>('classic.SubagentStop', async ($, e, next) => {
+    const session_id = await $.session.id()
+    const heard = await relay($, 'subagent_stopped', subagentBody(session_id, e), heardTaken)
+    return heard.yes ? next(e) : { drop: refusal(heard.why) }
+  }).catch(async (_$, e, next) => next(e))
 
   on<ToolCalled, ToolAnswer>('tool.call', async ($, e, next) => {
     const session_id = await $.session.id()
