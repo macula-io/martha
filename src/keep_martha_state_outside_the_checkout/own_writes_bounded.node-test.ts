@@ -80,8 +80,7 @@ test('a bad line with a newline after it still refuses the file, whether it is l
   assert.deepEqual(allOwnWrites(state), { writes: [], unread: [`${why} ${WHAT_A_SIGNED_RUN_NEEDS}`] })
 })
 
-test('a launch that writes one path two hundred times keeps one line for it, and still gives the latest (martha#157)', (t) => {
-  const state = stateFor(t)
+test('a launch that writes one path two hundred times keeps one line for it, and still gives the latest (martha#157)', (t) => {  const state = stateFor(t)
   const blobs = Array.from({ length: 200 }, (_, index) => index.toString(16).padStart(40, '0'))
   for (const [index, blob] of blobs.entries()) kept(state, ownWrite({ blob, tool_use_id: `toolu_${index}` }))
   const elsewhere = ownWrite({ path: '/project/elsewhere.txt', tool_use_id: 'toolu_elsewhere' })
@@ -89,4 +88,13 @@ test('a launch that writes one path two hundred times keeps one line for it, and
   const lines = readFileSync(filePath(state, 'launch-1'), 'utf8').split(NEWLINE).filter((line) => line !== '')
   assert.equal(lines.length, 2, `the file holds one line for each path, not one for each write: ${String(lines.length)}`)
   assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [ownWrite({ blob: blobs[199] as string, tool_use_id: 'toolu_199' }), elsewhere] })
+})
+
+test('an append onto a file that cannot be trusted is refused, and leaves the file exactly as it was (martha#157)', (t) => {
+  const state = stateFor(t)
+  kept(state, ownWrite())
+  writeFileSync(filePath(state, 'launch-1'), `not an own write${NEWLINE}`, { flag: 'a' })
+  const before = readFileSync(filePath(state, 'launch-1'), 'utf8')
+  assert.equal(ownWritesKeptForTheHistory(state).append(ownWrite({ tool_use_id: 'toolu_2' })), `${filePath(state, 'launch-1')} line 2 is not an own write, so Martha keeps no own write in it.`)
+  assert.equal(readFileSync(filePath(state, 'launch-1'), 'utf8'), before, 'a refused append rewrote the file')
 })
