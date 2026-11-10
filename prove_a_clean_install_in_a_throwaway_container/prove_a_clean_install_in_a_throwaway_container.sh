@@ -33,9 +33,10 @@
 # create that made it is still running. Gone is read from podman answering that it is gone, never from a silence: a host
 # that stopped answering, or podman erroring, fails the run and names the container so it can be removed by hand. So
 # does a create still in flight when the window spent watching for its container is over: a create outlives its ssh
-# client, so "not there yet" is not "never made". A create podman answered is settled, refused or made, and there is
-# nothing left to watch for: a refused one is reported as a container never made. Everything written in it goes with
-# it; the image the first run pulls stays in the host's own store, which belongs to the host and not to a run.
+# client, so "not there yet" is not "never made". A create podman answered -- a status of its own, 1 to 127 -- is
+# settled, refused or made, and there is nothing left to watch for: a refused one is reported as a container never
+# made. ssh's own 255, and 128 and above (the client killed by a signal), are no answer at all. Everything written in it
+# goes with it; the image the first run pulls stays in the host's own store, which belongs to the host and not to a run.
 #
 # Exit: 1 a step failed, the tear-down did, or the run was interrupted; 2 the arguments were refused and nothing ran;
 # 3 the registry carries no release, so the installer stopped on its own words (today's expected end); 4 the install
@@ -82,8 +83,8 @@ PODMAN_OWN_ENV=('container=podman' 'HOME=' 'HOSTNAME=')
 HOST_NETWORK='host'
 # A create may finish on the host after the ssh client that asked for it is gone, so the tear-down keeps asking for a
 # container it has not seen yet, in a window it can still catch. A create still in flight when the window ends is never
-# reported as one that made nothing: the tear-down fails and names the container. Only ssh's own 255 leaves a create in
-# flight; a status podman gave is an answer, and a create podman answered is settled.
+# reported as one that made nothing: the tear-down fails and names the container. Only a status podman gave (1 to 127)
+# settles a create; ssh's own 255, and 128 and above (the client killed by a signal), leave one in flight.
 CREATE_SETTLE_ATTEMPTS=20
 CREATE_SETTLE_S=0.5
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
@@ -194,10 +195,12 @@ container_step() {
   on_the_host podman create --name "${CONTAINER}" --user "${CONTAINER_USER}" "${IMAGE}" ${CONTAINER_IDLES} > /dev/null \
     || status=$?
   if [ "${status}" -ne 0 ]; then
-    # ssh's own 255 is the one status that says nothing about the create: the command never reached a shell on the host,
-    # which may still be working on it, and the flag stays set for the tear-down's window. Every other status is podman
-    # answering, so the create is settled -- it made nothing, now or later -- and there is nothing to watch for.
-    if [ "${status}" -ne 255 ]; then CREATE_WAS_IN_FLIGHT=''; fi
+    # Only a status podman itself returned -- 1 to 127, its own exit -- says the create is over and made nothing. 255 is
+    # ssh's own: the command never reached a shell on the host. 128 and above is the ssh client stopped by a signal
+    # (137 is SIGKILL) while the command it started runs on, so the host can still make the container afterwards. In
+    # both of those the flag stays set, and the tear-down watches. For 1 to 127 there is nothing to watch for, and a
+    # refused create is reported as a container never made.
+    if [ "${status}" -ge 1 ] && [ "${status}" -le 127 ]; then CREATE_WAS_IN_FLIGHT=''; fi
     failed container "podman could not make ${CONTAINER} from ${IMAGE}"
     return 1
   fi
@@ -406,6 +409,13 @@ fi
 if [ -f "${standin}/create.unreachable" ]; then
   case "${command_words}" in
     'podman create '*) exit 255 ;;
+  esac
+fi
+# A case whose create.killed exists stands for an ssh client stopped by a signal (SIGKILL is 137) while the command it
+# started runs on: no answer about the create either, so the container may still be made.
+if [ -f "${standin}/create.killed" ]; then
+  case "${command_words}" in
+    'podman create '*) exit 137 ;;
   esac
 fi
 exec sh -c "$*"
@@ -801,6 +811,24 @@ self_test() {
   [ "$(grep -c '^container exists' "${standin}/calls")" -gt 1 ] \
     || { echo 'the self-test: the tear-down did not watch for a create ssh could not carry' >&2; case_failed=1; }
 
+  # A create whose ssh client was stopped by a signal (137, SIGKILL) is no answer either: the command it started runs
+  # on, and the container it makes afterwards is still this run's to remove. Read as settled, the run would report a
+  # clean end while a container it made leaks.
+  standin="${root}/a-create-ssh-killed"
+  a_case "${standin}"
+  : > "${standin}/create.killed"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for '^FAIL container: podman could not make ' "${standin}/out" \
+    || { echo 'the self-test: a create whose ssh was killed did not fail the run at the container step' >&2; case_failed=1; }
+  asked_for '^FAIL tear down: martha-clean-install-[^ ]* was not seen within the window and its create is still in flight' "${standin}/out" \
+    || { echo 'the self-test: a create whose ssh was killed was not reported as still in flight' >&2; case_failed=1; }
+  if grep -q '^ok tear down: ' "${standin}/out"; then
+    echo 'the self-test: a create whose ssh was killed was reported as a container never made' >&2
+    case_failed=1
+  fi
+  [ "$(grep -c '^container exists' "${standin}/calls")" -gt 1 ] \
+    || { echo 'the self-test: the tear-down did not watch for a create whose ssh was killed' >&2; case_failed=1; }
+
   # The arguments: no host, an unknown option, two hosts and a log it cannot write are refused, and nothing runs.
   expect_status 2 "${root}" || case_failed=1
   expect_status 2 "${root}" --no-such-option || case_failed=1
@@ -812,7 +840,7 @@ self_test() {
   # nothing of it left: what this file says last is what these cases check.
   for standin in passes no-release refused other-version runs-as-root mounted on-the-host-network \
     given-the-hosts-environment interrupted interrupted-while-creating a-create-that-outlives-the-window \
-    a-create-podman-refused a-create-ssh-could-not-carry the-image-cannot-be-pulled; do
+    a-create-podman-refused a-create-ssh-could-not-carry a-create-ssh-killed the-image-cannot-be-pulled; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
