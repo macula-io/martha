@@ -595,8 +595,13 @@ function placeOf(path: string, places: OwnerMemoryPlaces): DeniedPlace | undefin
   return shape === undefined ? undefined : { what: shape.what, issue: shape.issue }
 }
 
-/** Whether two folders are the same path as the system resolved them: a shape is read in one folder, never below it. */
-const sameFolder = (one: string, other: string): boolean => normalize(one) === normalize(other)
+/**
+ * Whether two folders are the same path as the system resolved them: a shape is read in one folder, never below it.
+ * Compared without regard to case, as the name is, because on a case-insensitive disk two spellings of one folder are
+ * one folder and a write by either reaches the same file (Uranus, martha#202 r=1). On a case-sensitive disk this refuses
+ * a path spelled with a folder whose name differs only in case, which is no folder the host keeps its config in.
+ */
+const sameFolder = (one: string, other: string): boolean => asciiLowered(normalize(one)) === asciiLowered(normalize(other))
 
 /**
  * Whether `name` is one of the family's: the recorded stem at its start and the recorded extension at its end, compared
