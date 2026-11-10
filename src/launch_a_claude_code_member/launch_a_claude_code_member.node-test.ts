@@ -1271,8 +1271,7 @@ test('a host that says a rule the launch wrote can never match starts no member,
   const place = placeFor(t)
   const fake = fakeClaude(place, { callsTheFirstRuleDead: true })
   const lines: string[] = []
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.startsWith(NOT_STARTED), refusal)
