@@ -11,7 +11,7 @@
 #   martha --version
 #
 # The host is a parameter and is never named here: this repository is public, and a host name is a map of the network.
-# `podman` runs there, rootless, and every command of the run goes to it over ssh.
+# `podman` runs there, rootless, and every podman command the run makes goes to it over ssh.
 #
 # The installer's version is the one installer/package.json declares, never a copy typed here, and the Node major in
 # the image is the one the installer's engines range declares. Each major's image is pinned by digest in IMAGE_PINS;
@@ -478,7 +478,9 @@ self_test() {
     if [ "${waited}" -gt 250 ]; then break; fi
   done
   kill -INT -"${child}" 2> /dev/null || true
-  wait "${child}" || true
+  waited=0
+  wait "${child}" || waited=$?
+  [ "${waited}" -eq 1 ] || { echo "the self-test: an interrupted run exited ${waited}, not 1" >&2; case_failed=1; }
   asked_for '^FAIL run: interrupted by SIGINT' "${standin}/out" || { echo 'the self-test: an interrupted run did not say which signal ended it' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: an interrupted run did not remove its container' >&2; case_failed=1; }
 
@@ -488,6 +490,15 @@ self_test() {
   expect_status 2 "${root}" 'a-host' 'another-host' || case_failed=1
   expect_status 2 "${root}" --host 'a-host' --log "${root}/no-such-folder/a.log" || case_failed=1
   no_such_file "${root}/calls" || { echo 'the self-test: a refused run still reached podman' >&2; case_failed=1; }
+
+  # Every run that was not the one that could not remove its container ended with nothing of it left: what this file
+  # says last is what these cases check.
+  for standin in passes no-release refused other-version runs-as-root mounted interrupted; do
+    if [ -e "${root}/${standin}/container.present" ]; then
+      echo "the self-test: the ${standin} run left its container behind" >&2
+      case_failed=1
+    fi
+  done
 
   if [ "${case_failed}" -ne 0 ]; then
     echo 'the self-test: a case failed, above' >&2
