@@ -49,10 +49,12 @@ import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './le
 import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
+import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, type RelayJournal } from './keep_the_relays_journal.ts'
 import { HOST_EXIT_COMMAND, HOST_TERMINAL, RECORDED_HOST_VARIABLE } from './drive_the_recorded_host.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
+import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
@@ -78,6 +80,8 @@ interface Place {
   readonly snapshot_root: string
   /** Where the launcher installs the recorded mesh server trees (martha#65). */
   readonly mesh_servers: string
+  /** Where the launcher keeps what it is doing, one file per launch (martha#240). */
+  readonly relay_journal: string
   readonly approved: readonly string[]
   /**
    * Told by the helper that starts a member here. The place's own hook then leaves the removal to that member's hook,
@@ -151,6 +155,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     relay_root,
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
+    relay_journal: closed('relay-journal'),
     approved,
     aMemberStartsHere: () => {
       aMemberStarts = true
@@ -206,6 +211,7 @@ function answering(
   rows: RowStore = rowStreamsDirectory(place.rows),
   handed_at_start: readonly TurnSource[] = [],
   signed_runs?: SignedRuns,
+  journal?: RelayJournal,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -226,6 +232,7 @@ function answering(
     }),
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) }),
     ...(signed_runs === undefined ? {} : { signed_runs }),
+    ...(journal === undefined ? {} : { journal }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -1111,7 +1118,7 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },
+    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
     // The managed settings the host would read, under the place: never the machine's own.
     managed_settings: managedSettingsOf(place),
@@ -2268,7 +2275,7 @@ function launcherProcess(
       `  node_id: ${JSON.stringify(NODE_ID)},`,
       '  place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },',
       '  policy: { may_send_executable_text: [] },',
-      '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers },',
+      '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,
@@ -3271,4 +3278,71 @@ test('an agent start or stop the launcher cannot take in leaves the agent unvouc
   await asking.relay.answer('subagent_stopped', agentStop('ag-never-started'))
   const denied = await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
+})
+
+// --- what the launcher is doing, as the run watches it (martha#240) -----------------------------------------------------
+
+/** The journal a place's launcher keeps, on the clock `clock` gives. */
+const journalOf = (place: Place, clock?: () => number): RelayJournal =>
+  relayJournalKeptIn(place.relay_journal, 'launch-of-the-test', clock)
+
+/** What a place's journal says, one line per event, as a person reading a red would read it. */
+const linesOf = (place: Place): string[] =>
+  readTheNewestRelayJournal(place.relay_journal).events.map(
+    (line) => `${line.phase} ${line.event}${line.tool_use_id === undefined ? '' : ` ${line.tool_use_id}`}${line.answer === undefined ? '' : ` ${line.answer}`}`,
+  )
+
+/** The owner's own turn, so the shell is the member's: the gate keeps it for a typed turn (#51). */
+const theOwnersTurn = async (relay: MemberRelay): Promise<void> => {
+  await relay.answer('session_started', start('startup'))
+  await relay.answer('prompt_submitted', prompt('composer', 'run the tests'))
+}
+
+test('each event is a line as it arrives and a line as it is answered, and an allowed call stays open until its answer comes back', async (t) => {
+  const place = placeFor(t)
+  const { relay } = answering(place, undefined, [], undefined, journalOf(place))
+  await theOwnersTurn(relay)
+  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls', tool_use_id: 'call_00_the_test' })), ALLOW_REPLY)
+  assert.deepEqual(linesOf(place), [
+    'received session_started',
+    'answered session_started taken',
+    'received prompt_submitted',
+    'answered prompt_submitted taken',
+    'received tool_called call_00_the_test',
+    'answered tool_called call_00_the_test allow',
+  ])
+  // The call the launcher allowed is the one a run waits on, by the host's own id for it.
+  assert.deepEqual(
+    readTheNewestRelayJournal(place.relay_journal).open.map((open) => `${open.tool_use_id} ${open.tool}`),
+    ['call_00_the_test Bash'],
+  )
+  await relay.answer('tool_answered', call('Bash', { command: 'ls', tool_use_id: 'call_00_the_test' }))
+  assert.deepEqual(readTheNewestRelayJournal(place.relay_journal).open, [], 'the tool came back and the call is still open')
+})
+
+test('a call the launcher denies never opens, so a run has nothing to wait on', async (t) => {
+  const place = placeFor(t)
+  const { relay } = answering(place, undefined, [], undefined, journalOf(place))
+  // A call on a session whose start was never taken: the launcher refuses it, and a refusal is a deny here.
+  const reply = await relay.answer('tool_called', call('Bash', { command: 'ls', tool_use_id: 'call_00_denied' }))
+  assert.ok(isDenied(reply, /no start of session/), 'the launcher answered a call this case needed denied')
+  assert.deepEqual(readTheNewestRelayJournal(place.relay_journal).open, [])
+  assert.deepEqual(linesOf(place), ['received tool_called call_00_denied', 'answered tool_called call_00_denied deny'])
+})
+
+test('an allow the relay gave up on is journalled as the deny the host took, and the member is answered as before', async (t) => {
+  const place = placeFor(t)
+  // The receipt is stamped on the journal's clock as it arrives; this clock then jumps past the relay's deadline, which
+  // is what a launcher that took 30 s to decide looks like from the relay's side.
+  let late_by = 0
+  const { relay } = answering(place, undefined, [], undefined, journalOf(place, () => Date.now() + late_by))
+  await theOwnersTurn(relay)
+  const answered = relay.answer('tool_called', call('Bash', { command: 'ls', tool_use_id: 'call_00_late' }))
+  // Stamped before the event queues, so moving the clock here is moving it between the receipt and the answer (martha#240).
+  late_by = RELAY_DEADLINE_MS + 1
+  assert.deepEqual(await answered, ALLOW_REPLY, 'the member was answered differently, and only the journal was meant to change')
+  const kept = readTheNewestRelayJournal(place.relay_journal)
+  assert.equal(kept.events.at(-1)?.answer, 'deny', 'an allow the relay gave up on was journalled as an allow')
+  assert.equal(kept.events.at(-1)?.why, GAVE_UP_BEFORE_ALLOW)
+  assert.deepEqual(kept.open, [], 'the late allow opened a call, so a run would wait on a tool that never ran')
 })

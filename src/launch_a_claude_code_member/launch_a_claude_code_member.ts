@@ -144,6 +144,7 @@ import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
+import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
@@ -167,6 +168,8 @@ export interface LauncherPlaces {
   readonly relay_root: string
   /** Where the recorded mesh server trees are installed, one directory per version (martha#65). */
   readonly mesh_servers: string
+  /** Where each launch keeps its journal, one file per launch (martha#240). */
+  readonly relay_journal: string
 }
 
 export interface ClaudeCodeMemberLaunch {
@@ -700,6 +703,9 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
+    // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
+    // (martha#240).
+    journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)

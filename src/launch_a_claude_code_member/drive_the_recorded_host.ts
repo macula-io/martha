@@ -24,6 +24,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { removeTheTree } from './relay_copy.ts'
+import { readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
 import { waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 
@@ -90,8 +91,15 @@ export interface RecordedHostRan {
 /** The repository's own `martha` command. */
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
+/** The variables a run's processes start with: its own home, the stand-in's address, and where it keeps its state. */
+interface RunEnvironment {
+  /** The one value the launcher finds its state in, and the one the run derives the journal's directory from (#240 r=1). */
+  readonly XDG_STATE_HOME: string
+  readonly [name: string]: string
+}
+
 /** The places a run's processes find their state and sockets in, under its home. */
-function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: string, runtime: string): Record<string, string> {
+function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: string, runtime: string): RunEnvironment {
   const bin = join(run.home, 'bin')
   mkdirSync(bin, { recursive: true })
   rmSync(join(bin, 'claude'), { force: true })
@@ -206,6 +214,15 @@ function record(heard: ModelRequest[], body: Record<string, unknown>): ModelRequ
   return request
 }
 
+/**
+ * Why a run read no journal, once the host has sent a model request: the journal it watches has no line in it, so the
+ * wait is standing on the terminal alone and the false red #240 fixes would come back unnamed (r=1).
+ */
+export function journalNeverWritten(heard: readonly ModelRequest[], directory: string): string | undefined {
+  if (heard.length === 0 || readTheNewestRelayJournal(directory).written > 0) return undefined
+  return `The launcher wrote no line to the journal at ${directory} by the host's first model request, so this run read no journal: a tool that outlasts the silence budget would red it as it did before martha#240`
+}
+
 /** The terminal's text with its control sequences taken out, for a person reading a failure. */
 export const plainTextOf = (shown: string): string =>
   shown
@@ -229,21 +246,28 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   const model = await standIn(run.script, heard, (why) => void (failure ??= why))
   const runtime = mkdtempSync(join(tmpdir(), 'm-'))
   const command = [process.execPath, MARTHA, 'start', run.member].map(quoted).join(' ')
-  const terminal = spawn(PTY_RUNNER, ['-qefc', command, '/dev/null'], { cwd: run.checkout, env: environmentOf(run, model.url, runtime), stdio: ['pipe', 'pipe', 'pipe'], detached: true })
+  const environment = environmentOf(run, model.url, runtime)
+  // Where the launcher keeps what it is doing (martha#240): derived from the state home this run hands the launcher, so
+  // the run reads the path the launcher was told and cannot quietly read none (r=1).
+  const journal_directory = relayJournalDirectory(environment.XDG_STATE_HOME, run.checkout)
+  const terminal = spawn(PTY_RUNNER, ['-qefc', command, '/dev/null'], { cwd: run.checkout, env: environment, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
   let shown = ''
   terminal.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
   terminal.stderr.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
   const ended = new Promise<number | null>((resolve) => terminal.once('exit', (code) => resolve(code)))
   let exit_code: number | null | undefined
   void ended.then((code) => void (exit_code = code))
+  // A run whose journal stayed empty would fall back to the terminal alone without saying so: named here, where the
+  // wait reads the journal, so the run fails by name rather than by the silence it should have replaced (r=1).
   const until = async (what: string, done: () => boolean): Promise<void> => {
     try {
       await waitWhileTheHostKeepsShowing({
         what,
         holds: done,
-        cannotHappen: () => failure,
+        cannotHappen: () => failure ?? journalNeverWritten(heard, journal_directory),
         shown: () => shown,
         heard: () => heard.length,
+        journal: () => readTheNewestRelayJournal(journal_directory),
         silence_ms: run.silence_ms,
         run_started_at,
         now: Date.now,

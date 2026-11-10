@@ -48,6 +48,7 @@ import {
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
+import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
 import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -60,13 +61,13 @@ export const NOT_A_TERMINAL =
   'martha start runs a member on your own terminal, and its input is not one. Run it yourself, in a terminal.'
 
 /** The launcher's places, and where its approved snapshots go. */
-export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string }
+export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; readonly relay_journal: string }
 
 /** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
 /** The directory inside Martha's state that holds the launcher's launch records. */
 const LAUNCH_RECORDS_PLACE = 'launches'
 
-const STATE_PLACES = ['rows', LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers'] as const
+const STATE_PLACES = ['rows', LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
@@ -81,10 +82,10 @@ export function launcherPlacesOf(state: MarthaState, relay_root: string): Member
   const made = STATE_PLACES.map((name) => stateSubdirectory(state, name))
   const refused = made.find((place) => 'refusal' in place)
   if (refused !== undefined && 'refusal' in refused) return refused
-  const [rows, launch_records, snapshot_root, mesh_servers] = made.map((place) => ('path' in place ? place.path : ''))
+  const [rows, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_root }
+  return { rows: rows!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
 }
 
 export interface MemberStartRequest {
