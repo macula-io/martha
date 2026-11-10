@@ -9,7 +9,8 @@
 // terminal. The home holds the host's own record of a first run already done (onboarding, the stand-in's key
 // answered, the checkout trusted), so no first-run question shows. The run types one thing: the owner's turn,
 // once `martha start` says the member is up, since `martha start` passes the host no prompt. Nothing answers a
-// question by keystroke: a run whose stand-in hears no request within its deadline fails, with the last screen.
+// question by keystroke: a run whose stand-in hears no request while the host shows nothing new fails, with the last
+// screen drawn before it.
 //
 // A model request is one that offers tools: the host's side requests (a title, a summary) offer none, are
 // answered with text and are not counted.
