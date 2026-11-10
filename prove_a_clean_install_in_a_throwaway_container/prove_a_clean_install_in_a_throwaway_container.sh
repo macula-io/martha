@@ -69,7 +69,10 @@ CONTAINER_PREFIX='martha-clean-install'
 MOUNTS_FORMAT='{{len .Mounts}}'
 NETWORK_FORMAT='{{.HostConfig.NetworkMode}}'
 ENV_FORMAT='{{range .Config.Env}}{{println .}}{{end}}'
-PODMAN_OWN_ENV='container=podman'
+# What podman itself puts in a container's environment, in ONE place: its own variable, HOME, which it sets to the home
+# of the user it runs the container as (`--user`), read from the image's passwd rather than from this host, and the
+# container's own hostname. Any other name has to be one the image declares.
+PODMAN_OWN_ENV=('container=podman' 'HOME=' 'HOSTNAME=')
 # The network a container must not be on: the host's own.
 HOST_NETWORK='host'
 # A create may finish on the host after the ssh client that asked for it is gone, so the tear-down keeps asking for a
@@ -210,16 +213,19 @@ inside_step() {
 }
 
 # Anything in the container's environment that the image's own does not carry, as the line to fail with, or nothing
-# when there is none: podman's own variable is the one a run allows on top of the image. A host whose containers.conf
-# adds env, or sets env_host, puts variables here, and this is where that is refused.
+# when there is none: what podman itself sets is the allowance, and its names are the one place above. A host whose
+# containers.conf adds env, or sets env_host, puts variables here, and this is where that is refused.
 env_passed_in() {
-  local container_env image_env entry
+  local container_env image_env entry own
   container_env="$(on_the_host podman inspect --format "${ENV_FORMAT}" "${CONTAINER}")" \
     || { printf 'the container could not say which environment it carries'; return 0; }
   image_env="$(on_the_host podman image inspect --format "${ENV_FORMAT}" "${IMAGE}")" \
     || { printf 'the image could not say which environment it declares'; return 0; }
   while IFS= read -r entry; do
-    if [ -z "${entry}" ] || [ "${entry}" = "${PODMAN_OWN_ENV}" ]; then continue; fi
+    if [ -z "${entry}" ]; then continue; fi
+    for own in "${PODMAN_OWN_ENV[@]}"; do
+      case "${entry}" in "${own}"*) continue 2 ;; esac
+    done
     if ! printf '%s\n' "${image_env}" | grep -qxF -- "${entry}"; then
       printf 'the container carries environment that is not the image'"'"'s: %s' "${entry}"
       return 0
@@ -424,7 +430,7 @@ a_case() {
   printf '1000\n' > "${dir}/uid"
   printf 'slirp4netns\n' > "${dir}/network"
   printf 'PATH=/usr/local/bin:/usr/bin\n' > "${dir}/image.env"
-  printf '%s\nPATH=/usr/local/bin:/usr/bin\n' "${PODMAN_OWN_ENV}" > "${dir}/env"
+  printf '%s\nPATH=/usr/local/bin:/usr/bin\n' "${PODMAN_OWN_ENV[@]}" > "${dir}/env"
   printf '' > "${dir}/install.words"
   printf '0\n' > "${dir}/install.status"
   printf '' > "${dir}/version.words"
@@ -567,7 +573,7 @@ self_test() {
   asked_for '^FAIL inside: .*own network' "${standin}/out" || { echo "the self-test: a container on the host's own network did not fail the run" >&2; case_failed=1; }
   standin="${root}/given-the-hosts-environment"
   a_case "${standin}"
-  printf '%s\nPATH=/usr/local/bin:/usr/bin\nFROM_THE_HOST=1\n' "${PODMAN_OWN_ENV}" > "${standin}/env"
+  printf '%s\nPATH=/usr/local/bin:/usr/bin\nFROM_THE_HOST=1\n' "${PODMAN_OWN_ENV[@]}" > "${standin}/env"
   expect_status 1 "${standin}" 'a-host' || case_failed=1
   asked_for '^FAIL inside: .*not the image.s: FROM_THE_HOST=1' "${standin}/out" || { echo "the self-test: environment the image does not carry did not fail the run, and name it" >&2; case_failed=1; }
 
