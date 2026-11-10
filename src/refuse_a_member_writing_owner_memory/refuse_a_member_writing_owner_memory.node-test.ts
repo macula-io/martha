@@ -485,6 +485,27 @@ test('a member may not write the global config the host prefers at a config dir\
   }
 })
 
+// The member's own host resolves the config dir its own environment names, which need not be the launcher's
+// (martha#203, the case #187 left unpinned): the preferred global config there is refused as well, and the
+// launcher's own dir is not lost by the difference.
+test('a member may not write the global config the host prefers at the config dir only the member\'s environment names (martha#203)', (t) => {
+  const place = placeFor(t)
+  const memberConfig = join(place.root, 'member-only-config')
+  mkdirSync(memberConfig, { recursive: true })
+  const memberOnly = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home },
+    member_env: { HOME: place.home, CLAUDE_CONFIG_DIR: memberConfig },
+    home: place.home,
+    launch_dir: place.worktree,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  for (const name of CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES) {
+    assertDeniedBy(memberOnly, place.worktree, place.home, join(memberConfig, name), 'martha#187', 'the config dir only the member\'s own environment names')
+    assertDeniedBy(memberOnly, place.worktree, place.home, join(place.config, name), 'martha#187', 'the launcher\'s config dir, which its own environment names')
+  }
+})
+
 test('a link at the global config the host prefers, whose target does not exist yet, is denied where it will write (martha#187 r=3)', (t) => {
   const place = placeFor(t)
   for (const name of CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES) {

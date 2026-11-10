@@ -211,6 +211,18 @@ test('a host that renames the global config it prefers fails the check naming th
   assert.equal(two.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
 })
 
+// The recorded name is only trusted because the host also holds it as a constant of its own (martha#203, the
+// refusal #187 left untested): a host whose chooser joins a name it defines nowhere else is one whose global
+// config file cannot be told, and the check says so by the part rather than denying a name nothing reads.
+test('a host that joins the global config it prefers to its config dir but holds it as no constant of its own cannot be read (martha#203)', (t) => {
+  const chooserOnly = (PLACE_PARTS.legacy_global_config_names ?? '').split(';').filter((part) => !part.includes(PREFERRED_CONSTANT)).join(';')
+  assert.ok(chooserOnly.includes(PREFERRED_GLOBAL_CONFIG), 'the planted host joins the recorded name to its config dir')
+  assert.equal(chooserOnly.includes(`var ${PREFERRED_CONSTANT}=`), false, 'the planted host holds the name as no constant of its own')
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, legacy_global_config_names: chooserOnly }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
+})
+
 /** A folder the host runs whose name is no part of the file named beside it, so renaming it changes one thing. */
 const RENAMABLE = CODE_PLACES.folders.find((folder) => !(CODE_PLACES.files[0] ?? '').startsWith(folder)) ?? CODE_PLACES.folders[0] ?? ''
 
