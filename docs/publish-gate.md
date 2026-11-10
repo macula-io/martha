@@ -303,10 +303,13 @@ What the plan leaves out, stated rather than hidden:
   judged like any other file, and the refusal names the remedy that holds, since
   the host writes the file again at every start — turn that skill off on
   claude.ai, or put `"syncClaudeAiSkills": false` in the owner's settings. The
-  launcher reads that setting from the user, managed and drop-in settings files
-  as the host does (`=== false`, from any source), and while it is off it does not
-  read `skills/synced/` at all: the host hides that folder for every session
-  started afterwards, the member's included. `npm run probe:launch` starts the
+  launcher reads that setting from the user settings file, the managed file and
+  its drop-ins, and turns the folder off when any of them holds a real `false`,
+  which is how the host turns it off. The two per-workspace sources the host also
+  honours, `.claude/settings.local.json` and `--settings`, are not read here: that
+  can only make the launcher refuse more, never less (martha#243). While it is off
+  the launcher does not read `skills/synced/` at all: the host hides that folder
+  for every session started afterwards, the member's included. `npm run probe:launch` starts the
   member for the two shapes a signed-in host served, refuses one that really
   declares a hook, and starts it again once the setting is off.
   Two spellings that look like that key are not refused, because the host does

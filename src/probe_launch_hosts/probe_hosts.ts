@@ -916,12 +916,13 @@ function oneRunOfAProbe(probe: Probe): RunResult | string {
     const printed = printedText(run.stdout)
     return {
       markers: {
-        // The gate was asked and did not refuse, which only a row that names the gate can claim. It is written at the
-        // gate step, before any host runs, so a row whose claim is that a file gets through does not rest on the host
-        // (martha#243).
-        ...(probe.gate_names === undefined ? {} : { GATE_PASSED: true }),
         ...Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(markerPath(probe, place, name))])),
         ...(probe.from_output?.(place, printed) ?? {}),
+        // The gate was asked and did not refuse, which only a row that names the gate can claim. It is written at the
+        // gate step, before any host runs, so a row whose claim is that a file gets through does not rest on the host
+        // (martha#243) — and it comes last, because GATE_PASSED is one of the row's markers and a file of that name is
+        // never written: read first, it would always be overwritten as not started (martha#243 r=1).
+        ...(probe.gate_names === undefined ? {} : { GATE_PASSED: true }),
       },
       status: run.status,
     }
@@ -1221,6 +1222,24 @@ function reportMemoryProbe(worktree: boolean): void {
 }
 
 /** Everything the run does once its rows exist. A test imports the rows, so none of this may run on import. */
+/**
+ * The rows a run reports: all of them, or those whose words hold the text in
+ * MARTHA_PROBE_ROWS (martha#243). It is how a change runs its own rows without
+ * the ones that touch the developer's own home; the run says how many it left
+ * out, so a filtered run cannot pass for a whole one.
+ */
+const SELECTED_ROWS = process.env.MARTHA_PROBE_ROWS
+const selected = (rows: readonly Probe[]): readonly Probe[] =>
+  SELECTED_ROWS === undefined || SELECTED_ROWS === '' ? rows : rows.filter((row) => row.what.includes(SELECTED_ROWS))
+
+/** Reports the rows this run was asked for, says how many it left out, and leaves the memory rows out of a filtered run. */
+function reportSelected(rows: readonly Probe[]): void {
+  const whole = rows.length === ALL_PROBES.length
+  if (!whole) console.log(`this run reports ${rows.length} of ${ALL_PROBES.length} rows, those whose words hold ${JSON.stringify(SELECTED_ROWS)}`)
+  for (const probe of rows) reportProbe(probe)
+  for (const worktree of whole ? [false, true] : []) reportMemoryProbe(worktree)
+}
+
 function main(): void {
   for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES, NO_PLACE).command))) {
     console.log(`${command}: ${version(command)}`)
@@ -1239,8 +1258,7 @@ function main(): void {
     process.exitCode = 1
   }
   const startedWith = theProjectFoldersThere(process.env)
-  for (const probe of ALL_PROBES) reportProbe(probe)
-  for (const worktree of [false, true]) reportMemoryProbe(worktree)
+  reportSelected(selected(ALL_PROBES))
 
   const leftBehind = whatThisRunLeftAtTheEnd(startedWith)
   if (leftBehind.length > 0) process.exitCode = 1
