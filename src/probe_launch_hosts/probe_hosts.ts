@@ -17,7 +17,16 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 
-import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import {
+  projectFolderFor,
+  projectKeyOf,
+  takeAwayTheOnesThisRunWrote,
+  theLeftoverRow,
+  theProjectFoldersThere,
+  whatIsStillLeftAtTheEnd,
+  type ProjectFoldersBefore,
+} from './the_project_folders_a_run_wrote.ts'
+import { runTheHost, stopTheProcessesLeftIn } from './stop_a_host_that_outlives_the_run.ts'
 import {
   CLAUDE_MEMORY_OFF,
   fingerprintOf,
@@ -639,22 +648,23 @@ function switchesFor(probe: Probe, place: Place, inherited: Record<string, strin
   return prepared.switches
 }
 
-/** The host's key for a project folder: every character that is not a letter or a digit becomes `-`. */
-const projectKeyOf = (folder: string): string => folder.replaceAll(/[^A-Za-z0-9]/g, '-')
+/** The key prefix every scratch checkout's project folder has: the folders this probe's own runs write. */
+const SCRATCH_PREFIX = projectKeyOf(join(tmpdir(), 'martha-probe-'))
+
+/** The owner's project folders before this run started: what the last row reads the end against. */
+const startedWith = theProjectFoldersThere(process.env)
 
 /**
- * The folder Claude Code keeps a project's sessions and memory in, under the
- * owner's config dir: a run in a scratch checkout writes one, which the probe
- * removes with the scratch. Undefined when the config dir cannot be told.
+ * Every project folder a run wrote and could not take away (martha#179): what the
+ * last row reports by name, together with what a read at the end still finds.
  */
-function projectFolderOf(folder: string): string | undefined {
-  const settings = userSettingsPath(process.env)
-  return 'path' in settings ? join(dirname(settings.path), 'projects', projectKeyOf(folder)) : undefined
-}
+const leftBehindByARun: string[] = []
 
-/** Removes the scratch and the host's project folder for each checkout run in it. */
-function removeScratch(scratch: string, checkouts: readonly string[]): void {
-  for (const folder of checkouts.map(projectFolderOf)) if (folder !== undefined) rmSync(folder, { recursive: true, force: true })
+/** Removes the folders this run wrote, and keeps the ones it could not, to be named in the last row. */
+function takeAwayTheProjectFoldersOf(before: ProjectFoldersBefore, scratch: string): void {
+  // Nothing of the run may still be working in the scratch when its folders are read back.
+  stopTheProcessesLeftIn(scratch)
+  leftBehindByARun.push(...takeAwayTheOnesThisRunWrote(before, SCRATCH_PREFIX))
   rmSync(scratch, { recursive: true, force: true })
 }
 
@@ -672,6 +682,7 @@ function runProbe(probe: Probe): RunResult | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
   const checkout = join(scratch, 'checkout')
+  let before: ProjectFoldersBefore | undefined
   try {
     mkdirSync(checkout)
     spawnSync('git', ['init', '-q', '.'], { cwd: checkout })
@@ -683,14 +694,16 @@ function runProbe(probe: Probe): RunResult | string {
     if ('gate' in switches) return aRunTheGateRefused(probe, place, switches.gate)
 
     const { command, args } = probe.command(switches, place)
-    const run = spawnSync(command, args, {
+    // Read the project folders of the config dir this host will use, not of the developer's own.
+    const host_env = launchEnvironment(inherited, switches)
+    before = theProjectFoldersThere(host_env)
+    const run = runTheHost(command, args, {
       cwd: checkout,
-      env: launchEnvironment(inherited, switches),
-      // Captured for the rows that read the host's own account of what it was refused; the others ignore it.
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: RUN_TIMEOUT_MS,
+      env: host_env,
+      timeout_ms: RUN_TIMEOUT_MS,
+      pid_file: join(scratch, 'host-group'),
     })
-    if (run.error !== undefined) return `could not run: ${run.error.message}`
+    if (run.error !== undefined) return `could not run: ${run.error}`
     spawnSync('sleep', ['1'])
     const printed = printedText(run.stdout)
     return {
@@ -701,7 +714,9 @@ function runProbe(probe: Probe): RunResult | string {
       status: run.status,
     }
   } finally {
-    removeScratch(scratch, [checkout])
+    // On the failure paths too: a run that threw still wrote its folders.
+    if (before === undefined) rmSync(scratch, { recursive: true, force: true })
+    else takeAwayTheProjectFoldersOf(before, scratch)
   }
 }
 
@@ -749,15 +764,6 @@ function reportProbe(probe: Probe): void {
   if (!exitedOk) process.exitCode = 1
   console.log(`${probe.what}: the host exited ${exitedOk ? 'cleanly, as claimed' : `CLAIMED cleanly but exited ${run.status ?? 'not at all'}`}`)
 }
-
-/** The host's project folders for scratch checkouts, so a run that leaves one behind fails. */
-function scratchProjectFolders(): readonly string[] {
-  const projects = projectFolderOf(tmpdir())
-  if (projects === undefined) return []
-  const root = dirname(projects)
-  return existsSync(root) ? readdirSync(root).filter((name) => name.startsWith(`${projectKeyOf(join(tmpdir(), 'martha-probe-'))}`)) : []
-}
-const foldersBefore = new Set(scratchProjectFolders())
 
 if (SPELLINGS_WITHOUT_A_PROBE.length > 0) {
   console.error(`no probe row for the spelling rule(s): ${SPELLINGS_WITHOUT_A_PROBE.join(', ')}`)
@@ -868,10 +874,30 @@ function memoryOn(): Record<string, string | undefined> {
 }
 
 /** One memory run: whether the reply named the codeword, or why it could not run. */
-function codewordSaid(cwd: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, codeword: string): boolean | string {
-  const run = spawnSync('claude', [...HEADLESS_CLAUDE, MEMORY_PROMPT, ...args], { cwd, env, encoding: 'utf8', timeout: RUN_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'] })
-  if (run.error !== undefined) return `could not run: ${run.error.message}`
-  return run.stdout.includes(codeword)
+function codewordSaid(
+  scratch: string,
+  cwd: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+  codeword: string,
+  pid_file: string,
+): boolean | string {
+  // Read before the host starts, so the folder it writes is one this run can name and take away.
+  const before = theProjectFoldersThere(env)
+  try {
+    const run = runTheHost('claude', [...HEADLESS_CLAUDE, MEMORY_PROMPT, ...args], {
+      cwd,
+      env,
+      timeout_ms: RUN_TIMEOUT_MS,
+      pid_file,
+    })
+    if (run.error !== undefined) return `could not run: ${run.error}`
+    return printedText(run.stdout).includes(codeword)
+  } finally {
+    // The scratch itself goes when the whole memory probe is done; its folders go with each run.
+    stopTheProcessesLeftIn(scratch)
+    leftBehindByARun.push(...takeAwayTheOnesThisRunWrote(before, SCRATCH_PREFIX))
+  }
 }
 
 /** A checkout to start in, and the folder whose memory the host loads for it: its own, or the main clone's for a worktree. */
@@ -901,21 +927,27 @@ function memoryLines(scratch: string, memory: string, start: string, codeword: s
   if (!prepared.allow) return [['prepareLaunch allows the launch', prepared.refusal, true]]
   // Both runs pass the same switches; only the environment differs, so the control isolates the off switch.
   const forcedOn = Object.fromEntries(Object.keys(CLAUDE_MEMORY_OFF).map((name) => [name, '0']))
+  const group = (at: number) => join(scratch, `host-group-${at}`)
   return [
-    ['by hand, memory on: codeword said', codewordSaid(start, prepared.switches.args, memoryOn(), codeword), true],
-    ["as Martha starts it, the owner's environment saying memory on: codeword said", codewordSaid(start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword), false],
+    ['by hand, memory on: codeword said', codewordSaid(scratch, start, prepared.switches.args, memoryOn(), codeword, group(1)), true],
+    ["as Martha starts it, the owner's environment saying memory on: codeword said", codewordSaid(scratch, start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
     ['the memory folder holds exactly what was planted', JSON.stringify(filesUnder(folder)) === JSON.stringify(planted), true],
   ]
 }
 
 const yesNo = (value: boolean) => (value ? 'yes' : 'no')
 
+/** Takes away each folder named, skipping the ones the config dir could not tell. */
+function takeAwayTheFoldersOf(...folders: readonly (string | undefined)[]): void {
+  for (const folder of folders) if (folder !== undefined) rmSync(folder, { recursive: true, force: true })
+}
+
 /** Runs the memory probe in a plain checkout or a worktree; each line against its claim, a mismatch failing the run. */
 function reportMemoryProbe(worktree: boolean): void {
   const what = `Claude Code auto-memory, ${worktree ? "a worktree loading its main clone's folder" : 'a plain checkout'}`
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
   const { start, main } = memoryPlace(scratch, worktree)
-  const memory = projectFolderOf(main)
+  const memory = projectFolderFor(process.env, main)
   try {
     const lines: readonly MemoryLine[] =
       memory === undefined
@@ -926,12 +958,17 @@ function reportMemoryProbe(worktree: boolean): void {
       console.log(`${what}: ${line} ${typeof seen === 'string' ? seen : yesNo(seen)}, ${seen === claimed ? 'as claimed' : `CLAIMED ${yesNo(claimed)}`}`)
     }
   } finally {
-    removeScratch(scratch, [main, start])
+    stopTheProcessesLeftIn(scratch)
+    // The folders this probe made for itself: the one it plants the codeword in, and a
+    // worktree's own. They are made before a run reads what is there, so a run's own
+    // read-back would count them as already there; the probe made them, so it takes them.
+    takeAwayTheFoldersOf(memory, projectFolderFor(process.env, start))
+    rmSync(scratch, { recursive: true, force: true })
   }
 }
 
 for (const worktree of [false, true]) reportMemoryProbe(worktree)
 
-const leftBehind = scratchProjectFolders().filter((name) => !foldersBefore.has(name))
+const leftBehind = whatIsStillLeftAtTheEnd(startedWith, SCRATCH_PREFIX, leftBehindByARun)
 if (leftBehind.length > 0) process.exitCode = 1
-console.log(`project folders this run left in the owner's config dir: ${leftBehind.length === 0 ? 'none, as claimed' : `${leftBehind.join(', ')}, CLAIMED none`}`)
+console.log(theLeftoverRow(leftBehind))
