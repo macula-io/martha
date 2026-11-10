@@ -188,7 +188,7 @@ install_step() {
   fi
   if printf '%s' "${said}" | grep -qF -- "${NO_RELEASE_WORDS}"; then
     NO_RELEASE_YET=1
-    ok install "the installer reached the registry and stopped on its own words: $(one_line "${said}")"
+    ok install "the installer reached the registry and stopped on its own words: $(printf '%s' "${said}" | grep -F -- "${NO_RELEASE_WORDS}" | tail -1)"
     return 0
   fi
   failed install "the installer ended ${status}: $(one_line "${said}")"
@@ -415,10 +415,12 @@ self_test() {
   # No release: the installer's own words are the run's outcome, and the container still goes.
   standin="${root}/no-release"
   a_case "${standin}"
-  printf 'martha-install: ghcr.io/macula-io/martha carries no version; refused\n' > "${standin}/install.words"
+  printf 'npm notice a newer npm is available\nmartha-install: ghcr.io/macula-io/martha carries no version; refused\nnpm notice To update run: npm install -g npm@x\n' > "${standin}/install.words"
   printf '1\n' > "${standin}/install.status"
   expect_status 3 "${standin}" 'a-host' || case_failed=1
   [ "$(tail -1 "${standin}/out")" = 'no release to install' ] || { echo 'the self-test: a run with no release did not say so last' >&2; case_failed=1; }
+  asked_for '^ok install: .*carries no version; refused$' "${standin}/out" || { echo "the self-test: the no-release step did not end on the installer's own line" >&2; case_failed=1; }
+  if grep -q 'npm notice' "${standin}/out"; then echo 'the self-test: the no-release step carried the npm noise it is not supposed to' >&2; case_failed=1; fi
   asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: a run with no release left its container' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: a run with no release did not remove its container' >&2; case_failed=1; }
 
