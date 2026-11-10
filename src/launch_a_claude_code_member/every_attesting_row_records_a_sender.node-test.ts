@@ -48,7 +48,7 @@ const STARTED = '900100'
 interface RecordedAnswer {
   readonly tool_name: string
   readonly tool_input: Readonly<Record<string, unknown>>
-  readonly tool_response: unknown
+  readonly tool_call_answer: unknown
 }
 
 /** The host's own answers for the two ring tools, taken live (../read_a_ring_results_sender). */
@@ -153,7 +153,7 @@ async function ingestionsTheRelayRecords(t: TestContext, answers: Readonly<Recor
     await relay.answer('tool_answered', {
       session_id: id,
       call: { tool: `mcp__macula__${tool}`, ...answer.tool_input },
-      answer: answer.tool_response,
+      answer: answer.tool_call_answer,
     })
   }
 
@@ -196,7 +196,7 @@ test('every row that stands on an attestation records a sender, driven as it rea
 })
 
 test('the drive is not vacuous: without the recorded ring answers, A4 and A5 are named', async (t) => {
-  const empty = { [RINGS_AND_RETURNS_THE_ANSWER]: { ...RECORDED_ANSWERS[RINGS_AND_RETURNS_THE_ANSWER], tool_response: undefined }, [ANSWERS_A_RING]: { ...RECORDED_ANSWERS[ANSWERS_A_RING], tool_response: undefined } } as unknown as Readonly<Record<string, RecordedAnswer>>
+  const empty = { [RINGS_AND_RETURNS_THE_ANSWER]: { ...RECORDED_ANSWERS[RINGS_AND_RETURNS_THE_ANSWER], tool_call_answer: undefined }, [ANSWERS_A_RING]: { ...RECORDED_ANSWERS[ANSWERS_A_RING], tool_call_answer: undefined } } as unknown as Readonly<Record<string, RecordedAnswer>>
   const recorded = [...(await ingestionsTheRelayRecords(t, empty)), ...ingestionsTheRoomReadsRecord(), ...ingestionsTheSeamRecords()]
   const named = rowsWhoseAttestationNothingSupplies(recorded).map((gap) => gap.path)
   assert.deepEqual(named.sort(), [PATH_OF_SOURCE.ring, PATH_OF_SOURCE.ring_answer].sort())

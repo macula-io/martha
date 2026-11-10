@@ -22,14 +22,17 @@
 //      one and the row records nothing, where a rule written as "not
 //      unreachable" would turn the same rename into an attribution.
 //
-//   2. THE ID IS READ FROM ONE SHAPE ONLY: the host's answer for the call is a
-//      bare one-block array of text, whose whole text is one JSON object, whose
-//      own key is a 64-hex string. Never a substring, never an object found
-//      inside the text: the server's error text quotes the callee's payload
-//      (`JSON.stringify(delivery.payload)`), so a parser that hunted for JSON
-//      would read an id the callee wrote. A string (an error result), an
-//      object, an array of another length, a block that is not text, all record
-//      nothing.
+//   2. THE ID IS READ FROM ONE SHAPE ONLY: the host answers the relay's
+//      `tool.call` hook with the tool's output wrapped in a `{ result, text }`
+//      object (./recorded_host_ring_answers.json is that value, taken live), and
+//      `result` is a bare one-block array of text whose whole text is one JSON
+//      object whose own key is a 64-hex string. Never a substring, never an
+//      object found inside the text: the server's error text quotes the callee's
+//      payload (`JSON.stringify(delivery.payload)`), so a parser that hunted for
+//      JSON would read an id the callee wrote. A string (the host's error), the
+//      bare array without the wrapper (the PostToolUse shape, which this seam
+//      never receives), an array of another length, a block that is not text,
+//      all record nothing.
 //
 //   3. ON A5 THE RESULT MUST NAME THE NODE THIS CALL DIALLED, when the call's
 //      own `to` was a node id. A call resolves a petname before it dials, so a
@@ -164,14 +167,20 @@ function branchOf(own_name: string, result: Readonly<Record<string, unknown>>): 
 /**
  * The one JSON object the host's answer holds, or undefined.
  *
- * Claude Code keeps a macula MCP tool's successful result as a bare one-block
- * array (`[{type: 'text', text}]`), and its error as a plain string: nothing
- * else is a result this reads. The whole block goes through `JSON.parse`, never
- * a substring of it.
+ * Claude Code answers a `tool.call` hook with the tool's own output wrapped: the
+ * value is `{ result, text }`, where `result` is the bare one-block array of text
+ * the tool returned, and an error arrives as a plain string instead
+ * (./recorded_host_ring_answers.json is that value, taken live; the Bash recording
+ * in ../claude_code_host shows the same wrapper for a built-in tool). Nothing
+ * else is a result this reads, the wrapper-less array included: that is what a
+ * PostToolUse body carries, and this seam never receives one. The whole block
+ * goes through `JSON.parse`, never a substring of it.
  */
 function jsonObjectIn(answer: unknown): Readonly<Record<string, unknown>> | undefined {
-  if (!Array.isArray(answer) || answer.length !== 1) return undefined
-  const block: unknown = answer[0]
+  if (!isRecord(answer)) return undefined
+  const blocks = answer['result']
+  if (!Array.isArray(blocks) || blocks.length !== 1) return undefined
+  const block: unknown = blocks[0]
   if (!isRecord(block) || block['type'] !== 'text' || typeof block['text'] !== 'string') return undefined
   let parsed: unknown
   try {
@@ -188,12 +197,13 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 /**
- * The host's own answers for the two ring tools, taken live and recorded
- * (./recorded_host_ring_answers.json), by the tool's own name. A test that has to
- * drive a ring result reads this rather than building one: the shape is the
- * host's, and a hand-built one would hide a parse that reads a shape the host
- * never produces.
+ * The host's own answers for the two ring tools, taken live through a `tool.call`
+ * hook and recorded (./recorded_host_ring_answers.json), by the tool's own name:
+ * `tool_call_answer` is the value that hook's `next(e)` returns, which is the
+ * value the relay puts in body.answer. A test that has to drive a ring result
+ * reads this rather than building one: the shape is the host's, and a hand-built
+ * one would hide a parse that reads a shape the host never produces.
  */
-export const RECORDED_RING_ANSWERS: Readonly<Record<string, { readonly tool_input: Readonly<Record<string, unknown>>; readonly tool_response: unknown }>> =
-  (hostAnswers as { readonly answers: Readonly<Record<string, { readonly tool_input: Readonly<Record<string, unknown>>; readonly tool_response: unknown }>> })
+export const RECORDED_RING_ANSWERS: Readonly<Record<string, { readonly tool_input: Readonly<Record<string, unknown>>; readonly tool_call_answer: unknown }>> =
+  (hostAnswers as { readonly answers: Readonly<Record<string, { readonly tool_input: Readonly<Record<string, unknown>>; readonly tool_call_answer: unknown }>> })
     .answers

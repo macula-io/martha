@@ -135,7 +135,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
   // A ring tool's own result is driven from the recorded host answer (martha#247), so the row that reads a
   // sender out of it is reached with one; a result the host never produces would stop the member instead.
   const calls = [
-    ...MESH_TOOLS_THAT_RUN.map((own) => ({ call: { tool: MESH_SERVER_TOOL(own), ...RECORDED_RING_ANSWERS[own]?.tool_input }, answer: RECORDED_RING_ANSWERS[own]?.tool_response })),
+    ...MESH_TOOLS_THAT_RUN.map((own) => ({ call: { tool: MESH_SERVER_TOOL(own), ...RECORDED_RING_ANSWERS[own]?.tool_input }, answer: RECORDED_RING_ANSWERS[own]?.tool_call_answer })),
     { call: { tool: ANOTHER_SERVER_TOOL }, answer: undefined },
     ...BUILT_IN_CALLS.map((call) => ({ call, answer: undefined })),
   ]
