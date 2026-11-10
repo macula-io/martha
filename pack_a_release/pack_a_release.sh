@@ -33,14 +33,15 @@ names="$(git -C "${REPO}" show HEAD:installer/package.json)"
 source_repository="$(jq -r '.martha.sourceRepository // empty' <<<"${names}")"
 command_name="$(jq -r '.martha.command // empty' <<<"${names}")"
 folder="$(jq -r '.martha.releaseFolder // empty' <<<"${names}")"
-[[ -n "${source_repository}" && -n "${command_name}" && -n "${folder}" ]] || { echo "pack_a_release: installer/package.json names no sourceRepository, command or releaseFolder" >&2; exit 2; }
+pin_file="$(jq -r '.martha.pinFile // empty' <<<"${names}")"
+[[ -n "${source_repository}" && -n "${command_name}" && -n "${folder}" && -n "${pin_file}" ]] || { echo "pack_a_release: installer/package.json names no sourceRepository, command, releaseFolder or pinFile" >&2; exit 2; }
 
 mkdir -p "${context}"
 git -C "${REPO}" archive --format=tar --prefix="${folder}/" HEAD | tar -x -C "${context}"
 [[ -f "${context}/${folder}/package.json" ]] || { echo "pack_a_release: the packed tree has no package.json" >&2; exit 2; }
 [[ ! -e "${context}/${folder}/installer" ]] || { echo "pack_a_release: installer/ was packed; .gitattributes no longer leaves it out" >&2; exit 2; }
 # A pin is generated here, from what npm serves, and never packed with the tree (martha#84).
-[[ ! -e "${context}/${folder}/installer.json" ]] || { echo "pack_a_release: installer.json was packed; a release's pin is generated, never committed" >&2; exit 2; }
+[[ ! -e "${context}/${folder}/${pin_file}" ]] || { echo "pack_a_release: ${pin_file} was packed; a release's pin is generated, never committed" >&2; exit 2; }
 node "${REPO}/installer/pin_the_installer/pin_the_installer.mjs" "${context}" || exit 1
 
 cat > "${context}/Containerfile" <<CONTAINERFILE

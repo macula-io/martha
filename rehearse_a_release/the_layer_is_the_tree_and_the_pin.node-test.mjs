@@ -72,10 +72,18 @@ test('the pin a layer holds is read back as written, and a layer without one is 
   assert.throws(() => thePinIn(join(dir, 'nowhere')), (error) => String(error).includes(PIN_IN_THE_LAYER), 'a missing pin is named by its path')
 })
 
-test('a pin is the published installer, by all three fields, and any field that is not is named', () => {
+test('a pin is the published installer field for field, and any field that is not is named', () => {
   const published = { name: '@macula-io/martha', version: '1.0.2', integrity: 'sha512-aaaa' }
   assert.deepEqual(pinFieldsThatDiffer(published, published), [], 'the same installer is no difference')
   assert.deepEqual(pinFieldsThatDiffer({ ...published, version: '1.0.1' }, published), ['version is "1.0.1", not "1.0.2"'])
   assert.deepEqual(pinFieldsThatDiffer({ ...published, integrity: 'sha512-bbbb' }, published), ['integrity is "sha512-bbbb", not "sha512-aaaa"'])
-  assert.deepEqual(pinFieldsThatDiffer({}, published).length, 3, 'a pin with no fields differs in every one')
+  assert.deepEqual(pinFieldsThatDiffer({}, published), ['integrity is undefined, not "sha512-aaaa"', 'name is undefined, not "@macula-io/martha"', 'version is undefined, not "1.0.2"'], 'a pin with no fields differs in every one')
+})
+
+test('a pin carrying one field more than the published installer is refused, and the field is named', () => {
+  const published = { name: '@macula-io/martha', version: '1.0.2', integrity: 'sha512-aaaa' }
+  // The comparison is over every field either object names, never over a list of the fields the writer is known to
+  // write: a shape restated here would pass a pin that smuggles in a fourth field.
+  assert.deepEqual(pinFieldsThatDiffer({ ...published, extra: 'x' }, published), ['extra is "x", not undefined'])
+  assert.deepEqual(pinFieldsThatDiffer({ name: published.name, version: published.version }, published), ['integrity is undefined, not "sha512-aaaa"'], 'a field the pin leaves out is named too')
 })

@@ -12,9 +12,10 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { test } from 'node:test'
 
+import { PIN_IN_THE_LAYER } from '../../rehearse_a_release/the_layer_is_the_tree_and_the_pin.mjs'
 import { NAMES } from '../keep_the_names_in_one_place/names.mjs'
 import { CouldNotCheck, Refused } from '../refuse_in_words/refuse_in_words.mjs'
 import { pinTheInstaller } from './pin_the_installer.mjs'
@@ -200,13 +201,16 @@ const refusedWith = async (promise, pattern) => {
 }
 
 /** @param {string} context */
-const pinFile = (context) => join(context, NAMES.releaseFolder, 'installer.json')
+const pinFile = (context) => join(context, NAMES.releaseFolder, NAMES.pinFile)
 
 test('the pin is exactly the three fields, named by the tree and covered by the bytes npm serves', async (t) => {
-  const { pinning } = await attempt(t)
+  const { context, pinning } = await attempt(t)
   const { file, pin } = await pinning
   assert.deepEqual(pin, { name: NAME, version: VERSION, integrity: sri(TARBALL) })
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { name: NAME, version: VERSION, integrity: sri(TARBALL) })
+  // The dry run's rehearsal sets the pin aside by its path before it compares the layer with the committed tree, so
+  // that path is held to where this writer actually puts the pin, never to a copy of it spelled out there (martha#207).
+  assert.equal(relative(context, file), PIN_IN_THE_LAYER, 'the pin is written at the one path the rehearsal looks for it')
 })
 
 test('the certificate the pin demands is exactly this repository, this workflow and this ref', async (t) => {

@@ -12,9 +12,6 @@ import { NAMES } from '../installer/keep_the_names_in_one_place/names.mjs'
 /** Where a layer holds the pin the packer generated: the release folder, and the file the installer package names. */
 export const PIN_IN_THE_LAYER = `${NAMES.releaseFolder}/${NAMES.pinFile}`
 
-/** The three fields a pin holds, as pin_the_installer writes them. */
-const PIN_FIELDS = ['name', 'version', 'integrity']
-
 /** At most this many paths are named in one refusal, so a tree that differs everywhere stays readable. */
 const NAMED_AT_MOST = 10
 
@@ -77,11 +74,23 @@ export function thePinIn (layerRoot) {
 }
 
 /**
- * Which of the pin's three fields is not the installer npm serves, each with both values; empty when the pin is that
- * installer's, and all three when the layer holds no pin at all.
+ * Every field either object names, sorted: a pin carrying one field more than the published installer is a
+ * difference in that field, so the comparison cannot be limited to the fields the writer is known to write.
+ * @param {any} pin @param {any} published
+ * @returns {string[]}
+ */
+const fieldsOf = (pin, published) => [...new Set([...Object.keys(pin ?? {}), ...Object.keys(published ?? {})])].sort()
+
+/** One field's value as it reads in a refusal, so two values are compared and shown the same way. @param {any} value */
+const asRead = (value) => JSON.stringify(value)
+
+/**
+ * Which fields of the pin are not the installer npm serves, each with both values; empty when the pin is that
+ * installer's, and every field either object names when the layer holds no pin at all.
  * @param {any} pin the pin as the layer holds it @param {any} published what pin_the_installer would write
  */
 export function pinFieldsThatDiffer (pin, published) {
-  return PIN_FIELDS.filter((field) => pin?.[field] !== published?.[field])
-    .map((field) => `${field} is ${JSON.stringify(pin?.[field])}, not ${JSON.stringify(published?.[field])}`)
+  return fieldsOf(pin, published)
+    .filter((field) => asRead(pin?.[field]) !== asRead(published?.[field]))
+    .map((field) => `${field} is ${asRead(pin?.[field])}, not ${asRead(published?.[field])}`)
 }

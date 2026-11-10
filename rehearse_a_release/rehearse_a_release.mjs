@@ -8,9 +8,10 @@
 //      `git archive`, and that pin is the installer npm serves for this tree's installer version (martha#207).
 //
 // It lives here, outside installer/, and not in package.json "files": it ships on npm nowhere, and its own fixes no
-// longer force an installer bump and republish for a folder npm has never carried (martha#207). It is not a
-// *.node-test.mjs: it needs a registry token, the network and an image the workflow pushed. Its one caller is
-// release-dry-run.yml.
+// longer force an installer bump and republish for a folder npm has never carried (martha#207). It imports the
+// installer, which a release layer does not carry, so .gitattributes marks this folder export-ignore and it ships in
+// no layer either. It is not a *.node-test.mjs: it needs a registry token, the network and an image the workflow
+// pushed. Its one caller is release-dry-run.yml.
 //
 // Environment (all required): DRY_RUN_IMAGE, DRY_RUN_VERSION, DRY_RUN_DIGEST, DRY_RUN_UNSIGNED_DIGEST, DRY_RUN_REF,
 // GHCR_TOKEN (the run's token: before the owner makes it public, the release package is not).
