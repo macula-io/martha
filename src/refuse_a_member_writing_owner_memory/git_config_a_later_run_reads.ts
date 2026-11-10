@@ -27,7 +27,7 @@
 
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
-import type { LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { realOrResolved, type LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 
 /** The file name a git directory holds its main configuration in. */
 export const CONFIG = 'config'
@@ -142,7 +142,7 @@ function readOne(
 
 /** What one entry adds: its paths, then the files it includes, read as config in their turn. */
 function collectFrom(entry: ConfigEntry, top: string, home: string, places: ConfigNamedPlace[], seen: Set<string>, hops_left: number, reading: { refusal: string | undefined }, host: LaunchHost): void {
-  const named = placeOfEntry(entry, top, home)
+  const named = placeOfEntry(entry, top, home, host)
   if (named.kind === 'refused') {
     reading.refusal = named.refusal
     return
@@ -162,11 +162,11 @@ function isAnInclude(entry: ConfigEntry): boolean {
 }
 
 /** What one entry names: the places it names inside the checkout, and the config files it includes. */
-function placeOfEntry(entry: ConfigEntry, top: string, home: string): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } | { readonly kind: 'refused'; readonly refusal: string } {
+function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } | { readonly kind: 'refused'; readonly refusal: string } {
   const places: ConfigNamedPlace[] = []
   const includes: string[] = []
   for (const candidate of candidatesIn(entry)) {
-    const one = oneCandidate(candidate, entry, top, home)
+    const one = oneCandidate(candidate, entry, top, home, host)
     if (one.kind === 'refused') return one
     if (isAnInclude(entry)) includes.push(one.path)
     if (one.inside) places.push({ what: one.path, why: whyTheValueIsRefused(entry) })
@@ -175,14 +175,14 @@ function placeOfEntry(entry: ConfigEntry, top: string, home: string): { readonly
 }
 
 /** One word of a value, or the value whole: where it lands, and whether that is inside the checkout. */
-function oneCandidate(candidate: string, entry: ConfigEntry, top: string, home: string): { readonly kind: 'path'; readonly path: string; readonly inside: boolean } | { readonly kind: 'refused'; readonly refusal: string } {
+function oneCandidate(candidate: string, entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'path'; readonly path: string; readonly inside: boolean } | { readonly kind: 'refused'; readonly refusal: string } {
   if (candidate.includes('%(prefix)')) {
     return {
       kind: 'refused',
       refusal: `${entry.file}:${entry.line} names ${entry.value} under ${entry.key}, and %(prefix) is a path this guard cannot place without asking git about a directory a member chose: a member does not write into that checkout while it stands (martha#192)`,
     }
   }
-  const path = resolvedPathOf(candidate, entry, top, home)
+  const path = resolvedPathOf(candidate, entry, top, home, host)
   return { kind: 'path', path, inside: insideTheTree(path, top) }
 }
 
@@ -216,11 +216,16 @@ function expandHome(value: string, home: string): string {
  * Where one word of a value lands: an absolute word as it stands, an include path
  * against the directory of the file that holds it, and every other word against the
  * top of the work tree, which is where a later git run of the owner's starts it.
+ *
+ * The answer is here as the write guard compares it — every link resolved through
+ * the nearest directory that exists (martha#79). The top it is compared with is
+ * already resolved that way, so a value spelled through a link to the checkout
+ * (`/tmp -> /private/tmp`, or a link the owner made) would otherwise miss it.
  */
-function resolvedPathOf(candidate: string, entry: ConfigEntry, top: string, home: string): string {
+function resolvedPathOf(candidate: string, entry: ConfigEntry, top: string, home: string, host: LaunchHost): string {
   const expanded = expandHome(candidate, home)
-  if (isAbsolute(expanded)) return resolve(expanded)
-  return resolve(isAnInclude(entry) ? dirname(entry.file) : top, expanded)
+  if (isAbsolute(expanded)) return realOrResolved(host, resolve(expanded))
+  return realOrResolved(host, resolve(isAnInclude(entry) ? dirname(entry.file) : top, expanded))
 }
 
 /** Whether a path is the checkout's top or below it, with the top's own links resolved by the caller. */

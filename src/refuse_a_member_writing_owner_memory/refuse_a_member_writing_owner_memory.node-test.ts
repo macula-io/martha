@@ -842,6 +842,14 @@ test('a hooks folder the config names is refused, spelled relative, absolute, wi
   // path in it. A rule that judged only the words holding a slash would admit this.
   writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = /usr/bin/hookrun hk\n')
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk', 'pre-commit'), 'a bare word inside a value that starts outside the tree')
+
+  // The same folder named through a link, which is how a checkout on macOS is
+  // reached at all (/var -> /private/var, martha#79): the value resolves through the
+  // link and the write resolves through it, and both answers are the tree.
+  const throughALink = join(place.root, 'link-to-checkout')
+  symlinkSync(checkout, throughALink)
+  writeFileSync(join(checkout, '.git', 'config'), `[core]\n\thooksPath = ${join(throughALink, '.husky')}\n`)
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.husky', 'pre-commit'), 'an absolute hooks folder reached through a link')
 })
 
 test('a value naming a program is refused whoever holds the key: an alias, a hook command, a filter (#192)', (t) => {

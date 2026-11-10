@@ -910,8 +910,10 @@ where it came from. Three things stand on it:
   inside the checkout makes that path, and everything below it, one a member does
   not write. Relative words resolve against the top of the work tree, an include
   path against the directory of the file that holds it, `~/` against the owner's
-  home; includes are followed, and a value holding `%(prefix)` is refused rather
-  than guessed. The files read are the checkout's own `config`, its
+  home; a value is placed as the write is, every link on the way resolved
+  (martha#79), so a checkout reached through a link is caught however the value
+  spells it; includes are followed, and a value holding `%(prefix)` is refused
+  rather than guessed. The files read are the checkout's own `config`, its
   `config.worktree` when `extensions.worktreeConfig` is on, and the owner's
   system, global and XDG files. A file the guard cannot read as git reads it — a
   form it does not model, an escape git itself refuses, an unterminated quote, an
