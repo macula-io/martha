@@ -28,8 +28,8 @@ const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
-/** How long one run may take, start to end, on a hosted runner. */
-const RUN_DEADLINE_MS = 120_000
+/** How long the host may show nothing new before a run gives up on it: a host that is working is never cut off. */
+const HOST_SILENCE_MS = 120_000
 const CRLF_FILE = 'windows.txt'
 const OUTSIDER_BRANCH = 'outsider'
 /**
@@ -94,7 +94,7 @@ async function run(project: Project, requests: number, script: ModelScript): Pro
     owner_turn: OWNER_TURN,
     script,
     requests,
-    deadline_ms: RUN_DEADLINE_MS,
+    silence_ms: HOST_SILENCE_MS,
   })
 }
 

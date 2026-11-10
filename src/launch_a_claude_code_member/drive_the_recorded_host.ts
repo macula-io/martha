@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { removeTheTree } from './relay_copy.ts'
+import { waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 
 /** The variable the relay CI job names the recorded host's binary in. */
@@ -73,8 +74,8 @@ export interface RecordedHostRun {
   readonly script: ModelScript
   /** How many model requests the run waits for before it ends the host itself; a stopped member ends it sooner. */
   readonly requests: number
-  /** How long the whole run may take. */
-  readonly deadline_ms: number
+  /** How long the host may show nothing new before the run gives up on it; a host that is working is never cut off. */
+  readonly silence_ms: number
 }
 
 export interface RecordedHostRan {
@@ -215,8 +216,8 @@ export const plainTextOf = (shown: string): string =>
 /**
  * Starts `run.member` with `martha start` on a pseudo-terminal, types the owner's turn once it is up, and lets the
  * stand-in answer the host's model requests by `run.script`. Ends the host with its own exit command once
- * `run.requests` were answered, unless the member was stopped first. Rejects when the deadline passes, with the
- * last screen.
+ * `run.requests` were answered, unless the member was stopped first. Rejects when the host has shown nothing new for
+ * `run.silence_ms`, with the last screen (martha#210).
  */
 export async function driveTheRecordedHost(run: RecordedHostRun): Promise<RecordedHostRan> {
   const heard: ModelRequest[] = []
@@ -231,12 +232,20 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   const ended = new Promise<number | null>((resolve) => terminal.once('exit', (code) => resolve(code)))
   let exit_code: number | null | undefined
   void ended.then((code) => void (exit_code = code))
-  const started = Date.now()
   const until = async (what: string, done: () => boolean): Promise<void> => {
-    while (!done()) {
-      if (failure !== undefined) throw new Error(`${failure}. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
-      if (Date.now() - started > run.deadline_ms) throw new Error(`No ${what} within ${run.deadline_ms} ms. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
-      await new Promise((resolve) => setTimeout(resolve, 100))
+    try {
+      await waitWhileTheHostKeepsShowing({
+        what,
+        holds: done,
+        cannotHappen: () => failure,
+        shown: () => shown,
+        heard: () => heard.length,
+        silence_ms: run.silence_ms,
+        now: Date.now,
+        sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+      })
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
     }
   }
   try {
