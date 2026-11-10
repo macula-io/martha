@@ -79,6 +79,11 @@ interface Place {
   /** Where the launcher installs the recorded mesh server trees (martha#65). */
   readonly mesh_servers: string
   readonly approved: readonly string[]
+  /**
+   * Told by the helper that starts a member here. The place's own hook then leaves the removal to that member's hook,
+   * which is the one that waits for the member to stop (martha#216).
+   */
+  aMemberStartsHere(): void
 }
 
 function git(cwd: string, ...args: string[]): string {
@@ -95,7 +100,14 @@ const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['
 
 function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<string, string>> = {}): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-cc-launch-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  // A place no member ran in is removed here. One that a member ran in is removed by that member's own hook, which
+  // waits for it to stop first: the home holds the running host's files, and removing it while the host was still
+  // writing made a full run go red on teardown alone (martha#216).
+  let aMemberStarts = false
+  t.after(() => {
+    if (aMemberStarts) return
+    rmSync(home, { recursive: true, force: true })
+  })
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '.')
@@ -123,6 +135,9 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
     approved,
+    aMemberStartsHere: () => {
+      aMemberStarts = true
+    },
   }
 }
 
@@ -132,6 +147,32 @@ const launchOf = (place: Place) => ({
   stop_dir: place.home,
   approved_fingerprints: place.approved,
 })
+
+/** What a launch hands back: a member at work, or the reason none started. */
+type ALaunch = Awaited<ReturnType<typeof launchClaudeCodeMember>>
+
+/**
+ * A member started in a place, with everything the end of the test owes it: the member is stopped, its exit is waited
+ * for, and only then is the place's home removed. The home holds the running host's own files, so removing it while
+ * the host was still writing made a full run go red on teardown alone (martha#216).
+ */
+async function aMemberStartedIn(t: TestContext, place: Place, launch: Parameters<typeof launchClaudeCodeMember>[0]): Promise<ALaunch> {
+  const started = await launchClaudeCodeMember(launch)
+  // Said after the launch, so a launch that throws leaves the place's own hook to remove it.
+  place.aMemberStartsHere()
+  let hasStopped = false
+  if (started.started) void started.stopped.then(() => {
+    hasStopped = true
+  })
+  // One hook, in this order: the member is stopped, its exit is waited for, and only then does the place go. Registered
+  // first, so it runs before every other hook the test registers, as the place's own removal always did.
+  t.after(async () => {
+    if (started.started && !hasStopped) started.stop('the test is over')
+    if (started.started) await started.stopped
+    rmSync(place.home, { recursive: true, force: true })
+  })
+  return started
+}
 
 interface Answering {
   readonly relay: MemberRelay
@@ -890,6 +931,7 @@ test('a request dropped before its body ends gets nothing, and the launcher answ
 function fakeClaude(
   place: Place,
   answers: HostAnswers = {},
+  churns?: { readonly dir: string },
 ): { command: string; argsFile: string; envFile: string; childFile: string; ranFile: string; callsFile: string } {
   const dir = join(place.home, 'fake')
   mkdirSync(dir)
@@ -910,6 +952,10 @@ function fakeClaude(
       `: > '${files.ranFile}'`,
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `printf '%s' "$${RELAY_SOCKET_VARIABLE}" > '${files.envFile}'`,
+      // A member that keeps writing where it lives, until it is killed: the writer the teardown race needs (#216).
+      ...(churns === undefined
+        ? []
+        : [`( n=0; while :; do n=$((n+1)); : > '${churns.dir}/f'"$n" 2>/dev/null; sleep 0.02; done ) &`]),
       'sleep 600 &',
       `echo $! > '${files.childFile}'`,
       'exec sleep 600',
@@ -1051,7 +1097,7 @@ test('a refused launch starts no process and leaves nothing behind', async (t) =
   const place = placeFor(t)
   const fake = fakeClaude(place)
   const lines: string[] = []
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, [], lines))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, [], lines))
   assert.equal(started.started, false)
   assert.equal(existsSync(fake.ranFile), false)
   assert.deepEqual(readdirSync(place.relay_root), [])
@@ -1074,8 +1120,7 @@ test("a host that will not load Martha's relay starts nothing, naming the relay 
   const why = 'register.ts: $.env.get takes a literal name as its first argument'
   const fake = fakeClaude(place, { report: refusesTheRelay(why) })
   const lines: string[] = []
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.startsWith(NOT_STARTED), refusal)
@@ -1090,8 +1135,7 @@ test("a host that will not load Martha's relay starts nothing, naming the relay 
 test('a host whose load check cannot be read starts nothing', async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place, { report: 'not a report', reportExit: 0 })
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
   assert.equal(started.started, false)
   assert.ok(!started.started && started.refusal.includes(RELAY_PLUGIN_DIR), started.started ? '' : started.refusal)
   assert.equal(existsSync(fake.ranFile), false)
@@ -1102,8 +1146,7 @@ test('a host of another version than the recording starts its member, after one 
   const other = '999.0.0'
   const fake = fakeClaude(place, { version: other })
   const lines: string[] = []
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
   assert.equal(started.started, true, started.started ? '' : started.refusal)
   const named = lines.filter((line) => line.includes(other) && line.includes(RECORDED_HOST.host_version))
   assert.equal(named.length, 1, lines.join('\n'))
@@ -1120,10 +1163,9 @@ test('the session-init question starts nothing of the owner\'s, and nothing it s
   const childFile = join(place.home, 'init-child.pid')
   const hookFile = join(place.home, 'init-hook-ran')
   const fake = fakeClaude(place, { initChildFile: childFile, initHookFile: hookFile })
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, []))
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
-  // The pid is read here, before any assertion and before the after-hook that removes this place's home, which was
-  // registered first and so runs first: an after-hook that read the file would find it gone and kill nothing (#154 r=2).
+  await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, []))
+  // The pid is read here, in the body, because the after-hooks run once the body is over and the place's home goes
+  // with them: an after-hook that read the file would find it gone and kill nothing (#154 r=2).
   const startedPid = existsSync(childFile) ? Number(readFileSync(childFile, 'utf8').trim()) : 0
   t.after(() => {
     // A stand-in that outlived its question is killed here too, so a red run leaves nothing behind.
@@ -1149,6 +1191,42 @@ test('the session-init question starts nothing of the owner\'s, and nothing it s
   assert.equal(alive, false, `what the question started (${startedPid}) outlived it`)
 })
 
+test('a host still writing where it lives when the test ends is stopped before its home is removed (#216)', async (t) => {
+  const place = placeFor(t)
+  const churn = join(place.home, 'churn')
+  mkdirSync(churn)
+  const fake = fakeClaude(place, {}, { dir: churn })
+  // The end of the test as the launch registers it, captured rather than run. The order is what is under test, and
+  // reading it this way asks the question the flake asks only sometimes: was the host still there when its home went?
+  const ends: Array<() => unknown> = []
+  const starting = { after: (hook: () => unknown) => void ends.push(hook) } as unknown as TestContext
+  const started = await aMemberStartedIn(starting, place, memberLaunch(place, fake.command))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  // A red run stops the loop above before the captured hooks have run, so the member and its home are cleaned up here.
+  t.after(async () => {
+    if (started.started && isAlive(started.pid)) (started.stop('the test is over'), await started.stopped)
+    rmSync(place.home, { recursive: true, force: true })
+  })
+  await until('the fake host to write into its home', () => existsSync(join(churn, 'f1')), t)
+
+  // Run them in the order the harness would, asking after each whether the host is still there: the place may only
+  // be gone once it is not, and not merely killed -- a kill that is never waited for is the same race, one step
+  // later. It has to be THIS test's stop, too: left alone, the launcher's own deadline stops a member after 30 s.
+  let exitSeen = false
+  let ended: { readonly stopped_because: string | null } | undefined
+  if (started.started) void started.stopped.then((result) => {
+    exitSeen = true
+    ended = result
+  })
+  for (const hook of ends) {
+    await hook()
+    assert.equal(isAlive(started.pid), false, 'a hook of the end of the test ran while the host it holds was still running')
+    assert.equal(exitSeen, true, 'a hook of the end of the test returned before the host it holds was seen to exit')
+    assert.equal(ended?.stopped_because, 'the test is over', 'the host was stopped by something other than the end of the test')
+  }
+  assert.equal(existsSync(place.home), false, 'the place outlived the end of the test')
+})
+
 test('a host whose session init reports no output-styles folder starts nothing (#154)', async (t) => {
   const place = placeFor(t)
   // An init response with no folder in it: the launcher cannot tell which folder to deny, so it starts no member.
@@ -1156,8 +1234,7 @@ test('a host whose session init reports no output-styles folder starts nothing (
     initAnswer: JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: 'martha-session-init', response: {} } }),
   })
   const lines: string[] = []
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.startsWith(NOT_STARTED), refusal)
@@ -1172,9 +1249,8 @@ test('the member, its load check, its version check and its session init all run
   mkdirSync(onPath)
   symlinkSync(fake.command, join(onPath, 'claude'))
   const launch = memberLaunch(place, 'claude')
-  const started = await launchClaudeCodeMember({ ...launch, inherited: { ...launch.inherited, PATH: `${onPath}:${process.env.PATH ?? ''}` } })
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited: { ...launch.inherited, PATH: `${onPath}:${process.env.PATH ?? ''}` } })
   if (!started.started) assert.fail(started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '', t)
   const calls = readFileSync(fake.callsFile, 'utf8').trimEnd().split('\n')
   // The member's start is preceded by the three questions the launcher asks its host: the relay's load check, its
@@ -1227,12 +1303,11 @@ test('the started_with the relay is handed is what the host was spawned with, do
   const place = placeFor(t)
   const fake = fakeClaudeThatSaysHowItStarted(place)
   const heard: MemberRelayPlace[] = []
-  const started = await launchClaudeCodeMember({
+  const started = await aMemberStartedIn(t, place, {
     ...memberLaunch(place, fake.command, place.approved),
     hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
   })
   if (!started.started) assert.fail(started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
   const spawnedArgs = readFileSync(fake.argsFile, 'utf8').split('\n').filter((line) => line !== '')
   const spawnedEnv = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
@@ -1245,9 +1320,8 @@ test('a member with no owner to answer its host, whose relay never reports its s
   const fake = fakeClaude(place)
   const lines: string[] = []
   const session_start_deadline_ms = 300
-  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: 60_000 })
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: 60_000 })
   if (!started.started) assert.fail(started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   const stopped = await started.stopped
   assert.equal(stopped.signal, 'SIGKILL')
   const why = (stopped as { stopped_because?: string }).stopped_because ?? ''
@@ -1261,9 +1335,8 @@ test('a member whose relay reports its session start in time is not stopped by t
   const place = placeFor(t)
   const fake = fakeClaude(place)
   const session_start_deadline_ms = 1_000
-  const started = await launchClaudeCodeMember({ ...memberLaunch(place, fake.command), session_start_deadline_ms })
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command), session_start_deadline_ms })
   if (!started.started) assert.fail(started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
   const socketPath = readFileSync(fake.envFile, 'utf8')
   const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
@@ -1282,9 +1355,8 @@ test('an approved config that installs a mesh server version nobody recorded sta
   const place = placeFor(t, meshServerAt(unrecorded))
   const fake = fakeClaude(place)
   const lines: string[] = []
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
   // A launch that wrongly starts is stopped whole, so a failing run leaves no member behind.
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.includes(`${MESH_SERVER_PACKAGE} ${unrecorded}`), refusal)
@@ -1346,9 +1418,8 @@ for (const [shape, entry] of Object.entries(UNPINNED_SHAPES)) {
     const place = placeFor(t, unpinnedServer(entry))
     const fake = fakeClaude(place)
     const lines: string[] = []
-    const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines))
+    const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
     // A launch that wrongly starts is stopped whole, so a failing run leaves no member behind.
-    if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
     assert.equal(started.started, false)
     const refusal = started.started ? '' : started.refusal
     assert.ok(refusal.includes(`server ${SERVER_NAME}`), refusal)
@@ -1408,9 +1479,8 @@ test('an approved config that installs a recorded mesh server version starts the
   const { recording } = await recordedTreeOf(t, recorded.server_version)
   const place = placeFor(t, meshServerAt(recorded.server_version))
   const fake = fakeClaude(place)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(() => started.stop('the test is over'))
   await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula
   assert.ok(entry !== undefined)
@@ -1428,10 +1498,9 @@ test('an approved config that installs a recorded mesh server version starts the
 /** Starts a member on the fake host, posts its session start over the relay socket, and returns what the record holds. */
 async function pathsRecordedAtStart(t: TestContext, place: Place, mesh_trees?: MeshTreeRecording): Promise<string[]> {
   const fake = fakeClaude(place)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], mesh_trees))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], mesh_trees))
   assert.ok(started.started, started.started ? '' : started.refusal)
   if (!started.started) return []
-  t.after(() => started.stop('the test is over'))
   await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
   const reply = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
     method: 'POST',
@@ -1478,9 +1547,8 @@ test('what the launcher\'s environment would load into the mesh server never rea
     ...launch,
     inherited: { ...launch.inherited, NODE_OPTIONS: `--require ${preload}`, SOME_ADDON_PREBUILD: place.home, CLAUDE_CODE_SHELL_PREFIX: shellPrefix },
   }
-  const started = await launchClaudeCodeMember(planted)
+  const started = await aMemberStartedIn(t, place, planted)
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(() => started.stop('the test is over'))
   await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
   const hostEnv = (await environmentOf(started.pid, inTest(t))) ?? {}
@@ -1517,8 +1585,7 @@ function ownerSettings(place: Place, env: Record<string, string>): string {
 
 async function refusedLeavingNothing(t: TestContext, place: Place, launch: Parameters<typeof launchClaudeCodeMember>[0], ranFile: string): Promise<string> {
   const lines: string[] = []
-  const started = await launchClaudeCodeMember({ ...launch, tellOwner: (line) => void lines.push(line) })
-  if (started.started) t.after(async () => (started.stop('the test is over'), await started.stopped))
+  const started = await aMemberStartedIn(t, place, { ...launch, tellOwner: (line) => void lines.push(line) })
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.equal(existsSync(ranFile), false)
@@ -1587,9 +1654,8 @@ test("a blank CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the me
   const fake = fakeClaude(place)
   const fromSettings = { [PLUGIN_DIRS_VARIABLE]: ' ' }
   ownerSettings(place, fromSettings)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(() => started.stop('the test is over'))
   await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
   assert.ok(entry !== undefined)
@@ -1680,9 +1746,8 @@ test("a member's file tool call that writes any project's memory, or the owner's
 
 /** The settings file the fake host was started with by --settings, read while it runs. */
 async function settingsTheHostStartedWith(t: TestContext, place: Place, fake: ReturnType<typeof fakeClaude>, launch: Parameters<typeof launchClaudeCodeMember>[0]): Promise<Record<string, unknown>> {
-  const started = await launchClaudeCodeMember(launch)
+  const started = await aMemberStartedIn(t, place, launch)
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--plugin-dir'), t)
   const args = readFileSync(fake.argsFile, 'utf8').split('\n')
   const at = args.flatMap((arg, index) => (arg === '--settings' ? [index] : []))
@@ -1749,9 +1814,8 @@ test("a hook-killing key written while the member runs stops it, with no tool ca
   assert.ok(HOOKS_OFF !== undefined)
   const place = placeFor(t)
   const fake = fakeClaude(place)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
   if (!started.started) assert.fail(started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
   const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
     method: 'POST',
@@ -1850,7 +1914,7 @@ test('an empty user settings file, or one whose hooks and plugins are empty or o
     const place = placeFor(t)
     writeSettings(join(place.home, USER_SETTINGS), settings)
     const fake = fakeClaude(place)
-    const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+    const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
     if (!started.started) assert.fail(`${JSON.stringify(settings)}: ${started.refusal}`)
     started.stop('the test is over')
     await started.stopped
@@ -1860,9 +1924,8 @@ test('an empty user settings file, or one whose hooks and plugins are empty or o
 test("a hook written into the owner's user settings while the member runs stops it, naming the file and the event", async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
   if (!started.started) assert.fail(started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
   const file = writeSettings(join(place.home, USER_SETTINGS), { hooks: { UserPromptSubmit: [OWNER_HOOK] } })
   const stopped = await started.stopped
@@ -1876,7 +1939,7 @@ test('a mesh server tree changed since it was installed starts nothing, naming t
   const { recording } = await recordedTreeOf(t, recorded.server_version)
   const place = placeFor(t, meshServerAt(recorded.server_version))
   const fake = fakeClaude(place)
-  const first = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, [], recording))
+  const first = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(first.started, first.started ? '' : first.refusal)
   first.stop('the test is over')
   await first.stopped
@@ -1885,8 +1948,7 @@ test('a mesh server tree changed since it was installed starts nothing, naming t
   const changed = join('node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
   writeFileSync(join(place.mesh_servers, recorded.server_version, changed), "console.log('planted')\n")
   const lines: string[] = []
-  const second = await launchClaudeCodeMember(memberLaunch(place, fake.command, place.approved, lines, recording))
-  if (second.started) t.after(async () => (second.stop('the test is over'), await second.stopped))
+  const second = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines, recording))
   assert.equal(second.started, false)
   const refusal = second.started ? '' : second.refusal
   assert.ok(refusal.includes(changed), refusal)
@@ -1912,7 +1974,7 @@ test('an approved launch starts the host with the switches and the relay, and a 
   const place = placeFor(t)
   const validatedFile = join(place.home, 'validated')
   const fake = fakeClaude(place, { validatedFile })
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
   assert.equal(started.started, true)
   if (!started.started) return
   t.after(() => {
@@ -1979,7 +2041,7 @@ test('a member that exits by itself leaves no record, socket or snapshot, and no
   const place = placeFor(t)
   const fake = fakeClaude(place)
   writeFileSync(fake.command, readFileSync(fake.command, 'utf8').replace('exec sleep 600', 'sleep 0.5; exit 3'))
-  const started = await launchClaudeCodeMember(memberLaunch(place, fake.command))
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
   assert.equal(started.started, true)
   if (!started.started) return
   const stopped = await started.stopped
