@@ -3215,6 +3215,20 @@ test('a handback naming an agent the launcher has no run of records B7 and refus
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
 })
 
+test('a handback naming a vouched agent that has already stopped records nothing and keeps the shell (martha#170, case 5)', async (t) => {
+  // Uranus's probe r3a: a stopped run is not by itself unknown. A run the launcher vouched for records nothing even
+  // after its stop, and the page says so now — only a run that stopped WITHOUT being vouched goes to B7.
+  const pair = await anAgentUnderASession(t, { answerItsCall: true })
+  assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY, 'a vouched agent’s stop gives the shell back')
+  const itsHandback = { session_id: pair.session_id, call: { tool: 'SubagentHandback', tool_use_id: 'tu-handback-4', agent_id: pair.agent_id, message: 'my findings' } }
+  assert.deepEqual(await pair.asking.relay.answer('tool_called', itsHandback), ALLOW_REPLY)
+  const handback = await pair.asking.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
+  assert.equal(handback.answered, true)
+  const recorded = (await recordedPaths(pair.asking.rows, pair.session_id)).filter((p) => p.startsWith('B7'))
+  assert.deepEqual(recorded, [], 'the handback recorded: ' + JSON.stringify(recorded))
+  assert.deepEqual(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), ALLOW_REPLY)
+})
+
 test('an agent that read outside the approved tree closes the shell on that read, whatever its stop says (martha#170, case 7)', async (t) => {
   const place = placeFor(t)
   const clone = anotherClone(place)

@@ -185,8 +185,9 @@ function agentsRunning(state: RelayState, session: HostSession): readonly string
  *
  * The id on the call is looked up in the launcher's own run table, exactly as the answer's id is: whatever the call
  * carries, the answer is placed by what this launcher knows of that agent and never by the fact that a call named one.
- * A run it saw start and has not stopped places the answer as a running agent's: it records nothing, and the
- * `SubagentStop` decides. An id it has no run of, or one whose run has stopped, is unknown and records on B7 at once.
+ * A run it holds and has not seen stop places the answer as a running agent's, whatever brought the run into being:
+ * it records nothing, and the `SubagentStop` decides. An id it has no run of, or one whose run stopped without being
+ * vouched, is unknown and records on B7 at once.
  * So a handback cannot be used to hand text into the turn and be done with it: vouched, it is the agent's own work on
  * the member's own inputs; anything else, the shell closes on its text.
  */

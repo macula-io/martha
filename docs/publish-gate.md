@@ -521,12 +521,13 @@ The rules the seam keeps, and a host must not work around:
   its report back itself: a real `SubagentHandback` carries `agent_id` on the
   call and its output is `{success, message}` with no id on it. That id is
   looked up in the launcher's own record like any other, never believed
-  because a call carried it: a handback from an agent the launcher saw start
-  and has not seen stop records nothing there and the stop decides, while one
-  naming an id the launcher has no run of, or whose run has stopped, places
-  its text on B7 at once. So a handback is no way to hand text into the turn
-  and be done: vouched, it is the agent's own work on the member's own
-  inputs; anything else, the shell closes on its text.
+  because a call carried it: a handback naming an agent the launcher has a
+  run of and has not seen stop records nothing there and the stop decides,
+  while one naming an id the launcher has no run of, or whose run stopped
+  without being vouched, places its text on B7 at once. So a handback is no
+  way to hand text into the turn and be done: vouched, it is the agent's own
+  work on the member's own inputs; anything else, the shell closes on its
+  text.
   Two consequences are worth saying plainly. While any agent of the session is
   between its start and its stop, the shell is refused: the agent's text has no
   call to be placed on, so the launcher reads the state it has, and reading
