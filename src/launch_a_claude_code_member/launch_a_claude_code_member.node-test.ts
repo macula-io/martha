@@ -100,13 +100,16 @@ const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['
 
 function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<string, string>> = {}): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-cc-launch-'))
+  const relay_root = shortRelayRoot(t)
   // A place no member ran in is removed here. One that a member ran in is removed by that member's own hook, which
   // waits for it to stop first: the home holds the running host's files, and removing it while the host was still
   // writing made a full run go red on teardown alone (martha#216).
   let aMemberStarts = false
-  t.after(() => {
+  t.after(async () => {
     if (aMemberStarts) return
-    rmSync(home, { recursive: true, force: true })
+    // Nothing may hold this place here: a test that started a member in a process of its own marks the place, so this
+    // hook leaves the removal to that test's own hook, which waits for it (martha#216).
+    await theHomeGoes({ home, relay_root })
   })
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
@@ -131,7 +134,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     checkout,
     rows: closed('rows'),
     launch_records: closed('launches'),
-    relay_root: shortRelayRoot(t),
+    relay_root,
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
     approved,
@@ -2093,6 +2096,54 @@ async function killGroupsCarrying(relay_root: string): Promise<void> {
   }
 }
 
+/** Every process this user has that names this relay root in its environment. */
+async function pidsCarrying(relay_root: string): Promise<number[]> {
+  const found: number[] = []
+  for (const entry of readdirSync('/proc')) {
+    const pid = Number(entry)
+    if (!Number.isInteger(pid) || pid <= 1) continue
+    if (await carriesRelayRoot(pid, relay_root)) found.push(pid)
+  }
+  return found
+}
+
+/** Waits, within cleanup's own bound, for every process that still carries this relay root to be gone (martha#216). */
+async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<void> {
+  const deadline = Date.now() + CLEANUP_SETTLE_MS * 4
+  const stillHere = async (): Promise<boolean> =>
+    alsoGone.some((pid) => pid > 1 && isAlive(pid)) || (await pidsCarrying(relay_root)).length > 0
+  while (Date.now() < deadline && (await stillHere())) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+}
+
+/**
+ * The place's home goes once nothing is left writing in it (martha#216): a test that starts its member in a process of
+ * its own has to kill that process and wait for its member before the home the host was writing in can be removed.
+ * `alsoGone` names pids that carry no relay root of their own, such as a launcher killed by its pid.
+ *
+ * Whatever still holds the home when it is due is killed here, so a red run never leaves a member behind, and the test
+ * then fails by name naming those pids: a home that goes under a running host is never again only an occasioned
+ * ENOTEMPTY (martha#216).
+ */
+async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: readonly number[] = []): Promise<void> {
+  await noProcessCarries(place.relay_root, alsoGone)
+  const left = (await pidsCarrying(place.relay_root)).filter((pid) => !alsoGone.includes(pid))
+  const launcherLeft = alsoGone.filter((pid) => pid > 1 && isAlive(pid))
+  await killGroupsCarrying(place.relay_root)
+  rmSync(place.home, { recursive: true, force: true })
+  if (left.length > 0 || launcherLeft.length > 0) {
+    throw new Error(`the place's home was due for removal while ${[...left, ...launcherLeft].join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
+  }
+}
+
+/**
+ * The removal for a test that started its member in a process of its own (martha#216). Registered AFTER the hook that
+ * kills that process and waits for it, so it runs after that hook has done so: hooks run in registration order, each
+ * awaited before the next.
+ */
+const thePlaceGoesWithItsProcesses = (t: TestContext, place: Place): void => {
+  t.after(() => theHomeGoes(place))
+}
+
 /**
  * A launcher in a process of its own, started on this place, that says when its
  * member runs, and stops it on SIGUSR2 the way a refusal does. It stays up after
@@ -2110,6 +2161,9 @@ function launcherProcess(
   deadlines: SessionStartDeadlines = {},
   args: readonly string[] = OWNER_PROMPT_ARGS,
 ): string {
+  // A member runs here, in a process this one does not own: the place's own hook leaves the removal to this test, which
+  // alone can wait for that process before the home goes (martha#216).
+  place.aMemberStartsHere()
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
   writeFileSync(
@@ -2155,6 +2209,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       await ended
       await killGroupsCarrying(place.relay_root)
     })
+    thePlaceGoesWithItsProcesses(t, place)
     let said = ''
     launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
     await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
@@ -2254,6 +2309,8 @@ test('a launcher killed hard leaves its directory behind, and the next launch ta
     await nextEnded
     await killGroupsCarrying(place.relay_root)
   })
+  // Registered after the hook above, and after the first launcher's: both have killed their processes and waited.
+  thePlaceGoesWithItsProcesses(t, place)
   let nextSaid = ''
   next.stdout.on('data', (chunk: Buffer) => void (nextSaid += chunk.toString()))
   await until('the next launcher to start its member', () => nextSaid.includes('started') && existsSync(fake.childFile), t, () => nextSaid, () => REFUSED_LINE.exec(nextSaid)?.[0])
@@ -2434,6 +2491,9 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
     await killGroupsCarrying(place.relay_root)
     runner.kill('SIGKILL')
     await ended
+    // The launcher was killed by its pid, which its own environment does not name: waited for here, then the home goes
+    // (martha#216). Its pid file is still there because the home is.
+    await theHomeGoes(place, [launcherPid])
   })
   return {
     launcher: () => Number(textIn(note('launcher'))),
@@ -2659,6 +2719,7 @@ test('a detached member that exits at once is recorded and stops by itself, neve
     if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
     await ended
   })
+  thePlaceGoesWithItsProcesses(t, place)
   let said = ''
   launcher.stdout.on('data', (chunk: Buffer) => void (said += chunk.toString()))
   await until('the launcher to say its member stopped by itself', () => said.includes('stopped by itself'), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
