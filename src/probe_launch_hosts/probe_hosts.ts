@@ -648,8 +648,12 @@ function switchesFor(probe: Probe, place: Place, inherited: Record<string, strin
   return prepared.switches
 }
 
-/** The key prefix every scratch checkout's project folder has: the folders this probe's own runs write. */
-const SCRATCH_PREFIX = projectKeyOf(join(tmpdir(), 'martha-probe-'))
+/**
+ * The key prefix of each scratch this run made, as the host names the folder for it.
+ * One per scratch, because a scratch is realpath'd when it is made and a TMPDIR
+ * reached through a link (the CI's own) keys the folder by the path it leads to.
+ */
+const theScratchPrefixes = new Set<string>([projectKeyOf(join(realpathSync(tmpdir()), 'martha-probe-'))])
 
 /** The owner's project folders before this run started: what the last row reads the end against. */
 const startedWith = theProjectFoldersThere(process.env)
@@ -664,7 +668,7 @@ const leftBehindByARun: string[] = []
 function takeAwayTheProjectFoldersOf(before: ProjectFoldersBefore, scratch: string): void {
   // Nothing of the run may still be working in the scratch when its folders are read back.
   stopTheProcessesLeftIn(scratch)
-  leftBehindByARun.push(...takeAwayTheOnesThisRunWrote(before, SCRATCH_PREFIX))
+  leftBehindByARun.push(...takeAwayTheOnesThisRunWrote(before, projectKeyOf(scratch)))
   rmSync(scratch, { recursive: true, force: true })
 }
 
@@ -682,6 +686,7 @@ function runProbe(probe: Probe): RunResult | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
   const checkout = join(scratch, 'checkout')
+  theScratchPrefixes.add(projectKeyOf(scratch))
   let before: ProjectFoldersBefore | undefined
   try {
     mkdirSync(checkout)
@@ -896,7 +901,7 @@ function codewordSaid(
   } finally {
     // The scratch itself goes when the whole memory probe is done; its folders go with each run.
     stopTheProcessesLeftIn(scratch)
-    leftBehindByARun.push(...takeAwayTheOnesThisRunWrote(before, SCRATCH_PREFIX))
+    leftBehindByARun.push(...takeAwayTheOnesThisRunWrote(before, projectKeyOf(scratch)))
   }
 }
 
@@ -946,6 +951,7 @@ function takeAwayTheFoldersOf(...folders: readonly (string | undefined)[]): void
 function reportMemoryProbe(worktree: boolean): void {
   const what = `Claude Code auto-memory, ${worktree ? "a worktree loading its main clone's folder" : 'a plain checkout'}`
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
+  theScratchPrefixes.add(projectKeyOf(scratch))
   const { start, main } = memoryPlace(scratch, worktree)
   const memory = projectFolderFor(process.env, main)
   try {
@@ -969,6 +975,6 @@ function reportMemoryProbe(worktree: boolean): void {
 
 for (const worktree of [false, true]) reportMemoryProbe(worktree)
 
-const leftBehind = whatIsStillLeftAtTheEnd(startedWith, SCRATCH_PREFIX, leftBehindByARun)
+const leftBehind = whatIsStillLeftAtTheEnd(startedWith, theScratchPrefixes, leftBehindByARun)
 if (leftBehind.length > 0) process.exitCode = 1
 console.log(theLeftoverRow(leftBehind))
