@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, sep } from 'node:path'
+import { test, type TestContext } from 'node:test'
 
 import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import {
@@ -16,7 +19,7 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { ARGUMENT_PROBES, claimsTheShellGate, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type PathGate } from './check_every_path_is_gated.ts'
+import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
 import { REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
@@ -649,3 +652,60 @@ test('the row for code a checkout runs claims the path gate, with the shell gate
   assert.deepEqual(row.control, { kind: 'check_every_path_is_gated', gate: 'nothing-a-later-git-run-reads', also: [{ kind: 'shell-gate' }] })
 })
 
+
+// --- the shapes a path alone cannot express (martha#192) ---------------------------
+//
+// A config on disk names a tree path, so the question is only answerable in a
+// checkout that holds one. The check asks these beside the name-only probes, and the
+// stand-in below stands a real checkout for each: this is the probe that fails when
+// the value rule is dropped from the gate, which no name-only probe would notice.
+
+/**
+ * A checkout on disk holding the probe's configuration, and where the member stands
+ * in it. It is left on disk until the test ends: the gate reads it when it is asked,
+ * and a checkout removed before that answers about nothing.
+ */
+function standInNow(t: TestContext): (probe: ConfigPathProbe) => PathProbe {
+  const made: string[] = []
+  t.after(() => {
+    for (const top of made) rmSync(top, { recursive: true, force: true })
+  })
+  return (probe) => {
+    const top = mkdtempSync(join(tmpdir(), 'martha-192-probe-'))
+    made.push(top)
+    mkdirSync(join(top, '.git'), { recursive: true })
+    writeFileSync(join(top, '.git', 'config'), `${probe.config.join('\n')}\n`)
+    return { admits: probe.admits, what: probe.what, path: join(top, probe.writes), cwd: top, home: top }
+  }
+}
+
+test('the gate answers the configuration questions too, and a gate that lost them is named (#192)', (t) => {
+  const standIn = standInNow(t)
+  assert.ok(CONFIG_PATH_PROBES.length >= 3 && CONFIG_PATH_PROBES.some((probe) => probe.admits), 'the probes hold an admitted control and the shapes beside it')
+  assert.equal(gapsInConfigPathCoverage(admitsAWriteNoLaterGitRunReads, standIn), undefined, 'the real gate answers every configuration question')
+
+  // The value rule dropped: the ordinary file is still admitted, so every name-only
+  // probe passes, and only these questions notice the loss.
+  const withoutTheRule = (probe: PathProbe): boolean => !probe.path.includes(`${sep}.git${sep}`)
+  assert.notEqual(gapsInConfigPathCoverage(withoutTheRule, standIn), undefined, 'a gate that lost the value rule is named')
+  assert.ok(gapsInConfigPathCoverage(withoutTheRule, standIn)?.includes('admits'), `the gap says the gate admits what it should refuse (${gapsInConfigPathCoverage(withoutTheRule, standIn)})`)
+
+  // And a gate that refuses every write into any checkout is caught by the admitted probe.
+  assert.ok(gapsInConfigPathCoverage(() => false, standIn)?.includes('refuses an ordinary file'), `a gate that refuses everything is named (${gapsInConfigPathCoverage(() => false, standIn)})`)
+
+  // The wiring, not these questions alone: the pass that reads the register asks
+  // them too, so a gate that lost the value rule is named there. A gate that answers
+  // every name-only probe as the shipped one does, and admits every write into a
+  // checkout whose config names a tree path, stands for the loss.
+  const lostTheRule = (probe: PathProbe): boolean =>
+    PATH_PROBES.some((known) => known.path === probe.path && known.what === probe.what) ? admitsAWriteNoLaterGitRunReads(probe) : true
+  const row: InboundPath = {
+    id: 'A95',
+    what: 'a planted row whose path gate lost the configuration rule',
+    klass: 'delivered',
+    control: { kind: 'check_every_path_is_gated', gate: 'nothing-a-later-git-run-reads', also: [] },
+    attestation: 'none',
+  }
+  const wired = gapsInGateCoverage([row], gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': lostTheRule }, standIn)
+  assert.ok(wired.some((gap) => gap.why.includes('admits the hooks folder a tree config names')), `the register pass names the lost value rule (${wired.map((gap) => gap.why).join('; ') || 'no gap'})`)
+})

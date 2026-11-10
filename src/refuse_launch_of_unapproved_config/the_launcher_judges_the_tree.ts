@@ -46,6 +46,7 @@ import { join } from 'node:path'
 import { blobUnderTheTree, type GitObjectFormat, type LauncherStore } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import type { FileTree, Processes, ScratchDirectories, ScratchDirectory } from '../host_contract/host_contract.ts'
 import { whyAConvertedFileIsRefused } from './conversions_a_launch_passes.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The parts of the host contract this read goes through. */
 export interface JudgeHost {
@@ -192,7 +193,7 @@ function readTheLiveTree(
 function makeTheLaunchersGitDir(host: JudgeHost, scratch: ScratchDirectory, judge: string, format: GitObjectFormat, checkout_git_dir: string): string | undefined {
   const made = host.processes.runNow({
     command: 'git',
-    args: ['init', '-q', '--bare', judge],
+    args: marthasOwnGitArgs(['init', '-q', '--bare', judge]),
     cwd: scratch.path,
     environment: { drop_prefixes: NOTHING_DROPPED, set: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG, GIT_TERMINAL_PROMPT: '0' } },
   })
@@ -368,7 +369,7 @@ function gitRawIn(
 ): string | undefined {
   const run = host.processes.runNow({
     command: 'git',
-    args: ['--git-dir', git_dir, '-c', 'core.fsmonitor=false', ...args],
+    args: ['--git-dir', git_dir, ...marthasOwnGitArgs(args)],
     cwd: git_dir,
     ...(input === undefined ? {} : { input }),
     environment: {

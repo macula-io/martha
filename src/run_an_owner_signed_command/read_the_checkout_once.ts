@@ -19,6 +19,7 @@ import { spawnSync } from 'node:child_process'
 import { lstatSync, readdirSync, readFileSync, realpathSync, type Stats } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { rawBlobOf, type GitObjectFormat } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import { DEPENDENCIES, INSTALLED_LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import type { LiveEntry } from '../keep_the_shell_for_an_owner_signed_command/whose_tree.ts'
@@ -38,7 +39,7 @@ export interface CheckoutRead {
 /** Every path git sees in the checkout, or why git could not list them. */
 function pathsGitSees(top: string, inherited: Readonly<Record<string, string | undefined>>): readonly string[] | string {
   const env = { PATH: inherited['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: NULL_CONFIG }
-  const run = spawnSync('git', ['-C', top, '-c', 'core.fsmonitor=false', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { env, maxBuffer: Number.MAX_SAFE_INTEGER })
+  const run = spawnSync('git', marthasOwnGitArgs(['-C', top, 'ls-files', '-z', '--cached', '--others', '--exclude-standard']), { env, maxBuffer: Number.MAX_SAFE_INTEGER })
   if (run.status !== 0) return `git cannot list the checkout (${run.stderr?.toString('utf8').trim() ?? String(run.error)})`
   return [...new Set(run.stdout.toString('utf8').split(RECORD).filter((path) => path !== ''))]
 }

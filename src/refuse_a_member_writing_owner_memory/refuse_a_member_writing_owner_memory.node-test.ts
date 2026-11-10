@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -788,4 +788,198 @@ test('a line is read by the wording the recording holds, not by a copy of it (#2
   const about = `Permission deny rule (martha.json): ${written[0]} ${NOT_MATCHED_MARK} — only Edit(path) rules are. Use Edit(//home/synthetic/.claude.json) instead (Edit rules cover all file-editing tools).`
   assert.deepEqual(hostLinesNamingARule(about, written), [about])
   assert.deepEqual(hostLinesNamingARule(about.replace(NOT_MATCHED_MARK, 'is not matched by the file permission checks'), written), [])
+})
+
+// --- the paths a git configuration names, and the git directory a write completes (martha#192) ---
+//
+// A later git run of the owner's reads a configuration value and starts, or reads,
+// what it names. The keys are not what the guard knows — git adds keys — so every
+// value is asked the same question: does one of its words, or the value whole, land
+// inside the checkout? Each test below stands a checkout with a config, and asks the
+// guard about one write; the issue named in the refusal is the one that denies it.
+
+/** Every file tool refused as a path a later git run reads, naming martha#192. */
+function assertRefusedAs192(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, why: string): void {
+  for (const tool of FILE_WRITING_TOOLS) {
+    const input = tool === 'NotebookEdit' ? { notebook_path: file_path } : write(file_path)
+    const said = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine)
+    assert.ok(said?.includes('martha#192'), `${tool}: ${why} (${said ?? 'admitted'})`)
+  }
+}
+
+/** A checkout at the place's worktree, with a git directory holding `config` and any other file given. */
+function checkoutWith(place: ReturnType<typeof placeFor>, files: Readonly<Record<string, string>>): string {
+  mkdirSync(join(place.worktree, '.git'), { recursive: true })
+  for (const [name, text] of Object.entries(files)) {
+    const at = join(place.worktree, '.git', name)
+    mkdirSync(dirname(at), { recursive: true })
+    writeFileSync(at, text)
+  }
+  return place.worktree
+}
+
+test('a hooks folder the config names is refused, spelled relative, absolute, with a space, or bare (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n\thooksPath = .husky\n' })
+  const places = placesFor(place)
+  assertRefusedAs192(places, checkout, place.home, join(checkout, '.husky', 'pre-commit'), 'a relative hooks folder')
+  assertAdmitted(places, checkout, place.home, join(checkout, 'src', 'a.ts'), 'an ordinary file in the same checkout')
+
+  writeFileSync(join(checkout, '.git', 'config'), `[core]\n\thooksPath = ${join(checkout, '.husky')}\n`)
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.husky', 'pre-commit'), 'an absolute hooks folder')
+
+  // A path value is taken whole: the words of `my hooks` name nothing, and git runs
+  // the hook in the folder `<top>/my hooks`, which is the path this pins.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = "my hooks"\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'my hooks', 'pre-commit'), 'a hooks folder with a space in it')
+
+  // And without a slash at all: `hk` is a path relative to the top, as measured.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = hk\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk', 'pre-commit'), 'a bare hooks folder')
+
+  // A bare word inside a value that starts outside the tree: the value whole is
+  // `/usr/bin/hookrun hk`, which resolves outside it, and only the word `hk` names a
+  // path in it. A rule that judged only the words holding a slash would admit this.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = /usr/bin/hookrun hk\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk', 'pre-commit'), 'a bare word inside a value that starts outside the tree')
+})
+
+test('a value naming a program is refused whoever holds the key: an alias, a hook command, a filter (#192)', (t) => {
+  const place = placeFor(t)
+  const cases: readonly (readonly [string, string, string])[] = [
+    ['[alias]\n\tfmt = !tools/x.sh\n', join('tools', 'x.sh'), 'an alias git hands to a shell'],
+    ['[hook "lint"]\n\tevent = pre-commit\n\tcommand = tools/h.sh\n', join('tools', 'h.sh'), 'a config hook\'s command'],
+    ['[filter "fmt"]\n\tclean = tools/f.sh\n', join('tools', 'f.sh'), 'a filter\'s clean command'],
+  ]
+  for (const [config, written, why] of cases) {
+    const checkout = checkoutWith(place, { config })
+    const places = placesFor(place)
+    assertRefusedAs192(places, checkout, place.home, join(checkout, written), why)
+    assertAdmitted(places, checkout, place.home, join(checkout, 'src', 'a.ts'), `${why}: an ordinary file`)
+  }
+})
+
+test('an attributes file the config names is refused, and so is a file it names through an include (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n\tattributesFile = attrs\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'attrs'), 'the attributes file `attrs`')
+
+  // An include: the target is a tree file, and the resolution base is the directory
+  // of the file that holds it, which is git's own (`../tree.cfg` from `.git/`).
+  writeFileSync(join(checkout, '.git', 'config'), '[include]\n\tpath = ../tree.cfg\n')
+  writeFileSync(join(checkout, 'tree.cfg'), '[include]\n\tpath = two.cfg\n')
+  const places = placesFor(place)
+  assertRefusedAs192(places, checkout, place.home, join(checkout, 'tree.cfg'), 'the file an include names')
+  assertRefusedAs192(places, checkout, place.home, join(checkout, 'two.cfg'), 'a bare include path inside a tree file')
+
+  writeFileSync(join(checkout, 'tree.cfg'), '[include]\n\tpath = sub/inner.cfg\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'sub', 'inner.cfg'), 'a second file in the chain')
+
+  writeFileSync(join(checkout, '.git', 'config'), '[includeIf "gitdir:/a/directory/elsewhere/"]\n\tpath = ../other.cfg\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'other.cfg'), 'an include whose condition is false for the member')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'an ordinary file beside all of it')
+})
+
+test('the owner\'s own global config is read too, and the second file a git directory reads (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n' })
+  // A value written once, relative, so it holds for every repository: the owner's.
+  writeFileSync(join(place.home, '.gitconfig'), '[core]\n\thooksPath = .githooks\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.githooks', 'pre-commit'), 'a hooks folder the owner\'s global config names')
+
+  // `config.worktree`, which git reads when `extensions.worktreeConfig` is on.
+  writeFileSync(join(place.home, '.gitconfig'), '')
+  writeFileSync(join(checkout, '.git', 'config'), '[extensions]\n\tworktreeConfig = true\n')
+  writeFileSync(join(checkout, '.git', 'config.worktree'), '[core]\n\thooksPath = .wt-hooks\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.wt-hooks', 'pre-commit'), 'a hooks folder named in config.worktree')
+
+  // And with the extension off, git does not read that file, so its value names nothing.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, '.wt-hooks', 'pre-commit'), 'a config.worktree git does not read')
+})
+
+test('a config written as git writes it is read as git reads it: any case, and a continued line (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[Core]\n\tHooksPath = .hk\n' })
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.hk', 'pre-commit'), 'a section and key in another case')
+
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = .h\\\nks\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.hks', 'pre-commit'), 'a value continued onto the next line')
+
+  // A case matters where a key is looked up as well as where a value is judged:
+  // whether the second file is read turns on `extensions.worktreeConfig`, and git
+  // reads that name whatever case it is written in. A guard that kept the case would
+  // not open the file, and the hooks folder it names would be a member's to write.
+  writeFileSync(join(checkout, '.git', 'config'), '[Extensions]\n\tworktreeConfig = true\n')
+  writeFileSync(join(checkout, '.git', 'config.worktree'), '[core]\n\thooksPath = .wt-hk\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.wt-hk', 'pre-commit'), 'a section in another case, deciding which file git reads')
+})
+
+test('a config the guard cannot read refuses every write into that checkout, naming the file and line (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n\thooksPath = "unterminated\n' })
+  const places = placesFor(place)
+  const said = writesTheOwnersMemory('Write', write(join(checkout, 'src', 'a.ts')), places, checkout, place.home, thisMachine)
+  assert.ok(said?.includes('martha#192'), `an ordinary file in a checkout whose config cannot be read is refused (${said ?? 'admitted'})`)
+  assert.ok(said?.includes(join('.git', 'config')) && said.includes(':2'), `the refusal names the file and the line (${said})`)
+  assertAdmitted(places, checkout, place.home, join(place.root, 'outside-the-checkout.ts'), 'a write outside that checkout')
+
+  // An escape git itself refuses is a parse failure here too, never a value read another way.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = .a\\ b\n')
+  assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'a config with an escape git refuses')
+
+  // A well-formed config is not a refusal: the control that keeps this from passing on nothing.
+  writeFileSync(join(checkout, '.git', 'config'), '[core]\n\thooksPath = .husky\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(checkout, 'src', 'a.ts'), 'a config the guard does read')
+})
+
+test('a file named commondir is refused inside the checkout, so a split git directory cannot be assembled (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n' })
+  const places = placesFor(place)
+  assertRefusedAs192(places, checkout, place.home, join(checkout, 'a', 'commondir'), 'the file a split git directory is joined with')
+  assertAdmitted(places, checkout, place.home, join(checkout, 'a', 'HEAD'), 'the first half of the shape is no git directory yet')
+})
+
+test('the write that completes a git directory is refused, whichever of the three names it is (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n' })
+  // Two of the three names are on disk, and the guard is asked about the third, as
+  // it is just before that write lands. Each of the three can be the last, and the
+  // rule is asked of the directory the write completes, whatever landed first.
+  const shapes = [
+    { last: 'HEAD', already: ['objects/x', 'refs/heads/main'] },
+    { last: 'refs/heads/main', already: ['HEAD', 'objects/x'] },
+    { last: 'objects/x', already: ['HEAD', 'refs/heads/main'] },
+  ]
+  for (const shape of shapes) {
+    const dir = join(checkout, shape.last.replaceAll('/', '-'))
+    mkdirSync(dir, { recursive: true })
+    for (const name of shape.already) {
+      mkdirSync(dirname(join(dir, name)), { recursive: true })
+      writeFileSync(join(dir, name), name === 'HEAD' ? 'ref: refs/heads/main\n' : '')
+    }
+    assertRefusedAs192(placesFor(place), checkout, place.home, join(dir, shape.last), `the write of ${shape.last}, completing the set`)
+  }
+
+  // The control that keeps this from refusing a shape that is not one: with only
+  // HEAD, the write of objects/ is no git directory yet, and is admitted.
+  const early = join(checkout, 'only-head')
+  mkdirSync(early, { recursive: true })
+  writeFileSync(join(early, 'HEAD'), 'ref: refs/heads/main\n')
+  assertAdmitted(placesFor(place), checkout, place.home, join(early, 'objects', 'x'), 'a directory holding one of the three is no git directory')
+})
+
+test('the refusal names the file, the key and the value that put a whole checkout out of reach (#192)', (t) => {
+  const place = placeFor(t)
+  const checkout = checkoutWith(place, { config: '[core]\n' })
+  // git itself writes this into the owner's global config, and a value naming the
+  // checkout's top refuses every write into it.
+  writeFileSync(join(place.home, '.gitconfig'), `[safe]\n\tdirectory = ${checkout}\n`)
+  const said = writesTheOwnersMemory('Write', write(join(checkout, 'src', 'a.ts')), placesFor(place), checkout, place.home, thisMachine)
+  assert.ok(said?.includes('martha#192'), `a checkout the owner's own config puts out of reach is refused (${said ?? 'admitted'})`)
+  assert.ok(said?.includes(join(place.home, '.gitconfig')), `the refusal names the file (${said})`)
+  assert.ok(said?.includes('safe.directory'), `the refusal names the key (${said})`)
+  assert.ok(said?.includes(checkout), `the refusal names the value (${said})`)
+  assert.ok(said?.includes('git configuration'), `the refusal tells the owner what to change (${said})`)
 })

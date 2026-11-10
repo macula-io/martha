@@ -17,6 +17,7 @@
 // and `core.attributesFile` decide nothing here (§1 of the design).
 
 import type { Processes } from '../host_contract/host_contract.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The variables git would take a repository, an index or a config from; none is inherited. */
 const GIT_VARIABLES = 'GIT_'
@@ -69,7 +70,7 @@ export function whyAConvertedFileIsRefused(where: ApprovedAttributes, path: stri
 function attributesInForce(where: ApprovedAttributes, path: string): ReadonlySet<string> | string {
   const run = where.processes.runNow({
     command: 'git',
-    args: ['--git-dir', where.repository, '-c', 'core.fsmonitor=false', 'check-attr', '-z', ...CONVERSIONS_A_LAUNCH_REFUSES, '--', path],
+    args: ['--git-dir', where.repository, ...marthasOwnGitArgs(['check-attr', '-z', ...CONVERSIONS_A_LAUNCH_REFUSES, '--', path])],
     cwd: where.repository,
     environment: {
       drop_prefixes: [GIT_VARIABLES],

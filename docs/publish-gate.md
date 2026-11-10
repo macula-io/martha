@@ -900,9 +900,35 @@ where it came from. Three things stand on it:
   git directory is read at each call, so one that appears during the session is
   covered from the next call. The permission rules do not carry these places: the
   host runs no pass that writes a git directory or the owner's git config by
-  itself. What no path rule closes is filed as martha#192: an embedded bare
-  repository in the tree, a `core.hooksPath` already pointing into it, and
-  `include.path`/`includeIf`.
+  itself.
+  The paths a configuration **names** are refused the same way (martha#192), and
+  not by a list of keys: every value of every key the owner's git would read is
+  split into words, and the value whole is taken as a path too, so a hooks folder
+  (`core.hooksPath = .husky`), an alias's command (`alias.fmt = !tools/x.sh`), a
+  config hook's command, a filter, an attributes file, and an `include.path` or
+  `includeIf.*.path` are all covered by one rule — a word or value that resolves
+  inside the checkout makes that path, and everything below it, one a member does
+  not write. Relative words resolve against the top of the work tree, an include
+  path against the directory of the file that holds it, `~/` against the owner's
+  home; includes are followed, and a value holding `%(prefix)` is refused rather
+  than guessed. The files read are the checkout's own `config`, its
+  `config.worktree` when `extensions.worktreeConfig` is on, and the owner's
+  system, global and XDG files. A file the guard cannot read as git reads it — a
+  form it does not model, an escape git itself refuses, an unterminated quote, an
+  include chain past its cap — refuses **every** write into that checkout, naming
+  the file and line, rather than passing one.
+  Two shapes a path list cannot express are refused too: a write that completes a
+  git directory (a `HEAD` naming a ref or an object id, with `objects/` and
+  `refs/` beside it or in the directory its `commondir` names, counted with the
+  write itself), and a write of a file named `commondir` anywhere in the checkout,
+  which is how a git directory split across two folders is assembled. Martha's own
+  git runs carry `safe.bareRepository=explicit` from one list spliced in at every
+  call site, so none of them can be taken in by a planted bare directory either.
+  A refusal that names a *whole checkout* is usually the owner's own configuration
+  naming its top — `git maintenance register` and `safe.directory` write exactly
+  that — and the refusal says which file, key and value to change. The member's
+  own **shell** writes are outside this: a `printf` into `.husky/` is recorded as
+  A13, and this closes the file-tool half of it (martha#192).
 - **The host's own pass is refused the same places.** The settings the host is
   started with carry one `Edit(//…)` rule in `permissions.deny` for each place the
   relay refuses, as named and as it leads, for the projects folder as it leads,
