@@ -17,6 +17,9 @@
 # Last, a member's own writes do not stop it and an outsider's change does (martha#132): the real martha command, this
 # host, the relay and the launcher, with only the model a stand-in. Those four cases must all run and pass.
 #
+# Then every rule the launch writes is one this host's file permission checks match, and the same run names an inert
+# twin of one (martha#226): the question the launch now asks before it starts a member, put to this host's own binary.
+#
 # Exit: 0 the recorded host loads the relay and a launch leaves it as it was, 1 it does not (or a check did not bite),
 # 2 the host could not be set up.
 set -euo pipefail
@@ -30,6 +33,7 @@ LAUNCH_TESTS="${REPO}/src/launch_a_claude_code_member/launch_a_claude_code_membe
 LAUNCH_TEST="a launch leaves the installed relay folder as it was"
 HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
 OWN_WRITES_TESTS="${REPO}/src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts"
+RULES_TESTS="${REPO}/src/refuse_a_member_writing_owner_memory/the_rules_the_host_matches.node-test.ts"
 HOST_TYPES_FILE="tsconfig.json"
 HOST_WRITES_WITHIN_S=60
 VARIABLE_CONSTANT="RELAY_SOCKET_VARIABLE"
@@ -108,3 +112,15 @@ grep -q "^ℹ pass ${own_writes_cases}$" "${WORK}/own_writes.txt" && grep -q '^�
   || { echo "prove_the_relay_loads: the own-writes cases did not all run:" >&2; cat "${WORK}/own_writes.txt" >&2; exit 1; }
 
 echo "prove_the_relay_loads: with Claude Code ${version}, a member's own writes do not stop it and an outsider's change does"
+
+# Every rule the launch writes is one this host's file permission checks match, and an inert twin of one is named in
+# the same run (martha#226): the question the launch asks before it starts a member, put to this host itself.
+if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${RULES_TESTS}" > "${WORK}/rules.txt" 2>&1; then
+  echo "prove_the_relay_loads: with Claude Code ${version}, the host names a rule the launch writes as one it can never match, or the reading sees nothing:" >&2
+  cat "${WORK}/rules.txt" >&2
+  exit 1
+fi
+grep -q '^ℹ pass 1$' "${WORK}/rules.txt" && grep -q '^ℹ skipped 0$' "${WORK}/rules.txt" \
+  || { echo "prove_the_relay_loads: the rule case did not run exactly once:" >&2; cat "${WORK}/rules.txt" >&2; exit 1; }
+
+echo "prove_the_relay_loads: with Claude Code ${version}, the host matches every rule the launch writes, and names an inert twin of one"
