@@ -113,7 +113,7 @@ If the `claude` in your PATH is not the version Martha's adapter was recorded
 against, one more line sits between those two. It is information, not a refusal:
 
 ```text
-martha: The host at /usr/local/bin/claude is version 2.1.318; Martha's record of the host is of version 2.1.321. It loads Martha's relay, so the member starts.
+martha: The host at /usr/local/bin/claude is version 2.1.318; Martha's record of the host is of version 2.1.322. It loads Martha's relay, so the member starts.
 ```
 
 The two numbers are ones you can check: run the path the line names with
