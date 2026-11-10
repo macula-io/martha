@@ -16,8 +16,13 @@ export interface FilePermissionRules {
   readonly matcher: string
 }
 
-/** Where the host says in words that a rule of a file tool is not matched by those checks. */
-const NOT_MATCHED_MARK = 'is not matched by file permission checks'
+/**
+ * Where the host says in words that a rule of a file tool is not matched by those checks. The recorder cuts the
+ * statement that decides which rules are by this mark, and the launch reads the host's complaint about a rule by it
+ * (../refuse_a_member_writing_owner_memory), so a host that rewords it fails the recording rather than the reading
+ * quietly finding nothing.
+ */
+export const NOT_MATCHED_MARK = 'is not matched by file permission checks'
 
 /** The one statement of the host's text that holds `at`: from the `let` it opens with to the `;` that ends it. */
 function statementHolding(text: string, at: number): string {

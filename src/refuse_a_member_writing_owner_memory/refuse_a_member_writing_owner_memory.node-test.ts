@@ -6,6 +6,7 @@ import { test, type TestContext } from 'node:test'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
@@ -777,4 +778,14 @@ test('a line is read for the rule it is about, and one the host prints twice is 
   assert.deepEqual(hostLinesNamingARule(`${theOwnersDeadRule}\n${ours}\n`, written), [ours])
   // The host prints a complaint once per stream and once more in a second shape: one dead rule is one fault to read.
   assert.deepEqual(hostLinesNamingARule(`${ours}\n${ours}\n`, written), [ours])
+})
+
+// The words the reading is anchored on are the recording's own, never a second copy of them (martha#226 r=2): a line
+// built from NOT_MATCHED_MARK is read, and the same line with those words changed is not. A host that rewords the
+// complaint therefore fails the recording — where the mark is cut from its text — rather than being read wrongly here.
+test('a line is read by the wording the recording holds, not by a copy of it (#226 r=2)', () => {
+  const written = ['Edit(//home/synthetic/.claude.json)']
+  const about = `Permission deny rule (martha.json): ${written[0]} ${NOT_MATCHED_MARK} — only Edit(path) rules are. Use Edit(//home/synthetic/.claude.json) instead (Edit rules cover all file-editing tools).`
+  assert.deepEqual(hostLinesNamingARule(about, written), [about])
+  assert.deepEqual(hostLinesNamingARule(about.replace(NOT_MATCHED_MARK, 'is not matched by the file permission checks'), written), [])
 })

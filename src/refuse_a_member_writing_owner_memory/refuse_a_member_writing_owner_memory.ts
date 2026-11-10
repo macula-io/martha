@@ -90,6 +90,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
@@ -832,9 +833,10 @@ export function hostLinesNamingARule(printed: string, rules: readonly string[]):
  * The rule a host's line is about: the one it names after the settings file it read, which is the subject of the
  * complaint (martha#226 r=1). The host writes `Permission deny rule (<file>): <rule> is not matched …` and then the
  * rule to write instead, so the subject has to be cut out rather than searched for. A line that names no such rule is
- * no complaint about one.
+ * no complaint about one. The wording is the recording's own (NOT_MATCHED_MARK), never retyped here: a host that
+ * rewords the complaint fails the recording before it can be read wrongly here.
  */
-const THE_RULE_A_LINE_IS_ABOUT = /\): (.+?) is not matched/
+const THE_RULE_A_LINE_IS_ABOUT = new RegExp(`\\): (.+?) ${NOT_MATCHED_MARK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
 const theRuleTheLineIsAbout = (line: string): string | undefined => THE_RULE_A_LINE_IS_ABOUT.exec(line)?.[1]?.trim()
 
 
