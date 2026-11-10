@@ -99,12 +99,14 @@ export function theLeftoverRow(left: readonly string[]): string {
  * hold before it started -- a folder a host wrote after its run's read-back, which
  * is the one that was left behind before (martha#179). Read at the end because only
  * then can a folder written late be seen at all; nothing is taken from the owner's
- * own folders, only from the names this run's own scratch checkouts produce.
+ * own folders, only from the names this run's own scratch checkouts produce, one
+ * prefix per scratch the runs made.
  */
 export function whatIsStillLeftAtTheEnd(
   startedWith: ProjectFoldersBefore,
-  prefix: string,
+  prefixes: Iterable<string>,
   theRunsCouldNotTake: readonly string[],
 ): readonly string[] {
-  return [...new Set([...theRunsCouldNotTake, ...takeAwayTheOnesThisRunWrote(startedWith, prefix)])]
+  const theEnd = [...prefixes].flatMap((prefix) => takeAwayTheOnesThisRunWrote(startedWith, prefix))
+  return [...new Set([...theRunsCouldNotTake, ...theEnd])]
 }

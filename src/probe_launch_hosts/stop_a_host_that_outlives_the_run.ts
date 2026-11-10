@@ -8,7 +8,7 @@
 // group is killed and the probe waits for it to go before it removes anything.
 
 import { spawnSync } from 'node:child_process'
-import { readFileSync, readdirSync, readlinkSync } from 'node:fs'
+import { readFileSync, readdirSync, readlinkSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** What a run of the host did. */
@@ -88,6 +88,15 @@ export function runTheHost(
   return { status: run.status, stdout: run.stdout, error, timedOut }
 }
 
+/** The path a link leads to, or the path itself when it cannot be resolved. */
+function resolved(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
+}
+
 /** Every process on this machine whose working directory is inside `folder`. */
 function thePidsWorkingIn(folder: string): readonly number[] {
   let entries: readonly string[]
@@ -96,12 +105,15 @@ function thePidsWorkingIn(folder: string): readonly number[] {
   } catch {
     return []
   }
+  // Both sides are read through their links: a scratch under a TMPDIR reached by one is
+  // named one way by the caller and another by the kernel (the CI's own TMPDIR is).
+  const wanted = new Set([folder, resolved(folder)])
   return entries
     .filter((entry) => /^\d+$/.test(entry))
     .filter((entry) => {
       try {
         const cwd = readlinkSync(join('/proc', entry, 'cwd'))
-        return cwd === folder || cwd.startsWith(`${folder}/`)
+        return [...wanted].some((path) => cwd === path || cwd.startsWith(`${path}/`))
       } catch {
         return false
       }

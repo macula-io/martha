@@ -21,13 +21,17 @@ import {
   whatIsStillLeftAtTheEnd,
 } from './the_project_folders_a_run_wrote.ts'
 
-const SCRATCH_PREFIX = projectKeyOf(join(tmpdir(), 'martha-probe-'))
+// The names are the host's keys for paths under /tmp, written out as its own rule makes
+// them -- not read from this machine's TMPDIR, which the CI runs under a link (a long
+// path reached through a symlink), and which would key every name differently there.
+const SCRATCH_PREFIX = projectKeyOf('/tmp/martha-probe-')
 /** A folder an earlier run left, with the prefix this run's own folders carry: it must stay. */
-const ALREADY_THERE = '-tmp-martha-probe-OldOne1-checkout'
+const ALREADY_THERE = projectKeyOf('/tmp/martha-probe-OldOne1/checkout')
 /** The older generation's leftovers, which the prefix does not reach and which stay for the owner. */
-const OLDER_GENERATION = '-tmp-martha-probe41-774gdO-checkout'
-const THIS_RUN_WROTE = '-tmp-martha-probe-AbC123-checkout'
-const NOT_THE_PROBES = '-home-rl-work-github-com-macula-io-martha'
+const OLDER_GENERATION = projectKeyOf('/tmp/martha-probe41-774gdO/checkout')
+const THIS_RUN_WROTE = projectKeyOf('/tmp/martha-probe-AbC123/checkout')
+/** An owner's own working tree: no probe's business, and a made-up path, so no real one is named. */
+const NOT_THE_PROBES = projectKeyOf('/srv/git/martha/checkout')
 
 /** A config dir of the test's own, holding the folders named: what the host reads and writes. */
 function aConfigDirHolding(...names: readonly string[]): { readonly env: Record<string, string>; readonly root: string; at: (name: string) => string } {
