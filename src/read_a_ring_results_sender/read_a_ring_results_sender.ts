@@ -5,9 +5,10 @@
 // ring returns) both declare `attestation: 'station'` in the registry, and until
 // this slice nothing supplied one, so every ring a member made cost it the shell
 // for the rest of the session, its own crew mate's answer included. The id is
-// there: on A5 `to` is the node whose own `~<node_id>/ring` answered (the SDK's
-// own-namespace rule), on A4 `peer` is the ring's `from`, which the endpoint
-// checked against the call's verified caller. Both are the server's word about
+// there: on A5 `to` is the node whose own `~<node_id>/ring` answered, which is the
+// SDK's own-namespace rule (macula-io/macula-ts `src/pool.ts`: in a node's own
+// namespace only that node may answer), on A4 `peer` is the ring's `from`, which
+// the endpoint checked against the call's verified caller. Both are the server's word about
 // who is on the other end, never the callee's.
 //
 // Four rules are load-bearing here.

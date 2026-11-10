@@ -22,8 +22,8 @@ import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_
 import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInRingResultKeys, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { ANSWERS_A_RING, MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX, RINGS_AND_RETURNS_THE_ANSWER, sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
-import { RECORDED_RING_RESULT_KEYS, type RecordedRingResultKeys } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
+import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX, sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS, type RecordedRingResultKeys } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
@@ -730,14 +730,14 @@ test('every recorded mesh server version still carries the keys the ring parse r
   assert.deepEqual(gapsInRingResultKeys(), [])
 })
 
+/** Both keys the check reads on each ring tool — the id and the marker — read from the parse's own table, never typed again. */
+const KEYS_THE_CHECK_READS = Object.entries(RING_RESULT_KEYS).flatMap(([tool, keys]) =>
+  [keys.id, keys.marker].map((key) => ({ tool, key, row: PATH_OF_SOURCE[sourceOfAMeshToolResult(tool)] })),
+)
+
 test('a recorded version that has lost a key is named with the row it belongs to, the key and the version', () => {
-  const reads = [
-    { tool: RINGS_AND_RETURNS_THE_ANSWER, key: 'to' },
-    { tool: RINGS_AND_RETURNS_THE_ANSWER, key: 'answer' },
-    { tool: ANSWERS_A_RING, key: 'peer' },
-    { tool: ANSWERS_A_RING, key: 'caller_notified' },
-  ].map(({ tool, key }) => ({ tool, key, row: PATH_OF_SOURCE[sourceOfAMeshToolResult(tool)] }))
-  for (const { tool, key, row } of reads) {
+  assert.equal(KEYS_THE_CHECK_READS.length, 4, 'the two ring tools, an id and a marker each')
+  for (const { tool, key, row } of KEYS_THE_CHECK_READS) {
     const gaps = gapsInRingResultKeys([WITHOUT(NEWEST_RING_KEYS, tool, key)])
     assert.deepEqual(gaps.map((gap) => gap.path), [row], `${tool} without ${key}`)
     assert.match(gaps[0]?.why ?? '', new RegExp(`carries no ${key}`))
@@ -745,10 +745,11 @@ test('a recorded version that has lost a key is named with the row it belongs to
   }
 })
 
-test('a version that lost nothing is named for nothing, and a renamed key is not read as the one asked for', () => {
+test('a version that lost nothing is named for nothing, and a key the recording no longer carries is named once', () => {
   assert.deepEqual(gapsInRingResultKeys([NEWEST_RING_KEYS, { ...NEWEST_RING_KEYS, server_version: '0.0.1' }]), [])
-  const renamed = WITHOUT(NEWEST_RING_KEYS, RINGS_AND_RETURNS_THE_ANSWER, 'to')
-  const row = PATH_OF_SOURCE[sourceOfAMeshToolResult(RINGS_AND_RETURNS_THE_ANSWER)]
+  const [first] = KEYS_THE_CHECK_READS
+  assert.ok(first !== undefined, 'the parse reads no key at all')
+  const renamed = WITHOUT(NEWEST_RING_KEYS, first.tool, first.key)
   const gaps = gapsInRingResultKeys([renamed])
-  assert.equal(gaps.filter((gap) => gap.path === row).length, 1, 'one gap for the one row that lost its key')
+  assert.equal(gaps.filter((gap) => gap.path === first.row).length, 1, 'one gap for the one row that lost its key')
 })
