@@ -32,8 +32,14 @@
 //      that copy, the folder the member's host will load, by the host's own
 //      loader, or nothing starts; a host of another version than the recording
 //      is told to the owner in one line (host_runs_the_relay.ts, martha#104).
-//   3. The relay's server on that socket, answering with memberRelay.
-//   4. `claude` in a process group of its own, so one SIGKILL reaches the host
+//   3. The host's own answer about the rules that keep a member out of the
+//      owner's memory: asked in print mode with no prompt, with hooks off and
+//      exactly those rules, it says which of them its file permission checks
+//      can never match, and one of them refuses the launch, naming the host's
+//      own line (martha#226). Every rule is written under the tool that
+//      statement says the checks use (recorded_claude_code_host.ts).
+//   4. The relay's server on that socket, answering with memberRelay.
+//   5. `claude` in a process group of its own, so one SIGKILL reaches the host
 //      and its tool servers. On the owner's own terminal (inherited stdio, with
 //      stdin and stderr terminals) it is that terminal's foreground job, which
 //      gets the terminal back to the launcher as it was once the member ends
@@ -50,20 +56,20 @@
 //      compared file by file, with every variable of that environment and of
 //      the settings files' env emptied but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
 //      a refusal starts nothing.
-//   5. `recordMemberLaunch` with the writable store only the launcher holds
+//   6. `recordMemberLaunch` with the writable store only the launcher holds
 //      (#42), while the kernel still answers for the member's pid: on the
 //      owner's terminal the member is held until it is recorded and runs only
 //      then (martha#94); detached, it is recorded on its spawn, before this
 //      process can reap it. A launch that cannot be recorded is stopped, and on
 //      the owner's terminal its member never runs.
-//   6. The backstop (martha#104): a member whose relay does not report its
+//   7. The backstop (martha#104): a member whose relay does not report its
 //      session's start in time is stopped, and its stop says why, since a host
 //      that does not run the relay runs no gate at all. In time is
 //      TRUST_ANSWER_DEADLINE_MS when an owner can answer the host and the
 //      host's own record does not already trust the folder, so the host may
 //      first ask whether to trust it; else SESSION_START_DEADLINE_MS
 //      (host_runs_the_relay.ts).
-//   7. The settings watch (martha#122 r=2): the launcher reads those settings
+//   8. The settings watch (martha#122 r=2): the launcher reads those settings
 //      files again every HOOK_SETTINGS_CHECK_MS for the member's whole life,
 //      apart from any hook, and stops the member when one now sets a switch.
 //
@@ -99,7 +105,7 @@ import { environmentFromSettings, userSettingsPath } from '../claude_code_host/s
 import { pluginDirsIn } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, type ManagedSettingsPlace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
@@ -132,6 +138,7 @@ import {
   resolvedHostCommand,
   SESSION_START_DEADLINE_MS,
   TRUST_ANSWER_DEADLINE_MS,
+  whatTheHostSaysWithTheseSettings,
 } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
@@ -524,38 +531,79 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
  * Step 2c: where the owner's own text is, which a member does not write: the places the launcher's and the member's
  * config dirs hold, and the folder for output styles the member's own session init reported (martha#136, martha#154).
  * The settings the host starts with are written here, carrying the rules that refuse the host's own writes into the
- * same places. Or the refusal.
+ * same places, and the host is asked whether its own checks match those rules before anything runs on them
+ * (martha#226). Or the refusal.
  */
-function placesAwayFromTheOwner(
+async function placesAwayFromTheOwner(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
-  reported_output_styles_dir: string,
-): { readonly ownerMemory: OwnerMemoryPlaces; readonly settingsArgs: readonly string[] } | { readonly refusal: string } {
-  const ownerMemory = ownerMemoryOf(launch, ready.hostEnv, ready.prepared, reported_output_styles_dir)
+  host: { readonly binary: string; readonly reported_output_styles_dir: string },
+): Promise<{ readonly ownerMemory: OwnerMemoryPlaces; readonly settingsArgs: readonly string[] } | { readonly refusal: string }> {
+  const ownerMemory = ownerMemoryOf(launch, ready.hostEnv, ready.prepared, host.reported_output_styles_dir)
   if (typeof ownerMemory === 'string') return { refusal: ownerMemory }
   const startSettings = settingsDenyingOwnerMemory(ready.prepared, ownerMemory)
   if ('refusal' in startSettings) return startSettings
-  return { ownerMemory, settingsArgs: startSettings.args }
+  const unmatched = await rulesTheHostMatches(launch, ready, host.binary, ownerMemory)
+  return unmatched === undefined ? { ownerMemory, settingsArgs: startSettings.args } : { refusal: unmatched }
+}
+
+/**
+ * Step 2d: the host's own answer about the rules that keep a member out of the owner's memory (martha#226). The host
+ * says in its own words which rules its file permission checks never match: on the terminal at a session's start, and
+ * on the standard error of a run that is not a terminal, which is how it is asked here. One line naming a rule this
+ * launch wrote refuses the launch -- the rule closes nothing on that host, and the gate's own refusal of a file tool's
+ * call is not the layer the host was given -- and the refusal repeats the host's line, so the owner reads what the host
+ * said rather than this launcher's reading of it.
+ */
+async function rulesTheHostMatches(
+  launch: ClaudeCodeMemberLaunch,
+  ready: ReadyLaunch,
+  binary: string,
+  ownerMemory: OwnerMemoryPlaces,
+): Promise<string | undefined> {
+  const rules = memoryDenyRules(ownerMemory)
+  const asked = initQuestionSettings(ready.prepared, RULE_CHECK_SETTINGS, rules)
+  if ('refusal' in asked) return asked.refusal
+  const printed = await whatTheHostSaysWithTheseSettings(binary, ready.prepared.switches.args, asked.path, ready.hostEnv, launch.place.launch_dir)
+  if ('failure' in printed) {
+    return `the host could not be asked whether its file permission checks match the rules that keep a member out of the owner's memory (${printed.failure}), and a member is not started on rules it was not told it honours (martha#226)`
+  }
+  const named = hostLinesNamingARule(`${printed.stdout}\n${printed.stderr}`, rules)
+  if (named.length === 0) return undefined
+  const which = named.length === 1 ? 'a rule that keeps' : `${named.length} rules that keep`
+  return `the host says ${which} a member out of the owner's memory can never match, so a member is not started with that place open: ${named.join(' | ')} (martha#226)`
 }
 
 /** The settings file the session-init question is asked with: hooks off, and nothing else (martha#154 r=2). */
 const INIT_QUESTION_SETTINGS = 'martha-init-question.json'
 
+/** The settings file the host's own answer about the launch's rules is asked with (martha#226). */
+const RULE_CHECK_SETTINGS = 'martha-rules-the-host-must-honour.json'
+
 /**
- * The settings file that turns every hook off for the session-init question, by the key the recording names (martha#154
- * r=2); or why the question cannot be asked safely. A question that reads the owner's settings can run their hooks, and
- * a hook runs whatever it names, with the launcher's environment and before the launch placed anything; asked with this
- * file, the question still reads those settings -- the `env` block that may move the config dir included -- and runs no
- * hook of theirs.
+ * The settings file that turns every hook off for a question to the host, by the key the recording names (martha#154
+ * r=2), with `rules` added to its `permissions.deny`; or why the question cannot be asked safely. A question that reads
+ * the owner's settings can run their hooks, and a hook runs whatever it names, with the launcher's environment and
+ * before the launch placed anything; asked with this file, the question still reads those settings -- the `env` block
+ * that may move the config dir included -- and runs no hook of theirs. Deny rules start nothing, so the rules the
+ * launch adds ride the same file (martha#226).
  */
-function initQuestionSettings(prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly path: string } | { readonly refusal: string } {
-  const off = CLAUDE_CODE_HOOK_SWITCHES.every_source
-  if (off.length === 0) {
+function initQuestionSettings(
+  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
+  name: string = INIT_QUESTION_SETTINGS,
+  rules: readonly string[] = [],
+): { readonly path: string } | { readonly refusal: string } {
+  const keys = CLAUDE_CODE_HOOK_SWITCHES.every_source
+  if (keys.length === 0) {
     return { refusal: 'the recording names no key that turns every hook off from any settings file, so the session-init question cannot be asked without running the owner\'s hooks (martha#154)' }
   }
-  const path = join(prepared.snapshot_dir, INIT_QUESTION_SETTINGS)
+  const hooksOff = JSON.stringify(Object.fromEntries(keys.map((key) => [key, true])))
+  // A question about the styles asks with hooks off and nothing else; one about the rules carries them too.
+  const settings = rules.length === 0 ? { text: hooksOff } : settingsWithMemoryDenied(hooksOff, rules, name)
+  if ('refusal' in settings) return settings
+  const path = join(prepared.snapshot_dir, name)
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, JSON.stringify(Object.fromEntries(off.map((key) => [key, true]))))
+  writeFileSync(path, settings.text)
   return { path }
 }
 
@@ -902,8 +950,9 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     ready.removeSnapshot()
     return refuse(host)
   }
-  // The owner's own text, and the settings that keep the host's own writes out of those places (martha#136, #154).
-  const places = placesAwayFromTheOwner(launch, ready, host.reported_output_styles_dir)
+  // The owner's own text, the settings that keep the host's own writes out of those places (martha#136, #154), and the
+  // host's own answer about those rules, before a member runs on any of them (martha#226).
+  const places = await placesAwayFromTheOwner(launch, ready, host)
   if ('refusal' in places) {
     directories.relayDirectory.remove()
     ready.removeSnapshot()

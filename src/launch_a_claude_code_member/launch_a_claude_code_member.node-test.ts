@@ -1263,6 +1263,42 @@ test('a host whose session init reports no output-styles folder starts nothing (
   assert.equal(existsSync(fake.ranFile), false, 'the member itself never ran')
 })
 
+// The rules the launch writes are a second layer only on a host that matches them, and the host says in its own words
+// which of them its file permission checks never match. A launch that starts a member anyway runs with a place it
+// believes closed, and nothing after the start asks again (martha#226). Red first: the stand-in calls the first rule the
+// launch wrote dead, and a launch with no check of its own starts the member.
+test('a host that says a rule the launch wrote can never match starts no member, naming the rule and the host\'s words (#226)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place, { callsTheFirstRuleDead: true })
+  const lines: string[] = []
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.startsWith(NOT_STARTED), refusal)
+  // The rule the host was given, named, and the host's own words about it, repeated, so the owner reads what the host
+  // said rather than this launcher's reading of it.
+  assert.ok(refusal.includes('can never match'), refusal)
+  assert.ok(refusal.includes('Edit(//') && refusal.includes('projects'), refusal)
+  assert.ok(refusal.includes('not matched by file permission checks'), refusal)
+  assert.ok(refusal.includes('martha#226'), refusal)
+  assert.equal(existsSync(fake.ranFile), false, 'the member itself never ran')
+})
+
+// The host says what it makes of every settings file it reads, the owner's included, and its complaint about a rule of
+// the OWNER's ends with the rule to write instead — one this launch wrote, when their dead rule covers a place the
+// launch denies. That is the owner's rule and the owner's business: reading it as a fault of the launch's rules would
+// leave an owner who still protects their own CLAUDE.md the old way unable to start a member at all (martha#226 r=1).
+test('a host that calls a dead rule of the owner\'s dead, on a place the launch denies, still starts the member (#226 r=1)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place, { namesAnOwnersTwinDead: true })
+  const lines: string[] = []
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
+  if (!started.started) assert.fail(`the owner's own dead rule refused the launch: ${started.refusal}`)
+  // The question was asked — print mode with no prompt is where the host says it — so the pass above is about an answer
+  // that was given, not one the launch never sought.
+  assert.match(readFileSync(fake.callsFile, 'utf8'), / --print\b/, 'the host was asked about the rules')
+})
+
 test('the member, its load check, its version check and its session init all run the one file its command resolves to', async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
@@ -1274,10 +1310,11 @@ test('the member, its load check, its version check and its session init all run
   if (!started.started) assert.fail(started.refusal)
   await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '', t)
   const calls = readFileSync(fake.callsFile, 'utf8').trimEnd().split('\n')
-  // The member's start is preceded by the three questions the launcher asks its host: the relay's load check, its
-  // version, and the session init the styles folder is read from, which runs on the switches a member starts on (#154).
+  // The member's start is preceded by the questions the launcher asks its host: the relay's load check, its version,
+  // the session init the styles folder is read from, which runs on the switches a member starts on (#154), and print
+  // mode with no prompt, which is where the host says what it makes of the rules the launch wrote (#226).
   const [firstSwitch] = HOSTS['claude-code'].project_config_off.args
-  assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', firstSwitch, '-p'])
+  assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', firstSwitch, '--print', '-p'])
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
 })
 

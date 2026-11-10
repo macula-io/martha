@@ -98,9 +98,16 @@ const PLACE_PARTS: Readonly<Record<string, string>> = {
   ].join(';'),
 }
 
+/**
+ * Which rules the host's file permission checks match (martha#226), in the shape the host spells it: the statement that
+ * maps a rule's tool name to the one those checks use, inside the complaint it words that mapping with.
+ */
+const RULE_PARTS: Readonly<Record<string, string>> = {
+  file_permission_rules: `if(s.ruleContent!==void 0){${RECORDED_HOST.file_permission_rules.matcher}if(g!==void 0)return{valid:!0,warning:\`\${yn(s)} is not matched by file permission checks\`}}`,
+}
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
-  session_start_schema: RECORDED_HOST.session_start_schema,
-  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
+  session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
   prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback,
   prompt_origin_subkinds: RECORDED_HOST.prompt_origin_subkinds,
   hooks_switches: RECORDED_HOST.hooks_switches,
@@ -112,6 +119,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ].join(';'),
   ...MARKDOWN_PARTS,
   ...PLACE_PARTS,
+  ...RULE_PARTS,
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
@@ -247,4 +255,15 @@ test('a host whose statements and sentence name different places, or that walks 
     assert.equal(run.status, 1, JSON.stringify(Object.keys(planted)))
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
   }
+})
+
+// Which rules the host's file permission checks match is what a launch writes its rules under and what it reads the
+// host's complaint against (martha#226): a host that maps a file tool's rules another way fails the check by that
+// field, rather than leaving the launch writing a rule the new host would ignore.
+test('a host that matches a file tool\'s rules another way fails the check naming the field (martha#226)', (t) => {
+  const planted = RECORDED_HOST.file_permission_rules.matcher.replace('"Edit"', '"Write"')
+  assert.notEqual(planted, RECORDED_HOST.file_permission_rules.matcher, 'the planted statement differs')
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, file_permission_rules: RULE_PARTS.file_permission_rules?.replace(RECORDED_HOST.file_permission_rules.matcher, planted) ?? '' }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_permission_rules\n`)
 })
