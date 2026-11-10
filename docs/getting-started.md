@@ -189,7 +189,10 @@ its start, its stop and every call it makes are recorded, so the answer it
 hands back is placed by that record. While an agent is between its start and
 its stop, the reviewer's shell commands are refused — the agent's text has no
 call to be placed on yet — though it can still read files, and once the agent
-stops and Martha saw every call it made answered, the shell comes back.
+stops and Martha saw every call it made answered, the shell comes back. An
+agent that made no call at all does not count: there is nothing for Martha to
+have reconciled, so its answer is treated as any other subagent's and the shell
+closes.
 
 What that costs: a review that reads outside the approved tree still closes the
 reviewer's shell on that read, as any other text from a stranger does. A review

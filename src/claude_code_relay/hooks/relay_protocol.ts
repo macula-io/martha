@@ -102,12 +102,13 @@ export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
 
 /**
  * A `subagent_started`/`subagent_stopped` body (martha#170): the agent the host names, under the member's own
- * session. The host carries `agent_id` and `agent_type` on both, and the agent's own last words on the stop; nothing
- * the relay adds, and nothing the host's text could rename.
+ * session. The host carries `agent_id` and `agent_type` on both, its own list of background tasks, and the agent's own
+ * last words on the stop; nothing the relay adds, and nothing the host's text could rename.
  */
 export function subagentBody(session_id: string, input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
   const body: Record<string, unknown> = { session_id, agent_id: input['agent_id'], agent_type: input['agent_type'] }
   if (input['last_assistant_message'] !== undefined) body['last_assistant_message'] = input['last_assistant_message']
+  if (input['background_tasks'] !== undefined) body['background_tasks'] = input['background_tasks']
   return body
 }
 

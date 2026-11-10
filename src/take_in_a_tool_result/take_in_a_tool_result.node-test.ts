@@ -312,6 +312,7 @@ test('the getting-started guide says a vouched agent keeps the shell, and what s
   const guide = pageAsWords('../../docs/getting-started.md')
   const claims = [
     "While an agent is between its start and its stop, the reviewer's shell commands are refused — the agent's text has no call to be placed on yet — though it can still read files, and once the agent stops and Martha saw every call it made answered, the shell comes back.",
+    'An agent that made no call at all does not count: there is nothing for Martha to have reconciled, so its answer is treated as any other subagent\'s and the shell closes.',
     "What that costs: a review that reads outside the approved tree still closes the reviewer's shell on that read, as any other text from a stranger does.",
   ]
   for (const claim of claims) assert.ok(guide.includes(claim), `the guide says: ${claim}`)
@@ -320,12 +321,26 @@ test('the getting-started guide says a vouched agent keeps the shell, and what s
 test('the publish gate says what vouched for means, and what an agent that is not records (martha#170)', () => {
   const page = pageAsWords('../../docs/publish-gate.md')
   const claims = [
-    'It is vouched for when the launcher saw the host say the agent started under this session, saw it stop, answered every call the agent made, and none of those calls read text this gate counts: then the answer records nothing and the shell stays.',
-    'Anything less — an agent it never saw start, one still running, a call it did not answer, an agent that read a file outside the approved tree or ran a command — places the answer on B7, and the shell closes as for any other subagent result.',
-    'The id that places an answer comes from the answer when the member spawned the agent (tool_response.agentId), and from the call when the agent hands its report back itself: a real SubagentHandback carries agent_id on the call and its output is {success, message} with no id on it.',
+    // What vouching rests on, and the call count it now needs (the live observation's `vouched=true calls_seen=0`).
+    "It is vouched for when the launcher saw the host say the agent started under this session, saw it stop, answered every call the agent made, saw at least one call of the agent's to answer, and none of those calls read text this gate counts: then the answer records nothing and the shell stays.",
+    'Anything less — an agent it never saw start, one still running, a call it did not answer, a run with no call behind it at all, an agent that read a file outside the approved tree or ran a command — places the answer on B7, and the shell closes as for any other subagent result.',
+    'The call count is not decoration: the first version of this vouching passed on a real host with zero calls seen, because it read a field the host does not spell, and an empty set agrees with everything.',
+    // Where the host really puts the id, both ways, and the order a background launch is answered in.
+    'The id that places an answer comes from the answer when the member spawned the agent, and from the call when the agent hands its report back itself: a real SubagentHandback carries the id on the call and its output is {success, message} with no id on it.',
+    "Both spellings are the host's own and are read in one place, agentIdOf: on the call it hands the relay, the agent's id is agentId (camelCase — the settings hook's agent_id never reaches the launcher), and in the answer it is result.agentId, one level down in the mod's {ref, result} wrapper where the host's tool_response sits.",
     "That id is looked up in the launcher's own record like any other, never believed because a call carried it: a handback naming an agent the launcher has a run of and has not seen stop records nothing there and the stop decides, while one naming an id the launcher has no run of, or whose run stopped without being vouched, places its text on B7 at once.",
+    "The member's own spawn is the one exception, and only in what it is not: a host answers a background launch (status: async_launched) before it reports the agent started, so an id the launcher holds no run of yet is the member's own agent with its start still to come.",
+    'The run is made there and the shell is held for it until its stop decides; it is never recorded on B7 at the answer.',
+    "So a handback is no way to hand text into the turn and be done: vouched, it is the agent's own work on the member's own inputs; anything else, the shell closes on its text.",
+    // The two shapes the live run added: the completion notice, and the host's own turn end.
+    'Two more shapes come from the same live run and are placed by lookups, not by belief.',
+    "A background agent's completion arrives as a prompt whose origin is task-notification, which the engine also stamps on GitHub webhooks, PR stewards and session inboxes from any sender, so the origin alone is a cross-session message (A6).",
+    "The notice is taken in as the agent's own only when every part of it is found in the launcher's record: its <tool-use-id> names a call the member itself made whose answer named this agent, the agent is vouched for, and the words it carries in <result> are exactly the words the agent's stop reported.",
+    "And after that completion the host fires a second SubagentStop, for an id it never started, naming no agent type, listing none of its own background tasks, and carrying the member's own last words: that is the host reporting its own turn end, not an agent's answer, and it records nothing.",
+    "A stop that names a type, or that the host lists among its background tasks, is decided as any other agent's.",
+    // The hold, and what lifts it.
     "That hold is on the member's own calls: an agent's own calls are the ones being recorded, so a nested agent's shell is not held while its own child runs.",
-    'A stop the launcher never sees leaves its agent holding the shell for the rest of the session, and nothing in the session lifts it: like any other closed row, the owner\'s way out is to stop the member and start a fresh one, which reads no handover.',
+    "A stop the launcher never sees leaves its agent holding the shell for the rest of the session, and nothing in the session lifts it: like any other closed row, the owner's way out is to stop the member and start a fresh one, which reads no handover.",
   ]
   for (const claim of claims) assert.ok(page.includes(claim), `the page says: ${claim}`)
 })
