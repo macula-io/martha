@@ -12,8 +12,10 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "architecture/**/*.ts", "prove_the_core/**/*.ts"]
+  "include": ["src/**/*.ts", "architecture/**/*.ts", "prove_the_core/**/*.ts", "rehearse_a_release/**/*.mjs"]
 }

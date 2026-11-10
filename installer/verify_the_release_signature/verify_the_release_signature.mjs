@@ -156,7 +156,7 @@ async function failure ({ bundle, sha, ref, source, makeVerifier, tufCachePath }
  * { sha } of the listed signer whose identity one of `bundles` verifies under, for `version` of `digest`; or
  * { reasons } saying why each try failed. A trust root that could not be fetched throws CouldNotCheck instead.
  * `ref` is refs/tags/v<version>; only the release dry run, from a test file, names its branch's ref.
- * @param {{ bundles: any[], digest: string, version: string, signers: string[], source?: string, ref?: string, makeVerifier?: MakeVerifier, tufCachePath?: string | undefined }} request
+ * @param {{ bundles: any[], digest: string, version: string, signers: string[], source?: string, ref?: string | undefined, makeVerifier?: MakeVerifier, tufCachePath?: string | undefined }} request
  * @returns {Promise<{ sha: string } | { reasons: string[] }>}
  */
 export async function signedBy ({ bundles, digest, version, signers, source = NAMES.sourceRepository, ref = releaseRef(version), makeVerifier = createVerifier, tufCachePath }) {

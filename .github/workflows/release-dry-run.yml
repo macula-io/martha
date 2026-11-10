@@ -11,9 +11,9 @@
 #   - the signature verifies for THIS branch's ref, by a listed signer, for this repository;
 #   - the same signature is refused for refs/tags/v<version>, the ref every real install demands;
 #   - the unsigned digest is refused;
-#   - the signed layer unpacks to exactly the committed tree.
-# The ref check only ever runs against a branch ref here, from installer/rehearse_a_release/, a script the npm
-# package does not ship: the installer itself has no way to name another ref.
+#   - the signed layer unpacks to exactly the committed tree plus the installer pin the packer generates.
+# The ref check only ever runs against a branch ref here, from rehearse_a_release/, a script outside the npm
+# package: the installer itself has no way to name another ref.
 #
 # Like the release, it waits on the dependency advisory scan (advisories.yml, martha#110).
 #
@@ -168,4 +168,4 @@ jobs:
           DRY_RUN_UNSIGNED_DIGEST: ${{ needs.push.outputs.unsigned }}
           DRY_RUN_REF: ${{ github.ref }}
           GHCR_TOKEN: ${{ github.token }}
-        run: node installer/rehearse_a_release/rehearse_a_release.mjs
+        run: node rehearse_a_release/rehearse_a_release.mjs

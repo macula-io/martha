@@ -4,9 +4,13 @@
 //   1. the signature verifies for the branch's ref, by a listed signer, for this repository;
 //   2. the same signature is refused for refs/tags/v<version>, the ref every real install demands;
 //   3. the unsigned digest beside it is refused;
-//   4. the signed layer unpacks to exactly the committed tree (git archive of HEAD).
-// Not shipped (package.json "files" leaves it out), and not a *.node-test.mjs, so npm test never runs it: it needs a
-// registry token, the network and an image the workflow pushed. Its one caller is release-dry-run.yml.
+//   4. the signed layer unpacks to exactly the committed tree plus the installer pin the packer generates after
+//      `git archive`, and that pin is the installer npm serves for this tree's installer version (martha#207).
+//
+// It lives here, outside installer/, and not in package.json "files": it ships on npm nowhere, and its own fixes no
+// longer force an installer bump and republish for a folder npm has never carried (martha#207). It is not a
+// *.node-test.mjs: it needs a registry token, the network and an image the workflow pushed. Its one caller is
+// release-dry-run.yml.
 //
 // Environment (all required): DRY_RUN_IMAGE, DRY_RUN_VERSION, DRY_RUN_DIGEST, DRY_RUN_UNSIGNED_DIGEST, DRY_RUN_REF,
 // GHCR_TOKEN (the run's token: before the owner makes it public, the release package is not).
@@ -14,14 +18,19 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
-import { listedSigners } from '../install_a_release/install_a_release.mjs'
-import { releaseRef } from '../keep_the_names_in_one_place/names.mjs'
-import { layerOf, registry } from '../read_the_release_registry/read_the_release_registry.mjs'
-import { TOP, unpackLayer } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { signedBy } from '../verify_the_release_signature/verify_the_release_signature.mjs'
-import { removeEvenReadOnly, treeOf } from '../serve_a_release_locally/serve_a_release_locally.mjs'
+import { listedSigners } from '../installer/install_a_release/install_a_release.mjs'
+import { releaseRef } from '../installer/keep_the_names_in_one_place/names.mjs'
+import { pinFor } from '../installer/pin_the_installer/pin_the_installer.mjs'
+import { layerOf, registry } from '../installer/read_the_release_registry/read_the_release_registry.mjs'
+import { TOP, unpackLayer } from '../installer/unpack_the_release_layer/unpack_the_release_layer.mjs'
+import { signedBy } from '../installer/verify_the_release_signature/verify_the_release_signature.mjs'
+import { removeEvenReadOnly, treeOf } from '../installer/serve_a_release_locally/serve_a_release_locally.mjs'
+import { differences, inWords, pinFieldsThatDiffer, thePinIn, withoutThePin } from './the_layer_is_the_tree_and_the_pin.mjs'
+
+/** The checkout this runs in, whose committed tree the layer must hold. */
+const REPO = dirname(import.meta.dirname)
 
 /** @param {string} name */
 const need = (name) => {
@@ -67,9 +76,17 @@ const archived = mkdtempSync(join(tmpdir(), 'martha-dry-run-tree-'))
 try {
   const layer = layerOf(manifest.json, `${env['DRY_RUN_IMAGE']}@${digest}`)
   await unpackLayer(await reg.blob(layer, `the layer ${layer.digest}`), stage)
-  execFileSync('bash', ['-c', `git archive --format=tar --prefix=${TOP}/ HEAD | tar -x -C "$1"`, 'archive', archived])
-  assert.deepEqual(treeOf(join(stage, TOP)), treeOf(join(archived, TOP)), 'the layer is the committed tree')
-  console.log(`4. the layer is the committed tree, ${treeOf(join(stage, TOP)).size} entries`)
+  execFileSync('bash', ['-c', `git archive --format=tar --prefix=${TOP}/ HEAD | tar -x -C "$1"`, 'archive', archived], { cwd: REPO })
+  // Both trees start at their own root, so the pin's path is the one the layer holds it at: the release folder, and
+  // the file inside it. The packer writes that pin after the archive, so it is all the layer may add.
+  const layerTree = treeOf(stage)
+  const differing = inWords(differences(treeOf(archived), withoutThePin(layerTree)))
+  if (differing !== '') assert.fail(differing)
+  const pin = thePinIn(stage)
+  const published = await pinFor({ repo: REPO })
+  const fields = pinFieldsThatDiffer(pin, published)
+  if (fields.length > 0) assert.fail(`the pin is not the installer npm serves: ${fields.join('; ')}`)
+  console.log(`4. the layer is the committed tree plus the pin, ${layerTree.size} entries, pinned to ${published.name}@${published.version}`)
 } finally {
   removeEvenReadOnly(stage)
   removeEvenReadOnly(archived)
