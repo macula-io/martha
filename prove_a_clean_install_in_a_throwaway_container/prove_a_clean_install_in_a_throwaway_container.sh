@@ -4,8 +4,10 @@
 #
 # The clean-install proof (martha#69). A stranger's machine carries nothing of ours, so this starts a container that
 # carries nothing of ours either: a fresh one, from a Node image pinned by digest, run as the image's own non-root
-# user, with nothing of the host mounted and no host environment or network passed in. Inside it, the published
-# installer is installed by its exact version and the installed command says which version it is:
+# user, with nothing of the host mounted and no host environment or network passed in. What the container is asked for
+# is then read back from the container itself -- its user, its mounts, its network and its environment against the
+# image's own -- because the flags ask and only the container answers. Inside it, the published installer is installed
+# by its exact version and the installed command says which version it is:
 #
 #   npx -y --ignore-scripts @macula-io/martha@<installer version>
 #   martha --version
@@ -24,14 +26,21 @@
 # refused (martha#2) -- needs the owner at the terminal. This script claims none of it: when the install half passes,
 # the run stops at the member step, says so, and removes the container (exit 4). No member is claimed.
 #
-# The container is removed whatever happens: a pass, a refusal, a failed step, or a signal. A run whose container
-# would not go, or that finds it still there afterwards, has failed. Everything written in it goes with it; the image
-# the first run pulls stays in the host's own store, which belongs to the host and not to a run.
+# The container is removed whatever happens: a pass, a refusal, a failed step, or a signal -- including one while the
+# create that made it is still running, which on a host's first run is the image pull. Gone is read from podman
+# answering that it is gone, never from a silence: a host that stopped answering, or podman erroring, fails the run and
+# names the container so it can be removed by hand. Everything written in it goes with it; the image the first run
+# pulls stays in the host's own store, which belongs to the host and not to a run.
 #
 # Exit: 1 a step failed, the tear-down did, or the run was interrupted; 2 the arguments were refused and nothing ran;
 # 3 the registry carries no release, so the installer stopped on its own words (today's expected end); 4 the install
 # half passed and the run stopped at the member half, which waits for the owner's sign-in.
 set -euo pipefail
+
+# The run's own output, on a descriptor of its own: a signal that arrives while a command's output is being thrown away
+# (podman's own chatter) runs the tear-down with that command's redirection still in place, and the tear-down has to
+# reach the terminal or the log even then.
+exec 3>&1
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
@@ -54,8 +63,19 @@ CONTAINER_HOME='/tmp/martha-home'
 # What keeps the container up while the steps are run in it, and what every one of its names starts with.
 CONTAINER_IDLES='sleep 3600'
 CONTAINER_PREFIX='martha-clean-install'
-# The container's own record of what is mounted into it, the length of that list being what a run requires to be 0.
+# The container's own record of what is mounted into it, of its network, and of its environment; the length of the
+# first being what a run requires to be 0, the second never the host's own network, and the third the image's own
+# plus what podman itself adds, named once here.
 MOUNTS_FORMAT='{{len .Mounts}}'
+NETWORK_FORMAT='{{.HostConfig.NetworkMode}}'
+ENV_FORMAT='{{range .Config.Env}}{{println .}}{{end}}'
+PODMAN_OWN_ENV='container=podman'
+# The network a container must not be on: the host's own.
+HOST_NETWORK='host'
+# A create may finish on the host after the ssh client that asked for it is gone, so the tear-down keeps asking for a
+# container it has not seen yet, in a window it can still catch.
+CREATE_SETTLE_ATTEMPTS=20
+CREATE_SETTLE_S=0.5
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
 NO_RELEASE_WORDS='carries no version'
 
@@ -63,12 +83,13 @@ USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--lo
 
 LOG_FILE=''
 CONTAINER=''
+CREATE_WAS_IN_FLIGHT=''
 NO_RELEASE_YET=''
 INTERRUPTED=''
 SELF_TEST_ROOT=''
 
 log() {
-  printf '%s\n' "$*"
+  printf '%s\n' "$*" >&3
   if [ -n "${LOG_FILE}" ]; then printf '%s\n' "$*" >> "${LOG_FILE}"; fi
 }
 
@@ -144,22 +165,24 @@ image_step() {
   ok image "${IMAGE} for the Node ${NODE_MAJOR} installer/package.json declares (${range})"
 }
 
-# The container step: a fresh container from that image, named for this run, running as the image's own non-root user.
+# The container step: a fresh container from that image, running as the image's own non-root user. It is named here,
+# before podman is asked for it, so a run interrupted while create is still going -- on a host's first run that window
+# is the image pull -- is still removed by that name.
 container_step() {
-  local name
-  name="${CONTAINER_PREFIX}-$$-${RANDOM}"
-  on_the_host podman create --name "${name}" --user "${CONTAINER_USER}" "${IMAGE}" ${CONTAINER_IDLES} > /dev/null \
-    || { failed container "podman could not make a container from ${IMAGE}"; return 1; }
-  CONTAINER="${name}"
+  CONTAINER="${CONTAINER_PREFIX}-$$-${RANDOM}"
+  CREATE_WAS_IN_FLIGHT=1
+  on_the_host podman create --name "${CONTAINER}" --user "${CONTAINER_USER}" "${IMAGE}" ${CONTAINER_IDLES} > /dev/null \
+    || { failed container "podman could not make ${CONTAINER} from ${IMAGE}"; return 1; }
   on_the_host podman start "${CONTAINER}" > /dev/null \
     || { failed container "podman could not start ${CONTAINER}"; return 1; }
-  ok container "${CONTAINER} made from ${IMAGE} and started, as ${CONTAINER_USER}, with nothing mounted and no environment passed in"
+  CREATE_WAS_IN_FLIGHT=''
+  ok container "${CONTAINER} made from ${IMAGE} and started as ${CONTAINER_USER}, asking for no mount, no environment and no host network"
 }
 
-# The inside step: what the container is actually running as, and what it actually has mounted. The flags asked for
-# this; only the container says whether it happened.
+# The inside step: what the container is actually running as, what it actually has mounted, which network it is on
+# and which environment it carries. The flags asked for this; only the container says whether it happened.
 inside_step() {
-  local uid mounts=''
+  local uid mounts network env_extra
   uid="$(on_the_host podman exec "${CONTAINER}" id -u)" \
     || { failed inside 'the container could not say which user it runs as'; return 1; }
   if [ "${uid}" = 0 ]; then
@@ -172,7 +195,37 @@ inside_step() {
     failed inside "${mounts} mounts are in the container; a run mounts nothing"
     return 1
   fi
-  ok inside "uid ${uid} in the container, ${mounts} mounts"
+  network="$(on_the_host podman inspect --format "${NETWORK_FORMAT}" "${CONTAINER}")" \
+    || { failed inside 'the container could not say which network it is on'; return 1; }
+  if [ "${network}" = "${HOST_NETWORK}" ]; then
+    failed inside "the container is on this host's own network (${HOST_NETWORK})"
+    return 1
+  fi
+  env_extra="$(env_passed_in)"
+  if [ -n "${env_extra}" ]; then
+    failed inside "${env_extra}"
+    return 1
+  fi
+  ok inside "uid ${uid} in the container, ${mounts} mounts, network ${network}, and no environment but the image's"
+}
+
+# Anything in the container's environment that the image's own does not carry, as the line to fail with, or nothing
+# when there is none: podman's own variable is the one a run allows on top of the image. A host whose containers.conf
+# adds env, or sets env_host, puts variables here, and this is where that is refused.
+env_passed_in() {
+  local container_env image_env entry
+  container_env="$(on_the_host podman inspect --format "${ENV_FORMAT}" "${CONTAINER}")" \
+    || { printf 'the container could not say which environment it carries'; return 0; }
+  image_env="$(on_the_host podman image inspect --format "${ENV_FORMAT}" "${IMAGE}")" \
+    || { printf 'the image could not say which environment it declares'; return 0; }
+  while IFS= read -r entry; do
+    if [ -z "${entry}" ] || [ "${entry}" = "${PODMAN_OWN_ENV}" ]; then continue; fi
+    if ! printf '%s\n' "${image_env}" | grep -qxF -- "${entry}"; then
+      printf 'the container carries environment that is not the image'"'"'s: %s' "${entry}"
+      return 0
+    fi
+  done <<< "${container_env}"
+  return 0
 }
 
 # The install step: the installer, by its exact version, inside the container. Its refusals are its own words; the one
@@ -205,17 +258,45 @@ version_step() {
   ok version "${COMMAND} --version prints ${RELEASE_VERSION}, the version this tree declares"
 }
 
-# The tear-down step: the container removed and found gone afterwards. A container still there fails the run, and so
-# does one podman would not remove.
+# The container's state by podman's own answer: present when it says so, absent when it says so and nothing else.
+# ssh exits 255 when it cannot reach the host, and podman exits 125 on its own error; neither is an answer about the
+# container, so neither counts as gone.
+container_state() {
+  local status=0
+  on_the_host podman container exists "${CONTAINER}" > /dev/null 2>&1 || status=$?
+  case "${status}" in
+    0) printf 'present' ;;
+    1) printf 'absent' ;;
+    *) printf 'no answer (%s)' "${status}" ;;
+  esac
+}
+
+# The tear-down step: the container removed, and gone read from podman answering that it is. Anything else fails the
+# run and names the container, so it can be removed by hand.
 tear_down_step() {
-  if on_the_host podman container exists "${CONTAINER}" > /dev/null 2>&1; then
+  local state attempt=0 removed=''
+  state="$(container_state)"
+  # A create that was still going may finish on the host after its ssh client is gone; the container it makes then is
+  # still this run's to remove, so a moment is spent watching for it before the answer is taken.
+  while [ -n "${CREATE_WAS_IN_FLIGHT}" ] && [ "${state}" = absent ] && [ "${attempt}" -lt "${CREATE_SETTLE_ATTEMPTS}" ]; do
+    sleep "${CREATE_SETTLE_S}"
+    attempt=$((attempt + 1))
+    state="$(container_state)"
+  done
+  if [ "${state}" = present ]; then
     on_the_host podman rm --force "${CONTAINER}" > /dev/null 2>&1 || true
+    state="$(container_state)"
+    removed=1
   fi
-  if on_the_host podman container exists "${CONTAINER}" > /dev/null 2>&1; then
-    failed 'tear down' "${CONTAINER} is still there after podman rm --force"
+  if [ "${state}" != absent ]; then
+    failed 'tear down' "${CONTAINER} cannot be confirmed gone: podman answered '${state}'; remove it on the host by that name"
     return 1
   fi
-  ok 'tear down' "${CONTAINER} removed, and gone when asked for again"
+  if [ -n "${removed}" ]; then
+    ok 'tear down' "${CONTAINER} removed, and absent when asked again"
+    return 0
+  fi
+  ok 'tear down' "${CONTAINER} was never made: podman answers absent"
 }
 
 # The steps before the tear-down, in order; the first failure ends them, and a refusal that is the run's outcome ends
@@ -264,13 +345,20 @@ write_stand_ins() {
   local dir="$1"
   cat > "${dir}/ssh" <<'SSH'
 #!/bin/sh
-# ssh, as far as a run can tell: its own options, the host, then the command an sshd would give a shell.
+# ssh, as far as a run can tell: its own options, the host, then the command an sshd would give a shell. A case whose
+# ssh.down exists stands for a host that stopped answering: no answer at all, which is 255, and never "it is gone".
 while [ $# -gt 0 ]; do
   case "$1" in
     -*) shift ;;
     *) shift; break ;;
   esac
 done
+standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
+if [ -f "${standin}/ssh.down" ]; then
+  case "$*" in
+    *container*|*rm*) exit 255 ;;
+  esac
+fi
 exec sh -c "$*"
 SSH
   cat > "${dir}/podman" <<'PODMAN'
@@ -280,6 +368,13 @@ standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
 printf '%s\n' "$*" >> "${standin}/calls"
 case "${1:-}" in
   create)
+    # A case whose create.holds exists stands for a create still running when the signal arrives -- on a host's first
+    # run that window is the image pull. The create outlives the signal, as the host's own process does when its ssh
+    # client is gone, and makes the container a moment after the run has already begun to tear down.
+    if [ -f "${standin}/create.holds" ]; then
+      ( trap '' INT; sleep 2; : > "${standin}/container.present" ) &
+      sleep 300
+    fi
     : > "${standin}/container.present"
     printf 'a-container\n'
     ;;
@@ -300,22 +395,36 @@ case "${1:-}" in
         ;;
     esac
     ;;
-  inspect) cat "${standin}/mounts" ;;
+  inspect)
+    case "$*" in
+      *Mounts*) cat "${standin}/mounts" ;;
+      *NetworkMode*) cat "${standin}/network" ;;
+      *Env*) cat "${standin}/env" ;;
+    esac
+    ;;
+  image) cat "${standin}/image.env" ;;
   rm)
     if [ ! -f "${standin}/rm.refused" ]; then rm -f "${standin}/container.present"; fi
     ;;
-  container) [ -f "${standin}/container.present" ] ;;
+  container)
+    if [ -f "${standin}/container.refuses" ]; then exit 125; fi
+    [ -f "${standin}/container.present" ]
+    ;;
 esac
 PODMAN
   chmod +x "${dir}/ssh" "${dir}/podman"
 }
 
-# One case's answers, in a folder of its own.
+# One case's answers, in a folder of its own: a container as a run asks for it -- the image's own non-root user, no
+# mount, a private network, and the image's environment with only podman's own variable on top.
 a_case() {
   local dir="$1"
   mkdir -p "${dir}"
   printf '0\n' > "${dir}/mounts"
   printf '1000\n' > "${dir}/uid"
+  printf 'slirp4netns\n' > "${dir}/network"
+  printf 'PATH=/usr/local/bin:/usr/bin\n' > "${dir}/image.env"
+  printf '%s\nPATH=/usr/local/bin:/usr/bin\n' "${PODMAN_OWN_ENV}" > "${dir}/env"
   printf '' > "${dir}/install.words"
   printf '0\n' > "${dir}/install.status"
   printf '' > "${dir}/version.words"
@@ -438,8 +547,9 @@ self_test() {
   expect_status 1 "${standin}" 'a-host' || case_failed=1
   asked_for '^FAIL version: .*not the ' "${standin}/out" || { echo 'the self-test: a version other than this tree declares did not fail the run' >&2; case_failed=1; }
 
-  # A container that is not what was asked for fails the run before anything is installed in it: root inside, or
-  # something mounted into it. Both are what the flags asked for; only the container's own answer decides.
+  # A container that is not what was asked for fails the run before anything is installed in it: root inside,
+  # something mounted into it, the host's own network, or environment that is not the image's. All four are what the
+  # flags asked for; only the container's own answer decides.
   standin="${root}/runs-as-root"
   a_case "${standin}"
   printf '0\n' > "${standin}/uid"
@@ -450,6 +560,16 @@ self_test() {
   printf '2\n' > "${standin}/mounts"
   expect_status 1 "${standin}" 'a-host' || case_failed=1
   asked_for '^FAIL inside: .*2 mounts' "${standin}/out" || { echo 'the self-test: a container with something mounted did not fail the run' >&2; case_failed=1; }
+  standin="${root}/on-the-host-network"
+  a_case "${standin}"
+  printf '%s\n' "${HOST_NETWORK}" > "${standin}/network"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for '^FAIL inside: .*own network' "${standin}/out" || { echo "the self-test: a container on the host's own network did not fail the run" >&2; case_failed=1; }
+  standin="${root}/given-the-hosts-environment"
+  a_case "${standin}"
+  printf '%s\nPATH=/usr/local/bin:/usr/bin\nFROM_THE_HOST=1\n' "${PODMAN_OWN_ENV}" > "${standin}/env"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for '^FAIL inside: .*not the image.s: FROM_THE_HOST=1' "${standin}/out" || { echo "the self-test: environment the image does not carry did not fail the run, and name it" >&2; case_failed=1; }
 
   # A container that is still there after the removal fails the run, and is named.
   standin="${root}/sticks"
@@ -457,8 +577,24 @@ self_test() {
   printf '%s\n' "${release_version}" > "${standin}/version.words"
   printf '1\n' > "${standin}/rm.refused"
   expect_status 1 "${standin}" 'a-host' || case_failed=1
-  asked_for '^FAIL tear down: .*still there' "${standin}/out" || { echo 'the self-test: a container that would not go did not fail the run' >&2; case_failed=1; }
+  asked_for '^FAIL tear down: .*cannot be confirmed gone: podman answered .present.' "${standin}/out" || { echo 'the self-test: a container that would not go did not fail the run' >&2; case_failed=1; }
   [ "$(tail -1 "${standin}/out")" = failed ] || { echo 'the self-test: a run whose container stayed did not end failed' >&2; case_failed=1; }
+
+  # A host that stops answering is not a container that is gone: no answer is not gone, and the run fails naming the
+  # container rather than reporting a clean end. podman's own error is no answer either.
+  standin="${root}/the-host-stopped-answering"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  : > "${standin}/ssh.down"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for '^FAIL tear down: martha-clean-install-.* cannot be confirmed gone' "${standin}/out" || { echo 'the self-test: a host that stopped answering did not fail the tear-down, naming the container' >&2; case_failed=1; }
+  [ "$(tail -1 "${standin}/out")" = failed ] || { echo 'the self-test: a run whose host stopped answering did not end failed' >&2; case_failed=1; }
+  standin="${root}/podman-errors"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  : > "${standin}/container.refuses"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for '^FAIL tear down: .*no answer (125)' "${standin}/out" || { echo "the self-test: podman's own error was read as a gone container" >&2; case_failed=1; }
 
   # An interrupted run: the install parks until the signal arrives, and the container is removed anyway.
   standin="${root}/interrupted"
@@ -482,6 +618,31 @@ self_test() {
   asked_for '^FAIL run: interrupted by SIGINT' "${standin}/out" || { echo 'the self-test: an interrupted run did not say which signal ended it' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: an interrupted run did not remove its container' >&2; case_failed=1; }
 
+  # An interrupt while create is still going: on a host's first run that window is the image pull, and the container
+  # the create goes on to make is still this run's to remove. Its name is what the tear-down knows it by, and the
+  # tear-down keeps asking for a moment, because the create finishes after its ssh client is gone.
+  standin="${root}/interrupted-while-creating"
+  a_case "${standin}"
+  : > "${standin}/create.holds"
+  set -m
+  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
+    > "${standin}/out" 2> "${standin}/err" &
+  child=$!
+  set +m
+  waited=0
+  while ! grep -q '^create ' "${standin}/calls" 2> /dev/null; do
+    sleep 0.2
+    waited=$((waited + 1))
+    if [ "${waited}" -gt 250 ]; then break; fi
+  done
+  kill -INT -"${child}" 2> /dev/null || true
+  waited=0
+  wait "${child}" || waited=$?
+  [ "${waited}" -eq 1 ] || { echo "the self-test: an interrupt during create exited ${waited}, not 1" >&2; case_failed=1; }
+  asked_for '^FAIL run: interrupted by SIGINT' "${standin}/out" || { echo 'the self-test: an interrupt during create did not say which signal ended it' >&2; case_failed=1; }
+  asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: an interrupt during create failed its tear-down' >&2; case_failed=1; }
+  asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: the container a create made after the signal was not removed' >&2; case_failed=1; }
+
   # The arguments: no host, an unknown option, two hosts and a log it cannot write are refused, and nothing runs.
   expect_status 2 "${root}" || case_failed=1
   expect_status 2 "${root}" --no-such-option || case_failed=1
@@ -489,9 +650,10 @@ self_test() {
   expect_status 2 "${root}" --host 'a-host' --log "${root}/no-such-folder/a.log" || case_failed=1
   no_such_file "${root}/calls" || { echo 'the self-test: a refused run still reached podman' >&2; case_failed=1; }
 
-  # Every run that was not the one that could not remove its container ended with nothing of it left: what this file
-  # says last is what these cases check.
-  for standin in passes no-release refused other-version runs-as-root mounted interrupted; do
+  # Every run that was not one that could not confirm its container gone, or whose host stopped answering, ended with
+  # nothing of it left: what this file says last is what these cases check.
+  for standin in passes no-release refused other-version runs-as-root mounted on-the-host-network \
+    given-the-hosts-environment interrupted interrupted-while-creating; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
