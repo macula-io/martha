@@ -84,6 +84,12 @@ interface Place {
    * which is the one that waits for the member to stop (martha#216).
    */
   aMemberStartsHere(): void
+  /**
+   * Told when the hook that removes the home is registered. A place marked without one would leave its home behind
+   * whenever the test body stopped early, so the place's own hook takes the home down itself and fails the test by name
+   * (martha#216 r=3).
+   */
+  aRemovalIsRegistered(): void
 }
 
 function git(cwd: string, ...args: string[]): string {
@@ -105,11 +111,19 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
   // waits for it to stop first: the home holds the running host's files, and removing it while the host was still
   // writing made a full run go red on teardown alone (martha#216).
   let aMemberStarts = false
+  let aRemovalIsRegistered = false
   t.after(async () => {
-    if (aMemberStarts) return
-    // Nothing may hold this place here: a test that started a member in a process of its own marks the place, so this
-    // hook leaves the removal to that test's own hook, which waits for it (martha#216).
+    if (aMemberStarts && aRemovalIsRegistered) return
+    // The removal is the test's own when a member starts here in a process of its own: its hook kills that process,
+    // waits for it, and only then removes the home (martha#216 r=2). A place marked with no such hook takes its home
+    // down here instead — whatever is still running is killed first — and fails the test by name, since the home would
+    // otherwise be left behind by a test body that stopped early (martha#216 r=3). A launcher carries no relay root, so
+    // it is found by the place's own name in its command line, which is where its script lives.
+    if (aMemberStarts) await killWhateverNamesTheHome(home)
     await theHomeGoes({ home, relay_root })
+    if (aMemberStarts) {
+      throw new Error(`the place's home went with no removal registered for the member that starts here in a process of its own: a test that marks a place removes it after the process it spawned is gone (martha#216 r=3)`)
+    }
   })
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
@@ -141,6 +155,9 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     aMemberStartsHere: () => {
       aMemberStarts = true
     },
+    aRemovalIsRegistered: () => {
+      aRemovalIsRegistered = true
+    },
   }
 }
 
@@ -163,6 +180,7 @@ async function aMemberStartedIn(t: TestContext, place: Place, launch: Parameters
   const started = await launchClaudeCodeMember(launch)
   // Said after the launch, so a launch that throws leaves the place's own hook to remove it.
   place.aMemberStartsHere()
+  place.aRemovalIsRegistered()
   let hasStopped = false
   if (started.started) void started.stopped.then(() => {
     hasStopped = true
@@ -2116,6 +2134,32 @@ async function noProcessCarries(relay_root: string, alsoGone: readonly number[])
 }
 
 /**
+ * Kills every process of this user whose command line names this place's home, and waits a moment for them to go: a
+ * launcher names its script there, and that script is the one file of the place a running process holds open. Used by the
+ * place's own hook when a marked place has no removal registered, so a test body that stops early leaves nothing behind
+ * (martha#216 r=3).
+ */
+async function killWhateverNamesTheHome(home: string): Promise<void> {
+  for (const entry of readdirSync('/proc')) {
+    const pid = Number(entry)
+    if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
+    let line = ''
+    try {
+      line = readFileSync(`/proc/${pid}/cmdline`, 'utf8')
+    } catch {
+      continue
+    }
+    if (!line.includes(home)) continue
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // The process is gone already.
+    }
+  }
+  await new Promise((resolve) => setTimeout(resolve, POLL_MS * 5))
+}
+
+/**
  * The place's home goes once nothing is left writing in it (martha#216): a test that starts its member in a process of
  * its own has to kill that process and wait for its member before the home the host was writing in can be removed.
  * `alsoGone` names pids that carry no relay root of their own, such as a launcher killed by its pid.
@@ -2141,6 +2185,7 @@ async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: 
  * awaited before the next.
  */
 const thePlaceGoesWithItsProcesses = (t: TestContext, place: Place): void => {
+  place.aRemovalIsRegistered()
   t.after(() => theHomeGoes(place))
 }
 
@@ -2484,6 +2529,8 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   let shown = ''
   runner.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString()))
   const ended = new Promise<void>((resolve) => runner.once('exit', () => resolve()))
+  // The removal this test registers ends the hook below, so the place's own hook leaves it to that one (martha#216 r=3).
+  place.aRemovalIsRegistered()
   // Before any assertion: a test that fails must not leave the member, its launcher or the terminal running.
   t.after(async () => {
     const launcherPid = Number(textIn(note('launcher')))
