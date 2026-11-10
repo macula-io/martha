@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn } from './hooks_and_plugins_the_owner_declares.ts'
+import { HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from './recorded_claude_code_host.ts'
 import { hookSettingsWatch, markdownFolders } from './settings_that_turn_hooks_off.ts'
 
@@ -100,7 +100,7 @@ const withFrontmatter = (frontmatter: string) => `---\nname: helper\n${frontmatt
 const ONLY_BY: Readonly<Record<string, string>> = {
   'the key hooks': 'hooks: {}',
   'a collection used as a key': '[other]: {}',
-  'a backslash, which can spell any key': '"hoo\\x6bs": {}',
+  'a backslash outside a double-quoted value': '"hoo\\x6bs": {}',
   'an explicit key (?)': '? name2\n: x',
   'a merge key (<<)': '<<: {}',
   'an alias used as a key': 'a: &k other\n*k : {}',
@@ -189,6 +189,71 @@ test('the two spellings the host does not read as the key hooks are passed, and 
 
 const HOOKED = withFrontmatter('hooks:\n  PreToolUse: []')
 
+// --- a backslash is judged where YAML gives it meaning (martha#243) ----------
+//
+// Rule 2 of #146 refused a backslash anywhere, because a backslash can spell the
+// key `hooks`. A description that quotes a phrase then stopped every member: the
+// two skills a signed-in host syncs from the owner's account hold `\"` and
+// `\u{2014}` inside a double-quoted description, and declare no hook. A backslash
+// is an escape only inside a double-quoted scalar, and that scalar can only be
+// the key when it opens where a key opens.
+
+/** The two frontmatters a signed-in host actually served, as the clean-install run met them (martha#69, martha#243). */
+const SERVED = [
+  'description: "Read this before the first Google Drive call. Use it whenever the user wants to change a Google Doc, even \\"change it\\" or \\"add a tab\\"."',
+  'description: "Use this any time a spreadsheet file is the primary input or output, by name or path \\u{2014} even casually (like \\"the xlsx in my downloads\\")."',
+]
+
+test('a backslash in a double-quoted value is no hook declaration: the two shapes a signed-in host serves pass, and so do the other value shapes', () => {
+  for (const frontmatter of [
+    ...SERVED,
+    'description: "line\\nline"',
+    'description: "first\nsecond \\u{2014}"',
+    'description: "first\\\nsecond \\u{2014}"',
+    'description: "a \\\\ backslash"',
+    'description: "say \\"x: y\\" \\u{2014}"',
+  ]) {
+    assert.equal(hooksInFrontmatterOf(md(withFrontmatter(frontmatter)), PATTERN), undefined, `refused: ${frontmatter}`)
+  }
+})
+
+test('a backslash that can spell the key is refused in every position a key opens, an anchor or a tag before it included', () => {
+  for (const frontmatter of [
+    '"hoo\\x6bs": {}',
+    '"\\x68\\x6f\\x6f\\x6b\\x73": {}',
+    '"hoo\\u{6b}s": {}',
+    '"hoo\\\nks": {}',
+    '"hoo\\x6bs"\n: {}',
+    '&x: "hoo\\x6bs": {PreToolUse: []}',
+    '!x: "hoo\\x6bs": {PreToolUse: []}',
+    'a: {&x: "hoo\\x6bs": 1}',
+    'a: {"hoo\\x6bs": 1}',
+    '{a: 1, "hoo\\x6bs": 2}',
+    '- "hoo\\x6bs": {}',
+    'hoo\\x6bs: {}',
+    "'a\\b': {}",
+  ]) {
+    const refusal = hooksInFrontmatterOf(md(withFrontmatter(frontmatter)), PATTERN) ?? ''
+    assert.ok(refusal.includes(AGENT_FILE), `not refused: ${frontmatter}`)
+    assert.ok(refusal.includes('a backslash outside a double-quoted value'), `refused without naming the rule: ${frontmatter}`)
+  }
+})
+
+test('a double-quoted value that never closes is refused as cannot-be-told (martha#243)', () => {
+  const refusal = hooksInFrontmatterOf(md(withFrontmatter('description: "text with \\u{2014}')), PATTERN)
+  assert.ok(refusal?.includes(AGENT_FILE) && refusal.includes('never closes'), refusal ?? 'no refusal')
+})
+
+test('a synced skill is refused with the remedy its owner can carry out, and any other file with the one it can edit (martha#243)', () => {
+  const synced = hooksInFrontmatterOf({ path: '/owner/.claude/skills/synced/acct-1/xlsx/SKILL.md', text: HOOKED, managed: false, synced: true }, PATTERN) ?? ''
+  assert.ok(synced.includes('claude.ai'), synced === '' ? 'not refused' : synced)
+  assert.ok(synced.includes('syncClaudeAiSkills'), synced)
+  assert.ok(!synced.includes('move the hooks out of that file'), synced)
+  const own = hooksInFrontmatterOf(md(HOOKED), PATTERN) ?? ''
+  assert.ok(own.includes('move the hooks out of that file'), own === '' ? 'not refused' : own)
+  assert.ok(!own.includes('syncClaudeAiSkills'), own)
+})
+
 test('the watch refuses a hooked agent, skill or command in each user and managed folder the host loads, a synced skill included, and lets it go once removed', (t) => {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
@@ -234,4 +299,73 @@ test('the watch follows a link to a folder, reads only .md files, and refuses a 
     chmodSync(elsewhere, 0o700)
   }
   assert.ok(refusal?.includes(join(agents, 'linked')) && refusal.includes('cannot be read'), refusal ?? 'no refusal')
+})
+
+// --- what the host loads from the trash and from the account (martha#243) ---
+
+/** The watch over a scratch config folder, with the owner's user settings written as given. */
+function watchOver(t: TestContext, settings: unknown) {
+  const root = scratch(t)
+  const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
+  const user = join(root, 'config', 'settings.json')
+  mkdirSync(dirname(user), { recursive: true })
+  writeFileSync(user, JSON.stringify(settings))
+  const approved = join(root, 'approved.json')
+  writeFileSync(approved, '{}')
+  const watch = hookSettingsWatch({ user, home: root, approved, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
+  return { root, managed, user, approved, watch, skills: join(dirname(user), SKILLS_KIND) }
+}
+
+test('the trash is read where the host reads it: a SKILL.md directly in it is judged, and nothing below an entry of it is', (t) => {
+  const { watch, skills } = watchOver(t, {})
+  const top = join(skills, TRASH_FOLDER, 'SKILL.md')
+  mkdirSync(dirname(top), { recursive: true })
+  writeFileSync(top, HOOKED)
+  assert.ok(watch.check()?.includes(top), watch.check() ?? 'the host loads this one, so it is judged')
+  rmSync(top)
+  const below = join(skills, TRASH_FOLDER, 'entry', 'SKILL.md')
+  mkdirSync(dirname(below), { recursive: true })
+  writeFileSync(below, HOOKED)
+  assert.equal(watch.check(), undefined, 'the host loads nothing below an entry, so neither does the gate')
+})
+
+test('a synced skill is judged until the owner or the admin turns account sync off with a real false, which the host reads from any source', (t) => {
+  const { watch, skills, user, managed, approved } = watchOver(t, {})
+  const synced = join(skills, SYNCED_SKILLS_FOLDER, 'acct-1', 'xlsx', 'SKILL.md')
+  mkdirSync(dirname(synced), { recursive: true })
+  writeFileSync(synced, HOOKED)
+  assert.ok(watch.check()?.includes(synced), 'no setting: the host may load it, so it is judged')
+
+  for (const [what, settings] of [
+    ['true', { syncClaudeAiSkills: true }],
+    ['the string false', { syncClaudeAiSkills: 'false' }],
+    ['zero', { syncClaudeAiSkills: 0 }],
+    ['null', { syncClaudeAiSkills: null }],
+  ] as const) {
+    writeFileSync(user, JSON.stringify(settings))
+    assert.ok(watch.check()?.includes(synced), `${what} is not the false the host reads, so the skill is still judged`)
+  }
+
+  writeFileSync(user, JSON.stringify({ syncClaudeAiSkills: false }))
+  assert.equal(watch.check(), undefined, 'the owner turned sync off: the host hides the folder, and so does the gate')
+
+  writeFileSync(user, '{}')
+  assert.ok(watch.check()?.includes(synced))
+  mkdirSync(join(managed.dir, managed.drop_in), { recursive: true })
+  writeFileSync(join(managed.dir, managed.drop_in, '50-org.json'), JSON.stringify({ syncClaudeAiSkills: false }))
+  assert.equal(watch.check(), undefined, 'the admin turned it off in a drop-in: any source holding false turns it off for the host')
+
+  rmSync(join(managed.dir, managed.drop_in, '50-org.json'))
+  writeFileSync(user, '{}')
+  writeFileSync(approved, JSON.stringify({ syncClaudeAiSkills: false }))
+  assert.ok(watch.check()?.includes(synced), "the approved copy is Martha's own: the setting there must not take the owner's account skills away without the owner")
+})
+
+test('the trash depth is the skills folder’s alone: a file below an entry of a trash under agents or commands is still read, because the host loads those at any depth', (t) => {
+  const { watch, skills } = watchOver(t, {})
+  const agents = join(dirname(skills), 'agents')
+  const below = join(agents, TRASH_FOLDER, 'entry', 'helper.md')
+  mkdirSync(dirname(below), { recursive: true })
+  writeFileSync(below, HOOKED)
+  assert.ok(watch.check()?.includes(below), watch.check() ?? 'not read')
 })

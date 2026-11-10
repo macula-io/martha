@@ -46,6 +46,7 @@ import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
 import { memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
+import { skillsListedIn } from './the_skills_the_host_listed.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { absencesWithoutAHostProof, judgeRow, type RowClaims } from './an_absence_row_proves_the_host_ran.ts'
 
@@ -108,7 +109,9 @@ interface Probe {
    * Run the launcher's own settings gate (hookSettingsOf) before the host, as
    * martha start does. When it refuses, naming every one of these words, the
    * host is not started and GATE_REFUSED is marked; a refusal naming anything
-   * else fails the probe.
+   * else fails the probe. When it does not refuse, GATE_PASSED is marked, which
+   * is how a row claims that a file is let through by the gate itself rather than
+   * by a host that never got that far (martha#243).
    */
   readonly gate_names?: (place: Place) => readonly string[]
   /**
@@ -515,40 +518,51 @@ const SWITCH_PROBES: readonly Probe[] = HOOK_KILLING_KEYS.map((key): Probe => ({
 // YAML writes the one key the host looks for, and a spelling that stopped being
 // caught would be a row that stopped refusing.
 
-/** A frontmatter that spells the key `hooks` by one rule alone, keyed by the words its refusal names it by. */
-const SPELLED_AS: Readonly<Record<string, string>> = {
-  'the key hooks': '!<tag:yaml.org,2002:str>"hooks": {PreToolUse: []}',
-  'a collection used as a key': '[hooks]: {PreToolUse: []}',
-  'a backslash, which can spell any key': '"hoo\\x6bs": {}',
-  'an explicit key (?)': '? name2\n: x',
-  'a merge key (<<)': '<<: {}',
-  'an alias used as a key': 'a: &k other\n*k : {}',
+/**
+ * The frontmatters that spell the key `hooks` by one rule alone, keyed by the
+ * words its refusal names it by. A rule may have more than one: a rule that
+ * takes a class has more than one member, and each member is its own row
+ * (martha#243).
+ */
+const SPELLED_AS: Readonly<Record<string, readonly string[]>> = {
+  'the key hooks': ['!<tag:yaml.org,2002:str>"hooks": {PreToolUse: []}'],
+  'a collection used as a key': ['[hooks]: {PreToolUse: []}'],
+  'a backslash outside a double-quoted value': [
+    '"hoo\\x6bs": {}',
+    '&x: "hoo\\x6bs": {PreToolUse: []}',
+    '!x: "hoo\\x6bs": {PreToolUse: []}',
+  ],
+  'an explicit key (?)': ['? name2\n: x'],
+  'a merge key (<<)': ['<<: {}'],
+  'an alias used as a key': ['a: &k other\n*k : {}'],
 }
 
 /** A spelling rule with no frontmatter here: the run fails rather than quietly probing fewer rows. */
-const SPELLINGS_WITHOUT_A_PROBE = HOOKS_SPELLINGS.map(({ rule }) => rule).filter((rule) => SPELLED_AS[rule] === undefined)
+const SPELLINGS_WITHOUT_A_PROBE = HOOKS_SPELLINGS.map(({ rule }) => rule).filter((rule) => (SPELLED_AS[rule] ?? []).length === 0)
 
-const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.map(({ rule }, at) => {
-  const name = `spelling-${at}.md`
-  return {
-    what: `Claude Code as martha start starts it: a user-scope agent whose frontmatter spells the hooks key as ${rule}`,
-    host: 'claude-code' as const,
-    command: claude(...HEADLESS_CLAUDE, PROMPT),
-    approved: () => {},
-    planted: () => {},
-    planned: true,
-    owner_settings: () => JSON.stringify({}),
-    owner_markdown: (): readonly OwnerMarkdownFile[] => [
-      {
-        folder: 'agents',
-        name,
-        text: `---\nname: spelling-${at}\ndescription: a probe agent\n${SPELLED_AS[rule] ?? ''}\n---\n${PROMPT}\n`,
-      },
-    ],
-    expected: { GATE_REFUSED: true },
-    gate_names: (place: Place) => [join(dirname(ownerSettingsPath(place)), 'agents', name), rule],
-  }
-})
+const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.flatMap(({ rule }, ruleAt) =>
+  (SPELLED_AS[rule] ?? []).map((spelling, at) => {
+    const name = `spelling-${ruleAt}-${at}.md`
+    return {
+      what: `Claude Code as martha start starts it: a user-scope agent whose frontmatter spells the hooks key as ${rule}, spelling ${at + 1}`,
+      host: 'claude-code' as const,
+      command: claude(...HEADLESS_CLAUDE, PROMPT),
+      approved: () => {},
+      planted: () => {},
+      planned: true,
+      owner_settings: () => JSON.stringify({}),
+      owner_markdown: (): readonly OwnerMarkdownFile[] => [
+        {
+          folder: 'agents',
+          name,
+          text: `---\nname: spelling-${ruleAt}-${at}\ndescription: a probe agent\n${spelling}\n---\n${PROMPT}\n`,
+        },
+      ],
+      expected: { GATE_REFUSED: true },
+      gate_names: (place: Place) => [join(dirname(ownerSettingsPath(place)), 'agents', name), rule],
+    }
+  }),
+)
 
 // --- the two spellings the launcher passes, asked of the host (martha#174) ---
 //
@@ -615,6 +629,21 @@ const HOST_KEY_CASES: ReadonlyArray<{
     keyLine: (value) => `[hooks] # c\n: ${value}`,
     expected: { AGENT_HOOK: false, AGENT_NOT_FOUND: true },
   },
+  // The two spellings that made the narrowed scan enter a value where a key opens: an anchor and a local tag ending in
+  // a colon. Each runs, so the gate's refusal of them is warranted, and a host that stopped reading one fails its row
+  // (martha#243).
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key behind an anchor ending in a colon',
+    name: 'hooks-key-anchored',
+    keyLine: (value) => `&x: "hoo\\x6bs": ${value}`,
+    expected: { AGENT_HOOK: true, AGENT_NOT_FOUND: false },
+  },
+  {
+    what: 'Claude Code on the switches alone, its settings gate skipped: a user-scope agent whose frontmatter writes the key behind a local tag ending in a colon',
+    name: 'hooks-key-tagged',
+    keyLine: (value) => `!x: "hoo\\x6bs": ${value}`,
+    expected: { AGENT_HOOK: true, AGENT_NOT_FOUND: false },
+  },
 ]
 
 const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
@@ -628,6 +657,104 @@ const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
   owner_markdown: (place: Place): readonly OwnerMarkdownFile[] => [hostKeyAgent(place, one.name, one.keyLine)],
   expected: one.expected,
 }))
+
+// --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
+//
+// Two places under the owner's skills folder are read as the host reads them. The
+// trash: the host loads a SKILL.md directly in `skills/.trash` — as the skill
+// `.trash` — and loads nothing below an entry in it, so the gate must read the
+// same depth (measured on 2.1.322, and on this host's init event: `.trash` is
+// listed, `inner/` is not). And the synced folder: a skill the host writes again
+// from the owner's account at every start, which the gate judges like any other
+// until the owner or the admin turns that sync off with `syncClaudeAiSkills:
+// false`, a setting the host reads as `=== false` from any source.
+
+const TRASH_TOP = 'trash-top'
+const TRASH_BELOW = 'trash-below'
+
+const TRASH_PROBE: Probe = {
+  what: 'Claude Code as martha start starts it: the skill files under the owner skills folder, the one the host loads at the top of the trash and the one below an entry it does not',
+  host: 'claude-code',
+  command: (switches) => ({
+    command: 'claude',
+    args: ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose', PROMPT, ...switches.args],
+  }),
+  approved: () => {},
+  planted: () => {},
+  planned: true,
+  owner_settings: () => JSON.stringify({}),
+  owner_markdown: (): readonly OwnerMarkdownFile[] => [
+    { folder: 'skills/.trash', name: 'SKILL.md', text: `---\nname: ${TRASH_TOP}\ndescription: a probe skill\n---\n${PROMPT}\n` },
+    { folder: 'skills/.trash/entry', name: 'SKILL.md', text: `---\nname: ${TRASH_BELOW}\ndescription: a probe skill\n---\n${PROMPT}\n` },
+  ],
+  from_output: (_place: Place, printed: string) => {
+    const listed = skillsListedIn(printed)
+    return { TRASH_TOP_LISTED: listed.includes('.trash'), TRASH_BELOW_LISTED: listed.includes('entry') }
+  },
+  expected: { TRASH_TOP_LISTED: true, TRASH_BELOW_LISTED: false },
+}
+
+/** Two skills a signed-in host serves, as the clean-install run met them: one backslash each, inside a quoted description, and no hook. */
+const SERVED_SKILLS: readonly OwnerMarkdownFile[] = [
+  {
+    folder: 'skills/synced/acct-1/google-workspace',
+    name: 'SKILL.md',
+    text: '---\nname: google-workspace\ndescription: "Read this before the first Google Drive call. Use it to change a Google Doc, even \\"change it\\" or \\"add a tab\\"."\n---\nBody.\n',
+  },
+  {
+    folder: 'skills/synced/acct-1/xlsx',
+    name: 'SKILL.md',
+    text: '---\nname: xlsx\ndescription: "Use this any time a spreadsheet is the input, by name or path \\u{2014} even casually."\n---\nBody.\n',
+  },
+]
+
+/** The same skills, with one of them really declaring a hook. */
+const HOOKED_SYNCED: readonly OwnerMarkdownFile[] = SERVED_SKILLS.map((file, at) =>
+  at === 1 ? { ...file, text: `---\nname: xlsx\ndescription: a skill\nhooks:\n  PreToolUse: []\n---\nBody.\n` } : file,
+)
+
+/** The synced folder's own paths, as the gate names them in a refusal. */
+const syncedPathsOf = (place: Place, files: readonly OwnerMarkdownFile[]): readonly string[] =>
+  files.map((file) => join(dirname(ownerSettingsPath(place)), file.folder, file.name))
+
+const SYNCED_PROBES: readonly Probe[] = [
+  {
+    what: 'Claude Code as martha start starts it: two skills the host syncs from the owner account, each holding a backslash in a quoted description and no hook (martha#243)',
+    host: 'claude-code' as const,
+    command: claude(...HEADLESS_CLAUDE, PROMPT),
+    approved: () => {},
+    planted: () => {},
+    planned: true,
+    owner_settings: () => JSON.stringify({}),
+    owner_markdown: (): readonly OwnerMarkdownFile[] => SERVED_SKILLS,
+    expected: { GATE_PASSED: true },
+    gate_names: (place: Place) => syncedPathsOf(place, SERVED_SKILLS),
+  },
+  {
+    what: 'Claude Code as martha start starts it: a synced skill whose frontmatter really declares a hook is refused, naming the file and the rule (martha#243)',
+    host: 'claude-code' as const,
+    command: claude(...HEADLESS_CLAUDE, PROMPT),
+    approved: () => {},
+    planted: () => {},
+    planned: true,
+    owner_settings: () => JSON.stringify({}),
+    owner_markdown: (): readonly OwnerMarkdownFile[] => HOOKED_SYNCED,
+    expected: { GATE_REFUSED: true },
+    gate_names: (place: Place) => [syncedPathsOf(place, HOOKED_SYNCED)[1] ?? '', 'the key hooks'],
+  },
+  {
+    what: "Claude Code as martha start starts it: the same synced skill with `syncClaudeAiSkills: false` in the owner's settings, which the host reads as off, so the gate lets the start through (martha#243)",
+    host: 'claude-code' as const,
+    command: claude(...HEADLESS_CLAUDE, PROMPT),
+    approved: () => {},
+    planted: () => {},
+    planned: true,
+    owner_settings: () => JSON.stringify({ syncClaudeAiSkills: false }),
+    owner_markdown: (): readonly OwnerMarkdownFile[] => HOOKED_SYNCED,
+    expected: { GATE_PASSED: true },
+    gate_names: (place: Place) => syncedPathsOf(place, HOOKED_SYNCED),
+  },
+]
 
 /** The environment a probe's host inherits: the owner's own config folder when it has one, and no plugin folder from the developer's shell. */
 function environmentOf(probe: Probe, place: Place): Record<string, string | undefined> {
@@ -791,6 +918,11 @@ function oneRunOfAProbe(probe: Probe): RunResult | string {
       markers: {
         ...Object.fromEntries(Object.keys(probe.expected).map((name) => [name, existsSync(markerPath(probe, place, name))])),
         ...(probe.from_output?.(place, printed) ?? {}),
+        // The gate was asked and did not refuse, which only a row that names the gate can claim. It is written at the
+        // gate step, before any host runs, so a row whose claim is that a file gets through does not rest on the host
+        // (martha#243) — and it comes last, because GATE_PASSED is one of the row's markers and a file of that name is
+        // never written: read first, it would always be overwritten as not started (martha#243 r=1).
+        ...(probe.gate_names === undefined ? {} : { GATE_PASSED: true }),
       },
       status: run.status,
     }
@@ -914,6 +1046,8 @@ export const ALL_PROBES: readonly Probe[] = [
   ...SWITCH_PROBES,
   ...MARKDOWN_HOOK_PROBES,
   ...HOST_KEY_PROBES,
+  TRASH_PROBE,
+  ...SYNCED_PROBES,
   ...OWNER_SCOPE_PROBES,
 ]
 
@@ -1088,6 +1222,24 @@ function reportMemoryProbe(worktree: boolean): void {
 }
 
 /** Everything the run does once its rows exist. A test imports the rows, so none of this may run on import. */
+/**
+ * The rows a run reports: all of them, or those whose words hold the text in
+ * MARTHA_PROBE_ROWS (martha#243). It is how a change runs its own rows without
+ * the ones that touch the developer's own home; the run says how many it left
+ * out, so a filtered run cannot pass for a whole one.
+ */
+const SELECTED_ROWS = process.env.MARTHA_PROBE_ROWS
+const selected = (rows: readonly Probe[]): readonly Probe[] =>
+  SELECTED_ROWS === undefined || SELECTED_ROWS === '' ? rows : rows.filter((row) => row.what.includes(SELECTED_ROWS))
+
+/** Reports the rows this run was asked for, says how many it left out, and leaves the memory rows out of a filtered run. */
+function reportSelected(rows: readonly Probe[]): void {
+  const whole = rows.length === ALL_PROBES.length
+  if (!whole) console.log(`this run reports ${rows.length} of ${ALL_PROBES.length} rows, those whose words hold ${JSON.stringify(SELECTED_ROWS)}`)
+  for (const probe of rows) reportProbe(probe)
+  for (const worktree of whole ? [false, true] : []) reportMemoryProbe(worktree)
+}
+
 function main(): void {
   for (const command of new Set(PROBES.map((probe) => probe.command(NO_SWITCHES, NO_PLACE).command))) {
     console.log(`${command}: ${version(command)}`)
@@ -1106,8 +1258,7 @@ function main(): void {
     process.exitCode = 1
   }
   const startedWith = theProjectFoldersThere(process.env)
-  for (const probe of ALL_PROBES) reportProbe(probe)
-  for (const worktree of [false, true]) reportMemoryProbe(worktree)
+  reportSelected(selected(ALL_PROBES))
 
   const leftBehind = whatThisRunLeftAtTheEnd(startedWith)
   if (leftBehind.length > 0) process.exitCode = 1

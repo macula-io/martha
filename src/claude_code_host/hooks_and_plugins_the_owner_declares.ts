@@ -121,13 +121,21 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 //     {...}` is live on 2.1.319 and declares hooks like `hooks:` does), and
 //     this rule takes that whole class — `[hooks,]:`, `[[hooks]]:` and
 //     `{hooks: x}:` with it;
-//   - a backslash anywhere, since a double-quoted escape (`"hoo\x6bs"`) or a
-//     line continuation can build the key with no `hooks` in the text;
+//   - a backslash where YAML gives it a meaning, which is inside a double-quoted
+//     scalar: a double-quoted escape (`"hoo\x6bs"`) or a line continuation can
+//     build the key with no `hooks` in the text. A scalar can only be the key
+//     when it opens where a key opens, so the scan is inside one only where a
+//     value opens — a plain block key, its colon, and blanks (martha#243). A
+//     backslash anywhere else refuses, as does a quoted value that never closes;
 //   - an explicit key (`?` as a line's first character after blanks);
 //   - a merge key (`<<`);
 //   - an alias used as a key (`*name:`), which can copy `hooks` from an anchor
 //     on a value elsewhere.
-// A false positive costs a refusal that names the file and the rule.
+// A false positive costs a refusal that names the file and the rule. The refusal
+// names the remedy the file allows: a file the owner keeps is theirs to move,
+// while a file the host syncs from their account is re-created at every start,
+// so its remedy is on claude.ai or the host's own `syncClaudeAiSkills` setting
+// (martha#243).
 //
 // The frontmatter is found where the host finds it: one leading byte-order mark
 // stripped, then the host's own pattern from the recording, its group 1. A file
@@ -135,14 +143,26 @@ export function pluginDirsIn(environment: Readonly<Record<string, string | undef
 // cannot-be-told.
 
 /** The spellings by which a frontmatter can declare hooks, each with the words a refusal names it by. */
-export const HOOKS_SPELLINGS: ReadonlyArray<{ readonly rule: string; readonly found: RegExp }> = [
-  { rule: 'the key hooks', found: /hooks["']?\s*:/ },
-  { rule: 'a collection used as a key', found: /[\]}]\s*:/ },
-  { rule: 'a backslash, which can spell any key', found: /\\/ },
-  { rule: 'an explicit key (?)', found: /^\s*\?/m },
-  { rule: 'a merge key (<<)', found: /<</ },
-  { rule: 'an alias used as a key', found: /(^|[\s{,[])\*[^\s,:{}[\]]+\s*:/ },
+export const HOOKS_SPELLINGS: ReadonlyArray<{ readonly rule: string; readonly found: (frontmatter: string) => boolean }> = [
+  { rule: 'the key hooks', found: (frontmatter) => /hooks["']?\s*:/.test(frontmatter) },
+  { rule: 'a collection used as a key', found: (frontmatter) => /[\]}]\s*:/.test(frontmatter) },
+  { rule: 'a backslash outside a double-quoted value', found: (frontmatter) => backslashesOutsideValues(frontmatter).outside },
+  { rule: 'an explicit key (?)', found: (frontmatter) => /^\s*\?/m.test(frontmatter) },
+  { rule: 'a merge key (<<)', found: (frontmatter) => /<</.test(frontmatter) },
+  { rule: 'an alias used as a key', found: (frontmatter) => /(^|[\s{,[])\*[^\s,:{}[\]]+\s*:/.test(frontmatter) },
 ]
+
+/** The folder under the owner's skills folder that Claude Code fills from their Claude account (martha#243). */
+export const SYNCED_SKILLS_FOLDER = 'synced'
+
+/** The kind of the owner's markdown the host syncs into: the recording names it, and a test fails if it stops. */
+export const SKILLS_KIND = 'skills'
+
+/** The folder the host moves skills it no longer runs into. It loads a SKILL.md directly in it, and nothing below an entry (martha#243). */
+export const TRASH_FOLDER = '.trash'
+
+/** The setting with which the owner or the admin turns account skill sync off, which the host reads as `=== false`. */
+export const SYNC_OFF_SETTING = 'syncClaudeAiSkills'
 
 /** What the launcher reads the owner's and the managed markdown by: the host's frontmatter pattern and the folders it loads, from the recording. */
 export interface OwnersMarkdown {
@@ -155,8 +175,70 @@ export const MANAGED_MARKDOWN_FOLDER = '.claude'
 
 const BYTE_ORDER_MARK = 0xfeff
 
+/** What a scan of the frontmatter found: a backslash outside a value, and a quoted value that never closes. */
+interface Backslashes {
+  readonly outside: boolean
+  readonly unclosed: boolean
+}
+
+/**
+ * Where a double-quoted scalar opens as a value: a plain block key, its colon,
+ * and at least one blank, and nothing else before the quote. An anchor (`&x:`),
+ * a local tag (`!x:`), a bracket or a comma can end in a colon too, and each
+ * leaves a key behind it (measured on 2.1.322, martha#243).
+ */
+const VALUE_OPENING = /^[ \t]*[A-Za-z0-9_-]+:[ \t]+$/
+
+/** One step inside a double-quoted scalar: whether it goes on, and where the next step starts (an escape takes two characters). */
+function stepInsideScalar(frontmatter: string, at: number): { readonly inside: boolean; readonly next: number } {
+  return frontmatter[at] === '\\' ? { inside: true, next: at + 2 } : { inside: frontmatter[at] !== '"', next: at + 1 }
+}
+
+/**
+ * Whether the frontmatter holds a backslash where YAML gives it a meaning, and
+ * whether a double-quoted scalar it opened never closes.
+ *
+ * A backslash is an escape only inside a double-quoted scalar, and that scalar
+ * can only build the key `hooks` when it is the key. So the scan is inside a
+ * scalar only where a value opens; every other backslash is one YAML reads as an
+ * escape in a place a key can be. A scalar that never closes is refused by the
+ * caller: it cannot be told (martha#243).
+ */
+function backslashesOutsideValues(frontmatter: string): Backslashes {
+  let inside = false
+  let lineStart = 0
+  let at = 0
+  while (at < frontmatter.length) {
+    if (inside) {
+      const step = stepInsideScalar(frontmatter, at)
+      inside = step.inside
+      at = step.next
+      continue
+    }
+    const character = frontmatter[at]
+    if (character === '\n') lineStart = at + 1
+    else if (character === '\\') return { outside: true, unclosed: false }
+    else if (character === '"') inside = VALUE_OPENING.test(frontmatter.slice(lineStart, at))
+    at += 1
+  }
+  return { outside: false, unclosed: inside }
+}
+
+/** What the hooks of a file the owner keeps would cost: it is theirs to move (martha#146). */
 const FRONTMATTER_WHY =
   "a member's host would run them while that agent, skill or command runs, and what they print would reach the member with nothing recorded (martha#146); move the hooks out of that file before starting a member"
+
+/**
+ * What the hooks of a file Claude Code syncs from the owner's account would cost,
+ * and what the owner can do about it (martha#243). Editing the file does not
+ * hold: the host writes it again at every start. So the refusal names the two
+ * steps that do hold, each of which the owner carries out without Martha.
+ */
+const SYNCED_FRONTMATTER_WHY =
+  "a member's host would run them while that skill runs, and what they print would reach the member with nothing recorded (martha#146). " +
+  'Claude Code writes this file again from your account at every start, so editing or moving it does not hold: ' +
+  'turn that skill off on claude.ai, whose removal reaches this machine at the next sync, which the host does while one of your own sessions runs, so start Claude Code once yourself first; ' +
+  `or stop syncing your account's skills by putting "${SYNC_OFF_SETTING}": false in your user settings file, which the host honours for every session and this gate reads too`
 
 /** The opening of a frontmatter pattern: everything before its first group. */
 const openingOf = (pattern: string): RegExp => new RegExp(pattern.slice(0, pattern.indexOf('(')))
@@ -177,7 +259,12 @@ export function hooksInFrontmatterOf(file: HookSettingsFile, pattern: string): s
   if (found === 'unclosed') {
     return `${file.path} opens a frontmatter that never closes, so whether it declares hooks cannot be told; close it or remove the file`
   }
-  const rules = HOOKS_SPELLINGS.filter(({ found: spelled }) => spelled.test(found.frontmatter)).map(({ rule }) => rule)
+  const scanned = backslashesOutsideValues(found.frontmatter)
+  if (scanned.unclosed) {
+    return `${file.path} opens a double-quoted value that never closes, so whether it declares hooks cannot be told; close it or remove the file`
+  }
+  const rules = HOOKS_SPELLINGS.filter(({ found: spelled }) => spelled(found.frontmatter)).map(({ rule }) => rule)
   if (rules.length === 0) return undefined
-  return `${file.path} has frontmatter holding ${rules.join(' and ')}, so it can declare hooks: ${FRONTMATTER_WHY}`
+  const why = file.synced === true ? SYNCED_FRONTMATTER_WHY : FRONTMATTER_WHY
+  return `${file.path} has frontmatter holding ${rules.join(' and ')}, so it can declare hooks: ${why}`
 }

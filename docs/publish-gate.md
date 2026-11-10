@@ -283,10 +283,35 @@ What the plan leaves out, stated rather than hidden:
   any file in those folders declares hooks in one of the spellings the launcher
   reads: the key `hooks` with a colon after it (bare, quoted, tagged, escaped,
   flow style), a collection used as the key (`[hooks]:`, which the host reads as
-  the key itself, `[hooks,]:`, `[[hooks]]:`, `{hooks: x}:`), an explicit key, a
-  merge key, or an alias used as a key. The refusal names the file and the
-  spelling (martha#146). `npm run probe:launch` carries one row per spelling,
-  each refused by the launcher's own gate with nothing started.
+  the key itself, `[hooks,]:`, `[[hooks]]:`, `{hooks: x}:`), a backslash that
+  YAML gives a meaning to, an explicit key, a merge key, or an alias used as a
+  key. The refusal names the file and the spelling (martha#146). `npm run
+  probe:launch` carries one row per spelling, each refused by the launcher's own
+  gate with nothing started.
+  A backslash is judged where YAML gives it meaning (martha#243): it is an escape
+  only inside a double-quoted scalar, and that scalar can build the key only when
+  it opens where a key opens, so the launcher is inside such a scalar only where
+  a value opens — a plain block key, its colon, and blanks. A description that
+  quotes a phrase therefore passes, while `&x: "hoo\x6bs":`, a tag or an anchor
+  before the key, and every key position still refuse. A quoted value that never
+  closes refuses as cannot-be-told.
+  Two places are read as the host reads them. The trash under the owner's skills
+  folder: the host loads a `SKILL.md` directly in `skills/.trash` as the skill
+  `.trash` and loads nothing below an entry of it, so the launcher reads the same
+  depth, and `npm run probe:launch` asks the host what it listed. And the folder
+  the host syncs from the owner's Claude account, `skills/synced/`: its skills are
+  judged like any other file, and the refusal names the remedy that holds, since
+  the host writes the file again at every start — turn that skill off on
+  claude.ai, or put `"syncClaudeAiSkills": false` in the owner's settings. The
+  launcher reads that setting from the user settings file, the managed file and
+  its drop-ins, and turns the folder off when any of them holds a real `false`,
+  which is how the host turns it off. The two per-workspace sources the host also
+  honours, `.claude/settings.local.json` and `--settings`, are not read here: that
+  can only make the launcher refuse more, never less (martha#243). While it is off
+  the launcher does not read `skills/synced/` at all: the host hides that folder
+  for every session started afterwards, the member's included. `npm run probe:launch` starts the
+  member for the two shapes a signed-in host served, refuses one that really
+  declares a hook, and starts it again once the setting is off.
   Two spellings that look like that key are not refused, because the host does
   not read either of them as `hooks`: a binary tag that decodes to it, and a
   collection key whose colon the next line opens. `npm run probe:launch` starts
