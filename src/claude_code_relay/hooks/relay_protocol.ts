@@ -32,6 +32,10 @@ export const RELAY_PATHS = {
   prompt_submitted: '/prompt-submitted',
   tool_called: '/tool-called',
   tool_answered: '/tool-answered',
+  // An agent the host started or stopped under this session (martha#170). The stop is the only place a background
+  // agent's answer reaches us: the host delivers it into the member's turn with no tool result to place it on.
+  subagent_started: '/subagent-started',
+  subagent_stopped: '/subagent-stopped',
 } as const
 
 export type RelayEvent = keyof typeof RELAY_PATHS
@@ -95,6 +99,17 @@ const isReason = (value: unknown): value is string => typeof value === 'string' 
  * (LARGEST_RELAY_BODY, in ../../launch_a_claude_code_member/serve_the_relay.ts, is 32 MiB for the whole body).
  */
 export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
+
+/**
+ * A `subagent_started`/`subagent_stopped` body (martha#170): the agent the host names, under the member's own
+ * session. The host carries `agent_id` and `agent_type` on both, and the agent's own last words on the stop; nothing
+ * the relay adds, and nothing the host's text could rename.
+ */
+export function subagentBody(session_id: string, input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  const body: Record<string, unknown> = { session_id, agent_id: input['agent_id'], agent_type: input['agent_type'] }
+  if (input['last_assistant_message'] !== undefined) body['last_assistant_message'] = input['last_assistant_message']
+  return body
+}
 
 /**
  * A `tool_answered` body: the call, and the answer the host showed for it when that answer can cross the socket. An

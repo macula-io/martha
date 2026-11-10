@@ -184,13 +184,20 @@ That is a message to the reviewer, not a Martha command: the reviewer reads the
 range in your checkout and answers with a verdict and its findings. Name the
 base your project actually uses if it is not `main`.
 
-If Claude Code hands the review to its own background agent, Martha refuses that
-member's shell commands for the rest of the session once the agent's text
-arrives ([issue #170](https://github.com/macula-io/martha/issues/170)). The
-member can still read files, but the verdict that comes back never ran `git` and
-never saw the diff: do not rely on it. End the reviewer, start it again, and type
-the hand-off again; Martha's refusal says only a fresh start that reads no
-handover clears it.
+Claude Code may hand the review to its own agent. Martha follows that agent:
+its start, its stop and every call it makes are recorded, so the answer it
+hands back is placed by that record. While an agent is between its start and
+its stop, the reviewer's shell commands are refused — the agent's text has no
+call to be placed on yet — though it can still read files, and once the agent
+stops and Martha saw every call it made answered, the shell comes back.
+
+What that costs: a review that reads outside the approved tree still closes the
+reviewer's shell on that read, as any other text from a stranger does. A review
+of the range itself — `git`, the files in the checkout — is what this covers.
+If a `gh` call or a web page closes the shell, the verdict that comes back
+never saw the diff: end the reviewer, start it again, and type the hand-off
+again; Martha's refusal says only a fresh start that reads no handover clears
+it.
 
 ## Upgrading Martha
 

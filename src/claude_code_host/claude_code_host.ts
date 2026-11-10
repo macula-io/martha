@@ -229,8 +229,11 @@ export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
   Bash: { reads: 'a_command', source: 'checkout_run', field: 'command' },
   WebFetch: { reads: 'a_source', source: 'web' },
   WebSearch: { reads: 'a_source', source: 'web' },
-  Agent: { reads: 'a_source', source: 'subagent' },
-  Task: { reads: 'a_source', source: 'subagent' },
+  Agent: { reads: 'an_agents_answer', source: 'subagent' },
+  Task: { reads: 'an_agents_answer', source: 'subagent' },
+  // The tool a background agent hands its answer back through (martha#170). Placed on the same row as Agent and Task,
+  // so a handback is never a result this table does not know.
+  SubagentHandback: { reads: 'an_agents_answer', source: 'subagent' },
 }
 
 /** Whether a called tool is an MCP server's: its result is that server's text (B2). */

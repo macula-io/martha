@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -288,4 +288,45 @@ test('a checkout with no approved start keeps every read counting, whatever the 
   // Nothing was approved for this checkout, so there is no start tree, and the switches change nothing.
   const read = recordedReadingStartedWith(place, join(place.checkout, 'README.md'), place.started_with, SWITCHES, null)
   assert.deepEqual(read, ['B4:null'])
+})
+
+// --- what the pages say an agent's answer is (martha#170) ----------------------------------------
+//
+// The getting-started guide told the reader the opposite until this change — that a background agent's text closes the
+// member's session for good — so the pages are held to their words: a whole sentence, not a phrase they happen to
+// contain. A page that stops saying one of these, or says it differently, fails here.
+
+/** The page's sentences, as whole sentences: its paragraphs unwrapped, its emphasis dropped, then split where a sentence ends. */
+function sentencesIn(page: string): readonly string[] {
+  return page
+    .replace(/\s+/g, ' ')
+    .replace(/\*\*/g, '')
+    .split(/(?<=[.!?]) /)
+    .map((sentence) => sentence.trim())
+}
+
+const pageAsWords = (path: string): readonly string[] => sentencesIn(readFileSync(new URL(path, import.meta.url), 'utf8'))
+
+test('the getting-started guide says a vouched agent keeps the shell, and what still closes it (martha#170)', () => {
+  const guide = pageAsWords('../../docs/getting-started.md')
+  const claims = [
+    "While an agent is between its start and its stop, the reviewer's shell commands are refused — the agent's text has no call to be placed on yet — though it can still read files, and once the agent stops and Martha saw every call it made answered, the shell comes back.",
+    "What that costs: a review that reads outside the approved tree still closes the reviewer's shell on that read, as any other text from a stranger does.",
+  ]
+  for (const claim of claims) assert.ok(guide.includes(claim), `the guide says: ${claim}`)
+})
+
+test('the publish gate says what vouched for means, and what an agent that is not records (martha#170)', () => {
+  const page = pageAsWords('../../docs/publish-gate.md')
+  const claims = [
+    'It is vouched for when the launcher saw the host say the agent started under this session, saw it stop, answered every call the agent made, and none of those calls read text this gate counts: then the answer records nothing and the shell stays.',
+    'Anything less — an agent it never saw start, one still running, a call it did not answer, an agent that read a file outside the approved tree or ran a command — places the answer on B7, and the shell closes as for any other subagent result.',
+  ]
+  for (const claim of claims) assert.ok(page.includes(claim), `the page says: ${claim}`)
+})
+
+test("the host's own agent tools are placed by the agent, never by the tool's name alone (martha#170)", () => {
+  // All three read an agent's answer: a background agent hands it back through SubagentHandback, a foreground one
+  // through Agent or Task. A tool here that read anything else would place an agent's answer without its agent.
+  for (const tool of ['Agent', 'Task', 'SubagentHandback']) assert.deepEqual(CLAUDE_CODE_TOOL_RESULT_ROWS[tool], { reads: 'an_agents_answer', source: 'subagent' }, tool)
 })

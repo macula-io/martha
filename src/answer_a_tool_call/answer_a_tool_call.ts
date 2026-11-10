@@ -51,10 +51,15 @@ export interface ToolCall {
   readonly launch: ApprovedLaunch
   /** The host the launch is read again through: its files, scratch and git. */
   readonly host: LaunchHost
+  /**
+   * The agents this host started under this session that have not stopped (martha#170), by id. Defaults to none: a
+   * caller that knows of no agent is the case before the host has one.
+   */
+  readonly agents_running?: readonly string[]
 }
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch, names, host }: ToolCall): ToolCallAnswer {
+export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [] }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -86,6 +91,24 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
       : undefined
   }
 
+  const running = theAgentItWaitsOn(agents_running, tool)
+  if (running !== undefined) return running
+
   const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy })
   return decision.allow ? undefined : { deny: decision.refusal }
+}
+
+/**
+ * The refusal a shell call gets while an agent the host started under this session has not stopped (martha#170): its
+ * answer reaches the turn with no tool result to place it on, so nothing executes on text whose row has not been
+ * decided yet. The agent's stop is what decides it.
+ */
+function theAgentItWaitsOn(agents_running: readonly string[], tool: string): ToolCallAnswer {
+  if (agents_running.length === 0 || !isShellTool(tool)) return undefined
+  return {
+    deny:
+      `Nothing executes in this session: an agent this host started (${agents_running.join(', ')}) has not stopped, ` +
+      'and a background agent hands its answer into the turn with no call to place it on. The shell comes back when ' +
+      'it stops.',
+  }
 }
