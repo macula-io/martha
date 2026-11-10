@@ -97,13 +97,15 @@ test('an own write is kept in a file named for its launch, as one line with exac
   assert.deepEqual(allOwnWrites(state), { writes: [write], unread: [] })
 })
 
-test('every own write is read back, each launch in the order it kept them, whatever the launches', (t) => {
+test('every launch is read back in the order of its first record, and one path keeps the last write made to it (martha#157)', (t) => {
   const { state } = stateFor(t)
   const first = ownWrite({ recorded_at: new Date(1000).toISOString() })
   const ofAnother = ownWrite({ launch: 'launch-2', tool: 'Edit', tool_use_id: 'toolu_2', recorded_at: new Date(2000).toISOString() })
+  // A second write to a path the launch already wrote replaces it, so the history gives the bytes the checkout holds.
   const later = ownWrite({ blob: OTHER_SHA1_BLOB, tool: 'NotebookEdit', tool_use_id: 'toolu_3', recorded_at: new Date(3000).toISOString() })
   for (const write of [first, ofAnother, later]) kept(state, write)
-  assert.deepEqual(allOwnWrites(state), { writes: [first, later, ofAnother], unread: [] })
+  assert.deepEqual(allOwnWrites(state), { writes: [ofAnother, later], unread: [] })
+  assert.equal(readFileSync(filePath(state, 'launch-1'), 'utf8'), `${JSON.stringify(later)}${NEWLINE}`)
 })
 
 test('a launch reads only its own writes, and at one path the last kept is the one that counts, out of a file of its own', (t) => {
@@ -171,17 +173,17 @@ for (const [what, line] of MALFORMED) {
   })
 }
 
-test("a torn last line on one launch refuses that launch's own writes, and the project's other launches read on (martha#162)", (t) => {
+test("a torn last line is read for what the writer finished, and the launch's own writes are not refused (martha#157)", (t) => {
   const { state } = stateFor(t)
-  kept(state, ownWrite())
+  const first = ownWrite()
+  kept(state, first)
   const other = ownWrite({ launch: 'launch-2', tool_use_id: 'toolu_2' })
   kept(state, other)
   const torn = JSON.stringify(ownWrite({ blob: OTHER_SHA1_BLOB, tool_use_id: 'toolu_3' })).slice(0, 40)
   writeFileSync(filePath(state, 'launch-1'), torn, { flag: 'a' })
-  assert.deepEqual(ofLaunch(state, 'launch-1'), {
-    refusal: `${filePath(state, 'launch-1')} ends in a line that was never finished, so Martha reads none of this launch's own writes. Start the member again: each start keeps a file of its own.`,
-  })
+  assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [first] })
   assert.deepEqual(ofLaunch(state, 'launch-2'), { writes: [other] })
+  assert.deepEqual(allOwnWrites(state), { writes: [first, other], unread: [] })
 })
 
 test('a torn last line is cut off before the next record is kept, so the launch reads on with what it really kept (martha#162)', (t) => {
@@ -295,7 +297,7 @@ test('the history reads every launch kept, each launch in the order it kept them
   // first: only the first record's time puts alpha after zulu.
   const first = ownWrite({ launch: 'zulu', recorded_at: new Date(1000).toISOString() })
   const elsewhere = ownWrite({ launch: 'alpha', tool_use_id: 'toolu_2', recorded_at: new Date(3000).toISOString() })
-  const later = ownWrite({ launch: 'zulu', recorded_at: new Date(2000).toISOString(), blob: OTHER_SHA1_BLOB, tool_use_id: 'toolu_3' })
+  const later = ownWrite({ launch: 'zulu', path: '/project/later.txt', recorded_at: new Date(2000).toISOString(), blob: OTHER_SHA1_BLOB, tool_use_id: 'toolu_3' })
   for (const write of [first, elsewhere, later]) kept(state, write)
   assert.deepEqual(allOwnWrites(state), { writes: [first, later, elsewhere], unread: [] })
 })
@@ -311,7 +313,7 @@ test('a link in place of the file is refused, read or appended to, and the file 
   // The history reads past the file it cannot trust and names it, rather than refusing the whole project (martha#162 r=4).
   assert.deepEqual(allOwnWrites(state), { writes: [], unread: ['refusal' in read ? read.refusal : ''] })
   const appended = appendOwnWrite(state, ownWrite())
-  assert.ok(appended !== undefined && /could not be opened to append to \(ELOOP\), so Martha keeps no own write in it\./.test(appended.refusal))
+  assert.ok(appended !== undefined && /could not be read \(ELOOP\)\./.test(appended.refusal), String(appended?.refusal))
   assert.equal(readFileSync(target, 'utf8'), `${JSON.stringify(ownWrite())}${NEWLINE}`)
 })
 
@@ -323,6 +325,6 @@ test('a file others may read is refused, read or appended to', (t) => {
     refusal: `${filePath(state, 'launch-1')} is not a file only this user may read and write, so Martha does not trust it.`,
   })
   assert.deepEqual(appendOwnWrite(state, ownWrite()), {
-    refusal: `${filePath(state, 'launch-1')} is not a file only this user may read and write, so Martha keeps no own write in it.`,
+    refusal: `${filePath(state, 'launch-1')} is not a file only this user may read and write, so Martha does not trust it.`,
   })
 })

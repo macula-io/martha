@@ -8,7 +8,8 @@
 // Two readers, two windows:
 //   - the launch's own recheck reads only the writes of its launch, and at one path the last one kept wins, so an
 //     earlier own write never keeps a path passing after a later one replaced it (`latestOfLaunch`);
-//   - a reader of the member's whole history reads every write, in the order kept.
+//   - a reader of the member's whole history reads every launch's writes, in the order kept, and at each path the
+//     last one that launch left, which is the shape the store keeps a launch's file in (martha#157).
 //
 // This file holds the record and its rules, and touches nothing. Where the records are kept is the host's: an
 // adapter hands the core an OwnWritesStore (../keep_martha_state_outside_the_checkout keeps them in Martha's state,
@@ -106,8 +107,17 @@ export const lineOfOwnWrite = (write: OwnWrite): string => JSON.stringify(Object
 
 /** The own writes of one launch, the last kept at each path, in the order kept. */
 export function latestOfLaunch(writes: readonly OwnWrite[], launch: string): readonly OwnWrite[] {
+  return latestAtEachPath(writes.filter((kept) => kept.launch === launch))
+}
+
+/**
+ * The last write kept at each path, in the order of those last writes. A file of own writes is kept to this shape
+ * (../keep_martha_state_outside_the_checkout), so what is read back is what a reader of one launch's writes asks for,
+ * whatever the count of writes that went before (martha#157).
+ */
+export function latestAtEachPath(writes: readonly OwnWrite[]): readonly OwnWrite[] {
   const latest = new Map<string, OwnWrite>()
-  for (const write of writes.filter((kept) => kept.launch === launch)) {
+  for (const write of writes) {
     latest.delete(write.path)
     latest.set(write.path, write)
   }
