@@ -248,7 +248,7 @@ finish() {
     log 'no release to install'
     exit 3
   fi
-  log "waiting for the owner's sign-in"
+  log "the member half waits for the owner's sign-in"
   exit 4
 }
 
@@ -398,7 +398,7 @@ self_test() {
   a_case "${standin}"
   printf '%s\n' "${release_version}" > "${standin}/version.words"
   expect_status 4 "${standin}" 'a-host' || case_failed=1
-  [ "$(tail -1 "${standin}/out")" = "waiting for the owner's sign-in" ] || { echo 'the self-test: a passing install half did not stop at the member step' >&2; case_failed=1; }
+  [ "$(tail -1 "${standin}/out")" = "the member half waits for the owner's sign-in" ] || { echo 'the self-test: a passing install half did not stop at the member step' >&2; case_failed=1; }
   asked_for '^ok version: ' "${standin}/out" || { echo 'the self-test: a passing install half logged no version step' >&2; case_failed=1; }
   asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: a passing install half logged no tear-down step' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: the container was not removed' >&2; case_failed=1; }
