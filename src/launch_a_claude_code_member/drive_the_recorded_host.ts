@@ -24,7 +24,9 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { removeTheTree } from './relay_copy.ts'
+import { readTheNewestRelayJournal, RELAY_JOURNAL_PLACE } from './keep_the_relays_journal.ts'
 import { waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
+import { projectStateDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 
 /** The variable the relay CI job names the recorded host's binary in. */
@@ -229,6 +231,9 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   const model = await standIn(run.script, heard, (why) => void (failure ??= why))
   const runtime = mkdtempSync(join(tmpdir(), 'm-'))
   const command = [process.execPath, MARTHA, 'start', run.member].map(quoted).join(' ')
+  // Where the launcher keeps what it is doing (martha#240): the run sets XDG_STATE_HOME itself, so it derives the same
+  // project directory the launcher derives from the checkout, and no one is told a path.
+  const journal_directory = join(projectStateDirectory(join(run.home, '.local', 'state', STATE_ROOT_NAME), run.checkout), RELAY_JOURNAL_PLACE)
   const terminal = spawn(PTY_RUNNER, ['-qefc', command, '/dev/null'], { cwd: run.checkout, env: environmentOf(run, model.url, runtime), stdio: ['pipe', 'pipe', 'pipe'], detached: true })
   let shown = ''
   terminal.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
@@ -244,6 +249,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
         cannotHappen: () => failure,
         shown: () => shown,
         heard: () => heard.length,
+        journal: () => readTheNewestRelayJournal(journal_directory),
         silence_ms: run.silence_ms,
         run_started_at,
         now: Date.now,

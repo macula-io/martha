@@ -57,6 +57,9 @@ import {
 /** Only the owner may enter, list or write a state directory. */
 export const STATE_DIRECTORY_MODE = 0o700
 
+/** The directory under the state root that is Martha's own, so a state root shared with other tools stays theirs. */
+export const STATE_ROOT_NAME = 'martha'
+
 /** Only the owner may read or write a state file. */
 export const STATE_FILE_MODE = 0o600
 
@@ -116,10 +119,18 @@ function closedDirectory(path: string): string | undefined {
   return unsafeDirectory(path)
 }
 
+/**
+ * The directory one project's state is kept in: the state root and the sha256 of the project's real path. A reader
+ * outside the launcher — a run watching a member's journal (../launch_a_claude_code_member/drive_the_recorded_host) —
+ * derives the same path from the checkout it made, and no one has to be told it.
+ */
+export function projectStateDirectory(state_root: string, root: string): string {
+  return join(state_root, createHash('sha256').update(fs.realpathSync(root)).digest('hex'))
+}
+
 /** The state directory of the project at `root`, under `state_root`: made when missing, refused when unsafe. */
 export function openState(state_root: string, root: string): MarthaState | Refused {
-  const project = createHash('sha256').update(fs.realpathSync(root)).digest('hex')
-  const directory = join(state_root, project)
+  const directory = projectStateDirectory(state_root, root)
   const unsafe = closedDirectory(state_root) ?? closedDirectory(directory)
   return unsafe === undefined ? { directory } : { refusal: `Martha keeps no state there: ${unsafe}.` }
 }

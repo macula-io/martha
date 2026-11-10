@@ -52,6 +52,7 @@ import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result
 import { ALLOW, TAKEN, type Ran, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
+import type { JournalAnswer, RelayJournal } from './keep_the_relays_journal.ts'
 import type { SessionRecords } from './session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
@@ -92,6 +93,11 @@ export interface MemberRelayPlace {
   readonly ownerMemory: OwnerMemoryPlaces
   /** The member's signed runs (martha#129); a member without them runs no shape. */
   readonly signed_runs?: SignedRuns
+  /**
+   * What this launch is doing, for the run that waits on it (martha#240): a line when it receives an event and one when
+   * it answers it. A run watching a launcher with none reads the terminal and the requests alone, as #210 left it.
+   */
+  readonly journal?: RelayJournal
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -102,6 +108,23 @@ export const NO_SIGNED_RUNS = 'this member was launched with no signed shapes to
 const answered = (body: Taken | Refused | Verdict): RelayReply => ({ answered: true, body })
 const refused = (why: string): RelayReply => answered({ refused: why })
 const denied = (why: string): RelayReply => answered({ deny: why })
+
+/** What the journal's answer line says: the one word a run reading it needs, without the launcher's whole answer. */
+const journalAnswerOf = (reply: RelayReply): JournalAnswer => {
+  if (!reply.answered) return 'stopped'
+  if ('allow' in reply.body) return 'allow'
+  if ('deny' in reply.body) return 'deny'
+  if ('taken' in reply.body) return 'taken'
+  return 'refused'
+}
+
+/** Why the launcher answered that, where the answer carries a reason; the journal keeps it beside the answer. */
+const refusalReasonOf = (reply: RelayReply): string | undefined => {
+  if (!reply.answered) return reply.stopping
+  if ('deny' in reply.body) return reply.body.deny
+  if ('refused' in reply.body) return reply.body.refused
+  return undefined
+}
 
 type Body = Readonly<Record<string, unknown>>
 
@@ -237,18 +260,29 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
 
   return {
     answer: (event, body) => {
+      // The receipt line is stamped here, synchronously, before the event queues: an event waiting its turn is timed
+      // from when it arrived rather than from when the queue reached it (martha#240).
+      const journaled = place.journal?.received(event, body)
       const next = queue.then(async () => {
-        if (!isBody(body)) return failed[event]('the relay sent no body the launcher reads')
-        try {
-          return await handlers[event](body)
-        } catch (error) {
-          return failed[event](`the launcher failed to answer (${error instanceof Error ? error.message : String(error)})`)
-        }
+        const reply = await answerOne(event, body)
+        // Written before the answer goes back, so an event this launcher has answered is on disk at once.
+        journaled?.answered(journalAnswerOf(reply), refusalReasonOf(reply))
+        return reply
       })
       queue = next.catch(() => undefined)
       return next
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
+  }
+
+  /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
+  async function answerOne(event: RelayEvent, body: unknown): Promise<RelayReply> {
+    if (!isBody(body)) return failed[event]('the relay sent no body the launcher reads')
+    try {
+      return await handlers[event](body)
+    } catch (error) {
+      return failed[event](`the launcher failed to answer (${error instanceof Error ? error.message : String(error)})`)
+    }
   }
 }
 

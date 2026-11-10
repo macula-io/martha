@@ -27,7 +27,7 @@ import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
@@ -51,9 +51,6 @@ export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins 
 
 /** What starts every line Martha shows the owner on stderr. */
 export const SAID_BY = 'martha:'
-
-/** The directory under the XDG state home that holds Martha's state, one directory per project. */
-const STATE_ROOT_NAME = 'martha'
 
 /** The host the owner has installed, found on their PATH. */
 const CLAUDE = 'claude'
