@@ -26,11 +26,15 @@
 # refused (martha#2) -- needs the owner at the terminal. This script claims none of it: when the install half passes,
 # the run stops at the member step, says so, and removes the container (exit 4). No member is claimed.
 #
+# The image is fetched by its digest in a step of its own, before the container is named, so the create that follows has
+# nothing left to fetch and is over in moments, not minutes.
+#
 # The container is removed whatever happens: a pass, a refusal, a failed step, or a signal -- including one while the
-# create that made it is still running, which on a host's first run is the image pull. Gone is read from podman
-# answering that it is gone, never from a silence: a host that stopped answering, or podman erroring, fails the run and
-# names the container so it can be removed by hand. Everything written in it goes with it; the image the first run
-# pulls stays in the host's own store, which belongs to the host and not to a run.
+# create that made it is still running. Gone is read from podman answering that it is gone, never from a silence: a host
+# that stopped answering, or podman erroring, fails the run and names the container so it can be removed by hand. So
+# does a create still in flight when the window spent watching for its container is over: a create outlives its ssh
+# client, so "not there yet" is not "never made". Everything written in it goes with it; the image the first run pulls
+# stays in the host's own store, which belongs to the host and not to a run.
 #
 # Exit: 1 a step failed, the tear-down did, or the run was interrupted; 2 the arguments were refused and nothing ran;
 # 3 the registry carries no release, so the installer stopped on its own words (today's expected end); 4 the install
@@ -76,7 +80,8 @@ PODMAN_OWN_ENV=('container=podman' 'HOME=' 'HOSTNAME=')
 # The network a container must not be on: the host's own.
 HOST_NETWORK='host'
 # A create may finish on the host after the ssh client that asked for it is gone, so the tear-down keeps asking for a
-# container it has not seen yet, in a window it can still catch.
+# container it has not seen yet, in a window it can still catch. A create still in flight when the window ends is never
+# reported as one that made nothing: the tear-down fails and names the container.
 CREATE_SETTLE_ATTEMPTS=20
 CREATE_SETTLE_S=0.5
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
@@ -168,9 +173,18 @@ image_step() {
   ok image "${IMAGE} for the Node ${NODE_MAJOR} installer/package.json declares (${range})"
 }
 
+# The image by its digest, fetched in a step of its own before the container is named, so the create that follows has
+# nothing left to fetch. What it leaves is in the host's own store, which belongs to the host and not to a run.
+pull_step() {
+  local said
+  said="$(on_the_host podman pull "${IMAGE}" 2>&1)" \
+    || { failed pull "podman could not fetch ${IMAGE}: $(one_line "${said}")"; return 1; }
+  ok pull "${IMAGE} is in the host's own store, so the container's create has nothing to fetch"
+}
+
 # The container step: a fresh container from that image, running as the image's own non-root user. It is named here,
-# before podman is asked for it, so a run interrupted while create is still going -- on a host's first run that window
-# is the image pull -- is still removed by that name.
+# before podman is asked for it, so a run interrupted while create is still going is still removed by that name; the
+# image is already on the host, so the create has no pull of its own to do.
 container_step() {
   CONTAINER="${CONTAINER_PREFIX}-$$-${RANDOM}"
   CREATE_WAS_IN_FLIGHT=1
@@ -298,6 +312,13 @@ tear_down_step() {
     failed 'tear down' "${CONTAINER} cannot be confirmed gone: podman answered '${state}'; remove it on the host by that name"
     return 1
   fi
+  # Nothing was seen, and a create may still be in flight: the host goes on with it after its ssh client is gone, so a
+  # container it has not made yet can still appear. Not seen is not never made, and a run that cannot vouch for the
+  # container says so and names it.
+  if [ -z "${removed}" ] && [ -n "${CREATE_WAS_IN_FLIGHT}" ]; then
+    failed 'tear down' "${CONTAINER} was not seen within the window and its create is still in flight; check the host by that name"
+    return 1
+  fi
   if [ -n "${removed}" ]; then
     ok 'tear down' "${CONTAINER} removed, and absent when asked again"
     return 0
@@ -309,6 +330,7 @@ tear_down_step() {
 # them without failing.
 run_the_steps() {
   image_step || return 1
+  pull_step || return 1
   container_step || return 1
   inside_step || return 1
   install_step || return 1
@@ -361,8 +383,11 @@ while [ $# -gt 0 ]; do
 done
 standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
 if [ -f "${standin}/ssh.down" ]; then
-  case "$*" in
-    *container*|*rm*) exit 255 ;;
+  # The words reach this stand-in quoted one by one, as ssh joins them, so the quotes come off before the command is
+  # read: only the two commands that ask about a container are left unanswered.
+  command_words="$(printf '%s' "$*" | tr -d "'")"
+  case "${command_words}" in
+    'podman container '*|'podman rm '*) exit 255 ;;
   esac
 fi
 exec sh -c "$*"
@@ -373,13 +398,27 @@ SSH
 standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
 printf '%s\n' "$*" >> "${standin}/calls"
 case "${1:-}" in
+  pull)
+    # A case whose pull.fails exists stands for a host that cannot fetch the image: nothing can be made from it.
+    if [ -f "${standin}/pull.fails" ]; then
+      printf 'Error: initializing source docker://%s: no such image\n' "${2:-}" >&2
+      exit 125
+    fi
+    ;;
   create)
-    # A case whose create.holds exists stands for a create still running when the signal arrives -- on a host's first
-    # run that window is the image pull. The create outlives the signal, as the host's own process does when its ssh
-    # client is gone, and makes the container a moment after the run has already begun to tear down.
+    # A case whose create.holds exists stands for a create still running when the signal arrives. The create outlives
+    # the signal, as the host's own process does when its ssh client is gone, and makes the container a moment after
+    # the run has already begun to tear down.
     if [ -f "${standin}/create.holds" ]; then
       ( trap '' INT; sleep 2; : > "${standin}/container.present" ) &
       sleep 300
+    fi
+    # A case whose create.stuck exists stands for a create still running when the tear-down's window ends and after it:
+    # it makes no container in all that time, so the run cannot vouch for it either way.
+    if [ -f "${standin}/create.stuck" ]; then
+      trap '' INT TERM
+      sleep 12
+      exit 0
     fi
     : > "${standin}/container.present"
     printf 'a-container\n'
@@ -486,6 +525,7 @@ check_create_line() {
 
 self_test() {
   local standin case_failed=0 child waited installer_name installer_version release_version major image
+  local pulled_at created_at
   SELF_TEST_ROOT="$(mktemp -d)"
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
@@ -519,11 +559,34 @@ self_test() {
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: the container was not removed' >&2; case_failed=1; }
   check_create_line "$(grep '^create ' "${standin}/calls")" "${image}" \
     || { echo "the self-test: the container was not made as asked: $(grep '^create ' "${standin}/calls")" >&2; case_failed=1; }
+  # The image by its digest, fetched in its own step, and before the container is made: a create that has a pull to do
+  # is the one that outlives its ssh client on a host's first run.
+  asked_for "^pull ${image}$" "${standin}/calls" \
+    || { echo "the self-test: the image was not pulled by its digest: $(grep '^pull ' "${standin}/calls")" >&2; case_failed=1; }
+  pulled_at="$(grep -n '^pull ' "${standin}/calls" | head -1 | cut -d: -f1)"
+  created_at="$(grep -n '^create ' "${standin}/calls" | head -1 | cut -d: -f1)"
+  if [ -z "${pulled_at}" ] || [ -z "${created_at}" ] || [ "${pulled_at}" -ge "${created_at}" ]; then
+    echo 'the self-test: the image was not pulled before the container was made' >&2
+    case_failed=1
+  fi
   asked_for "--ignore-scripts ${installer_name}@${installer_version}" "${standin}/calls" \
     || { echo 'the self-test: the installer was not named by its exact version' >&2; case_failed=1; }
   # Both scripts the container runs arrive as one argument each: `exec <name> sh -lc <script>` is five, and a run
   # whose quoting let the remote shell split one arrives as more.
   [ "$(grep -c '^exec-argc=5$' "${standin}/calls")" = 2 ] || { echo 'the self-test: a script reached the container split into more than one word' >&2; case_failed=1; }
+
+  # An image the host cannot fetch fails the run at the pull, before a container is named: nothing can be made from an
+  # image that is not there, and there is no container to look for.
+  standin="${root}/the-image-cannot-be-pulled"
+  a_case "${standin}"
+  : > "${standin}/pull.fails"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for '^FAIL pull: .*no such image' "${standin}/out" \
+    || { echo 'the self-test: an image the host could not fetch did not fail the run at the pull' >&2; case_failed=1; }
+  if grep -q '^create ' "${standin}/calls"; then
+    echo 'the self-test: a container was made from an image the host could not fetch' >&2
+    case_failed=1
+  fi
 
   # No release: the installer's own words are the run's outcome, and the container still goes.
   standin="${root}/no-release"
@@ -649,6 +712,35 @@ self_test() {
   asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: an interrupt during create failed its tear-down' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: the container a create made after the signal was not removed' >&2; case_failed=1; }
 
+  # A create that outlives the window: interrupted while create is still running, and the window spent watching for its
+  # container ends with nothing there. Not seen is not never made -- a create whose ssh client is gone can still finish
+  # on the host -- so the tear-down fails and names the container, and never reports one it cannot vouch for as "never
+  # made".
+  standin="${root}/a-create-that-outlives-the-window"
+  a_case "${standin}"
+  : > "${standin}/create.stuck"
+  set -m
+  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
+    > "${standin}/out" 2> "${standin}/err" &
+  child=$!
+  set +m
+  waited=0
+  while ! grep -q '^create ' "${standin}/calls" 2> /dev/null; do
+    sleep 0.2
+    waited=$((waited + 1))
+    if [ "${waited}" -gt 250 ]; then break; fi
+  done
+  kill -INT -"${child}" 2> /dev/null || true
+  waited=0
+  wait "${child}" || waited=$?
+  [ "${waited}" -eq 1 ] || { echo "the self-test: an interrupt during a create that outlived the window exited ${waited}, not 1" >&2; case_failed=1; }
+  asked_for '^FAIL tear down: martha-clean-install-[^ ]* was not seen within the window' "${standin}/out" \
+    || { echo 'the self-test: a create still running when the window ended did not fail the tear-down, naming the container' >&2; case_failed=1; }
+  if grep -q '^ok tear down: ' "${standin}/out"; then
+    echo 'the self-test: a create still running when the window ended was reported as a container never made' >&2
+    case_failed=1
+  fi
+
   # The arguments: no host, an unknown option, two hosts and a log it cannot write are refused, and nothing runs.
   expect_status 2 "${root}" || case_failed=1
   expect_status 2 "${root}" --no-such-option || case_failed=1
@@ -659,7 +751,8 @@ self_test() {
   # Every run that was not one that could not confirm its container gone, or whose host stopped answering, ended with
   # nothing of it left: what this file says last is what these cases check.
   for standin in passes no-release refused other-version runs-as-root mounted on-the-host-network \
-    given-the-hosts-environment interrupted interrupted-while-creating; do
+    given-the-hosts-environment interrupted interrupted-while-creating a-create-that-outlives-the-window \
+    the-image-cannot-be-pulled; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
