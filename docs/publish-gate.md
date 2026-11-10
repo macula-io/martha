@@ -918,11 +918,18 @@ where it came from. Three things stand on it:
   (martha#226). Before a member starts, the launch asks the host in print mode,
   with hooks off and exactly those rules, whether it matches them: a rule the
   host says can never match refuses the launch, and the refusal repeats the
-  host's own line. That is measured, not asserted — on the recorded host an inert
-  `Write` twin is reported and the rules the launch writes are not, and a rule
-  written under another tool on the host of a later version is caught by the same
-  question. This layer is for a later host on which the off switch stops holding;
-  on the recorded host the switch still holds, so nothing claims it was seen
+  host's own line. Each line is read for the rule it is about — the one the host
+  names as the rule it read — and never for one it merely quotes: the host's
+  complaint ends by saying which rule to write instead, so a dead rule in the
+  owner's own settings would otherwise quote one of the launch's and refuse the
+  owner their member over their own rule (martha#226 r=1). That is measured, not
+  asserted — on the recorded host an inert
+  `Write` twin is reported and the rules the launch writes are not, an owner's
+  own dead rule on a shared place is reported without naming the launch's, and a
+  rule written under another tool on the host of a later version is caught by the
+  same question. This layer is for a later host on which the off switch stops
+  holding; on the recorded host the switch still holds, so nothing claims it was
+  seen
   refusing a real member's write.
 
 What it does not rest on: the publish gate's hook for the memory pass, which

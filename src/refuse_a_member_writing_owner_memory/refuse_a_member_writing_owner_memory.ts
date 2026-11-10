@@ -806,21 +806,37 @@ export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /**
- * The lines of what a host printed about `rules` — the ones that quote a rule this repository wrote (martha#226).
+ * The lines of what a host printed about `rules` — one per rule of this repository's the host says it never matches
+ * (martha#226).
  *
  * The host says in its own words which rules its file permission checks never match, on the terminal at a session's
  * start and on the standard error of a run that is not a terminal. A rule it names there is a rule that does nothing,
  * so the launch reads this before it starts a member and refuses rather than run with a place it believes closed.
- * Nothing is matched but the rule itself, cut from this repository's own list: the host's wording is the host's, and a
- * line quoting one of our rules is about that rule whatever it goes on to say. Its suggestion quotes the rule written
- * under the tool it does match, which is ours too, so a line can be counted once for each spelling it names.
+ * Each line is read for the rule it is about — the one it names as the rule it read, which is what a rule of ours has
+ * to be — and never for one it merely quotes: the host's complaint ends with the rule to write instead, so a dead rule
+ * in the owner's own settings quotes the very spelling this launch writes, and that is the owner's rule and not one of
+ * ours (martha#226 r=1). One rule is one fault: the host prints a complaint more than once, and the first line about a
+ * rule is kept.
  */
 export function hostLinesNamingARule(printed: string, rules: readonly string[]): string[] {
-  return printed
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && rules.some((rule) => line.includes(rule)))
+  const about = new Map<string, string>()
+  for (const line of printed.split('\n').map((one) => one.trim()).filter((one) => one !== '')) {
+    const rule = theRuleTheLineIsAbout(line)
+    if (rule === undefined || !rules.includes(rule) || about.has(rule)) continue
+    about.set(rule, line)
+  }
+  return [...about.values()]
 }
+
+/**
+ * The rule a host's line is about: the one it names after the settings file it read, which is the subject of the
+ * complaint (martha#226 r=1). The host writes `Permission deny rule (<file>): <rule> is not matched …` and then the
+ * rule to write instead, so the subject has to be cut out rather than searched for. A line that names no such rule is
+ * no complaint about one.
+ */
+const THE_RULE_A_LINE_IS_ABOUT = /\): (.+?) is not matched/
+const theRuleTheLineIsAbout = (line: string): string | undefined => THE_RULE_A_LINE_IS_ABOUT.exec(line)?.[1]?.trim()
+
 
 /**
  * The settings the host is started with: the approved copy, or none, with

@@ -53,6 +53,13 @@ export interface HostAnswers {
    * about.
    */
   readonly callsTheFirstRuleDead?: boolean
+  /**
+   * Whether it complains instead about a dead rule of the OWNER's, on a place the launch denies — the shape the recorded
+   * host prints for an owner's old `Write(…)` twin of a rule the launch writes, quoting the launch's own rule as the one
+   * to use instead (#226 r=1). It prints that line twice, as the host does. A launch must not read it as a fault of its
+   * own rules.
+   */
+  readonly namesAnOwnersTwinDead?: boolean
 }
 
 /** The key that turns hooks off from any settings file, as the recording spells it: the stand-in reads it, never types it. */
@@ -91,6 +98,24 @@ function callsTheFirstRuleDead(): string {
 /** The lines a host that calls the first rule it was given dead says before it answers, or nothing when it says nothing. */
 const aDeadRule = (answers: HostAnswers): string => (answers.callsTheFirstRuleDead === true ? `${callsTheFirstRuleDead()}; ` : '')
 
+/**
+ * The line a stand-in prints when a test asks it to complain about the OWNER's dead rule instead (#226 r=1): a rule the
+ * launch did not write, on the same place as the first rule it did write, with the launch's own rule quoted after "Use"
+ * — exactly how the recorded host answers an owner who protects a place the old way. Printed twice, as the host prints
+ * its complaints.
+ */
+function namesAnOwnersTwinDead(): string {
+  return [
+    `prev=''; found=''`,
+    `for a in "$@"; do if [ "$prev" = --settings ]; then found="$a"; fi; prev="$a"; done`,
+    `rule=$(grep -o '"[A-Za-z]*(/[^"]*)"' "$found" 2>/dev/null | head -n 1 | tr -d '"')`,
+    `if [ -n "$rule" ]; then twin="Write(\${rule#*(}"; line="Permission deny rule (.claude/settings.json): $twin is not matched by file permission checks — only Edit(path) rules are. Use $rule instead (Edit rules cover all file-editing tools)."; printf '%s\\n%s\\n' "$line" "$line" >&2; fi`,
+  ].join('; ')
+}
+
+/** The lines a host that complains about the owner's dead rule says before it answers, or nothing when it says nothing. */
+const anOwnersDeadRule = (answers: HostAnswers): string => (answers.namesAnOwnersTwinDead === true ? `${namesAnOwnersTwinDead()}; ` : '')
+
 /** The shell lines a stand-in `claude` starts with, right after its #! line. */
 export function hostAnswers(answers: HostAnswers = {}): string[] {
   const report = answers.report ?? LOADS_THE_RELAY
@@ -98,7 +123,9 @@ export function hostAnswers(answers: HostAnswers = {}): string[] {
   // What the question may start comes first, then the answer; nothing at all when the test asks for neither.
   const sideEffects = initSideEffects(answers)
   // A host that reads the rules it was given and calls one dead says so before it answers, as the recorded one does.
+  // One that complains about the owner's own dead rule instead is a different answer, and says only that (#226 r=1).
   const deadRule = aDeadRule(answers)
+  const ownersDeadRule = anOwnersDeadRule(answers)
   return [
     ...(answers.callsFile === undefined ? [] : [`printf '%s %s\\n' "$0" "$1" >> ${quoted(answers.callsFile)}`]),
     ...(answers.validatedFile === undefined
@@ -111,6 +138,6 @@ export function hostAnswers(answers: HostAnswers = {}): string[] {
     `case " $* " in *" --input-format stream-json "*) ${sideEffects}printf '%s\\n' ${quoted(answers.initAnswer ?? reportsOutputStyles(STAND_IN_OUTPUT_STYLES_DIR))}; exit 0;; esac`,
     // The question about the rules is print mode with no prompt: a host reads its settings, says what it makes of them,
     // and ends on its own complaint that no input was given (#226). It asks for no turn, and neither does this.
-    `if [ "$1" = --print ]; then ${deadRule}printf 'Error: Input must be provided either through stdin or as a prompt argument when using --print\\n' >&2; exit 1; fi`,
+    `if [ "$1" = --print ]; then ${deadRule}${ownersDeadRule}printf 'Error: Input must be provided either through stdin or as a prompt argument when using --print\\n' >&2; exit 1; fi`,
   ]
 }

@@ -7,7 +7,7 @@
 // The relay CI job names the binary in MARTHA_RECORDED_HOST; without it this is skipped.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -54,4 +54,13 @@ test('the recorded host matches every rule the launch writes, and names an inert
   const twinSaid = await whatItSaysAbout([...written, inert])
   assert.equal(hostLinesNamingARule(twinSaid, [inert]).length, 1, `the host said nothing about an inert rule, so the reading above proves nothing: ${twinSaid.slice(-800)}`)
   assert.match(twinSaid, /Input must be provided/, 'the host read the rules in the run above too')
+
+  // The owner's own settings are read in the same run, and their dead rule on a place this launch denies makes the host
+  // quote the launch's own rule as the one to write instead. That is the owner's rule: a launch that read it as ours
+  // would leave an owner who protects the place the old way unable to start a member at all (martha#226 r=1).
+  mkdirSync(join(home, '.claude'), { recursive: true })
+  writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify({ permissions: { deny: [anInertTwinOf(written[0] ?? '')] } }))
+  const ownersSaid = await whatItSaysAbout(written)
+  assert.match(ownersSaid, /is not matched by file permission checks/, `the host said nothing about the owner's own dead rule, so this proves nothing: ${ownersSaid.slice(-800)}`)
+  assert.deepEqual(hostLinesNamingARule(ownersSaid, written), [], `the owner's own rule is read as one of ours: ${hostLinesNamingARule(ownersSaid, written).join(' | ')}`)
 })

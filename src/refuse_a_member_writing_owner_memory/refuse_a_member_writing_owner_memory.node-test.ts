@@ -757,9 +757,24 @@ test('the host\'s own words are read for a rule this launch wrote, and a line ab
   const aboutOurRule = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude.json) is not matched by file permission checks'
   assert.deepEqual(hostLinesNamingARule(`starting\n${aboutOurRule}\n`, written), [aboutOurRule])
   // A rule the owner's own settings carry is the owner's business, and not a reason to refuse their member.
-  assert.deepEqual(hostLinesNamingARule('Permission deny rule (user.json): Edit(//home/synthetic/notes/**) never matches', written), [])
+  assert.deepEqual(hostLinesNamingARule('Permission deny rule (user.json): Edit(//home/synthetic/notes/**) is not matched by file permission checks', written), [])
   assert.deepEqual(hostLinesNamingARule('', written), [])
   // Every line that names one, not the first: a host complaining about two rules is two faults to read.
-  const second = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude/projects/*/**) never matches'
+  const second = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude/projects/*/**) is not matched by file permission checks'
   assert.deepEqual(hostLinesNamingARule(`${aboutOurRule}\n${second}\n`, written), [aboutOurRule, second])
+})
+
+// A line is read for the rule it is ABOUT, never for one it merely quotes (martha#226 r=1). The host's complaint about
+// a dead rule ends with the rule to write instead, so an owner who still protects a place the old way — a `Write(…)`
+// twin of a place this launch denies — has the host quote one of our own rules back at it. That is the owner's rule,
+// and refusing their member for it would leave an owner who protects their own CLAUDE.md unable to start one at all.
+test('a line is read for the rule it is about, and one the host prints twice is one rule (#226 r=1)', () => {
+  const written = ['Edit(//home/synthetic/.claude/projects/*/**)', 'Edit(//home/synthetic/.claude.json)']
+  const theOwnersDeadRule = 'Permission deny rule (.claude/settings.json): Write(//home/synthetic/.claude.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(//home/synthetic/.claude.json) instead (Edit rules cover all file-editing tools).'
+  assert.deepEqual(hostLinesNamingARule(theOwnersDeadRule, written), [])
+  // The owner's twin of one of our rules, printed among our own line: ours is counted, theirs is not.
+  const ours = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude.json) is not matched by file permission checks'
+  assert.deepEqual(hostLinesNamingARule(`${theOwnersDeadRule}\n${ours}\n`, written), [ours])
+  // The host prints a complaint once per stream and once more in a second shape: one dead rule is one fault to read.
+  assert.deepEqual(hostLinesNamingARule(`${ours}\n${ours}\n`, written), [ours])
 })

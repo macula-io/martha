@@ -1284,6 +1284,21 @@ test('a host that says a rule the launch wrote can never match starts no member,
   assert.equal(existsSync(fake.ranFile), false, 'the member itself never ran')
 })
 
+// The host says what it makes of every settings file it reads, the owner's included, and its complaint about a rule of
+// the OWNER's ends with the rule to write instead — one this launch wrote, when their dead rule covers a place the
+// launch denies. That is the owner's rule and the owner's business: reading it as a fault of the launch's rules would
+// leave an owner who still protects their own CLAUDE.md the old way unable to start a member at all (martha#226 r=1).
+test('a host that calls a dead rule of the owner\'s dead, on a place the launch denies, still starts the member (#226 r=1)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place, { namesAnOwnersTwinDead: true })
+  const lines: string[] = []
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines))
+  if (!started.started) assert.fail(`the owner's own dead rule refused the launch: ${started.refusal}`)
+  // The question was asked — print mode with no prompt is where the host says it — so the pass above is about an answer
+  // that was given, not one the launch never sought.
+  assert.match(readFileSync(fake.callsFile, 'utf8'), / --print\b/, 'the host was asked about the rules')
+})
+
 test('the member, its load check, its version check and its session init all run the one file its command resolves to', async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
