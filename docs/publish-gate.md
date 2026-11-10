@@ -904,15 +904,26 @@ where it came from. Three things stand on it:
   repository in the tree, a `core.hooksPath` already pointing into it, and
   `include.path`/`includeIf`.
 - **The host's own pass is refused the same places.** The settings the host is
-  started with carry a `Write(//…)` and `Edit(//…)` pair in `permissions.deny` for
-  each place the relay refuses, as named and as it leads, for the projects
-  folder as it leads, and for where each memory folder that is a link leads at
-  launch (one linked later is the relay's alone), from the same function. They go
-  into the carried `--settings` copy, after the owner's approval was
-  fingerprinted, or into a file the launch writes when none is carried. This
-  layer is for a later host on which the off switch stops holding; on the
-  recorded host the switch holds, and
-  nothing claims this layer was seen working.
+  started with carry one `Edit(//…)` rule in `permissions.deny` for each place the
+  relay refuses, as named and as it leads, for the projects folder as it leads,
+  and for where each memory folder that is a link leads at launch (one linked
+  later is the relay's alone), from the same function. They go into the carried
+  `--settings` copy, after the owner's approval was fingerprinted, or into a file
+  the launch writes when none is carried.
+  The rule is written under the tool the host's own file permission checks use,
+  taken from the statement the recording cuts from its binary: the host says a
+  rule naming `Write`, `NotebookEdit` or `MultiEdit` is never matched by those
+  checks, and that `Edit` rules cover every file-editing tool, so a `Write(//…)`
+  twin of each rule closed nothing and only gave the host something to report
+  (martha#226). Before a member starts, the launch asks the host in print mode,
+  with hooks off and exactly those rules, whether it matches them: a rule the
+  host says can never match refuses the launch, and the refusal repeats the
+  host's own line. That is measured, not asserted — on the recorded host an inert
+  `Write` twin is reported and the rules the launch writes are not, and a rule
+  written under another tool on the host of a later version is caught by the same
+  question. This layer is for a later host on which the off switch stops holding;
+  on the recorded host the switch still holds, so nothing claims it was seen
+  refusing a real member's write.
 
 What it does not rest on: the publish gate's hook for the memory pass, which
 runs as a fork whose tool calls the hook is not established to see. What it
@@ -956,7 +967,10 @@ tool call is refused by the host as well as by the gate; the host's own writes
 are not a tool call, and are not what the rule refuses. `npm run probe:launch`
 asks the host to write one file in each of those folders, with those rules and
 with none of them: with them nothing is written, and without them the file
-lands.
+lands. Each rule is written under the tool the host's own file permission checks
+use, and the launch asks the host whether it matches them before it starts a
+member: one the host says can never match refuses the launch, naming the host's
+own words about it (martha#226).
 
 Not closed: the other places under the config dir that the host runs as code,
 which martha#187's name map denies, and this row claims none of them; a `Bash`

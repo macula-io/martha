@@ -73,5 +73,8 @@
   },
   "legacy_global_config_names": [
     ".config.json"
-  ]
+  ],
+  "file_permission_rules": {
+    "matcher": "let g=s.toolName===\"Write\"||s.toolName===\"NotebookEdit\"||s.toolName===\"MultiEdit\"?\"Edit\":s.toolName===\"Glob\"?\"Read\":void 0;"
+  }
 }

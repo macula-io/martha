@@ -5,13 +5,14 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import {
   FILE_WRITING_TOOLS,
   gapsInTheNameMap,
+  hostLinesNamingARule,
   LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
   MEMORY_FOLDER_OVERRIDE,
@@ -94,7 +95,7 @@ test('a project\'s memory folder that is itself a link is denied where it leads,
   assertDenied(places, place.worktree, place.home, join(elsewhere, 'a.md'), 'the folder the memory link leads to')
   symlinkSync(project, join(place.worktree, 'lnk'))
   assertDenied(places, place.worktree, place.home, 'lnk/memory/b.md', 'a checkout link to the project, then the memory link')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(elsewhere)}/**)`), 'the permission rules name where a linked memory folder leads')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(elsewhere)}/**)`), 'the permission rules name where a linked memory folder leads')
 })
 
 test('a config dir that is a link is denied by its real path too: memory, CLAUDE.md and rules/ (#136 r=2)', (t) => {
@@ -112,7 +113,7 @@ test('a config dir that is a link is denied by its real path too: memory, CLAUDE
   // Where the link leads, as the host resolves it: the scratch root a test runs in
   // is itself reached through a link on macOS and in the suite's long-TMPDIR run (martha#79).
   const leads = realPathOf(real)
-  for (const rule of [`Write(/${join(leads, 'projects')}/*/memory/**)`, `Write(/${join(leads, 'rules')}/**)`, `Write(/${join(leads, 'CLAUDE.md')})`]) {
+  for (const rule of [`Edit(/${join(leads, 'projects')}/*/memory/**)`, `Edit(/${join(leads, 'rules')}/**)`, `Edit(/${join(leads, 'CLAUDE.md')})`]) {
     assert.ok(rules.includes(rule), `${rule} in ${rules.join(' ')}`)
   }
 })
@@ -126,7 +127,7 @@ test('a config dir whose projects folder is a link to another disk denies a real
   const places = placesFor(place)
   // No folder for this project yet anywhere, so only the projects folder as it leads can catch it.
   assertDenied(places, place.worktree, place.home, join(disk, '-home-owner-next', 'memory', 'MEMORY.md'), 'a project with no folder yet, by the real projects folder')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${join(realPathOf(disk))}/*/memory/**)`), 'the permission rules name where the projects folder leads')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${join(realPathOf(disk))}/*/memory/**)`), 'the permission rules name where the projects folder leads')
 })
 
 test('a project\'s memory folder that is a link to a folder that does not exist yet is denied where it will lead (#136 r=3)', (t) => {
@@ -137,7 +138,7 @@ test('a project\'s memory folder that is a link to a folder that does not exist 
   mkdirSync(project)
   symlinkSync(notYet, join(project, 'memory'))
   assertDenied(places, place.worktree, place.home, join(notYet, 'MEMORY.md'), 'the folder the link will lead to')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(notYet)}/**)`), 'the permission rules name where a link with no target yet will lead')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(notYet)}/**)`), 'the permission rules name where a link with no target yet will lead')
 })
 
 /** A chain of `links` links under `base`, each pointing at the next and the last at `to`: returns the first (martha#136 r=4). */
@@ -160,7 +161,7 @@ test('a memory folder that is a two-hop chain of links is denied where the chain
   mkdirSync(project)
   symlinkSync(chainAt(join(place.root, 'hops'), 1, end), join(project, 'memory'))
   assertDenied(places, place.worktree, place.home, join(end, 'MEMORY.md'), 'where the two-hop chain ends')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(end)}/**)`), 'the permission rules name the end of the chain')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(end)}/**)`), 'the permission rules name the end of the chain')
 })
 
 test('a projects folder that is a link to a disk folder that does not exist yet denies a write into it (#136 r=4)', (t) => {
@@ -170,7 +171,7 @@ test('a projects folder that is a link to a disk folder that does not exist yet 
   symlinkSync(disk, join(place.config, 'projects'))
   const places = placesFor(place)
   assertDenied(places, place.worktree, place.home, join(disk, '-new', 'memory', 'MEMORY.md'), 'a project under the disk the projects folder will be')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(disk)}/*/memory/**)`), 'the permission rules name the disk it will lead to')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(disk)}/*/memory/**)`), 'the permission rules name the disk it will lead to')
 })
 
 test('a project folder that is a link to a folder that does not exist yet denies a write into its memory (#136 r=4)', (t) => {
@@ -179,7 +180,7 @@ test('a project folder that is a link to a folder that does not exist yet denies
   const elsewhere = join(place.root, 'project-not-yet')
   symlinkSync(elsewhere, join(place.config, 'projects', '-project-link'))
   assertDenied(places, place.worktree, place.home, join(elsewhere, 'memory', 'MEMORY.md'), 'the memory of the project folder the link will lead to')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(join(elsewhere, 'memory'))}/**)`), 'the permission rules name where that memory folder will be')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(join(elsewhere, 'memory'))}/**)`), 'the permission rules name where that memory folder will be')
 })
 
 test('a chain of links at the cap is followed and denied at its end (#136 r=4)', (t) => {
@@ -190,7 +191,7 @@ test('a chain of links at the cap is followed and denied at its end (#136 r=4)',
   mkdirSync(project)
   symlinkSync(chainAt(join(place.root, 'hops-at-cap'), LINK_HOPS - 1, end), join(project, 'memory'))
   assertDenied(places, place.worktree, place.home, join(end, 'MEMORY.md'), 'the end of a chain at the cap')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(end)}/**)`), 'the permission rules name the end of a chain at the cap')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(end)}/**)`), 'the permission rules name the end of a chain at the cap')
 })
 
 test('a chain of links one past the cap is refused, and no write is allowed while it stands (#136 r=4)', (t) => {
@@ -247,7 +248,7 @@ test('a projects folder that is a chain of links at the cap is followed and deni
   symlinkSync(chainAt(join(place.root, 'projects-at-cap'), LINK_HOPS - 1, disk), join(place.config, 'projects'))
   const places = placesFor(place)
   assertDenied(places, place.worktree, place.home, join(disk, '-new', 'memory', 'MEMORY.md'), 'a project under a chain at the cap')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(disk)}/*/memory/**)`), 'the permission rules name where the chain ends')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(disk)}/*/memory/**)`), 'the permission rules name where the chain ends')
 })
 
 test('a project folder that is a chain of links at the cap is followed and denied where it ends (#136 r=5)', (t) => {
@@ -256,7 +257,7 @@ test('a project folder that is a chain of links at the cap is followed and denie
   const pe = join(place.root, 'pe-at-cap')
   symlinkSync(chainAt(join(place.root, 'project-at-cap'), LINK_HOPS - 1, pe), join(place.config, 'projects', '-chain-at-cap'))
   assertDenied(places, place.worktree, place.home, join(pe, 'memory', 'MEMORY.md'), 'the memory of the project folder the chain leads to')
-  assert.ok(memoryDenyRules(places).includes(`Write(/${realPathOf(join(pe, 'memory'))}/**)`), 'the permission rules name it')
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(join(pe, 'memory'))}/**)`), 'the permission rules name it')
 })
 
 test('the owner\'s CLAUDE.md and rules are denied, in the launcher\'s config dir and in the member\'s when it differs', (t) => {
@@ -363,25 +364,26 @@ test('a write in the checkout, and any read of a memory file, are allowed', (t) 
   assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.config, 'projects', '-work-main-clone', 'session.jsonl') }, places, place.worktree, place.home, thisMachine), undefined)
 })
 
-test('the permission rules name the same places the gate denies, a Write and an Edit rule each', (t) => {
+test('the permission rules name the same places the gate denies, one rule each under the tool the host\'s checks match (#226)', (t) => {
   const place = placeFor(t)
   const override = join(place.root, 'cowork-memory')
   const places = placesFor(place, { [MEMORY_FOLDER_OVERRIDE]: override })
   const rules = memoryDenyRules(places)
-  // A place reached through a link is named twice, as spelled and as it leads
-  // (martha#79), so the count is not fixed: each rule is a Write, and the same
-  // Edit, of one place.
+  assert.ok(rules.length > 0)
+  // One rule a place, and every one of them under the tool the host's own file permission checks match. The host says a
+  // rule naming any other file-editing tool is never matched; a rule written there closes nothing (#226).
   assert.deepEqual(
-    rules.filter((rule) => rule.startsWith('Edit(/')).map((rule) => rule.replace(/^Edit/, 'Write')),
-    rules.filter((rule) => rule.startsWith('Write(/')),
-    'every rule comes as a Write and an Edit of the same place',
+    rules.filter((rule) => !rule.startsWith(`${CLAUDE_CODE_FILE_RULE_TOOL}(/`)),
+    [],
+    'every rule is written under the tool the host\'s file permission checks match',
   )
-  assert.ok(rules.includes(`Write(/${join(place.config, 'projects')}/*/memory/**)`), rules.join(' '))
+  assert.ok(!rules.some((rule) => rule.startsWith('Write(')), `no inert Write rule: ${rules.join(' ')}`)
+  assert.ok(rules.includes(`Edit(/${join(place.config, 'projects')}/*/memory/**)`), rules.join(' '))
   // Each project's own folder is denied whole, so a transcript or a file beside it is refused too (martha#154).
-  assert.ok(rules.includes(`Write(/${join(place.config, 'projects')}/*/**)`), rules.join(' '))
+  assert.ok(rules.includes(`Edit(/${join(place.config, 'projects')}/*/**)`), rules.join(' '))
   assert.ok(rules.includes(`Edit(/${override}/**)`), rules.join(' '))
-  assert.ok(rules.includes(`Write(/${join(place.config, 'CLAUDE.md')})`), rules.join(' '))
-  assert.ok(rules.every((rule) => /^(Write|Edit)\(\/\//.test(rule)), 'every rule names an absolute path')
+  assert.ok(rules.includes(`Edit(/${join(place.config, 'CLAUDE.md')})`), rules.join(' '))
+  assert.ok(rules.every((rule) => /^Edit\(\/\//.test(rule)), 'every rule names an absolute path')
 })
 
 /**
@@ -485,6 +487,27 @@ test('a member may not write the global config the host prefers at a config dir\
   }
 })
 
+// The member's own host resolves the config dir its own environment names, which need not be the launcher's
+// (martha#203, the case #187 left unpinned): the preferred global config there is refused as well, and the
+// launcher's own dir is not lost by the difference.
+test('a member may not write the global config the host prefers at the config dir only the member\'s environment names (martha#203)', (t) => {
+  const place = placeFor(t)
+  const memberConfig = join(place.root, 'member-only-config')
+  mkdirSync(memberConfig, { recursive: true })
+  const memberOnly = ownerMemoryPlaces({
+    launcher_env: { HOME: place.home },
+    member_env: { HOME: place.home, CLAUDE_CONFIG_DIR: memberConfig },
+    home: place.home,
+    launch_dir: place.worktree,
+    settings_files: [],
+    user_scope: userScopeFor(place),
+  })
+  for (const name of CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES) {
+    assertDeniedBy(memberOnly, place.worktree, place.home, join(memberConfig, name), 'martha#187', 'the config dir only the member\'s own environment names')
+    assertDeniedBy(memberOnly, place.worktree, place.home, join(place.config, name), 'martha#187', 'the launcher\'s config dir, which its own environment names')
+  }
+})
+
 test('a link at the global config the host prefers, whose target does not exist yet, is denied where it will write (martha#187 r=3)', (t) => {
   const place = placeFor(t)
   for (const name of CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES) {
@@ -535,19 +558,16 @@ test('every place the map says another package denies is refused through the rea
   }
 })
 
-test('the permission rules carry every place the host runs as code into permissions.deny, a Write rule and an Edit rule each (martha#187)', (t) => {
+test('the permission rules carry every place the host runs as code into permissions.deny, one rule each (#187, #226)', (t) => {
   const place = placeFor(t)
   const rules = memoryDenyRules(placesFor(place))
   for (const folder of CODE_FOLDERS) {
-    assert.ok(rules.includes(`Write(/${join(place.config, folder)}/**)`), folder)
     assert.ok(rules.includes(`Edit(/${join(place.config, folder)}/**)`), folder)
   }
   for (const file of [...CODE_FILES, USER_SETTINGS_FILE, ...CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES]) {
-    assert.ok(rules.includes(`Write(/${join(place.config, file)})`), file)
     assert.ok(rules.includes(`Edit(/${join(place.config, file)})`), file)
   }
   const config = join(place.home, HOST_TRUST_RECORD_FILE)
-  assert.ok(rules.includes(`Write(/${config})`), `Write(/${config}) in ${rules.join(' ')}`)
   assert.ok(rules.includes(`Edit(/${config})`), `Edit(/${config}) in ${rules.join(' ')}`)
 })
 
@@ -727,3 +747,19 @@ test('a git directory that appears during the session is covered from the next c
   assertRefusedAsGit(places, place.worktree, place.home, config, 'the checkout that appeared between calls')
 })
 
+
+// The rules are a second layer only on a host that matches them. The host says in its own words which of them its file
+// permission checks never match, and a launch reads that before it starts a member (martha#226). What it says is
+// matched against the rules this repository wrote, and nothing else: the wording is the host's, and a line quoting one
+// of our rules is about that rule whatever it goes on to say.
+test('the host\'s own words are read for a rule this launch wrote, and a line about someone else\'s rule is not one (#226)', () => {
+  const written = ['Edit(//home/synthetic/.claude/projects/*/**)', 'Edit(//home/synthetic/.claude.json)']
+  const aboutOurRule = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude.json) is not matched by file permission checks'
+  assert.deepEqual(hostLinesNamingARule(`starting\n${aboutOurRule}\n`, written), [aboutOurRule])
+  // A rule the owner's own settings carry is the owner's business, and not a reason to refuse their member.
+  assert.deepEqual(hostLinesNamingARule('Permission deny rule (user.json): Edit(//home/synthetic/notes/**) never matches', written), [])
+  assert.deepEqual(hostLinesNamingARule('', written), [])
+  // Every line that names one, not the first: a host complaining about two rules is two faults to read.
+  const second = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude/projects/*/**) never matches'
+  assert.deepEqual(hostLinesNamingARule(`${aboutOurRule}\n${second}\n`, written), [aboutOurRule, second])
+})

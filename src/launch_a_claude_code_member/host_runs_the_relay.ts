@@ -250,8 +250,7 @@ export const MCP_CONFIG_SWITCH = '--mcp-config'
  * with `--strict-mcp-config` and no server file, and with hooks turned off by the key the recording names.
  */
 export function initQuestionArgs(switches: readonly string[], hooksOffSettings: string): string[] {
-  const kept = switches.filter((arg, at) => arg !== MCP_CONFIG_SWITCH && !arg.startsWith(`${MCP_CONFIG_SWITCH}=`) && switches[at - 1] !== MCP_CONFIG_SWITCH)
-  return [...kept, '--settings', hooksOffSettings, ...SESSION_INIT_ARGS]
+  return [...withoutTheServerFile(switches), '--settings', hooksOffSettings, ...SESSION_INIT_ARGS]
 }
 
 /** The one control request the init question writes: the engine's `initialize`, which answers with the session's init. */
@@ -301,12 +300,29 @@ export async function outputStylesDirTheHostReports(
   return { dir }
 }
 
-/** The host's answer to the init question: what it printed, or why it could not be asked. */
-async function askedForItsInit(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string): Promise<{ readonly stdout: string } | { readonly failure: string }> {
+/** What the host printed while it was asked a question, on both streams. */
+export interface WhatTheHostPrinted {
+  readonly stdout: string
+  /** What it said about its own settings, which the host writes here and not on the stream that answers (#226). */
+  readonly stderr: string
+}
+
+/** A question put to the host over stream-json: the request line, and what counts as the whole answer. */
+interface HostQuestion {
+  readonly ask: string
+  /** Whether what it printed holds the whole answer. A question that says so is stopped there, the host ended with it. */
+  readonly answered: (printed: WhatTheHostPrinted) => boolean
+}
+
+/**
+ * Asks the host one question and returns everything it printed on both streams, or why it could not be asked. The host
+ * is detached, so it leads its own process group and everything it started is in that group, and the group is killed
+ * once the question is over (martha#154 r=2).
+ */
+async function askedTheHost(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string, question: HostQuestion): Promise<WhatTheHostPrinted | { readonly failure: string }> {
   return new Promise((done) => {
-    // Detached, so the host leads its own process group and everything it started is in that group (martha#154 r=2).
-    const child = spawn(binary, args, { cwd, env, stdio: ['pipe', 'pipe', 'ignore'], detached: true })
-    let printed = ''
+    const child = spawn(binary, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
+    let printed: WhatTheHostPrinted = { stdout: '', stderr: '' }
     let settled = false
     /** Ends the question: the host and everything it started, by group, so nothing is left running. */
     const stopHost = (): void => {
@@ -318,7 +334,7 @@ async function askedForItsInit(binary: string, args: readonly string[], env: Nod
         child.kill('SIGKILL')
       }
     }
-    const finish = (answer: { readonly stdout: string } | { readonly failure: string }): void => {
+    const finish = (answer: WhatTheHostPrinted | { readonly failure: string }): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -326,14 +342,66 @@ async function askedForItsInit(binary: string, args: readonly string[], env: Nod
       done(answer)
     }
     const timer = setTimeout(() => finish({ failure: `it did not answer within ${HOST_ANSWER_TIMEOUT_MS} ms` }), HOST_ANSWER_TIMEOUT_MS)
+    const said = (): void => {
+      // The answer is one line; a question that has it is closed and the host stopped as soon as it is read.
+      if (question.answered(printed)) finish(printed)
+    }
     child.stdout?.on('data', (chunk: Buffer | string) => {
-      printed += chunk.toString()
-      // The answer is one line; the request is closed and the host stopped as soon as it is read.
-      if (initResponseIn(printed) !== undefined) finish({ stdout: printed })
+      printed = { ...printed, stdout: printed.stdout + chunk.toString() }
+      said()
+    })
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      printed = { ...printed, stderr: printed.stderr + chunk.toString() }
     })
     child.once('error', (error) => finish({ failure: `it could not be run (${String((error as NodeJS.ErrnoException).code ?? error.message)})` }))
-    child.once('close', () => finish(printed === '' ? { failure: 'it ended without a word' } : { stdout: printed }))
+    child.once('close', () => finish(question.answered(printed) || printed.stdout !== '' || printed.stderr !== '' ? printed : { failure: 'it ended without a word' }))
     child.stdin?.on('error', () => undefined)
-    child.stdin?.end(`${INITIALIZE_REQUEST}\n`)
+    child.stdin?.end(question.ask)
   })
+}
+
+/** The host's answer to the init question: what it printed, or why it could not be asked. */
+async function askedForItsInit(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string): Promise<WhatTheHostPrinted | { readonly failure: string }> {
+  return askedTheHost(binary, args, env, cwd, { ask: `${INITIALIZE_REQUEST}\n`, answered: (printed) => initResponseIn(printed.stdout) !== undefined })
+}
+
+/** The switches the host is asked in print mode with when no turn is wanted: it reads its settings, then asks for input. */
+const PRINT_MODE = '--print'
+
+/** The switch that refuses a tool server file, so a question names none and starts none. */
+const STRICT_NO_SERVER_FILE = '--strict-mcp-config'
+
+/** The switches `switches` holds, less a tool server file and the file it names (martha#154 r=2). */
+export function withoutTheServerFile(switches: readonly string[]): string[] {
+  return switches.filter((arg, at) => arg !== MCP_CONFIG_SWITCH && !arg.startsWith(`${MCP_CONFIG_SWITCH}=`) && switches[at - 1] !== MCP_CONFIG_SWITCH)
+}
+
+/**
+ * The switches the host is asked about the rules with (martha#226): print mode, no tool server file, the launch's own
+ * switches less `--mcp-config`, and the settings file last so it is the one the host reads.
+ *
+ * Print mode with no prompt ends at once, after the host has read its settings, on its own complaint that no input was
+ * given. That is the run in which it says which rules its file permission checks never match: it asks for no turn and
+ * reaches no model, so the question costs one host start and nothing else.
+ */
+export function ruleQuestionArgs(switches: readonly string[], settings: string): string[] {
+  return [PRINT_MODE, ...withoutTheServerFile(switches), STRICT_NO_SERVER_FILE, '--settings', settings]
+}
+
+/**
+ * Everything the host printed when it read `settings` — the standard error it writes what it makes of those settings on
+ * included — or why it could not be asked (martha#226).
+ *
+ * The question is print mode with no prompt: the host reads the rules, says which of them it can never match, and ends
+ * on its own. Nothing it starts is left behind, and nothing of the owner's runs: the settings file turns every hook off
+ * and names no tool server.
+ */
+export async function whatTheHostSaysWithTheseSettings(
+  binary: string,
+  switches: readonly string[],
+  settings: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Promise<WhatTheHostPrinted | { readonly failure: string }> {
+  return askedTheHost(binary, ruleQuestionArgs(switches, settings), env, cwd, { ask: '', answered: () => false })
 }

@@ -89,7 +89,7 @@ import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
 
-import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
@@ -734,10 +734,16 @@ export function writesTheOwnersMemory(
 
 /**
  * The permission rules that refuse the host's own writes into the same places
- * (`Write(//<path>/**)`, `Edit(//<path>/**)`), each place as named and as its
- * links lead, and each project's memory folder that is a link where it leads at
+ * (`Edit(//<path>/**)`, `Edit(//<path>)`), each place as named and as its links
+ * lead, and each project's memory folder that is a link where it leads at
  * launch. A folder linked later is the gate's alone, which follows it at each
  * write.
+ *
+ * One spelling, under the tool the host's own file permission checks use
+ * (CLAUDE_CODE_FILE_RULE_TOOL): it says a rule naming a file-writing tool other
+ * than that one is never matched, and that the one it names covers every
+ * file-editing tool, so a second `Write(...)` twin of each rule matched nothing
+ * and only gave the host something to warn about (martha#226).
  */
 export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
   const rootSpellings = places.memory_roots.flatMap((root) => spellingsOf(root) ?? [root])
@@ -764,7 +770,7 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
     ...[...linkedAway, ...places.folders.flatMap((folder) => spellingsOf(folder.what) ?? [folder.what])].map((folder) => `${folder}/**`),
     ...places.files.flatMap((file) => spellingsOf(file.what) ?? [file.what]),
   ])
-  return [...globs].flatMap((glob) => [`Write(/${glob})`, `Edit(/${glob})`])
+  return [...globs].map((glob) => `${CLAUDE_CODE_FILE_RULE_TOOL}(/${glob})`)
 }
 
 /**
@@ -798,6 +804,23 @@ export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * The lines of what a host printed about `rules` — the ones that quote a rule this repository wrote (martha#226).
+ *
+ * The host says in its own words which rules its file permission checks never match, on the terminal at a session's
+ * start and on the standard error of a run that is not a terminal. A rule it names there is a rule that does nothing,
+ * so the launch reads this before it starts a member and refuses rather than run with a place it believes closed.
+ * Nothing is matched but the rule itself, cut from this repository's own list: the host's wording is the host's, and a
+ * line quoting one of our rules is about that rule whatever it goes on to say. Its suggestion quotes the rule written
+ * under the tool it does match, which is ours too, so a line can be counted once for each spelling it names.
+ */
+export function hostLinesNamingARule(printed: string, rules: readonly string[]): string[] {
+  return printed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && rules.some((rule) => line.includes(rule)))
+}
 
 /**
  * The settings the host is started with: the approved copy, or none, with

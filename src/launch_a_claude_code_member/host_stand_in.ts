@@ -46,6 +46,13 @@ export interface HostAnswers {
   readonly initChildFile?: string
   /** A file the init answer touches when the settings it was given leave hooks on, as a host that runs one does (#154 r=2). */
   readonly initHookFile?: string
+  /**
+   * Whether it says, in its own words and on its standard error, that the first rule the settings it was given hold can
+   * never match — as the recorded host says of a rule under a tool its file permission checks never use (#226). It
+   * reads the rule out of the settings file rather than naming one, so the launch's own rules are what it complains
+   * about.
+   */
+  readonly callsTheFirstRuleDead?: boolean
 }
 
 /** The key that turns hooks off from any settings file, as the recording spells it: the stand-in reads it, never types it. */
@@ -66,12 +73,32 @@ function initSideEffects(answers: HostAnswers): string {
   return lines.length === 0 ? '' : `${lines.join('; ')}; `
 }
 
+/**
+ * The line a stand-in prints on its standard error when a test asks it to call a rule dead (martha#226): it takes the
+ * settings file it was given — the last `--settings` on its command line, as a host reads them — reads the first rule
+ * out of it, and says that rule is not matched by its file permission checks. A settings file that holds no rule is
+ * answered in silence, so a launch that asks with none is not refused for a rule nobody wrote.
+ */
+function callsTheFirstRuleDead(): string {
+  return [
+    `prev=''; found=''`,
+    `for a in "$@"; do if [ "$prev" = --settings ]; then found="$a"; fi; prev="$a"; done`,
+    `rule=$(grep -o '"[A-Za-z]*(/[^"]*)"' "$found" 2>/dev/null | head -n 1 | tr -d '"')`,
+    `if [ -n "$rule" ]; then printf 'Permission deny rule (%s): %s is not matched by file permission checks\\n' "$found" "$rule" >&2; fi`,
+  ].join('; ')
+}
+
+/** The lines a host that calls the first rule it was given dead says before it answers, or nothing when it says nothing. */
+const aDeadRule = (answers: HostAnswers): string => (answers.callsTheFirstRuleDead === true ? `${callsTheFirstRuleDead()}; ` : '')
+
 /** The shell lines a stand-in `claude` starts with, right after its #! line. */
 export function hostAnswers(answers: HostAnswers = {}): string[] {
   const report = answers.report ?? LOADS_THE_RELAY
   const reportExit = answers.reportExit ?? (report === LOADS_THE_RELAY ? 0 : 1)
   // What the question may start comes first, then the answer; nothing at all when the test asks for neither.
   const sideEffects = initSideEffects(answers)
+  // A host that reads the rules it was given and calls one dead says so before it answers, as the recorded one does.
+  const deadRule = aDeadRule(answers)
   return [
     ...(answers.callsFile === undefined ? [] : [`printf '%s %s\\n' "$0" "$1" >> ${quoted(answers.callsFile)}`]),
     ...(answers.validatedFile === undefined
@@ -82,5 +109,8 @@ export function hostAnswers(answers: HostAnswers = {}): string[] {
     // The init question is the one run that asks for stream-json input: the member's own start never does. Whatever a
     // host may start there is started here first, so a launch that lets it happen shows it (martha#154 r=2).
     `case " $* " in *" --input-format stream-json "*) ${sideEffects}printf '%s\\n' ${quoted(answers.initAnswer ?? reportsOutputStyles(STAND_IN_OUTPUT_STYLES_DIR))}; exit 0;; esac`,
+    // The question about the rules is print mode with no prompt: a host reads its settings, says what it makes of them,
+    // and ends on its own complaint that no input was given (#226). It asks for no turn, and neither does this.
+    `if [ "$1" = --print ]; then ${deadRule}printf 'Error: Input must be provided either through stdin or as a prompt argument when using --print\\n' >&2; exit 1; fi`,
   ]
 }

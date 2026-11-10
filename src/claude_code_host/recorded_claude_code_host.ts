@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs'
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { promptOriginKindsOf } from './claude_code_prompt_origins.ts'
 import { sessionStartSourcesOf } from './claude_code_session_events.ts'
+import { WHOLE_FILE_TOOL } from './claude_code_file_tools.ts'
+import { ruleMatchersIn, theToolItsChecksMatch, type FilePermissionRules } from './file_permission_rules.ts'
 import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 import type { ProtectedConfigPlaces } from './protected_config_places.ts'
 import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
@@ -38,6 +40,11 @@ export interface MemoryOff {
 /** What the host binary says, as recorded; the markdown it loads since martha#146, the config-dir places it runs as code since martha#187. */
 export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlaces {
   readonly host_version: string
+  /**
+   * Which of a file tool's rules the host's file permission checks match, cut from the binary (martha#226). It is a
+   * field of its own rather than a mix-in: what is recorded is the host's statement, and the mapping is derived.
+   */
+  readonly file_permission_rules: FilePermissionRules
   /**
    * How the recorded host's auto-memory is kept off, re-read by hand from that
    * version's code and restated, never derived: the recorder carries it over
@@ -81,7 +88,16 @@ export function recordedHostFrom(text: string): RecordedHost {
   if (!Array.isArray(recording.legacy_global_config_names) || recording.legacy_global_config_names.length === 0) {
     throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
   }
+  ruleMatchersIn(filePermissionRulesOf(recording).matcher)
   return recording
+}
+
+/** The recorded statement on which rules the file permission checks match, or a refusal when the recording holds none. */
+function filePermissionRulesOf(recording: RecordedHost): FilePermissionRules {
+  if (typeof recording.file_permission_rules?.matcher !== 'string' || recording.file_permission_rules.matcher.trim() === '') {
+    throw new Error("The recording does not hold the statement on which rules the host's file permission checks match, so a rule the host would ignore cannot be told from one it honours (martha#226).")
+  }
+  return recording.file_permission_rules
 }
 
 /** Every SessionStart source the recorded host sends. */
@@ -118,3 +134,14 @@ export const CLAUDE_CODE_OUTPUT_STYLES_FIELD: string = outputStylesFieldIn(RECOR
  * member's write there starts a server in the owner's next session unasked.
  */
 export const CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES: readonly string[] = RECORDED_HOST.legacy_global_config_names
+
+/**
+ * The tool a permission rule that refuses a file write is written under, so the host's own file permission checks
+ * match it: the one the recorded statement maps a whole-file write to, `Edit` on 2.1.322, whose rules the host's own
+ * complaint says cover every file-editing tool (martha#226). Never typed: a host that maps the write another way
+ * changes it here.
+ */
+export const CLAUDE_CODE_FILE_RULE_TOOL: string = theToolItsChecksMatch(
+  ruleMatchersIn(filePermissionRulesOf(RECORDED_HOST).matcher),
+  WHOLE_FILE_TOOL,
+)
