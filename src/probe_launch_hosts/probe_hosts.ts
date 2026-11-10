@@ -12,7 +12,7 @@
 // whose config only touches marker files there, and removes it.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -45,8 +45,9 @@ import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_se
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
+import { memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { absencesWithoutAHostProof, judgeRow } from './an_absence_row_proves_the_host_ran.ts'
+import { absencesWithoutAHostProof, judgeRow, type RowClaims } from './an_absence_row_proves_the_host_ran.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -57,7 +58,12 @@ const RUN_TIMEOUT_MS = 120_000
 const LINGER_SECONDS = 3
 
 const PROMPT = 'Reply with the single word ok.'
-const HEADLESS_CLAUDE = ['-p', '--max-turns', '1', '--model', 'haiku']
+/**
+ * A headless run with room for one tool call before the reply (martha#223). At one turn a
+ * host that spends it on a tool call exits non-zero, and every row that reads the host's
+ * exit — or reading the model's answer — reports that as a failure of the tree under test.
+ */
+const HEADLESS_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku']
 
 /** One scratch checkout: where its files go and where markers land. */
 interface Place {
@@ -713,9 +719,46 @@ interface RunResult {
   readonly markers: Readonly<Record<string, boolean>>
   /** The host's exit status, or null when the launcher's gate refused it and no host ran. */
   readonly status: number | null
+  /** How many times the host was made before this result stood; absent or 1 means once. */
+  readonly attempts?: number
 }
-/** Each marker and whether it was started, or why the probe could not run. */
+
+/**
+ * How many times a row whose claim rests on the host's clean exit is made before its result
+ * stands (martha#223). A host that spent every turn it was given, or the model service failing,
+ * is not evidence about the tree: on one live run in five a row read `the host exited CLAIMED
+ * cleanly but exited 1` on an unchanged tree. A row that is really wrong is wrong in every
+ * attempt and is still reported.
+ */
+const ATTEMPTS_FOR_A_CLEAN_EXIT = 3
+
+/**
+ * Whether to make this run again instead of judging it (martha#223): only when the host's exit
+ * is the attempt's **only** red. A row whose marker already came out wrong is this row's answer
+ * and stands at once — a write that got through and then exited 1 is an intermittent failure of
+ * the deny rules, which is the defect these rows exist to find, and making it again in a fresh
+ * scratch would hide it.
+ */
+export function onlyTheExitFailed(probe: RowClaims, run: RunResult | string): boolean {
+  if (probe.host_ok !== true || typeof run === 'string') return false
+  const failed = judgeRow(probe, run).filter((line) => line.failed)
+  return failed.length === 1 && failed[0]?.about === 'the exit'
+}
+
+/** A run, with how many times the host was made before this result stood. */
+const afterAttempts = (run: RunResult | string, attempts: number): RunResult | string => (typeof run === 'string' ? run : { ...run, attempts })
+
+/** One probe's row, made again only while the host's exit is the only thing that failed. */
 function runProbe(probe: Probe): RunResult | string {
+  for (let attempt = 1; attempt < ATTEMPTS_FOR_A_CLEAN_EXIT; attempt += 1) {
+    const run = oneRunOfAProbe(probe)
+    if (!onlyTheExitFailed(probe, run)) return afterAttempts(run, attempt)
+  }
+  return afterAttempts(oneRunOfAProbe(probe), ATTEMPTS_FOR_A_CLEAN_EXIT)
+}
+
+/** One run of a probe's host, in a scratch of its own. */
+function oneRunOfAProbe(probe: Probe): RunResult | string {
   // A fresh directory each time: OpenCode's background service caches config per directory.
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'martha-probe-')))
   const checkout = join(scratch, 'checkout')
@@ -787,6 +830,8 @@ function reportProbe(probe: Probe): void {
     if (line.failed) process.exitCode = 1
     console.log(line.text)
   }
+  // A row that needed the host made again reads differently from one that did not (martha#223).
+  if (run.attempts !== undefined && run.attempts > 1) console.log(`${probe.what}: the host was made ${run.attempts} times before this result stood`)
 }
 
 // --- the folders the host loads the owner's own text from (martha#154) -------
@@ -833,8 +878,11 @@ const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder
         command: 'claude',
         args: [
           '-p',
+          // Room for a turn that does not reach the Write (martha#223): a model that spends
+          // both turns elsewhere exits non-zero, and this row's host_ok reads that as the
+          // launch having failed rather than as the write never being tried.
           '--max-turns',
-          '2',
+          '4',
           '--model',
           'haiku',
           '--permission-mode',
@@ -869,19 +917,39 @@ export const ALL_PROBES: readonly Probe[] = [
   ...OWNER_SCOPE_PROBES,
 ]
 
+/**
+ * The turn budget each row starts the model with, by the row's own words, so a test reads the
+ * commands the probe really builds rather than a constant restated beside it (martha#223).
+ */
+export function turnBudgets(): readonly { readonly what: string; readonly maxTurns: number | undefined }[] {
+  return ALL_PROBES.map((probe) => {
+    const { args } = probe.command(NO_SWITCHES, NO_PLACE)
+    const at = args.indexOf('--max-turns')
+    return { what: probe.what, maxTurns: at < 0 ? undefined : Number(args[at + 1]) }
+  })
+}
+
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
 // session of a project, and a session in a git worktree loads the main clone's
-// folder. Each run plants a codeword there and asks for it: the control, by
-// hand with memory on, must say it, so a run that does not proves the off
-// switch and not a loader that never ran. Martha's planned launch must not, even
-// when the owner's environment says memory on, and must leave the folder holding
-// exactly what was planted. The folder is the owner's real one, removed after.
+// folder. Each run plants a codeword there and starts the host once: the control,
+// by hand with memory on, must be seen loading it, so a run that shows nothing
+// proves the off switch and not a loader that never ran. Martha's planned launch
+// must show nothing, even when the owner's environment says memory on, and must
+// leave the folder holding exactly what was planted. The folder is the owner's real
+// one, removed after.
+//
+// What was loaded is read from the host's own record of the session (martha#223),
+// not from an answer: the transcript quotes each file the host read in. Asking the
+// model used to be the row, and the model sometimes spent every turn it was given
+// without answering — one run in five, whatever the budget — so a tree where
+// nothing was wrong went red.
 
-const MEMORY_PROMPT = 'Is there a codeword in your memory or instructions? Reply with only the codeword, or NONE.'
 const MEMORY_INDEX = 'MEMORY.md'
 const MEMORY_NOTE = 'codeword.md'
 
+/** The record the host writes its session into: a transcript, one json line per entry. */
+const SESSION_RECORD = '.jsonl'
 
 /** Every file under `dir`, relative, sorted. */
 function filesUnder(dir: string): string[] {
@@ -895,10 +963,34 @@ function memoryOn(): Record<string, string | undefined> {
   return env
 }
 
-/** One memory run: whether the reply named the codeword, or why it could not run. */
-function codewordSaid(
+/**
+ * The session records the host has written in the project folders given, by path. Only the
+ * folders a run's own checkouts key are ever passed (martha#223 r=2): the owner's projects root
+ * holds every session on the machine, and a transcript some other session started there is not
+ * this run's record — reading the whole root once made a Martha arm that wrote nothing read
+ * `no, as claimed` as soon as a neighbour started a session.
+ */
+export function theRecordsIn(folders: readonly (string | undefined)[]): readonly string[] {
+  return folders
+    .flatMap((folder) => (folder !== undefined && existsSync(folder) ? readdirSync(folder).map((name) => join(folder, name)) : []))
+    .filter((path) => path.endsWith(SESSION_RECORD))
+    .sort()
+}
+
+/**
+ * What one memory run showed: whether the host recorded reading the codeword in, or why there
+ * was no record to read (martha#223). The record is written when the session starts, so a run
+ * whose model spent every turn still answers this row; a run that wrote no record at all is
+ * named, never read as "the codeword was not loaded".
+ *
+ * The record is looked for in the project folders this run's own checkouts key — the folder it
+ * started the host in, and the main clone's for a worktree, which is where the host keeps a
+ * worktree session — and only in the files that appear while this run is the one running.
+ */
+function theCodewordWasLoaded(
   scratch: string,
-  cwd: string,
+  start: string,
+  main: string,
   args: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
   codeword: string,
@@ -906,15 +998,20 @@ function codewordSaid(
 ): boolean | string {
   // Read before the host starts, so the folder it writes is one this run can name and take away.
   const before = theProjectFoldersThere(env)
+  const ourFolders = [start, main].map((folder) => projectFolderFor(env, folder))
+  const recordsBefore = new Set(theRecordsIn(ourFolders))
   try {
-    const run = runTheHost('claude', [...HEADLESS_CLAUDE, MEMORY_PROMPT, ...args], {
-      cwd,
+    const run = runTheHost('claude', [...HEADLESS_CLAUDE, PROMPT, ...args], {
+      cwd: start,
       env,
       timeout_ms: RUN_TIMEOUT_MS,
       pid_file,
     })
     if (run.error !== undefined) return `could not run: ${run.error}`
-    return printedText(run.stdout).includes(codeword)
+    const written = theRecordsIn(ourFolders).filter((path) => !recordsBefore.has(path))
+    if (written.length === 0) return 'the host wrote no session record in its own project folder, so there is nothing to read'
+    const record = written.map((path) => readFileSync(path, 'utf8')).join('\n')
+    return memoryTheHostLoadedFor(record, start).some((file) => file.text.includes(codeword))
   } finally {
     // The scratch itself goes when the whole memory probe is done; its folders go with each run.
     stopTheProcessesLeftIn(scratch)
@@ -938,7 +1035,7 @@ function memoryPlace(scratch: string, worktree: boolean): { readonly start: stri
 type MemoryLine = readonly [line: string, seen: boolean | string, claimed: boolean]
 
 /** Plants the codeword in the memory folder the host loads for the run, then runs the control and Martha's launch. */
-function memoryLines(scratch: string, memory: string, start: string, codeword: string): readonly MemoryLine[] {
+function memoryLines(scratch: string, memory: string, main: string, start: string, codeword: string): readonly MemoryLine[] {
   const folder = join(memory, 'memory')
   put(folder, MEMORY_INDEX, `- [codeword](${MEMORY_NOTE}) - the codeword is ${codeword}\n`)
   put(folder, MEMORY_NOTE, `---\nname: codeword\ndescription: the codeword\n---\nThe codeword is ${codeword}.\n`)
@@ -951,8 +1048,8 @@ function memoryLines(scratch: string, memory: string, start: string, codeword: s
   const forcedOn = Object.fromEntries(Object.keys(CLAUDE_MEMORY_OFF).map((name) => [name, '0']))
   const group = (at: number) => join(scratch, `host-group-${at}`)
   return [
-    ['by hand, memory on: codeword said', codewordSaid(scratch, start, prepared.switches.args, memoryOn(), codeword, group(1)), true],
-    ["as Martha starts it, the owner's environment saying memory on: codeword said", codewordSaid(scratch, start, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
+    ['by hand, memory on: the host recorded reading the codeword in', theCodewordWasLoaded(scratch, start, main, prepared.switches.args, memoryOn(), codeword, group(1)), true],
+    ["as Martha starts it, the owner's environment saying memory on: the host recorded reading the codeword in", theCodewordWasLoaded(scratch, start, main, prepared.switches.args, launchEnvironment({ ...process.env, ...forcedOn }, prepared.switches), codeword, group(2)), false],
     ['the memory folder holds exactly what was planted', JSON.stringify(filesUnder(folder)) === JSON.stringify(planted), true],
   ]
 }
@@ -975,7 +1072,7 @@ function reportMemoryProbe(worktree: boolean): void {
     const lines: readonly MemoryLine[] =
       memory === undefined
         ? [["the owner's config dir can be told", 'it cannot', true]]
-        : memoryLines(scratch, memory, start, `ZEBRA${randomBytes(4).toString('hex')}`)
+        : memoryLines(scratch, memory, main, start, `ZEBRA${randomBytes(4).toString('hex')}`)
     if (lines.some(([, seen, claimed]) => seen !== claimed)) process.exitCode = 1
     for (const [line, seen, claimed] of lines) {
       console.log(`${what}: ${line} ${typeof seen === 'string' ? seen : yesNo(seen)}, ${seen === claimed ? 'as claimed' : `CLAIMED ${yesNo(claimed)}`}`)
