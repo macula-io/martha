@@ -23,7 +23,7 @@ import {
 } from '../keep_the_ledger/keep_the_ledger.ts'
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
-import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
+import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -142,8 +142,7 @@ interface SessionState {
 }
 
 /** The tools a member can call, over the place its launcher gave it. */
-export function crewToolsOver(places: CrewToolPlaces): CrewTools {
-  const state: SessionState = { held: null, session: '' }
+export function crewToolsOver(places: CrewToolPlaces): CrewTools {  const state: SessionState = { held: null, session: '' }
   const handlers = handlersOver(places, state)
 
   return {
@@ -253,8 +252,10 @@ async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   if ('refused' in declared) return declared
   const seen = seeTheCrew(declared.settings, beatsOf(places.beats, declared.settings), places.ledger.clock.now())
   // The pane is the host's, and opens by itself only when the declaration switched it on (martha#254): one bit, read
-  // from the declaration the launcher already read, so the mod decides nothing on its own.
-  return { answer: JSON.stringify({ ...seen, pane_at_start: declared.settings.house_rules.dashboard }) }
+  // from the declaration the launcher already read, so the mod decides nothing on its own. The interval it redraws on
+  // is the beat's own, named here and read there, so the pane cannot drift from the beat the rows are written on
+  // (part 2 r=2 R1): the host draws a `ui.render` once and caches it until a plugin invalidates it.
+  return { answer: JSON.stringify({ ...seen, pane_at_start: declared.settings.house_rules.dashboard, pane_redraw_ms: READER_BEAT_MS }) }
 }
 
 /** The declaration, and the crew's names as a report's rules read them; or why it could not be read. */

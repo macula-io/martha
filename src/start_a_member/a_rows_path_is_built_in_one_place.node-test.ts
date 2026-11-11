@@ -25,6 +25,12 @@ const QUOTES = `'"${String.fromCharCode(96)}`
 /** A quoted `rows`, which is either a path segment or an index into a type. */
 const SPELLS_ROWS = new RegExp(`[${QUOTES}]rows[${QUOTES}]`)
 
+/**
+ * A quoted string that ends in `/rows`, which is how a path is appended without the name standing alone: a template
+ * such as `${home}/rows`, or a joined tail. Part 1's scan caught this and part 2's rewrite lost it (r=2 R3b).
+ */
+const ENDS_IN_ROWS = new RegExp(`/rows[${QUOTES}]`)
+
 /** The core's files that may build a path, which are the ones that ship. */
 const shippingSources = (): ReturnType<typeof coreSources> => coreSources('src').filter((source) => !source.path.endsWith('.node-test.ts'))
 
@@ -35,7 +41,7 @@ test('no shipping file but the one that defines it spells a rows path (martha#25
       source.text
         .split('\n')
         .map((line, index) => ({ line, number: index + 1 }))
-        .filter(({ line }) => SPELLS_ROWS.test(line) && !READS_THE_STORE_FROM_THE_CONTRACT.test(line))
+        .filter(({ line }) => (SPELLS_ROWS.test(line) || ENDS_IN_ROWS.test(line)) && !READS_THE_STORE_FROM_THE_CONTRACT.test(line))
         .map(({ line, number }) => `${source.path}:${number}: ${line.trim()}`),
     )
   assert.deepEqual(offenders, [], "a rows path is built by the crew's own place (crewRowsDirectory) and nowhere else")

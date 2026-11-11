@@ -7,11 +7,13 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { CREW_TOOL_NAMES, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -26,7 +28,10 @@ import {
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
+import { RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -333,4 +338,60 @@ test("a run reading a member's rows derives the same place the launcher writes t
   } finally {
     rmSync(state_home, { recursive: true, force: true })
   }
+})
+
+// --- the crew reaches a launched member (martha#254 part 2 r=2 R3a) -------------
+
+/** The socket of the one launch under a test's relay root, once its launcher has served it. */
+async function launchedSocket(relay_root: string, t: TestContext): Promise<string> {
+  let found: string | undefined
+  await until('the launcher served its relay socket', () => {
+    const launch = readdirSync(relay_root).find((name) => existsSync(join(relay_root, name, RELAY_SOCKET_NAME)))
+    found = launch === undefined ? undefined : join(relay_root, launch, RELAY_SOCKET_NAME)
+    return found !== undefined
+  }, t)
+  assert.ok(found !== undefined, 'the launch served a socket')
+  return found
+}
+
+/** Posts a body to a launcher's relay socket, as the mod does, and gives back what it answered. */
+function postOverSocket(socket_path: string, path: string, body: unknown): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const sent = request(`${RELAY_ORIGIN}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, socketPath: socket_path }, (response) => {
+      const chunks: Buffer[] = []
+      response.on('data', (chunk: Buffer) => chunks.push(chunk))
+      response.on('end', () => resolve({ status: response.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }))
+    })
+    sent.on('error', reject)
+    sent.end(JSON.stringify(body))
+  })
+}
+
+/**
+ * `crewOf` in the launcher is the only link that hands a launched member its crew's tools (martha#254 part 2 r=2
+ * R3a): a launch given no crew place answers no tool, and every test of the mod built its relay by hand until this
+ * one. So this starts a member the way the owner does, and asks its launcher — over the socket the mod posts to —
+ * for the crew's tools.
+ */
+test('a member started from the crew answers the crew\'s tools over its relay (martha#254 part 2 r=2 R3a)', async (t) => {
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = fakeClaude(place)
+  const started = await startMember(requestFor(place, fake.command, BUILDER!.name, []))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  t.after(async () => (started.stop('the test is over'), await started.stopped))
+
+  const socket_path = await launchedSocket(place.relay_root, t)
+  const heard = await postOverSocket(socket_path, TOOL_ANSWER_PATH, toolCallBody('session-254', THE_TOOLS_ASK, {}))
+  assert.equal(heard.status, 200, heard.text)
+  assert.ok(!heard.text.includes(NO_CREW_TOOLS), `the launch answered no tool: ${heard.text}`)
+  const answered = JSON.parse((JSON.parse(heard.text) as { answer: string }).answer) as readonly { name: string }[]
+  assert.deepEqual(answered.map((tool) => tool.name), [...CREW_TOOL_NAMES], 'the crew\'s own tools, named by the launcher')
+
+  // The pane is told how often to redraw itself by the same answer it reads the crew from, and the interval is the
+  // beat's own (r=2 R1): a redraw on a literal would drift from the beat the rows are written on.
+  const shown = await postOverSocket(socket_path, TOOL_ANSWER_PATH, toolCallBody('session-254', 'see_the_crew', {}))
+  assert.equal(shown.status, 200, shown.text)
+  const crew = JSON.parse((JSON.parse(shown.text) as { answer: string }).answer) as { pane_redraw_ms: number }
+  assert.equal(crew.pane_redraw_ms, BEAT_INTERVAL_MS, 'the pane redraws on the beat\'s own interval')
 })

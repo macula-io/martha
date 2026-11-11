@@ -41,27 +41,39 @@ interface CrewEngine {
     fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }>
   }
   readonly session: { id(): Promise<string> }
-  readonly clock: { after(ms: number, fn: () => void): { cancel(): void } }
+  readonly clock: {
+    after(ms: number, fn: () => void): { cancel(): void }
+    every(ms: number, fn: () => void): { cancel(): void }
+  }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
   readonly command: { register(command: { name: string; description: string }): Promise<unknown> }
   readonly ui: {
     open(view: { id: string; title: string; rows: number }): Promise<unknown>
     close(view: { id: string }): Promise<unknown>
+    /** Asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it (martha#254). */
+    invalidate(event: string): Promise<unknown>
+    toast(text: string): unknown
     resolve(event: unknown): { Box: unknown; Text: unknown; Button: unknown }
   }
 }
 
 type CrewNext = (event: unknown) => Promise<unknown>
 
+/** The event whose view the pane asks the host to draw again, as the host names it. */
+const THE_PANES_RENDER = 'ui.render'
+
+/** What the launcher heard, or why it could not be heard: the two are not the same, and only one of them is an answer. */
+type Heard = { readonly said: string } | { readonly why: string }
+
 /**
- * Asks the launcher for a core tool's answer, and gives back exactly what it said. A launcher that cannot be
- * heard is not a yes: the answer says so, and the member carries on with it.
+ * Asks the launcher for a core tool's answer. A launcher that cannot be heard is not a yes: the caller is told which
+ * of the two happened, so a pane can say a read failed instead of drawing an empty crew (martha#254 part 2 r=2 R2).
  */
-async function askTheLauncher($: CrewEngine, tool: string, args: Readonly<Record<string, unknown>>): Promise<string> {
+async function hearTheLauncher($: CrewEngine, tool: string, args: Readonly<Record<string, unknown>>): Promise<Heard> {
   // The name is spelled out, as the relay's own module spells it: the host refuses a hooks module whose
   // `$.env.get` is given anything but a literal, an imported constant included (#104).
   const socket_path = await $.env.get('MARTHA_RELAY_SOCKET')
-  if (socket_path === undefined) return NOT_OURS
+  if (socket_path === undefined) return { why: NOT_OURS }
   const session_id = await $.session.id()
   try {
     const heard = await $.http.fetch(`${RELAY_ORIGIN}${TOOL_ANSWER_PATH}`, {
@@ -71,27 +83,78 @@ async function askTheLauncher($: CrewEngine, tool: string, args: Readonly<Record
       socketPath: socket_path,
     })
     const answer = heardToolAnswer(heard.status, heard.text)
-    return answer.answered ? answer.answer : `Martha did not answer: ${answer.why}`
+    return answer.answered ? { said: answer.answer } : { why: answer.why }
   } catch (error) {
-    return `Martha did not answer: ${error instanceof Error ? error.message : String(error)}`
+    return { why: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/** Asks the launcher for a core tool's answer, and gives back the words the model is shown. */
+async function askTheLauncher($: CrewEngine, tool: string, args: Readonly<Record<string, unknown>>): Promise<string> {
+  const heard = await hearTheLauncher($, tool, args)
+  return 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}`
+}
+
+/** What the launcher gives the relay when it asks for the tools to register. */
+interface FromTheLauncher {
+  readonly tools: readonly CrewTool[]
+}
+
+/** The crew as the launcher answered it, with the interval its pane is to be drawn again on. */
+interface TheCrewShown {
+  readonly rows: readonly ShownRow[]
+  readonly counts: Record<string, number>
+  readonly pane_redraw_ms: number | null
+}
+
+/** The crew's tools as the launcher answered them, or null when the answer is not that. */
+function crewToolsIn(said: string): FromTheLauncher | null {
+  try {
+    const parsed = JSON.parse(said) as { tools?: unknown }
+    return Array.isArray(parsed.tools) ? { tools: parsed.tools as CrewTool[] } : null
+  } catch {
+    return null
   }
 }
 
 /** Asks the launcher for the tools to register, which it alone names and describes. */
-async function toolsFromTheLauncher($: CrewEngine): Promise<readonly CrewTool[]> {
-  const said = await askTheLauncher($, 'the_crews_tools', {})
-  try {
-    const parsed: unknown = JSON.parse(said)
-    return Array.isArray(parsed) ? (parsed as CrewTool[]) : []
-  } catch {
-    return []
-  }
+async function toolsFromTheLauncher($: CrewEngine): Promise<FromTheLauncher> {
+  const heard = await hearTheLauncher($, 'the_crews_tools', {})
+  const read = 'said' in heard ? crewToolsIn(heard.said) : null
+  if (read !== null) return read
+  // A launcher that could not answer is not a crew with no tools: registering nothing in silence would leave the
+  // member calling tools that were never registered, and nothing would say why (martha#254 part 2 r=2 R2).
+  $.ui.toast(`Martha did not give the crew's tools: ${'said' in heard ? 'its answer is not a list of them' : heard.why}`)
+  return { tools: [] }
 }
 
-/** Opens the pane, with the rows the host draws it in. */
+/** The pane's redraw timer while a pane is open: the host draws a `ui.render` once and caches it until invalidated. */
+let redrawing: { cancel(): void } | null = null
+
+/** Asks the host to draw the pane again on the interval the launcher named, once per open pane. */
+function startRedrawing($: CrewEngine, every_ms: number | null): void {
+  if (redrawing !== null || every_ms === null) return
+  redrawing = $.clock.every(every_ms, () => void $.ui.invalidate(THE_PANES_RENDER))
+}
+
+/** Stops asking the host to draw the pane: it is closed, or the session is over. */
+function stopRedrawing(): void {
+  redrawing?.cancel()
+  redrawing = null
+}
+
+/** Closes the pane, and stops asking the host to draw it again. */
+async function shutThePane($: CrewEngine): Promise<void> {
+  stopRedrawing()
+  await $.ui.close({ id: PANE })
+}
+
+/** Opens the pane, with the rows the host draws it in, and asks it to keep drawing while it is open. */
 async function openThePane($: CrewEngine): Promise<void> {
-  const said = await askTheLauncher($, 'see_the_crew', {})
-  await $.ui.open({ id: PANE, title: 'Crew', rows: rowsToOpen(said) })
+  const heard = await hearTheLauncher($, 'see_the_crew', {})
+  const shown = 'said' in heard ? crewIn(heard.said) : null
+  await $.ui.open({ id: PANE, title: 'Crew', rows: rowsToOpen('said' in heard ? heard.said : '') })
+  if (shown !== null) startRedrawing($, shown.pane_redraw_ms)
 }
 
 /** What the pane draws, from the answer the launcher gives. */
@@ -113,6 +176,43 @@ function lineOf(row: ShownRow): string {
   const needs = row.needs === '' ? '' : ` · needs you: ${row.needs}`
   const holds = row.holds === '' ? '' : ` · ${row.holds}`
   return `${row.member}: ${row.state} · ${row.task} ${bar}${holds}${waits}${needs}`
+}
+
+/** The crew as the launcher answered it, or null when the answer is not one. */
+function crewIn(said: string): TheCrewShown | null {
+  try {
+    const parsed = JSON.parse(said) as { rows?: readonly ShownRow[]; counts?: Record<string, number>; pane_redraw_ms?: unknown }
+    const every = parsed.pane_redraw_ms
+    return {
+      rows: parsed.rows ?? [],
+      counts: parsed.counts ?? {},
+      pane_redraw_ms: typeof every === 'number' && every > 0 ? every : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Why the pane could not read the crew: the launcher's own words, or the shape it answered with. */
+function unreadableOf(heard: Heard): string {
+  return 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why
+}
+
+/**
+ * The pane when the read failed: it says that it could not read the crew, and why. Drawing `0/0 online` and "no one
+ * has reported" over a broken answer tells the owner a lie about a working crew (martha#254 part 2 r=2 R2).
+ */
+function unreadablePane($: CrewEngine, views: { Box: unknown; Text: unknown; Button: unknown }, why: string): unknown {
+  const { Box, Text, Button } = views
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" justifyContent="space-between">
+        <Text bold>Could not read the crew</Text>
+        <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
+      </Box>
+      <Text>{why}</Text>
+    </Box>
+  )
 }
 
 /** One tool's hook: the call's own fields, minus the ones the host adds, posted to the launcher. */
@@ -144,20 +244,18 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($: CrewEngine, e: unknown) => {
     const { Box, Text, Button } = $.ui.resolve(e) as { Box: unknown; Text: unknown; Button: unknown }
-    const said = await askTheLauncher($, 'see_the_crew', {})
-    let parsed: { rows?: readonly ShownRow[]; counts?: Record<string, number> } = {}
-    try {
-      parsed = JSON.parse(said) as typeof parsed
-    } catch {
-      parsed = {}
-    }
-    const rows = parsed.rows ?? []
-    const counts = parsed.counts ?? {}
+    const heard = await hearTheLauncher($, 'see_the_crew', {})
+    const crew = 'said' in heard ? crewIn(heard.said) : null
+    if (crew === null) return unreadablePane($, { Box, Text, Button }, unreadableOf(heard))
+    // A pane that is being drawn is a pane that is open: if nothing is asking the host to draw it again, ask, so a
+    // member who reports after it opened is drawn without the owner typing anything (part 2 r=2 R1).
+    startRedrawing($, crew.pane_redraw_ms)
+    const { rows, counts } = crew
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between">
           <Text bold>{`${counts.online ?? 0}/${counts.members ?? 0} online · ${counts.waiting ?? 0} waiting · ${counts.needs_you ?? 0} need you`}</Text>
-          <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void $.ui.close({ id: PANE })} />
+          <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
         </Box>
         {rows.length === 0 ? <Text dimColor>No member of this crew has reported yet.</Text> : null}
         {rows.map((row) => (
@@ -170,7 +268,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
   on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
-    for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
+    const fromTheLauncher = await toolsFromTheLauncher($)
+    for (const tool of fromTheLauncher.tools) await $.tool.register(tool)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (opensAtStartOf(first)) await openThePane($)
     return next(e)
