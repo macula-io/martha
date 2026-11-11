@@ -686,6 +686,13 @@ function launchDirectories(
   return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir }
 }
 
+/** The relay server, with the member's row kept fresh while it runs and left alone once its launcher closes it. */
+function beatingWhileItRuns(crew: CrewTools | undefined, server: RelayServer): RelayServer {
+  const stopBeating = crew?.startBeating()
+  if (stopBeating === undefined) return server
+  return { close: async () => { stopBeating(); await server.close() } }
+}
+
 /** The crew's tools for this launch, or nothing at all: a launch given no crew place answers no tool (martha#254). */
 function crewOf(launch: ClaudeCodeMemberLaunch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools() }
@@ -739,10 +746,7 @@ async function servedRelay(
   }
 
   try {
-    const server = await serveTheRelay(relay, socket_path)
-    // The member's row is kept fresh while it runs, and stops being beaten when its launcher closes the relay.
-    const stopBeating = place.crew?.startBeating()
-    return { close: async () => { stopBeating?.(); await server.close() } }
+    return beatingWhileItRuns(place.crew, await serveTheRelay(relay, socket_path))
   } catch (error) {
     return `${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`
   }

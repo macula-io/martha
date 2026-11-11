@@ -276,7 +276,12 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   const specifiers = (name: string) => moduleReferencesOf(read(name), name).map(({ specifier }) => specifier)
   assert.deepEqual(specifiers('register.ts'), ['./relay_protocol.ts'])
   assert.deepEqual(specifiers('relay_protocol.ts'), [])
-  assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./register.ts'] })
+  // The crew's mod is the second module the host loads (martha#254): it carries its tools' calls to the launcher the
+  // same way, and the one rule it applies — whether the pane opens by itself — is a plain file with no imports at all,
+  // so what it decides is readable and testable without the host.
+  assert.deepEqual(specifiers('crew.tsx'), ['./relay_protocol.ts', './pane_rule.ts'])
+  assert.deepEqual(specifiers('pane_rule.ts'), [])
+  assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./register.ts', './crew.tsx'] })
 })
 
 test('the relay reads the socket only from the variable the launcher sets', async () => {

@@ -32,7 +32,16 @@ import { dirname, join } from 'node:path'
 export const RELAY_MANIFEST = '.claude-plugin/plugin.json'
 
 /** The relay's files, relative to its folder: what a launch carries into its copy. */
-export const RELAY_FILES = [RELAY_MANIFEST, 'hooks/hooks.json', 'hooks/register.ts', 'hooks/relay_protocol.ts'] as const
+export const RELAY_FILES = [
+  RELAY_MANIFEST,
+  'hooks/hooks.json',
+  'hooks/register.ts',
+  'hooks/relay_protocol.ts',
+  // The crew's mod and the one rule it applies (martha#254): both are hooks files the host loads, so a copy of the
+  // relay is not the relay without them.
+  'hooks/crew.tsx',
+  'hooks/pane_rule.ts',
+] as const
 
 /** The copy's name inside a launch's relay directory. */
 export const RELAY_COPY_NAME = 'relay'

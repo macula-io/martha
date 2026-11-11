@@ -56,6 +56,7 @@ import {
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
@@ -235,7 +236,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
       crewToolsOver({
         member: request.member,
         ledger: { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } },
-        beats: request.places.dashboard,
+        beats: dashboardRowsIn(request.places.dashboard),
         root: request.root,
         documents: request.documents,
       }),

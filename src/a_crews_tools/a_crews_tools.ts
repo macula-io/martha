@@ -23,7 +23,7 @@ import {
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
-import { BEAT_INTERVAL_MS, beatOf, keepBeat, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
 export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew'] as const
@@ -51,8 +51,8 @@ export interface CrewToolPlaces {
   readonly member: string
   /** The crew's streams: the ledger and the session records. */
   readonly ledger: LedgerHost
-  /** The crew's dashboard rows, one file per member. */
-  readonly beats: string
+  /** The crew's dashboard rows: one per member, kept by the host (../launch_a_claude_code_member/dashboard_rows_in_state). */
+  readonly beats: DashboardStore
   /** The checkout the crew is declared in. */
   readonly root: string
   readonly documents: DocumentStore
@@ -192,14 +192,14 @@ const A_MEMBER_WITH_NO_BEAT = {
 
 /** The row as this session last left it: what a report moves and the heartbeat rewrites. */
 function rowNow(places: CrewToolPlaces, state: SessionState): DashboardRow {
-  const kept = state.held ?? beatOf(places.beats, places.member)
+  const kept = state.held ?? places.beats.read(places.member)
   return { ...A_MEMBER_WITH_NO_BEAT, ...(kept ?? {}), member: places.member, session: state.session, at: places.ledger.clock.now() }
 }
 
 /** Keeps the row, in this process and on disk. */
 function writeRow(places: CrewToolPlaces, state: SessionState, row: DashboardRow): void {
   state.held = row
-  keepBeat(places.beats, row)
+  places.beats.keep(row)
 }
 
 /** `report_progress`: the report's own rules move the row, and the member is told what landed. */
@@ -244,22 +244,14 @@ async function crewOrRefusal(places: CrewToolPlaces): Promise<{ readonly crew: T
 const textOf = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
 /** Every member's beat, by name, for `seeTheCrew` to lay out in the declaration's order. */
-function beatsOf(directory: string, settings: CrewSettings): Readonly<Record<string, DashboardRow>> {
+function beatsOf(store: DashboardStore, settings: CrewSettings): Readonly<Record<string, DashboardRow>> {
+  const held = store.all()
   const beats: Record<string, DashboardRow> = {}
   for (const member of settings.members) {
-    const beat = beatOfOne(directory, member.name)
-    if (beat !== null) beats[member.name] = beat
+    const beat = held[member.name]
+    if (beat !== undefined) beats[member.name] = beat
   }
   return beats
-}
-
-/** One member's beat, or null when it has none: a row that cannot be read is a member not shown, never one shown working. */
-function beatOfOne(directory: string, member: string): DashboardRow | null {
-  try {
-    return beatOf(directory, member)
-  } catch {
-    return null
-  }
 }
 
 /** The stream a package's ledger lives in, for a reader that wants the name: one way to build it, in the ledger. */

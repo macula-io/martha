@@ -24,7 +24,7 @@ import { RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_rel
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
-import { beatOf } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 
@@ -55,7 +55,7 @@ function toolsIn(place: { readonly home: string; readonly checkout: string; read
   return crewToolsOver({
     member: MEMBER,
     ledger: { clock: { now }, stores: { rows: rowStreamsDirectory(place.rows) } },
-    beats: place.dashboard,
+    beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
   })
@@ -97,7 +97,7 @@ test('a tool call posted by the mod is answered by the core\'s slice, and the ro
   assert.equal(posted.status, 200, posted.text)
   assert.deepEqual(JSON.parse(posted.text), mine, 'what the mod posts is answered with the slice\'s own words, unchanged')
 
-  const row = beatOf(place.dashboard, MEMBER)
+  const row = dashboardRowsIn(place.dashboard).read(MEMBER)
   assert.equal(row?.task, 'Build the crew store', 'the row the answer reports is on disk')
   assert.equal(row?.session, SESSION, 'and it names the session the call came from')
 })

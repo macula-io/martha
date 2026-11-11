@@ -342,10 +342,6 @@ export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
  */
 export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
   {
-    name: 'log_ledger',
-    why: 'the crew ledger: a row per milestone and per outward act, and nothing this release runs loads it yet',
-  },
-  {
     name: 'probe_launch_hosts',
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
@@ -391,6 +387,8 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-cmp', x: 32, y: 890, w: 300, h: 140, name: 'install_the_pinned_installer', names: ['install_the_pinned_installer'], type: '[the installer this release pins]', code: true,
     desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 890, w: 300, h: 140, name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger'], type: '[the crew\'s rows and its ledger]', code: true,
+    desc: ['show_dashboard_beat holds a member\'s row and', 'the rule the newest beat wins; report_progress', 'moves it, see_the_crew lays every one out,', 'and a_crews_tools answers all five tools.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state'] })
   d.box({ kind: 'b-cmp', x: 348, y: 890, w: 300, h: 140, name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
     desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] })
 
@@ -402,9 +400,9 @@ export function components(): Diagram {
     desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; a badge host that answers 408 is', 'asked again before its link is broken.', 'Each has a self-test that proves it bites'] })
 
   d.notes(24, 1058, [
-    'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
-    'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,',
-    'probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
+    'Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:',
+    'the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew\'s',
+    'own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
     'room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.',
   ])
   d.legend(984, ['b-sys', 'b-cmp', 'b-dat'], 'Boundary')
