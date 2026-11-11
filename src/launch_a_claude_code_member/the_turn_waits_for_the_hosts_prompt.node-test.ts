@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { HOST_PROMPT_MARK, theHostHasDrawnItsPrompt } from './drive_the_recorded_host.ts'
+import { HOST_PROMPT_MARK, textArrivingInChunks, theHostHasDrawnItsPrompt } from './drive_the_recorded_host.ts'
 
 /** What `martha start` itself prints before the host draws anything, taken from the run #264 was found on. */
 const THE_LAUNCHER_SAYING_THE_MEMBER_IS_UP = [
@@ -38,4 +38,18 @@ test('#264: the host\'s own input box is what the turn waits for', () => {
 
 test('#264: a screen the host has drawn its box on says so however much the launcher said first', () => {
   assert.equal(theHostHasDrawnItsPrompt(`${THE_LAUNCHER_SAYING_THE_MEMBER_IS_UP}${THE_LAUNCHER_SAYING_THE_MEMBER_IS_UP}${THE_HOSTS_BOX}`), true)
+})
+
+test('#264: a box mark split across two chunks is still read as drawn', () => {
+  const bytes = Buffer.from(THE_HOSTS_BOX, 'utf8')
+  // Cut inside the mark itself: the host drew it, and a reader that decodes each chunk on its own sees two halves
+  // that are neither the mark nor anything else.
+  const cut = bytes.indexOf(Buffer.from(HOST_PROMPT_MARK, 'utf8')) + 1
+  const stream = textArrivingInChunks()
+  const shown = stream.write(bytes.subarray(0, cut)) + stream.write(bytes.subarray(cut))
+  assert.equal(
+    theHostHasDrawnItsPrompt(shown),
+    true,
+    'a mark the host drew across two reads was read as never drawn, so the run would wait out its whole silence budget at a host that was ready',
+  )
 })

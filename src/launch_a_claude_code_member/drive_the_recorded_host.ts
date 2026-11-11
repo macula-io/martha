@@ -22,6 +22,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
+import { StringDecoder } from 'node:string_decoder'
 
 import { removeTheTree } from './relay_copy.ts'
 import { readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
@@ -255,6 +256,16 @@ export const plainTextOf = (shown: string): string =>
 export const HOST_PROMPT_MARK = '❯'
 
 /**
+ * One of the host's streams, read as text as it arrives (martha#264). A character the host draws can straddle two
+ * chunks, and half a character is not the character: a box mark cut in two would read as never drawn, and the run
+ * would wait out its whole silence budget at a host that was ready. A decoder keeps the tail of one chunk for the next.
+ */
+export function textArrivingInChunks(): { readonly write: (chunk: Buffer) => string } {
+  const decoder = new StringDecoder('utf8')
+  return { write: (chunk) => decoder.write(chunk) }
+}
+
+/**
  * Whether the host has drawn the box the owner's turn is typed into (martha#264). Everything the terminal shows grows
  * the screen — `martha start`'s own two lines above the host's — so growth says nothing about the host being ready to
  * take a turn. Run 43030805227 typed the turn into a host still starting: the text sat in its box and no model request
@@ -283,8 +294,11 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   const journal_directory = relayJournalDirectory(environment.XDG_STATE_HOME, run.checkout)
   const terminal = spawn(PTY_RUNNER, ['-qefc', command, '/dev/null'], { cwd: run.checkout, env: environment, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
   let shown = ''
-  terminal.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
-  terminal.stderr.on('data', (chunk: Buffer) => void (shown += chunk.toString('utf8')))
+  // Each stream is decoded as it arrives rather than chunk by chunk, so a character split across two chunks still
+  // reads whole (martha#264). One decoder per stream, because a partial character on one is not the other's to finish.
+  const speaking = { out: textArrivingInChunks(), err: textArrivingInChunks() }
+  terminal.stdout.on('data', (chunk: Buffer) => void (shown += speaking.out.write(chunk)))
+  terminal.stderr.on('data', (chunk: Buffer) => void (shown += speaking.err.write(chunk)))
   const ended = new Promise<number | null>((resolve) => terminal.once('exit', (code) => resolve(code)))
   let exit_code: number | null | undefined
   void ended.then((code) => void (exit_code = code))
