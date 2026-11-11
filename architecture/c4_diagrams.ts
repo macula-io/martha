@@ -391,8 +391,8 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-cmp', x: 32, y: 890, w: 300, h: 140, name: 'install_the_pinned_installer', names: ['install_the_pinned_installer'], type: '[the installer this release pins]', code: true,
     desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 940, w: 300, h: 140, name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger'], type: '[the crew\'s rows and its ledger]', code: true,
-    desc: ['show_dashboard_beat holds a member\'s row and', 'the rule the newest beat wins; report_progress', 'moves it, see_the_crew lays every one out,', 'and a_crews_tools answers all five tools.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 940, w: 300, h: 140, name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message'], type: '[the crew\'s rows and its ledger]', code: true,
+    desc: ['show_dashboard_beat holds a member\'s row and', 'the rule the newest beat wins; report_progress', 'moves it, see_the_crew lays every one out,', 'and a_crews_tools answers all six tools.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, and send_a_crew_message writes one'] })
   d.box({ kind: 'b-cmp', x: 348, y: 890, w: 300, h: 140, name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
     desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] })
 

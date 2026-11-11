@@ -10,6 +10,7 @@
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
   CREW_LOG_DESCRIPTION,
@@ -27,7 +28,7 @@ import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
-export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew'] as const
+export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say'] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
 /**
@@ -133,6 +134,21 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: "Every member's row of this crew, in the declaration's order, with what has gone quiet marked.",
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'crew_say',
+    description: CREW_SAY_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          description: "Who it is for: a list of this crew's members' names, or \"crew\" for every member but you",
+          anyOf: [{ type: 'string', enum: ['crew'] }, { type: 'array', items: { type: 'string' }, minItems: 1 }],
+        },
+        text: { type: 'string', description: 'What you say. A HANDOFF or VERDICT line is read from its first line' },
+      },
+      required: ['to', 'text'],
+    },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -192,6 +208,19 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   return {
     report_progress: (args) => reportProgress(places, state, args),
     see_the_crew: () => seeTheCrewOf(places),
+    crew_say: async (args) => {
+      const declared = await crewOrRefusal(places)
+      if ('refused' in declared) return declared
+      const held = state.held === null ? places.beats.read(places.member) : state.held
+      const sent = await sendACrewMessage(places.ledger, {
+        member: places.member,
+        roster: declared.settings.members.map((member) => member.name),
+        package: held === null || held.holds === '' ? null : held.holds,
+        to: args['to'],
+        text: args['text'],
+      })
+      return 'refused' in sent ? { refused: sent.refused } : { answer: sent.told }
+    },
     crew_log: async (args) => ({ answer: (await keepTheMilestone(places.ledger, { ...workerOf(args), event: args['event'], note: args['note'] })).told }),
     what_was_sent: async (args) => ({ answer: (await whatWasSent(places.ledger, workerOf(args).package)).told }),
     note_what_became_of_an_act: async (args) => {

@@ -215,6 +215,7 @@ const answerCrewLog = ($: CrewEngine, e: Record<string, unknown>): Promise<unkno
 const answerWhatWasSent = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'what_was_sent')
 const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'note_what_became_of_an_act')
 const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
+const answerCrewSay = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_say')
 
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
@@ -223,6 +224,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha-relay__what_was_sent' }, answerWhatWasSent)
   on('tool.call', { tool: 'mcp__martha-relay__note_what_became_of_an_act' }, answerNoteWhatBecame)
   on('tool.call', { tool: 'mcp__martha-relay__see_the_crew' }, answerSeeTheCrew)
+  on('tool.call', { tool: 'mcp__martha-relay__crew_say' }, answerCrewSay)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)
