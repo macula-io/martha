@@ -276,6 +276,26 @@ jobs:
       - run: npm ci
       - run: prove_the_recorded_host_is_current/prove_the_drift_check_bites.sh
 
+  # Posted text (martha#265): the check that reads what members post on GitHub can fail. Its self-test
+  # plants a cited path, in memory, on each of the six surfaces it reads, and a placeholder that must
+  # pass, then names the surface whose reader stopped refusing. It needs no token and no network, so it
+  # runs on every PR, and the daily run in posted-text.yml is never the first thing to find it broken.
+  posted-text-bites:
+    name: the posted text check bites
+    runs-on: ubuntu-latest
+    env:
+      # The lab's families are a secret and are never printed. A pull request from a fork gets none,
+      # and the check then runs every other class and says which one it skipped.
+      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
+      MARTHA_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: the check bites
+        run: npm run --silent check:posted-text -- --self-test
+
   # The clean-install proof removes its container whatever happens (martha#69). It runs against a host given as a
   # parameter, and this job names none: the script's own stand-ins answer ssh and podman, so the cases run here are
   # the ones a runner can hold -- a passing install half, a refusal, no release, a container that would not go, and
