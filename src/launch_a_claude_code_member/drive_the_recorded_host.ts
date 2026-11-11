@@ -47,11 +47,19 @@ const KEY_TAIL_LENGTH = 20
 /** Whether the terminal shows what martha start prints once `member` is up, as its startedLine writes it. */
 const memberIsUp = (member: string, shown: string): boolean => plainTextOf(shown).includes(startedLine(member, ''))
 
-/** One request the host sent the model, as the stand-in received it. */
+/**
+ * One request the host sent the model, as the stand-in received it. The two times are what a stall is read by
+ * (martha#264): a request with no answer is the stand-in's side of a silence, an answered one with nothing after it
+ * is the host's.
+ */
 export interface ModelRequest {
   /** 1 for the first request that offers tools, and so on. */
   readonly number: number
   readonly body: Readonly<Record<string, unknown>>
+  /** When the stand-in had read the request whole. */
+  readonly received_at: number
+  /** When the stand-in handed the host its reply, or undefined while it has not. */
+  answered_at?: number
 }
 
 /** What the stand-in answers one model request with. */
@@ -178,21 +186,33 @@ async function bodyOf(request: IncomingMessage): Promise<Record<string, unknown>
   return text === '' ? {} : (JSON.parse(text) as Record<string, unknown>)
 }
 
+/** Whether a request offers the model tools: the kind the stand-in scripts and counts, rather than answering itself. */
+const offersTools = (body: Record<string, unknown>): boolean => Array.isArray(body['tools']) && body['tools'].length > 0
+
+/**
+ * Answers one model request with the turn its number names, and records when the reply went out: a silence after this
+ * one is the host's side of it, not the stand-in's (martha#264).
+ */
+async function answerWithTheScript(script: ModelScript, heard: ModelRequest[], body: Record<string, unknown>, response: ServerResponse): Promise<void> {
+  const heard_request = offersTools(body) ? record(heard, body) : undefined
+  const turn: ScriptedTurn = heard_request === undefined ? { text: 'a side answer' } : await script(heard_request)
+  response.writeHead(200, { 'content-type': 'text/event-stream' }).end(streamOf(turn, body['model'], heard.length))
+  if (heard_request !== undefined) heard_request.answered_at = Date.now()
+}
+
 /** The stand-in model: answers each request offering tools by its number, and every other request with text. */
-async function standIn(script: ModelScript, heard: ModelRequest[], failed: (why: string) => void): Promise<{ readonly url: string; close(): Promise<void> }> {
+export async function theStandInModel(script: ModelScript, heard: ModelRequest[], failed: (why: string) => void): Promise<{ readonly url: string; close(): Promise<void> }> {
   const answer = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    if (request.method !== 'POST' || !(request.url ?? '').startsWith('/v1/messages')) {
+    const url = request.url ?? ''
+    if (request.method !== 'POST' || !url.startsWith('/v1/messages')) {
       response.writeHead(request.method === 'HEAD' ? 200 : 404).end()
       return
     }
-    const body = await bodyOf(request)
-    if ((request.url ?? '').startsWith('/v1/messages/count_tokens')) {
+    if (url.startsWith('/v1/messages/count_tokens')) {
       response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ input_tokens: 1 }))
       return
     }
-    const offers_tools = Array.isArray(body['tools']) && body['tools'].length > 0
-    const turn: ScriptedTurn = offers_tools ? await script(record(heard, body)) : { text: 'a side answer' }
-    response.writeHead(200, { 'content-type': 'text/event-stream' }).end(streamOf(turn, body['model'], heard.length))
+    await answerWithTheScript(script, heard, await bodyOf(request), response)
   }
   const server = createServer((request, response) => {
     answer(request, response).catch((error: unknown) => {
@@ -209,7 +229,7 @@ async function standIn(script: ModelScript, heard: ModelRequest[], failed: (why:
 }
 
 function record(heard: ModelRequest[], body: Record<string, unknown>): ModelRequest {
-  const request = { number: heard.length + 1, body }
+  const request: ModelRequest = { number: heard.length + 1, body, received_at: Date.now() }
   heard.push(request)
   return request
 }
@@ -231,6 +251,17 @@ export const plainTextOf = (shown: string): string =>
     .replaceAll(/\x1b[()][0-9A-Za-z]/g, '')
     .replaceAll(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
 
+/** The character the host draws in front of the input box the owner's turn is typed into (martha#264). */
+export const HOST_PROMPT_MARK = '❯'
+
+/**
+ * Whether the host has drawn the box the owner's turn is typed into (martha#264). Everything the terminal shows grows
+ * the screen — `martha start`'s own two lines above the host's — so growth says nothing about the host being ready to
+ * take a turn. Run 43030805227 typed the turn into a host still starting: the text sat in its box and no model request
+ * was ever sent, and the red could only say the host had shown nothing new.
+ */
+export const theHostHasDrawnItsPrompt = (shown: string): boolean => plainTextOf(shown).includes(HOST_PROMPT_MARK)
+
 /**
  * Starts `run.member` with `martha start` on a pseudo-terminal, types the owner's turn once it is up, and lets the
  * stand-in answer the host's model requests by `run.script`. Ends the host with its own exit command once
@@ -243,7 +274,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   const run_started_at = Date.now()
   const heard: ModelRequest[] = []
   let failure: string | undefined
-  const model = await standIn(run.script, heard, (why) => void (failure ??= why))
+  const model = await theStandInModel(run.script, heard, (why) => void (failure ??= why))
   const runtime = mkdtempSync(join(tmpdir(), 'm-'))
   const command = [process.execPath, MARTHA, 'start', run.member].map(quoted).join(' ')
   const environment = environmentOf(run, model.url, runtime)
@@ -267,6 +298,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
         cannotHappen: () => failure ?? journalNeverWritten(heard, journal_directory),
         shown: () => shown,
         heard: () => heard.length,
+        model: () => heard,
         journal: () => readTheNewestRelayJournal(journal_directory),
         silence_ms: run.silence_ms,
         run_started_at,
@@ -280,9 +312,8 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   try {
     await until('started member', () => memberIsUp(run.member, shown) || exit_code !== undefined)
     if (exit_code === undefined) {
-      // The host draws its prompt after the launcher says the member is up: type once it shows it has drawn.
-      const drawn = shown.length
-      await until('prompt drawn', () => shown.length > drawn || exit_code !== undefined)
+      // The owner types once the host has drawn its own box, not when anything at all has grown the screen (#264).
+      await until('the host drawing its prompt', () => theHostHasDrawnItsPrompt(shown) || exit_code !== undefined)
       terminal.stdin.write(run.owner_turn)
       await new Promise((resolve) => setTimeout(resolve, 500))
       terminal.stdin.write('\r')

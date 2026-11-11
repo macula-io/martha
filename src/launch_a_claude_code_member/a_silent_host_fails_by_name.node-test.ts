@@ -31,7 +31,7 @@ import {
   type RelayJournal,
   type RelayJournalRead,
 } from './keep_the_relays_journal.ts'
-import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
+import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing, type ModelAttempt } from './wait_while_the_host_keeps_showing.ts'
 
 /** Looks a wait may take before the test calls it a wait that never gives up, rather than asking the harness.
  * Far above the slowest case here (ten budgets of looks, 12 000), so only a wait that never ends reaches it. */
@@ -329,7 +329,7 @@ test('#240: a run whose launcher keeps no journal behaves exactly as it did befo
 test('#240: a run that read no journal by the host\'s first model request fails by name, and one that read a line goes on', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
-  const heard = [{ number: 1, body: {} }]
+  const heard = [{ number: 1, body: {}, received_at: Date.now() }]
   assert.equal(journalNeverWritten([], directory), undefined, 'a run no request has arrived in yet was failed for a journal it has not needed')
   assert.match(
     journalNeverWritten(heard, directory) ?? '',
@@ -338,4 +338,68 @@ test('#240: a run that read no journal by the host\'s first model request fails 
   )
   relayJournalKeptIn(directory, 'launch-of-the-test').received('session_started', {})
   assert.equal(journalNeverWritten(heard, directory), undefined, 'a journal with a line in it was read as no journal')
+})
+
+// --- martha#264: which side of the model request went silent ---------------------------------------------------------
+
+/** What the stand-in heard, as the wait reads it: one request, with the reply's time when it was sent at all. */
+const aRequestOfTheStandIn = (received_at: number, answered_at?: number): readonly ModelAttempt[] => [
+  answered_at === undefined ? { number: 1, received_at } : { number: 1, received_at, answered_at },
+]
+
+/** The red of a run whose stand-in heard `heard`, giving up on the silence budget as the shipping rule does. */
+async function theRedOfASilentRun(host: Host, heard: () => readonly ModelAttempt[]): Promise<Error | undefined> {
+  return waitWhileTheHostKeepsShowing({
+    what: 'model request 2',
+    holds: () => false,
+    shown: host.shown,
+    heard: host.heard,
+    model: heard,
+    silence_ms: HOST_SILENCE_MS,
+    run_started_at: host.now(),
+    now: host.now,
+    sleep: countingLooks(host, () => {}),
+  }).then(
+    () => undefined,
+    (error: Error) => error,
+  )
+}
+
+test('#264: a run whose stand-in heard no request says the host never took the turn, and does not blame a slow model', async () => {
+  const host = aHostOfTheTests()
+  const why = await theRedOfASilentRun(host, () => [])
+  assert.ok(why !== undefined, 'a run whose stand-in heard nothing must fail the wait')
+  assert.match(
+    why.message,
+    /the stand-in has been sent no model request at all, so the host never took the turn/,
+    'a run where nothing reached the stand-in read as silence on the model\'s side: the reader cannot tell a host that never took the turn from a slow model',
+  )
+  assert.doesNotMatch(why.message, /showed nothing new/, 'the red still says only that the host showed nothing, which is the ambiguity #264 removes')
+})
+
+test('#264: a run whose stand-in answered the last request names the host as the side that showed nothing', async () => {
+  const host = aHostOfTheTests()
+  const answered_at = host.now() - 25_000
+  const why = await theRedOfASilentRun(host, () => aRequestOfTheStandIn(answered_at - 5_000, answered_at))
+  assert.ok(why !== undefined, 'a run whose stand-in answered and then nothing came must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`the stand-in answered request 1 ${host.now() - answered_at} ms ago and the host showed nothing after it`),
+    'the reply went out and the red did not say so, so a reader cannot clear the model of a stall the host caused',
+  )
+  assert.ok(host.now() - answered_at > HOST_SILENCE_MS, 'the case never stood further past the answer than the silence budget, so the figure it pins could be the budget alone')
+  assert.doesNotMatch(why.message, /showed nothing new/, 'the red still says only that the host showed nothing, which is the ambiguity #264 removes')
+})
+
+test('#264: a run whose stand-in read a request and never answered names the stand-in, with that request\'s own age', async () => {
+  const host = aHostOfTheTests()
+  const received_at = host.now() - 5_000
+  const why = await theRedOfASilentRun(host, () => aRequestOfTheStandIn(received_at))
+  assert.ok(why !== undefined, 'a run whose stand-in never answered must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`request 1 reached the stand-in ${host.now() - received_at} ms ago and its reply has not been sent`),
+    'a request the stand-in never answered was read as a silent host, so the model\'s own silence would be looked for in the host',
+  )
+  assert.doesNotMatch(why.message, /showed nothing new/, 'the red named the host for a reply the stand-in never sent')
 })
