@@ -7,13 +7,29 @@ import { randomBytes } from 'node:crypto'
 
 import { privateHitsIn, type Resolve, type Rules } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
 import { postedTextSources } from './posted_text.ts'
-import { pageOf, readPostedText, ROUTES, type Call } from './read_posted_text.ts'
+import { API, PER_PAGE, readPostedText, ROUTES, type Call } from './read_posted_text.ts'
 
 // The stand-in repository. Its owner is a synthetic one, so the tree scan knows
 // it is not a repository anyone has to look up.
 const REPO = 'synthetic-owner-martha-265/nowhere'
 const PULL = 263
 const COMMIT = randomBytes(20).toString('hex')
+
+/**
+ * The key a stand-in answers one page under, built here from the route alone.
+ *
+ * It must not ask the reader for it. A stand-in keyed by the code under test agrees
+ * with that code's own bug, which is how a malformed page URL reached a green run:
+ * the reader asked GitHub for `.../issues/comments&per_page=100&page=1` and every
+ * stand-in in this tree had that exact string in its map (martha#265 r=2). Built
+ * from the route, a malformed request finds no answer and stops the check.
+ */
+export const standInPage = (route: string, page: number): string => {
+  const url = new URL(route, API)
+  url.searchParams.set('per_page', String(PER_PAGE))
+  url.searchParams.set('page', String(page))
+  return `${url.pathname}${url.search}`
+}
 
 // The form a public text may write, and must pass here: a placeholder the class
 // cannot match. Every field without a plant carries it, so anything else the
@@ -27,16 +43,16 @@ const aCitedPath = (): string => ['', 'home', `u${randomBytes(6).toString('hex')
 // One plant per surface, in the shape GitHub answers each surface with.
 const answering = (plant: string): Call => {
   const answers: Readonly<Record<string, unknown>> = {
-    [pageOf(ROUTES.issues(REPO), 1)]: [{ number: 1, title: PLACEHOLDER, body: plant }],
-    [pageOf(ROUTES.issueComments(REPO), 1)]: [
+    [standInPage(ROUTES.issues(REPO), 1)]: [{ number: 1, title: PLACEHOLDER, body: plant }],
+    [standInPage(ROUTES.issueComments(REPO), 1)]: [
       { id: 6765201999, issue_url: `https://api.github.com/repos/${REPO}/issues/170`, body: plant },
     ],
-    [pageOf(ROUTES.pulls(REPO), 1)]: [{ number: PULL, title: PLACEHOLDER, body: plant }],
-    [pageOf(ROUTES.reviews(REPO, PULL), 1)]: [{ id: 4810, body: plant }],
-    [pageOf(ROUTES.reviewComments(REPO), 1)]: [
+    [standInPage(ROUTES.pulls(REPO), 1)]: [{ number: PULL, title: PLACEHOLDER, body: plant }],
+    [standInPage(ROUTES.reviews(REPO, PULL), 1)]: [{ id: 4810, body: plant }],
+    [standInPage(ROUTES.reviewComments(REPO), 1)]: [
       { id: 4812, pull_request_url: `https://api.github.com/repos/${REPO}/pulls/${PULL}`, body: plant },
     ],
-    [pageOf(ROUTES.commitComments(REPO), 1)]: [{ id: 12, commit_id: COMMIT, body: plant }],
+    [standInPage(ROUTES.commitComments(REPO), 1)]: [{ id: 12, commit_id: COMMIT, body: plant }],
   }
   return async ({ path }) => {
     const answer = answers[path]

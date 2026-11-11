@@ -21,7 +21,8 @@ import {
 import { rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { postedTextSources } from './posted_text.ts'
-import { pageOf, readPostedText, ROUTES, type Call, type Request } from './read_posted_text.ts'
+import { standInPage } from './plant_every_surface.ts'
+import { API, readPostedText, ROUTES, type Call, type Request } from './read_posted_text.ts'
 
 // Every value planted here is a synthetic form, because this file is in the
 // public tree the check reads. The class tests switch the synthetic allowance
@@ -73,12 +74,12 @@ const aCommitComment = (plant: string) => ({ id: 12, commit_id: A_COMMIT, body: 
 const answersWith = (surface: string, plant: string): Record<string, unknown> => {
   const at = (name: string) => (name === surface ? plant : CLEAN)
   return {
-    [pageOf(ROUTES.issues(REPO), 1)]: [anIssue(at('issue')), aPullInTheIssuesList()],
-    [pageOf(ROUTES.issueComments(REPO), 1)]: [anIssueComment(at('issue comment'))],
-    [pageOf(ROUTES.pulls(REPO), 1)]: [aPull(at('pull'))],
-    [pageOf(ROUTES.reviews(REPO, 263), 1)]: [aReview(at('review'))],
-    [pageOf(ROUTES.reviewComments(REPO), 1)]: [aReviewComment(at('review comment'))],
-    [pageOf(ROUTES.commitComments(REPO), 1)]: [aCommitComment(at('commit comment'))],
+    [standInPage(ROUTES.issues(REPO), 1)]: [anIssue(at('issue')), aPullInTheIssuesList()],
+    [standInPage(ROUTES.issueComments(REPO), 1)]: [anIssueComment(at('issue comment'))],
+    [standInPage(ROUTES.pulls(REPO), 1)]: [aPull(at('pull'))],
+    [standInPage(ROUTES.reviews(REPO, 263), 1)]: [aReview(at('review'))],
+    [standInPage(ROUTES.reviewComments(REPO), 1)]: [aReviewComment(at('review comment'))],
+    [standInPage(ROUTES.commitComments(REPO), 1)]: [aCommitComment(at('commit comment'))],
   }
 }
 
@@ -126,8 +127,8 @@ test('every surface is read: a plant on any one of them is refused where it sits
 test('a title is read as posted text, and a pull is read once though it is listed twice', async () => {
   const answers = answersWith('issue', CLEAN)
   const titled = `the proof is at ${HOME_PATH}`
-  answers[pageOf(ROUTES.issues(REPO), 1)] = [anIssue(CLEAN), aPullInTheIssuesList(titled)]
-  answers[pageOf(ROUTES.pulls(REPO), 1)] = [{ ...aPull(CLEAN), title: titled }]
+  answers[standInPage(ROUTES.issues(REPO), 1)] = [anIssue(CLEAN), aPullInTheIssuesList(titled)]
+  answers[standInPage(ROUTES.pulls(REPO), 1)] = [{ ...aPull(CLEAN), title: titled }]
   const names = (await sourcesOf(answers)).map((source) => source.name)
   assert.deepEqual(names.filter((name) => name.startsWith('issue #263')), [], 'the pull was read from the issues list as well')
   assert.deepEqual(await wheresOf(answers), ['pull 263 title:1'], "the pull's title was not read, or was read twice")
@@ -168,7 +169,7 @@ test('a lab machine family from the secret is refused and never printed', async 
 
 test('a surface that cannot be read stops the check, and names the surface', async () => {
   const answers = answersWith('issue', CLEAN)
-  delete answers[pageOf(ROUTES.reviews(REPO, 263), 1)]
+  delete answers[standInPage(ROUTES.reviews(REPO, 263), 1)]
   await assert.rejects(readPostedText(calling(answers).call, REPO), /pulls\/263\/reviews/)
 })
 
@@ -201,10 +202,11 @@ test('the command refuses a draft that carries a cited path, and passes a clean 
   assert.match(refused.stdout, /a home directory/)
 })
 
-test('every request is a GET of one of the six surfaces, a page of 100, and the comments list carries no state', async () => {
-  const { call, asked } = calling(answersWith('issue', CLEAN))
-  await readPostedText(call, REPO)
-  const allowed = [
+// The seam GitHub sees: what the reader asks for, parsed the way GitHub parses it.
+// Nothing here is built by pageOf, so a malformed request cannot hide behind a
+// stand-in keyed by the same code (martha#265 r=2).
+test('every request is a GET of one well-formed page of one surface, parsed as GitHub parses it', async () => {
+  const routes = [
     ROUTES.issues(REPO),
     ROUTES.issueComments(REPO),
     ROUTES.pulls(REPO),
@@ -212,25 +214,45 @@ test('every request is a GET of one of the six surfaces, a page of 100, and the 
     ROUTES.reviewComments(REPO),
     ROUTES.commitComments(REPO),
   ]
-  for (const request of asked) {
-    assert.equal(request.method, 'GET')
-    assert.ok(allowed.some((route) => request.path.startsWith(route)), `${request.path} is not one of the surfaces`)
-    assert.match(request.path, /per_page=100/)
+  const surfaces = routes.map((route) => new URL(route, API).pathname)
+  const pullsSurface = new URL(ROUTES.pulls(REPO), API).pathname
+  // A stand-in that answers whatever it is handed, so the reader finishes and every
+  // request it made can be read. What is under test is the request, not the answer;
+  // only the pulls list must carry a pull, so that reviews are asked for as well.
+  const asked: Request[] = []
+  const lenient: Call = async (request) => {
+    asked.push(request)
+    return new URL(request.path, API).pathname === pullsSurface ? [{ number: 263, title: CLEAN, body: CLEAN }] : []
   }
-  const commentRequests = asked.filter((request) => request.path.startsWith(ROUTES.issueComments(REPO)))
+  await readPostedText(lenient, REPO)
+  assert.ok(asked.length > 0, 'nothing was asked for')
+  for (const request of asked) {
+    const url = new URL(request.path, API)
+    assert.equal(request.method, 'GET')
+    assert.ok(surfaces.includes(url.pathname), `${request.path} is not one of the six surfaces`)
+    // The design asks for 100 a page (§ "Every list is followed to its last page").
+    assert.equal(url.searchParams.get('per_page'), '100', `${request.path} does not ask for a page of 100`)
+    assert.match(url.searchParams.get('page') ?? '', /^[1-9][0-9]*$/, `${request.path} does not ask for a page number`)
+  }
+  assert.deepEqual(
+    [...new Set(asked.map((request) => new URL(request.path, API).pathname))].sort(),
+    [...surfaces].sort(),
+    'not every one of the six surfaces was asked for',
+  )
+  const commentRequests = asked.filter((request) => new URL(request.path, API).pathname === new URL(ROUTES.issueComments(REPO), API).pathname)
   assert.ok(commentRequests.length > 0, 'the comments list was never asked for')
-  assert.ok(commentRequests.every((request) => !request.path.includes('state=')), 'the comments list was asked for a state it does not take')
+  assert.ok(commentRequests.every((request) => !new URL(request.path, API).searchParams.has('state')), 'the comments list was asked for a state it does not take')
 })
 
 test('a full page is followed to the last one', async () => {
   const full = Array.from({ length: 100 }, (_step, at) => anIssueComment(`note ${at}`))
   const answers: Record<string, unknown> = {
     ...answersWith('issue', CLEAN),
-    [pageOf(ROUTES.issueComments(REPO), 1)]: full,
-    [pageOf(ROUTES.issueComments(REPO), 2)]: [anIssueComment(`the proof is at ${HOME_PATH}`)],
+    [standInPage(ROUTES.issueComments(REPO), 1)]: full,
+    [standInPage(ROUTES.issueComments(REPO), 2)]: [anIssueComment(`the proof is at ${HOME_PATH}`)],
   }
   assert.deepEqual(await wheresOf(answers), ['issue #170 comment 6765201999:1'])
   const { call, asked } = calling(answers)
   await readPostedText(call, REPO)
-  assert.ok(asked.some((request) => request.path === pageOf(ROUTES.issueComments(REPO), 2)), 'the second page was not read')
+  assert.ok(asked.some((request) => request.path === standInPage(ROUTES.issueComments(REPO), 2)), 'the second page was not read')
 })
