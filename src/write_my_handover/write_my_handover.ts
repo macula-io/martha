@@ -57,6 +57,7 @@ export function writeMyHandover(handing: HandingOver): string | Refused {
   const name = theHandoverFile(handing.member, handing.at)
   const file = join(place.path, name)
   keepCrewFile(place.path, name, handing.content)
-  stampHandover(handing.stamps, { member: handing.member, session: handing.session }, { file, content: handing.content })
+  // Stamped with the same moment the file is named for, so the day in the name and the stamp can never disagree.
+  stampHandover(handing.stamps, { member: handing.member, session: handing.session }, { file, content: handing.content }, () => handing.at.getTime())
   return CREW_HANDOVER_WRITTEN
 }
