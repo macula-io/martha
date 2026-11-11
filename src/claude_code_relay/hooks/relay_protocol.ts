@@ -46,6 +46,39 @@ export type RelayEvent = keyof typeof RELAY_PATHS
  */
 export const RUN_PATH = '/run-a-signed-shape'
 
+/**
+ * Where the crew's mod asks the launcher for a core tool's answer (martha#254). Not a hook event: the mod registers
+ * the tools the member's model calls, and the launcher runs the slice that decides what the answer is. Every later
+ * Martha tool uses this one seam.
+ */
+export const TOOL_ANSWER_PATH = '/answer-a-tool'
+
+/** A tool call as the mod posts it: the session it came from, the tool's own name, and its arguments unchanged. */
+export function toolCallBody(session_id: string, tool: string, args: unknown): Readonly<Record<string, unknown>> {
+  return { session_id, tool, args }
+}
+
+/** A core tool's answer: what the slice said. */
+export interface Answered {
+  readonly answer: string
+}
+
+/** What the mod acts on: the core's answer, or why it has none. */
+export type HeardToolAnswer = { readonly answered: true; readonly answer: string } | { readonly answered: false; readonly why: string }
+
+const isAnswer = (value: Record<string, unknown>): value is Record<string, unknown> & Answered =>
+  exactKeys(value, ['answer']) && typeof value.answer === 'string'
+
+/** A tool's answer, as the mod hears it: exactly `{"answer": "..."}`, or a refusal with its reason. */
+export function heardToolAnswer(status: number, text: string): HeardToolAnswer {
+  if (status !== 200) return { answered: false, why: `the launcher answered with status ${status}` }
+  const value = jsonObjectOf(text)
+  if (value === undefined) return { answered: false, why: MALFORMED }
+  if (isAnswer(value)) return { answered: true, answer: value.answer }
+  if (exactKeys(value, ['refused']) && isReason(value.refused)) return { answered: false, why: value.refused }
+  return { answered: false, why: MALFORMED }
+}
+
 /** A signed shape ran: its exit status, and its merged output, base64. */
 export interface Ran {
   readonly ran: 1
@@ -56,6 +89,16 @@ export interface Ran {
 /** The launcher took the event in. */
 export interface Taken {
   readonly taken: 1
+}
+
+/**
+ * The launcher took a session's start in, and hands that session one line as it starts (martha#254 test 10): the acts
+ * of the package this member holds that were sent with no outcome recorded. The relay puts the line into the start's
+ * own answer, so it is in the session before its first prompt and the member never has to ask for it.
+ */
+export interface TakenWithAHandedLine {
+  readonly taken: 1
+  readonly handed: string
 }
 
 /** The launcher refused the event, and says why for the owner to read. */
@@ -69,8 +112,9 @@ export type Verdict = { readonly allow: 1 } | { readonly deny: string }
 export const TAKEN: Taken = { taken: 1 }
 export const ALLOW: Verdict = { allow: 1 }
 
-/** What the relay acts on: the launcher's yes, or why not. */
-export type Heard = { readonly yes: true } | { readonly yes: false; readonly why: string }
+/** What the relay acts on: the launcher's yes, or why not. A yes may carry the one line a session is handed as it
+ * starts (martha#254 test 10), which is the only answer here that carries anything but its verdict. */
+export type Heard = { readonly yes: true; readonly handed?: string } | { readonly yes: false; readonly why: string }
 
 const NO = (why: string): Heard => ({ yes: false, why })
 const YES: Heard = { yes: true }
@@ -138,6 +182,29 @@ export function heardTaken(status: number, text: string): Heard {
   if (exactKeys(value, ['taken']) && value.taken === 1) return YES
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
   return NO(MALFORMED)
+}
+
+/**
+ * A session's start, as the relay hears it: `{"taken":1}`, or `{"taken":1,"handed":"<line>"}` when the launcher hands
+ * this session its start line (martha#254 test 10). Anything else is a no, as every answer here is.
+ */
+export type StartHeard = { readonly yes: true; readonly handed?: string } | { readonly yes: false; readonly why: string }
+
+export function heardStart(status: number, text: string): StartHeard {
+  if (status !== 200) return NO(`the launcher answered with status ${status}`)
+  const value = jsonObjectOf(text)
+  if (value === undefined) return NO(MALFORMED)
+  const handed = lineHandedIn(value)
+  if (handed !== undefined) return { yes: true, handed }
+  if (exactKeys(value, ['taken']) && value.taken === 1) return YES
+  if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
+  return NO(MALFORMED)
+}
+
+/** The line a start's answer hands this session, when it carries one: exactly `{"taken":1,"handed":"<line>"}`. */
+function lineHandedIn(value: Record<string, unknown>): string | undefined {
+  const carried = exactKeys(value, ['taken', 'handed']) && value.taken === 1 && isReason(value.handed)
+  return carried ? (value.handed as string) : undefined
 }
 
 /** A verdict, as the relay hears it: `{"allow":1}` is the only yes; a deny carries its reason. */

@@ -39,6 +39,7 @@
 
 import {
   answeredBody,
+  heardStart,
   RELAY_DEADLINE_MS,
   RELAY_ORIGIN,
   RELAY_PATHS,
@@ -122,6 +123,17 @@ export const REFUSED_BY_THE_RELAY = 'Martha refused this'
 
 const refusal = (why: string): string => `${REFUSED_BY_THE_RELAY}: ${why}${/[.!?]$/.test(why) ? '' : '.'}`
 
+/**
+ * The rest of the chain's answer to a session's start, with the launcher's line added to what that session takes in.
+ * The host's module API reads `additionalContext` as one entry per hook, so an answer that already carries some keeps
+ * them and the line goes last.
+ */
+function withTheLineHanded(passed: unknown, line: string): Readonly<Record<string, unknown>> {
+  const rest = typeof passed === 'object' && passed !== null && !Array.isArray(passed) ? (passed as Record<string, unknown>) : {}
+  const already = Array.isArray(rest['additionalContext']) ? (rest['additionalContext'] as unknown[]) : []
+  return { ...rest, additionalContext: [...already, line] }
+}
+
 /** Posts one event to the launcher and hears its answer; never rejects. */
 export async function relay(
   $: RelayEngine,
@@ -195,8 +207,13 @@ export async function stopThisMember($: RelayEngine, why: string): Promise<never
 /** The relay's hooks. */
 export const register = (on: RelayOn): void => {
   on<ClassicSessionStart, unknown>('classic.SessionStart', async ($, e, next) => {
-    await relay($, 'session_started', e, heardTaken)
-    return next(e)
+    const heard = await relay($, 'session_started', e, heardStart)
+    const passed = await next(e)
+    // The launcher may hand this session one line as it starts (martha#254 test 10): the acts of the package the
+    // member holds that were sent with no outcome recorded. It goes in this hook's own answer, which is what the host
+    // puts into the session before its first prompt; the host's module API takes one entry per hook, so it is a list.
+    if (heard.yes && heard.handed !== undefined) return withTheLineHanded(passed, heard.handed)
+    return passed
   }).catch(async (_$, e, next) => next(e))
 
   on<PromptSubmitted, PromptAnswer>('prompt.submit', async ($, e, next) => {

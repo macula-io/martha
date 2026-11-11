@@ -32,7 +32,18 @@ import { dirname, join } from 'node:path'
 export const RELAY_MANIFEST = '.claude-plugin/plugin.json'
 
 /** The relay's files, relative to its folder: what a launch carries into its copy. */
-export const RELAY_FILES = [RELAY_MANIFEST, 'hooks/hooks.json', 'hooks/register.ts', 'hooks/relay_protocol.ts'] as const
+export const RELAY_FILES = [
+  RELAY_MANIFEST,
+  'hooks/hooks.json',
+  // The one module the host loads, and the files it imports (martha#254): the relay's gates, the crew's tools and
+  // pane, and the one rule the pane applies.
+  'hooks/martha.tsx',
+  'hooks/register.ts',
+  'hooks/relay_protocol.ts',
+  'hooks/crew.tsx',
+  'hooks/crew_tools_answer.ts',
+  'hooks/pane_rule.ts',
+] as const
 
 /** The copy's name inside a launch's relay directory. */
 export const RELAY_COPY_NAME = 'relay'

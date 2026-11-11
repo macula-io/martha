@@ -96,8 +96,8 @@ export interface ActAwaitingOutcome {
   readonly at: number
 }
 
-/** What the ledger needs of a host: its clock and its rows. */
-export type LedgerHost = Pick<HostContract, 'clock' | 'stores'>
+/** What the ledger needs of a host: its clock, and the rows a package's stream is kept in. */
+export type LedgerHost = Pick<HostContract, 'clock'> & { readonly stores: { readonly rows: HostContract['stores']['rows'] } }
 
 interface Work {
   readonly package: string
