@@ -93,15 +93,16 @@
 <text class="t-desc" x="364" y="396">shape the owner signed on a verified</text>
 <text class="t-desc" x="364" y="412">copy, in a sandbox</text>
 <rect class="b-cmp" x="664" y="214" width="300" height="146" rx="10"/>
-<text class="t-code" x="680" y="242">refuse_launch_of_unapproved_config</text>
-<text class="t-type" x="680" y="260">[the launch gate]</text>
-<text class="t-desc" x="680" y="284">Fingerprints the config and the tree</text>
-<text class="t-desc" x="680" y="300">id at start, and allows only what was</text>
-<text class="t-desc" x="680" y="316">approved, plus remember_a_members_</text>
-<text class="t-desc" x="680" y="332">own_writes; refuse_code_a_checkout_</text>
-<text class="t-desc" x="680" y="348">runs_itself closes a checkout's scripts;</text>
-<text class="t-desc" x="680" y="364">run_marthas_own_git the settings each</text>
-<text class="t-desc" x="680" y="380">of Martha's own git runs carries</text>
+<text class="t-code" x="680" y="242">refuse_launch_of_</text>
+<text class="t-code" x="680" y="260">unapproved_config</text>
+<text class="t-type" x="680" y="278">[the launch gate]</text>
+<text class="t-desc" x="680" y="302">Fingerprints the config and the tree</text>
+<text class="t-desc" x="680" y="318">id at start, and allows only what was</text>
+<text class="t-desc" x="680" y="334">approved, plus remember_a_members_</text>
+<text class="t-desc" x="680" y="350">own_writes; refuse_code_a_checkout_</text>
+<text class="t-desc" x="680" y="366">runs_itself closes a checkout's scripts;</text>
+<text class="t-desc" x="680" y="382">run_marthas_own_git the settings each</text>
+<text class="t-desc" x="680" y="398">of Martha's own git runs carries</text>
 <rect class="b-dat" x="32" y="376" width="300" height="150" rx="10"/>
 <text class="t-code" x="48" y="404">keep_martha_state_</text>
 <text class="t-code" x="48" y="422">outside_the_checkout</text>
@@ -194,13 +195,14 @@
 <text class="t-desc" x="48" y="842">gives the mesh server's tools, and refuse_</text>
 <text class="t-desc" x="48" y="858">widening_a_member_reach refuses the rest</text>
 <rect class="b-cmp" x="348" y="724" width="300" height="150" rx="10"/>
-<text class="t-code" x="364" y="752">claude_code_host, claude_code_relay</text>
-<text class="t-type" x="364" y="770">[the Claude Code host]</text>
-<text class="t-desc" x="364" y="794">The host contract on Claude Code: the</text>
-<text class="t-desc" x="364" y="810">plugin, its hooks, the relay on a socket</text>
-<text class="t-desc" x="364" y="826">and the member's tools; refuse_a_member_</text>
-<text class="t-desc" x="364" y="842">writing_owner_memory keeps a member's</text>
-<text class="t-desc" x="364" y="858">writes out of the owner's memory</text>
+<text class="t-code" x="364" y="752">claude_code_host,</text>
+<text class="t-code" x="364" y="770">claude_code_relay</text>
+<text class="t-type" x="364" y="788">[the Claude Code host]</text>
+<text class="t-desc" x="364" y="812">The host contract on Claude Code: the</text>
+<text class="t-desc" x="364" y="828">plugin, its hooks, the relay on a socket</text>
+<text class="t-desc" x="364" y="844">and the member's tools; refuse_a_member_</text>
+<text class="t-desc" x="364" y="860">writing_owner_memory keeps a member's</text>
+<text class="t-desc" x="364" y="876">writes out of the owner's memory</text>
 <rect class="b-cmp" x="664" y="724" width="300" height="260" rx="10"/>
 <text class="t-code" x="680" y="752">check_nothing_private_gets_in,</text>
 <text class="t-code" x="680" y="770">check_every_link_resolves</text>
@@ -246,10 +248,10 @@
 <text class="t-desc" x="24" y="1384">room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
 <rect class="b-sys" x="24" y="984" width="22" height="14" rx="3"/>
 <text class="t-leg" x="54" y="996">Martha</text>
-<rect class="b-cmp" x="103.6" y="984" width="22" height="14" rx="3"/>
-<text class="t-leg" x="133.6" y="996">Container or component</text>
-<rect class="b-dat" x="288.79999999999995" y="984" width="22" height="14" rx="3"/>
-<text class="t-leg" x="318.79999999999995" y="996">Data, in the project</text>
-<rect class="bound" x="460.79999999999995" y="984" width="22" height="14" rx="3"/>
-<text class="t-leg" x="490.79999999999995" y="996">Boundary</text>
+<rect class="b-cmp" x="103.168" y="984" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.168" y="996">Container or component</text>
+<rect class="b-dat" x="277.93999999999994" y="984" width="22" height="14" rx="3"/>
+<text class="t-leg" x="307.93999999999994" y="996">Data, in the project</text>
+<rect class="bound" x="424.5719999999999" y="984" width="22" height="14" rx="3"/>
+<text class="t-leg" x="454.5719999999999" y="996">Boundary</text>
 </svg>

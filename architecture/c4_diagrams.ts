@@ -91,6 +91,63 @@ function escape(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+/**
+ * How wide one character is, as a fraction of its font size. Measured from the fonts the
+ * stack at the top of this file falls back to on a reader's machine, taking the widest of
+ * them, so a text this file says fits does not cross its box on a renderer that picked a
+ * wider family. A character not listed takes the widest class it could be: over-estimating
+ * makes a box a little larger, under-estimating draws text outside it (martha#283).
+ */
+const ADVANCE = {
+  space: 0.28,
+  narrow: 0.305,
+  underscore: 0.615,
+  wide: 0.911,
+  upper: 0.682,
+  lower: 0.581,
+  digit: 0.593,
+} as const
+
+const NARROW_CHARS = `iljtfr.,'!:;|()[]/"\\-`
+const WIDE_CHARS = 'mwMW@%&'
+/** A mono font gives every character the same advance, and the mono fallbacks agree to within a hundredth. */
+const MONO_ADVANCE = 0.62
+/** The size each class is drawn at, in the SVG's own units, as the style above sets it. */
+const SIZE: Record<string, number> = {
+  't-name': 15,
+  't-desc': 12.5,
+  't-rel': 11.5,
+  't-code': 13,
+  't-type': 11.5,
+  't-bound': 12,
+  't-leg': 12,
+}
+
+type Advance = keyof typeof ADVANCE
+
+/** The class each character belongs to; a character in no list is read as an upper-case letter. */
+const CHAR_CLASS = new Map<string, Advance>()
+for (let c = 0x30; c <= 0x39; c++) CHAR_CLASS.set(String.fromCharCode(c), 'digit')
+for (let c = 0x41; c <= 0x5a; c++) CHAR_CLASS.set(String.fromCharCode(c), 'upper')
+for (let c = 0x61; c <= 0x7a; c++) CHAR_CLASS.set(String.fromCharCode(c), 'lower')
+// The lists come last: several of their characters are letters, and the class that measures
+// them is this one, not the letter's — a 't' and an 'm' are not a lowercase letter's width.
+for (const ch of NARROW_CHARS) CHAR_CLASS.set(ch, 'narrow')
+for (const ch of WIDE_CHARS) CHAR_CLASS.set(ch, 'wide')
+CHAR_CLASS.set(' ', 'space')
+CHAR_CLASS.set('_', 'underscore')
+
+const emOf = (ch: string): number => ADVANCE[CHAR_CLASS.get(ch) ?? 'upper']
+
+/** How wide a text is drawn, in the SVG's own units. */
+function widthOf(cls: string, text: string): number {
+  const size = SIZE[cls] ?? SIZE['t-desc']!
+  const ems = cls === 't-code' || cls === 't-type'
+    ? MONO_ADVANCE * [...text].length
+    : [...text].reduce((sum, ch) => sum + emOf(ch), 0)
+  return ems * size
+}
+
 interface Box {
   readonly kind: Kind
   readonly x: number
@@ -117,14 +174,48 @@ export interface BoxCoverage {
   readonly text: string
 }
 
+/** A text as it was drawn: its baseline, and the width the estimate above gives it. */
+export interface DrawnText {
+  readonly x: number
+  readonly y: number
+  readonly text: string
+  readonly width: number
+}
+
+/**
+ * A box as it was drawn: its rectangle, and every text it put in it. The test beside this
+ * file holds each of those texts inside the rectangle, so a box given more text than it
+ * has room for is answered where it is written rather than by someone reading the page.
+ */
+export interface DrawnBox {
+  readonly name: string
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+  readonly texts: readonly DrawnText[]
+}
+
+/** One entry of a legend row as it was drawn: its swatch, and the label beside it. */
+export interface DrawnLegendEntry {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+  readonly label: string
+  readonly labelX: number
+  readonly labelWidth: number
+}
+
 /** One line when a name fits its box, else two, broken between names at a comma, or inside one at its underscore nearest the middle. */
 function nameLines(name: string, code: boolean, width: number): string[] {
-  const fits = Math.floor(width / (code ? 7.5 : 8.6))
-  if (name.length <= fits) return [name]
+  const cls = code ? 't-code' : 't-name'
+  const fits = (line: string): boolean => widthOf(cls, line) <= width
+  if (fits(name)) return [name]
   const cutsAt = (separators: RegExp): number[] =>
     [...name.matchAll(separators)]
       .map((found) => (found.index ?? 0) + found[0].length)
-      .filter((at) => at <= fits && name.length - at <= fits)
+      .filter((at) => fits(name.slice(0, at).trimEnd()) && fits(name.slice(at).trimStart()))
   // A box that lists several directories breaks between them when it can, so no directory's name is cut
   // in two while there is room to start the next one on the second line.
   const betweenNames = cutsAt(/, /g)
@@ -147,6 +238,10 @@ class Diagram {
   private readonly parts: string[] = []
   /** Every box that stands for directories in src/, as drawn, for the test that holds the picture to them. */
   readonly coverage: BoxCoverage[] = []
+  /** Every box as drawn, for the test that holds each text inside its own rectangle. */
+  readonly boxes: DrawnBox[] = []
+  /** Every legend entry as drawn, for the test that keeps a legend off the boxes. */
+  readonly legendEntries: DrawnLegendEntry[] = []
   readonly file: string
   readonly title: string
   readonly w: number
@@ -158,10 +253,11 @@ class Diagram {
     this.h = h
   }
 
-  text(cls: string, x: number, y: number, s: string, middle = false, rotate?: number): void {
+  text(cls: string, x: number, y: number, s: string, middle = false, rotate?: number): DrawnText {
     const anchor = middle ? ' text-anchor="middle"' : ''
     const turn = rotate === undefined ? '' : ` transform="rotate(${rotate} ${x} ${y})"`
     this.parts.push(`<text class="${cls}" x="${x}" y="${y}"${anchor}${turn}>${escape(s)}</text>`)
+    return { x, y, text: s, width: widthOf(cls, s) }
   }
 
   box(b: Box): void {
@@ -173,9 +269,10 @@ class Diagram {
     // readable as the directory it is: keep_martha_state_outside_ / the_checkout.
     const lines = nameLines(b.name, b.code === true, b.w - 32)
     const room = 18 * (lines.length - 1)
-    lines.forEach((line, i) => this.text(b.code ? 't-code' : 't-name', tx, b.y + 28 + 18 * i, line))
-    this.text('t-type', tx, b.y + 46 + room, b.type)
-    b.desc.forEach((line, i) => this.text('t-desc', b.x + 16, b.y + 70 + room + 16 * i, line))
+    const texts = lines.map((line, i) => this.text(b.code ? 't-code' : 't-name', tx, b.y + 28 + 18 * i, line))
+    texts.push(this.text('t-type', tx, b.y + 46 + room, b.type))
+    b.desc.forEach((line, i) => texts.push(this.text('t-desc', b.x + 16, b.y + 70 + room + 16 * i, line)))
+    this.boxes.push({ name: b.name, x: b.x, y: b.y, w: b.w, h: b.h, texts })
   }
 
   bound(x: number, y: number, w: number, h: number, label: string, atTheBottom = false): void {
@@ -200,8 +297,9 @@ class Diagram {
     if (boundary !== null) entries.push(['bound', boundary])
     for (const [cls, label] of entries) {
       this.parts.push(`<rect class="${cls}" x="${x}" y="${y}" width="22" height="14" rx="3"/>`)
-      this.text('t-leg', x + 30, y + 12, label)
-      x += 40 + 6.6 * label.length
+      const drawn = this.text('t-leg', x + 30, y + 12, label)
+      this.legendEntries.push({ x, y, w: 22, h: 14, label, labelX: drawn.x, labelWidth: drawn.width })
+      x += 40 + drawn.width
     }
   }
 
