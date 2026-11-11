@@ -9,7 +9,7 @@
 //
 //   - A WAIT ON A PERSON SAYS WHAT IT WAITS FOR. The owner's dashboard is read to see who holds whom up; a row that
 //     says "waiting on Supervisor" and nothing else tells the owner to go and ask. So a wait on a person with no
-//     `waiting_for` is not recorded, and the row keeps the wait it had (macula-sponsors#147).
+//     `waiting_for` is not recorded, and the row keeps the wait it had (the crew's rule for a wait on a person).
 //   - A NAME THE CREW DOES NOT HAVE IS RECORDED, WITH A WARNING. The row is the member's own word about itself; a
 //     name nobody has is a typo to see in the warning, not something to paper over by dropping the wait.
 //
