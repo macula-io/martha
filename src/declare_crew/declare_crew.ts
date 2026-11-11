@@ -39,10 +39,19 @@ export type Act = (typeof ACTS)[number]
 export const OWNER = 'owner'
 
 /**
- * The house rules a crew can switch on. Each is off unless the declaration says true, so a crew that names none of
- * them opens no pane and reports nothing (martha#254's `dashboard` among them).
+ * The house rule that opens the crew's pane at a session's start and keeps its rows (martha#254). Off unless the
+ * declaration names it, as every switch is: a crew that names no dashboard opens no pane and reports nothing.
  */
-export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', 'dashboard'] as const
+export const DASHBOARD = 'dashboard'
+
+/** The house rule that runs the strict shell gate (martha#259): a session that took in text it cannot trace executes
+ * nothing until it is replaced. Off unless the declaration names it, as every switch is, so an owner who wrote no
+ * `house_rules` gets a member that keeps its shell (DECIDED 2026-11-11 "make the guard opt-in").
+ */
+export const STRICT_GATE = 'strict_gate'
+
+/** The house rules a crew can switch on. Each is off unless the declaration says true. */
+export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */

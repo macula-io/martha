@@ -12,6 +12,7 @@ import {
   DeclarationRefused,
   HOUSE_RULE_SWITCHES,
   OWNER,
+  STRICT_GATE,
   declareCrew,
   type CrewSettings,
 } from './declare_crew.ts'
@@ -232,6 +233,22 @@ test('a field that is not an object is refused with its shape, naming every key 
 
 test('a misspelt house rule is refused by name, so it cannot leave a rule off unseen', async () => {
   await refusedWith({ ...team, house_rules: { owner_item: true } }, 'house_rules.owner_item')
+})
+
+// --- the strict shell gate is a house rule (martha#259) -----------------------
+
+test('the strict gate is a house rule, off unless the declaration names it, and refused when it is not true or false', async () => {
+  assert.equal((await declare(solo).settings).house_rules[STRICT_GATE], false)
+  assert.equal((await declare({ ...solo, house_rules: { [STRICT_GATE]: true } }).settings).house_rules[STRICT_GATE], true)
+  await refusedWith({ ...solo, house_rules: { [STRICT_GATE]: 'yes' } }, `house_rules.${STRICT_GATE}`)
+})
+
+test('every declared switch is read from the one list, so a new rule is neither misspelt nor forgotten', async () => {
+  for (const name of HOUSE_RULE_SWITCHES) {
+    const named = await declare({ ...solo, house_rules: { [name]: true } }).settings
+    assert.equal(named.house_rules[name], true, name)
+  }
+  assert.ok(HOUSE_RULE_SWITCHES.includes(STRICT_GATE), 'the strict gate is one of the declared switches')
 })
 
 test('an act the mode table does not know is refused by name', async () => {

@@ -18,6 +18,12 @@
 // A raw mesh read is refused next, tainted or not
 // (../read_a_room_through_its_gate): the room is read through its gate instead.
 //
+// Two of the refusals below stand on text the session took in rather than on
+// the call itself: a record that cannot be read, and an agent the host started
+// that has not stopped. The owner's switch (`house_rules.strict_gate`, martha#259)
+// turns those off as well as the taint rule, and turns nothing else off: the
+// recheck, the reach rule and the mesh read above stand whatever it says.
+//
 // This is the whole wiring on the host side: one question per tool call. Which
 // host asks it is an adapter detail — the answer is the core's.
 
@@ -56,10 +62,16 @@ export interface ToolCall {
    * caller that knows of no agent is the case before the host has one.
    */
   readonly agents_running?: readonly string[]
+  /**
+   * Whether the owner turned the strict gate on in the crew's declaration (martha#259). Absent means on, so a caller
+   * that has not heard of the setting keeps the guard; the owner's off comes from the declaration through the launcher
+   * (../launch_a_claude_code_member). Off, every refusal here that stands on text the session took in allows the call.
+   */
+  readonly strict_gate?: boolean
 }
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [] }: ToolCall): ToolCallAnswer {
+export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [], strict_gate = true }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -81,6 +93,25 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
     }
   }
 
+  const onTheRecord = refusedOnWhatItTookIn(session, tool, agents_running, strict_gate)
+  if (onTheRecord !== undefined) return onTheRecord
+
+  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy, strict_gate })
+  return decision.allow ? undefined : { deny: decision.refusal }
+}
+
+/**
+ * The refusals that stand on text the session took in rather than on the call: a record that cannot be read, and an
+ * agent the host started that has not stopped (martha#170). Both are part of the owner's strict gate (martha#259), and
+ * with it off they allow the call; what the session took in is still recorded either way.
+ */
+function refusedOnWhatItTookIn(
+  session: HostSession,
+  tool: string,
+  agents_running: readonly string[],
+  strict_gate: boolean,
+): ToolCallAnswer {
+  if (!strict_gate) return undefined
   if (session.record_missing) {
     return isShellTool(tool)
       ? {
@@ -90,12 +121,7 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
         }
       : undefined
   }
-
-  const running = theAgentItWaitsOn(agents_running, tool)
-  if (running !== undefined) return running
-
-  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy })
-  return decision.allow ? undefined : { deny: decision.refusal }
+  return theAgentItWaitsOn(agents_running, tool)
 }
 
 /**

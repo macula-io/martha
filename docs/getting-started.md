@@ -186,18 +186,39 @@ base your project actually uses if it is not `main`.
 
 Claude Code may hand the review to its own agent. Martha follows that agent:
 its start, its stop and every call it makes are recorded, so the answer it
-hands back is placed by that record. While an agent is between its start and
-its stop, the reviewer's shell commands are refused — the agent's text has no
-call to be placed on yet — though it can still read files, and once the agent
-stops and Martha saw every call it made answered, the shell comes back.
+hands back is placed by that record. By default the reviewer keeps its shell
+while the agent runs; the answer is recorded and nothing is refused.
 
-What that costs: a review that reads outside the approved tree still closes the
-reviewer's shell on that read, as any other text from a stranger does. A review
-of the range itself — `git`, the files in the checkout — is what this covers.
-If a `gh` call or a web page closes the shell, the verdict that comes back
-never saw the diff: end the reviewer, start it again, and type the hand-off
-again; Martha's refusal says only a fresh start that reads no handover clears
-it.
+## If you want the strict shell gate
+
+Martha can be told that text it cannot trace stops every later shell command in
+the session — a file the member read outside your checkout, a tool result it
+could not place, a page, or a background agent's answer while it runs. Reading
+stays allowed under it; only running is stopped, until the session is replaced.
+It is off unless you ask for it: a member is a trusted helper by default, and
+the check on it is your review plus your yes on every push and release.
+
+With it on, a background agent closes the shell while it runs — its text has no
+call to be placed on yet — though the member can still read files, and once the
+agent stops and Martha saw every call it made answered, the shell comes back.
+
+To turn it on, add the rule to the crew's declaration, `.crew/crew.json`, as a
+top-level key beside `owner` and `mode`:
+
+```json
+"house_rules": { "strict_gate": true }
+```
+
+If the declaration already has a `house_rules` object, add `"strict_gate": true`
+inside it instead of writing a second one. Then start the member again: the
+declaration is read once, at `martha start`.
+
+With it on, what that costs is what the strict rule always cost: a review that
+reads outside the approved tree closes the reviewer's shell on that read, as
+any other text from a stranger does, and a `gh` call or a web page does the
+same. The verdict that comes back never saw the diff: end the reviewer, start it
+again, and type the hand-off again; Martha's refusal says only a fresh start
+that reads no handover clears it.
 
 ## Upgrading Martha
 

@@ -13,8 +13,8 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
-import { declareSoloCrew, SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
   nodeIdsFor,
   openState,
@@ -26,6 +26,7 @@ import {
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -293,7 +294,32 @@ test('starting a member on an approval prunes the own writes of launches past th
   assert.equal(left.length, OWN_WRITES_LAUNCHES_KEPT, 'the two oldest launches are pruned, and no more')
 })
 
-test('a run reading a member\'s rows derives the same place the launcher writes them to (martha#254, r=1 O2)', () => {
+// --- the strict shell gate reaches the member (martha#259) ---------------------
+
+test("the declaration's strict gate is what the member's relay is handed, and off is the default", async (t) => {
+  const seenWith = async (house_rules: Readonly<Record<string, boolean>>): Promise<readonly (boolean | undefined)[]> => {
+    const place = placeFor(t, { '.mcp.json': SERVERS })
+    await declared(place)
+    // The declaration the crew reads, with the house rules the owner wrote: init wrote none.
+    writeFileSync(
+      join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
+      `${JSON.stringify({ ...soloDeclaration('Ada Owner'), house_rules }, null, 2)}\n`,
+    )
+    const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+    assert.equal(approved.kind, 'approved')
+    const fake = fakeClaude(place)
+    const handed: MemberRelayPlace[] = []
+    const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
+    assert.ok(started.started, started.started ? '' : started.refusal)
+    t.after(async () => (started.stop('the test is over'), await started.stopped))
+    return handed.map((relay_place) => relay_place.strict_gate)
+  }
+
+  assert.deepEqual(await seenWith({}), [false], 'no house rules: the gate is off, as the owner decided')
+  assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), [true], 'the declaration turns it on')
+})
+
+test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
   const state_home = mkdtempSync(join(tmpdir(), 'martha-254-derive-'))
   const checkout = join(state_home, 'checkout')
   mkdirSync(checkout, { recursive: true })

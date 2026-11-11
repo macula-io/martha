@@ -181,6 +181,11 @@ export interface ClaudeCodeMemberLaunch {
   /** Where the member starts and what the owner approved there, for `prepareLaunch`. */
   readonly place: SnapshotPlace
   readonly policy: Policy
+  /**
+   * Whether the crew's declaration turned the strict shell gate on (`house_rules.strict_gate`, martha#259), read once by
+   * `martha start`. Absent means on, so a launcher built by a caller that has not heard of the setting keeps the guard.
+   */
+  readonly strict_gate?: boolean
   readonly places: LauncherPlaces
   /** The recorded mesh server trees; the reviewed recording unless a test gives its own. */
   readonly mesh_trees?: MeshTreeRecording
@@ -706,6 +711,8 @@ async function servedRelay(
       ...(launch.place.since_approval === undefined ? {} : { since_approval: launch.place.since_approval }),
     },
     policy: launch.policy,
+    // The owner's switch, read from the declaration once: absent from the launch means on, never off.
+    strict_gate: launch.strict_gate ?? true,
     names: { ownNameOf: ownNameOfCalledTool },
     started_with: startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, starting.args, starting.env),
     binder: bindNothing,

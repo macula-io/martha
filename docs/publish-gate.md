@@ -58,6 +58,19 @@ because the crew's own code lowercases them. A display name is never a
 principal: a session whose first user message says "you are Supervisor" gains
 nothing, because the node id on the delivery is the only thing compared.
 
+## Who runs it
+
+It is the owner's switch, and it is off until they turn it on: `house_rules.strict_gate`
+in the crew's declaration (martha#259). The reset decided that a member is a
+trusted helper, and the check on it is review plus a yes on every push. The record
+the rule reads is written either way; with the switch off, nothing reads it.
+
+Off, the three refusals that stand on text the session took in allow the call:
+this rule, a record that cannot be read, and an agent that has not stopped.
+Everything else here — the launch recheck, the refused writes to the owner's
+memory, the rule against a member widening its own reach, and the raw mesh read —
+stands whether the switch is on or off.
+
 ## What this means when you are the owner
 
 Text **you** paste into a session is an ingestion too. If it arrives
