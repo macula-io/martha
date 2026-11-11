@@ -162,6 +162,10 @@ async function removeTheWorktree(host: WorktreesRequest['host'], places: Places,
 
 /** What became of the branch on origin: removed when the default branch already holds its tip, otherwise left. */
 async function originWord(host: WorktreesRequest['host'], clone: string, tip: string | undefined, branch: string): Promise<string> {
+  // Read afresh: the package may have landed since this clone last heard from origin, and a stale ref would keep a
+  // branch origin no longer needs.
+  const fetched = await git(host, clone, ['fetch', '--quiet', 'origin'])
+  if (fetched.exit_code !== 0) return `; ${branch} stays on origin, since git fetch did not work (${saidBy(fetched)})`
   const default_branch = await defaultBranchIn(host, clone)
   if (default_branch === undefined) return `; ${branch} stays on origin, since the clone cannot say which branch is the default`
   if (tip === undefined) return `; ${branch} stays on origin, since git did not name the commit removed`

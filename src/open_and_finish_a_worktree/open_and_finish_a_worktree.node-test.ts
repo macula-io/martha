@@ -33,6 +33,7 @@ const SLUG = '261-the-refusals'
 
 interface Fixture {
   readonly origin: string
+  readonly seed: string
   readonly clones: string
   readonly worktrees: string
   readonly clone: string
@@ -65,7 +66,7 @@ function aCrew(t: TestContext): Fixture {
   gitIn(seed, 'remote', 'add', 'origin', origin)
   gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
   gitIn(clones, 'clone', '--quiet', origin, join('acme', 'widget'))
-  return { origin, clones, worktrees, clone: join(clones, 'acme', 'widget') }
+  return { origin, seed, clones, worktrees, clone: join(clones, 'acme', 'widget') }
 }
 
 const settingsFor = (fixture: Fixture, places: { readonly clones: string | null; readonly worktrees: string | null }): CrewSettings => ({
@@ -157,9 +158,12 @@ test('worktree_finish removes the worktree, its local branch and the branch on o
   writeFileSync(join(path, 'work.txt'), 'the work\n')
   commitIn(path, 'the work')
   gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
-  gitIn(fixture.clone, 'fetch', '--quiet', 'origin')
-  gitIn(fixture.clone, 'merge', '--ff-only', '--quiet', `origin/${MEMBER}/${SLUG}`)
-  gitIn(fixture.clone, 'push', '--quiet', 'origin', 'main')
+  // The landing is done from the seed checkout, which leaves the crew's own clone with an origin/main that does not
+  // know it yet: finishing has to ask origin afresh, or it would keep a branch origin no longer needs.
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, 'merge', '--ff-only', '--quiet', `origin/${MEMBER}/${SLUG}`)
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.notEqual(gitIn(fixture.clone, 'rev-parse', 'origin/main'), gitIn(fixture.seed, 'rev-parse', 'HEAD'), 'the clone has not heard of the landing yet')
   const answer = await finish.answer(asked('acme/widget', SLUG))
   assert.match(answer, new RegExp(`removed ${path.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')} and removed Ceres/261-the-refusals`))
   assert.match(answer, /removed Ceres\/261-the-refusals on origin/)
