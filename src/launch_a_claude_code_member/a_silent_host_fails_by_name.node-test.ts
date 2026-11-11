@@ -16,7 +16,7 @@
 // before all of this.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -31,6 +31,7 @@ import {
   type RelayJournal,
   type RelayJournalRead,
 } from './keep_the_relays_journal.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
 
 /** Looks a wait may take before the test calls it a wait that never gives up, rather than asking the harness.
@@ -186,7 +187,7 @@ const THE_TOOL = 'Write'
  */
 function aJournalOfTheTests(t: TestContext, host: Host): { readonly journal: RelayJournal; readonly read: () => RelayJournalRead } {
   const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
-  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  t.after(() => removeTheTree(directory))
   return { journal: relayJournalKeptIn(directory, 'launch-of-the-test', host.now), read: () => readTheNewestRelayJournal(directory) }
 }
 
@@ -328,7 +329,7 @@ test('#240: a run whose launcher keeps no journal behaves exactly as it did befo
 
 test('#240: a run that read no journal by the host\'s first model request fails by name, and one that read a line goes on', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
-  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  t.after(() => removeTheTree(directory))
   const heard = [{ number: 1, body: {} }]
   assert.equal(journalNeverWritten([], directory), undefined, 'a run no request has arrived in yet was failed for a journal it has not needed')
   assert.match(

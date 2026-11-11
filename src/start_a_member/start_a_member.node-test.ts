@@ -1,14 +1,15 @@
 // `martha start <member>`: one member of the declared crew, started on the config the owner approved (martha#98).
 //
 // A real git checkout under a temporary home, a fake `claude` standing in for the host, the real launcher and the
-// real launch records. Everything a test makes is removed after it, the member's process group included.
+// real launch records. A place ends every member started on it before it removes the home they were writing in, and
+// the member's process group goes with it (martha#272).
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, watch, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -23,9 +24,10 @@ import {
   ownWritesKeptForLaunch,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { NOT_STARTED } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
@@ -43,15 +45,41 @@ interface Place {
   readonly root: string
   readonly state: MarthaState
   readonly relay_root: string
+  /** Every member started on this place, so the place ends them before the home they write in is removed (martha#272). */
+  readonly membersStarted: AStartedMember[]
 }
+
+/** A member that did start, as the launcher hands it to a test: it can be stopped, and it says when it is gone. */
+type AStartedMember = Extract<MemberStarted, { readonly started: true }>
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync('git', ['-c', 'user.name=martha-test', '-c', 'user.email=martha-test@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd })
 }
 
+/**
+ * The end of a place: every member it started is stopped and gone before the home they and the children they started
+ * write in is removed (martha#272).
+ *
+ * A test's hooks run in the order they were registered, and the place is made before any member is, so the home used to
+ * be removed while the member was still running: the red seen once in a full run on #256's worktree, ENOTEMPTY, the home
+ * gaining an entry between the remove reading it and removing it. The place owns the member's end instead of the order
+ * of the hooks, so a test that starts a member and says nothing else still tears down cleanly.
+ */
+async function thePlaceEnds(place: Place): Promise<void> {
+  for (const started of place.membersStarted) started.stop('the test is over')
+  await Promise.all(place.membersStarted.map((started) => started.stopped))
+  removeTheTree(place.home)
+}
+
+/** A member started on a place, which the place ends before its home goes (martha#272). */
+async function startedOn(place: Place, request: MemberStartRequest): Promise<MemberStarted> {
+  const started = await startMember(request)
+  if (started.started) place.membersStarted.push(started)
+  return started
+}
+
 function placeFor(t: TestContext, files: Readonly<Record<string, string>>): Place {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-start-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
   const root = join(home, 'project')
   mkdirSync(root)
   git(root, 'init', '-q', '.')
@@ -61,7 +89,9 @@ function placeFor(t: TestContext, files: Readonly<Record<string, string>>): Plac
   git(root, 'commit', '-q', '-m', 'start')
   const state = openState(join(home, 'state'), root)
   assert.ok('directory' in state)
-  return { home, root, state, relay_root: shortRelayRoot(t) }
+  const place: Place = { home, root, state, relay_root: shortRelayRoot(t), membersStarted: [] }
+  t.after(() => thePlaceEnds(place))
+  return place
 }
 
 /** A fake `claude`: notes that it ran and with what, then waits to be stopped. */
@@ -73,6 +103,46 @@ function fakeClaude(place: Place): { readonly command: string; readonly ran: str
   const command = join(dir, 'claude')
   writeFileSync(command, ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, `printf '%s\\n' "$@" > '${args}'`, 'exec sleep 600', ''].join('\n'), { mode: 0o700 })
   return { command, ran, args }
+}
+
+/**
+ * A fake `claude` that starts a child writing into the home until it is killed, and then waits to be stopped: the shape
+ * of the run the teardown race came from (martha#272). The child's pid is left where the test can read it, and it puts
+ * an entry into the home every few microseconds, so a teardown that removes the home under it is removing a tree that
+ * is not quiet.
+ */
+function aHostWritingIn(place: Place): { readonly command: string; readonly child: string } {
+  const dir = join(place.home, 'writer')
+  mkdirSync(dir)
+  mkdirSync(join(place.home, 'written'))
+  const child = join(dir, 'child')
+  const command = join(dir, 'claude')
+  const theChild =
+    'const fs = require("node:fs");const home = process.argv[1];' +
+    'for (;;) { try { fs.writeFileSync(`${home}/written/now`, String(process.pid)) } catch { /* the home is going */ } }'
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...hostAnswers(),
+      `node -e '${theChild}' '${place.home}' &`,
+      `echo $! > '${child}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, child }
+}
+
+/** Whether a process is still there: a signal that does nothing, and the answer is whether it could be sent. */
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function requestFor(place: Place, command: string, member: string, lines: string[]): MemberStartRequest {
@@ -105,7 +175,7 @@ const yes = { is_terminal: true, ask: () => Promise.resolve('yes') }
 test('start with no declaration starts nothing, naming the file and the command that writes one', async (t) => {
   const place = placeFor(t, {})
   const fake = fakeClaude(place)
-  const started = await startMember(requestFor(place, fake.command, BUILDER!.name, []))
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.startsWith(NOT_STARTED), refusal)
@@ -118,7 +188,7 @@ test('start of a member the crew does not have starts nothing, naming it and the
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
-  const started = await startMember(requestFor(place, fake.command, 'stranger', []))
+  const started = await startedOn(place, requestFor(place, fake.command, 'stranger', []))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.includes('stranger'), refusal)
@@ -131,7 +201,7 @@ test('start on a config the owner has not approved starts nothing, naming martha
   await declared(place)
   const fake = fakeClaude(place)
   const lines: string[] = []
-  const started = await startMember(requestFor(place, fake.command, BUILDER!.name, lines))
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, lines))
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.includes('.mcp.json'), refusal)
@@ -147,9 +217,8 @@ test('init, approve and start bring a member up on the approved config, recorded
   assert.equal(approved.kind, 'approved')
   const fake = fakeClaude(place)
   const lines: string[] = []
-  const started = await startMember(requestFor(place, fake.command, BUILDER!.name, lines))
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, lines))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
 
   const ids = nodeIdsFor(place.state, [BUILDER!.name])
   assert.ok('ids' in ids)
@@ -162,12 +231,55 @@ test('init, approve and start bring a member up on the approved config, recorded
   assert.ok(readFileSync(fake.args, 'utf8').includes('--mcp-config'), 'the approved copy is passed')
 })
 
+test('a place ends the member it started before it removes the home, while a child of it is still writing there (#272)', async (t) => {
+  const place = placeFor(t, { '.mcp.json': SERVERS })
+  await declared(place)
+  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const writer = aHostWritingIn(place)
+  const lines: string[] = []
+  const started = await startedOn(place, requestFor(place, writer.command, BUILDER!.name, lines))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  await until('the host\'s child to write into the home', () => existsSync(writer.child), t)
+  const child = Number(readFileSync(writer.child, 'utf8').trim())
+  assert.ok(isRunning(child), 'the child that writes into the home is running when the test ends')
+  // The order is read, not raced: the two things the teardown does are noted as they happen. Nothing here stops the
+  // member or removes the home — the place does both — and this hook is registered after the place's own, so it reads
+  // what the teardown left.
+  const happened: string[] = []
+  let noteTheHomeWent = (): void => {}
+  const theHomeWent = new Promise<void>((resolve) => {
+    noteTheHomeWent = () => {
+      if (!happened.includes('the home went')) happened.push('the home went')
+      resolve()
+    }
+  })
+  void started.stopped.then(() => happened.push('the member stopped'))
+  // A change to an entry of the home's own directory is the home appearing or going; it existed before the watcher was
+  // made, so the first change to it that this sees is the removal. The note is taken from the event alone: the home may
+  // still be readable for a moment after the event that says it is going, and the event itself is delivered in its own
+  // turn of the loop, so this waits for it rather than reading the list before it has been said.
+  const watcher = watch(dirname(place.home), (_event, name) => {
+    if (name === basename(place.home)) noteTheHomeWent()
+  })
+  t.after(async () => {
+    await theHomeWent
+    watcher.close()
+    assert.deepEqual(
+      happened,
+      ['the member stopped', 'the home went'],
+      `a place ends the member it started before it removes the home it was writing in (martha#272): ${happened.join(', then ')}`,
+    )
+    assert.equal(existsSync(place.home), false, 'the home is gone')
+    assert.equal(isRunning(child), false, 'the child that kept writing in the home went with it')
+  })
+})
+
 test('start whose input is no terminal starts nothing, so a member\'s shell cannot start a sibling', async (t) => {
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
   const lines: string[] = []
-  const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, lines), is_terminal: false })
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, lines), is_terminal: false })
   assert.equal(started.started, false)
   assert.equal(started.started ? '' : started.refusal, NOT_A_TERMINAL)
   assert.deepEqual(lines, [NOT_A_TERMINAL])
@@ -201,7 +313,7 @@ for (const args of REFUSED_ARGUMENTS) {
     const place = placeFor(t, {})
     await declared(place)
     const fake = fakeClaude(place)
-    const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), args })
+    const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
     assert.equal(started.started, false)
     const refusal = started.started ? '' : started.refusal
     assert.ok(refusal.startsWith(NOT_STARTED), refusal)
@@ -216,7 +328,7 @@ test('a switch that takes a value refuses one that is missing or is itself a swi
   await declared(place)
   const fake = fakeClaude(place)
   for (const args of [['--model'], ['--model', '--settings', '{}']]) {
-    const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), args })
+    const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
     assert.equal(started.started, false, args.join(' '))
     assert.ok(!started.started && started.refusal.includes('--model'), started.started ? '' : started.refusal)
   }
@@ -228,9 +340,8 @@ test('the switches that load no config reach the host as the owner gave them', a
   await declared(place)
   const fake = fakeClaude(place)
   const args = ['--model', 'an-owner-model', '--effort', 'high', '--verbose']
-  const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), args })
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
   const passed = readFileSync(fake.args, 'utf8').split('\n')
   for (const arg of args) assert.ok(passed.includes(arg), arg)
@@ -286,9 +397,8 @@ test('starting a member on an approval prunes the own writes of launches past th
     utimesSync(join(ownWritesPlace(place.state), made), when, when)
   }
   const fake = fakeClaude(place)
-  const started = await startMember(requestFor(place, fake.command, BUILDER!.name, []))
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
   const left = readdirSync(ownWritesPlace(place.state))
   assert.equal(left.length, OWN_WRITES_LAUNCHES_KEPT, 'the two oldest launches are pruned, and no more')
 })
@@ -308,9 +418,8 @@ test("the declaration's strict gate is what the member's relay is handed, and of
     assert.equal(approved.kind, 'approved')
     const fake = fakeClaude(place)
     const handed: MemberRelayPlace[] = []
-    const started = await startMember({ ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
+    const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
     assert.ok(started.started, started.started ? '' : started.refusal)
-    t.after(async () => (started.stop('the test is over'), await started.stopped))
     return handed.map((relay_place) => relay_place.strict_gate)
   }
 

@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
+import { removeTheTree } from './relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -195,7 +196,7 @@ async function aMemberStartedIn(t: TestContext, place: Place, launch: Parameters
   t.after(async () => {
     if (started.started && !hasStopped) started.stop('the test is over')
     if (started.started) await started.stopped
-    rmSync(place.home, { recursive: true, force: true })
+    removeTheTree(place.home)
   })
   return started
 }
@@ -825,7 +826,7 @@ test("a relay socket as long as this kernel binds, or a NUL byte less, is made; 
   let longest = Buffer.byteLength(join(probe, 's'))
   const probed = (bytes: number): string => join(probe, 's'.repeat(bytes - Buffer.byteLength(probe) - 1))
   while (await binds(probed(longest + 1))) longest += 1
-  rmSync(probe, { recursive: true, force: true })
+  removeTheTree(probe)
 
   // The launcher may keep sun_path's terminating NUL, which Linux lets a path fill: one byte short of the kernel.
   const accepted = [longest, longest - SUN_PATH_NUL].find((bytes) => {
@@ -1261,7 +1262,7 @@ test('a host still writing where it lives when the test ends is stopped before i
   // A red run stops the loop above before the captured hooks have run, so the member and its home are cleaned up here.
   t.after(async () => {
     if (started.started && isAlive(started.pid)) (started.stop('the test is over'), await started.stopped)
-    rmSync(place.home, { recursive: true, force: true })
+    removeTheTree(place.home)
   })
   await until('the fake host to write into its home', () => existsSync(join(churn, 'f1')), t)
 
@@ -1553,7 +1554,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
   ])
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
-  t.after(() => rmSync(scratch, { recursive: true, force: true }))
+  t.after(() => removeTheTree(scratch))
   const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], known_environment_reads: {}, versions: [] }
   const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
   return { registry, recording: { ...recording, versions: [tree] } }
@@ -2245,7 +2246,7 @@ async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: 
   const left = (await pidsCarrying(place.relay_root)).filter((pid) => !alsoGone.includes(pid))
   const launcherLeft = alsoGone.filter((pid) => pid > 1 && isAlive(pid))
   await killGroupsCarrying(place.relay_root)
-  rmSync(place.home, { recursive: true, force: true })
+  removeTheTree(place.home)
   if (left.length > 0 || launcherLeft.length > 0) {
     throw new Error(`the place's home was due for removal while ${[...left, ...launcherLeft].join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
   }
@@ -2352,7 +2353,7 @@ test("a member is written into its launch directory's record inside the hold, an
   const directory = mkdtempSync(join(tmpdir(), 'martha-124-held-'))
   t.after(() => {
     chmodSync(directory, 0o700)
-    rmSync(directory, { recursive: true, force: true })
+    removeTheTree(directory)
   })
   assert.equal(recordTheLauncher(directory), undefined, 'the launch records itself before the member is spawned')
 

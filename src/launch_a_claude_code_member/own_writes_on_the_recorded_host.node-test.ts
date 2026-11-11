@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -22,6 +22,7 @@ import {
   type ModelScript,
   type RecordedHostRan,
 } from './drive_the_recorded_host.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
 
 const recordedHost = process.env[RECORDED_HOST_VARIABLE]
@@ -56,7 +57,7 @@ interface Project {
 /** A checkout with a crew declared and its config approved by the owner, in a home made for the test. */
 function approvedProject(t: TestContext, more: Readonly<Record<string, string>> = {}): Project {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-real-host-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'project')
   const files = { 'README.md': 'a project\n', [CRLF_FILE]: 'one\r\ntwo\r\n', '.claude/settings.json': SETTINGS, ...more }
   for (const [path, text] of Object.entries(files)) {

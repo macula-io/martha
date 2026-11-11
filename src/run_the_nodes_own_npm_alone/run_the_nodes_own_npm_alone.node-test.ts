@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { fakeNpmRegistry, type FakePackage, type FakeRegistry } from './fake_npm_registry.ts'
 import type { Ran } from './run_the_nodes_own_npm_alone.ts'
 import { NPM_RUNS_WITH, npmBesideNode, runIsolatedNpm } from './run_the_nodes_own_npm_alone.ts'
@@ -37,7 +38,7 @@ const SENTINELS = ['NODE_OPTIONS', 'LD_PRELOAD', 'npm_config_registry', `npm_con
 
 const scratch = (t: TestContext, what: string): string => {
   const dir = mkdtempSync(join(tmpdir(), `martha-npm-alone-${what}-`))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 
@@ -148,7 +149,7 @@ test('an install script a variable would turn on never runs', async (t) => {
   const control = npmTheOrdinaryWay(t, dir, ['install', '--no-save', '--dangerously-allow-all-scripts', `--registry=${good.registry}`, SCOPED], { npm_config_ignore_scripts: 'false' })
   assert.equal(control.status, 0, control.said)
   assert.ok(existsSync(mark), 'the postinstall is live: npm the ordinary way runs it')
-  rmSync(join(dir, 'node_modules'), { recursive: true, force: true })
+  removeTheTree(join(dir, 'node_modules'))
   withEnvironment(t, { npm_config_ignore_scripts: 'false', npm_config_dangerously_allow_all_scripts: 'true' })
   const ran = isolatedInstall(dir, good.registry, npmHomeOf(t, 'scripts-home'))
   assert.ok(ran.ran, whyNotRan(ran))
@@ -164,7 +165,7 @@ test('a prefix in the environment is not where anything is installed', async (t)
   const control = npmTheOrdinaryWay(t, dir, ['install', '-g', '--no-save', `--registry=${good.registry}`, SCOPED], { npm_config_prefix: prefix })
   assert.equal(control.status, 0, control.said)
   assert.ok(existsSync(installedUnder), 'the prefix is live: npm the ordinary way installs under it')
-  rmSync(join(prefix, 'lib'), { recursive: true, force: true })
+  removeTheTree(join(prefix, 'lib'))
   withEnvironment(t, { npm_config_prefix: prefix })
   const ran = runIsolatedNpm(['install', '-g', '--no-save', SCOPED], dir, good.registry, npmHomeOf(t, 'prefix-home'))
   assert.ok(ran.ran, whyNotRan(ran))

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   environmentWith,
   filesOnThisMachine as files,
@@ -13,7 +14,7 @@ import {
 
 function place(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-machine-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 

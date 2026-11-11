@@ -30,6 +30,7 @@ import { OWN_WRITE_MODES, type OwnWritesOfTheHistory } from '../remember_a_membe
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
@@ -69,7 +70,7 @@ interface Options {
 
 function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_disk }: Options = {}): Checkout {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-own-writes-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '.')
@@ -323,7 +324,7 @@ test('a branch checked out mid-session that drops the config and adds a file sto
 test('a checkout git can no longer read mid-session stops the member, even with its config gone: nothing can be told apart', async (t) => {
   const place = checkoutFor(t)
   await started(place)
-  rmSync(join(place.checkout, '.git'), { recursive: true, force: true })
+  removeTheTree(join(place.checkout, '.git'))
   rmSync(join(place.checkout, '.mcp.json'))
   const why =
     "The checkout no longer matches what the owner approved, and git can no longer read it as a checkout below the owner's home, so the member's own writes cannot be told from anyone else's. " +

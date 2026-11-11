@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -8,6 +8,7 @@ import type { DeliveryGate, RoomRosters } from '../admit_a_room_message/admit_a_
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { gapsInGateCoverage } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import { PATH_OF_SOURCE, beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -31,7 +32,7 @@ const names = claudeCodeToolNames
 // A member started in a directory holding no launch config: the launch check
 // passes, so these tests see only the rules they are about. Removed at the end.
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
-after(() => rmSync(launch_home, { recursive: true, force: true }))
+after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
   host: 'claude-code',
   launch_dir: mkdtempSync(join(launch_home, 'work-')),

@@ -9,7 +9,7 @@
 // with it on, so the guard is shown to still stand.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -22,6 +22,7 @@ import {
   type HandoverStampStore,
 } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -34,7 +35,7 @@ const names = claudeCodeToolNames
 
 // A member started in a directory holding no launch config, so these tests see only the rule they are about.
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-259-no-launch-config-'))
-after(() => rmSync(launch_home, { recursive: true, force: true }))
+after(() => removeTheTree(launch_home))
 const checkout = join(launch_home, 'work')
 mkdirSync(checkout)
 writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
