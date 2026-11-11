@@ -277,8 +277,14 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
   that project — each member's node id (`members.json`), the approvals you gave
   (`approvals.jsonl`), each launch's copy of the config it started on, and the
   record of what a member wrote itself. Those are the files you would look for;
-  the directory also holds what Martha keeps for itself (`rows/`, `launches/`,
+  the directory also holds what Martha keeps for itself (`launches/`,
   `snapshots/`, `mesh-servers/`). Nothing in your checkout holds any of it.
+- `$XDG_STATE_HOME/martha/crews`, or `~/.local/state/martha/crews`: one
+  directory per repository, named by a hash of its git common directory, and
+  shared by every worktree of that repository — a member working in a worktree
+  and one working in the clone read the same place. It holds the crew's streams
+  (`rows/`): its session records, and the ledger of what a member did on a work
+  package. Nothing in your checkout holds any of it either.
 - `$XDG_RUNTIME_DIR/martha-<your uid>`, or `/tmp/martha-<your uid>`: the sockets
   a running member answers over. Made 0700, and refused if it is not yours
   alone.

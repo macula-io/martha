@@ -48,6 +48,17 @@ test('a row older than OFFLINE_AFTER_MS reads offline, and one younger does not 
   assert.equal(past.counts.online, 0, 'an offline member is not counted online')
 })
 
+test('a member whose launcher beat before it reported anything reads idle, and is still on the crew (test 7, r=1 R2)', () => {
+  const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 500, { state: 'idle', task: '', holds: '', progress: { step: 0, of: 1 } }) }, NOW)
+
+  assert.equal(seen.rows[0]!.state, 'idle', 'a fresh row that says idle reads idle, never offline and never working')
+  assert.deepEqual(
+    seen.counts,
+    { members: 3, online: 1, working: 0, waiting: 0, needs_you: 0 },
+    'and the member is counted online, because its row is fresh, though nothing is counted as working on its word alone',
+  )
+})
+
 test('a member waiting on somebody keeps that wait, and a member that needs the owner is counted (test 7, the counts)', () => {
   const seen = seeTheCrew(
     CREW,

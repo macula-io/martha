@@ -22,6 +22,8 @@ import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writi
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
+import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
 import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
@@ -100,6 +102,26 @@ test('a tool call posted by the mod is answered by the core\'s slice, and the ro
   const row = dashboardRowsIn(place.dashboard).read(MEMBER)
   assert.equal(row?.task, 'Build the crew store', 'the row the answer reports is on disk')
   assert.equal(row?.session, SESSION, 'and it names the session the call came from')
+})
+
+test('the heartbeat of a member that has reported nothing says idle, never working (test 7, r=1 R2)', (t) => {
+  const place = aCrewPlace(t)
+  const crew = toolsIn(place, () => 1_000)
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const stop = crew.startBeating()
+  t.after(() => stop())
+
+  assert.equal(dashboardRowsIn(place.dashboard).read(MEMBER), null, 'nothing is written before the first beat')
+
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  const beat = dashboardRowsIn(place.dashboard).read(MEMBER)
+  assert.equal(beat?.state, 'idle', 'a member that has reported nothing reads idle, so a live member can read idle')
+  assert.equal(beat?.task, '', 'and it claims no task')
+  assert.equal(beat?.session, '', 'and names no session it has not been told')
+
+  const seen = seeTheCrew({ members: [{ name: MEMBER }] }, dashboardRowsIn(place.dashboard).all(), 1_000)
+  assert.equal(seen.rows[0]?.state, 'idle', 'so the crew reads the member as idle')
+  assert.equal(seen.counts.online, 1, 'and the member is on the crew: its row is fresh')
 })
 
 test('a name the crew registers nothing for is refused, naming it (test 11)', async (t) => {

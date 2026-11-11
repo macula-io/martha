@@ -128,6 +128,33 @@ async function callThrough(fake: Fake) {
   return { answer, ran: calls }
 }
 
+test('the session a launcher hands a line to takes it in at its start, and one it does not is handed nothing (martha#254 test 10)', async () => {
+  const line =
+    'macula-io/martha#254 has 1 act sent with no outcome recorded (row 0: a push by Vesta). ' +
+    'Check what became of each before sending anything again, then record it with note_what_became_of_an_act.'
+  const start = { session_id: SESSION, source: 'startup', transcript_path: '/t', hook_event_name: 'SessionStart' }
+
+  const handed = next<typeof start>({ text: 'the rest of the chain' })
+  const answered = await hooksOfTheRelay().get('classic.SessionStart')?.hook(fakeEngine(answering(200, JSON.stringify({ taken: 1, handed: line }))).$, start, handed.fn)
+  assert.equal(handed.calls.length, 1, 'the start is still passed down the chain')
+  assert.deepEqual(
+    answered,
+    { text: 'the rest of the chain', additionalContext: [line] },
+    'the line goes in the hook\'s own answer, which is what the host puts into the session before its first prompt',
+  )
+
+  const nothing = next<typeof start>({ text: 'the rest of the chain' })
+  const plain = await hooksOfTheRelay().get('classic.SessionStart')?.hook(fakeEngine(sayYes).$, start, nothing.fn)
+  assert.deepEqual(plain, { text: 'the rest of the chain' }, 'a launcher with nothing to hand leaves the start as the chain made it')
+})
+
+test('a session start the launcher answers in a shape the relay does not know is not a yes, and hands nothing', async () => {
+  const start = { session_id: SESSION, source: 'startup', transcript_path: '/t', hook_event_name: 'SessionStart' }
+  const passed = next<typeof start>({ text: 'the rest of the chain' })
+  const answer = await hooksOfTheRelay().get('classic.SessionStart')?.hook(fakeEngine(answering(200, '{"taken":1,"handed":""}')).$, start, passed.fn)
+  assert.deepEqual(answer, { text: 'the rest of the chain' }, 'an empty line is not one this relay hands, so the start carries nothing')
+})
+
 test('the relay sends the engine fields unchanged: the start whole, the origin whole, the call with its answer', async () => {
   const fake = fakeEngine(sayYes)
   const start = { session_id: SESSION, source: 'fork', transcript_path: '/t', hook_event_name: 'SessionStart' }

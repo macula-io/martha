@@ -18,12 +18,13 @@ import {
   WHAT_WAS_SENT_DESCRIPTION,
   keepTheMilestone,
   noteWhatBecameOfAnAct,
+  theLineAStartingSessionIsHanded,
   whatWasSent,
 } from '../keep_the_ledger/keep_the_ledger.ts'
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
-import { BEAT_INTERVAL_MS, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
 export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew'] as const
@@ -65,6 +66,12 @@ export interface CrewTools {
   answer(name: string, args: Readonly<Record<string, unknown>>, session: string): Promise<CoreToolAnswer>
   /** Starts the heartbeat, which keeps this member's row fresh; returns the stop. */
   startBeating(): () => void
+  /**
+   * The line a session starting on a package is handed, once, at its start (martha#254 design, test 10): every act of
+   * the package this member holds that was sent with no outcome recorded, oldest first, or null when it holds no
+   * package or nothing of it was left waiting.
+   */
+  theLineToHandAtStart(): Promise<string | null>
 }
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
@@ -161,7 +168,22 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       timer.unref()
       return () => clearInterval(timer)
     },
+    theLineToHandAtStart: () => theLineToHandAtStart(places, state),
   }
+}
+
+/**
+ * The line this member's session starts on: what the member's own row says it holds, and every act of that package
+ * that was sent with no outcome recorded (martha#254 design line 53, test 10). The row is the member's, so a session
+ * that resumes a package reads its predecessor's package and checks what became of what it sent, instead of hoping it
+ * asks. Null when the member holds no package, or when nothing of it was left waiting.
+ */
+async function theLineToHandAtStart(places: CrewToolPlaces, state: SessionState): Promise<string | null> {
+  const held = state.held ?? places.beats.read(places.member)
+  const package_name = held?.holds ?? ''
+  if (package_name === '') return null
+  const sent = await whatWasSent(places.ledger, package_name)
+  return theLineAStartingSessionIsHanded(package_name, sent.acts)
 }
 
 /** What each tool answers, over one place: every tool is one slice's answer, told to the member. */
@@ -179,9 +201,14 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   }
 }
 
-/** What a member that has beaten nothing reads as, until its first report moves its row. */
+/**
+ * What a member that has reported nothing reads as, until its first report moves its row: `idle`, never `working`
+ * (martha#254 test 7, r=1 R2). The heartbeat runs from the launch, before the member has said anything about itself,
+ * so a row written with `working` here would make every live member read as working and no live member ever read
+ * idle. What the member is doing is only ever the member's own report.
+ */
 const A_MEMBER_WITH_NO_BEAT = {
-  state: 'working',
+  state: IDLE,
   holds: '',
   task: '',
   progress: { step: 0, of: 1 },

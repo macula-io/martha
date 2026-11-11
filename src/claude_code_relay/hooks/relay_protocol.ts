@@ -91,6 +91,16 @@ export interface Taken {
   readonly taken: 1
 }
 
+/**
+ * The launcher took a session's start in, and hands that session one line as it starts (martha#254 test 10): the acts
+ * of the package this member holds that were sent with no outcome recorded. The relay puts the line into the start's
+ * own answer, so it is in the session before its first prompt and the member never has to ask for it.
+ */
+export interface TakenWithAHandedLine {
+  readonly taken: 1
+  readonly handed: string
+}
+
 /** The launcher refused the event, and says why for the owner to read. */
 export interface Refused {
   readonly refused: string
@@ -102,8 +112,9 @@ export type Verdict = { readonly allow: 1 } | { readonly deny: string }
 export const TAKEN: Taken = { taken: 1 }
 export const ALLOW: Verdict = { allow: 1 }
 
-/** What the relay acts on: the launcher's yes, or why not. */
-export type Heard = { readonly yes: true } | { readonly yes: false; readonly why: string }
+/** What the relay acts on: the launcher's yes, or why not. A yes may carry the one line a session is handed as it
+ * starts (martha#254 test 10), which is the only answer here that carries anything but its verdict. */
+export type Heard = { readonly yes: true; readonly handed?: string } | { readonly yes: false; readonly why: string }
 
 const NO = (why: string): Heard => ({ yes: false, why })
 const YES: Heard = { yes: true }
@@ -171,6 +182,29 @@ export function heardTaken(status: number, text: string): Heard {
   if (exactKeys(value, ['taken']) && value.taken === 1) return YES
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
   return NO(MALFORMED)
+}
+
+/**
+ * A session's start, as the relay hears it: `{"taken":1}`, or `{"taken":1,"handed":"<line>"}` when the launcher hands
+ * this session its start line (martha#254 test 10). Anything else is a no, as every answer here is.
+ */
+export type StartHeard = { readonly yes: true; readonly handed?: string } | { readonly yes: false; readonly why: string }
+
+export function heardStart(status: number, text: string): StartHeard {
+  if (status !== 200) return NO(`the launcher answered with status ${status}`)
+  const value = jsonObjectOf(text)
+  if (value === undefined) return NO(MALFORMED)
+  const handed = lineHandedIn(value)
+  if (handed !== undefined) return { yes: true, handed }
+  if (exactKeys(value, ['taken']) && value.taken === 1) return YES
+  if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
+  return NO(MALFORMED)
+}
+
+/** The line a start's answer hands this session, when it carries one: exactly `{"taken":1,"handed":"<line>"}`. */
+function lineHandedIn(value: Record<string, unknown>): string | undefined {
+  const carried = exactKeys(value, ['taken', 'handed']) && value.taken === 1 && isReason(value.handed)
+  return carried ? (value.handed as string) : undefined
 }
 
 /** A verdict, as the relay hears it: `{"allow":1}` is the only yes; a deny carries its reason. */

@@ -50,7 +50,7 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
@@ -60,7 +60,7 @@ import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_membe
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
 export type RelayReply =
-  | { readonly answered: true; readonly body: Taken | Refused | Verdict }
+  | { readonly answered: true; readonly body: Taken | TakenWithAHandedLine | Refused | Verdict }
   | { readonly answered: false; readonly stopping: string }
 
 export interface MemberRelay {
@@ -121,7 +121,7 @@ export interface MemberRelayPlace {
 /** Why a run is refused for a member launched without signed runs. */
 export const NO_SIGNED_RUNS = 'this member was launched with no signed shapes to run'
 
-const answered = (body: Taken | Refused | Verdict): RelayReply => ({ answered: true, body })
+const answered = (body: Taken | TakenWithAHandedLine | Refused | Verdict): RelayReply => ({ answered: true, body })
 const refused = (why: string): RelayReply => answered({ refused: why })
 const denied = (why: string): RelayReply => answered({ deny: why })
 
@@ -402,7 +402,24 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
     started,
   )
   const why = await keep(state, handed)
-  return why === undefined ? answered(TAKEN) : refused(why)
+  if (why !== undefined) return refused(why)
+  const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
+  return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn })
+}
+
+/**
+ * The line this session is handed as it starts (martha#254 design line 53, test 10): the acts of the package this
+ * member holds that were sent with no outcome recorded, so a session resuming a package checks what became of them
+ * instead of hoping it asks. Null when the member holds no package, nothing of it is waiting, or the ledger cannot be
+ * read — a start the ledger could not be read for is still a start, and the member can ask with what_was_sent.
+ */
+async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<string | null> {
+  if (crew === undefined) return null
+  try {
+    return await crew.theLineToHandAtStart()
+  } catch {
+    return null
+  }
 }
 
 async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {

@@ -31,6 +31,9 @@ import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
+import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -215,6 +218,7 @@ function answering(
   signed_runs?: SignedRuns,
   journal?: RelayJournal,
   strict_gate?: boolean,
+  crew?: CrewTools,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -237,6 +241,7 @@ function answering(
     ...(signed_runs === undefined ? {} : { signed_runs }),
     ...(journal === undefined ? {} : { journal }),
     ...(strict_gate === undefined ? {} : { strict_gate }),
+    ...(crew === undefined ? {} : { crew }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -258,6 +263,9 @@ const OWNER_TYPED = `${PATH_OF_SOURCE.owner_typed}:${OWNER_AT_THE_TERMINAL}`
 const call = (tool: string, more: Record<string, unknown> = {}, session_id = SESSION) => ({ session_id, call: { tool, ...more } })
 
 const TAKEN_REPLY: RelayReply = { answered: true, body: { taken: 1 } }
+
+/** The package a member's predecessor held, as its own row names it (martha#254 test 10). */
+const PACKAGE = 'macula-io/martha#254'
 const ALLOW_REPLY: RelayReply = { answered: true, body: { allow: 1 } }
 
 function isDenied(reply: RelayReply, pattern?: RegExp): boolean {
@@ -932,6 +940,66 @@ test('end to end: the relay posts each event, and a refused tool call never runs
   })
   assert.equal(unknown.status, 404)
   directory.remove()
+})
+
+test('a session starting on a package is handed its predecessor\'s unfinished acts in the answer to its start (test 10, r=1 R3)', async (t) => {
+  const place = placeFor(t)
+  const member = 'Vesta'
+  const crew = crewToolsOver({
+    member,
+    ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
+    beats: dashboardRowsIn(place.dashboard),
+    root: place.checkout,
+    documents: { read: async (path) => readFileSync(path, 'utf8') },
+  })
+  // The predecessor's row: the member holds a package, and says so where the launcher reads it.
+  const kept = dashboardRowsIn(place.dashboard).keep({
+    member,
+    session: 'the-session-before',
+    at: 1_000,
+    state: 'working',
+    holds: PACKAGE,
+    task: 'Build the crew store',
+    progress: { step: 1, of: 4 },
+    waits: null,
+    needs: '',
+    host: { model: 'opus', provider: '', contextPercent: null, costUsd: null },
+  })
+  assert.equal(kept.kept, true, kept.why ?? '')
+  // An act it sent with no outcome recorded.
+  await rowStreamsDirectory(place.rows).append(ledgerStreamOf(PACKAGE), {
+    kind: 'act_announced',
+    package: PACKAGE,
+    member,
+    at: 2_000,
+    act: { kind: 'push', what: 'main 1111..2222' },
+  })
+
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
+  const answered = await relay.answer('session_started', start('startup'))
+  assert.ok(answered.answered, answered.answered ? '' : answered.stopping)
+  if (!answered.answered) return
+  const handed = 'handed' in answered.body ? answered.body.handed : undefined
+  assert.match(
+    handed ?? '',
+    new RegExp(`${PACKAGE} has 1 act sent with no outcome recorded \\(row 0: a push by ${member}\\)`),
+    'the launcher hands the session the acts its predecessor sent and never concluded',
+  )
+  assert.match(handed ?? '', /note_what_became_of_an_act/, 'and names the tool that records what became of one')
+})
+
+test('a session starting on no package is handed nothing, and its start is taken as before (test 10, r=1 R3)', async (t) => {
+  const place = placeFor(t)
+  const crew = crewToolsOver({
+    member: 'Vesta',
+    ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
+    beats: dashboardRowsIn(place.dashboard),
+    root: place.checkout,
+    documents: { read: async (path) => readFileSync(path, 'utf8') },
+  })
+
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
+  assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY, 'nothing to hand, and the start is taken as it always was')
 })
 
 test('the strict gate is off unless the launch says so, and the launcher\'s answer follows it (martha#259)', async (t) => {

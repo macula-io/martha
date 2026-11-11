@@ -82,7 +82,10 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
 }
 
 function countsOf(rows: readonly CrewRow[]): CrewCounts {
-  const online = rows.filter((row) => row.state !== OFFLINE && row.state !== IDLE)
+  // Online is the header's own word about a row being fresh, which is what CrewCounts says it is: a member whose row
+  // is younger than OFFLINE_AFTER_MS, whatever that row says it is doing (r=1 R2: a live member that has reported
+  // nothing has a row, and it reads idle, so counting only the working states would drop it from the crew's size).
+  const online = rows.filter((row) => row.at !== null && row.state !== OFFLINE)
   return {
     members: rows.length,
     online: online.length,
