@@ -6,14 +6,14 @@
 // own installed tree.
 
 import assert from 'node:assert/strict'
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { fakeNpmRegistry, sha512Of, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
-import { INSTALLER_ENTRY, installThePinnedInstaller, PIN_FILE, type InstallOutcome, type InstallRequest, type Pin } from './install_the_pinned_installer.ts'
+import { INSTALLER_ENTRY, installThePinnedInstaller, PIN_FILE, TEMP_DIR_PREFIX, type InstallOutcome, type InstallRequest, type Pin } from './install_the_pinned_installer.ts'
 
 const NAME = '@martha-installer-pin/fixture'
 const VERSION = '1.0.0'
@@ -46,6 +46,37 @@ const scratch = (t: TestContext, what: string): string => {
   const dir = mkdtempSync(join(tmpdir(), `martha-pinned-${what}-`))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   return dir
+}
+
+/**
+ * What another run of this suite leaves in the shared temporary directory while this one goes: a directory named
+ * as this run names its own, made by a neighbour and not by the run that reads these words.
+ */
+function aNeighbourRunsHere(t: TestContext): string {
+  const dir = mkdtempSync(join(tmpdir(), `${TEMP_DIR_PREFIX}neighbour-`))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  return dir
+}
+
+/**
+ * The run's own temporary directory, as the run announced it: in the temporary directory and named as the
+ * installer names one, there while the run goes, and gone once the run has answered. Nothing else in the
+ * temporary directory is looked at, so a neighbour's directory cannot decide what this case reads (martha#270).
+ */
+function watchingTheRunsOwnTempDir(): { readonly onWorkDir: (work: string) => void; readonly gone: (claim: string) => void } {
+  let work: string | undefined
+  return {
+    onWorkDir: (dir) => {
+      work = dir
+      assert.ok(existsSync(dir), "the run's own temporary directory is there while the run goes")
+      assert.ok(dir.startsWith(tmpdir()), `the run's own directory is outside the temporary directory: ${dir}`)
+      assert.ok(basename(dir).startsWith(TEMP_DIR_PREFIX), `the run's own directory is not named as the installer names one: ${dir}`)
+    },
+    gone: (claim) => {
+      assert.ok(work !== undefined, 'the run said where its temporary directory was')
+      assert.equal(existsSync(work), false, claim)
+    }
+  }
 }
 
 /** The running release's tree: the manifest naming the installer, and the pin it carries. */
@@ -168,19 +199,19 @@ test('the installer the pin names installs with its bundled dependency, and the 
   const registry = await fakeNpmRegistry([installerPackage()])
   t.after(registry.stop)
   const out = join(scratch(t, 'out'), 'reported.json')
-  const started = readdirSync(tmpdir())
-  const outcome = installThePinnedInstaller(requestFor(treeOf(t, pinFor(registry)), { registry: registry.registry, env: { ...process.env, MARTHA_TEST_OUT: out } }))
+  const ownTempDir = watchingTheRunsOwnTempDir()
+  const outcome = installThePinnedInstaller(requestFor(treeOf(t, pinFor(registry)), { registry: registry.registry, env: { ...process.env, MARTHA_TEST_OUT: out }, onWorkDir: ownTempDir.onWorkDir }))
+  aNeighbourRunsHere(t)
   assert.deepEqual('status' in outcome ? outcome.status : -1, 0)
   assert.equal(reported(out).bundle, true, 'the bundled node_modules arrived inside the tarball')
-  const left = readdirSync(tmpdir()).filter((entry) => entry.startsWith('martha-install-') && !started.includes(entry))
-  assert.deepEqual(left, [], 'the temporary directory is removed after a run')
+  ownTempDir.gone('the temporary directory is removed after a run')
 })
 
 test('the temporary directory is removed after a refusal too', async (t) => {
   const empty = await fakeNpmRegistry([])
   t.after(empty.stop)
-  const started = readdirSync(tmpdir())
-  refusalOf(installThePinnedInstaller(requestFor(treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' }), { registry: empty.registry })))
-  const left = readdirSync(tmpdir()).filter((entry) => entry.startsWith('martha-install-') && !started.includes(entry))
-  assert.deepEqual(left, [], 'the temporary directory is removed after a refusal')
+  const ownTempDir = watchingTheRunsOwnTempDir()
+  refusalOf(installThePinnedInstaller(requestFor(treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' }), { registry: empty.registry, onWorkDir: ownTempDir.onWorkDir })))
+  aNeighbourRunsHere(t)
+  ownTempDir.gone('the temporary directory is removed after a refusal')
 })
