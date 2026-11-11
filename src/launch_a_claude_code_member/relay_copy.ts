@@ -43,6 +43,9 @@ export const RELAY_FILES = [
   'hooks/crew.tsx',
   'hooks/crew_tools_answer.ts',
   'hooks/pane_rule.ts',
+  // The one rule for when a session reads its crew's channel (martha#253 r=2): the host refused a launch whose copy
+  // did not carry it.
+  'hooks/crew_channel_reading.ts',
 ] as const
 
 /** The copy's name inside a launch's relay directory. */
