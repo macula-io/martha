@@ -30,6 +30,7 @@
   "martha": {
     "hostContract": "src/host_contract",
     "hostGlue": [
+      "src/crew_files_directory",
       "src/linux_process_identity",
       "src/row_streams_directory"
     ],
