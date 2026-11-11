@@ -48,8 +48,8 @@ test('a loader module allowed for one file is still named in any other file, and
 
 // eslint joined in martha#87: prove_the_core/structure_stays_flat.node-test.ts reads the structural floor's caps
 // from eslint's resolved config and lints planted functions with them.
-test('tripwire: package.json allows exactly typescript and eslint, and only in prove_the_core; a new package is a decision, not a drift', () => {
-  assert.deepEqual(packages, { typescript: 'prove_the_core', eslint: 'prove_the_core' })
+test('tripwire: package.json allows exactly typescript and eslint in prove_the_core, and saxes for the SVG parse in src (martha#271); a new package is a decision, not a drift', () => {
+  assert.deepEqual(packages, { typescript: 'prove_the_core', eslint: 'prove_the_core', saxes: 'src' })
 })
 
 test('a planted import of a coding tool is named, with its file and line', () => {
