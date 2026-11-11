@@ -234,6 +234,19 @@ interface Label {
   readonly rotate?: number
 }
 
+/** The room a box keeps under its last description line: more than the six pixels the test asks for. */
+const BELOW_THE_LAST_LINE = 14
+
+/**
+ * The height a box needs to hold its own text, from the baselines box() draws on. A box is
+ * drawn at least this tall, so a description line added to a box can never print outside it
+ * (martha#283).
+ */
+function heightFor(b: { readonly name: string; readonly code?: true; readonly desc: readonly string[] }, w: number): number {
+  const room = 18 * (nameLines(b.name, b.code === true, w - 32).length - 1)
+  return 70 + room + 16 * (b.desc.length - 1) + BELOW_THE_LAST_LINE
+}
+
 class Diagram {
   private readonly parts: string[] = []
   /** Every box that stands for directories in src/, as drawn, for the test that holds the picture to them. */
@@ -245,12 +258,18 @@ class Diagram {
   readonly file: string
   readonly title: string
   readonly w: number
-  readonly h: number
+  /** The canvas grows to what is drawn on it: the last thing a page draws sets the height it needs. */
+  h: number
   constructor(file: string, title: string, w: number, h: number) {
     this.file = file
     this.title = title
     this.w = w
     this.h = h
+  }
+
+  /** Keeps the canvas tall enough for what was drawn, and no shorter than the page asked for. */
+  fitTo(bottom: number): void {
+    this.h = Math.max(this.h, bottom)
   }
 
   text(cls: string, x: number, y: number, s: string, middle = false, rotate?: number): DrawnText {
@@ -261,7 +280,10 @@ class Diagram {
   }
 
   box(b: Box): void {
-    this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10"/>`)
+    // A box is never drawn smaller than its text needs, whatever the page gave it: the fault this
+    // check was written for was a box given six lines of description and the height of five.
+    const h = Math.max(b.h, heightFor(b, b.w))
+    this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${h}" rx="10"/>`)
     const tx = b.person ? b.x + 44 : b.x + 16
     if (b.person) this.parts.push(`<circle class="head" cx="${b.x + 26}" cy="${b.y + 24}" r="9"/>`)
     if (b.names) this.coverage.push({ name: b.name, names: b.names, text: [b.name, b.type, ...b.desc].join('') })
@@ -272,7 +294,7 @@ class Diagram {
     const texts = lines.map((line, i) => this.text(b.code ? 't-code' : 't-name', tx, b.y + 28 + 18 * i, line))
     texts.push(this.text('t-type', tx, b.y + 46 + room, b.type))
     b.desc.forEach((line, i) => texts.push(this.text('t-desc', b.x + 16, b.y + 70 + room + 16 * i, line)))
-    this.boxes.push({ name: b.name, x: b.x, y: b.y, w: b.w, h: b.h, texts })
+    this.boxes.push({ name: b.name, x: b.x, y: b.y, w: b.w, h, texts })
   }
 
   bound(x: number, y: number, w: number, h: number, label: string, atTheBottom = false): void {
@@ -340,7 +362,7 @@ export function context(): Diagram {
   d.box({ kind: 'b-ext', x: 375, y: 430, w: 250, h: 140, name: 'Anthropic model API', type: '[External: the tool\'s own]',
     desc: ['The coding tool talks to it;', 'Martha never does, and never', 'sees a prompt the tool did not', 'hand it'] })
   d.box({ kind: 'b-mac', x: 720, y: 430, w: 250, h: 140, name: 'Macula mesh and realm', type: '[Macula]',
-    desc: ['A mesh server runs only when your', 'project\'s config names one; the room', 'and admission are team mode, and this', 'release runs neither'] })
+    desc: ['A mesh server runs only when your', 'project\'s config names one; the', 'room and admission are team mode,', 'and this release runs neither'] })
 
   d.edge('M155 144V180H420V210', { x: 300, y: 172, text: 'runs init, approve, start' })
   d.edge('M500 144V210', { x: 508, y: 180, text: 'once published' }, true)
@@ -397,8 +419,8 @@ export function containers(): Diagram {
     desc: ['init, approve, start <member>,', '--version. Reads the declaration and', 'the approval, then starts one member', 'and holds its terminal'] })
   d.box({ kind: 'b-dat', x: 32, y: 246, w: 268, h: 120, name: 'Martha\'s state', type: '[~/.local/state/martha]',
     desc: ['Per project, outside the checkout:', 'each member\'s node id, the approvals', 'given, launch records and snapshots'] })
-  d.box({ kind: 'b-later', x: 32, y: 546, w: 268, h: 120, name: 'the team mode', type: '[planned]',
-    desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing. The', 'parts every launch loads are drawn below'] })
+  d.box({ kind: 'b-later', x: 32, y: 546, w: 268, h: 132, name: 'the team mode', type: '[planned]',
+    desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing.', 'The parts every launch loads are', 'drawn below'] })
 
   d.box({ kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.crew/crew.json]',
     desc: ['Who is on the crew, and the mode\'s', 'table of who may do what; written', 'once by init, never written over'] })
@@ -453,70 +475,131 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
   },
 ]
 
-/** Level 3: what Martha's code is made of, one box per group of slices in src/. */
+/**
+ * A box on a page laid out in rows: which column it takes, and everything else a box needs.
+ * Where it sits on the page is not its business — inRows decides that.
+ */
+type LooseBox = Omit<Box, 'x' | 'y' | 'w' | 'h'> & { readonly col: number }
+
+/**
+ * Draws a page row by row: a row starts one gap below the tallest box of the row above it, and
+ * each box is as tall as its own text needs. Returns the bottom of the last row.
+ */
+function inRows(
+  d: Diagram,
+  rows: readonly (readonly LooseBox[])[],
+  columns: readonly number[],
+  w: number,
+  top: number,
+  gap: number,
+): number {
+  let y = top
+  for (const row of rows) {
+    const heights = row.map((spec) => heightFor(spec, w))
+    row.forEach((spec, i) => {
+      const { col, ...box } = spec
+      d.box({ ...box, x: columns[col]!, y, w, h: heights[i]! })
+    })
+    y += Math.max(...heights) + gap
+  }
+  return y - gap
+}
+
+/** The Component page's boxes, row by row and column by column: inRows places them. */
+const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
+  [
+    { col: 0, kind: 'b-sys', name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the acts]', code: true,
+      desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, --version: the words', 'checked first, a refusal on stderr with', 'the command that fixes it, 0 / 1 / 2'] },
+    { col: 1, kind: 'b-cmp', name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
+      desc: ['Reads .crew/crew.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] },
+    { col: 2, kind: 'b-cmp', name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
+      desc: ['Names every file that starts code and', 'the checkout\'s tree, asks on the owner\'s', 'own terminal, and keeps the fingerprint', 'it was given in approvals.jsonl'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
+      desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] },
+    { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member'], type: '[the launcher]', code: true,
+      desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners, and hand_a_', 'crew_message_to_its_member hands one', 'message at a time and counts it taken', 'in; run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] },
+    { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git'], type: '[the launch gate]', code: true,
+      desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries'] },
+  ],
+  [
+    { col: 0, kind: 'b-dat', name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
+      desc: ['One directory per project, named by a', 'hash of its path: approvals, launches,', 'keep_what_the_owner_signed;', 'row_streams_directory appends rows', 'as files'] },
+    { col: 1, kind: 'b-cmp', name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
+      desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] },
+    { col: 2, kind: 'b-cmp', name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'record_ring_results', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
+      desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'record_ring_results rings one server', 'with another and keeps the keys,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
+      desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] },
+    { col: 1, kind: 'b-cmp', name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'take_in_a_tool_result', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'read_a_ring_results_sender', 'trust_only_framed_envelopes', 'keep_the_shell_for_an_owner_signed_command', 'hash_a_file_under_a_tree'], type: '[the shell gate]', code: true,
+      desc: ['A turn or a tool\'s result: take_in_a_turn,', 'take_in_a_tool_result, shell_tools,', 'answer_a_tool_call, read_a_ring_results_', 'sender, refuse_execution_after_ungated_', 'text, trust_only_framed_envelopes; keep_', 'the_shell_for_an_owner_signed_command;', 'hash_a_file_under_a_tree, what a file is'] },
+    { col: 2, kind: 'b-cmp', name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
+      desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
+      desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] },
+    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'refuse_a_member_writing_owner_memory'], type: '[the Claude Code host]', code: true,
+      desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools; refuse_a_member_', 'writing_owner_memory keeps a member\'s', 'writes out of the owner\'s memory'] },
+    { col: 2, kind: 'b-cmp', name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg', 'check_no_test_the_base_passed_goes_missing', 'check_posted_text_carries_nothing_private'], type: '[this repository\'s own checks]', code: true,
+      desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; so does a home path in the text', 'members post on GitHub, which check_', 'posted_text_carries_nothing_private', 'reads daily. A badge host that answers', '408 is asked again before its link is', 'broken; check_the_logos_are_valid_svg', 'holds every logo to well-formed XML;', 'check_no_test_the_base_passed_goes_', 'missing names a dropped test; each bites'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'install_the_pinned_installer', names: ['install_the_pinned_installer'], type: '[the installer this release pins]', code: true,
+      desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] },
+    { col: 1, kind: 'b-cmp', name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
+      desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] },
+    { col: 2, kind: 'b-cmp', name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message', 'show_what_a_message_became', 'read_a_crew_line'], type: '[the crew\'s rows and its ledger]', code: true,
+      desc: ['show_dashboard_beat holds a member\'s row', 'and the rule the newest beat wins;', 'report_progress moves it, and', 'see_the_crew lays every row out;', 'a_crews_tools answers all six tools.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, send_a_crew_message writes one,', 'show_what_a_message_became reads back', 'what became of it, and read_a_crew_line', 'reads the HANDOFF and VERDICT lines'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'write_my_handover', names: ['write_my_handover'], type: '[the host writes a handover]', code: true,
+      desc: ['A member\'s handover is written by the', 'host, at the path the host chose, and', 'stamped: one file per member per day', 'in the crew\'s own store, so a file the', 'member wrote itself is not a handover'] },
+    { col: 1, kind: 'b-cmp', name: 'park_and_wake_a_member', names: ['park_and_wake_a_member'], type: '[a park that outlives a session]', code: true,
+      desc: ['A member\'s park is a marker in the', 'crew\'s store, so a clear, a restart or a', 'refresh cannot lose it; who may park', 'another member is the declaration\'s', 'table, not who_may_act (martha#255 r=3)'] },
+    { col: 2, kind: 'b-cmp', name: 'crew_files_directory', names: ['crew_files_directory'], type: '[the crew\'s store, on this machine]', code: true,
+      desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] },
+  ],
+]
+
+/**
+ * Level 3: what Martha's code is made of, one box per group of slices in src/.
+ *
+ * The page says which row and column a box is in, and inRows decides where it goes: every
+ * box was placed by hand once, which is how two of them came to sit on each other and others
+ * to print their text off the bottom (martha#283). A row starts below the tallest box of the
+ * row above it, so no box can land on another, and the boundary, the notes, the legend and
+ * the canvas all follow the last row rather than being counted by hand.
+ */
 export function components(): Diagram {
-  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1430)
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 240)
+  const COLUMNS = [32, 348, 664] as const
+  const WIDE = 300
+  const GAP = 16
+  const TOP = 70
 
-  d.bound(16, 40, 968, 1270, 'Martha [the code in src/, one directory per capability]')
 
-  d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the acts]', code: true,
-    desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, --version: the words', 'checked first, a refusal on stderr with', 'the command that fixes it, 0 / 1 / 2'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 70, w: 300, h: 128, name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
-    desc: ['Reads .crew/crew.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 70, w: 300, h: 128, name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
-    desc: ['Names every file that starts code and', 'the checkout\'s tree, asks on the owner\'s', 'own terminal, and keeps the fingerprint', 'it was given in approvals.jsonl'] })
+  const lastRowBottom = inRows(d, COMPONENT_ROWS, COLUMNS, WIDE, TOP, GAP)
+  const boundaryBottom = lastRowBottom + 24
+  d.bound(16, 40, 968, boundaryBottom - 40, 'Martha [the code in src/, one directory per capability]')
 
-  d.box({ kind: 'b-cmp', x: 32, y: 214, w: 300, h: 146, name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
-    desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 146, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member'], type: '[the launcher]', code: true,
-    desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners, and hand_a_', 'crew_message_to_its_member hands one', 'message at a time and counts it taken', 'in; run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 146, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git'], type: '[the launch gate]', code: true,
-    desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries'] })
-
-  d.box({ kind: 'b-dat', x: 32, y: 376, w: 300, h: 150, name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
-    desc: ['One directory per project, named by a', 'hash of its path: approvals, launches,', 'keep_what_the_owner_signed; row_streams_', 'directory appends rows as files'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 376, w: 300, h: 150, name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
-    desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 376, w: 300, h: 150, name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'record_ring_results', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
-    desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'record_ring_results rings one server', 'with another and keeps the keys,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] })
-
-  d.box({ kind: 'b-cmp', x: 32, y: 542, w: 300, h: 170, name: 'inbound_paths', names: ['inbound_paths', 'check_every_path_is_gated'], type: '[every path, and its control]', code: true,
-    desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 542, w: 300, h: 170, name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'take_in_a_tool_result', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'read_a_ring_results_sender', 'trust_only_framed_envelopes', 'keep_the_shell_for_an_owner_signed_command', 'hash_a_file_under_a_tree'], type: '[the shell gate]', code: true,
-    desc: ['A turn or a tool\'s result: take_in_a_turn,', 'take_in_a_tool_result, shell_tools,', 'answer_a_tool_call, read_a_ring_results_', 'sender, refuse_execution_after_ungated_', 'text, trust_only_framed_envelopes; keep_', 'the_shell_for_an_owner_signed_command;', 'hash_a_file_under_a_tree, what a file is'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 542, w: 300, h: 170, name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
-    desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] })
-
-  d.box({ kind: 'b-cmp', x: 32, y: 890, w: 300, h: 140, name: 'install_the_pinned_installer', names: ['install_the_pinned_installer'], type: '[the installer this release pins]', code: true,
-    desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 940, w: 300, h: 140, name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message', 'show_what_a_message_became', 'read_a_crew_line'], type: '[the crew\'s rows and its ledger]', code: true,
-    desc: ['show_dashboard_beat holds a member\'s row and', 'the rule the newest beat wins; report_progress', 'moves it, see_the_crew lays every one out,', 'and a_crews_tools answers all six tools.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, send_a_crew_message writes one, and', 'show_what_a_message_became reads back', 'what became of it, and read_a_crew_line', 'reads the HANDOFF and VERDICT lines'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 890, w: 300, h: 140, name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
-    desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] })
-
-  d.box({ kind: 'b-cmp', x: 32, y: 724, w: 300, h: 150, name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
-    desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 724, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'refuse_a_member_writing_owner_memory'], type: '[the Claude Code host]', code: true,
-    desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools; refuse_a_member_', 'writing_owner_memory keeps a member\'s', 'writes out of the owner\'s memory'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 260, name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg', 'check_no_test_the_base_passed_goes_missing', 'check_posted_text_carries_nothing_private'], type: '[this repository\'s own checks]', code: true,
-    desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; so does a home path in the text', 'members post on GitHub, which check_', 'posted_text_carries_nothing_private', 'reads daily. A badge host that answers', '408 is asked again before its link is', 'broken; check_the_logos_are_valid_svg', 'holds every logo to well-formed XML;', 'check_no_test_the_base_passed_goes_', 'missing names a dropped test; each bites'] })
-
-  d.box({ kind: 'b-cmp', x: 32, y: 1120, w: 300, h: 150, name: 'write_my_handover', names: ['write_my_handover'], type: '[the host writes a handover]', code: true,
-    desc: ['A member\'s handover is written by the', 'host, at the path the host chose, and', 'stamped: one file per member per day', 'in the crew\'s own store, so a file the', 'member wrote itself is not a handover'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 1120, w: 300, h: 150, name: 'park_and_wake_a_member', names: ['park_and_wake_a_member'], type: '[a park that outlives a session]', code: true,
-    desc: ['A member\'s park is a marker in the', 'crew\'s store, so a clear, a restart or a', 'refresh cannot lose it; who may park', 'another member is the declaration\'s', 'table, not who_may_act (martha#255 r=3)'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 1120, w: 300, h: 150, name: 'crew_files_directory', names: ['crew_files_directory'], type: '[the crew\'s store, on this machine]', code: true,
-    desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] })
-
-  d.notes(24, 1330, [
+  const notesAt = boundaryBottom + 40
+  const notes = [
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:',
     'the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew\'s',
     'own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
     'room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.',
-  ])
-  d.legend(984, ['b-sys', 'b-cmp', 'b-dat'], 'Boundary')
+  ]
+  d.notes(24, notesAt, notes)
+  const legendAt = notesAt + 18 * (notes.length - 1) + 40
+  d.legend(legendAt, ['b-sys', 'b-cmp', 'b-dat'], 'Boundary')
+  d.fitTo(legendAt + 30)
   return d
 }
+
 
 export const DIAGRAMS = [context, containers, components] as const
 

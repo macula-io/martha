@@ -108,9 +108,9 @@
 <text class="t-name" x="736" y="458">Macula mesh and realm</text>
 <text class="t-type" x="736" y="476">[Macula]</text>
 <text class="t-desc" x="736" y="500">A mesh server runs only when your</text>
-<text class="t-desc" x="736" y="516">project's config names one; the room</text>
-<text class="t-desc" x="736" y="532">and admission are team mode, and this</text>
-<text class="t-desc" x="736" y="548">release runs neither</text>
+<text class="t-desc" x="736" y="516">project's config names one; the</text>
+<text class="t-desc" x="736" y="532">room and admission are team mode,</text>
+<text class="t-desc" x="736" y="548">and this release runs neither</text>
 <path class="edge" d="M155 144V180H420V210" marker-end="url(#a)"/>
 <text class="t-rel" x="300" y="172">runs init, approve, start</text>
 <path class="edge-team" d="M500 144V210" marker-end="url(#a)"/>

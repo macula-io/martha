@@ -64,12 +64,13 @@
 <text class="t-desc" x="48" y="316">Per project, outside the checkout:</text>
 <text class="t-desc" x="48" y="332">each member's node id, the approvals</text>
 <text class="t-desc" x="48" y="348">given, launch records and snapshots</text>
-<rect class="b-later" x="32" y="546" width="268" height="120" rx="10"/>
+<rect class="b-later" x="32" y="546" width="268" height="132" rx="10"/>
 <text class="t-name" x="48" y="574">the team mode</text>
 <text class="t-type" x="48" y="592">[planned]</text>
 <text class="t-desc" x="48" y="616">Realm admission and the shared room,</text>
-<text class="t-desc" x="48" y="632">not built here; solo admits nothing. The</text>
-<text class="t-desc" x="48" y="648">parts every launch loads are drawn below</text>
+<text class="t-desc" x="48" y="632">not built here; solo admits nothing.</text>
+<text class="t-desc" x="48" y="648">The parts every launch loads are</text>
+<text class="t-desc" x="48" y="664">drawn below</text>
 <rect class="b-dat" x="332" y="76" width="268" height="120" rx="10"/>
 <text class="t-name" x="348" y="104">the crew declaration</text>
 <text class="t-type" x="348" y="122">[.crew/crew.json]</text>
