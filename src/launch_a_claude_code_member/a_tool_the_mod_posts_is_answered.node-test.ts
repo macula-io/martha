@@ -29,6 +29,7 @@ import { sessionRecordsIn } from './session_records_in_rows.ts'
 import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
+import { shortRelayRoot } from './short_relay_root.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'
@@ -66,7 +67,7 @@ function toolsIn(place: { readonly home: string; readonly checkout: string; read
 test('a tool call posted by the mod is answered by the core\'s slice, and the row moves (test 11)', async (t) => {
   const place = aCrewPlace(t)
   const crew = toolsIn(place, () => 1_000)
-  const socket_path = join(place.home, 'relay.sock')
+  const socket_path = join(shortRelayRoot(t), 'relay.sock')
   const server = await serveTheRelay(
     memberRelay({
       records: sessionRecordsIn(rowStreamsDirectory(place.rows)),
@@ -127,7 +128,7 @@ test('the heartbeat of a member that has reported nothing says idle, never worki
 test('a name the crew registers nothing for is refused, naming it (test 11)', async (t) => {
   const place = aCrewPlace(t)
   const crew = toolsIn(place, () => 1_000)
-  const socket_path = join(place.home, 'relay-unknown.sock')
+  const socket_path = join(shortRelayRoot(t), 'relay-unknown.sock')
   const server = await serveTheRelay(
     memberRelay({
       records: sessionRecordsIn(rowStreamsDirectory(place.rows)),
