@@ -48,6 +48,9 @@
       "src/run_the_nodes_own_npm_alone",
       "src/start_a_member"
     ],
+    "decisionFiles": [
+      "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
+    ],
     "packageImports": {
       "typescript": "prove_the_core",
       "eslint": "prove_the_core",

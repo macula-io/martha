@@ -19,6 +19,8 @@ export interface Manifest {
     readonly hostContract?: string
     readonly hostGlue?: readonly string[]
     readonly hostAdapters?: readonly string[]
+    /** Files inside a host adapter that are decisions, not the adapter's machinery (martha#158). */
+    readonly decisionFiles?: readonly string[]
     readonly packageImports?: Readonly<Record<string, string>>
     readonly loaderImports?: Readonly<Record<string, string>>
   }

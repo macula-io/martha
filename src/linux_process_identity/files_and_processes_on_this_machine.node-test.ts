@@ -27,10 +27,22 @@ test('a path reads as absent, a file, a directory, a link (never followed) or ot
   symlinkSync('a-file', join(dir, 'a-link'))
 
   assert.deepEqual(files.kindOf(join(dir, 'nothing')), { kind: 'absent' })
-  assert.deepEqual(files.kindOf(join(dir, 'a-file')), { kind: 'file' })
+  assert.deepEqual(files.kindOf(join(dir, 'a-file')), { kind: 'file', ownerExecutes: false })
   assert.deepEqual(files.kindOf(join(dir, 'a-dir')), { kind: 'directory' })
   assert.deepEqual(files.kindOf(join(dir, 'a-link')), { kind: 'symlink', target: 'a-file' })
   assert.deepEqual(files.kindOf('/dev/null'), { kind: 'other' })
+})
+
+test('a file says whether its owner may execute it: the bit git reads for mode 100755 (martha#158)', (t) => {
+  const dir = place(t)
+  writeFileSync(join(dir, 'plain'), 'bytes', { mode: 0o644 })
+  writeFileSync(join(dir, 'runnable'), 'bytes', { mode: 0o755 })
+  // Executable by the group alone: git writes 100644, because the owner's own bit is what it reads.
+  writeFileSync(join(dir, 'group-only'), 'bytes', { mode: 0o654 })
+
+  assert.deepEqual(files.kindOf(join(dir, 'plain')), { kind: 'file', ownerExecutes: false })
+  assert.deepEqual(files.kindOf(join(dir, 'runnable')), { kind: 'file', ownerExecutes: true })
+  assert.deepEqual(files.kindOf(join(dir, 'group-only')), { kind: 'file', ownerExecutes: false })
 })
 
 test('a failure other than absence throws with its own code', (t) => {
