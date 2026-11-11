@@ -97,16 +97,26 @@ export function ownWriteOfCall(launch: ApprovedLaunch, call: CallThatRan, host: 
 }
 
 /**
+ * True when this is the machine's own refusal, which the contract lets a read fail with: an error
+ * carrying the system's `code` (EACCES, ENOTDIR...). Anything else is a bug in this decision, and
+ * is left to be thrown rather than read as a file that is not the member's write (review r=1).
+ */
+const isTheMachinesRefusal = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && typeof (error as { readonly code?: unknown }).code === 'string'
+
+/**
  * The file the call wrote and the mode it holds, or undefined when it wrote none. The contract lets a read fail with the
  * machine's own error (EACCES, ENOTDIR), and a file that cannot be read is not an own write: the relay is waiting for an
- * answer, and this must give one rather than throw.
+ * answer, and this must give one rather than throw. A failure that is not the machine's — a bug here — is thrown, so it
+ * stays loud instead of being read as someone else's change.
  */
 function readTheWrite(launch: ApprovedLaunch, named: string, call: CallThatRan, host: LaunchHost): { readonly path: string; readonly blob: string; readonly mode: OwnWriteMode } | undefined {
   try {
     const checkout = checkoutOf(launch, host)
     const written = checkout === undefined ? undefined : writtenFileOf(call, named, checkout, host)
     return written === undefined ? undefined : { path: written.path, blob: written.blob, mode: written.ownerExecutes ? EXECUTABLE : REGULAR }
-  } catch {
+  } catch (error) {
+    if (!isTheMachinesRefusal(error)) throw error
     return undefined
   }
 }

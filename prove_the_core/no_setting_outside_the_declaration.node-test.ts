@@ -8,13 +8,11 @@ import { CORE, escaped, isTestFile, manifestOf, programsRunByScriptsOf, testSuff
 import {
   adapterReachesBeyondItsKind,
   glueReachesBeyondTheContract,
-  NODE_MODULES_A_SLICE_MAY_IMPORT,
   nodeModulesBeyondADecision,
   settingsReadOutsideTheDeclaration,
   slicesImportingPrograms,
   type Source,
 } from './no_setting_outside_the_declaration.ts'
-import { moduleReferencesIn, parseSource } from './parse_a_source.ts'
 
 const repository = join(import.meta.dirname, '..')
 const src = join(repository, CORE)
@@ -111,19 +109,11 @@ test('package.json names files inside a host adapter as decisions, and each one 
 
 for (const path of [...decisionFiles]) {
   test(`a decision declared inside a host adapter reads the machine through the host, not Node's own modules: ${path}`, () => {
-    const { file, errors } = parseSource(
-      coreSources(src).find((source) => source.path === path)?.text ?? '',
-      path,
-    )
-    assert.deepEqual(errors, [], `${path} parses`)
-    const beyond = moduleReferencesIn(file)
-      .filter((reference) => !reference.type_only)
-      .flatMap(({ specifier, line }) => {
-        const own = specifier !== null && (specifier.startsWith('./') || specifier.startsWith('../'))
-        const pure = specifier !== null && (NODE_MODULES_A_SLICE_MAY_IMPORT as readonly string[]).includes(specifier)
-        return own || pure ? [] : [{ line, specifier }]
-      })
-    assert.deepEqual(beyond, [], `${path} imports only its own code and the Node modules a decision may`)
+    const source = coreSources(src).find((candidate) => candidate.path === path)
+    assert.ok(source !== undefined, `${path} is read`)
+    // The same rule the planted cases below judge, called on the file itself, so one definition
+    // decides both and a change to it reaches the repository as well as the plants (review r=1).
+    assert.deepEqual(nodeModulesBeyondADecision([source]), [], `${path} imports only its own code and the Node modules a decision may`)
   })
 }
 

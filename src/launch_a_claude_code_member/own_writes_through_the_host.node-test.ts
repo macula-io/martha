@@ -23,9 +23,13 @@ const LAUNCH = 'launch-1'
 const BLOB = 'b'.repeat(40)
 const [REGULAR, EXECUTABLE] = OWN_WRITE_MODES
 
-/** A file the in-memory tree holds: its bytes, and whether its owner may execute it. */
+/**
+ * A path the in-memory tree holds: a plain file's bytes and whether its owner may execute it,
+ * or, for a path that is not a plain file, the kind it is (a pipe or socket, a link).
+ */
 interface HeldFile {
-  readonly bytes: string
+  readonly kind?: 'file' | 'other' | 'symlink'
+  readonly bytes?: string
   readonly ownerExecutes?: boolean
 }
 
@@ -40,7 +44,10 @@ function treeOf(files: Readonly<Record<string, HeldFile>>, asked: Asked[]): File
   const kindAt = (path: string): FileKind => {
     if (path === TOP || path === HOME) return { kind: 'directory' }
     const file = files[path]
-    return file === undefined ? { kind: 'absent' } : { kind: 'file', ownerExecutes: file.ownerExecutes ?? false }
+    if (file === undefined) return { kind: 'absent' }
+    if (file.kind === 'other') return { kind: 'other' }
+    if (file.kind === 'symlink') return { kind: 'symlink', target: path }
+    return { kind: 'file', ownerExecutes: file.ownerExecutes ?? false }
   }
   return {
     kindOf: (path) => {
@@ -49,7 +56,7 @@ function treeOf(files: Readonly<Record<string, HeldFile>>, asked: Asked[]): File
     },
     bytesOf: (path) => {
       asked.push({ what: 'bytes', path })
-      return Buffer.from(held(path).bytes)
+      return Buffer.from(held(path).bytes ?? '')
     },
     childrenOf: (path) => {
       asked.push({ what: 'children', path })
@@ -147,11 +154,33 @@ test('a Write whose bytes on disk are not the call content is not kept, and noth
   assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
 })
 
+test('a Write whose bytes on disk have the same length as the call content and differ in one of them is not kept (review r=1)', () => {
+  const host = hostWith(treeOf({ [WRITTEN]: { bytes: 'hellO\n' } }, []))
+
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+})
+
 test('a path that is not a regular file under the checkout is not kept, and its bytes are never read', () => {
   const asked: Asked[] = []
   const host = hostWith(treeOf({ [TOP]: { bytes: '' } }, asked))
 
   assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(TOP, 'hello\n'), host.host, NOW), undefined)
+  assert.deepEqual(asked.filter(({ what }) => what === 'bytes'), [])
+})
+
+test('a path that is a pipe or a socket, holding the call content, is not kept and its bytes are never read (review r=1)', () => {
+  const asked: Asked[] = []
+  const host = hostWith(treeOf({ [WRITTEN]: { kind: 'other', bytes: 'hello\n' } }, asked))
+
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+  assert.deepEqual(asked.filter(({ what }) => what === 'bytes'), [])
+})
+
+test('a path that is a link, resolved to itself under the checkout, is not kept and its bytes are never read (review r=1)', () => {
+  const asked: Asked[] = []
+  const host = hostWith(treeOf({ [WRITTEN]: { kind: 'symlink', bytes: 'hello\n' } }, asked))
+
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
   assert.deepEqual(asked.filter(({ what }) => what === 'bytes'), [])
 })
 
@@ -168,6 +197,19 @@ test('a tree that refuses every read leaves nothing kept, and does not throw out
   const host = hostWith(REFUSING)
 
   assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+})
+
+test('a read that fails with a bug of our own, carrying no code, is thrown rather than read as someone else’s change (review r=1)', () => {
+  const buggy: FileTree = {
+    kindOf: () => {
+      throw new TypeError('the kind was read as a file without being asked')
+    },
+    bytesOf: (path) => refuse(path),
+    childrenOf: (path) => refuse(path),
+    realPathOf: (path) => path,
+  }
+
+  assert.throws(() => ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), hostWith(buggy).host, NOW), TypeError)
 })
 
 test('a call that made an own write has it kept on the launch; a call that made none keeps nothing', () => {
