@@ -55,7 +55,7 @@ const scratch = (t: TestContext, what: string): string => {
  */
 function aNeighbourRunsHere(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), `${TEMP_DIR_PREFIX}neighbour-`))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 
