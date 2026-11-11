@@ -25,7 +25,9 @@ const repository = join(import.meta.dirname, '..')
 const planted = (text: string, path = 'src/planted/planted.node-test.ts'): CoreSource => ({ path, text })
 
 test('no test file in the suite removes a tree without the bounded retry (martha#272)', () => {
-  const findings = removalsWithoutARetry(coreSources(repository))
+  const suite = coreSources(repository)
+  assert.ok(suite.filter((source) => source.path.endsWith('.node-test.ts')).length > 1, 'the walk read the suite')
+  const findings = removalsWithoutARetry(suite)
   assert.deepEqual(
     findings,
     [],
@@ -145,4 +147,70 @@ test('a removal that loses one of its retry options is named, and so is a bound 
   assert.deepEqual(withoutMax.map(({ why }) => why.includes(MAX_RETRIES)), [true])
   assert.deepEqual(withoutDelay.map(({ why }) => why.includes(RETRY_DELAY)), [true])
   assert.deepEqual(neverRetries.map(({ why }) => why.includes('never retries')), [true])
+})
+
+test('an option given a value that is not its bounding constant is named: the constant is the retry, not any value (r=2)', () => {
+  const findings = removalsWithoutTheirRetry([aRemovalCalling(10, [`${MAX_RETRIES}: 0`, BOTH[1]])])
+  assert.equal(findings.length, 1)
+  assert.match(findings[0]?.why ?? '', new RegExp(MAX_RETRIES))
+})
+
+/** The removal's file with two removals: the options each is given, in the order the file makes them. */
+const aRemovalCallingTwice = (first: readonly string[], second: readonly string[]): CoreSource => ({
+  path: THE_ONE_REMOVAL,
+  text: [
+    `export const ${ATTEMPTS} = 10`,
+    `export const ${DELAY} = 100`,
+    'export function removeTheTree(directory: string): void {',
+    `  rmSync(directory, { recursive: true, force: true${first.map((option) => `, ${option}`).join('')} })`,
+    `  rmSync(directory, { recursive: true, force: true${second.map((option) => `, ${option}`).join('')} })`,
+    '}',
+    '',
+  ].join('\n'),
+})
+
+test('a second removal in the same file is judged too, and the one that lacks the retry is the one named (r=2)', () => {
+  assert.deepEqual(removalsWithoutTheirRetry([aRemovalCallingTwice(BOTH, BOTH)]), [], 'both removals retry')
+  const second = removalsWithoutTheirRetry([aRemovalCallingTwice(BOTH, [BOTH[0]])])
+  assert.equal(second.length, 1)
+  assert.equal(second[0]?.line, 5, 'the second call is the one named')
+  assert.match(second[0]?.why ?? '', new RegExp(RETRY_DELAY))
+  const first = removalsWithoutTheirRetry([aRemovalCallingTwice([BOTH[1]], BOTH)])
+  assert.deepEqual(first.map(({ line }) => line), [4])
+})
+
+test('the constant is read from the module the removal imports it from, not from a same-named one elsewhere (r=2)', () => {
+  const elsewhere: CoreSource = {
+    path: 'src/somewhere_else/constants.ts',
+    text: `export const ${ATTEMPTS} = 10\nexport const ${DELAY} = 100\n`,
+  }
+  const importing = (from: string): CoreSource => ({
+    path: THE_ONE_REMOVAL,
+    text: [
+      `import { ${ATTEMPTS}, ${DELAY} } from '${from}'`,
+      'export function removeTheTree(directory: string): void {',
+      `  rmSync(directory, { recursive: true, force: true, ${MAX_RETRIES}: ${ATTEMPTS}, ${RETRY_DELAY}: ${DELAY} })`,
+      '}',
+      '',
+    ].join('\n'),
+  })
+  const otherBoundNeverRetries: CoreSource = { ...elsewhere, text: `export const ${ATTEMPTS} = 0\nexport const ${DELAY} = 100\n` }
+  // A same-named pair declared before the module the removal imports from: reading it would read another constant.
+  const decoy: CoreSource = { path: 'src/aaa_decoy/bounds.ts', text: `export const ${ATTEMPTS} = 0\nexport const ${DELAY} = 0\n` }
+
+  assert.deepEqual(removalsWithoutTheirRetry([decoy, importing('../somewhere_else/constants.ts'), elsewhere]), [])
+  const found = removalsWithoutTheirRetry([decoy, importing('../somewhere_else/constants.ts'), otherBoundNeverRetries])
+  assert.deepEqual(found.map(({ path, why }) => [path, why.includes('never retries')]), [['src/somewhere_else/constants.ts', true]])
+})
+
+test('a constant the removal imports from a file that is not among the sources is named, not guessed (r=2)', () => {
+  const text = [
+    `import { ${ATTEMPTS}, ${DELAY} } from '../missing/bounds.ts'`,
+    'export function removeTheTree(directory: string): void {',
+    `  rmSync(directory, { recursive: true, force: true, ${MAX_RETRIES}: ${ATTEMPTS}, ${RETRY_DELAY}: ${DELAY} })`,
+    '}',
+    '',
+  ].join('\n')
+  const findings = removalsWithoutTheirRetry([{ path: THE_ONE_REMOVAL, text }])
+  assert.deepEqual(findings.map(({ why }) => why.includes("not among these sources")), [true, true])
 })

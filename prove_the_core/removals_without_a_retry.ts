@@ -17,6 +17,8 @@
 // removal a tree's: a test that removes one file with `rmSync(path)` is left alone, since no writer can add an entry
 // to a file.
 
+import { dirname, join, normalize } from 'node:path'
+
 import ts from 'typescript'
 
 import type { CoreSource } from '../src/host_contract/core_source.ts'
@@ -150,38 +152,74 @@ export interface RemovalWithoutItsRetry {
 const isPositiveWholeNumber = (node: ts.Expression): boolean =>
   ts.isNumericLiteral(node) && Number.isInteger(Number(node.text)) && Number(node.text) > 0
 
-/** A constant's declaration, wherever it is in these sources. */
-function constantIn(sources: readonly CoreSource[], name: string): { source: CoreSource; node: ts.Node } | undefined {
-  for (const source of sources) {
-    const { file } = parseSource(source.text, source.path)
-    const found = nodesOf(file).find(
-      (node) => ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name,
+/** The names one import statement binds, and the module it takes them from. */
+const importSpecifiersOf = (file: ts.SourceFile): readonly { readonly name: string; readonly from: string }[] =>
+  nodesOf(file)
+    .filter((node): node is ts.ImportDeclaration => ts.isImportDeclaration(node))
+    .flatMap((node) =>
+      bindingsOf(node).map((element) => ({
+        name: element.name.text,
+        from: node.moduleSpecifier.getText(file).replaceAll(/['"]/g, ''),
+      })),
     )
-    if (found !== undefined) return { source, node: found }
+
+/**
+ * The source holding the constant the removal's file uses: that file itself when it declares the constant there, and
+ * otherwise the module its own import names. A constant of the same name declared elsewhere is another constant, and is
+ * not read (martha#272 r=2).
+ */
+function declaringSourceOf(
+  sources: readonly CoreSource[],
+  removalFile: CoreSource,
+  name: string,
+): { readonly source: CoreSource } | { readonly missing: string } {
+  const { file } = parseSource(removalFile.text, removalFile.path)
+  const declared = nodesOf(file).some(
+    (node) => ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name,
+  )
+  if (declared) return { source: removalFile }
+  const imported = importSpecifiersOf(file).find((binding) => binding.name === name)
+  if (imported === undefined) {
+    return { missing: `${name} is neither declared in ${THE_ONE_REMOVAL} nor imported by it: the retry has no bound to read` }
   }
-  return undefined
+  const target = normalize(join(dirname(THE_ONE_REMOVAL), imported.from))
+  const found = sources.find((candidate) => candidate.path === target || candidate.path === `${target}.ts`)
+  return found === undefined
+    ? { missing: `${name} is imported from ${imported.from}, which is not among these sources: the retry's bound cannot be read` }
+    : { source: found }
 }
 
 /** Why a bounding constant does not bound anything, or is not there at all. */
-function boundWhy(sources: readonly CoreSource[], name: string): RemovalWithoutItsRetry[] {
-  const constant = constantIn(sources, name)
-  if (constant === undefined) {
-    return [{ path: THE_ONE_REMOVAL, line: 1, why: `${name} is not declared: the retry has no bound to read` }]
+function boundWhy(
+  sources: readonly CoreSource[],
+  removalFile: CoreSource,
+  name: string,
+): RemovalWithoutItsRetry[] {
+  const where = declaringSourceOf(sources, removalFile, name)
+  if ('missing' in where) return [{ path: THE_ONE_REMOVAL, line: 1, why: where.missing }]
+  const { source } = where
+  const { file } = parseSource(source.text, source.path)
+  const declaration = nodesOf(file).find(
+    (node): node is ts.VariableDeclaration =>
+      ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name,
+  )
+  if (declaration === undefined) {
+    return [{ path: source.path, line: 1, why: `${name} is not declared here: the retry has no bound to read` }]
   }
-  const { initializer } = constant.node as ts.VariableDeclaration
+  const { initializer } = declaration
   if (initializer !== undefined && isPositiveWholeNumber(initializer)) return []
   return [
     {
-      path: constant.source.path,
-      line: lineOf(parseSource(constant.source.text, constant.source.path).file, constant.node),
+      path: source.path,
+      line: lineOf(file, declaration),
       why: `${name} is not a positive whole number: a retry bounded by it never retries`,
     },
   ]
 }
 
-// The `rmSync` call the removal makes, and the options it was given.
-const theRemovalsOwnCall = (file: ts.SourceFile): ts.CallExpression | undefined =>
-  nodesOf(file).find(
+/** Every `rmSync` the removal's file makes: each one is a removal, and each one must carry the bounded retry. */
+const theRemovalFilesCalls = (file: ts.SourceFile): readonly ts.CallExpression[] =>
+  nodesOf(file).filter(
     (node): node is ts.CallExpression => ts.isCallExpression(node) && calleeName(node.expression) === 'rmSync',
   )
 
@@ -208,14 +246,22 @@ export function removalsWithoutTheirRetry(sources: readonly CoreSource[]): Remov
     return [{ path: THE_ONE_REMOVAL, line: 1, why: `the one removal is not in these sources` }]
   }
   const { file } = parseSource(source.text, source.path)
-  const call = theRemovalsOwnCall(file)
-  const missing = call === undefined ? THE_RETRY_OPTIONS : unbounded(call)
-  const findings = missing.map(([option, constant]) => ({
-    path: source.path,
-    line: call === undefined ? 1 : lineOf(file, call),
-    why: `${THE_REMOVAL}'s own removal does not carry ${option}: ${constant}, so it never retries (martha#272)`,
-  }))
-  return [...findings, ...THE_RETRY_OPTIONS.flatMap(([, constant]) => boundWhy(sources, constant))].sort(
+  const calls = theRemovalFilesCalls(file)
+  const findings =
+    calls.length === 0
+      ? THE_RETRY_OPTIONS.map(([option, constant]) => ({
+          path: source.path,
+          line: 1,
+          why: `${THE_REMOVAL}'s own removal is not in ${THE_ONE_REMOVAL}, so it does not carry ${option}: ${constant}, and never retries (martha#272)`,
+        }))
+      : calls.flatMap((call) =>
+          unbounded(call).map(([option, constant]) => ({
+            path: source.path,
+            line: lineOf(file, call),
+            why: `${THE_REMOVAL}'s own removal does not carry ${option}: ${constant}, so it never retries (martha#272)`,
+          })),
+        )
+  return [...findings, ...THE_RETRY_OPTIONS.flatMap(([, constant]) => boundWhy(sources, source, constant))].sort(
     (a, b) => a.line - b.line,
   )
 }
