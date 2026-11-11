@@ -37,6 +37,7 @@ const solo = {
   owner: 'Ann',
   members: [{ name: 'Builder', role: 'builder' }],
   mode: { name: 'solo', roles: ['builder'], may: allActsTo([OWNER]) },
+  channel_read_seconds: 30,
 }
 
 // A table with roles: a supervisor assigns and resumes, the owner approves a landing.
@@ -55,6 +56,7 @@ const team = {
   },
   house_rules: { owner_items: true, practice: true, review_model: 'model-r' },
   conventions: 'conventions.md',
+  channel_read_seconds: 30,
 }
 
 const declare = (declaration: unknown) => {
@@ -309,4 +311,17 @@ test('the settings are frozen all the way down: no slice changes them for its ne
   assert.throws(() => {
     ;(settings.members as unknown as { name: string }[]).push({ name: 'Intruder' })
   }, TypeError)
+})
+
+// --- 6. how often a session reads the crew channel (martha#253) ---------------
+
+test('#253: a crew that does not say how often its sessions read the channel is refused, by field name', async () => {
+  await refusedWith(without('channel_read_seconds', solo), 'channel_read_seconds')
+  await refusedWith({ ...solo, channel_read_seconds: 0 }, 'channel_read_seconds')
+  await refusedWith({ ...solo, channel_read_seconds: 1.5 }, 'channel_read_seconds')
+  await refusedWith({ ...solo, channel_read_seconds: '30' }, 'channel_read_seconds')
+})
+
+test('#253: the interval a crew declares is the one its settings carry', async () => {
+  assert.equal((await declare({ ...solo, channel_read_seconds: 7 }).settings).channel_read_seconds, 7)
 })

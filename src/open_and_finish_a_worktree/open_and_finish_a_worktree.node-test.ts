@@ -88,6 +88,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     clones: places.clones,
     worktrees: places.worktrees,
   },
+  channel_read_seconds: 30,
 })
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */

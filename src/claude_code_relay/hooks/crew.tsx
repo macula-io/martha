@@ -12,6 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { opensAtStartOf, rowsToOpen } from './pane_rule.ts'
+import { readingTheChannelWith } from './crew_channel_reading.ts'
 
 /**
  * The server name the host gives this plugin's tools: `mcp__<server>__<tool>`. It is the plugin's own name, and each
@@ -42,6 +43,8 @@ interface CrewEngine {
     after(ms: number, fn: () => void): { cancel(): void }
     every(ms: number, fn: () => void): { cancel(): void }
   }
+  /** Submits a prompt into this session (martha#253): the text a message is handed in. */
+  readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
   readonly command: { register(command: { name: string; description: string }): Promise<unknown> }
   readonly ui: {
@@ -58,6 +61,53 @@ type CrewNext = (event: unknown) => Promise<unknown>
 
 /** The event whose view the pane asks the host to draw again, as the host names it. */
 const THE_PANES_RENDER = 'ui.render'
+
+/** What the mod asks the launcher for: the next message this member has not taken in (martha#253). */
+const THE_NEXT_MESSAGE = 'take_a_crew_message'
+
+/** What the mod asks the launcher for: how often, in seconds, to read the channel again (martha#253). */
+const THE_CHANNEL_READ = 'channel_read_seconds'
+
+/** The interval the channel is read on, once the launcher has named it; null until it has. */
+let readingTheChannel: { cancel(): void } | null = null
+
+/** The one reading of the channel this session holds, built on first use. */
+let theReading: ReturnType<typeof readingTheChannelWith> | null = null
+
+/**
+ * The reading this session holds (martha#253, slice 2): the launcher answers with the framed text of the next crew
+ * message the member has not taken in, and the mod submits it as a prompt. Only an idle submit is raised back through
+ * the prompt hook, and that raise is what counts the message as taken in — so the reading is the one rule in
+ * ./crew_channel_reading.ts, and every hook here goes through it.
+ */
+function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWith> {
+  theReading ??= readingTheChannelWith(
+    async () => {
+      const heard = await hearTheLauncher($, THE_NEXT_MESSAGE, {})
+      return 'said' in heard ? heard.said : null
+    },
+    async (text) => {
+      await $.prompt.submit({ text })
+    },
+  )
+  return theReading
+}
+
+/** The agent an event belongs to: the host stamps a subagent's turn with one, and the main turn with none. */
+function agentIdIn(event: unknown): unknown {
+  return typeof event === 'object' && event !== null ? (event as { agentId?: unknown }).agentId : undefined
+}
+
+/** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
+async function startReadingTheChannel($: CrewEngine): Promise<void> {
+  if (readingTheChannel !== null) return
+  const heard = await hearTheLauncher($, THE_CHANNEL_READ, {})
+  const seconds = 'said' in heard ? Number.parseInt(heard.said, 10) : Number.NaN
+  if (!Number.isInteger(seconds) || seconds < 1) return
+  const reading = theChannelReading($)
+  readingTheChannel = $.clock.every(seconds * 1000, () => void reading.readWhileIdle())
+  await reading.readWhileIdle()
+}
 
 /** What the launcher heard, or why it could not be heard: the two are not the same, and only one of them is an answer. */
 type Heard = { readonly said: string } | { readonly why: string }
@@ -215,6 +265,8 @@ const answerCrewLog = ($: CrewEngine, e: Record<string, unknown>): Promise<unkno
 const answerWhatWasSent = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'what_was_sent')
 const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'note_what_became_of_an_act')
 const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
+const answerCrewSay = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_say')
+const answerCrewReceipts = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_receipts')
 
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
@@ -223,6 +275,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha-relay__what_was_sent' }, answerWhatWasSent)
   on('tool.call', { tool: 'mcp__martha-relay__note_what_became_of_an_act' }, answerNoteWhatBecame)
   on('tool.call', { tool: 'mcp__martha-relay__see_the_crew' }, answerSeeTheCrew)
+  on('tool.call', { tool: 'mcp__martha-relay__crew_say' }, answerCrewSay)
+  on('tool.call', { tool: 'mcp__martha-relay__crew_receipts' }, answerCrewReceipts)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)
@@ -259,6 +313,24 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
     for (const tool of fromTheLauncher.tools) await $.tool.register(tool)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (opensAtStartOf(first)) await openThePane($)
+    await startReadingTheChannel($)
+    return next(e)
+  })
+
+  // A turn is running from `turn.start` until it ends, and the channel is read only outside one: the host queues a
+  // submit made during a turn and never raises it back, so it could never be counted as taken in (martha#253 r=2).
+  // The host fires both events for a subagent's turn too; those carry the agent, and the rule ignores them, or a
+  // subagent finishing inside the member's own turn would read as the member going idle.
+  on('turn.start', ($: CrewEngine, e: unknown, next: CrewNext) => {
+    theChannelReading($).aTurnStarted(agentIdIn(e))
+    return next(e)
+  })
+
+  // A turn ended — answered, aborted, refused or failed, since `turn.complete` carries the reason — so the host is
+  // idle and can take the next message the launcher hands it (martha#253, slice 2). The submit from `turn.complete`
+  // is the one shape the host's own guidance names for submitting while the session idles.
+  on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
+    await theChannelReading($).aTurnEnded(agentIdIn(e))
     return next(e)
   })
 }

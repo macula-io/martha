@@ -10,6 +10,9 @@
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
+import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
   CREW_LOG_DESCRIPTION,
@@ -27,7 +30,7 @@ import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
-export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew'] as const
+export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts'] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
 /**
@@ -57,7 +60,15 @@ export interface CrewToolPlaces {
   /** The checkout the crew is declared in. */
   readonly root: string
   readonly documents: DocumentStore
+  /**
+   * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
+   * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
+   */
+  readonly carrier?: MessageCarrier
 }
+
+/** What the mod asks for: how often, in seconds, to read the channel (martha#253). */
+export const THE_CHANNEL_READ_ASK = 'channel_read_seconds'
 
 /** The tools a crew's member can call. */
 export interface CrewTools {
@@ -133,6 +144,26 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: "Every member's row of this crew, in the declaration's order, with what has gone quiet marked.",
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'crew_say',
+    description: CREW_SAY_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          description: "Who it is for: a list of this crew's members' names, or \"crew\" for every member but you",
+          anyOf: [{ type: 'string', enum: ['crew'] }, { type: 'array', items: { type: 'string' }, minItems: 1 }],
+        },
+        text: { type: 'string', description: 'What you say. A HANDOFF or VERDICT line is read from its first line' },
+      },
+      required: ['to', 'text'],
+    },
+  },
+  {
+    name: 'crew_receipts',
+    description: CREW_RECEIPTS_DESCRIPTION,
+    inputSchema: { type: 'object', properties: {} },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -151,6 +182,15 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
       if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
+      // The two asks the mod makes on the channel's behalf, never a model's: how often to look, and what to hand next.
+      if (name === THE_CHANNEL_READ_ASK) {
+        const declared = await crewOrRefusal(places)
+        return 'refused' in declared ? declared : { answer: String(declared.settings.channel_read_seconds) }
+      }
+      if (name === THE_NEXT_MESSAGE_ASK) {
+        if (places.carrier === undefined) return { refused: 'this launch reads no crew channel' }
+        return { answer: (await places.carrier.next()) ?? '' }
+      }
       const handle = handlers[name as CrewToolName]
       if (handle === undefined) {
         return { refused: `${JSON.stringify(name)} is not a tool this crew registers (they are ${CREW_TOOL_NAMES.join(', ')})` }
@@ -192,6 +232,24 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   return {
     report_progress: (args) => reportProgress(places, state, args),
     see_the_crew: () => seeTheCrewOf(places),
+    crew_receipts: async () => {
+      const declared = await crewOrRefusal(places)
+      if ('refused' in declared) return declared
+      return { answer: await whatBecameOfWhatISent(places.ledger, places.member, declared.settings.members.map((member) => member.name)) }
+    },
+    crew_say: async (args) => {
+      const declared = await crewOrRefusal(places)
+      if ('refused' in declared) return declared
+      const held = state.held === null ? places.beats.read(places.member) : state.held
+      const sent = await sendACrewMessage(places.ledger, {
+        member: places.member,
+        roster: declared.settings.members.map((member) => member.name),
+        package: held === null || held.holds === '' ? null : held.holds,
+        to: args['to'],
+        text: args['text'],
+      })
+      return 'refused' in sent ? { refused: sent.refused } : { answer: sent.told }
+    },
     crew_log: async (args) => ({ answer: (await keepTheMilestone(places.ledger, { ...workerOf(args), event: args['event'], note: args['note'] })).told }),
     what_was_sent: async (args) => ({ answer: (await whatWasSent(places.ledger, workerOf(args).package)).told }),
     note_what_became_of_an_act: async (args) => {

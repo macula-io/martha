@@ -104,6 +104,11 @@ export interface CrewSettings {
   readonly members: readonly Member[]
   readonly mode: Mode
   readonly house_rules: HouseRules
+  /**
+   * How often, in seconds, a member's session reads the crew's channel for a message it has not taken in (martha#253).
+   * Required: there is no default in code, so a crew cannot carry messages without saying how often it looks.
+   */
+  readonly channel_read_seconds: number
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -119,7 +124,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions'] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds'] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model'] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -199,7 +204,14 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     members: membersOf(refuse, value['members'], mode.roles),
     mode,
     house_rules: houseRulesOf(refuse, value['house_rules']),
+    channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
   }
+}
+
+/** How often a session reads the channel for a message: a positive whole number of seconds, and never a default. */
+function channelReadSecondsOf(refuse: Refuse, value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return refuse.at('channel_read_seconds', 'is not a whole number of seconds, at least 1')
+  return value
 }
 
 function modeOf(refuse: Refuse, value: unknown): Mode {

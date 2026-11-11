@@ -36,6 +36,12 @@ export const SOLO_MEMBERS = [
   { name: 'reviewer', role: 'reviewer' },
 ] as const
 
+/**
+ * How often a new crew's sessions read the crew channel, as `martha init` writes it (martha#253). It is written into
+ * the declaration the owner reads, never defaulted by the reader: a crew without the field is refused.
+ */
+export const SOLO_CHANNEL_READ_SECONDS = 30
+
 /** A solo crew's declaration: the owner may do every act. */
 export function soloDeclaration(owner: string) {
   return {
@@ -47,6 +53,7 @@ export function soloDeclaration(owner: string) {
       roles: SOLO_MEMBERS.map((member) => member.role),
       may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
     },
+    channel_read_seconds: SOLO_CHANNEL_READ_SECONDS,
   }
 }
 

@@ -58,7 +58,6 @@ import type { SessionStart } from '../carry_taint_across_a_refresh/carry_taint_a
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import {
   readingOnly,
-  type ArrivingTurn,
   type HostContract,
   type ProcessOutcome,
   type ProcessRequest,
@@ -71,7 +70,8 @@ import {
 } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
-import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { HOSTS, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -135,7 +135,9 @@ export function sessionStartOf(input: SessionStartHookInput): SessionStart {
 
 /** The host contract on Claude Code, over these directories. */
 export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlaces): ClaudeCodeHost {
-  const listeners: ((turn: ArrivingTurn) => void)[] = []
+  // The same raising a launched member's relay holds (martha#253): one arrival mapping for both, so a turn an adapter
+  // raises and a turn the launcher raises are read by a listener the same way.
+  const turns = turnsRaised()
   const tools = new Map<string, Tool>()
   const registrations: Promise<unknown>[] = []
 
@@ -156,7 +158,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
     },
     delivery: {
       handToModel: async (text) => void (await engine.prompt.submit({ text })),
-      onTurn: (take) => void listeners.push(take),
+      onTurn: (take) => turns.onTurn(take),
     },
     tools: {
       ownNameOf: ownNameOfCalledTool,
@@ -175,10 +177,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
   return {
     host,
     binder: bindNothing,
-    prompted: (prompt) => {
-      const turn: ArrivingTurn = { text: prompt.text, arrival: arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, prompt.origin.kind, whatAPromptCarries(prompt)) }
-      for (const take of listeners) take(turn)
-    },
+    prompted: (prompt) => turns.prompted(prompt.text, prompt.origin.kind, whatAPromptCarries(prompt)),
     answerToolCall: async (name, args) => {
       const tool = tools.get(name)
       if (tool === undefined) throw new Error(`no tool is registered by that name: ${name}`)
