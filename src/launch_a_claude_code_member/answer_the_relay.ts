@@ -90,6 +90,12 @@ export interface MemberRelayPlace {
   readonly handed_at_start: readonly TurnSource[]
   /** The settings files the host reads, watched for a key that turns the relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
+  /**
+   * Whether the owner turned the strict gate on in the crew's declaration (martha#259): the launcher reads
+   * `house_rules.strict_gate` once and hands it here, and every answer this relay gives follows it. Absent means on, so
+   * a place built by a caller that has not heard of the setting keeps the guard.
+   */
+  readonly strict_gate?: boolean
   /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
   readonly ownerMemory: OwnerMemoryPlaces
   /** The member's signed runs (martha#129); a member without them runs no shape. */
@@ -503,6 +509,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
     names: place.names,
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
+    ...(place.strict_gate === undefined ? {} : { strict_gate: place.strict_gate }),
   })
   if (verdict !== undefined) return denied(verdict.deny)
   place.signed_runs?.callAllowed(call.tool, call.input)

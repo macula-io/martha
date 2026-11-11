@@ -20,6 +20,10 @@
 //
 // The member's policy lets no node id hand it executable text: for the first release the owner relays every
 // hand-off between members (martha#51 ruling), and a turn the owner types is host-attested as theirs.
+//
+// The strict shell gate is off unless the declaration names it (`house_rules.strict_gate`, martha#259): a member is a
+// trusted helper by default, and the owner's safety is review plus a yes on every push. The switch is read here once,
+// from the declaration, and handed to the launcher; no later slice reads a setting for it.
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
@@ -27,7 +31,7 @@ import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
-import { DeclarationRefused, declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import {
   nodeIdsFor,
@@ -47,6 +51,7 @@ import {
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
@@ -106,6 +111,11 @@ export interface MemberStartRequest {
   readonly inherited: Readonly<Record<string, string | undefined>>
   readonly stdio: StdioOptions
   readonly documents: DocumentStore
+  /**
+   * A test's ear on what the member's relay is handed (martha#259), so that the declaration's switch reaching the gate is
+   * measured through the launcher rather than inferred from the line that passes it. A real start gives none.
+   */
+  readonly hear_relay_place?: (place: MemberRelayPlace) => void
   tellOwner(line: string): void
 }
 
@@ -139,7 +149,7 @@ function approvalInUse(request: MemberStartRequest, approvals: readonly Approval
 }
 
 /** Everything a start needs before the launcher is asked, or why it may not start. */
-async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined } | string> {
+async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly strict_gate: boolean } | string> {
   if (!request.is_terminal) return NOT_A_TERMINAL
   const unpassed = unpassedOwnerArgument(request.args)
   if (unpassed !== undefined) return `${NOT_STARTED}: ${unpassed}`
@@ -154,7 +164,7 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   if ('refusal' in kept) return `${NOT_STARTED}: ${kept.refusal}`
   const approval = approvalInUse(request, kept.approvals)
   if (typeof approval === 'string') return approval
-  return { node_id: ids.ids[member.name]!, model: member.model, approval }
+  return { node_id: ids.ids[member.name]!, model: member.model, approval, strict_gate: settings.house_rules[STRICT_GATE] }
 }
 
 /**
@@ -203,12 +213,14 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     node_id: ready.node_id,
     place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, ...approvedPlace(request, ready.approval) },
     policy: { may_send_executable_text: [] },
+    strict_gate: ready.strict_gate,
     places,
     command: request.command,
     args: [...(ready.model === null ? [] : ['--model', ready.model]), ...request.args],
     inherited: request.inherited,
     stdio: request.stdio,
     tellOwner: (line) => request.tellOwner(line),
+    ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
       (name) => runAKeptShape(request.state, request.root, request.inherited, name, new Date()),

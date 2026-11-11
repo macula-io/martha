@@ -20,6 +20,12 @@
 // session whose first user message says "you are Supervisor" gains nothing: the
 // node id on the delivery is the only thing compared. Comparison lowercases
 // both sides, because the crew's own code lowercases node ids.
+//
+// The owner may switch the whole gate off, from the crew's declaration
+// (`house_rules.strict_gate`, martha#259): a member is a trusted helper, and the
+// safety the owner chose is review plus a yes on every push. The switch reaches
+// this function as an argument, never read here; absent means on, so a caller
+// that has not heard of it cannot lose the guard.
 
 import { INBOUND_PATHS, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
@@ -73,6 +79,12 @@ export interface GateInput {
   readonly tool: string
   readonly session: Session
   readonly policy: Policy
+  /**
+   * Whether the owner turned the strict gate on in the crew's declaration (martha#259). Absent means on: a caller
+   * that has not heard of the setting must not lose the guard, and the owner's off comes from the declaration
+   * (../declare_crew) through the launcher, never from here.
+   */
+  readonly strict_gate?: boolean
 }
 
 /**
@@ -105,8 +117,10 @@ export function recordIngestion(session: Session, arrived: readonly Ingestion[])
  * turn is the one ingestion admitted without the policy: the owner's mark on
  * the row the host's engine attests, and that mark nowhere else.
  */
-export function refuseExecutionAfterUngatedText({ tool, session, policy }: GateInput): Decision {
+export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_gate = true }: GateInput): Decision {
   if (!isShellTool(tool)) return { allow: true }
+  // The gate is off unless the owner asked for it (martha#259): the record is still kept, and nothing reads it.
+  if (!strict_gate) return { allow: true }
 
   for (const ingest of session.ingested) {
     const refusal = refusalFor(ingest, PATHS_BY_ID.get(ingest.path), policy)

@@ -311,8 +311,11 @@ const pageAsWords = (path: string): readonly string[] => sentencesIn(readFileSyn
 test('the getting-started guide says a vouched agent keeps the shell, and what still closes it (martha#170)', () => {
   const guide = pageAsWords('../../docs/getting-started.md')
   const claims = [
-    "While an agent is between its start and its stop, the reviewer's shell commands are refused — the agent's text has no call to be placed on yet — though it can still read files, and once the agent stops and Martha saw every call it made answered, the shell comes back.",
-    "What that costs: a review that reads outside the approved tree still closes the reviewer's shell on that read, as any other text from a stranger does.",
+    // The default, since the strict gate became the owner's switch (martha#259): nothing is refused.
+    'By default the reviewer keeps its shell while the agent runs; the answer is recorded and nothing is refused.',
+    // Behind the switch, the hold #170 built is unchanged, and the guide still says so.
+    'With it on, a background agent closes the shell while it runs — its text has no call to be placed on yet — though the member can still read files, and once the agent stops and Martha saw every call it made answered, the shell comes back.',
+    'With it on, what that costs is what the strict rule always cost: a review that reads outside the approved tree closes the reviewer\'s shell on that read, as any other text from a stranger does, and a gh call or a web page does the same.',
   ]
   for (const claim of claims) assert.ok(guide.includes(claim), `the guide says: ${claim}`)
 })

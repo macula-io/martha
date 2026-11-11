@@ -66,6 +66,20 @@ Start solo and move to team without changing tools.
 - a replacement for your own review: every push and every release still waits
   for a person's yes.
 
+## A member keeps its shell
+
+A member is a trusted helper. By default it keeps its shell after it reads a
+file, a tool result or a background agent's answer; what checks it is your
+review plus your yes on every push and release.
+
+If you want the strict rule instead — text Martha cannot trace stops every later
+shell command in that session until the session is replaced — turn it on in the
+crew's declaration, `.crew/crew.json`, with `"house_rules": { "strict_gate": true }`.
+Reading stays allowed under it, and the launch gate, the refused writes to your
+memory and the rule against a member widening its own reach stand either way.
+[Getting started](docs/getting-started.md#if-you-want-the-strict-shell-gate) walks
+through it.
+
 ## Install
 
 Martha runs on Node, from the version its `engines` field sets, and starts one

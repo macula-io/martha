@@ -212,6 +212,7 @@ function answering(
   handed_at_start: readonly TurnSource[] = [],
   signed_runs?: SignedRuns,
   journal?: RelayJournal,
+  strict_gate?: boolean,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -233,6 +234,7 @@ function answering(
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) }),
     ...(signed_runs === undefined ? {} : { signed_runs }),
     ...(journal === undefined ? {} : { journal }),
+    ...(strict_gate === undefined ? {} : { strict_gate }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -928,6 +930,22 @@ test('end to end: the relay posts each event, and a refused tool call never runs
   })
   assert.equal(unknown.status, 404)
   directory.remove()
+})
+
+test('the strict gate is off unless the launch says so, and the launcher\'s answer follows it (martha#259)', async (t) => {
+  const afterAPageTheMemberFetched = async (strict_gate: boolean): Promise<RelayReply> => {
+    const place = placeFor(t)
+    const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, strict_gate)
+    assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY)
+    // A page a tool server fetched: text from a stranger, placed on B2, exactly as the host hands it over.
+    assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: { tool: 'mcp__probe__fetch_page' } }), TAKEN_REPLY)
+    return relay.answer('tool_called', call('Bash', { command: 'id' }))
+  }
+
+  // Off: the default an owner who wrote no setting gets, and what the reset decided.
+  assert.deepEqual(await afterAPageTheMemberFetched(false), ALLOW_REPLY)
+  // On: the same page still costs the shell, in the words it always used.
+  assert.ok(isDenied(await afterAPageTheMemberFetched(true), /nothing executes/i))
 })
 
 test('a request dropped before its body ends gets nothing, and the launcher answers the next one', async (t) => {
