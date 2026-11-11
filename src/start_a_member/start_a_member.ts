@@ -58,6 +58,8 @@ import {
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
@@ -219,6 +221,10 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     for (const unremoved of pruneOwnWritesOfOldLaunches(request.state)) request.tellOwner(unremoved)
   }
   const { snapshot_root, ...places } = request.places
+  // One raising for this launch, and one channel carrier over it: the carrier hears every turn the host takes in, so
+  // a message counts as taken in only when the host raised it back (martha#253).
+  const turns = turnsRaised()
+  const channel = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } }
   return launchClaudeCodeMember({
     member_name: request.member,
     node_id: ready.node_id,
@@ -232,13 +238,15 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     stdio: request.stdio,
     tellOwner: (line) => request.tellOwner(line),
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
+    turns,
     crew_tools: () =>
       crewToolsOver({
         member: request.member,
-        ledger: { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } },
+        ledger: channel,
         beats: dashboardRowsIn(request.places.dashboard),
         root: request.root,
         documents: request.documents,
+        carrier: carryingTo({ member: request.member, host: channel, turns }),
       }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

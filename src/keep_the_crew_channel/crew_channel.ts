@@ -86,7 +86,7 @@ export async function readTheChannel(host: ChannelHost): Promise<readonly Placed
 }
 
 /** Whether a message is for this member: it names the member, or it names the whole crew. */
-export function addressedTo(message: ChannelRow, member: string): boolean {
+export function addressedTo(message: Pick<ChannelRow, 'to'>, member: string): boolean {
   return message.to === 'crew' || message.to.includes(member)
 }
 

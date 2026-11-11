@@ -370,8 +370,8 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-cmp', x: 32, y: 214, w: 300, h: 146, name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
     desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] })
-  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 146, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member'], type: '[the launcher]', code: true,
-    desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners;', 'run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 214, w: 300, h: 146, name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member'], type: '[the launcher]', code: true,
+    desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners, and hand_a_', 'crew_message_to_its_member hands one', 'message at a time and counts it taken', 'in; run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] })
   d.box({ kind: 'b-cmp', x: 664, y: 214, w: 300, h: 146, name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git'], type: '[the launch gate]', code: true,
     desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries'] })
 

@@ -11,6 +11,7 @@
 
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
+import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
   CREW_LOG_DESCRIPTION,
@@ -58,7 +59,15 @@ export interface CrewToolPlaces {
   /** The checkout the crew is declared in. */
   readonly root: string
   readonly documents: DocumentStore
+  /**
+   * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
+   * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
+   */
+  readonly carrier?: MessageCarrier
 }
+
+/** What the mod asks for: how often, in seconds, to read the channel (martha#253). */
+export const THE_CHANNEL_READ_ASK = 'channel_read_seconds'
 
 /** The tools a crew's member can call. */
 export interface CrewTools {
@@ -167,6 +176,15 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
       if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
+      // The two asks the mod makes on the channel's behalf, never a model's: how often to look, and what to hand next.
+      if (name === THE_CHANNEL_READ_ASK) {
+        const declared = await crewOrRefusal(places)
+        return 'refused' in declared ? declared : { answer: String(declared.settings.channel_read_seconds) }
+      }
+      if (name === THE_NEXT_MESSAGE_ASK) {
+        if (places.carrier === undefined) return { refused: 'this launch reads no crew channel' }
+        return { answer: (await places.carrier.next()) ?? '' }
+      }
       const handle = handlers[name as CrewToolName]
       if (handle === undefined) {
         return { refused: `${JSON.stringify(name)} is not a tool this crew registers (they are ${CREW_TOOL_NAMES.join(', ')})` }

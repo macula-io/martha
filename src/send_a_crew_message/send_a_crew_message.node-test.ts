@@ -127,6 +127,7 @@ const DECLARATION = {
     { name: 'Reviewer', role: 'reviewer' },
   ],
   mode: { name: 'solo', roles: ['builder', 'reviewer'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+  channel_read_seconds: 30,
 }
 
 /** A dashboard store that holds no row: the member has reported nothing, so it holds no package. */

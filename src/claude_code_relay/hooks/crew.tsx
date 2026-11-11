@@ -42,6 +42,8 @@ interface CrewEngine {
     after(ms: number, fn: () => void): { cancel(): void }
     every(ms: number, fn: () => void): { cancel(): void }
   }
+  /** Submits a prompt into this session (martha#253): the text a message is handed in. */
+  readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
   readonly command: { register(command: { name: string; description: string }): Promise<unknown> }
   readonly ui: {
@@ -58,6 +60,36 @@ type CrewNext = (event: unknown) => Promise<unknown>
 
 /** The event whose view the pane asks the host to draw again, as the host names it. */
 const THE_PANES_RENDER = 'ui.render'
+
+/** What the mod asks the launcher for: the next message this member has not taken in (martha#253). */
+const THE_NEXT_MESSAGE = 'take_a_crew_message'
+
+/** What the mod asks the launcher for: how often, in seconds, to read the channel again (martha#253). */
+const THE_CHANNEL_READ = 'channel_read_seconds'
+
+/** The interval the channel is read on, once the launcher has named it; null until it has. */
+let readingTheChannel: { cancel(): void } | null = null
+
+/**
+ * Hands this session the next crew message it has not taken in (martha#253, slice 2): the launcher answers with the
+ * framed text, or nothing, and the mod submits it as a prompt. The host raises that prompt back through the prompt
+ * hook, which is what counts the message as taken in; a text that is never raised is handed again.
+ */
+async function takeTheNextMessage($: CrewEngine): Promise<void> {
+  const heard = await hearTheLauncher($, THE_NEXT_MESSAGE, {})
+  if (!('said' in heard) || heard.said === '') return
+  await $.prompt.submit({ text: heard.said })
+}
+
+/** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
+async function startReadingTheChannel($: CrewEngine): Promise<void> {
+  if (readingTheChannel !== null) return
+  const heard = await hearTheLauncher($, THE_CHANNEL_READ, {})
+  const seconds = 'said' in heard ? Number.parseInt(heard.said, 10) : Number.NaN
+  if (!Number.isInteger(seconds) || seconds < 1) return
+  readingTheChannel = $.clock.every(seconds * 1000, () => void takeTheNextMessage($))
+  await takeTheNextMessage($)
+}
 
 /** What the launcher heard, or why it could not be heard: the two are not the same, and only one of them is an answer. */
 type Heard = { readonly said: string } | { readonly why: string }
@@ -261,6 +293,14 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
     for (const tool of fromTheLauncher.tools) await $.tool.register(tool)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (opensAtStartOf(first)) await openThePane($)
+    await startReadingTheChannel($)
+    return next(e)
+  })
+
+  // A turn ended, so the host is idle and can take the next message the launcher hands it (martha#253, slice 2). The
+  // submit from `turn.complete` is the one shape the host's own guidance names for submitting while the session idles.
+  on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
+    await takeTheNextMessage($)
     return next(e)
   })
 }
