@@ -142,7 +142,8 @@ interface SessionState {
 }
 
 /** The tools a member can call, over the place its launcher gave it. */
-export function crewToolsOver(places: CrewToolPlaces): CrewTools {  const state: SessionState = { held: null, session: '' }
+export function crewToolsOver(places: CrewToolPlaces): CrewTools {
+  const state: SessionState = { held: null, session: '' }
   const handlers = handlersOver(places, state)
 
   return {

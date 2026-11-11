@@ -9,6 +9,7 @@
 // A hooks module runs with no Node and may import only its own files, so nothing of the core is reachable here: the
 // socket in the environment and the shapes in ./relay_protocol.ts are all this file knows.
 
+import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { opensAtStartOf, rowsToOpen } from './pane_rule.ts'
 
@@ -27,12 +28,8 @@ export const OPEN_THE_PANE = 'crew'
 /** Why a tool call has no answer: the member was started by hand, or the launcher could not be heard. */
 const NOT_OURS = 'Martha is not running this session, so it answers no tool'
 
-/** A tool as the launcher gives it: its name, what it is for, and the schema of what it takes. */
-interface CrewTool {
-  readonly name: string
-  readonly description: string
-  readonly inputSchema: Readonly<Record<string, unknown>>
-}
+/** A tool as the launcher gives it, as the one parser for its answer reads it. */
+type CrewTool = ALaunchersTool
 
 /** The engine calls this module makes, typed by shape as the relay's own module types them. */
 interface CrewEngine {
@@ -107,21 +104,11 @@ interface TheCrewShown {
   readonly pane_redraw_ms: number | null
 }
 
-/** The crew's tools as the launcher answered them, or null when the answer is not that. */
-function crewToolsIn(said: string): FromTheLauncher | null {
-  try {
-    const parsed = JSON.parse(said) as { tools?: unknown }
-    return Array.isArray(parsed.tools) ? { tools: parsed.tools as CrewTool[] } : null
-  } catch {
-    return null
-  }
-}
-
 /** Asks the launcher for the tools to register, which it alone names and describes. */
 async function toolsFromTheLauncher($: CrewEngine): Promise<FromTheLauncher> {
   const heard = await hearTheLauncher($, 'the_crews_tools', {})
-  const read = 'said' in heard ? crewToolsIn(heard.said) : null
-  if (read !== null) return read
+  const tools = 'said' in heard ? crewToolsIn(heard.said) : null
+  if (tools !== null) return { tools }
   // A launcher that could not answer is not a crew with no tools: registering nothing in silence would leave the
   // member calling tools that were never registered, and nothing would say why (martha#254 part 2 r=2 R2).
   $.ui.toast(`Martha did not give the crew's tools: ${'said' in heard ? 'its answer is not a list of them' : heard.why}`)

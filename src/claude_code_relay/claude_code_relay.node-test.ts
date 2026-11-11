@@ -306,8 +306,11 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // The crew's mod is the second module the host loads (martha#254): it carries its tools' calls to the launcher the
   // same way, and the one rule it applies — whether the pane opens by itself — is a plain file with no imports at all,
   // so what it decides is readable and testable without the host.
-  assert.deepEqual(specifiers('crew.tsx'), ['./relay_protocol.ts', './pane_rule.ts'])
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './pane_rule.ts'])
   assert.deepEqual(specifiers('pane_rule.ts'), [])
+  // The third is the one parser for the tools the launcher answers with (martha#254 part 2 r=4): a plain file with no
+  // imports, so a test can feed it the launcher's own answer without the host, which is what r=3 lacked.
+  assert.deepEqual(specifiers('crew_tools_answer.ts'), [])
   // The host loads one hooks module per plugin, so ONE file is listed and it hands the registration to both; a
   // hooks.json naming two was refused outright, which would have left every gate off (martha#254).
   // The entry itself is a .tsx (it hands the registration to a module that draws), and the host compiles it; what this
