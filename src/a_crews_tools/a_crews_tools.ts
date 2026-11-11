@@ -12,6 +12,7 @@
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
   CREW_LOG_DESCRIPTION,
@@ -29,7 +30,7 @@ import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
-export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say'] as const
+export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts'] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
 /**
@@ -158,6 +159,11 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       required: ['to', 'text'],
     },
   },
+  {
+    name: 'crew_receipts',
+    description: CREW_RECEIPTS_DESCRIPTION,
+    inputSchema: { type: 'object', properties: {} },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -226,6 +232,11 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   return {
     report_progress: (args) => reportProgress(places, state, args),
     see_the_crew: () => seeTheCrewOf(places),
+    crew_receipts: async () => {
+      const declared = await crewOrRefusal(places)
+      if ('refused' in declared) return declared
+      return { answer: await whatBecameOfWhatISent(places.ledger, places.member, declared.settings.members.map((member) => member.name)) }
+    },
     crew_say: async (args) => {
       const declared = await crewOrRefusal(places)
       if ('refused' in declared) return declared
