@@ -21,7 +21,7 @@ import {
 import { declaredOrNone, resolveOnGitHub, rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
 import { selfTest } from './plant_every_surface.ts'
 import { postedTextSources } from './posted_text.ts'
-import { readPostedText, type Call } from './read_posted_text.ts'
+import { readPostedText, API, type Call } from './read_posted_text.ts'
 
 const NAME = 'check_posted_text_carries_nothing_private'
 
@@ -33,7 +33,7 @@ const option = (name: string): string | undefined => {
 // GitHub, as it answers a GET. Anything but an answer stops the check rather than
 // being read as an empty surface.
 const callGitHub = (token: string | undefined): Call => async ({ method, path }) => {
-  const response = await fetch(`https://api.github.com${path}`, {
+  const response = await fetch(`${API}${path}`, {
     method,
     headers: {
       accept: 'application/vnd.github+json',

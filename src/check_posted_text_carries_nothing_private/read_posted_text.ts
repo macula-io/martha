@@ -14,12 +14,15 @@ export interface Request {
 /** How the reader asks GitHub. main.ts answers it with fetch; a test with a map. */
 export type Call = (request: Request) => Promise<unknown>
 
-const PER_PAGE = 100
+export const PER_PAGE = 100
 // A ceiling on pages, so a list that never ends stops the run instead of hanging it.
 const PAGE_LIMIT = 100
 const SHORT_SHA_LENGTH = 7
 
 const REPOSITORY = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/
+
+// GitHub's answer root. A route is a path under it; one page of it is a path too.
+export const API = 'https://api.github.com'
 
 const checkedRepository = (repository: string): string => {
   if (!REPOSITORY.test(repository)) throw new Error(`not a repository: ${repository}`)
@@ -36,8 +39,19 @@ export const ROUTES = {
   commitComments: (repo: string) => `/repos/${repo}/comments`,
 } as const
 
-/** The path of one page of a list. `state` is the surface's own; it is never added here. */
-export const pageOf = (path: string, page: number): string => `${path}&per_page=${PER_PAGE}&page=${page}`
+/** The path of one page of a list. `state` is the surface's own; it is never added here.
+ *
+ * The query is built through URL and its search params rather than appended, so a
+ * route that carries no `?` gets a well-formed one: only `issues` and `pulls` have a
+ * query of their own, and the other four used to be asked as
+ * `.../issues/comments&per_page=100&page=1`, which GitHub answers 404 (martha#265 r=2).
+ */
+export const pageOf = (path: string, page: number): string => {
+  const url = new URL(path, API)
+  url.searchParams.set('per_page', String(PER_PAGE))
+  url.searchParams.set('page', String(page))
+  return `${url.pathname}${url.search}`
+}
 
 const listOf = (answered: unknown, path: string): readonly unknown[] => {
   if (!Array.isArray(answered)) throw new Error(`GitHub answered no list for ${path}`)
