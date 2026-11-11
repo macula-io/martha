@@ -1,6 +1,6 @@
 // The strict shell gate is off unless the owner asked for it (martha#259).
 //
-// The owner's rule, from the reset: members are trusted helpers, and the safety is review plus a yes on every push.
+// The owner's rule, decided on 2026-11-11: members are trusted helpers, and the safety is review plus a yes on every push.
 // So a member that read a file, a tool result or an agent's answer keeps its shell by default, and the gate that
 // stopped it runs only for an owner who turned it on in the crew's declaration.
 //
@@ -23,9 +23,20 @@ import {
 } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import {
+  WHAT_CLEARS_IT,
+  type Policy,
+  type Session,
+} from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { beginSession, rememberSession, resumeSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import {
+  beginSession,
+  PATH_OF_SOURCE,
+  rememberSession,
+  resumeSession,
+  takeInTurn,
+  type SessionRecordStore,
+} from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from './answer_a_tool_call.ts'
@@ -63,6 +74,11 @@ const denied = (answer: ToolCallAnswer, why: string): string => {
   return (answer as { deny: string }).deny
 }
 
+/** The refusal names the path the text arrived on, by the registry's own id for it. */
+const namesThePath = (answer: string, source: keyof typeof PATH_OF_SOURCE): void => {
+  assert.match(answer, new RegExp(`path ${PATH_OF_SOURCE[source]} \\(`))
+}
+
 // --- a tool result Martha could not place --------------------------------------
 
 /** The session after a tool the host's own table does not name ran: what an unplaced result records. */
@@ -91,7 +107,10 @@ test('off: a member keeps its shell after a tool result Martha could not place',
 
 test('on: the same unplaced result still closes the shell', () => {
   const answer = denied(bash(afterAnUnplacedResult(), { strict_gate: true }), 'a gate that is on')
-  assert.match(answer, /nothing executes/i)
+  // The words name the result that could not be placed, so a switch that broke another rule cannot pass this.
+  assert.match(answer, /a-tool-the-host-added-later/)
+  assert.match(answer, /which this gate does not know/i)
+  assert.ok(answer.includes(WHAT_CLEARS_IT))
 })
 
 // --- a background agent that has not stopped (#170) -----------------------------
@@ -101,7 +120,10 @@ test('off: a member keeps its shell while an agent it started has not stopped', 
 })
 
 test('on: the same running agent still closes the shell', () => {
-  denied(bash(beginSession(store(), 's-1'), { agents_running: ['agent-7'], strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(beginSession(store(), 's-1'), { agents_running: ['agent-7'], strict_gate: true }), 'a gate that is on')
+  // The words name the agent, so a switch that broke another rule cannot pass this.
+  assert.match(answer, /an agent this host started \(agent-7\) has not stopped/i)
+  assert.match(answer, /the shell comes back when it stops/i)
 })
 
 // --- a refresh, which inherits the predecessor's record -------------------------
@@ -132,7 +154,11 @@ test("off: a successor that read a tainted predecessor's handover keeps its shel
 })
 
 test('on: the same handover still carries the taint', () => {
-  denied(bash(afterARefresh(), { strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(afterARefresh(), { strict_gate: true }), 'a gate that is on')
+  // The words name the path the inherited text arrived on, so a switch that broke another rule cannot pass this.
+  namesThePath(answer, 'cross_session')
+  assert.match(answer, /an unattributed sender/i)
+  assert.ok(answer.includes(WHAT_CLEARS_IT))
 })
 
 // --- a record nobody can read ---------------------------------------------------
@@ -142,14 +168,21 @@ test('off: a member whose record cannot be read keeps its shell', () => {
 })
 
 test('on: the same lost record still closes the shell', () => {
-  denied(bash(resumeSession(store(), 'a-session-the-store-never-saw'), { strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(resumeSession(store(), 'a-session-the-store-never-saw'), { strict_gate: true }), 'a gate that is on')
+  // The words say the record cannot be read, so a switch that broke another rule cannot pass this.
+  assert.match(answer, /its record of what it has taken in cannot be read/i)
+  assert.ok(answer.includes(WHAT_CLEARS_IT))
 })
 
 // --- the fail-closed default ----------------------------------------------------
 
 test('a call site that says nothing keeps the gate: an out-of-date caller cannot lose it', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  denied(bash(tainted), 'a call site with no flag')
+  const answer = denied(bash(tainted), 'a call site with no flag')
+  // The owner's taint rule, in the words it always used, not one of the two the switch turns off.
+  namesThePath(answer, 'ring')
+  assert.match(answer, /an unattributed sender/i)
+  assert.ok(answer.includes(WHAT_CLEARS_IT))
 })
 
 test("off never widens what the owner did not switch: the record is still written, and reading is still allowed", () => {
