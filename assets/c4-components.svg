@@ -85,9 +85,11 @@
 <text class="t-type" x="364" y="260">[the launcher]</text>
 <text class="t-desc" x="364" y="284">Martha's places, the approved snapshot,</text>
 <text class="t-desc" x="364" y="300">a launch record before the host starts;</text>
-<text class="t-desc" x="364" y="316">run_an_owner_signed_command runs a</text>
-<text class="t-desc" x="364" y="332">shape the owner signed on a verified</text>
-<text class="t-desc" x="364" y="348">copy, in a sandbox</text>
+<text class="t-desc" x="364" y="316">raise_a_turn_to_the_member raises each</text>
+<text class="t-desc" x="364" y="332">kept turn to its listeners;</text>
+<text class="t-desc" x="364" y="348">run_an_owner_signed_command runs a</text>
+<text class="t-desc" x="364" y="364">shape the owner signed on a verified</text>
+<text class="t-desc" x="364" y="380">copy, in a sandbox</text>
 <rect class="b-cmp" x="664" y="214" width="300" height="146" rx="10"/>
 <text class="t-code" x="680" y="242">refuse_launch_of_unapproved_config</text>
 <text class="t-type" x="680" y="260">[the launch gate]</text>

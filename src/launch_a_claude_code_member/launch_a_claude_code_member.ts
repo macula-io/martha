@@ -127,6 +127,7 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
@@ -211,6 +212,11 @@ export interface ClaudeCodeMemberLaunch {
   readonly signed_runs?: SignedRuns
   /** The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. */
   readonly crew_tools?: () => CrewTools
+  /**
+   * What this launch raises every turn the host took in to (martha#253): the crew channel's carrier builds one and
+   * reads it, so a message counts as taken in only once the host raised it back. A launch given none raises nothing.
+   */
+  readonly turns?: TurnRaising
   /**
    * A test's ear on what the relay is handed, so that what the relay calls `started_with` is measured against what
    * the host was really spawned with rather than inferred from the code that builds both (martha#135). A real
@@ -698,6 +704,11 @@ function crewOf(launch: ClaudeCodeMemberLaunch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools() }
 }
 
+/** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
+function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising } {
+  return launch.turns === undefined ? {} : { turns: launch.turns }
+}
+
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
@@ -728,6 +739,7 @@ async function servedRelay(
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     ...crewOf(launch),
+    ...turnsOf(launch),
     // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
     // (martha#240).
     journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),

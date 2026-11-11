@@ -52,6 +52,7 @@ import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { JournalAnswer, RelayJournal } from './keep_the_relays_journal.ts'
@@ -109,6 +110,12 @@ export interface MemberRelayPlace {
   readonly signed_runs?: SignedRuns
   /** The crew's tools, answered by the slices behind them (martha#254); a launch with none answers no tool. */
   readonly crew?: CrewTools
+  /**
+   * What this launch raises every turn the host took in to (martha#253): the crew channel's readers wait on it, so a
+   * message is counted as taken in only when the host raised it back. A launch given none raises nothing, and a turn
+   * is still recorded.
+   */
+  readonly turns?: TurnRaising
   /**
    * What this launch is doing, for the run that waits on it (martha#240): a line when it receives an event and one when
    * it answers it. A run watching a launcher with none reads the terminal and the requests alone, as #210 left it.
@@ -431,7 +438,11 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   }
   const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
-  return why === undefined ? answered(TAKEN) : refused(why)
+  if (why !== undefined) return refused(why)
+  // The turn is kept, so the host really took it in: it is raised to whatever waits on turns, in the shape the host
+  // contract names (martha#253). A prompt this launcher refused is never raised.
+  state.place.turns?.prompted(body.text, origin.kind, whatAPromptCarries(body))
+  return answered(TAKEN)
 }
 
 function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined } | undefined {
