@@ -38,9 +38,11 @@
 // a recorded path has no rule, a rule has no recorded path, the recorded versions
 // disagree on a path, or a recorded default is not one the two runs agreed on.
 //
-// The two tool names below ARE typed by hand, and that is said plainly: what is proven
-// is each one's admission, leaf by leaf, against the recording. A tool not named here
-// records on B2 exactly as before.
+// WHICH TOOLS ARE READ IS TWO NAMES, NOT A SHAPE. The two names are built from MESH_TOOL_PREFIX in
+// ../read_a_room_through_its_gate, beside the other tool names and the allow-list, and imported here rather
+// than typed again: a name restated beside the shape it indexes would drift the day one of them is renamed.
+// What is proven is each one's admission, leaf by leaf, against the recording. A tool not named there records
+// on B2 exactly as before.
 
 import { petnameOf } from '../name_a_node_by_its_petname/name_a_node_by_its_petname.ts'
 import { MESH_GOODBYE, MESH_HELLO } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
