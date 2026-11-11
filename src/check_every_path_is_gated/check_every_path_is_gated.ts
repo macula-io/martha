@@ -681,16 +681,6 @@ export function rowsWhoseAttestationNothingSupplies(
 }
 
 /**
- * Every recorded mesh server version whose ring results no longer carry the keys
- * the parse reads (martha#247), named with the registry row each key belongs to.
- *
- * The gate reads `to` on A5 and `peer` on A4, and the marker that proves the
- * branch answered (`answer`, `caller_notified`). Those names are the server's, so
- * a release that renames one leaves the parse reading nothing: the row then
- * records no sender and the member loses its shell in silence. The fix is a
- * recording in a reviewed commit, the same act as recording a version at all.
- */
-/**
  * Every recorded mesh answer's leaf that has no rule, every rule whose leaf no recorded answer
  * carries, and every pair of recorded versions that disagree about a shape (martha#251), named
  * with the tool and the leaf.
@@ -747,6 +737,16 @@ function gapsBetweenRulesAndLeaves(recorded: ReadonlySet<string>, rules: Readonl
   return [...withNoRule, ...withNoLeaf]
 }
 
+/**
+ * Every recorded mesh server version whose ring results no longer carry the keys
+ * the parse reads (martha#247), named with the registry row each key belongs to.
+ *
+ * The gate reads `to` on A5 and `peer` on A4, and the marker that proves the
+ * branch answered (`answer`, `caller_notified`). Those names are the server's, so
+ * a release that renames one leaves the parse reading nothing: the row then
+ * records no sender and the member loses its shell in silence. The fix is a
+ * recording in a reviewed commit, the same act as recording a version at all.
+ */
 export function gapsInRingResultKeys(
   recorded: readonly { readonly server_version: string; readonly results: Readonly<Record<string, readonly string[]>> }[] = RECORDED_RING_RESULT_KEYS,
   keys: Readonly<Record<string, { readonly id: string; readonly marker: string }>> = RING_RESULT_KEYS,
