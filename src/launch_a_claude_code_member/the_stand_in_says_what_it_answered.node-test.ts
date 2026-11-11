@@ -66,8 +66,8 @@ test('#264: a scripted turn still owed is a request the stand-in read and has no
   const heard: ModelRequest[] = []
   const held = aTurnHeldBack()
   const stand = await theStandInModel(() => held.turn, heard, () => {})
+  const asked = ask(stand.url, OFFERS_TOOLS)
   try {
-    const asked = ask(stand.url, OFFERS_TOOLS)
     // The request has been read by now: the stand-in records it before it waits on the script.
     await new Promise((resolve) => setTimeout(resolve, 300))
     assert.equal(heard.length, 1, 'the stand-in did not record a request it had read, so a stall while its script was owed would read as a host that sent nothing')
@@ -76,10 +76,11 @@ test('#264: a scripted turn still owed is a request the stand-in read and has no
       undefined,
       'a request no reply has gone out for was recorded as answered, so the red would blame the host for the stand-in\'s own silence',
     )
-    held.release({ text: 'Done.' })
-    await asked
-    assert.ok(heard[0]?.answered_at !== undefined, 'the reply went out and the stand-in still says it never answered')
   } finally {
+    // Released whatever the figures said, so a wrong record fails by name instead of holding the connection open.
+    held.release({ text: 'Done.' })
+    await asked.catch(() => '')
     await stand.close()
   }
+  assert.ok(heard[0]?.answered_at !== undefined, 'the reply went out and the stand-in still says it never answered')
 })
