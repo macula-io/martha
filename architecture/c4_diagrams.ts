@@ -346,6 +346,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'the crew ledger: a row per milestone and per outward act, and nothing this release runs loads it yet',
   },
   {
+    name: 'open_and_finish_a_worktree',
+    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no tool (martha#253)',
+  },
+  {
     name: 'probe_launch_hosts',
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
