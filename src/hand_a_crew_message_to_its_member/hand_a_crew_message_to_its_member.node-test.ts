@@ -40,6 +40,28 @@ const raised = async (bench: Bench, text: string): Promise<void> => {
   await settled()
 }
 
+test('#253: a message is handed in the exact frame [crew #<position>] <sender>: <text>', async () => {
+  const b = bench()
+  await say(b, 'A', ['B'], 'a hand-off')
+  await say(b, 'A', ['B'], 'a hand-off')
+  const carrier = b.carrierFor('B')
+
+  // Spelled out rather than built with `framed`: a frame written by the same function that hands it would move with the
+  // code and pin nothing.
+  assert.equal(await carrier.next(), '[crew #0] A: a hand-off')
+  await raised(b, '[crew #0] A: a hand-off')
+  assert.equal(await carrier.next(), '[crew #1] A: a hand-off', 'two messages with one sender and one text were handed in the same frame')
+})
+
+test('#253: a message that arrives after the carrier has asked once is handed on the next ask', async () => {
+  const b = bench()
+  const carrier = b.carrierFor('B')
+  assert.equal(await carrier.next(), null, 'an empty channel handed a message')
+
+  await say(b, 'A', ['B'], 'arrived later')
+  assert.equal(await carrier.next(), '[crew #0] A: arrived later', 'the carrier stopped reading the channel after its first ask')
+})
+
 test('#253: a message to one member is handed to that member alone', async () => {
   const b = bench()
   await say(b, 'A', ['B'], 'a hand-off')
