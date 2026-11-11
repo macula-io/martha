@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
-// | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2; and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
+// | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -42,6 +42,7 @@ import {
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -109,6 +110,12 @@ export interface MemberRelayPlace {
   readonly signed_runs?: SignedRuns
   /** The crew's tools, answered by the slices behind them (martha#254); a launch with none answers no tool. */
   readonly crew?: CrewTools
+  /**
+   * What this launch supplied a mesh answer, and which answer may be read as the member's own (martha#251). Absent,
+   * no MCP answer is read that way and every one records on B2, as it did before this existed: a caller that cannot
+   * say what it supplied gets the taint, not a guess.
+   */
+  readonly wordless_answers?: Omit<WhatTheLaunchSupplies, 'input'>
   /**
    * What this launch is doing, for the run that waits on it (martha#240): a line when it receives an event and one when
    * it answers it. A run watching a launcher with none reads the terminal and the requests alone, as #210 left it.
@@ -605,8 +612,15 @@ async function recordToolResult(
 ): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
   const { place } = state
   const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
+  // A mesh tool's own session answer may carry nothing of anyone else's (martha#251): read first, so an answer whose
+  // every leaf came from this launch takes nothing in and the member keeps the shell it needs for the ring it was
+  // about to make. Every other answer, this tool's included when the launch cannot say what it supplied, records on
+  // B2 exactly as before.
+  const own_name = place.names.ownNameOf(call.tool)
+  const wordless = place.wordless_answers === undefined ? undefined : wordsInAMeshAnswer(own_name, answer, { ...place.wordless_answers, input: call.input })
+  if (wordless?.reads_nothing === true) return { reply: answered(TAKEN), recorded: [] }
   const taken = isMcpToolCall(call.tool)
-    ? takeInTurn(session, arrivalOfAMeshToolResult(place.names.ownNameOf(call.tool), call.input, answer), place.binder)
+    ? takeInTurn(session, arrivalOfAMeshToolResult(own_name, call.input, answer), place.binder)
     : takeInToolResult(
         session,
         {

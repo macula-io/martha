@@ -112,6 +112,12 @@ export type KnownPathGate = 'nothing-a-later-git-run-reads'
  *   judged before the host starts: every word the named argument gate does not
  *   pass refuses the start, so none reaches the model or the host's config.
  *   Only a `delivered` row may declare it.
+ * - `no-words-to-admit` — the fetched answer is the member's own: every leaf it carries is
+ *   admitted by equality with what the launch supplied or can compute, or is a stamp, a
+ *   count, a boolean or a 64-hex id, so there is nothing in it to admit and nothing is
+ *   taken in (../prove_a_mesh_answer_is_wordless, martha#251). An answer carrying anything
+ *   else is words and belongs on the row that holds a shell gate against words. `why`
+ *   says which answer, and where the rule is. Only a `fetched` row may declare it.
  * - `none` — no control. A row in this state fails CI on purpose.
  * - `check_every_path_is_gated` — a member's own file tools are refused, path by
  *   path, by the gate the row names: the owner's memory and instructions, and
@@ -122,6 +128,7 @@ export type Control =
   | { readonly kind: 'delivery-gate'; readonly gate: KnownDeliveryGate }
   | { readonly kind: 'shell-gate' }
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
+  | { readonly kind: 'no-words-to-admit'; readonly why: string }
   | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
   | { readonly kind: 'check_every_path_is_gated'; readonly gate: KnownPathGate; readonly also: readonly Control[] }
@@ -365,6 +372,16 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     control: {
       kind: 'no-text-reaches-the-model',
       why: 'only headRefOid, headRefName and a #n match are read, as a stale-handoff flag; no body text is delivered',
+    },
+    attestation: 'none',
+  },
+  {
+    id: 'B9',
+    what: "a mesh tool's own session answer: `mesh_hello` and `mesh_goodbye`, the two calls that start and end a member's presence",
+    klass: 'fetched',
+    control: {
+      kind: 'no-words-to-admit',
+      why: "no peer's words can be in it: every leaf the pinned server's answer carries is admitted only by equality with what the launch supplied or can compute (the member's own node id, its petname, the entry's approved settings, the HOME the launcher gave the server, the host version it started, the call's own input, the station those settings name, the server's own recorded defaults), or is a stamp, a count, a boolean or a 64-hex id, none of which can carry an instruction (../prove_a_mesh_answer_is_wordless, whose table the coverage check holds to the recording and fails by name when the two drift). Anything else — a provider's error, a policy file's quoted text, a joined realm's own strings, a leaf a release adds — is words and stays on B2. A joined identity is not read this way at all: the realm writes the strings it describes a member with",
     },
     attestation: 'none',
   },

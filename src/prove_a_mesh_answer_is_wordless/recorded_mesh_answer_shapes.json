@@ -1,0 +1,282 @@
+{
+  "_why": "The leaves each session tool's answer carries and the values the pinned mesh server reports when every setting is empty, one record per version a member may install (martha#251). Two runs: every setting empty, then every setting named; only the bare run's values are kept as defaults, and each one that follows a setting must differ in the named run, so a value that is one run's output proves nothing. Taken by ../record_mesh_answers. Every 64-hex id a run carried was replaced by a value the recorder chose: this repository is public.",
+  "server": "@macula-io/mcp",
+  "versions": [
+    {
+      "server_version": "0.51.0",
+      "integrity": "sha512-gELqCzCAfNbt4XIdTm2hqAKV1HDqrN9Gi2FuL6ReK9hzcau5onnYyhwE6LYJqYYfDISXPKURlqHN0pIG7YdCZw==",
+      "tools": {
+        "mesh_hello": [
+          "already_active",
+          "banner",
+          "citizen_did",
+          "citizenship.citizen_did",
+          "citizenship.display_name",
+          "citizenship.expires_at",
+          "citizenship.next_renewal_at",
+          "citizenship.realm",
+          "citizenship.registered",
+          "citizenship.registered_at",
+          "connected_to",
+          "interval_seconds",
+          "lobby_topic",
+          "node_id",
+          "petname",
+          "realm.joined",
+          "realm.portal",
+          "ring.allowlist_size",
+          "ring.contact_policy",
+          "ring.offers",
+          "ring.policy_file",
+          "ring.policy_label",
+          "ring.policy_source",
+          "ring.procedure",
+          "ring.serving"
+        ],
+        "mesh_goodbye": [
+          "rooms_left",
+          "said_goodbye",
+          "was_active"
+        ]
+      },
+      "defaults": {
+        "banner": "\n   __  __   _   ___ _   _ _      _\n  |  \\/  | /_\\ / __| | | | |    /_\\\n  | |\\/| |/ _ \\ (__| |_| | |__ / _ \\\n  |_|  |_/_/ \\_\\___|\\___/|____/_/ \\_\\\n  macula mesh -- an agent just said hello\n",
+        "lobby_topic": "agents.lobby",
+        "station": "station-de-frankfurt.macula.io:4433",
+        "interval_seconds": 60,
+        "contact_policy": 2,
+        "policy_label": "ask",
+        "policy_source": "default",
+        "portal": "https://realm.macula.io"
+      },
+      "states": {
+        "bare": {
+          "mesh_hello": {
+            "banner": "\n   __  __   _   ___ _   _ _      _\n  |  \\/  | /_\\ / __| | | | |    /_\\\n  | |\\/| |/ _ \\ (__| |_| | |__ / _ \\\n  |_|  |_/_/ \\_\\___|\\___/|____/_/ \\_\\\n  macula mesh -- an agent just said hello\n",
+            "node_id": "0000000000000000000000000000000000000000000000000000000000000000",
+            "petname": "bold_rust_moose_4847",
+            "connected_to": "station-de-frankfurt.macula.io:4433",
+            "interval_seconds": 60,
+            "already_active": false,
+            "lobby_topic": "agents.lobby",
+            "ring": {
+              "serving": 1,
+              "procedure": "~0000000000000000000000000000000000000000000000000000000000000000/ring",
+              "contact_policy": 2,
+              "policy_label": "ask",
+              "policy_source": "default",
+              "policy_file": "/tmp/martha-record/home-bare/.config/macula-mcp/contact_policy.json",
+              "allowlist_size": 0,
+              "offers": []
+            },
+            "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+            "citizenship": {
+              "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+              "registered": true,
+              "realm": "0000000000000000000000000000000000000000000000000000000000000000",
+              "display_name": "martha recorder",
+              "registered_at": "2026-11-11T20:33:02.258Z",
+              "expires_at": 1794430382107,
+              "next_renewal_at": "2026-11-11T20:38:02.258Z"
+            },
+            "realm": {
+              "portal": "https://realm.macula.io",
+              "joined": false
+            }
+          },
+          "mesh_goodbye": {
+            "was_active": true,
+            "rooms_left": 0,
+            "said_goodbye": true
+          }
+        },
+        "named": {
+          "mesh_hello": {
+            "banner": "martha records the default banner\n",
+            "node_id": "0000000000000000000000000000000000000000000000000000000000000000",
+            "petname": "bold_rust_moose_4847",
+            "connected_to": "station-de-nuremberg.macula.io:4433",
+            "interval_seconds": 30,
+            "already_active": false,
+            "lobby_topic": "agents.lobby",
+            "ring": {
+              "serving": 1,
+              "procedure": "~0000000000000000000000000000000000000000000000000000000000000000/ring",
+              "contact_policy": 4,
+              "policy_label": "closed",
+              "policy_source": "file",
+              "policy_file": "/tmp/martha-record/contact_policy.json",
+              "allowlist_size": 0,
+              "offers": [
+                "martha records an answer shape"
+              ]
+            },
+            "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+            "citizenship": {
+              "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+              "registered": true,
+              "realm": "0000000000000000000000000000000000000000000000000000000000000000",
+              "display_name": "martha records the named run",
+              "registered_at": "2026-11-11T20:33:06.874Z",
+              "expires_at": 1794430386712,
+              "next_renewal_at": "2026-11-11T20:38:06.875Z"
+            },
+            "realm": {
+              "portal": "https://realm.beam-campus.net",
+              "joined": false
+            }
+          },
+          "mesh_goodbye": {
+            "was_active": true,
+            "rooms_left": 0,
+            "said_goodbye": true
+          }
+        }
+      },
+      "labels": {
+        "1": "open",
+        "2": "ask",
+        "3": "allowlist",
+        "4": "closed"
+      }
+    },
+    {
+      "server_version": "0.51.2",
+      "integrity": "sha512-BuY1vN12QFm8vTpic5h/frvNDBYlOyFYhVmUjtR1PgypQwPqKrIDSTHr+gTKGx3gHlSqQI0gvt0EGPyGw59C5A==",
+      "tools": {
+        "mesh_hello": [
+          "already_active",
+          "banner",
+          "citizen_did",
+          "citizenship.citizen_did",
+          "citizenship.display_name",
+          "citizenship.expires_at",
+          "citizenship.next_renewal_at",
+          "citizenship.realm",
+          "citizenship.registered",
+          "citizenship.registered_at",
+          "connected_to",
+          "interval_seconds",
+          "lobby_topic",
+          "node_id",
+          "petname",
+          "realm.joined",
+          "realm.portal",
+          "ring.allowlist_size",
+          "ring.contact_policy",
+          "ring.offers",
+          "ring.policy_file",
+          "ring.policy_label",
+          "ring.policy_source",
+          "ring.procedure",
+          "ring.serving"
+        ],
+        "mesh_goodbye": [
+          "rooms_left",
+          "said_goodbye",
+          "was_active"
+        ]
+      },
+      "defaults": {
+        "banner": "\n   __  __   _   ___ _   _ _      _\n  |  \\/  | /_\\ / __| | | | |    /_\\\n  | |\\/| |/ _ \\ (__| |_| | |__ / _ \\\n  |_|  |_/_/ \\_\\___|\\___/|____/_/ \\_\\\n  macula mesh -- an agent just said hello\n",
+        "lobby_topic": "agents.lobby",
+        "station": "station-de-frankfurt.macula.io:4433",
+        "interval_seconds": 60,
+        "contact_policy": 2,
+        "policy_label": "ask",
+        "policy_source": "default",
+        "portal": "https://realm.macula.io"
+      },
+      "states": {
+        "bare": {
+          "mesh_hello": {
+            "banner": "\n   __  __   _   ___ _   _ _      _\n  |  \\/  | /_\\ / __| | | | |    /_\\\n  | |\\/| |/ _ \\ (__| |_| | |__ / _ \\\n  |_|  |_/_/ \\_\\___|\\___/|____/_/ \\_\\\n  macula mesh -- an agent just said hello\n",
+            "node_id": "0000000000000000000000000000000000000000000000000000000000000000",
+            "petname": "bold_rust_moose_4847",
+            "connected_to": "station-de-frankfurt.macula.io:4433",
+            "interval_seconds": 60,
+            "already_active": false,
+            "lobby_topic": "agents.lobby",
+            "ring": {
+              "serving": 1,
+              "procedure": "~0000000000000000000000000000000000000000000000000000000000000000/ring",
+              "contact_policy": 2,
+              "policy_label": "ask",
+              "policy_source": "default",
+              "policy_file": "/tmp/martha-record/home-bare/.config/macula-mcp/contact_policy.json",
+              "allowlist_size": 0,
+              "offers": []
+            },
+            "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+            "citizenship": {
+              "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+              "registered": true,
+              "realm": "0000000000000000000000000000000000000000000000000000000000000000",
+              "display_name": "martha recorder",
+              "registered_at": "2026-11-11T20:51:05.339Z",
+              "expires_at": 1794431465151,
+              "next_renewal_at": "2026-11-11T20:56:05.339Z"
+            },
+            "realm": {
+              "portal": "https://realm.macula.io",
+              "joined": false
+            }
+          },
+          "mesh_goodbye": {
+            "was_active": true,
+            "rooms_left": 0,
+            "said_goodbye": true
+          }
+        },
+        "named": {
+          "mesh_hello": {
+            "banner": "martha records the default banner\n",
+            "node_id": "0000000000000000000000000000000000000000000000000000000000000000",
+            "petname": "bold_rust_moose_4847",
+            "connected_to": "station-de-nuremberg.macula.io:4433",
+            "interval_seconds": 30,
+            "already_active": false,
+            "lobby_topic": "agents.lobby",
+            "ring": {
+              "serving": 1,
+              "procedure": "~0000000000000000000000000000000000000000000000000000000000000000/ring",
+              "contact_policy": 4,
+              "policy_label": "closed",
+              "policy_source": "file",
+              "policy_file": "/tmp/martha-record/contact_policy.json",
+              "allowlist_size": 0,
+              "offers": [
+                "martha records an answer shape"
+              ]
+            },
+            "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+            "citizenship": {
+              "citizen_did": "0000000000000000000000000000000000000000000000000000000000000000",
+              "registered": true,
+              "realm": "0000000000000000000000000000000000000000000000000000000000000000",
+              "display_name": "martha records the named run",
+              "registered_at": "2026-11-11T20:51:10.496Z",
+              "expires_at": 1794431470318,
+              "next_renewal_at": "2026-11-11T20:56:10.496Z"
+            },
+            "realm": {
+              "portal": "https://realm.beam-campus.net",
+              "joined": false
+            }
+          },
+          "mesh_goodbye": {
+            "was_active": true,
+            "rooms_left": 0,
+            "said_goodbye": true
+          }
+        }
+      },
+      "labels": {
+        "1": "open",
+        "2": "ask",
+        "3": "allowlist",
+        "4": "closed"
+      }
+    }
+  ]
+}

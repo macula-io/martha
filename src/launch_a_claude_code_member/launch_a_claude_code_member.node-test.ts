@@ -60,6 +60,9 @@ import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
+import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -220,6 +223,7 @@ function answering(
   journal?: RelayJournal,
   strict_gate?: boolean,
   crew?: CrewTools,
+  wordless_answers?: Omit<WhatTheLaunchSupplies, 'input'>,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -243,6 +247,7 @@ function answering(
     ...(journal === undefined ? {} : { journal }),
     ...(strict_gate === undefined ? {} : { strict_gate }),
     ...(crew === undefined ? {} : { crew }),
+    ...(wordless_answers === undefined ? {} : { wordless_answers }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -3434,4 +3439,52 @@ test('an allow the relay gave up on is journalled as the deny the host took, and
   assert.equal(kept.events.at(-1)?.answer, 'deny', 'an allow the relay gave up on was journalled as an allow')
   assert.equal(kept.events.at(-1)?.why, GAVE_UP_BEFORE_ALLOW)
   assert.deepEqual(kept.open, [], 'the late allow opened a call, so a run would wait on a tool that never ran')
+})
+
+// --- a member's first mesh answer (martha#251) ------------------------------------
+
+/** The recording's own bare `mesh_hello` answer: an answer the pinned server really gave. */
+function recordedHello(): Readonly<Record<string, unknown>> {
+  const version = RECORDED_MESH_ANSWER_SHAPES.at(-1)
+  const bare = version?.states['bare'] as Readonly<Record<string, unknown>> | undefined
+  const hello = bare?.[MESH_HELLO] as Readonly<Record<string, unknown>> | undefined
+  assert.ok(hello !== undefined, 'the recording carries no bare mesh_hello answer')
+  return hello
+}
+
+test('a member’s first mesh answer records nothing, so its ring reaches A5 instead of being refused (martha#251)', async (t) => {
+  const place = placeFor(t)
+  const hello = recordedHello()
+  const ring = hello['ring'] as Readonly<Record<string, unknown>>
+  const policy_file = String(ring['policy_file'])
+  const home = policy_file.slice(0, policy_file.length - '/.config/macula-mcp/contact_policy.json'.length)
+  const { relay, rows } = answering(place, undefined, [], undefined, undefined, true, undefined, {
+    node_id: String(hello['node_id']),
+    env: { HOME: home },
+    home,
+    host_version: '2.1.322',
+  })
+  await relay.answer('session_started', start('startup'))
+  const helloAnswer = [{ type: 'text', text: JSON.stringify(hello, null, 2) }]
+  const session = (extra: Record<string, unknown>) => ({ session_id: SESSION, ...extra })
+
+  // The call's own input is the member's words, and the launcher reads them from the call itself.
+  assert.deepEqual(
+    await relay.answer('tool_answered', session({ call: { tool: 'mcp__macula__mesh_hello', operator_name: 'martha recorder' }, answer: helloAnswer })),
+    TAKEN_REPLY,
+  )
+  assert.deepEqual(await recordedPaths(rows), [], 'the member’s own hello answer took nothing in')
+  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'id' })), ALLOW_REPLY, 'and the shell it needs for the ring is still there')
+  assert.deepEqual(await relay.answer('tool_called', call('mcp__macula__mesh_ring', { to: 'f'.repeat(64), purpose: 'a check' })), ALLOW_REPLY, 'the ring itself is not refused')
+
+  const ringAnswer = RECORDED_RING_ANSWERS[RINGS_AND_RETURNS_THE_ANSWER]
+  assert.ok(ringAnswer !== undefined, 'the recording carries no mesh_ring answer')
+  assert.deepEqual(
+    await relay.answer('tool_answered', session({ call: { tool: `mcp__macula__${RINGS_AND_RETURNS_THE_ANSWER}`, ...ringAnswer.tool_input }, answer: ringAnswer.tool_call_answer })),
+    TAKEN_REPLY,
+  )
+  const after = await recordedPaths(rows)
+  assert.ok(after.some((entry) => entry.startsWith(`${PATH_OF_SOURCE.ring_answer}:`)), `the ring's answer reached its own row: ${after.join(', ')}`)
+  assert.equal(after.filter((entry) => entry.startsWith('B2:')).length, 0, 'and nothing landed on B2')
+  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'id' }))), 'the ring’s answer is another agent’s text, so the shell closes on it, as the gate means it to')
 })

@@ -52,6 +52,12 @@ import {
   MESH_TOOL_PREFIX,
   sourceOfAMeshToolResult,
 } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import {
+  ADMITS,
+  RECORDED_MESH_ANSWER_SHAPES,
+  WORDLESS_TOOLS,
+  type RecordedMeshAnswerShape,
+} from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 
 export interface Gap {
   readonly path: string
@@ -684,6 +690,63 @@ export function rowsWhoseAttestationNothingSupplies(
  * records no sender and the member loses its shell in silence. The fix is a
  * recording in a reviewed commit, the same act as recording a version at all.
  */
+/**
+ * Every recorded mesh answer's leaf that has no rule, every rule whose leaf no recorded answer
+ * carries, and every pair of recorded versions that disagree about a shape (martha#251), named
+ * with the tool and the leaf.
+ *
+ * The reading that keeps a member's first mesh answer from costing it the shell admits a leaf only
+ * by the rule here, and admits nothing it has not been taught. So a release that adds a leaf must
+ * be recorded again in a reviewed commit and a rule written for it; until then the answer records
+ * on B2, which is safe, and this check is what says so by name rather than leaving it to be found
+ * by a member whose shell went.
+ */
+export function gapsInMeshAnswerShapes(
+  versions: readonly RecordedMeshAnswerShape[] = RECORDED_MESH_ANSWER_SHAPES,
+  rules: Readonly<Record<string, unknown>> = ADMITS,
+  tools: readonly string[] = WORDLESS_TOOLS,
+): readonly Gap[] {
+  const recorded = new Set(tools.flatMap((tool) => recordedLeavesOf(tool, versions)))
+  return [...tools.flatMap((tool) => gapsInOneToolsShape(tool, versions)), ...gapsBetweenRulesAndLeaves(recorded, rules)]
+}
+
+/** Every leaf any recorded version carries for this tool. */
+function recordedLeavesOf(tool: string, versions: readonly RecordedMeshAnswerShape[]): readonly string[] {
+  return versions.flatMap((version) => version.tools[tool] ?? [])
+}
+
+/** The tool's shape across the recorded versions: a version that carries none, or two that disagree, are named. */
+function gapsInOneToolsShape(tool: string, versions: readonly RecordedMeshAnswerShape[]): readonly Gap[] {
+  const first = versions[0]?.tools[tool]
+  if (first === undefined) {
+    return [{ path: tool, why: 'no recorded version carries an answer shape for it, so nothing can say its answer is the member’s own' }]
+  }
+  return versions.flatMap((version) => {
+    const leaves = version.tools[tool]
+    if (leaves === undefined) return [{ path: tool, why: `${version.server_version} records no answer shape for it` }]
+    return gapsBetweenShapes(tool, version.server_version, first, leaves)
+  })
+}
+
+/** What one recorded version carries that the first does not, and the other way round. */
+function gapsBetweenShapes(tool: string, version: string, first: readonly string[], leaves: readonly string[]): readonly Gap[] {
+  const missing = first.filter((leaf) => !leaves.includes(leaf))
+  const added = leaves.filter((leaf) => !first.includes(leaf))
+  if (missing.length === 0 && added.length === 0) return []
+  return [{ path: tool, why: `${version} disagrees about its shape (missing: ${missing.join(', ') || 'none'}; added: ${added.join(', ') || 'none'})` }]
+}
+
+/** The rules and the recorded leaves, each side naming what the other does not carry. */
+function gapsBetweenRulesAndLeaves(recorded: ReadonlySet<string>, rules: Readonly<Record<string, unknown>>): readonly Gap[] {
+  const withNoRule: readonly Gap[] = [...recorded]
+    .filter((leaf) => !Object.hasOwn(rules, leaf))
+    .map((leaf) => ({ path: leaf, why: 'a recorded answer carries it and no rule admits it, so an answer that carries it records on B2' }))
+  const withNoLeaf: readonly Gap[] = Object.keys(rules)
+    .filter((leaf) => !recorded.has(leaf))
+    .map((leaf) => ({ path: leaf, why: 'a rule admits it and no recorded answer carries it' }))
+  return [...withNoRule, ...withNoLeaf]
+}
+
 export function gapsInRingResultKeys(
   recorded: readonly { readonly server_version: string; readonly results: Readonly<Record<string, readonly string[]>> }[] = RECORDED_RING_RESULT_KEYS,
   keys: Readonly<Record<string, { readonly id: string; readonly marker: string }>> = RING_RESULT_KEYS,

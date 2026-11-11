@@ -20,11 +20,12 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshTools, gapsInPromptOrigins, gapsInRingResultKeys, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
+import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshAnswerShapes, gapsInMeshTools, gapsInPromptOrigins, gapsInRingResultKeys, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import { RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX, sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS, type RecordedRingResultKeys } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
+import { ADMITS, MESH_GOODBYE, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type RecordedMeshAnswerShape } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
@@ -58,7 +59,7 @@ const coverageOf = (
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
     ...Array.from({ length: 18 }, (_, index) => `A${index + 1}`),
-    ...Array.from({ length: 8 }, (_, index) => `B${index + 1}`),
+    ...Array.from({ length: 9 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
   const seen = INBOUND_PATHS.map((path) => path.id).sort()
@@ -753,4 +754,47 @@ test('a version that lost nothing is named for nothing, and a key the recording 
   const renamed = WITHOUT(NEWEST_RING_KEYS, first.tool, first.key)
   const gaps = gapsInRingResultKeys([renamed])
   assert.equal(gaps.filter((gap) => gap.path === first.row).length, 1, 'one gap for the one row that lost its key')
+})
+
+// --- the mesh answer shapes (martha#251) -----------------------------------------
+
+const NEWEST_SHAPES: RecordedMeshAnswerShape = (() => {
+  const newest = RECORDED_MESH_ANSWER_SHAPES.at(-1)
+  if (newest === undefined) throw new Error('no recorded mesh answer shape')
+  return newest
+})()
+
+/** The newest recording without one leaf of one tool. */
+function shapesWithout(tool: string, leaf: string): RecordedMeshAnswerShape {
+  return {
+    ...NEWEST_SHAPES,
+    tools: { ...NEWEST_SHAPES.tools, [tool]: (NEWEST_SHAPES.tools[tool] ?? []).filter((each) => each !== leaf) },
+  }
+}
+
+test('every recorded leaf of every session answer has a rule, and every rule a recorded leaf', () => {
+  assert.deepEqual(gapsInMeshAnswerShapes(), [])
+  assert.ok(Object.keys(ADMITS).length > 20, 'the reading admits almost nothing')
+})
+
+test('a recorded answer that lost a leaf is named, with the leaf whose rule nothing carries now', () => {
+  for (const [tool, leaf] of [[MESH_HELLO, 'petname'], [MESH_HELLO, 'node_id'], [MESH_GOODBYE, 'said_goodbye']] as const) {
+    const gaps = gapsInMeshAnswerShapes([shapesWithout(tool, leaf)])
+    assert.ok(gaps.some((gap) => gap.path === leaf), `${tool} without ${leaf}: ${JSON.stringify(gaps)}`)
+  }
+})
+
+test('a rule no recorded answer carries is named with the leaf it admits', () => {
+  const invented = { ...ADMITS, 'citizenship.second_thoughts': () => true }
+  const gaps = gapsInMeshAnswerShapes(RECORDED_MESH_ANSWER_SHAPES, invented)
+  assert.deepEqual(gaps.map((gap) => gap.path), ['citizenship.second_thoughts'])
+})
+
+test('a recorded leaf no rule admits is named, so a release that adds one is not read silently', () => {
+  const widened = RECORDED_MESH_ANSWER_SHAPES.map((version) => ({
+    ...version,
+    tools: { ...version.tools, [MESH_HELLO]: [...(version.tools[MESH_HELLO] ?? []), 'citizenship.second_thoughts'] },
+  }))
+  const gaps = gapsInMeshAnswerShapes(widened)
+  assert.deepEqual(gaps.map((gap) => gap.path), ['citizenship.second_thoughts'])
 })
