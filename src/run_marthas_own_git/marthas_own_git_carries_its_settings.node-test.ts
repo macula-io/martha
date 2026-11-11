@@ -8,12 +8,13 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { GIT_SETTINGS_VARIABLE, switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -36,7 +37,7 @@ test('the settings carry safe.bareRepository=explicit, and the arguments splice 
 /** A directory holding what git takes for a bare repository, and a file beside it. */
 function plantedBareDirectory(t: TestContext): { readonly dir: string; readonly file: string } {
   const dir = mkdtempSync(join(tmpdir(), 'martha-192-planted-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   mkdirSync(join(dir, 'objects'), { recursive: true })
   mkdirSync(join(dir, 'refs', 'heads'), { recursive: true })
   writeFileSync(join(dir, 'HEAD'), 'ref: refs/heads/main\n')
@@ -77,7 +78,7 @@ test('a run through spawnSync refuses a planted bare directory (#192)', (t) => {
 
 test('the switch stays off the member\'s environment, where a bare checkout is a legitimate place to work (#192)', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-192-a-members-git-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const bare = join(dir, 'bare')
   mkdirSync(join(bare, 'objects'), { recursive: true })
   mkdirSync(join(bare, 'refs', 'heads'), { recursive: true })

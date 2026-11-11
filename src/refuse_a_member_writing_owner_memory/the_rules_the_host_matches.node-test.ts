@@ -7,7 +7,7 @@
 // The relay CI job names the binary in MARTHA_RECORDED_HOST; without it this is skipped.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -16,6 +16,7 @@ import { test } from 'node:test'
 import { RECORDED_HOST_VARIABLE } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { whatTheHostSaysWithTheseSettings } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
 
 const recordedHost = process.env[RECORDED_HOST_VARIABLE]
@@ -26,7 +27,7 @@ const anInertTwinOf = (rule: string): string => rule.replace(/^\w+\(/, 'Write(')
 
 test('the recorded host matches every rule the launch writes, and names an inert twin of one in the same run (#226)', { skip }, async (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-rules-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const env = { HOME: home, PATH: [join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color' }
   const written = memoryDenyRules(ownerMemoryPlaces({ launcher_env: env, member_env: env, home, launch_dir: home, settings_files: [], user_scope: userScopeUnder(home) }))
   assert.ok(written.length > 0, 'the launch writes rules for an ordinary home')

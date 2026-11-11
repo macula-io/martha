@@ -141,14 +141,18 @@ export const readingOnly = (store: KeyedRows): KeyedRows => Object.freeze({ all:
 /**
  * One path on disk as it is, the path itself never followed when it is a link.
  * `other` is anything that is not a plain file, a directory or a link (a socket,
- * a device, a pipe).
+ * a device, a pipe). A plain file says whether its owner may execute it, which is
+ * the bit git reads when it writes a mode of 100644 or 100755 (martha#158).
  */
 export type FileKind =
   | { readonly kind: 'absent' }
-  | { readonly kind: 'file' }
+  | { readonly kind: 'file'; readonly ownerExecutes: boolean }
   | { readonly kind: 'directory' }
   | { readonly kind: 'symlink'; readonly target: string }
   | { readonly kind: 'other' }
+
+/** The bit in a file's mode that says its owner may execute it, as git reads it for 100755. */
+export const OWNER_EXECUTES = 0o100
 
 /**
  * The files on disk, read as they are, by absolute path (martha#16's launch gate

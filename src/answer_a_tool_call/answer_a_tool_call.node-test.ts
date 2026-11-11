@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   WHAT_CLEARS_IT,
   type Policy,
@@ -32,7 +33,7 @@ const names = claudeCodeToolNames
 // A member started in a directory holding no launch config: the launch check
 // passes, so these tests see only the rules they are about. Removed at the end.
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
-after(() => rmSync(launch_home, { recursive: true, force: true }))
+after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
   host: 'claude-code',
   launch_dir: mkdtempSync(join(launch_home, 'work-')),
@@ -175,7 +176,7 @@ function put(dir: string, name: string, content: string): void {
 /** A checkout whose approved hook runs ./hooks/after.sh after every tool call, approved as it stands. */
 function approvedCheckout(t: TestContext): ApprovedLaunch {
   const home = mkdtempSync(join(tmpdir(), 'martha-launch-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '-b', 'main', '.')

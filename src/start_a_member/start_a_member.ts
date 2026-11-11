@@ -30,11 +30,14 @@ import fs from 'node:fs'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
+import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import {
+  CREW_ROW_PLACE,
   crewRowsDirectory,
+  crewSubdirectory,
   nodeIdsFor,
   PERMISSION_BITS,
   readApprovals,
@@ -53,6 +56,8 @@ import {
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
@@ -88,13 +93,15 @@ function closedRelayRoot(relay_root: string): string | undefined {
 export function launcherPlacesOf(state: MarthaState, relay_root: string, root: string): MemberPlaces | { readonly refusal: string } {
   const rows = crewRowsDirectory(state.state_root, root)
   if ('refusal' in rows) return rows
+  const dashboard = crewSubdirectory(state.state_root, root, CREW_ROW_PLACE)
+  if ('refusal' in dashboard) return dashboard
   const made = STATE_PLACES.map((name) => stateSubdirectory(state, name))
   const refused = made.find((place) => 'refusal' in place)
   if (refused !== undefined && 'refusal' in refused) return refused
   const [launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows.path, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
+  return { rows: rows.path, dashboard: dashboard.path, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
 }
 
 export interface MemberStartRequest {
@@ -225,6 +232,14 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     stdio: request.stdio,
     tellOwner: (line) => request.tellOwner(line),
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
+    crew_tools: () =>
+      crewToolsOver({
+        member: request.member,
+        ledger: { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } },
+        beats: dashboardRowsIn(request.places.dashboard),
+        root: request.root,
+        documents: request.documents,
+      }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
       (name) => runAKeptShape(request.state, request.root, request.inherited, name, new Date()),

@@ -2,11 +2,12 @@
 // The dry run compared the layer with `git archive HEAD` alone, refused a correct release, and its one differing path
 // arrived cut off a Map diff. These hold the comparison to the pin, and hold every refusal to naming its paths.
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../src/launch_a_claude_code_member/relay_copy.ts'
 import {
   differences,
   inWords,
@@ -64,7 +65,7 @@ test('a tree that differs in more paths than one message names still counts them
 
 test('the pin a layer holds is read back as written, and a layer without one is named', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-pin-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const pin = { name: '@macula-io/martha', version: '1.0.2', integrity: 'sha512-aaaa' }
   mkdirSync(join(dir, dirname(PIN_IN_THE_LAYER)), { recursive: true })
   writeFileSync(join(dir, PIN_IN_THE_LAYER), `${JSON.stringify(pin, null, 2)}\n`)

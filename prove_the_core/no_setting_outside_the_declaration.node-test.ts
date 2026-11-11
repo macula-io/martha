@@ -8,6 +8,7 @@ import { CORE, escaped, isTestFile, manifestOf, programsRunByScriptsOf, testSuff
 import {
   adapterReachesBeyondItsKind,
   glueReachesBeyondTheContract,
+  nodeModulesBeyondADecision,
   settingsReadOutsideTheDeclaration,
   slicesImportingPrograms,
   type Source,
@@ -18,8 +19,8 @@ const src = join(repository, CORE)
 const manifest = manifestOf(repository)
 
 const underTheCore = new RegExp(`^${escaped(CORE)}/`)
-// An entry of the manifest's martha section, declared as <core>/<directory>.
-const directoryUnderTheCore = (entry: string) => entry.replace(underTheCore, '')
+// An entry of the manifest's martha section, declared as <core>/<directory> or <core>/<path>.
+const declaredPath = (entry: string) => entry.replace(underTheCore, '')
 
 // Which files under src/ are not slices, as package.json declares them: the test
 // files its test script runs, the programs its other scripts run with node, and
@@ -29,11 +30,16 @@ const programsRunByScripts = programsRunByScriptsOf(manifest)
 
 // The host glue: the code that implements the host contract on one machine. It is
 // declared as <core>/<directory>; it is not a slice, and reaching the machine is its job.
-const hostGlue = (manifest.martha?.hostGlue ?? []).map(directoryUnderTheCore)
+const hostGlue = (manifest.martha?.hostGlue ?? []).map(declaredPath)
 // The host adapters: each composes the contract for one coding tool from glue and slices.
-const hostAdapters = (manifest.martha?.hostAdapters ?? []).map(directoryUnderTheCore)
+const hostAdapters = (manifest.martha?.hostAdapters ?? []).map(declaredPath)
 // The host contract the glue implements, the one place glue may import from in the core.
-const hostContract = directoryUnderTheCore(manifest.martha?.hostContract ?? '')
+const hostContract = declaredPath(manifest.martha?.hostContract ?? '')
+// Files inside a host adapter that are decisions rather than the adapter's machinery
+// (martha#158). The directory they sit in is an adapter, so the slice rule does not reach
+// them; what reaches them is the one rule a decision cannot break wherever it lives: it
+// reads the machine through the host, so it imports no Node module but pure computation.
+const decisionFiles = (manifest.martha?.decisionFiles ?? []).map(declaredPath)
 
 const isSlice = (path: string) => {
   const top = path.split(sep)[0] ?? ''
@@ -54,7 +60,8 @@ interface Planted {
 const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_reaches.json'), 'utf8')) as Planted
 
 const PLANTED_PATH = join('some_slice', 'some_slice.ts')
-const judge = (text: string) => settingsReadOutsideTheDeclaration([{ path: PLANTED_PATH, text }], isSlice)
+const judgeAt = (path: string, text: string) => settingsReadOutsideTheDeclaration([{ path, text }], isSlice)
+const judge = (text: string) => judgeAt(PLANTED_PATH, text)
 
 const linesOf = (found: readonly { line: number }[]) => [...new Set(found.map(finding => finding.line))]
 
@@ -81,10 +88,53 @@ test('the host contract and every host glue and host adapter entry are one direc
   const entries = [manifest.martha?.hostContract ?? '', ...(manifest.martha?.hostGlue ?? []), ...(manifest.martha?.hostAdapters ?? [])]
   for (const entry of entries) {
     assert.match(entry, new RegExp(`^${escaped(CORE)}/[^/]+$`), entry)
-    assert.ok(directories.has(directoryUnderTheCore(entry)), entry)
+    assert.ok(directories.has(declaredPath(entry)), entry)
   }
   assert.notDeepEqual(hostGlue, [])
   assert.notDeepEqual(hostAdapters, [])
+})
+
+// --- the decisions declared inside a host adapter ---------------------------------
+
+test('package.json names files inside a host adapter as decisions, and each one is there', () => {
+  const files = new Set(coreSources(src).map(source => source.path))
+  assert.notDeepEqual(decisionFiles, [], 'the declaration is read')
+  for (const path of decisionFiles) {
+    const top = path.split(sep)[0] ?? ''
+    assert.ok(files.has(path), `${path} is not a file under ${CORE}`)
+    assert.ok(hostAdapters.includes(top), `${path} is not inside a host adapter, so declaring it does nothing`)
+    assert.equal(isSlice(path), false, `${path} is inside an adapter, which is why it is declared`)
+  }
+})
+
+for (const path of [...decisionFiles]) {
+  test(`a decision declared inside a host adapter reads the machine through the host, not Node's own modules: ${path}`, () => {
+    const source = coreSources(src).find((candidate) => candidate.path === path)
+    assert.ok(source !== undefined, `${path} is read`)
+    // The same rule the planted cases below judge, called on the file itself, so one definition
+    // decides both and a change to it reaches the repository as well as the plants (review r=1).
+    assert.deepEqual(nodeModulesBeyondADecision([source]), [], `${path} imports only its own code and the Node modules a decision may`)
+  })
+}
+
+test('caught: a declared decision importing node:fs, node:child_process, node:process or a package is named, and node:path and its own code are not', () => {
+  const caught = ['node:fs', 'node:child_process', 'node:process', 'some-package']
+  const quiet = ['node:path', 'node:crypto', '../some_slice/some_slice.ts']
+  for (const path of decisionFiles) {
+    for (const specifier of caught) {
+      const found = nodeModulesBeyondADecision([{ path, text: `${importOf(specifier)}\n` }])
+      assert.deepEqual(linesOf(found), [1], `${path} importing ${specifier}`)
+      assert.equal(found[0]?.path, path)
+    }
+    for (const specifier of quiet) assert.deepEqual(nodeModulesBeyondADecision([{ path, text: `${importOf(specifier)}\n` }]), [], specifier)
+  }
+})
+
+test('caught: a decision importing a module whose name is computed is named', () => {
+  for (const path of decisionFiles) {
+    const found = nodeModulesBeyondADecision([{ path, text: 'export const a = await import(name)\n' }])
+    assert.deepEqual(linesOf(found), [1], path)
+  }
 })
 
 // --- every planted reach is caught, at its own line -----------------------------

@@ -55,6 +55,8 @@ export interface HostForTestsOptions {
   readonly crew?: CrewStore
   /** The launcher's records the store starts with. */
   readonly launches?: readonly KeyedRow[]
+  /** The row store a test drives, when it needs the real one on disk (martha#254's ledger tests); with none, in memory. */
+  readonly rows?: HostContract['stores']['rows']
   /** Which process holds a pid; asked afresh every time. */
   readonly identityOf?: (pid: number) => string | null
   /** How the host this test stands for names a called tool; with none, Claude Code's form, so no test fails open by forgetting it. */
@@ -98,7 +100,7 @@ const missingDocument = (path: string): Error =>
 
 export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
   let now = options.now ?? 0
-  const rows = rowsInMemory()
+  const in_memory = options.rows === undefined ? rowsInMemory() : undefined
   const handed: string[] = []
   const reads: string[] = []
   const listeners: ((turn: ArrivingTurn) => void)[] = []
@@ -115,7 +117,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
   const host: HostContract = {
     clock: { now: () => now },
     stores: {
-      rows: rows.store,
+      rows: rowsOf(options, in_memory),
       documents: {
         read: async (path) => {
           reads.push(path)
@@ -147,7 +149,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
     host,
     launcherRecords,
     advanceClock: (milliseconds) => void (now += milliseconds),
-    refuseNextAppend: rows.refuseNextAppend,
+    refuseNextAppend: refuseHandleOf(in_memory),
     turnsHandedToModel: () => [...handed],
     documentsRead: () => [...reads],
     arrive: (turn) => listeners.forEach((take) => take(turn)),
@@ -184,6 +186,16 @@ function rowsInMemory(): { readonly store: HostContract['stores']['rows']; refus
     (streams.get(stream) ?? []).map((text, position) => ({ position, row: JSON.parse(text) as Row }))
 
   return { store: { append, read }, refuseNextAppend: (reason) => void (refusal = reason) }
+}
+
+/** A test's handle on making the next append fail; a store the test brought has none, and nothing is refused. */
+function refuseHandleOf(in_memory: ReturnType<typeof rowsInMemory> | undefined): (reason: string) => void {
+  return in_memory === undefined ? () => undefined : in_memory.refuseNextAppend
+}
+
+/** The rows a test drives: the store it gave, or the in-memory one it was made when it gave none. */
+function rowsOf(options: HostForTestsOptions, in_memory: ReturnType<typeof rowsInMemory> | undefined): HostContract['stores']['rows'] {
+  return options.rows ?? in_memory!.store
 }
 
 /** The processes a test gives; with none, every run is refused and no pid is held. */

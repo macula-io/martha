@@ -5,11 +5,12 @@
 // holding the same words must not make the row say the memory was loaded.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { memoryTheHostLoaded, memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
 import { theRecordsIn } from './probe_hosts.ts'
 
@@ -58,7 +59,7 @@ test('an entry that does not say where its session started is taken, inside a fo
 
 test('the records read are only those under the project folders the run names (martha#223 r=2)', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'martha-probe-records-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const ours = join(root, 'ours')
   const anotherSessions = join(root, 'another-session')
   for (const folder of [ours, anotherSessions]) mkdirSync(folder, { recursive: true })

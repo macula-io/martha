@@ -2,7 +2,7 @@
 // every one of those refused when the directory or the file is not one only this user may read and write.
 
 import assert from 'node:assert/strict'
-import fs, { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import fs, { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -15,9 +15,10 @@ import {
   isAPlainName,
 } from './crew_files_directory.ts'
 import type { CrewPlace } from '../host_contract/host_contract.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-crew-files-'))
-after(() => rmSync(home, { recursive: true, force: true }))
+after(() => removeTheTree(home))
 
 const PERMISSIONS = 0o777
 

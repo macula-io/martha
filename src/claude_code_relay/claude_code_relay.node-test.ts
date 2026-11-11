@@ -128,6 +128,33 @@ async function callThrough(fake: Fake) {
   return { answer, ran: calls }
 }
 
+test('the session a launcher hands a line to takes it in at its start, and one it does not is handed nothing (martha#254 test 10)', async () => {
+  const line =
+    'macula-io/martha#254 has 1 act sent with no outcome recorded (row 0: a push by Vesta). ' +
+    'Check what became of each before sending anything again, then record it with note_what_became_of_an_act.'
+  const start = { session_id: SESSION, source: 'startup', transcript_path: '/t', hook_event_name: 'SessionStart' }
+
+  const handed = next<typeof start>({ text: 'the rest of the chain' })
+  const answered = await hooksOfTheRelay().get('classic.SessionStart')?.hook(fakeEngine(answering(200, JSON.stringify({ taken: 1, handed: line }))).$, start, handed.fn)
+  assert.equal(handed.calls.length, 1, 'the start is still passed down the chain')
+  assert.deepEqual(
+    answered,
+    { text: 'the rest of the chain', additionalContext: [line] },
+    'the line goes in the hook\'s own answer, which is what the host puts into the session before its first prompt',
+  )
+
+  const nothing = next<typeof start>({ text: 'the rest of the chain' })
+  const plain = await hooksOfTheRelay().get('classic.SessionStart')?.hook(fakeEngine(sayYes).$, start, nothing.fn)
+  assert.deepEqual(plain, { text: 'the rest of the chain' }, 'a launcher with nothing to hand leaves the start as the chain made it')
+})
+
+test('a session start the launcher answers in a shape the relay does not know is not a yes, and hands nothing', async () => {
+  const start = { session_id: SESSION, source: 'startup', transcript_path: '/t', hook_event_name: 'SessionStart' }
+  const passed = next<typeof start>({ text: 'the rest of the chain' })
+  const answer = await hooksOfTheRelay().get('classic.SessionStart')?.hook(fakeEngine(answering(200, '{"taken":1,"handed":""}')).$, start, passed.fn)
+  assert.deepEqual(answer, { text: 'the rest of the chain' }, 'an empty line is not one this relay hands, so the start carries nothing')
+})
+
 test('the relay sends the engine fields unchanged: the start whole, the origin whole, the call with its answer', async () => {
   const fake = fakeEngine(sayYes)
   const start = { session_id: SESSION, source: 'fork', transcript_path: '/t', hook_event_name: 'SessionStart' }
@@ -276,7 +303,19 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   const specifiers = (name: string) => moduleReferencesOf(read(name), name).map(({ specifier }) => specifier)
   assert.deepEqual(specifiers('register.ts'), ['./relay_protocol.ts'])
   assert.deepEqual(specifiers('relay_protocol.ts'), [])
-  assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./register.ts'] })
+  // The crew's mod is the second module the host loads (martha#254): it carries its tools' calls to the launcher the
+  // same way, and the one rule it applies — whether the pane opens by itself — is a plain file with no imports at all,
+  // so what it decides is readable and testable without the host.
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './pane_rule.ts'])
+  assert.deepEqual(specifiers('pane_rule.ts'), [])
+  // The third is the one parser for the tools the launcher answers with (martha#254 part 2 r=4): a plain file with no
+  // imports, so a test can feed it the launcher's own answer without the host, which is what r=3 lacked.
+  assert.deepEqual(specifiers('crew_tools_answer.ts'), [])
+  // The host loads one hooks module per plugin, so ONE file is listed and it hands the registration to both; a
+  // hooks.json naming two was refused outright, which would have left every gate off (martha#254).
+  // The entry itself is a .tsx (it hands the registration to a module that draws), and the host compiles it; what this
+  // reads is that one module is listed, and the .ts modules it loads keep their own import lists.
+  assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./martha.tsx'] })
 })
 
 test('the relay reads the socket only from the variable the launcher sets', async () => {

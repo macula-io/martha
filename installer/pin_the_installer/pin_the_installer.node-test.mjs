@@ -9,13 +9,14 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { test } from 'node:test'
 
 import { PIN_IN_THE_LAYER } from '../../rehearse_a_release/the_layer_is_the_tree_and_the_pin.mjs'
+import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
 import { NAMES } from '../keep_the_names_in_one_place/names.mjs'
 import { CouldNotCheck, Refused } from '../refuse_in_words/refuse_in_words.mjs'
 import { pinTheInstaller } from './pin_the_installer.mjs'
@@ -56,7 +57,7 @@ const git = (repo, ...args) => execFileSync('git', args, { cwd: repo, encoding: 
  */
 function repoOf (t, { drift = false } = {}) {
   const repo = scratch('repo')
-  t.after(() => rmSync(repo, { recursive: true, force: true }))
+  t.after(() => removeTheTree(repo))
   mkdirSync(join(repo, 'installer'))
   writeFileSync(join(repo, 'installer', 'package.json'), JSON.stringify({ name: NAME, version: VERSION, martha: { sourceRepository: SOURCE, installerPublishWorkflow: WORKFLOW, issuer: ISSUER } }, null, 2))
   writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'martha', version: VERSION }))
@@ -183,7 +184,7 @@ function servedFrom (base, { documentChange = () => {}, attestations } = {}) {
 async function attempt (t, { world, attestations, documentChange, makeVerifier = sigstoreStandIn() } = {}) {
   const made = world ?? repoOf(t)
   const context = scratch('context')
-  t.after(() => rmSync(context, { recursive: true, force: true }))
+  t.after(() => removeTheTree(context))
   const base = await registryServing(t, (url) => servedFrom(url, { documentChange: documentChange ?? (() => {}), attestations: attestations ?? attestationsOver(statementFor(made.commit)) }))
   return { context, world: made, pinning: pinTheInstaller({ context, repo: made.repo, registry: base, makeVerifier }) }
 }
@@ -287,7 +288,7 @@ test('a tree with no installer tag, or an installer/ that moved after its tag, i
 test('a context that already carries a pin is refused, and the pin it holds is left as it was', async (t) => {
   const world = repoOf(t)
   const context = scratch('written')
-  t.after(() => rmSync(context, { recursive: true, force: true }))
+  t.after(() => removeTheTree(context))
   mkdirSync(join(context, NAMES.releaseFolder))
   writeFileSync(pinFile(context), 'the pin a release was packed with\n')
   const base = await registryServing(t, (url) => servedFrom(url, { attestations: attestationsOver(statementFor(world.commit)) }))
@@ -300,7 +301,7 @@ test('a real published attestation is refused under the real trust root: another
   // is what refuses it. A trust root that cannot be reached is no verdict, and skips rather than fails.
   const world = repoOf(t)
   const context = scratch('real')
-  t.after(() => rmSync(context, { recursive: true, force: true }))
+  t.after(() => removeTheTree(context))
   const base = await registryServing(t, (url) => servedFrom(url, { attestations: REAL_ATTESTATIONS }))
   try {
     await pinTheInstaller({ context, repo: world.repo, registry: base })

@@ -50,7 +50,8 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { ALLOW, TAKEN, type Ran, type RelayEvent, type Refused, type Taken, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
+import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { JournalAnswer, RelayJournal } from './keep_the_relays_journal.ts'
@@ -59,11 +60,17 @@ import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_membe
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
 export type RelayReply =
-  | { readonly answered: true; readonly body: Taken | Refused | Verdict }
+  | { readonly answered: true; readonly body: Taken | TakenWithAHandedLine | Refused | Verdict }
   | { readonly answered: false; readonly stopping: string }
 
 export interface MemberRelay {
   answer(event: RelayEvent, body: unknown): Promise<RelayReply>
+  /**
+   * A tool call the crew's mod posted (martha#254): the core's answer, unchanged, or a refusal naming the tool this
+   * launcher registers nothing for. Answered on its own, not through the event queue, so a tool call never waits
+   * behind a turn's events.
+   */
+  answerTool(body: unknown): Promise<Answered | Refused>
   /** `martha run <name>` asks for a signed shape (martha#129); answered outside the event queue, as a run takes long. */
   run(body: unknown): Promise<Ran | Refused>
 }
@@ -100,6 +107,8 @@ export interface MemberRelayPlace {
   readonly ownerMemory: OwnerMemoryPlaces
   /** The member's signed runs (martha#129); a member without them runs no shape. */
   readonly signed_runs?: SignedRuns
+  /** The crew's tools, answered by the slices behind them (martha#254); a launch with none answers no tool. */
+  readonly crew?: CrewTools
   /**
    * What this launch is doing, for the run that waits on it (martha#240): a line when it receives an event and one when
    * it answers it. A run watching a launcher with none reads the terminal and the requests alone, as #210 left it.
@@ -112,7 +121,7 @@ export interface MemberRelayPlace {
 /** Why a run is refused for a member launched without signed runs. */
 export const NO_SIGNED_RUNS = 'this member was launched with no signed shapes to run'
 
-const answered = (body: Taken | Refused | Verdict): RelayReply => ({ answered: true, body })
+const answered = (body: Taken | TakenWithAHandedLine | Refused | Verdict): RelayReply => ({ answered: true, body })
 const refused = (why: string): RelayReply => answered({ refused: why })
 const denied = (why: string): RelayReply => answered({ deny: why })
 
@@ -280,6 +289,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       return next
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
+    answerTool: async (body) => answerACoreTool(place, body),
   }
 
   /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
@@ -291,6 +301,30 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       return failed[event](`the launcher failed to answer (${error instanceof Error ? error.message : String(error)})`)
     }
   }
+}
+
+/** What a launch with no crew place answers a tool call: nothing, by name (martha#254). */
+export const NO_CREW_TOOLS = 'this launch was given no crew place, so it answers no tool'
+
+/**
+ * A tool call the crew's mod posted (martha#254): its session, the tool's own name, and its arguments. The core's
+ * slice decides the answer, and the launcher hands it back unchanged; a name the crew registers nothing for is
+ * refused by name, never answered as though it had been.
+ */
+async function answerACoreTool(place: MemberRelayPlace, body: unknown): Promise<Answered | Refused> {
+  if (place.crew === undefined) return { refused: NO_CREW_TOOLS }
+  const call = bodyOfAToolCall(body)
+  if (call === undefined) return { refused: 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments' }
+  return place.crew.answer(call.tool, call.args, call.session_id)
+}
+
+/** A tool call's three fields, or undefined when the body is not one. */
+function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const { session_id, tool, args } = body as Record<string, unknown>
+  if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
+  return { session_id, tool, args: args as Readonly<Record<string, unknown>> }
 }
 
 /** What a mesh tool's result is taken in as: its row, and the node id the result itself attests where the row's station attestation is really there (martha#247). */
@@ -368,7 +402,24 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
     started,
   )
   const why = await keep(state, handed)
-  return why === undefined ? answered(TAKEN) : refused(why)
+  if (why !== undefined) return refused(why)
+  const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
+  return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn })
+}
+
+/**
+ * The line this session is handed as it starts (martha#254 design line 53, test 10): the acts of the package this
+ * member holds that were sent with no outcome recorded, so a session resuming a package checks what became of them
+ * instead of hoping it asks. Null when the member holds no package, nothing of it is waiting, or the ledger cannot be
+ * read — a start the ledger could not be read for is still a start, and the member can ask with what_was_sent.
+ */
+async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<string | null> {
+  if (crew === undefined) return null
+  try {
+    return await crew.theLineToHandAtStart()
+  } catch {
+    return null
+  }
 }
 
 async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {

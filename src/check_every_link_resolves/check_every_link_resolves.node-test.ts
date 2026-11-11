@@ -6,11 +6,12 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { checkEveryLinkResolves, failuresIn, retryable, type Options, type Scan } from './check_every_link_resolves.ts'
 
 type Named = { file: string; url: string; code?: number; timeout?: boolean }
@@ -179,7 +180,7 @@ const runMain = (checker: string, report: string, exitCode: number) =>
 
 test('the command fails a broken link by name, and passes when every link resolves', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'martha-231-'))
-  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  t.after(() => removeTheTree(directory))
   const stand = join(directory, 'stand-in.cjs')
   writeFileSync(stand, STAND_IN, { mode: 0o755 })
   const dead = reportOf([{ file: 'README.md', url: 'file:///nowhere/missing-page.md' }])
@@ -192,7 +193,7 @@ test('the command fails a broken link by name, and passes when every link resolv
 
 test('the command cannot look without a checker, and says so', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'martha-231-'))
-  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  t.after(() => removeTheTree(directory))
   const missing = runMain(join(directory, 'not-a-checker'), '', 0)
   assert.equal(missing.status, 2)
   assert.match(missing.stderr, /could not be made/)

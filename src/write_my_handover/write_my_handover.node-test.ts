@@ -10,7 +10,7 @@
 // and the stamp, are this slice's, and are what these cases pin.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -24,12 +24,13 @@ import {
 } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CREW_HANDOVER_WRITTEN, handoversPlace, theHandoverFile, writeMyHandover } from './write_my_handover.ts'
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-handover-'))
-after(() => rmSync(home, { recursive: true, force: true }))
+after(() => removeTheTree(home))
 const crew = join(home, 'state', 'crews', 'a-key')
 
 const MEMBER = 'builder'

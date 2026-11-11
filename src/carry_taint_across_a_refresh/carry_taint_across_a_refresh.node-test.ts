@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   beginSession,
@@ -33,7 +34,7 @@ const names = claudeCodeToolNames
 // A member started in a directory holding no launch config: the launch check
 // passes, so these tests see only the rules they are about. Removed at the end.
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
-after(() => rmSync(launch_home, { recursive: true, force: true }))
+after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
   host: 'claude-code',
   launch_dir: mkdtempSync(join(launch_home, 'work-')),

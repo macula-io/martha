@@ -8,7 +8,7 @@
 // (../crew_files_directory), so the marker read back is the file a launch would have left.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -22,6 +22,7 @@ import {
 } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { handoversPlace, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import {
   mayParkAnother,
@@ -34,7 +35,7 @@ import {
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-park-'))
-after(() => rmSync(home, { recursive: true, force: true }))
+after(() => removeTheTree(home))
 const crew = join(home, 'state', 'crews', 'a-key')
 
 const AT = new Date('2026-11-11T15:00:00Z')
@@ -101,7 +102,7 @@ test('#255: a member parks itself whatever its role', () => {
 })
 
 // The owner is a seat like any other in the table: the grant is asked of the owner too, so a crew that does not grant
-// the act to it has an owner that parks nobody (martha#255 r=3, held by r=2).
+// the act to it has an owner that parks nobody. The rule is the OWNER arm of the r=3 design; this case holds it.
 test('#255: an owner the table does not grant the act parks nobody', () => {
   const host = aHost()
   const ownerHasNoGrant = aTeamGranting(['supervisor'])

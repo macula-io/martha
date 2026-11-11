@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
+import { removeTheTree } from './relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -31,6 +32,9 @@ import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
+import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -75,6 +79,7 @@ interface Place {
   /** A git checkout under it, with an approved tool-server config committed. */
   readonly checkout: string
   readonly rows: string
+  readonly dashboard: string
   readonly launch_records: string
   readonly relay_root: string
   readonly snapshot_root: string
@@ -151,6 +156,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     home,
     checkout,
     rows: closed('rows'),
+    dashboard: closed('dashboard'),
     launch_records: closed('launches'),
     relay_root,
     snapshot_root: closed('snapshots'),
@@ -195,7 +201,7 @@ async function aMemberStartedIn(t: TestContext, place: Place, launch: Parameters
   t.after(async () => {
     if (started.started && !hasStopped) started.stop('the test is over')
     if (started.started) await started.stopped
-    rmSync(place.home, { recursive: true, force: true })
+    removeTheTree(place.home)
   })
   return started
 }
@@ -213,6 +219,7 @@ function answering(
   signed_runs?: SignedRuns,
   journal?: RelayJournal,
   strict_gate?: boolean,
+  crew?: CrewTools,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -235,6 +242,7 @@ function answering(
     ...(signed_runs === undefined ? {} : { signed_runs }),
     ...(journal === undefined ? {} : { journal }),
     ...(strict_gate === undefined ? {} : { strict_gate }),
+    ...(crew === undefined ? {} : { crew }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -256,6 +264,9 @@ const OWNER_TYPED = `${PATH_OF_SOURCE.owner_typed}:${OWNER_AT_THE_TERMINAL}`
 const call = (tool: string, more: Record<string, unknown> = {}, session_id = SESSION) => ({ session_id, call: { tool, ...more } })
 
 const TAKEN_REPLY: RelayReply = { answered: true, body: { taken: 1 } }
+
+/** The package a member's predecessor held, as its own row names it (martha#254 test 10). */
+const PACKAGE = 'macula-io/martha#254'
 const ALLOW_REPLY: RelayReply = { answered: true, body: { allow: 1 } }
 
 function isDenied(reply: RelayReply, pattern?: RegExp): boolean {
@@ -825,7 +836,7 @@ test("a relay socket as long as this kernel binds, or a NUL byte less, is made; 
   let longest = Buffer.byteLength(join(probe, 's'))
   const probed = (bytes: number): string => join(probe, 's'.repeat(bytes - Buffer.byteLength(probe) - 1))
   while (await binds(probed(longest + 1))) longest += 1
-  rmSync(probe, { recursive: true, force: true })
+  removeTheTree(probe)
 
   // The launcher may keep sun_path's terminating NUL, which Linux lets a path fill: one byte short of the kernel.
   const accepted = [longest, longest - SUN_PATH_NUL].find((bytes) => {
@@ -930,6 +941,66 @@ test('end to end: the relay posts each event, and a refused tool call never runs
   })
   assert.equal(unknown.status, 404)
   directory.remove()
+})
+
+test('a session starting on a package is handed its predecessor\'s unfinished acts in the answer to its start (test 10, r=1 R3)', async (t) => {
+  const place = placeFor(t)
+  const member = 'Vesta'
+  const crew = crewToolsOver({
+    member,
+    ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
+    beats: dashboardRowsIn(place.dashboard),
+    root: place.checkout,
+    documents: { read: async (path) => readFileSync(path, 'utf8') },
+  })
+  // The predecessor's row: the member holds a package, and says so where the launcher reads it.
+  const kept = dashboardRowsIn(place.dashboard).keep({
+    member,
+    session: 'the-session-before',
+    at: 1_000,
+    state: 'working',
+    holds: PACKAGE,
+    task: 'Build the crew store',
+    progress: { step: 1, of: 4 },
+    waits: null,
+    needs: '',
+    host: { model: 'opus', provider: '', contextPercent: null, costUsd: null },
+  })
+  assert.equal(kept.kept, true, kept.why ?? '')
+  // An act it sent with no outcome recorded.
+  await rowStreamsDirectory(place.rows).append(ledgerStreamOf(PACKAGE), {
+    kind: 'act_announced',
+    package: PACKAGE,
+    member,
+    at: 2_000,
+    act: { kind: 'push', what: 'main 1111..2222' },
+  })
+
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
+  const answered = await relay.answer('session_started', start('startup'))
+  assert.ok(answered.answered, answered.answered ? '' : answered.stopping)
+  if (!answered.answered) return
+  const handed = 'handed' in answered.body ? answered.body.handed : undefined
+  assert.match(
+    handed ?? '',
+    new RegExp(`${PACKAGE} has 1 act sent with no outcome recorded \\(row 0: a push by ${member}\\)`),
+    'the launcher hands the session the acts its predecessor sent and never concluded',
+  )
+  assert.match(handed ?? '', /note_what_became_of_an_act/, 'and names the tool that records what became of one')
+})
+
+test('a session starting on no package is handed nothing, and its start is taken as before (test 10, r=1 R3)', async (t) => {
+  const place = placeFor(t)
+  const crew = crewToolsOver({
+    member: 'Vesta',
+    ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
+    beats: dashboardRowsIn(place.dashboard),
+    root: place.checkout,
+    documents: { read: async (path) => readFileSync(path, 'utf8') },
+  })
+
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
+  assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY, 'nothing to hand, and the start is taken as it always was')
 })
 
 test('the strict gate is off unless the launch says so, and the launcher\'s answer follows it (martha#259)', async (t) => {
@@ -1136,7 +1207,7 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
+    places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
     // The managed settings the host would read, under the place: never the machine's own.
     managed_settings: managedSettingsOf(place),
@@ -1261,7 +1332,7 @@ test('a host still writing where it lives when the test ends is stopped before i
   // A red run stops the loop above before the captured hooks have run, so the member and its home are cleaned up here.
   t.after(async () => {
     if (started.started && isAlive(started.pid)) (started.stop('the test is over'), await started.stopped)
-    rmSync(place.home, { recursive: true, force: true })
+    removeTheTree(place.home)
   })
   await until('the fake host to write into its home', () => existsSync(join(churn, 'f1')), t)
 
@@ -1553,7 +1624,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
   ])
   t.after(() => registry.stop())
   const scratch = mkdtempSync(join(tmpdir(), 'martha-65-record-'))
-  t.after(() => rmSync(scratch, { recursive: true, force: true }))
+  t.after(() => removeTheTree(scratch))
   const recording: MeshTreeRecording = { _why: 'test', registry: registry.registry, known_settings: [], known_environment_reads: {}, versions: [] }
   const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch })
   return { registry, recording: { ...recording, versions: [tree] } }
@@ -2245,7 +2316,7 @@ async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: 
   const left = (await pidsCarrying(place.relay_root)).filter((pid) => !alsoGone.includes(pid))
   const launcherLeft = alsoGone.filter((pid) => pid > 1 && isAlive(pid))
   await killGroupsCarrying(place.relay_root)
-  rmSync(place.home, { recursive: true, force: true })
+  removeTheTree(place.home)
   if (left.length > 0 || launcherLeft.length > 0) {
     throw new Error(`the place's home was due for removal while ${[...left, ...launcherLeft].join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
   }
@@ -2293,7 +2364,7 @@ function launcherProcess(
       `  node_id: ${JSON.stringify(NODE_ID)},`,
       '  place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },',
       '  policy: { may_send_executable_text: [] },',
-      '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
+      '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,
@@ -2352,7 +2423,7 @@ test("a member is written into its launch directory's record inside the hold, an
   const directory = mkdtempSync(join(tmpdir(), 'martha-124-held-'))
   t.after(() => {
     chmodSync(directory, 0o700)
-    rmSync(directory, { recursive: true, force: true })
+    removeTheTree(directory)
   })
   assert.equal(recordTheLauncher(directory), undefined, 'the launch records itself before the member is spawned')
 

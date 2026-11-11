@@ -16,7 +16,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -37,6 +37,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { sessionRecordsIn } from './session_records_in_rows.ts'
 
 // Synthetic node ids and pids, never a real one: this repository is public.
@@ -75,7 +76,7 @@ const userScopeFor = (home: string): OwnerUserScope => ({
 /** A member's places, under one directory the test removes. */
 function placeOf(t: TestContext): { readonly home: string; readonly checkout: string; readonly rows: string } {
   const home = mkdtempSync(join(tmpdir(), 'martha-247-attested-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })

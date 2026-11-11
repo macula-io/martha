@@ -14,12 +14,13 @@ import { test, type TestContext } from 'node:test'
 
 import { chmodSync } from 'node:fs'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { CREW_ROWS_PLACE, CREWS_PLACE, crewKeyOf, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, PERMISSION_BITS, projectStateDirectory } from './keep_martha_state_outside_the_checkout.ts'
 
 /** A directory the test owns, removed when it ends. */
 function aDirectory(t: TestContext, prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), `martha-254-${prefix}-`))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 

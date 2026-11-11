@@ -6,14 +6,15 @@
 // own installed tree.
 
 import assert from 'node:assert/strict'
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { fakeNpmRegistry, sha512Of, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
-import { INSTALLER_ENTRY, installThePinnedInstaller, PIN_FILE, type InstallOutcome, type InstallRequest, type Pin } from './install_the_pinned_installer.ts'
+import { INSTALLER_ENTRY, installThePinnedInstaller, PIN_FILE, TEMP_DIR_PREFIX, type InstallOutcome, type InstallRequest, type Pin } from './install_the_pinned_installer.ts'
 
 const NAME = '@martha-installer-pin/fixture'
 const VERSION = '1.0.0'
@@ -44,8 +45,50 @@ const installerPackage = (): FakePackage => ({
 
 const scratch = (t: TestContext, what: string): string => {
   const dir = mkdtempSync(join(tmpdir(), `martha-pinned-${what}-`))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
+}
+
+/**
+ * What another run of this suite leaves in the shared temporary directory while this one goes: a directory named
+ * as this run names its own, made by a neighbour and not by the run that reads these words.
+ */
+function aNeighbourRunsHere(t: TestContext): string {
+  const dir = mkdtempSync(join(tmpdir(), `${TEMP_DIR_PREFIX}neighbour-`))
+  t.after(() => removeTheTree(dir))
+  return dir
+}
+
+/**
+ * How this run's own work directory is named, which no neighbour's is: the installer's prefix, this tree's name,
+ * a dash. `tree` comes from scratch(), a mkdtempSync, so its basename belongs to this case alone.
+ */
+const thisRunsWorkDirectory = (tree: string): string => `${TEMP_DIR_PREFIX}${basename(tree)}-`
+
+/** The entries in a directory that are named with `prefix`, which for this run's own name must be none. */
+const entriesNamed = (inDirectory: string, prefix: string): string[] =>
+  readdirSync(inDirectory).filter((entry) => entry.startsWith(prefix))
+
+/**
+ * The run's own temporary directory (martha#270): named for this case's tree, there while the run goes, and gone
+ * once the run has answered. The name is the half that needs no hook -- a neighbour's directory has its own tree's
+ * name, so it can neither be mistaken for this run's nor decide what this case reads.
+ */
+function watchingTheRunsOwnTempDir(tree: string): { readonly onWorkDir: (work: string) => void; readonly gone: (claim: string) => void } {
+  const name = thisRunsWorkDirectory(tree)
+  let announced = false
+  return {
+    onWorkDir: (dir) => {
+      announced = true
+      assert.ok(existsSync(dir), "the run's own temporary directory is there while the run goes")
+      assert.ok(dir.startsWith(tmpdir()), `the run's own directory is outside the temporary directory: ${dir}`)
+      assert.ok(basename(dir).startsWith(name), `the run's own directory is not named for its tree: ${dir}`)
+    },
+    gone: (claim) => {
+      assert.ok(announced, 'the run said where its temporary directory was')
+      assert.deepEqual(entriesNamed(tmpdir(), name), [], claim)
+    }
+  }
 }
 
 /** The running release's tree: the manifest naming the installer, and the pin it carries. */
@@ -168,19 +211,42 @@ test('the installer the pin names installs with its bundled dependency, and the 
   const registry = await fakeNpmRegistry([installerPackage()])
   t.after(registry.stop)
   const out = join(scratch(t, 'out'), 'reported.json')
-  const started = readdirSync(tmpdir())
-  const outcome = installThePinnedInstaller(requestFor(treeOf(t, pinFor(registry)), { registry: registry.registry, env: { ...process.env, MARTHA_TEST_OUT: out } }))
+  const tree = treeOf(t, pinFor(registry))
+  const ownTempDir = watchingTheRunsOwnTempDir(tree)
+  const outcome = installThePinnedInstaller(requestFor(tree, { registry: registry.registry, env: { ...process.env, MARTHA_TEST_OUT: out }, onWorkDir: ownTempDir.onWorkDir }))
+  aNeighbourRunsHere(t)
   assert.deepEqual('status' in outcome ? outcome.status : -1, 0)
   assert.equal(reported(out).bundle, true, 'the bundled node_modules arrived inside the tarball')
-  const left = readdirSync(tmpdir()).filter((entry) => entry.startsWith('martha-install-') && !started.includes(entry))
-  assert.deepEqual(left, [], 'the temporary directory is removed after a run')
+  ownTempDir.gone('the temporary directory is removed after a run')
 })
 
 test('the temporary directory is removed after a refusal too', async (t) => {
   const empty = await fakeNpmRegistry([])
   t.after(empty.stop)
-  const started = readdirSync(tmpdir())
-  refusalOf(installThePinnedInstaller(requestFor(treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' }), { registry: empty.registry })))
-  const left = readdirSync(tmpdir()).filter((entry) => entry.startsWith('martha-install-') && !started.includes(entry))
-  assert.deepEqual(left, [], 'the temporary directory is removed after a refusal')
+  const tree = treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' })
+  const ownTempDir = watchingTheRunsOwnTempDir(tree)
+  refusalOf(installThePinnedInstaller(requestFor(tree, { registry: empty.registry, onWorkDir: ownTempDir.onWorkDir })))
+  aNeighbourRunsHere(t)
+  ownTempDir.gone('the temporary directory is removed after a refusal')
+})
+
+test('a callback that throws leaves no work directory behind either (martha#270)', (t) => {
+  const tree = treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' })
+  let announced: string | undefined
+  assert.throws(
+    () =>
+      installThePinnedInstaller(
+        requestFor(tree, {
+          onWorkDir: (dir) => {
+            announced = dir
+            throw new Error('the caller gave up')
+          },
+        }),
+      ),
+    /the caller gave up/,
+  )
+  const where = announced
+  assert.ok(where !== undefined, 'the run said where its temporary directory was before it was asked to stop')
+  assert.equal(existsSync(where), false, 'a callback that threw left its work directory behind')
+  assert.deepEqual(entriesNamed(tmpdir(), thisRunsWorkDirectory(tree)), [], 'the run that threw left no directory named for its tree')
 })

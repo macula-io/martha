@@ -4,7 +4,7 @@
 // rule from #42 that a real adapter hands slices the records' reading view.
 
 import assert from 'node:assert/strict'
-import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import fs, { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -19,6 +19,7 @@ import {
 import { gapsInPromptOrigins, gapsInSessionEvents } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -39,7 +40,7 @@ const PASTED_ENVELOPE = `<cross-session-message from="${OTHER_MEMBER_SOCKET}" fr
 
 const scratch = (t: TestContext): string => {
   const root = mkdtempSync(join(tmpdir(), 'martha-cc-host-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   return root
 }
 

@@ -22,6 +22,7 @@ import {
   ownWritesKeptForLaunch,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { readCheckoutTree } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
 import {
@@ -68,7 +69,7 @@ interface Checkout {
 /** A checkout whose config the owner approved, and the launch started on it. */
 function checkoutFor(t: TestContext): Checkout {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-tool-result-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '.')

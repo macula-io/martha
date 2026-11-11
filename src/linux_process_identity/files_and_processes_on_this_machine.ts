@@ -23,6 +23,7 @@ import type {
   ScratchDirectories,
   ScratchDirectory,
 } from '../host_contract/host_contract.ts'
+import { OWNER_EXECUTES } from '../host_contract/host_contract.ts'
 
 /** The files on this machine's disk, read as they are. */
 export const filesOnThisMachine: FileTree = {
@@ -31,7 +32,7 @@ export const filesOnThisMachine: FileTree = {
       const stat = lstatSync(path)
       if (stat.isSymbolicLink()) return { kind: 'symlink', target: readlinkSync(path) }
       if (stat.isDirectory()) return { kind: 'directory' }
-      return stat.isFile() ? { kind: 'file' } : { kind: 'other' }
+      return stat.isFile() ? { kind: 'file', ownerExecutes: (stat.mode & OWNER_EXECUTES) !== 0 } : { kind: 'other' }
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return { kind: 'absent' }
       throw error
