@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -21,6 +21,7 @@ import { test, type TestContext } from 'node:test'
 import { type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest, Tool } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   NO_LAYOUT,
   WORKTREE_FINISH,
@@ -52,7 +53,7 @@ const commitIn = (cwd: string, message: string): void => {
 /** A bare origin holding one commit on main, and a clone of it under `<clones>/acme/widget`. */
 function aCrew(t: TestContext): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'martha-256-worktrees-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const origin = join(root, 'origin.git')
   const clones = join(root, 'clones')
   const worktrees = join(root, 'worktrees')

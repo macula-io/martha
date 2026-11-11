@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { readCheckoutTree } from './checkout_tree.ts'
 
 import {
@@ -57,7 +58,7 @@ function git(cwd: string, ...args: string[]): string {
 
 function scratch(t: TestContext, { repository = true } = {}): Scratch {
   const home = mkdtempSync(join(tmpdir(), 'martha-launch-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'work', 'checkout')
   mkdirSync(checkout, { recursive: true })
   if (repository) {
@@ -212,7 +213,7 @@ test('a stop directory not made yet, reached through a symlink, still stops: the
 test('a checkout outside the stop directory altogether still has its tree read', (t) => {
   const place = scratch(t)
   const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))
-  t.after(() => rmSync(elsewhere, { recursive: true, force: true }))
+  t.after(() => removeTheTree(elsewhere))
   assert.equal(treeAt(place.checkout, elsewhere), git(place.checkout, 'rev-parse', 'HEAD^{tree}'))
 })
 

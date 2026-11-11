@@ -7,11 +7,12 @@
 // what another run wrote, and what the owner keeps, is left where it is.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { projectKeyOf, theProjectFoldersThere } from './the_project_folders_a_run_wrote.ts'
 import { aScratchThisRunMade, whatThisRunLeftAtTheEnd } from './probe_hosts.ts'
 
@@ -35,7 +36,7 @@ function aConfigDir(): { readonly env: Record<string, string>; readonly root: st
 
 test('another probe:launch keeps its project folders when this run reads the end (#179 r=2)', (t) => {
   const config = aConfigDir()
-  t.after(() => rmSync(config.scratch, { recursive: true, force: true }))
+  t.after(() => removeTheTree(config.scratch))
   const startedWith = theProjectFoldersThere(config.env)
   aScratchThisRunMade(A_SCRATCH_OF_THIS_RUN)
 

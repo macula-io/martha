@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { BASE_REF, openSignedBase } from './signed_base.ts'
 
 const GIT_ENV = { PATH: process.env['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' }
@@ -14,7 +15,7 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd,
 /** A remote with one commit on main holding `files`, a checkout of it, and a state directory; removed after. */
 function place(t: { after(fn: () => void): void }, files: Record<string, string>) {
   const top = mkdtempSync(join(tmpdir(), 'martha-129-base-'))
-  t.after(() => rmSync(top, { recursive: true, force: true }))
+  t.after(() => removeTheTree(top))
   const remote = join(top, 'remote')
   mkdirSync(remote)
   git(remote, 'init', '--quiet', '--initial-branch=main')

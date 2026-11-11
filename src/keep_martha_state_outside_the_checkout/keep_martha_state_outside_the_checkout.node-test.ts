@@ -3,12 +3,13 @@
 // Real directories under a temporary home. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   appendApproval,
@@ -27,7 +28,7 @@ const PERMISSIONS = 0o777
 
 function homeFor(t: TestContext): { home: string; project: string; stateRoot: string } {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-state-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const project = join(home, 'project')
   mkdirSync(project)
   return { home, project, stateRoot: join(home, 'state', 'martha') }
@@ -67,7 +68,7 @@ test('a state directory others may write is refused by name', (t) => {
 test('a state directory that is a link is refused by name', (t) => {
   const { home, project, stateRoot } = homeFor(t)
   const state = opened(stateRoot, project)
-  rmSync(state.directory, { recursive: true })
+  removeTheTree(state.directory)
   const elsewhere = join(home, 'elsewhere')
   mkdirSync(elsewhere, { mode: STATE_DIRECTORY_MODE })
   symlinkSync(elsewhere, state.directory)

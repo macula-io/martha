@@ -8,11 +8,12 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { runTheHost, stopTheProcessesLeftIn } from './stop_a_host_that_outlives_the_run.ts'
 
 /** A scratch of the test's own, and the file the run's group is named in. */
@@ -33,7 +34,7 @@ function theGroupIsThere(pid_file: string): boolean {
 
 test('a host that outlives the wait is killed whole, with the process under its shell (#179)', (t) => {
   const scratch = aScratch()
-  t.after(() => rmSync(scratch.dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(scratch.dir))
 
   // The `sh` stays, so the process it starts is the one a kill of the direct child would leave.
   const run = runTheHost('sh', ['-c', 'sleep 30 & sleep 31'], {
@@ -51,7 +52,7 @@ test('a host that outlives the wait is killed whole, with the process under its 
 
 test('a host that finishes on its own is waited for, and its group is not touched (#179)', (t) => {
   const scratch = aScratch()
-  t.after(() => rmSync(scratch.dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(scratch.dir))
 
   const run = runTheHost('sh', ['-c', 'printf ok'], {
     cwd: scratch.dir,
@@ -69,7 +70,7 @@ test('a host that finishes on its own is waited for, and its group is not touche
 
 test('a process the group kill cannot reach is reached by the scratch it works in (#179)', async (t) => {
   const scratch = aScratch()
-  t.after(() => rmSync(scratch.dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(scratch.dir))
   // A session of its own, as a row that starts the host under `setsid` does: a kill of any
   // group this probe leads would miss it, and it works in the run's scratch all the same.
   const left = spawn('setsid', ['sh', '-c', 'sleep 30'], { cwd: scratch.dir, stdio: 'ignore', detached: true })
