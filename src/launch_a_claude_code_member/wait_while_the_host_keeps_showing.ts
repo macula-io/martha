@@ -17,6 +17,10 @@
 // the other side, and a call the launcher holds open is not silence at all. An open stretch spends OPEN_WORK_MS
 // instead, and the red names which stretch ran out — the launcher deciding, the tool, or the launcher answering —
 // rather than blaming a model request for a tool that is still running (runs 42752345298 and 42747883703).
+//
+// A silence has two sides, and one red could not tell them apart (martha#264): the host that never sent the request,
+// and the stand-in that received it and never answered. Reading the stand-in's own record of what it heard and what it
+// answered tells them apart, so a flake is told from a defect without a re-run and a guess.
 
 import { NO_JOURNAL, stretchOfTheJournal, type RelayJournalRead, type Stretch } from './keep_the_relays_journal.ts'
 
@@ -47,6 +51,19 @@ export interface HostWhileWaiting {
   readonly heard: () => number
 }
 
+/**
+ * One model request as the stand-in model saw it (martha#264): when it finished reading it, and when its reply went
+ * out. A request with no answer is the model's side of a silence; an answered one with nothing after it is the host's.
+ */
+export interface ModelAttempt {
+  /** 1 for the first request that offers tools, and so on — the number the host's own request is counted by. */
+  readonly number: number
+  /** When the stand-in had read the request whole. */
+  readonly received_at: number
+  /** When the stand-in handed the host its reply, or undefined while it has not. */
+  answered_at?: number
+}
+
 /** One wait: what it waits for, how it is ended, and the run it is watching. */
 export interface ProgressWait extends HostWhileWaiting {
   /** What the wait is for, as a person reading a failure reads it. */
@@ -60,6 +77,12 @@ export interface ProgressWait extends HostWhileWaiting {
   /** What the launcher has recorded (martha#240); a run whose launcher keeps no journal gives none. */
   readonly journal?: () => RelayJournalRead
   /**
+   * Every request the stand-in has heard, oldest first (martha#264), or undefined when the run has no stand-in to ask
+   * — a run that drives the host without one keeps the red it had before, unchanged.
+   */
+  readonly model?: () => readonly ModelAttempt[]
+
+  /**
    * When the run began. A run makes several waits and each begins its own silence budget, so a wait cannot count its
    * own time and call it the run's: this is the figure the red reports, and it is the run's (martha#210 r=1).
    */
@@ -69,12 +92,27 @@ export interface ProgressWait extends HostWhileWaiting {
 }
 
 /**
- * The red for a run that showed nothing new: the silence, the run's own time, and — when the launcher kept a journal —
- * the last event it answered and how long ago, so a reader is told what the run was doing when it stopped.
+ * Which side of the model request went quiet, in the words a person reads a red by (martha#264), or undefined when
+ * the run has no stand-in to ask — the silence #210 named before there was one to name it with.
+ */
+function whichSideWentSilent(wait: ProgressWait, now: number): string | undefined {
+  const heard = wait.model?.()
+  if (heard === undefined) return undefined
+  const newest = heard.at(-1)
+  // Nothing reached the stand-in at all: the host drew its box and never took the turn, which is not a slow model.
+  if (newest === undefined) return 'the stand-in has been sent no model request at all, so the host never took the turn'
+  if (newest.answered_at === undefined) return `request ${newest.number} reached the stand-in ${now - newest.received_at} ms ago and its reply has not been sent`
+  return `the stand-in answered request ${newest.number} ${now - newest.answered_at} ms ago and the host showed nothing after it`
+}
+
+/**
+ * The red for a run that showed nothing new: which side went silent, the run's own time, and — when the launcher kept
+ * a journal — the last event it answered and how long ago, so a reader is told what the run was doing when it stopped.
  */
 function wentSilent(wait: ProgressWait, journal: RelayJournalRead, now: number): string {
   const taken = now - wait.run_started_at
-  const said = `No ${wait.what} for ${wait.silence_ms} ms: the host showed nothing new in that time, and the run has taken ${taken} ms in all`
+  const quiet = whichSideWentSilent(wait, now) ?? 'the host showed nothing new in that time'
+  const said = `No ${wait.what} for ${wait.silence_ms} ms: ${quiet}, and the run has taken ${taken} ms in all`
   const last = [...journal.events].reverse().find((line) => line.phase === 'answered')
   if (last === undefined) return said
   // Counted from the answer line's own time, on the machine's clock, not from when this wait began: a wait that opens
