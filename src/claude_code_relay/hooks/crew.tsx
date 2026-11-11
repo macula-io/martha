@@ -115,21 +115,27 @@ function lineOf(row: ShownRow): string {
   return `${row.member}: ${row.state} · ${row.task} ${bar}${holds}${waits}${needs}`
 }
 
+/** One tool's hook: the call's own fields, minus the ones the host adds, posted to the launcher. */
+const answerFromTheLauncher = async ($: CrewEngine, e: Record<string, unknown>, tool: string): Promise<unknown> => {
+  const { tool: _tool, agentId: _agent, tool_use_id: _use, ...args } = e
+  return { result: await askTheLauncher($, tool, args) }
+}
+
+// Each hook is a named function, never a call returning one: the host's plugin validator refuses a hook that is
+// "not a function literal or the name of one", and refuses a tool named by anything but a string literal.
+const answerReportProgress = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'report_progress')
+const answerCrewLog = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_log')
+const answerWhatWasSent = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'what_was_sent')
+const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'note_what_became_of_an_act')
+const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
+
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
-  const answerWith = (tool: string) => async ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => {
-    const { tool: _tool, agentId: _agent, tool_use_id: _use, ...args } = e
-    return { result: await askTheLauncher($, tool, args) }
-  }
-
-  // The tool names are spelled out, never built: the host's plugin validator reads this file and refuses a hook that
-  // names its tool by anything but a string literal (the relay's register.ts records the same rule). Each name is
-  // CREW_SERVER followed by the tool's own, and a test here fails by name when one of them drifts.
-  on('tool.call', { tool: 'mcp__martha-relay__report_progress' }, answerWith('report_progress'))
-  on('tool.call', { tool: 'mcp__martha-relay__crew_log' }, answerWith('crew_log'))
-  on('tool.call', { tool: 'mcp__martha-relay__what_was_sent' }, answerWith('what_was_sent'))
-  on('tool.call', { tool: 'mcp__martha-relay__note_what_became_of_an_act' }, answerWith('note_what_became_of_an_act'))
-  on('tool.call', { tool: 'mcp__martha-relay__see_the_crew' }, answerWith('see_the_crew'))
+  on('tool.call', { tool: 'mcp__martha-relay__report_progress' }, answerReportProgress)
+  on('tool.call', { tool: 'mcp__martha-relay__crew_log' }, answerCrewLog)
+  on('tool.call', { tool: 'mcp__martha-relay__what_was_sent' }, answerWhatWasSent)
+  on('tool.call', { tool: 'mcp__martha-relay__note_what_became_of_an_act' }, answerNoteWhatBecame)
+  on('tool.call', { tool: 'mcp__martha-relay__see_the_crew' }, answerSeeTheCrew)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)
