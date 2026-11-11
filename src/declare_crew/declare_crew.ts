@@ -57,6 +57,17 @@ export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 /** The house rule that names a model rather than switching a rule on. */
 export const REVIEW_MODEL = 'review_model'
 
+/**
+ * The house rules that name a place rather than switching a rule on (martha#256): where a crew keeps its clones,
+ * and where it keeps the worktrees its members branch in. They belong to `workspace_layout`, so that rule being on
+ * means both are named: a crew that turned the layout on and named no places would have members making worktrees
+ * wherever they happened to be.
+ */
+export const CLONES = 'clones'
+export const WORKTREES = 'worktrees'
+export const HOUSE_RULE_PLACES = [CLONES, WORKTREES] as const
+export type HouseRulePlace = (typeof HOUSE_RULE_PLACES)[number]
+
 /** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
@@ -75,6 +86,8 @@ export interface Mode {
 
 export type HouseRules = Readonly<Record<HouseRuleSwitch, boolean>> & {
   readonly review_model: string | null
+  readonly clones: string | null
+  readonly worktrees: string | null
 }
 
 export interface CrewPaths {
@@ -115,7 +128,7 @@ const MODE_KEYS = ['name', 'roles', 'may'] as const
 // What a field must look like, written from its keys: `{ a, b, c? }`.
 const shapeOf = (required: readonly string[], optional: readonly string[] = []) =>
   `{ ${[...required, ...optional.map(key => `${key}?`)].join(', ')} }`
-const HOUSE_RULE_KEYS: readonly string[] = [...HOUSE_RULE_SWITCHES, REVIEW_MODEL]
+const HOUSE_RULE_KEYS: readonly string[] = [...HOUSE_RULE_SWITCHES, REVIEW_MODEL, ...HOUSE_RULE_PLACES]
 
 type Json = Record<string, unknown>
 
@@ -253,18 +266,45 @@ function houseRulesOf(refuse: Refuse, value: unknown): HouseRules {
   if (value === undefined) return houseRulesFrom({})
   if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
+  refuseSwitches(refuse, value)
+  refusePlaces(refuse, value)
+  return houseRulesFrom(value)
+}
+
+function refuseSwitches(refuse: Refuse, value: Json): void {
   for (const name of HOUSE_RULE_SWITCHES) {
     if (value[name] !== undefined && typeof value[name] !== 'boolean') refuse.at(`house_rules.${name}`, 'is not true or false')
   }
   const model = value[REVIEW_MODEL]
   if (model !== undefined && !isText(model)) refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
-  return houseRulesFrom(value)
 }
+
+/**
+ * The places a crew keeps its clones and worktrees in: each an absolute path when it is named, and both named when
+ * the workspace layout is on, so a member is never left to make a worktree wherever it is.
+ */
+function refusePlaces(refuse: Refuse, value: Json): void {
+  for (const place of HOUSE_RULE_PLACES) {
+    const named = value[place]
+    if (named !== undefined && (!isText(named) || !isAbsolute(named))) refuse.at(`house_rules.${place}`, 'is not an absolute path')
+  }
+  if (value['workspace_layout'] !== true) return
+  const missing = HOUSE_RULE_PLACES.find((place) => value[place] === undefined)
+  if (missing !== undefined) {
+    refuse.at(`house_rules.${missing}`, 'is missing, and house_rules.workspace_layout is on in this declaration')
+  }
+}
+
+const textOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 
 function houseRulesFrom(value: Json): HouseRules {
   const switches = Object.fromEntries(HOUSE_RULE_SWITCHES.map(name => [name, value[name] === true]))
-  const model = value[REVIEW_MODEL]
-  return { ...(switches as Record<HouseRuleSwitch, boolean>), review_model: typeof model === 'string' ? model : null }
+  const places = Object.fromEntries(HOUSE_RULE_PLACES.map(place => [place, textOrNull(value[place])]))
+  return {
+    ...(switches as Record<HouseRuleSwitch, boolean>),
+    ...(places as Record<HouseRulePlace, string | null>),
+    review_model: textOrNull(value[REVIEW_MODEL]),
+  }
 }
 
 // The conventions document is named relative to the crew directory and must stay inside it.

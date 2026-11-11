@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { journalNeverWritten } from './drive_the_recorded_host.ts'
+import { aWaitOfTheRun, journalNeverWritten } from './drive_the_recorded_host.ts'
 import {
   GAVE_UP_BEFORE_ALLOW,
   NO_JOURNAL,
@@ -31,7 +31,7 @@ import {
   type RelayJournal,
   type RelayJournalRead,
 } from './keep_the_relays_journal.ts'
-import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
+import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing, type ModelAttempt } from './wait_while_the_host_keeps_showing.ts'
 
 /** Looks a wait may take before the test calls it a wait that never gives up, rather than asking the harness.
  * Far above the slowest case here (ten budgets of looks, 12 000), so only a wait that never ends reaches it. */
@@ -329,7 +329,7 @@ test('#240: a run whose launcher keeps no journal behaves exactly as it did befo
 test('#240: a run that read no journal by the host\'s first model request fails by name, and one that read a line goes on', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
-  const heard = [{ number: 1, body: {} }]
+  const heard = [{ number: 1, body: {}, received_at: Date.now() }]
   assert.equal(journalNeverWritten([], directory), undefined, 'a run no request has arrived in yet was failed for a journal it has not needed')
   assert.match(
     journalNeverWritten(heard, directory) ?? '',
@@ -338,4 +338,128 @@ test('#240: a run that read no journal by the host\'s first model request fails 
   )
   relayJournalKeptIn(directory, 'launch-of-the-test').received('session_started', {})
   assert.equal(journalNeverWritten(heard, directory), undefined, 'a journal with a line in it was read as no journal')
+})
+
+// --- martha#264: which side of the model request went silent ---------------------------------------------------------
+
+/** What the stand-in heard, as the wait reads it: one request, with the reply's time when it was sent at all. */
+const aRequestOfTheStandIn = (received_at: number, answered_at?: number): readonly ModelAttempt[] => [
+  answered_at === undefined ? { number: 1, received_at } : { number: 1, received_at, answered_at },
+]
+
+/** The red of a run whose stand-in heard `heard`, giving up on the silence budget as the shipping rule does. */
+async function theRedOfASilentRun(host: Host, heard: () => readonly ModelAttempt[]): Promise<Error | undefined> {
+  return waitWhileTheHostKeepsShowing({
+    what: 'model request 2',
+    holds: () => false,
+    shown: host.shown,
+    heard: host.heard,
+    model: heard,
+    silence_ms: HOST_SILENCE_MS,
+    run_started_at: host.now(),
+    now: host.now,
+    sleep: countingLooks(host, () => {}),
+  }).then(
+    () => undefined,
+    (error: Error) => error,
+  )
+}
+
+test('#264: a run whose stand-in heard no request says the host never took the turn, and does not blame a slow model', async () => {
+  const host = aHostOfTheTests()
+  const why = await theRedOfASilentRun(host, () => [])
+  assert.ok(why !== undefined, 'a run whose stand-in heard nothing must fail the wait')
+  assert.match(
+    why.message,
+    /the stand-in has been sent no model request at all, so the host never took the turn/,
+    'a run where nothing reached the stand-in read as silence on the model\'s side: the reader cannot tell a host that never took the turn from a slow model',
+  )
+  assert.doesNotMatch(why.message, /showed nothing new/, 'the red still says only that the host showed nothing, which is the ambiguity #264 removes')
+})
+
+test('#264: a run whose stand-in answered the last request names the host as the side that showed nothing', async () => {
+  const host = aHostOfTheTests()
+  const answered_at = host.now() - 25_000
+  const why = await theRedOfASilentRun(host, () => aRequestOfTheStandIn(answered_at - 5_000, answered_at))
+  assert.ok(why !== undefined, 'a run whose stand-in answered and then nothing came must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`the stand-in answered request 1 ${host.now() - answered_at} ms ago and the host showed nothing after it`),
+    'the reply went out and the red did not say so, so a reader cannot clear the model of a stall the host caused',
+  )
+  assert.ok(host.now() - answered_at > HOST_SILENCE_MS, 'the case never stood further past the answer than the silence budget, so the figure it pins could be the budget alone')
+  assert.doesNotMatch(why.message, /showed nothing new/, 'the red still says only that the host showed nothing, which is the ambiguity #264 removes')
+})
+
+test('#264: a run whose stand-in read a request and never answered names the stand-in, with that request\'s own age', async () => {
+  const host = aHostOfTheTests()
+  const received_at = host.now() - 5_000
+  const why = await theRedOfASilentRun(host, () => aRequestOfTheStandIn(received_at))
+  assert.ok(why !== undefined, 'a run whose stand-in never answered must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`request 1 reached the stand-in ${host.now() - received_at} ms ago and its reply has not been sent`),
+    'a request the stand-in never answered was read as a silent host, so the model\'s own silence would be looked for in the host',
+  )
+  assert.doesNotMatch(why.message, /showed nothing new/, 'the red named the host for a reply the stand-in never sent')
+})
+
+test('#264: the drive hands its waits the stand-in\'s record, so a real stall names the side', async (t) => {
+  // The very wait the drive builds, with the drive's own view: if the wiring is dropped, this case reads the message
+  // #264 removes and every recorded-host red goes back to being ambiguous.
+  const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  relayJournalKeptIn(directory, 'launch-of-the-test').received('tool_called', THE_CALL).answered('deny', 'the call writes outside the checkout')
+  const received_at = Date.now() - 1_000
+  const wait = aWaitOfTheRun('model request 2', () => false, {
+    shown: () => '',
+    heard: [{ number: 1, body: {}, received_at }],
+    journal_directory: directory,
+    failure: () => undefined,
+    silence_ms: 150,
+    run_started_at: Date.now(),
+  })
+  const why = await waitWhileTheHostKeepsShowing(wait).then(
+    () => undefined,
+    (error: Error) => error,
+  )
+  assert.ok(why !== undefined, 'a wait the drive builds gave up on nothing at all')
+  assert.match(
+    why.message,
+    /request 1 reached the stand-in \d+ ms ago and its reply has not been sent/,
+    'the drive built its wait without the stand-in\'s record, so a real stall would print the old ambiguous message',
+  )
+})
+
+test('#264: the red names the request still owed, not the one answered before it', async () => {
+  const host = aHostOfTheTests()
+  const first = host.now() - 60_000
+  const owed = host.now() - 5_000
+  const why = await theRedOfASilentRun(host, () => [
+    { number: 1, received_at: first, answered_at: first + 100 },
+    { number: 2, received_at: owed },
+  ])
+  assert.ok(why !== undefined, 'a run that was owed a second request must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`request 2 reached the stand-in ${host.now() - owed} ms ago and its reply has not been sent`),
+    'the red named an older request, so a reader is told about one that was answered long ago',
+  )
+  assert.doesNotMatch(why.message, /request 1/, 'the red named the request that was already answered')
+})
+
+test('#264: the red names the last request answered, not the first', async () => {
+  const host = aHostOfTheTests()
+  const second = host.now() - 20_000
+  const why = await theRedOfASilentRun(host, () => [
+    { number: 1, received_at: host.now() - 90_000, answered_at: host.now() - 89_000 },
+    { number: 2, received_at: second - 500, answered_at: second },
+  ])
+  assert.ok(why !== undefined, 'a run whose last request was answered and then went quiet must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`the stand-in answered request 2 ${host.now() - second} ms ago and the host showed nothing after it`),
+    'the red named the first request rather than the last one answered, so its age is not the silence the run is in',
+  )
+  assert.doesNotMatch(why.message, /request 1/, 'the red named a request that was answered a minute and a half ago')
 })

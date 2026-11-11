@@ -342,6 +342,10 @@ export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
  */
 export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
   {
+    name: 'open_and_finish_a_worktree',
+    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no tool (martha#253)',
+  },
+  {
     name: 'probe_launch_hosts',
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
@@ -353,9 +357,9 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
 
 /** Level 3: what Martha's code is made of, one box per group of slices in src/. */
 export function components(): Diagram {
-  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1170)
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1230)
 
-  d.bound(16, 40, 968, 1000, 'Martha [the code in src/, one directory per capability]')
+  d.bound(16, 40, 968, 1080, 'Martha [the code in src/, one directory per capability]')
 
   d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the acts]', code: true,
     desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, --version: the words', 'checked first, a refusal on stderr with', 'the command that fixes it, 0 / 1 / 2'] })
@@ -387,7 +391,7 @@ export function components(): Diagram {
 
   d.box({ kind: 'b-cmp', x: 32, y: 890, w: 300, h: 140, name: 'install_the_pinned_installer', names: ['install_the_pinned_installer'], type: '[the installer this release pins]', code: true,
     desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 890, w: 300, h: 140, name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger'], type: '[the crew\'s rows and its ledger]', code: true,
+  d.box({ kind: 'b-cmp', x: 664, y: 940, w: 300, h: 140, name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger'], type: '[the crew\'s rows and its ledger]', code: true,
     desc: ['show_dashboard_beat holds a member\'s row and', 'the rule the newest beat wins; report_progress', 'moves it, see_the_crew lays every one out,', 'and a_crews_tools answers all five tools.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state'] })
   d.box({ kind: 'b-cmp', x: 348, y: 890, w: 300, h: 140, name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
     desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] })
@@ -396,10 +400,10 @@ export function components(): Diagram {
     desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] })
   d.box({ kind: 'b-cmp', x: 348, y: 724, w: 300, h: 150, name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'refuse_a_member_writing_owner_memory'], type: '[the Claude Code host]', code: true,
     desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools; refuse_a_member_', 'writing_owner_memory keeps a member\'s', 'writes out of the owner\'s memory'] })
-  d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 150, name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves'], type: '[this repository\'s own checks]', code: true,
-    desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; a badge host that answers 408 is', 'asked again before its link is broken.', 'Each has a self-test that proves it bites'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 200, name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg'], type: '[this repository\'s own checks]', code: true,
+    desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; a badge host that answers 408 is', 'asked again before its link is broken;', 'and check_the_logos_are_valid_svg holds', 'every logo to well-formed XML. Each has', 'a self-test that proves it bites'] })
 
-  d.notes(24, 1058, [
+  d.notes(24, 1120, [
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:',
     'the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew\'s',
     'own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
