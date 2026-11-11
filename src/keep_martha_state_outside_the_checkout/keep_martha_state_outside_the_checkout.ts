@@ -104,7 +104,8 @@ export interface Approval {
   readonly tree: string | null
 }
 
-type Refused = { readonly refusal: string }
+/** Why the store would not do it, in the words the owner reads: named by the slices that build on the store too. */
+export type Refused = { readonly refusal: string }
 
 /** Why a directory may not hold Martha's state, or undefined when it may. */
 function unsafeDirectory(path: string): string | undefined {
@@ -236,12 +237,25 @@ export function readStateFile(path: string): { readonly text: string } | Refused
   }
 }
 
-/** Writes a state file whole: under a staging name, then renamed into place. */
-export function keepStateFile(state: MarthaState, name: string, text: string): void {
-  const staged = join(state.directory, `${STAGING_PREFIX}${randomUUID()}`)
+/** Writes a file into a directory this store owns, whole: under a staging name, then renamed into place. */
+function keepFileWhole(directory: string, name: string, text: string): void {
+  const staged = join(directory, `${STAGING_PREFIX}${randomUUID()}`)
   fs.writeFileSync(staged, text, { mode: STATE_FILE_MODE, flag: 'wx' })
   fs.chmodSync(staged, STATE_FILE_MODE)
-  fs.renameSync(staged, join(state.directory, name))
+  fs.renameSync(staged, join(directory, name))
+}
+
+/** Writes a state file whole: under a staging name, then renamed into place. */
+export function keepStateFile(state: MarthaState, name: string, text: string): void {
+  keepFileWhole(state.directory, name, text)
+}
+
+/**
+ * Writes a crew file whole (martha#255): a handover or a park marker, in the crew store's own directory, under the same
+ * rule a state file is written by — a staging name, `0600`, then renamed into place, so a reader never sees half of it.
+ */
+export function keepCrewFile(directory: string, name: string, text: string): void {
+  keepFileWhole(directory, name, text)
 }
 
 const isNodeIds = (value: unknown): value is Record<string, string> =>
