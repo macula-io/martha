@@ -34,6 +34,7 @@ import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
+import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
@@ -146,7 +147,7 @@ function isRunning(pid: number): boolean {
 }
 
 function requestFor(place: Place, command: string, member: string, lines: string[]): MemberStartRequest {
-  const places = launcherPlacesOf(place.state, place.relay_root)
+  const places = launcherPlacesOf(place.state, place.relay_root, place.root)
   assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
   return {
     root: place.root,
@@ -222,7 +223,7 @@ test('init, approve and start bring a member up on the approved config, recorded
 
   const ids = nodeIdsFor(place.state, [BUILDER!.name])
   assert.ok('ids' in ids)
-  const places = launcherPlacesOf(place.state, place.relay_root)
+  const places = launcherPlacesOf(place.state, place.relay_root, place.root)
   assert.ok('rows' in places)
   const records = launchRecordsDirectory(places.launch_records).all()
   assert.deepEqual(records.map((record) => [record.key, record.row['node_id']]), [[BUILDER!.name, ids.ids[BUILDER!.name]]])
@@ -425,4 +426,20 @@ test("the declaration's strict gate is what the member's relay is handed, and of
 
   assert.deepEqual(await seenWith({}), [false], 'no house rules: the gate is off, as the owner decided')
   assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), [true], 'the declaration turns it on')
+})
+
+test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
+  const state_home = mkdtempSync(join(tmpdir(), 'martha-254-derive-'))
+  const checkout = join(state_home, 'checkout')
+  mkdirSync(checkout, { recursive: true })
+  execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
+  try {
+    const state = openState(join(state_home, '.local', 'state', 'martha'), checkout)
+    assert.ok('directory' in state, 'the state opens')
+    const places = launcherPlacesOf(state, join(state_home, 'relay'), checkout)
+    assert.ok('rows' in places, 'the launcher places are made')
+    assert.equal(crewRowsDirectoryOf(join(state_home, '.local', 'state'), checkout), places.rows, 'the reader derives the place the launcher built')
+  } finally {
+    rmSync(state_home, { recursive: true, force: true })
+  }
 })

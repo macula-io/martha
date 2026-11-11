@@ -943,7 +943,7 @@ test('the strict gate is off unless the launch says so, and the launcher\'s answ
     return relay.answer('tool_called', call('Bash', { command: 'id' }))
   }
 
-  // Off: the default an owner who wrote no setting gets, and what the reset decided.
+  // Off: the default an owner who wrote no setting gets, and what the owner chose on 2026-11-11.
   assert.deepEqual(await afterAPageTheMemberFetched(false), ALLOW_REPLY)
   // On: the same page still costs the shell, in the words it always used.
   assert.ok(isDenied(await afterAPageTheMemberFetched(true), /nothing executes/i))

@@ -61,8 +61,8 @@ nothing, because the node id on the delivery is the only thing compared.
 ## Who runs it
 
 It is the owner's switch, and it is off until they turn it on: `house_rules.strict_gate`
-in the crew's declaration (martha#259). The reset decided that a member is a
-trusted helper, and the check on it is review plus a yes on every push. The record
+in the crew's declaration (martha#259). The owner decided on 2026-11-11 that a member
+is a trusted helper, and the check on it is review plus a yes on every push. The record
 the rule reads is written either way; with the switch off, nothing reads it.
 
 Off, the three refusals that stand on text the session took in allow the call:
