@@ -247,6 +247,9 @@ test('the record a handover carries comes from the store, never from the stamp',
     'predecessor_id',
     'record_digest',
     'record_length',
+    // When the host stamped it, and the one thing a reader may not take from the stamp either (martha#255): it says
+    // which handover is newest, and nothing about what the predecessor held.
+    'written_at',
   ])
 })
 

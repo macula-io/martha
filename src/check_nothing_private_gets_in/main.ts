@@ -20,34 +20,12 @@ import {
 } from './check_nothing_private_gets_in.ts'
 import { DECLARED } from './declared.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
-
-// Asks GitHub whether a repository is public. The answer is the repository's own
-// visibility, not whether this caller can see it: a token that reads private
-// repositories still gets `private: true` back, and that is refused.
-export const resolveOnGitHub = (token: string | undefined): Resolve => async (owner, repo) => {
-  const response = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
-    headers: {
-      accept: 'application/vnd.github+json',
-      'user-agent': 'martha-check-nothing-private',
-      ...(token === undefined || token === '' ? {} : { authorization: `Bearer ${token}` }),
-    },
-  })
-  if (response.status === 404) return 'not_public'
-  if (!response.ok) throw new Error(`GitHub answered ${response.status} for ${owner}/${repo}`)
-  const body = (await response.json()) as { private?: unknown; visibility?: unknown }
-  return body.private === false && body.visibility === 'public' ? 'public' : 'not_public'
-}
+import { declaredOrNone, resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
 
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
   return at === -1 ? undefined : process.argv[at + 1]
 }
-
-const rulesOf = (families: Families, allowSynthetic: boolean): Rules => ({
-  ...DECLARED,
-  labHosts: families.kind === 'declared' ? families.labHosts : [],
-  allowSynthetic,
-})
 
 const sourcesOf = (root: string, range: string | undefined): Source[] => [
   ...treeSources(root),
@@ -115,18 +93,6 @@ const main = async (): Promise<number> => {
   }
   console.log('check_nothing_private_gets_in: nothing private')
   return 0
-}
-
-// An error can name anything: a tracked path git could not read, a repository
-// the lookup failed on. Its lab names are replaced before it is printed, with the
-// declared families when they can be read and the generic classes when not.
-const declaredOrNone = (): readonly string[] => {
-  try {
-    const families = familiesFrom(process.env['MARTHA_LAB_HOSTS'], true)
-    return families.kind === 'declared' ? families.labHosts : []
-  } catch {
-    return []
-  }
 }
 
 main().then(

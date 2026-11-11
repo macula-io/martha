@@ -144,6 +144,11 @@ export function undeclaredSessionEvents(declared: HostSessionEvents, produced: r
 export interface HandoverStamp {
   readonly member: string
   readonly predecessor_id: string
+  /**
+   * When the host stamped it, on the machine's clock. It is what the newest handover of a member is read by
+   * (martha#255): the file's own name carries a day, and a day cannot tell two handovers apart.
+   */
+  readonly written_at: string
   readonly digest: string
   /** How many ingestions the predecessor's record held when stamped. */
   readonly record_length: number
@@ -181,10 +186,12 @@ export function stampHandover(
   stamps: HandoverStampStore,
   writer: { readonly member: string; readonly session: HostSession },
   handover: Handover,
+  now: () => number = Date.now,
 ): void {
   stamps.write(handover.file, {
     member: writer.member,
     predecessor_id: writer.session.id,
+    written_at: new Date(now()).toISOString(),
     digest: digestOf(handover.content),
     record_length: writer.session.gate.ingested.length,
     record_digest: digestOfRecord(writer.session.gate.ingested),
