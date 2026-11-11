@@ -7,12 +7,13 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
+import { removeTheTree } from './relay_copy.ts'
 import { until } from './wait_until_the_event.ts'
 
 /** The wait's name, and the state it is watching, as the log must carry them. */
@@ -26,7 +27,7 @@ const TEST_CONTEXT_VARIABLE = 'NODE_TEST_CONTEXT'
 
 test('a wait that never ends is named in the log, with what it was watching, though the harness reports only its timeout', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-90-wait-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const planted = join(dir, 'a_hung_wait.node-test.ts')
   writeFileSync(
     planted,
@@ -65,7 +66,7 @@ const ENDED_BY = 'refused: A launch of Mercury is not recorded: no process 4242 
 
 test('a wait whose event can no longer come fails at once, naming why, instead of hanging to the harness timeout (#94)', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-94-wait-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const planted = join(dir, 'an_ended_wait.node-test.ts')
   writeFileSync(
     planted,

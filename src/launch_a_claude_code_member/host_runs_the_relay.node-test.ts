@@ -1,7 +1,7 @@
 // The host's answers are read strictly: anything but a report of success refuses (#104).
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -23,10 +23,11 @@ import {
   versionIn,
 } from './host_runs_the_relay.ts'
 import { hostAnswers, LOADS_THE_RELAY, refusesTheRelay } from './host_stand_in.ts'
+import { removeTheTree } from './relay_copy.ts'
 
 function placeFor(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-host-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 

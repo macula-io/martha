@@ -14,6 +14,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { MESH_SERVER_PACKAGE, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import {
   KNOWN_ENVIRONMENT_READS,
@@ -98,7 +99,7 @@ const PLANTED = [serverOf(PLANTED_MARK), dependencyOf(PLANTED_MARK)]
 
 const scratch = (t: TestContext, what: string): string => {
   const dir = mkdtempSync(join(tmpdir(), `martha-65-${what}-`))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 

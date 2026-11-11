@@ -6,13 +6,14 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
@@ -125,7 +126,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
 /** A host text holding `parts`, written to a scratch file the test removes. */
 function hostHolding(t: TestContext, parts: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'martha-host-drift-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const host = join(root, 'claude')
   writeFileSync(host, `#!junk\n${Object.values(parts).join(';other code;')}\n`, 'latin1')
   return host

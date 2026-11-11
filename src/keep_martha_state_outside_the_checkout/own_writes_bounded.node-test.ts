@@ -1,11 +1,12 @@
 // The tests martha#157 adds: a torn tail is read for what it finished, and one path takes one line.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite, type OwnWrites } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import {
   openState,
@@ -50,7 +51,7 @@ function ownWrite(fields: Partial<OwnWrite> = {}): OwnWrite {
 
 function stateFor(t: TestContext): MarthaState {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-own-writes-bounded-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const project = join(home, 'project')
   mkdirSync(project)
   const state = openState(join(home, 'state'), project)

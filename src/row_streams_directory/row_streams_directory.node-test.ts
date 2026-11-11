@@ -4,19 +4,20 @@
 // it cannot vouch for.
 
 import assert from 'node:assert/strict'
-import fs, { chmodSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import fs, { chmodSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { ACT_NOT_SENT, ActNotSent, ledgerStreamOf, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { ROW_FILE_MODE, rowFileNameOf, rowStreamsDirectory, streamDirectoryNameOf } from './row_streams_directory.ts'
 
 const scratch = (t: TestContext): string => {
   const root = mkdtempSync(join(tmpdir(), 'martha-rows-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   return root
 }
 
@@ -137,7 +138,7 @@ test('a gap, an unparsable row, a symlinked row or a group-writable row file is 
     plant(join(directory, streamDirectoryNameOf('acts')))
     await assert.rejects(store.read('acts'), Error, what)
     await assert.rejects(store.append('acts', { n: 9 }), Error, `${what}: an append reads first`)
-    rmSync(join(directory, '..'), { recursive: true, force: true })
+    removeTheTree(join(directory, '..'))
   }
 })
 

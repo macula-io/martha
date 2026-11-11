@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   admitsLaunch,
   fingerprintOf,
@@ -669,7 +670,7 @@ test('the row for code a checkout runs claims the path gate, with the shell gate
 function standInNow(t: TestContext): (probe: ConfigPathProbe) => PathProbe {
   const made: string[] = []
   t.after(() => {
-    for (const top of made) rmSync(top, { recursive: true, force: true })
+    for (const top of made) removeTheTree(top)
   })
   return (probe) => {
     const top = mkdtempSync(join(tmpdir(), 'martha-192-probe-'))

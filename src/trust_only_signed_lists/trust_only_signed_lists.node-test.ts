@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { fixtureKey, signLikeAHardwareKey, type FixtureKey } from './sign_like_a_hardware_key.ts'
 import { ED25519, verifySshSignature } from './ssh_signature.ts'
 import {
@@ -215,7 +216,7 @@ const scratch = (run: (dir: string) => void) => {
   try {
     run(dir)
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    removeTheTree(dir)
   }
 }
 

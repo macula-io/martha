@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -36,6 +36,7 @@ import { GIT, GITHUB_CLI, HISTORY_SUBCOMMANDS } from '../take_in_a_tool_result/t
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
@@ -79,7 +80,7 @@ const BUILT_IN_CALLS: readonly Readonly<Record<string, unknown>>[] = Object.entr
 /** A member's places, under one directory the test removes: a checkout with no launch config, and its rows. */
 function placeOf(t: TestContext): { readonly home: string; readonly checkout: string; readonly rows: string } {
   const home = mkdtempSync(join(tmpdir(), 'martha-121-reach-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })

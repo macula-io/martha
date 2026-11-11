@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { blobUnderTheTree, rawBlobOf, type LauncherStore } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { judgeTheCheckout, objectFormatOf } from './the_launcher_judges_the_tree.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
@@ -22,7 +23,7 @@ function git(cwd: string, ...args: string[]): string {
 
 function place(t: TestContext, files: Readonly<Record<string, string>>): Place {
   const home = mkdtempSync(join(tmpdir(), 'martha-judge-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(checkout, { recursive: true })
   git(checkout, 'init', '-q', '.')

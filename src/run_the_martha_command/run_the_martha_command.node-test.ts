@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +14,7 @@ import { test, type TestContext } from 'node:test'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
@@ -32,7 +33,7 @@ interface Place {
 
 function placeFor(t: TestContext, { checkout = true } = {}): Place {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-command-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const root = join(home, 'project')
   mkdirSync(root)
   if (checkout) {
@@ -174,7 +175,7 @@ test('martha start whose input is no terminal refuses, so a member\'s shell cann
 
 test('what martha shows the owner carries no terminal control: it is written out as an escape', (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-command-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const root = join(home, EVERY_CONTROL_CLASS)
   mkdirSync(root)
   const run = martha({ home, root }, 'init')
