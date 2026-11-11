@@ -121,7 +121,7 @@ function fakeProc(
   setBoot: (id: string | undefined) => void
 } {
   const root = mkdtempSync(join(tmpdir(), 'martha-124-proc-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
 
   const fields_after_command = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
   mkdirSync(join(root, String(pid)))

@@ -18,7 +18,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
@@ -30,6 +30,7 @@ import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { EMPTY_DIRECTORY_MODE } from './empty_directory.ts'
 import { CLAUDE_CODE, EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
 
@@ -89,7 +90,7 @@ const ownersSettings = (place: Fixture) => ({
 
 function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   const home = mkdtempSync(join(tmpdir(), 'martha-checkout-runs-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const markers = join(home, 'markers')
   mkdirSync(markers)
   const marker = (door: Door): string => join(markers, door)

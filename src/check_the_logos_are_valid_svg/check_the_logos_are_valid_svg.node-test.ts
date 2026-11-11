@@ -4,12 +4,13 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { checkTheLogosAreValidSvg } from './check_the_logos_are_valid_svg.ts'
 
 const REPO = join(import.meta.dirname, '..', '..')
@@ -17,7 +18,7 @@ const ASSETS = join(REPO, 'assets')
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-logos-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 

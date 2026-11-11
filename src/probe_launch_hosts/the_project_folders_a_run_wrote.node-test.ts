@@ -7,11 +7,12 @@
 // takes away, and what it says when something survives.
 
 import assert from 'node:assert/strict'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   projectFolderFor,
   projectKeyOf,
@@ -46,7 +47,7 @@ function aConfigDirHolding(...names: readonly string[]): { readonly env: Record<
 
 test('the project folders a run meets are read from the config dir its host is started with (#179)', (t) => {
   const config = aConfigDirHolding(ALREADY_THERE)
-  t.after(() => rmSync(join(config.root, '..', '..'), { recursive: true, force: true }))
+  t.after(() => removeTheTree(join(config.root, '..', '..')))
   const before = theProjectFoldersThere(config.env)
   assert.deepEqual([...before.names], [ALREADY_THERE])
   // The folder the host keeps one project in is the same one, by the key the host itself uses.
@@ -55,7 +56,7 @@ test('the project folders a run meets are read from the config dir its host is s
 
 test('a run takes away every folder it wrote and leaves the ones that were already there (#179)', (t) => {
   const config = aConfigDirHolding(ALREADY_THERE, OLDER_GENERATION)
-  t.after(() => rmSync(join(config.root, '..', '..'), { recursive: true, force: true }))
+  t.after(() => removeTheTree(join(config.root, '..', '..')))
   const before = theProjectFoldersThere(config.env)
   // What the run adds: a scratch checkout's folder, and one that is no probe's business.
   mkdirSync(config.at(THIS_RUN_WROTE), { recursive: true })
@@ -73,7 +74,7 @@ test('a folder a run wrote and did not take away is named by the row, which fail
   const config = aConfigDirHolding(ALREADY_THERE)
   t.after(() => {
     chmodSync(config.root, 0o755)
-    rmSync(join(config.root, '..', '..'), { recursive: true, force: true })
+    removeTheTree(join(config.root, '..', '..'))
   })
   const before = theProjectFoldersThere(config.env)
   // The host wrote its folder during the run, and the probe cannot take it away: the projects
@@ -94,7 +95,7 @@ test('a folder a run wrote and did not take away is named by the row, which fail
 
 test('a folder written after a run read back is seen and taken at the end (#179)', (t) => {
   const config = aConfigDirHolding(OLDER_GENERATION)
-  t.after(() => rmSync(join(config.root, '..', '..'), { recursive: true, force: true }))
+  t.after(() => removeTheTree(join(config.root, '..', '..')))
   const startedWith = theProjectFoldersThere(config.env)
   // The late write: it was not there when the run started, and the run's own read-back never saw it.
   mkdirSync(config.at(THIS_RUN_WROTE), { recursive: true })

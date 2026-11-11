@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   familiesFrom,
   privateHitsIn,
@@ -247,7 +248,7 @@ test('a leak in a commit that a later commit removes is still found, and so is o
     ])
     assert.deepEqual(commitsOf(root, `${'0'.repeat(40)}..${head}`), [])
   } finally {
-    rmSync(root, { recursive: true, force: true })
+    removeTheTree(root)
   }
 })
 
@@ -275,7 +276,7 @@ test('a path is read as well as its text, in the tree and in every commit, empty
     assert.equal(inRange.filter((hit) => hit.where.includes(' path <lab host>')).length, 2)
     assert.ok(inRange.every((hit) => !`${hit.where} ${hit.what}`.includes('synth0')))
   } finally {
-    rmSync(root, { recursive: true, force: true })
+    removeTheTree(root)
   }
 })
 

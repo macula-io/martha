@@ -3,13 +3,14 @@
 // held to it: the tag globs and guard inputs each job passes, the signer sha every signing job calls, the version
 // files the guard reads, the installer's repository.url, and the install line a reader copies.
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
 import { readSigners } from '../verify_the_release_signature/verify_the_release_signature.mjs'
 import { NAMES } from './names.mjs'
 
@@ -236,7 +237,7 @@ test('a build that fails in the dry run is reported by the command that failed, 
   const fn = workflow.dryRun.match(/^( *)build\(\) \{\n[\s\S]*?\n\1\}$/m)?.[0]
   assert.ok(fn, 'the dry run defines build()')
   const dir = mkdtempSync(join(tmpdir(), 'martha-dry-run-build-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   writeFileSync(join(dir, 'docker'), '#!/bin/sh\necho "buildx said no" >&2\nexit 7\n')
   chmodSync(join(dir, 'docker'), 0o755)
   const script = `set -euo pipefail\nRUNNER_TEMP="${dir}"; RELEASE_CTX="${dir}"; IMAGE=example.invalid/x\n${fn}\nbuild t\necho "after the build"\n`

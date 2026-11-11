@@ -192,7 +192,7 @@
 <text class="t-desc" x="364" y="826">and the member's tools; refuse_a_member_</text>
 <text class="t-desc" x="364" y="842">writing_owner_memory keeps a member's</text>
 <text class="t-desc" x="364" y="858">writes out of the owner's memory</text>
-<rect class="b-cmp" x="664" y="724" width="300" height="200" rx="10"/>
+<rect class="b-cmp" x="664" y="724" width="300" height="260" rx="10"/>
 <text class="t-code" x="680" y="752">check_nothing_private_gets_in,</text>
 <text class="t-code" x="680" y="770">check_every_link_resolves</text>
 <text class="t-type" x="680" y="788">[this repository's own checks]</text>
@@ -201,8 +201,11 @@
 <text class="t-desc" x="680" y="844">name; a badge host that answers 408 is</text>
 <text class="t-desc" x="680" y="860">asked again before its link is broken;</text>
 <text class="t-desc" x="680" y="876">and check_the_logos_are_valid_svg holds</text>
-<text class="t-desc" x="680" y="892">every logo to well-formed XML. Each has</text>
-<text class="t-desc" x="680" y="908">a self-test that proves it bites</text>
+<text class="t-desc" x="680" y="892">every logo to well-formed XML. check_</text>
+<text class="t-desc" x="680" y="908">no_test_the_base_passed_goes_missing</text>
+<text class="t-desc" x="680" y="924">names the test a branch dropped from</text>
+<text class="t-desc" x="680" y="940">its base, by file and title. Each has</text>
+<text class="t-desc" x="680" y="956">a self-test that proves it bites</text>
 <text class="t-desc" x="24" y="1120">Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:</text>
 <text class="t-desc" x="24" y="1138">the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew's</text>
 <text class="t-desc" x="24" y="1156">own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>

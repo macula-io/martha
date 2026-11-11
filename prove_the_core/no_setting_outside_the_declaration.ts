@@ -208,7 +208,7 @@ export function slicesImportingPrograms(slices: readonly Source[], programs: rea
 }
 
 /**
- * Every import in this machine glue beyond the host contract (`contract`, a
+ * Every import in these machine glue beyond the host contract (`contract`, a
  * directory under src/), Node's own modules and files in the glue's own directory.
  */
 export function glueReachesBeyondTheContract(glue: readonly Source[], contract: string): Finding[] {
@@ -219,6 +219,29 @@ export function glueReachesBeyondTheContract(glue: readonly Source[], contract: 
       target => [contract, own].includes(topOf(target)),
       'machine glue may import only the host contract, node:* and its own directory',
     )
+  })
+}
+
+/**
+ * Every Node module one of these decisions imports beyond the two a slice may
+ * (`NODE_MODULES_A_SLICE_MAY_IMPORT`). A decision reads the machine through the host
+ * contract whatever directory it sits in, so a Node module that reaches the machine —
+ * `node:fs` above all — is named by file and line (martha#158). The repository's own
+ * code is not a reach: a decision composes the slices it is made of.
+ */
+export function nodeModulesBeyondADecision(decisions: readonly Source[]): Finding[] {
+  return decisions.flatMap(source => {
+    const { file, errors } = parseSource(source.text, source.path)
+    return [
+      ...parseFindings(source.path, errors),
+      ...moduleReferencesIn(file)
+        .filter(reference => !reference.type_only)
+        .flatMap(({ specifier, line }) => {
+          if (specifier === null) return [{ path: source.path, line, why: 'imports a module whose name is computed' }]
+          if (isRelative(specifier) || isAllowedNodeModule(specifier)) return []
+          return [{ path: source.path, line, why: `imports ${specifier}, which a decision may not` }]
+        }),
+    ].sort((a, b) => a.line - b.line)
   })
 }
 

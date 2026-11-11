@@ -6,12 +6,13 @@
 // from the real function the launcher calls, and puts it through the real parser the mod reads it with.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { CREW_TOOL_NAMES, crewToolsOver, THE_TOOLS_ASK } from './a_crews_tools.ts'
@@ -19,7 +20,7 @@ import { CREW_TOOL_NAMES, crewToolsOver, THE_TOOLS_ASK } from './a_crews_tools.t
 /** The crew's tools over a place of the test's own, which it removes. */
 function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typeof crewToolsOver> {
   const home = mkdtempSync(join(tmpdir(), 'martha-254-tools-answer-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   return crewToolsOver({
     member: 'Pallas',
     ledger: { clock: { now: () => 1_000 }, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } },
