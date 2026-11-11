@@ -86,8 +86,13 @@ function keepInPlace(path: string, name: string, text: string): Refused | undefi
     fs.rmSync(staged, { force: true })
     return refused
   }
-  fs.renameSync(staged, file)
-  return undefined
+  try {
+    fs.renameSync(staged, file)
+    return undefined
+  } catch (error) {
+    fs.rmSync(staged, { force: true })
+    return { refusal: `${file} could not be replaced (${codeOf(error)}), so Martha keeps nothing in it.` }
+  }
 }
 
 /** `text` written whole to the staging file `staged`, every byte counted, so `file` is renamed over only once it is on disk. */

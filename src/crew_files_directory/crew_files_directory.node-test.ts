@@ -101,6 +101,15 @@ test('#255: a file anyone else may read is not trusted, and neither is one that 
   assert.ok(linked !== undefined && 'refusal' in linked, 'a link was followed as though it were a crew file')
 })
 
+test('#255: a name a directory already holds is refused, and the place is left as it was', () => {
+  const place = placeOf(aCrew('taken'), 'handovers')
+  mkdirSync(join(place.path, 'builder.md'), { mode: CREW_DIRECTORY_MODE })
+  const refused = place.keep('builder.md', 'the handover\n')
+  assert.ok(refused !== undefined, 'a write over a directory of the same name neither happened nor said why')
+  assert.match(refused.refusal, /could not be replaced/, 'the refusal does not say what went wrong')
+  assert.deepEqual(readdirSync(place.path), ['builder.md'], 'a refused write left its staging file behind')
+})
+
 test('#255: a place or a file name that is a path is refused, never translated into one', () => {
   const crew = aCrew('paths')
   const store = crewFilesDirectory(crew)
