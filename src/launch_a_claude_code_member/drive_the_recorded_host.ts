@@ -26,7 +26,7 @@ import { StringDecoder } from 'node:string_decoder'
 
 import { removeTheTree } from './relay_copy.ts'
 import { readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
-import { waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
+import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 
 /** The variable the relay CI job names the recorded host's binary in. */
@@ -273,6 +273,41 @@ export function textArrivingInChunks(): { readonly write: (chunk: Buffer) => str
  */
 export const theHostHasDrawnItsPrompt = (shown: string): boolean => plainTextOf(shown).includes(HOST_PROMPT_MARK)
 
+/** What one run's waits are given: the terminal, the requests the stand-in heard, the launcher's journal, and time. */
+export interface TheRunsView {
+  /** Everything the terminal has shown so far. */
+  readonly shown: () => string
+  /** Every request the stand-in heard, live: the wait reads it at each look. */
+  readonly heard: ModelRequest[]
+  /** Where this run's launcher keeps its journal (martha#240). */
+  readonly journal_directory: string
+  /** Why the stand-in gave up, once it has. */
+  readonly failure: () => string | undefined
+  readonly silence_ms: number
+  readonly run_started_at: number
+}
+
+/**
+ * One wait of a run, wired the way the drive wires them (martha#240, martha#264). It is built here, not inside the
+ * drive, so a case can take the very wait the drive would take and prove it is handed the stand-in's record — the
+ * difference between a red that names the silent side and one that says only that the host showed nothing new.
+ */
+export function aWaitOfTheRun(what: string, holds: () => boolean, view: TheRunsView): ProgressWait {
+  return {
+    what,
+    holds,
+    cannotHappen: () => view.failure() ?? journalNeverWritten(view.heard, view.journal_directory),
+    shown: view.shown,
+    heard: () => view.heard.length,
+    model: () => view.heard,
+    journal: () => readTheNewestRelayJournal(view.journal_directory),
+    silence_ms: view.silence_ms,
+    run_started_at: view.run_started_at,
+    now: Date.now,
+    sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  }
+}
+
 /**
  * Starts `run.member` with `martha start` on a pseudo-terminal, types the owner's turn once it is up, and lets the
  * stand-in answer the host's model requests by `run.script`. Ends the host with its own exit command once
@@ -304,21 +339,17 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   void ended.then((code) => void (exit_code = code))
   // A run whose journal stayed empty would fall back to the terminal alone without saying so: named here, where the
   // wait reads the journal, so the run fails by name rather than by the silence it should have replaced (r=1).
+  const seen: TheRunsView = {
+    shown: () => shown,
+    heard,
+    journal_directory,
+    failure: () => failure,
+    silence_ms: run.silence_ms,
+    run_started_at,
+  }
   const until = async (what: string, done: () => boolean): Promise<void> => {
     try {
-      await waitWhileTheHostKeepsShowing({
-        what,
-        holds: done,
-        cannotHappen: () => failure ?? journalNeverWritten(heard, journal_directory),
-        shown: () => shown,
-        heard: () => heard.length,
-        model: () => heard,
-        journal: () => readTheNewestRelayJournal(journal_directory),
-        silence_ms: run.silence_ms,
-        run_started_at,
-        now: Date.now,
-        sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-      })
+      await waitWhileTheHostKeepsShowing(aWaitOfTheRun(what, done, seen))
     } catch (error) {
       throw new Error(`${error instanceof Error ? error.message : String(error)}. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
     }

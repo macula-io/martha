@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { journalNeverWritten } from './drive_the_recorded_host.ts'
+import { aWaitOfTheRun, journalNeverWritten } from './drive_the_recorded_host.ts'
 import {
   GAVE_UP_BEFORE_ALLOW,
   NO_JOURNAL,
@@ -402,4 +402,64 @@ test('#264: a run whose stand-in read a request and never answered names the sta
     'a request the stand-in never answered was read as a silent host, so the model\'s own silence would be looked for in the host',
   )
   assert.doesNotMatch(why.message, /showed nothing new/, 'the red named the host for a reply the stand-in never sent')
+})
+
+test('#264: the drive hands its waits the stand-in\'s record, so a real stall names the side', async (t) => {
+  // The very wait the drive builds, with the drive's own view: if the wiring is dropped, this case reads the message
+  // #264 removes and every recorded-host red goes back to being ambiguous.
+  const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  relayJournalKeptIn(directory, 'launch-of-the-test').received('tool_called', THE_CALL).answered('deny', 'the call writes outside the checkout')
+  const received_at = Date.now() - 1_000
+  const wait = aWaitOfTheRun('model request 2', () => false, {
+    shown: () => '',
+    heard: [{ number: 1, body: {}, received_at }],
+    journal_directory: directory,
+    failure: () => undefined,
+    silence_ms: 150,
+    run_started_at: Date.now(),
+  })
+  const why = await waitWhileTheHostKeepsShowing(wait).then(
+    () => undefined,
+    (error: Error) => error,
+  )
+  assert.ok(why !== undefined, 'a wait the drive builds gave up on nothing at all')
+  assert.match(
+    why.message,
+    /request 1 reached the stand-in \d+ ms ago and its reply has not been sent/,
+    'the drive built its wait without the stand-in\'s record, so a real stall would print the old ambiguous message',
+  )
+})
+
+test('#264: the red names the request still owed, not the one answered before it', async () => {
+  const host = aHostOfTheTests()
+  const first = host.now() - 60_000
+  const owed = host.now() - 5_000
+  const why = await theRedOfASilentRun(host, () => [
+    { number: 1, received_at: first, answered_at: first + 100 },
+    { number: 2, received_at: owed },
+  ])
+  assert.ok(why !== undefined, 'a run that was owed a second request must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`request 2 reached the stand-in ${host.now() - owed} ms ago and its reply has not been sent`),
+    'the red named an older request, so a reader is told about one that was answered long ago',
+  )
+  assert.doesNotMatch(why.message, /request 1/, 'the red named the request that was already answered')
+})
+
+test('#264: the red names the last request answered, not the first', async () => {
+  const host = aHostOfTheTests()
+  const second = host.now() - 20_000
+  const why = await theRedOfASilentRun(host, () => [
+    { number: 1, received_at: host.now() - 90_000, answered_at: host.now() - 89_000 },
+    { number: 2, received_at: second - 500, answered_at: second },
+  ])
+  assert.ok(why !== undefined, 'a run whose last request was answered and then went quiet must fail the wait')
+  assert.match(
+    why.message,
+    new RegExp(`the stand-in answered request 2 ${host.now() - second} ms ago and the host showed nothing after it`),
+    'the red named the first request rather than the last one answered, so its age is not the silence the run is in',
+  )
+  assert.doesNotMatch(why.message, /request 1/, 'the red named a request that was answered a minute and a half ago')
 })
