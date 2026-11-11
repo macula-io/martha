@@ -73,6 +73,25 @@ test('a shorthand reference to another repository is refused, this repository\'s
   assert.deepEqual(await hitsOf('see martha#14 and #2'), [])
 })
 
+// A hyphen between a word and a reference is punctuation, not part of a
+// repository's name: the daily run flagged "the pre-#189 original" as a
+// reference to a repository called `pre-`, and the first live run's 64 hits
+// held two of this class (martha#287). The guard closes the trailing hyphen
+// and nothing else, so the values below are the ones that must still refuse.
+test('a hyphen separating a word from its reference is not a repository name', async () => {
+  assert.deepEqual(await hitsOf('MC, the pre-#189 original that #137 quotes'), [])
+  assert.deepEqual(await hitsOf('the post-#12 cleanup'), [])
+  assert.deepEqual(await hitsOf('synthetic-repo#112'), [
+    'a shorthand reference to another repository (synthetic-repo#...): write owner/repo#n so it can be checked',
+  ])
+  assert.deepEqual(await hitsOf(`${PRIVATE}#464`), [`a repository that is not public (${PRIVATE})`])
+  // Only the hyphen is refused: a repository may end in a dot or an underscore,
+  // and a reference to one must still be read.
+  assert.deepEqual(await hitsOf('synthetic-repo_#13'), [
+    'a shorthand reference to another repository (synthetic-repo_#...): write owner/repo#n so it can be checked',
+  ])
+})
+
 test('a private remote is refused, over ssh, https and as a bare slug', async () => {
   for (const text of [
     `git@github.com:${PRIVATE}.git`,
