@@ -20,7 +20,7 @@ import {
 } from './check_nothing_private_gets_in.ts'
 import { DECLARED } from './declared.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
-import { resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
+import { declaredOrNone, resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
 
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
@@ -93,18 +93,6 @@ const main = async (): Promise<number> => {
   }
   console.log('check_nothing_private_gets_in: nothing private')
   return 0
-}
-
-// An error can name anything: a tracked path git could not read, a repository
-// the lookup failed on. Its lab names are replaced before it is printed, with the
-// declared families when they can be read and the generic classes when not.
-const declaredOrNone = (): readonly string[] => {
-  try {
-    const families = familiesFrom(process.env['MARTHA_LAB_HOSTS'], true)
-    return families.kind === 'declared' ? families.labHosts : []
-  } catch {
-    return []
-  }
 }
 
 main().then(

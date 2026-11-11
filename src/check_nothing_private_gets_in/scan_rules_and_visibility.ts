@@ -4,7 +4,7 @@
 // imported (martha#265): a second check cannot import either one from there, and
 // a copy of the rules would be a second definition of what a scan refuses.
 
-import type { Families, Resolve, Rules } from './check_nothing_private_gets_in.ts'
+import { familiesFrom, type Families, type Resolve, type Rules } from './check_nothing_private_gets_in.ts'
 import { DECLARED } from './declared.ts'
 
 // Asks GitHub whether a repository is public. The answer is the repository's own
@@ -31,3 +31,17 @@ export const rulesOf = (families: Families, allowSynthetic: boolean): Rules => (
   labHosts: families.kind === 'declared' ? families.labHosts : [],
   allowSynthetic,
 })
+
+// An error can name anything: a tracked path git could not read, a repository
+// the lookup failed on. Its lab names are replaced before it is printed, with the
+// declared families when they can be read and the generic classes when not. This
+// reads the secret a second time because the failure it serves happens before or
+// instead of the scan's own reading.
+export const declaredOrNone = (): readonly string[] => {
+  try {
+    const families = familiesFrom(process.env['MARTHA_LAB_HOSTS'], true)
+    return families.kind === 'declared' ? families.labHosts : []
+  } catch {
+    return []
+  }
+}
