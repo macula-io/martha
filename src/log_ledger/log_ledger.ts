@@ -107,7 +107,7 @@ interface Work {
 // A work package is an issue: owner/repo#n, as GitHub names it. Nothing else is
 // one, and refusing everything else here keeps a package name from steering
 // where its stream lives.
-const WORK_PACKAGE = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.+#)[A-Za-z0-9._-]+#[1-9][0-9]*$/
+export const WORK_PACKAGE = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.+#)[A-Za-z0-9._-]+#[1-9][0-9]*$/
 
 /** The stream a package's ledger lives in; refuses a name that is not owner/repo#n. */
 export const ledgerStreamOf = (work_package: string): string => {

@@ -12,6 +12,7 @@
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { sendOutwardAct } from '../log_ledger/log_ledger.ts'
 import { type Addressee, type ChannelHost, appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 
 /** What the tool says it is for, as the model reads it. */
 export const CREW_SAY_DESCRIPTION =
@@ -64,6 +65,10 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   if (input.text.length > LONGEST_MESSAGE) return { refused: `a message is at most ${LONGEST_MESSAGE} characters. Nothing was sent.` }
   const to = addresseesOf(input.to, input.roster)
   if (isRefusal(to)) return { refused: to.refused }
+  // A hand-off or verdict line is read before the message goes out: one that does not read is answered with the field
+  // wrong, and nothing is sent, so a broken line never sits in the channel where a reader would trust it.
+  const reading = readACrewLine(input.text)
+  if ('refused' in reading) return { refused: reading.refused }
 
   const text = input.text
   let sent = 0
@@ -76,10 +81,12 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   // either: the message is still sent, and the answer says that nothing was announced to a package.
   if (input.package === null) {
     const told = await send()
+    if (reading.line !== null) await keepTheLinesRow(host, input.member, reading.line)
     return { sent, told: `${told} No package was held, so nothing was announced to a package's ledger.` }
   }
 
   const told = await sendOutwardAct(host, { package: input.package, member: input.member, act: { kind: 'room_message', what: whatOf(to, text) } }, send)
+  if (reading.line !== null) await keepTheLinesRow(host, input.member, reading.line)
   return { sent, told }
 }
 

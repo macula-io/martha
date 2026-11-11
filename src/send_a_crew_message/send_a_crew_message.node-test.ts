@@ -32,7 +32,7 @@ const sending = (more: Partial<Parameters<typeof sendACrewMessage>[1]> = {}): Pa
   roster: ROSTER,
   package: null,
   to: ['Reviewer'],
-  text: 'HANDOFF a package',
+  text: 'a hand-off, in words',
   ...more,
 })
 
@@ -42,7 +42,7 @@ test('#253: a message to one member is one row, addressed to that member only', 
 
   assert.ok('sent' in sent)
   assert.match(sent.told, /^sent as message 0 to Reviewer\./, 'the member was not told which message it sent')
-  assert.deepEqual(await readTheChannel(channel), [{ position: 0, message: { from: 'Builder', to: ['Reviewer'], text: 'HANDOFF a package', sent_at: 7_500 } }])
+  assert.deepEqual(await readTheChannel(channel), [{ position: 0, message: { from: 'Builder', to: ['Reviewer'], text: 'a hand-off, in words', sent_at: 7_500 } }])
 })
 
 test('#253: "crew" addresses every member, and is kept as the crew rather than as a list', async () => {
@@ -153,7 +153,7 @@ test('#253: crew_say is a tool the launcher names, and answering it writes to th
   assert.ok('answer' in named)
   assert.ok(CREW_TOOL_NAMES.includes('crew_say'), 'the launcher does not name crew_say, so the mod never registers it')
 
-  const answered = await crew.answer('crew_say', { to: ['Reviewer'], text: 'HANDOFF macula-io/martha#253' }, 'session-253')
+  const answered = await crew.answer('crew_say', { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-253')
   assert.ok('answer' in answered, `crew_say was not answered: ${JSON.stringify(answered)}`)
   assert.match(answered.answer, /sent as message 0 to Reviewer/)
 })
@@ -172,4 +172,27 @@ test('#253: every tool the launcher names has a hook in the mod that answers it'
   const mod = readFileSync(new URL('../claude_code_relay/hooks/crew.tsx', import.meta.url), 'utf8')
   const missing = CREW_TOOL_NAMES.filter((name) => !mod.includes(`'mcp__martha-relay__${name}'`))
   assert.deepEqual(missing, [], 'the mod registers no hook for these tools, so their calls go unanswered')
+})
+
+test('#253: a hand-off whose line does not read is answered with the field, before anything is sent', async () => {
+  const channel = channelHost()
+  const sent = await sendACrewMessage(channel, sending({ text: 'HANDOFF macula-io/martha#253 aaaa..bbbb r=1' }))
+
+  assert.ok('refused' in sent)
+  assert.match(sent.refused, /range/)
+  assert.deepEqual(await readTheChannel(channel), [], 'a line that does not read was put in the channel anyway')
+})
+
+test('#253: a well-formed hand-off sent through the crew says its line reached the package\'s ledger', async () => {
+  const channel = channelHost()
+  const base = 'a'.repeat(40)
+  const tip = 'b'.repeat(40)
+  const sent = await sendACrewMessage(channel, sending({ text: `HANDOFF macula-io/martha#253 ${base}..${tip} r=1 ci=41700170944` }))
+
+  assert.ok('sent' in sent)
+  const rows = await readLedger(channel, 'macula-io/martha#253')
+  assert.deepEqual(rows.map((row) => row.kind), ['act_announced', 'act_concluded'], `the hand-off added no row of its own: ${JSON.stringify(rows)}`)
+  const announced = rows[0]
+  assert.ok(announced !== undefined && 'act' in announced)
+  assert.equal(announced.act.kind, 'handoff')
 })
