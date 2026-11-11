@@ -229,3 +229,24 @@ test('the temporary directory is removed after a refusal too', async (t) => {
   aNeighbourRunsHere(t)
   ownTempDir.gone('the temporary directory is removed after a refusal')
 })
+
+test('a callback that throws leaves no work directory behind either (martha#270)', (t) => {
+  const tree = treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' })
+  let announced: string | undefined
+  assert.throws(
+    () =>
+      installThePinnedInstaller(
+        requestFor(tree, {
+          onWorkDir: (dir) => {
+            announced = dir
+            throw new Error('the caller gave up')
+          },
+        }),
+      ),
+    /the caller gave up/,
+  )
+  const where = announced
+  assert.ok(where !== undefined, 'the run said where its temporary directory was before it was asked to stop')
+  assert.equal(existsSync(where), false, 'a callback that threw left its work directory behind')
+  assert.deepEqual(entriesNamed(tmpdir(), thisRunsWorkDirectory(tree)), [], 'the run that threw left no directory named for its tree')
+})
