@@ -16,13 +16,15 @@
 # Exit: 0 installed, 1 not installed (the reason printed last).
 #
 # The self-test runs this script again with stand-ins for sudo and apt-get (MARTHA_SUDO, MARTHA_APT_GET) and no
-# waiting (MARTHA_APT_WAITS), and proves all three: a blink that recovers installs on the third attempt, a network
-# that never comes back ends with the one line naming it, and a package apt refuses outright is not retried.
+# waiting (MARTHA_APT_WAITS), and proves all four: a blink that recovers installs on the third attempt, a network
+# that never comes back ends with the one line naming it, a package apt refuses outright is not retried, and a
+# stale index answering 404 is not retried either -- apt prints "Unable to fetch some archives" for that too, with
+# the archive answering, so that line is not one of the network's: a resolver failure always prints its own.
 set -euo pipefail
 
 ATTEMPTS=3
 DEFAULT_WAITS='5 15'
-NETWORK_SIGNS='Temporary failure resolving|Temporary failure in name resolution|Could not resolve|Could not connect|Connection failed|Unable to fetch some archives'
+NETWORK_SIGNS='Temporary failure resolving|Temporary failure in name resolution|Could not resolve|Could not connect|Connection failed'
 NETWORK_LINE='the hosted runner could not reach the Ubuntu archive (DNS); nothing in this repository was run'
 
 SUDO="${MARTHA_SUDO:-sudo}"
@@ -118,6 +120,14 @@ exit 100"
   standIn "${scratch}" apt-refusing "echo x >>'${count}'
 echo 'E: Unable to locate package a-package' >&2
 exit 100"
+  # A stale index: the archive answers 404, and apt says it could not fetch the archives -- its own words for a
+  # package that is not there, with the runner's resolver answering all along.
+  standIn "${scratch}" apt-404 "echo x >>'${count}'
+echo 'Err:1 http://archive.ubuntu.com/ubuntu noble/main amd64 a-package amd64 1.0' >&2
+echo '  404  Not Found [IP: 185.125.190.36 80]' >&2
+echo 'E: Failed to fetch http://archive.ubuntu.com/ubuntu/pool/main/a/a-package/a-package_1.0_amd64.deb  404  Not Found [IP: 185.125.190.36 80]' >&2
+echo 'E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?' >&2
+exit 100"
 
   : >"${count}"
   runWith "${scratch}/apt-blinking"
@@ -140,6 +150,14 @@ exit 100"
     mustNotSay 'a package apt refuses' "${NETWORK_LINE}" &&
     mustRunAptTimes 'a package apt refuses' "${count}" 1 &&
     say 'self-test "a package apt refuses": red on apt words, not retried' || return 1
+
+  : >"${count}"
+  runWith "${scratch}/apt-404"
+  mustExit 'a stale index answers 404' 1 &&
+    mustSay 'a stale index answers 404' 'Unable to fetch some archives' &&
+    mustNotSay 'a stale index answers 404' "${NETWORK_LINE}" &&
+    mustRunAptTimes 'a stale index answers 404' "${count}" 1 &&
+    say 'self-test "a stale index answers 404": red on apt words, not retried, and the runner is not blamed' || return 1
 }
 
 if [[ "${1:-}" == '--self-test' ]]; then
