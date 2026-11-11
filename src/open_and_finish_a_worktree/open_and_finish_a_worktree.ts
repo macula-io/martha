@@ -171,6 +171,27 @@ async function originWord(host: WorktreesRequest['host'], clone: string, tip: st
   if (tip === undefined) return `; ${branch} stays on origin, since git did not name the commit removed`
   const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
   if (held.exit_code !== 0) return `; ${branch} stays on origin, which its tip is not on yet`
+  return removeTheBranch(host, clone, branch, tip, default_branch)
+}
+
+/**
+ * Removes the branch on origin, or says why it stays. The branch's own head on origin has to be the tip that was
+ * removed, or a commit the default branch already holds: another checkout may have pushed onto it after the tip
+ * landed, and deleting it then would leave that commit on no branch at all.
+ */
+async function removeTheBranch(
+  host: WorktreesRequest['host'],
+  clone: string,
+  branch: string,
+  tip: string,
+  default_branch: string,
+): Promise<string> {
+  const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+  if (on_origin === undefined) return `; ${branch} is no longer on origin`
+  const elsewheres = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
+  if (on_origin !== tip && elsewheres.exit_code !== 0) {
+    return `; ${branch} stays on origin, where it is at ${on_origin}, which the default branch does not hold`
+  }
   const pushed = await git(host, clone, ['push', '--quiet', 'origin', '--delete', branch])
   return pushed.exit_code === 0 ? `; removed ${branch} on origin` : `; ${branch} stays on origin (${saidBy(pushed)})`
 }

@@ -187,6 +187,31 @@ test('worktree_finish leaves the branch on origin while the default branch does 
   assert.ok(onOrigin.includes(`${MEMBER}/${SLUG}`), 'the branch on origin is still there, holding work main does not have')
 })
 
+test('worktree_finish leaves the branch on origin, naming its moved head, when another checkout pushed past the tip (#256)', async (t) => {
+  const fixture = aCrew(t)
+  const { open, finish } = toolsOf(settingsFor(fixture, fixture))
+  await open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'x.txt'), 'x\n')
+  commitIn(path, 'X')
+  gitIn(path, 'push', '--quiet', 'origin', `${MEMBER}/${SLUG}`)
+  // X lands on the default branch.
+  gitIn(path, 'push', '--quiet', 'origin', 'HEAD:main')
+  // Then another checkout pushes Y onto the same branch on origin: a fold-in, or another member's work.
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, 'checkout', '--quiet', '-b', 'other', `origin/${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, 'y.txt'), 'y\n')
+  commitIn(fixture.seed, 'Y')
+  const y = gitIn(fixture.seed, 'rev-parse', 'HEAD')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', `HEAD:refs/heads/${MEMBER}/${SLUG}`)
+  const answer = await finish.answer(asked('acme/widget', SLUG))
+  assert.match(answer, new RegExp(`stays on origin, where it is at ${y}, which the default branch does not hold`))
+  const onOrigin = execFileSync('git', ['ls-remote', fixture.origin, `refs/heads/${MEMBER}/${SLUG}`], { encoding: 'utf8' }).trim()
+  assert.ok(onOrigin.includes(y), 'origin still holds the commit another checkout pushed, which no other branch has')
+  const anywhere = execFileSync('git', ['--git-dir', fixture.origin, 'branch', '--contains', y], { encoding: 'utf8' }).trim()
+  assert.notEqual(anywhere, '', 'the commit is still on a branch of origin')
+})
+
 test('a crew with no workspace layout is told which fields to add, not given a worktree in a place nobody named (#256)', async (t) => {
   const fixture = aCrew(t)
   const { open } = toolsOf(settingsFor(fixture, { clones: null, worktrees: null }))
