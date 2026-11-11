@@ -19,7 +19,7 @@ import { removeTheTree } from './relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
@@ -43,7 +43,7 @@ import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, t
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
+import { MCP_CONFIG_SWITCH, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
@@ -3470,12 +3470,12 @@ test('a member’s first mesh answer records nothing, so its ring reaches A5 ins
 
   // The call's own input is the member's words, and the launcher reads them from the call itself.
   assert.deepEqual(
-    await relay.answer('tool_answered', session({ call: { tool: 'mcp__macula__mesh_hello', operator_name: 'martha recorder' }, answer: helloAnswer })),
+    await relay.answer('tool_answered', session({ call: { tool: `mcp__macula__${MESH_HELLO}`, operator_name: 'martha recorder' }, answer: helloAnswer })),
     TAKEN_REPLY,
   )
   assert.deepEqual(await recordedPaths(rows), [], 'the member’s own hello answer took nothing in')
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'id' })), ALLOW_REPLY, 'and the shell it needs for the ring is still there')
-  assert.deepEqual(await relay.answer('tool_called', call('mcp__macula__mesh_ring', { to: 'f'.repeat(64), purpose: 'a check' })), ALLOW_REPLY, 'the ring itself is not refused')
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'id' })), ALLOW_REPLY, 'and the shell it needs for the ring is still there')
+  assert.deepEqual(await relay.answer('tool_called', call(`mcp__macula__${RINGS_AND_RETURNS_THE_ANSWER}`, { to: 'f'.repeat(64), purpose: 'a check' })), ALLOW_REPLY, 'the ring itself is not refused')
 
   const ringAnswer = RECORDED_RING_ANSWERS[RINGS_AND_RETURNS_THE_ANSWER]
   assert.ok(ringAnswer !== undefined, 'the recording carries no mesh_ring answer')
@@ -3486,7 +3486,7 @@ test('a member’s first mesh answer records nothing, so its ring reaches A5 ins
   const after = await recordedPaths(rows)
   assert.ok(after.some((entry) => entry.startsWith(`${PATH_OF_SOURCE.ring_answer}:`)), `the ring's answer reached its own row: ${after.join(', ')}`)
   assert.equal(after.filter((entry) => entry.startsWith('B2:')).length, 0, 'and nothing landed on B2')
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'id' }))), 'the ring’s answer is another agent’s text, so the shell closes on it, as the gate means it to')
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'id' }))), 'the ring’s answer is another agent’s text, so the shell closes on it, as the gate means it to')
 })
 
 /**
@@ -3518,7 +3518,7 @@ test('with one exact-pin mesh server, the launch hands the relay that server’s
     hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
   })
   if (!started.started) assert.fail(started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   const passed = heard[0]?.wordless_answers
   assert.ok(passed !== undefined, 'the launch handed the relay no reading of its mesh answers')
   assert.deepEqual(passed.env, theMeshServerStarted(fake.argsFile).env, 'the relay was handed an environment other than the one its server is started with')

@@ -8,6 +8,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  CONTACT_POLICY_FILE_UNDER_HOME,
   FALLBACK_DISPLAY_NAME,
   MESH_GOODBYE,
   MESH_HELLO,
@@ -16,6 +17,7 @@ import {
   wordsInAMeshAnswer,
   type WhatTheLaunchSupplies,
 } from './prove_a_mesh_answer_is_wordless.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { petnameOf } from '../name_a_node_by_its_petname/name_a_node_by_its_petname.ts'
 
 /** The leaves the reading needs the launch to have supplied, for the recording's own bare answer. */
@@ -23,12 +25,12 @@ function launchFor(bare: Readonly<Record<string, unknown>>): WhatTheLaunchSuppli
   const citizenship = bare['citizenship'] as Readonly<Record<string, unknown>> | undefined
   const ring = bare['ring'] as Readonly<Record<string, unknown>> | undefined
   const policy_file = String(ring?.['policy_file'] ?? '')
-  const home = policy_file.slice(0, policy_file.indexOf('/.config/macula-mcp/contact_policy.json'))
+  const home = policy_file.slice(0, policy_file.length - `/${CONTACT_POLICY_FILE_UNDER_HOME}`.length)
   return {
     node_id: String(bare['node_id']),
     env: { HOME: home },
     home,
-    host_version: '2.1.322',
+    host_version: RECORDED_HOST.host_version,
     input: { operator_name: String(citizenship?.['display_name']), interval_seconds: bare['interval_seconds'] },
   }
 }

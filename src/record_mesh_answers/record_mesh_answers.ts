@@ -38,6 +38,7 @@ import { MESH_TREE_RECORDING } from '../prove_the_mesh_server_bytes/prove_the_me
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { MESH_GOODBYE, MESH_HELLO } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { recordedNodeId, type RecordedId } from '../name_a_node_by_its_petname/name_a_node_by_its_petname.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { MeshServer } from './ask_a_mesh_server_a_tool.ts'
 
 const SHAPES = new URL('../prove_a_mesh_answer_is_wordless/recorded_mesh_answer_shapes.json', import.meta.url)
@@ -355,7 +356,7 @@ try {
     exit(1)
   }
   const installed = join(scratch, 'tree')
-  const server_file = join(installed, 'node_modules', MESH_SERVER_PACKAGE, bin)
+  const server_file = join(installed, DEPENDENCIES, MESH_SERVER_PACKAGE, bin)
 
   const { bare, named } = await runsAnsweredIn(server_file, runsIn(scratch))
 
