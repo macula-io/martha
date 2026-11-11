@@ -2,7 +2,7 @@
 // every one of those refused when the directory or the file is not one only this user may read and write.
 
 import assert from 'node:assert/strict'
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import fs, { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -108,6 +108,20 @@ test('#255: a name a directory already holds is refused, and the place is left a
   assert.ok(refused !== undefined, 'a write over a directory of the same name neither happened nor said why')
   assert.match(refused.refusal, /could not be replaced/, 'the refusal does not say what went wrong')
   assert.deepEqual(readdirSync(place.path), ['builder.md'], 'a refused write left its staging file behind')
+})
+
+// A disk can take fewer bytes than it was given. The count is checked against what the text needs, so a half-written
+// handover is refused rather than renamed over the whole one it was meant to replace (martha#255 r=2).
+test('#255: a file the disk kept only part of is refused, and none of it is left behind', (t) => {
+  const place = placeOf(aCrew('short'), 'handovers')
+  const text = 'a handover longer than the four bytes this disk will take\n'
+  t.mock.method(fs, 'writeSync', () => 4)
+
+  const refused = place.keep('builder.md', text)
+
+  assert.ok(refused !== undefined, 'a short write was taken as a whole file, so a successor could be handed half a handover')
+  assert.match(refused.refusal, /kept only 4 of the \d+ bytes/, 'the refusal does not say that only part of the file was written')
+  assert.deepEqual(readdirSync(place.path), [], 'a refused short write left a file behind')
 })
 
 test('#255: a place or a file name that is a path is refused, never translated into one', () => {

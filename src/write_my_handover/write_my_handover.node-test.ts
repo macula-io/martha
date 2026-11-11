@@ -118,6 +118,27 @@ test('#255: a file the member wrote itself is not a handover, and nothing is cle
   )
 })
 
+// The stamp is a fact about the file, so it is taken from the moment the file is named for and never from the clock: a
+// year-old `at` names a 2001 file, and a stamp read off today's clock would say the two disagree (martha#255 r=2).
+test('#255: the stamp carries the moment the handover is named for, never the clock\'s own', () => {
+  const host = aHost()
+  const store = sessions()
+  const stamps = stampStore()
+  const session = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
+  const longAgo = new Date('2001-02-03T04:05:06.000Z')
+
+  const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: longAgo, stamps, session })
+
+  assert.equal(said, CREW_HANDOVER_WRITTEN)
+  const file = theHandoverFile(MEMBER, longAgo)
+  assert.equal(file, 'HANDOVER_2001-02-03_builder.md', 'the file is not named for the day it is stamped for')
+  assert.equal(
+    stamps.read(join(thePlace(host), file))?.written_at,
+    longAgo.toISOString(),
+    'the stamp was written with the clock rather than the moment the handover is named for, so the day in the name and the stamp can disagree',
+  )
+})
+
 // Two names the store would take are still not a member's: one that reaches out of the place, and one longer than
 // MEMBER_NAME allows. So the slice's own rule is what refuses them, and the store is not the thing that decides.
 test('#255: a name that is not a member\'s name is refused, and no handover is written for it', () => {

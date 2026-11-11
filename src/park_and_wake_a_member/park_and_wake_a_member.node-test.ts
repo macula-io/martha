@@ -100,6 +100,22 @@ test('#255: a member parks itself whatever its role', () => {
   assert.ok(!('refusal' in itself), 'a member was refused the park of itself, which the declaration has nothing to say about')
 })
 
+// The owner is a seat like any other in the table: the grant is asked of the owner too, so a crew that does not grant
+// the act to it has an owner that parks nobody (martha#255 r=3, held by r=2).
+test('#255: an owner the table does not grant the act parks nobody', () => {
+  const host = aHost()
+  const ownerHasNoGrant = aTeamGranting(['supervisor'])
+  assert.equal(
+    mayParkAnother(ownerHasNoGrant, 'owner'),
+    false,
+    'the owner was allowed to park another member by being the owner, which the declaration does not say',
+  )
+  const said = parkAMember(host.host, parkingOf(ownerHasNoGrant, 'owner', 'reviewer'))
+  assert.ok('refusal' in said, 'the owner parked another member with no grant in the table')
+  assert.match(said.refusal, /resume_parked_work/, 'the refusal does not name the act that would have allowed it')
+  assert.equal(theParkOf(theParkedPlace(host), 'reviewer'), undefined, 'a refused park by the owner left a marker behind')
+})
+
 test('#255: a solo crew parks its member, because the owner is granted the act and has no node id to be checked against', () => {
   const host = aHost()
   assert.equal(mayParkAnother(aSoloCrew, 'owner'), true, 'a solo crew cannot park at all: its owner is granted the act and nothing else is')
@@ -132,4 +148,46 @@ test('#255: a handover with no stamp is nobody\'s handover, so a wake is not off
   const place = handoversPlace(host.host)
   assert.ok(!('refusal' in place), 'the host refused the handovers place')
   assert.equal(theNewestHandover(place, stamps, 'nobody-has-handed-over'), undefined, 'a handover no host stamped was offered to a wake')
+})
+
+// Every member's handovers share one place, so the stamp's own member is what tells them apart: a wake of one member
+// must never resume a colleague's newer file (martha#255 r=2).
+test('#255: a wake is offered its own member\'s newest handover, never a colleague\'s newer one', () => {
+  const host = aHost()
+  const stamps = stampStore()
+  const store = { read: () => undefined, write: () => {} }
+  const session = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
+  const place = handoversPlace(host.host)
+  assert.ok(!('refusal' in place), 'the host refused the handovers place')
+  const buildersDay = new Date('2026-11-09T09:00:00Z')
+  const aColleaguesDay = new Date('2026-11-11T09:00:00Z')
+  writeMyHandover(host.host, { member: 'builder', content: 'the builder\'s own', at: buildersDay, stamps, session })
+  writeMyHandover(host.host, { member: 'reviewer', content: 'a colleague\'s, stamped later', at: aColleaguesDay, stamps, session })
+
+  const newest = theNewestHandover(place, stamps, 'builder')
+  assert.equal(
+    newest?.content,
+    'the builder\'s own',
+    'a wake of the builder was offered a colleague\'s newer handover, because the stamps were not asked whose they are',
+  )
+  assert.equal(newest?.file, join(place.path, theHandoverFile('builder', buildersDay)), 'the wake was offered a file the builder never wrote')
+})
+
+// theParkOf's own comment: "A marker that does not parse is not a park." A file of valid JSON that is not a marker is
+// one of the ways it does not parse (martha#255 r=2).
+test('#255: a marker that does not parse is not a park, whatever JSON it holds', () => {
+  const place = theParkedPlace(aHost())
+  const notMarkers = [
+    'not json at all\n',
+    '{"why":"a reason nobody named"}\n',
+    '{"reason":"a reason, and no since"}\n',
+    '{"since":"2026-11-11T15:00:00.000Z"}\n',
+    'null\n',
+    '"a member\'s name, not a marker"\n',
+    '[]\n',
+  ]
+  for (const text of notMarkers) {
+    assert.equal(place.keep('builder.parked.json', text), undefined, `the store refused a file the test needed it to keep: ${text.trim()}`)
+    assert.equal(theParkOf(place, 'builder'), undefined, `${text.trim()} was read as a park, so a member nobody parked would wake parked`)
+  }
 })
