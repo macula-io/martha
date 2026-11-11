@@ -12,7 +12,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { CREW_ROWS_PLACE, CREWS_PLACE, crewKeyOf, crewRowsDirectory, crewStateDirectory, PERMISSION_BITS } from './keep_martha_state_outside_the_checkout.ts'
+import { chmodSync } from 'node:fs'
+
+import { CREW_ROWS_PLACE, CREWS_PLACE, crewKeyOf, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, PERMISSION_BITS, projectStateDirectory } from './keep_martha_state_outside_the_checkout.ts'
 
 /** A directory the test owns, removed when it ends. */
 function aDirectory(t: TestContext, prefix: string): string {
@@ -98,3 +100,42 @@ function modeOf(path: string): number {
   assert.ok(found !== undefined, `${path} was made`)
   return Number(found.mode) & PERMISSION_BITS
 }
+
+test('a directory that is not in git is keyed by its real path, so a link to it is the same place (R1)', (t) => {
+  const state_root = aDirectory(t, 'state')
+  const plain = aDirectory(t, 'plain')
+  const link = join(aDirectory(t, 'links'), 'a-link')
+  symlinkSync(plain, link)
+
+  assert.equal(crewKeyOf(link), crewKeyOf(plain), 'the key follows the link to the directory it names')
+  assert.equal(pathOf(crewStateDirectory(state_root, link)), pathOf(crewStateDirectory(state_root, plain)))
+})
+
+test('a crew place others may write into is refused (R1)', (t) => {
+  const state_root = aDirectory(t, 'state')
+  const repo = aRepository(t)
+  const crew = pathOf(crewStateDirectory(state_root, repo))
+  chmodSync(crew, 0o777)
+
+  const answer = crewStateDirectory(state_root, repo)
+  assert.ok('refusal' in answer, 'a crew place anyone may write into is refused')
+  assert.match(answer.refusal, /may be written by others/, 'the refusal says so')
+})
+
+test('everything else stays keyed by the checkout: two worktrees of one repository keep their own state (R1)', (t) => {
+  const state_root = aDirectory(t, 'state')
+  const repo = aRepository(t)
+  const worktree = join(aDirectory(t, 'worktrees'), 'a-worktree')
+  git(repo, 'worktree', 'add', '-q', '-b', 'a-branch', worktree)
+
+  const inTheRepository = openState(state_root, repo)
+  const inTheWorktree = openState(state_root, worktree)
+  assert.ok('directory' in inTheRepository && 'directory' in inTheWorktree, 'both states open')
+  assert.equal(inTheRepository.directory, projectStateDirectory(state_root, repo), 'a checkout keeps its state where it did')
+  assert.notEqual(inTheWorktree.directory, inTheRepository.directory, 'a worktree does not read the other checkout\'s approvals, ids or own writes')
+
+  const ids = nodeIdsFor(inTheRepository, ['Vesta'])
+  assert.ok('ids' in ids, 'the ids are kept')
+  const elsewhere = nodeIdsFor(inTheWorktree, ['Vesta'])
+  assert.ok('ids' in elsewhere && elsewhere.ids['Vesta'] !== ids.ids['Vesta'], 'each checkout keeps its own ids, so one does not sign for the other')
+})
