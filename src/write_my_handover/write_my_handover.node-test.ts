@@ -5,8 +5,9 @@
 // very thing it is handing to the successor — so the host picks the path, writes the file whole, and stamps it, and a
 // file the member wrote itself is not a handover and clears nothing (this is martha#16's rule 3, wired here).
 //
-// The path and the file are all this slice owns. The tool a member calls, and the flow that asks for the handover,
-// come with #254 part 2.
+// The slice is driven through the contract's test host, with the crew store the host really composes over a directory
+// (../crew_files_directory), so what it writes is a file on a disk the way a launch writes one. The name the file has,
+// and the stamp, are this slice's, and are what these cases pin.
 
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -21,20 +22,23 @@ import {
   type HandoverStamp,
   type HandoverStampStore,
 } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CREW_HANDOVER_WRITTEN, handoversPlace, theHandoverFile, writeMyHandover } from './write_my_handover.ts'
 
-/** A home of the tests: a project directory and the state root the store keeps its crews in. */
+/** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-handover-'))
 after(() => rmSync(home, { recursive: true, force: true }))
-const state_root = join(home, 'state')
-const root = join(home, 'project')
-mkdirSync(root, { recursive: true })
+const crew = join(home, 'state', 'crews', 'a-key')
 
 const MEMBER = 'builder'
 const AT = new Date('2026-11-11T15:00:00Z')
 const THE_DAY = '2026-11-11'
 const CONTENT = '# Handover: builder\n\n## Package lines\n\n- macula-io/martha#255, branch vesta/255-part1, nothing committed\n'
+
+/** The contract's test host, over the crew's own store on this disk. */
+const aHost = (over: string = crew): HostForTests => hostForTests({ crew: crewFilesDirectory(over) })
 
 const sessions = (): SessionRecordStore => {
   const records = new Map<string, never>()
@@ -46,52 +50,64 @@ const stampStore = (): HandoverStampStore & { readonly all: Map<string, Handover
   return { all, read: (file) => all.get(file), write: (file, stamp) => void all.set(file, stamp) }
 }
 
-/** The place a crew's handovers live, once the store has made it. */
-function thePlace(): string {
-  const place = handoversPlace(state_root, root)
-  assert.ok(!('refusal' in place), `the store refused the handovers place: ${'refusal' in place ? place.refusal : ''}`)
+/** The place a crew's handovers live, once the host's store has made it. */
+function thePlace(host: HostForTests): string {
+  const place = handoversPlace(host.host)
+  assert.ok(!('refusal' in place), `the host refused the handovers place: ${'refusal' in place ? place.refusal : ''}`)
   return place.path
 }
 
+/** The files a crew's handovers place holds, once the host's store has made it. */
+function placeNames(host: HostForTests): readonly string[] {
+  const place = handoversPlace(host.host)
+  assert.ok(!('refusal' in place), `the host refused the handovers place: ${'refusal' in place ? place.refusal : ''}`)
+  const names = place.names()
+  assert.ok(!('refusal' in names), `the host could not list the handovers place: ${'refusal' in names ? names.refusal : ''}`)
+  return names
+}
+
 test('#255: the host writes the handover at the path it chose, whole, and stamps it', () => {
+  const host = aHost()
   const store = sessions()
   const stamps = stampStore()
   const predecessor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'old' })
   rememberSession(store, predecessor)
 
-  const said = writeMyHandover({ state_root, root, member: MEMBER, content: CONTENT, at: AT, stamps, session: predecessor })
+  const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps, session: predecessor })
 
   assert.equal(said, CREW_HANDOVER_WRITTEN, 'the answer a member reads is the one word the flow waits for')
   const file = theHandoverFile(MEMBER, AT)
   assert.equal(file, `HANDOVER_${THE_DAY}_${MEMBER}.md`, 'the handover file is named for the day and the member, and by nothing the member chose')
-  const written = join(thePlace(), file)
+  const written = join(thePlace(host), file)
   assert.equal(readFileSync(written, 'utf8'), CONTENT, 'the file the host wrote is not the handover it was given')
   assert.equal(statSync(written).mode & 0o777, 0o600, 'a handover is readable by this user only')
   assert.ok(stamps.read(written) !== undefined, 'the handover was written with no stamp, so the successor it is handed to could never inherit')
 })
 
 test('#255: a handover stamped by the host is one a session inherits from', () => {
+  const host = aHost()
   const store = sessions()
   const stamps = stampStore()
   const colleague = 'another-member'
   const predecessor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'predecessor' })
   rememberSession(store, predecessor)
-  writeMyHandover({ state_root, root, member: colleague, content: CONTENT, at: AT, stamps, session: predecessor })
+  writeMyHandover(host.host, { member: colleague, content: CONTENT, at: AT, stamps, session: predecessor })
   const reader = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'successor' })
   const after_it_read = readHandover(
     store,
     stamps,
     { member: colleague, session: reader },
-    { file: join(thePlace(), theHandoverFile(colleague, AT)), content: CONTENT },
+    { file: join(thePlace(host), theHandoverFile(colleague, AT)), content: CONTENT },
   )
   assert.notEqual(after_it_read.record_missing, true, 'a handover the host wrote and stamped was read as lost anyway, so a refresh could never inherit')
 })
 
 test('#255: a file the member wrote itself is not a handover, and nothing is cleared for it', () => {
+  const host = aHost()
   const store = sessions()
   const stamps = stampStore()
   const reader = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-member-that-wrote-its-own' })
-  const its_own = join(thePlace(), 'what-i-wrote.md')
+  const its_own = join(thePlace(host), 'what-i-wrote.md')
   writeFileSync(its_own, CONTENT, { mode: 0o600 })
 
   assert.equal(stamps.read(its_own), undefined, 'a file the member wrote was stamped as though the host had written it')
@@ -102,11 +118,33 @@ test('#255: a file the member wrote itself is not a handover, and nothing is cle
   )
 })
 
+// Two names the store would take are still not a member's: one that reaches out of the place, and one longer than
+// MEMBER_NAME allows. So the slice's own rule is what refuses them, and the store is not the thing that decides.
 test('#255: a name that is not a member\'s name is refused, and no handover is written for it', () => {
+  const host = aHost()
   const store = sessions()
   const stamps = stampStore()
   const session = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
-  const said = writeMyHandover({ state_root, root, member: '../../etc/passwd', content: CONTENT, at: AT, stamps, session })
-  assert.notEqual(typeof said, 'string', 'a name that is not a member\'s name was taken, and a handover would be written outside the crew store')
+  const before = placeNames(host)
+  for (const member of ['../../etc/passwd', 'a'.repeat(65)]) {
+    const said = writeMyHandover(host.host, { member, content: CONTENT, at: AT, stamps, session })
+    assert.notEqual(typeof said, 'string', `${member} is not a member's name, and a handover was written for it anyway`)
+  }
   assert.equal(stamps.all.size, 0, 'a refused handover was stamped anyway, so a file that was never written could be inherited from')
+  assert.deepEqual(placeNames(host), before, 'a handover was written outside the crew store, under a name that is not a member\'s')
+})
+
+test('#255: a crew store the host will not write into refuses the handover, and stamps nothing', () => {
+  // A crew whose handovers place cannot be made: a file is already there under the place's name.
+  const blocked = join(home, 'a-crew-that-cannot-write')
+  mkdirSync(blocked, { recursive: true, mode: 0o700 })
+  writeFileSync(join(blocked, 'handovers'), 'not a directory', { mode: 0o600 })
+  const host = aHost(blocked)
+  const store = sessions()
+  const stamps = stampStore()
+  const session = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
+
+  const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps, session })
+  assert.ok(typeof said !== 'string' && 'refusal' in said, 'a store that could not make the place took the handover anyway')
+  assert.equal(stamps.all.size, 0, 'a handover that was never written was stamped, so a successor could inherit from nothing')
 })

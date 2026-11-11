@@ -43,6 +43,7 @@ import { dirname, join } from 'node:path'
 import { getuid } from 'node:process'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
+import type { Refused } from '../host_contract/host_contract.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import {
@@ -104,8 +105,8 @@ export interface Approval {
   readonly tree: string | null
 }
 
-/** Why the store would not do it, in the words the owner reads: named by the slices that build on the store too. */
-export type Refused = { readonly refusal: string }
+/** Why the store would not do it, in the words the owner reads: the host contract's own word for it, named by the slices that build on the store too (martha#255). */
+export type { Refused }
 
 /** Why a directory may not hold Martha's state, or undefined when it may. */
 function unsafeDirectory(path: string): string | undefined {
@@ -248,14 +249,6 @@ function keepFileWhole(directory: string, name: string, text: string): void {
 /** Writes a state file whole: under a staging name, then renamed into place. */
 export function keepStateFile(state: MarthaState, name: string, text: string): void {
   keepFileWhole(state.directory, name, text)
-}
-
-/**
- * Writes a crew file whole (martha#255): a handover or a park marker, in the crew store's own directory, under the same
- * rule a state file is written by — a staging name, `0600`, then renamed into place, so a reader never sees half of it.
- */
-export function keepCrewFile(directory: string, name: string, text: string): void {
-  keepFileWhole(directory, name, text)
 }
 
 const isNodeIds = (value: unknown): value is Record<string, string> =>

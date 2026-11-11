@@ -5,14 +5,18 @@
 // very thing it hands to the successor — so the path is the host's, the write is the host's, and the stamp is the
 // host's, and a file a member wrote itself is not a handover and clears nothing (martha#16's rule 3, wired here).
 //
-// What this slice owns is the path and the file. The tool a member calls, and the flow that asks for a handover, are
-// #254 part 2, and answer over a seam this does not depend on.
+// This slice owns the name of the file and the decision to write it; the directory is the crew store's and the writer
+// is host glue behind the host contract (src/crew_files_directory), so no slice of the core touches a disk. What it
+// keeps is the name: one file per member per day, in the crew's `handovers` place.
+//
+// The tool a member calls, and the flow that asks for a handover, are #254 part 2, and answer over a seam this does not
+// depend on.
 
 import { join } from 'node:path'
 
 import { stampHandover, type HandoverStampStore } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
-import { crewSubdirectory, keepCrewFile, type Refused } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import type { CrewPlace, HostContract, Refused } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
@@ -20,6 +24,9 @@ export const CREW_HANDOVER_WRITTEN = 'CREW-HANDOVER-WRITTEN'
 
 /** Where a crew keeps its handovers, under the one crew store (martha#254 part 1). */
 export const HANDOVERS_PLACE = 'handovers'
+
+/** What this slice asks of a host: the crew's own store, and nothing else. */
+export type HandingOverHost = Pick<HostContract, 'stores'>
 
 /**
  * The file a member's handover written on `at` has: the day it was written and the member, and nothing the member
@@ -29,14 +36,12 @@ export const HANDOVERS_PLACE = 'handovers'
 export const theHandoverFile = (member: string, at: Date): string => `HANDOVER_${at.toISOString().slice(0, 10)}_${member}.md`
 
 /** Where one crew's handovers live, `<crew>/handovers`: made when missing, refused when it is not a place to write. */
-export function handoversPlace(state_root: string, root: string): { readonly path: string } | Refused {
-  return crewSubdirectory(state_root, root, HANDOVERS_PLACE)
+export function handoversPlace(host: HandingOverHost): CrewPlace | Refused {
+  return host.stores.crew.place(HANDOVERS_PLACE)
 }
 
 /** A member handing over: what it wrote, when, and the session whose record a successor inherits. */
 export interface HandingOver {
-  readonly state_root: string
-  readonly root: string
   readonly member: string
   readonly content: string
   readonly at: Date
@@ -50,14 +55,19 @@ export interface HandingOver {
  * saying why it could not: not a member's name, or a crew store that is not safe to write into. A refused write stamps
  * nothing, so a file that was never written can never be inherited from.
  */
-export function writeMyHandover(handing: HandingOver): string | Refused {
+export function writeMyHandover(host: HandingOverHost, handing: HandingOver): string | Refused {
   if (!MEMBER_NAME.test(handing.member)) return { refusal: `${handing.member} is not a member's name.` }
-  const place = handoversPlace(handing.state_root, handing.root)
+  const place = handoversPlace(host)
   if ('refusal' in place) return place
   const name = theHandoverFile(handing.member, handing.at)
-  const file = join(place.path, name)
-  keepCrewFile(place.path, name, handing.content)
+  const refused = place.keep(name, handing.content)
+  if (refused !== undefined) return refused
   // Stamped with the same moment the file is named for, so the day in the name and the stamp can never disagree.
-  stampHandover(handing.stamps, { member: handing.member, session: handing.session }, { file, content: handing.content }, () => handing.at.getTime())
+  stampHandover(
+    handing.stamps,
+    { member: handing.member, session: handing.session },
+    { file: join(place.path, name), content: handing.content },
+    () => handing.at.getTime(),
+  )
   return CREW_HANDOVER_WRITTEN
 }

@@ -9,7 +9,9 @@
 // own: a test that needs one passes the runner, and without one a run is refused.
 // Nor does it hold files on a disk or make scratch directories: a test that
 // needs them passes them, and without them every read and every scratch
-// directory is refused.
+// directory is refused. The crew's own store is the same: a test that needs one
+// passes it (../crew_files_directory on a directory of its own), and without one
+// no place can be asked for.
 //
 // It fails closed where the core trusts the host (#42): with nothing given, the
 // launcher's records are empty and no pid is held by any process, so a binder
@@ -19,6 +21,7 @@
 
 import type {
   ArrivingTurn,
+  CrewStore,
   FileTree,
   HostContract,
   KeyedRow,
@@ -48,6 +51,8 @@ export interface HostForTestsOptions {
   readonly files?: FileTree
   /** Where the test lets the host make scratch directories. */
   readonly scratch?: ScratchDirectories
+  /** The crew's own store the test lets a slice keep files in. */
+  readonly crew?: CrewStore
   /** The launcher's records the store starts with. */
   readonly launches?: readonly KeyedRow[]
   /** Which process holds a pid; asked afresh every time. */
@@ -86,6 +91,8 @@ const NO_FILES: FileTree = {
 
 const NO_SCRATCH: ScratchDirectories = { make: (root, prefix) => notGiven('scratch place', `${root ?? ''} ${prefix}`) }
 
+const NO_CREW: CrewStore = { place: (name) => notGiven('crew store', name) }
+
 const missingDocument = (path: string): Error =>
   Object.assign(new Error(`ENOENT: no such document: ${path}`), { code: 'ENOENT' })
 
@@ -120,6 +127,7 @@ export function hostForTests(options: HostForTestsOptions = {}): HostForTests {
       launches: readingOnly(launcherRecords),
       files: options.files ?? NO_FILES,
       scratch: options.scratch ?? NO_SCRATCH,
+      crew: options.crew ?? NO_CREW,
     },
     processes: processesFor(options),
     delivery: {

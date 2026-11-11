@@ -7,7 +7,9 @@
 //   - a clock;
 //   - stores: append-only rows, documents read as text, the launcher's
 //     records kept one per key, which slices only read, the files on disk as
-//     they are, and scratch directories a slice makes and writes only inside;
+//     they are, scratch directories a slice makes and writes only inside, and
+//     the crew's own store, one place per name, which a slice keeps whole
+//     files in and reads back (martha#254 R1, #255);
 //   - running a process (now, or later), and telling which process holds a pid;
 //   - delivery in and out: a turn handed to the model, and the turns that
 //     arrive, with where each came from as far as the tool itself can say;
@@ -192,12 +194,49 @@ export interface ScratchDirectories {
   make(root: string | null, prefix: string): ScratchDirectory
 }
 
+/** Why a host would not do it, in the words the owner reads. */
+export type Refused = { readonly refusal: string }
+
+/**
+ * One place in the crew's own store: a directory every member of one crew reads, holding whole files a slice keeps
+ * and reads back (martha#254 R1, #255).
+ *
+ * A slice names a place and a file in it, never a path on the machine, so where a handover or a park marker lives is
+ * the host's to decide and the host's to check. The adapter refuses a place that is not a directory of this user's that
+ * nobody else may write into, and refuses a name that would leave the place it was asked for.
+ */
+export interface CrewPlace {
+  /** Its absolute path, as the host resolved it: the name a record of a file in it carries. */
+  readonly path: string
+  /** Keeps `text` whole as `name` — under a staging name, mode 0600, then renamed into place — or says why it could not. */
+  keep(name: string, text: string): Refused | undefined
+  /** The text of `name`; undefined when this place holds no file of that name; or why it may not be read. */
+  read(name: string): { readonly text: string } | undefined | Refused
+  /** Every name in this place, in no particular order, or why it cannot be listed. A half-written file is not one. */
+  names(): readonly string[] | Refused
+}
+
+/**
+ * The crew's own store, outside the checkout, one directory per place (martha#254 R1, #255).
+ *
+ * It is the place martha#254 R1 keys by a repository's git common directory, so every member of one crew reads one
+ * history however many checkouts it works in; the launcher resolves it and composes this store over it. A slice reaches
+ * it here and never by a path of its own, so what a member hands to its successor and what a park marker says are
+ * written by the host, in a directory the host checked (martha#255; the writer is host glue, and
+ * prove_the_core/only_the_launcher_writes_launch_records keeps a slice from importing it).
+ */
+export interface CrewStore {
+  /** The one place this crew keeps `name` in, made 0700 when missing; or why it may not be used. */
+  place(name: string): CrewPlace | Refused
+}
+
 export interface Stores {
   readonly rows: RowStore
   readonly documents: DocumentStore
   readonly launches: KeyedRows
   readonly files: FileTree
   readonly scratch: ScratchDirectories
+  readonly crew: CrewStore
 }
 
 /** A process to run: the command, its arguments and the directory it runs in. */

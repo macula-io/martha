@@ -361,9 +361,9 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
 
 /** Level 3: what Martha's code is made of, one box per group of slices in src/. */
 export function components(): Diagram {
-  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1170)
+  const d = new Diagram('c4-components.svg', 'Martha components', 1000, 1330)
 
-  d.bound(16, 40, 968, 1000, 'Martha [the code in src/, one directory per capability]')
+  d.bound(16, 40, 968, 1170, 'Martha [the code in src/, one directory per capability]')
 
   d.box({ kind: 'b-sys', x: 32, y: 70, w: 300, h: 128, name: 'run_the_martha_command', names: ['run_the_martha_command'], type: '[the acts]', code: true,
     desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, --version: the words', 'checked first, a refusal on stderr with', 'the command that fixes it, 0 / 1 / 2'] })
@@ -405,7 +405,14 @@ export function components(): Diagram {
   d.box({ kind: 'b-cmp', x: 664, y: 724, w: 300, h: 200, name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg'], type: '[this repository\'s own checks]', code: true,
     desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; a badge host that answers 408 is', 'asked again before its link is broken;', 'and check_the_logos_are_valid_svg holds', 'every logo to well-formed XML. Each has', 'a self-test that proves it bites'] })
 
-  d.notes(24, 1058, [
+  d.box({ kind: 'b-cmp', x: 32, y: 1046, w: 300, h: 150, name: 'write_my_handover', names: ['write_my_handover'], type: '[the host writes a handover]', code: true,
+    desc: ['A member\'s handover is written by the', 'host, at the path the host chose, and', 'stamped: one file per member per day', 'in the crew\'s own store, so a file the', 'member wrote itself is not a handover'] })
+  d.box({ kind: 'b-cmp', x: 348, y: 1046, w: 300, h: 150, name: 'park_and_wake_a_member', names: ['park_and_wake_a_member'], type: '[a park that outlives a session]', code: true,
+    desc: ['A member\'s park is a marker in the', 'crew\'s store, so a clear, a restart or a', 'refresh cannot lose it; who may park', 'another member is the declaration\'s', 'table, not who_may_act (martha#255 r=3)'] })
+  d.box({ kind: 'b-cmp', x: 664, y: 1046, w: 300, h: 150, name: 'crew_files_directory', names: ['crew_files_directory'], type: '[the crew\'s store, on this machine]', code: true,
+    desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] })
+
+  d.notes(24, 1230, [
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:',
     'log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,',
     'probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
