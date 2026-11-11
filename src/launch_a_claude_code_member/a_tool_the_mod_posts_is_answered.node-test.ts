@@ -6,7 +6,7 @@
 // does not.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -30,6 +30,7 @@ import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
+import { removeTheTree } from './relay_copy.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'
@@ -37,7 +38,7 @@ const SESSION = 'session-254'
 /** A crew place a test owns: a checkout with a declaration, the crew's streams and its dashboard rows. */
 function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout: string; readonly rows: string; readonly dashboard: string } {
   const home = mkdtempSync(join(tmpdir(), 'martha-254-tools-'))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
   mkdirSync(join(checkout, '.crew'), { recursive: true })
   writeFileSync(join(checkout, '.crew', 'crew.json'), JSON.stringify({

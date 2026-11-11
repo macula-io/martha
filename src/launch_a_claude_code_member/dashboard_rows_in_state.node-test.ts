@@ -4,18 +4,19 @@
 // half a row, and a beat taken earlier that lands later leaves the row where the newer beat put it.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 
 /** A rows directory the test owns, removed when it ends. */
 function aPlace(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-254-rows-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   return dir
 }

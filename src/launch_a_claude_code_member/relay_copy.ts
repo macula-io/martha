@@ -41,6 +41,7 @@ export const RELAY_FILES = [
   'hooks/register.ts',
   'hooks/relay_protocol.ts',
   'hooks/crew.tsx',
+  'hooks/crew_tools_answer.ts',
   'hooks/pane_rule.ts',
 ] as const
 
