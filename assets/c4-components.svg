@@ -157,6 +157,16 @@
 <text class="t-desc" x="48" y="992">installer version through run_the_nodes_</text>
 <text class="t-desc" x="48" y="1008">own_npm_alone, refuses other bytes, and</text>
 <text class="t-desc" x="48" y="1024">runs it with the words unchanged</text>
+<rect class="b-cmp" x="664" y="890" width="300" height="140" rx="10"/>
+<text class="t-code" x="680" y="918">show_dashboard_beat,</text>
+<text class="t-code" x="680" y="936">keep_the_ledger</text>
+<text class="t-type" x="680" y="954">[the crew's rows and its ledger]</text>
+<text class="t-desc" x="680" y="978">show_dashboard_beat holds a member's row and</text>
+<text class="t-desc" x="680" y="994">the rule the newest beat wins; report_progress</text>
+<text class="t-desc" x="680" y="1010">moves it, see_the_crew lays every one out,</text>
+<text class="t-desc" x="680" y="1026">and a_crews_tools answers all five tools.</text>
+<text class="t-desc" x="680" y="1042">keep_the_ledger loads log_ledger, whose</text>
+<text class="t-desc" x="680" y="1058">streams sit in the crew's own state</text>
 <rect class="b-cmp" x="348" y="890" width="300" height="140" rx="10"/>
 <text class="t-code" x="364" y="918">run_the_nodes_own_npm_alone</text>
 <text class="t-type" x="364" y="936">[npm, and nothing of the machine's]</text>
@@ -191,9 +201,9 @@
 <text class="t-desc" x="680" y="844">name; a badge host that answers 408 is</text>
 <text class="t-desc" x="680" y="860">asked again before its link is broken.</text>
 <text class="t-desc" x="680" y="876">Each has a self-test that proves it bites</text>
-<text class="t-desc" x="24" y="1058">Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:</text>
-<text class="t-desc" x="24" y="1076">log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,</text>
-<text class="t-desc" x="24" y="1094">probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>
+<text class="t-desc" x="24" y="1058">Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:</text>
+<text class="t-desc" x="24" y="1076">the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew's</text>
+<text class="t-desc" x="24" y="1094">own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>
 <text class="t-desc" x="24" y="1112">room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
 <rect class="b-sys" x="24" y="984" width="22" height="14" rx="3"/>
 <text class="t-leg" x="54" y="996">Martha</text>

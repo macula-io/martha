@@ -276,7 +276,16 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   const specifiers = (name: string) => moduleReferencesOf(read(name), name).map(({ specifier }) => specifier)
   assert.deepEqual(specifiers('register.ts'), ['./relay_protocol.ts'])
   assert.deepEqual(specifiers('relay_protocol.ts'), [])
-  assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./register.ts'] })
+  // The crew's mod is the second module the host loads (martha#254): it carries its tools' calls to the launcher the
+  // same way, and the one rule it applies — whether the pane opens by itself — is a plain file with no imports at all,
+  // so what it decides is readable and testable without the host.
+  assert.deepEqual(specifiers('crew.tsx'), ['./relay_protocol.ts', './pane_rule.ts'])
+  assert.deepEqual(specifiers('pane_rule.ts'), [])
+  // The host loads one hooks module per plugin, so ONE file is listed and it hands the registration to both; a
+  // hooks.json naming two was refused outright, which would have left every gate off (martha#254).
+  // The entry itself is a .tsx (it hands the registration to a module that draws), and the host compiles it; what this
+  // reads is that one module is listed, and the .ts modules it loads keep their own import lists.
+  assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./martha.tsx'] })
 })
 
 test('the relay reads the socket only from the variable the launcher sets', async () => {

@@ -46,6 +46,39 @@ export type RelayEvent = keyof typeof RELAY_PATHS
  */
 export const RUN_PATH = '/run-a-signed-shape'
 
+/**
+ * Where the crew's mod asks the launcher for a core tool's answer (martha#254). Not a hook event: the mod registers
+ * the tools the member's model calls, and the launcher runs the slice that decides what the answer is. Every later
+ * Martha tool uses this one seam.
+ */
+export const TOOL_ANSWER_PATH = '/answer-a-tool'
+
+/** A tool call as the mod posts it: the session it came from, the tool's own name, and its arguments unchanged. */
+export function toolCallBody(session_id: string, tool: string, args: unknown): Readonly<Record<string, unknown>> {
+  return { session_id, tool, args }
+}
+
+/** A core tool's answer: what the slice said. */
+export interface Answered {
+  readonly answer: string
+}
+
+/** What the mod acts on: the core's answer, or why it has none. */
+export type HeardToolAnswer = { readonly answered: true; readonly answer: string } | { readonly answered: false; readonly why: string }
+
+const isAnswer = (value: Record<string, unknown>): value is Record<string, unknown> & Answered =>
+  exactKeys(value, ['answer']) && typeof value.answer === 'string'
+
+/** A tool's answer, as the mod hears it: exactly `{"answer": "..."}`, or a refusal with its reason. */
+export function heardToolAnswer(status: number, text: string): HeardToolAnswer {
+  if (status !== 200) return { answered: false, why: `the launcher answered with status ${status}` }
+  const value = jsonObjectOf(text)
+  if (value === undefined) return { answered: false, why: MALFORMED }
+  if (isAnswer(value)) return { answered: true, answer: value.answer }
+  if (exactKeys(value, ['refused']) && isReason(value.refused)) return { answered: false, why: value.refused }
+  return { answered: false, why: MALFORMED }
+}
+
 /** A signed shape ran: its exit status, and its merged output, base64. */
 export interface Ran {
   readonly ran: 1
