@@ -188,14 +188,15 @@
 <text class="t-type" x="680" y="788">[this repository's own checks]</text>
 <text class="t-desc" x="680" y="812">A private issue link, an internal host</text>
 <text class="t-desc" x="680" y="828">name or a private remote fails CI by</text>
-<text class="t-desc" x="680" y="844">name; a badge host that answers 408 is</text>
-<text class="t-desc" x="680" y="860">asked again before its link is broken;</text>
-<text class="t-desc" x="680" y="876">and check_the_logos_are_valid_svg holds</text>
-<text class="t-desc" x="680" y="892">every logo to well-formed XML. check_</text>
-<text class="t-desc" x="680" y="908">no_test_the_base_passed_goes_missing</text>
-<text class="t-desc" x="680" y="924">names the test a branch dropped from</text>
-<text class="t-desc" x="680" y="940">its base, by file and title. Each has</text>
-<text class="t-desc" x="680" y="956">a self-test that proves it bites</text>
+<text class="t-desc" x="680" y="844">name; so does a home path in the text</text>
+<text class="t-desc" x="680" y="860">members post on GitHub, which check_</text>
+<text class="t-desc" x="680" y="876">posted_text_carries_nothing_private</text>
+<text class="t-desc" x="680" y="892">reads daily. A badge host that answers</text>
+<text class="t-desc" x="680" y="908">408 is asked again before its link is</text>
+<text class="t-desc" x="680" y="924">broken; check_the_logos_are_valid_svg</text>
+<text class="t-desc" x="680" y="940">holds every logo to well-formed XML;</text>
+<text class="t-desc" x="680" y="956">check_no_test_the_base_passed_goes_</text>
+<text class="t-desc" x="680" y="972">missing names a dropped test; each bites</text>
 <text class="t-desc" x="24" y="1058">Every box is a directory in src/: the name is the capability, and its test sits beside it. Three directories are drawn nowhere on purpose:</text>
 <text class="t-desc" x="24" y="1076">log_ledger, the crew ledger, which nothing this release runs loads yet; and the two scripts run by hand when a host is recorded,</text>
 <text class="t-desc" x="24" y="1094">probe_launch_hosts and record_claude_code_host. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>
