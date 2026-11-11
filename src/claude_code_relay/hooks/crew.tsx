@@ -94,6 +94,11 @@ function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWi
 }
 
 /** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
+/** The agent an event belongs to: the host stamps a subagent's turn with one, and the main turn with none. */
+function agentIdIn(event: unknown): unknown {
+  return typeof event === 'object' && event !== null ? (event as { agentId?: unknown }).agentId : undefined
+}
+
 async function startReadingTheChannel($: CrewEngine): Promise<void> {
   if (readingTheChannel !== null) return
   const heard = await hearTheLauncher($, THE_CHANNEL_READ, {})
@@ -314,21 +319,18 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   // A turn is running from `turn.start` until it ends, and the channel is read only outside one: the host queues a
   // submit made during a turn and never raises it back, so it could never be counted as taken in (martha#253 r=2).
+  // The host fires both events for a subagent's turn too; those carry the agent, and the rule ignores them, or a
+  // subagent finishing inside the member's own turn would read as the member going idle.
   on('turn.start', ($: CrewEngine, e: unknown, next: CrewNext) => {
-    theChannelReading($).aTurnStarted()
+    theChannelReading($).aTurnStarted(agentIdIn(e))
     return next(e)
   })
 
-  // A turn ended, so the host is idle and can take the next message the launcher hands it (martha#253, slice 2). The
-  // submit from `turn.complete` is the one shape the host's own guidance names for submitting while the session idles.
+  // A turn ended — answered, aborted, refused or failed, since `turn.complete` carries the reason — so the host is
+  // idle and can take the next message the launcher hands it (martha#253, slice 2). The submit from `turn.complete`
+  // is the one shape the host's own guidance names for submitting while the session idles.
   on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
-    await theChannelReading($).aTurnEnded()
-    return next(e)
-  })
-
-  // An aborted turn never completes, so without this the session would read nothing again (martha#253 r=2).
-  on('turn.abort', ($: CrewEngine, e: unknown, next: CrewNext) => {
-    void theChannelReading($).aTurnEnded()
+    await theChannelReading($).aTurnEnded(agentIdIn(e))
     return next(e)
   })
 }

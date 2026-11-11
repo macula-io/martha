@@ -70,12 +70,37 @@ test('#253: an idle tick reads and submits without a turn having ended', async (
   assert.deepEqual(b.submitted, ['[crew #0] reviewer: while idle', '[crew #0] reviewer: still while idle'], 'an idle member that never takes a turn stopped reading')
 })
 
-test('#253: a turn that was aborted is over, and the next tick reads again', async () => {
+test("#253: a subagent's turn is not the member's, so its end submits nothing", async () => {
+  const b = bench()
+  b.next('[crew #0] reviewer: during the main turn')
+  b.reading.aTurnStarted() // the member's own turn begins
+  b.reading.aTurnStarted('agent-1') // a subagent's turn begins inside it
+  await b.reading.aTurnEnded('agent-1') // and ends, while the member's turn is still running
+
+  assert.deepEqual(b.asked, [], "a subagent's turn ending asked the launcher while the member was still in its own turn")
+  assert.deepEqual(b.submitted, [], "a subagent's turn ending submitted a prompt during the member's turn")
+
+  await b.reading.aTurnEnded() // the member's own turn ends
+  assert.deepEqual(b.submitted, ['[crew #0] reviewer: during the main turn'], "the member's own turn ending did not read")
+})
+
+test('#253: one read at a time — two reads racing submit one message once', async () => {
+  const b = bench()
+  b.next('[crew #0] reviewer: one message')
+
+  await Promise.all([b.reading.readWhileIdle(), b.reading.readWhileIdle()])
+
+  assert.deepEqual(b.submitted, ['[crew #0] reviewer: one message'], 'two reads at once submitted the message more than once')
+  assert.equal(b.asked.length, 1, 'two reads at once both asked the launcher')
+})
+
+test('#253: an interrupted turn ends through turn.complete, so its end reads again', async () => {
   const b = bench()
   b.reading.aTurnStarted()
-  b.next('[crew #0] reviewer: after the abort')
+  b.next('[crew #0] reviewer: after the interruption')
 
+  // The host fires turn.complete with reason 'aborted': there is no separate hook to listen for.
   await b.reading.aTurnEnded()
 
-  assert.deepEqual(b.submitted, ['[crew #0] reviewer: after the abort'], 'an aborted turn left the session reading nothing')
+  assert.deepEqual(b.submitted, ['[crew #0] reviewer: after the interruption'], 'an interrupted turn left the session reading nothing')
 })
