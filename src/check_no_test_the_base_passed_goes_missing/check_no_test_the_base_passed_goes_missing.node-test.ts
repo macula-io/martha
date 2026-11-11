@@ -133,6 +133,19 @@ test('a claim for a title that is still at the tip is a failure of its own', (t)
   assert.match(answer.stderr, /still there/)
 })
 
+test('the closing line counts the claims that excuse nothing, not only the missing tests (martha#274 r=2)', (t) => {
+  const { dir, shas } = repositoryWith(t, [
+    { files: { 'package.json': MANIFEST, 'src/x/a.node-test.ts': oneTest('one') } },
+    {
+      files: { 'src/x/a.node-test.ts': oneTest('one') + oneTest('two') },
+      message: dropTrailer('src/x/a.node-test.ts', 'two'),
+    },
+  ])
+  const answer = check(dir, shas[0] ?? '', shas[1] ?? '')
+  assert.equal(answer.status, 1, answer.stderr)
+  assert.match(answer.stderr, /0 test\(s\) the base passed are not at the tip, 1 claim\(s\) that excuse nothing/)
+})
+
 test('a test file removed whole passes only with a claim for the file, and otherwise names every title', (t) => {
   const base = { files: { 'package.json': MANIFEST, 'src/x/a.node-test.ts': oneTest('one') + oneTest('two') } }
   const refused = repositoryWith(t, [base, { files: { 'src/x/a.node-test.ts': null } }])
@@ -194,6 +207,17 @@ test('a test file the plant never names is caught from the glob, not from a writ
   const answer = check(dir, shas[0] ?? '', shas[1] ?? '')
   assert.equal(answer.status, 1, answer.stderr)
   assert.match(answer.stderr, /src\/y\/b\.node-test\.ts/)
+})
+
+test('a test file directly under the glob’s own folder is judged, not only one a folder deeper (martha#274 r=2)', (t) => {
+  const { dir, shas } = repositoryWith(t, [
+    { files: { 'package.json': MANIFEST, 'src/a.node-test.ts': oneTest('one') + oneTest('directly under the core') } },
+    { files: { 'src/a.node-test.ts': oneTest('one') } },
+  ])
+  const answer = check(dir, shas[0] ?? '', shas[1] ?? '')
+  assert.equal(answer.status, 1, answer.stderr)
+  assert.match(answer.stderr, /src\/a\.node-test\.ts/)
+  assert.match(answer.stderr, /directly under the core/)
 })
 
 test('an installer test file is judged from the installer manifest at the base', (t) => {

@@ -6,6 +6,7 @@
 // in package.json at the merge base, and the titles come from the files themselves.
 
 import { spawnSync } from 'node:child_process'
+import { posix } from 'node:path'
 
 import { PACKAGES, testGlobsOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
@@ -22,10 +23,13 @@ export type Scan =
   | { readonly verdict: 'unreadable'; readonly reason: string }
 
 interface Patterns {
-  readonly matchers: readonly RegExp[]
+  readonly matchers: readonly Matcher[]
   /** The package folders whose manifest the merge base does not hold, so their tests could not have been there. */
   readonly skipped: readonly string[]
 }
+
+/** Whether a repository path is one a test script's glob runs. */
+type Matcher = (path: string) => boolean
 
 interface Unreadable {
   readonly reason: string
@@ -57,24 +61,25 @@ const pathsAt = (repository: string, revision: string): readonly string[] | unde
 const textAt = (repository: string, revision: string, path: string): string | undefined =>
   git(repository, ['show', `${revision}:${path}`])
 
-/** The globs of a test script as matchers for a repository path; a package's globs are relative to it. */
-const matchersFor = (folder: string, globs: readonly string[]): RegExp[] => {
+/**
+ * The globs of a test script as matchers for a repository path; a package's globs are relative to it.
+ *
+ * The glob is matched by Node's own `path.matchesGlob`, in its posix form because the paths come from git
+ * and always hold `/`. A translation of our own drifted from the runner once: it read `**` as one folder or
+ * more, while the runner reads it as zero or more, so a test file directly under a glob's folder ran but was
+ * never judged (martha#274 r=2). Asking the same library the runner asks is how the two cannot disagree.
+ */
+const matchersFor = (folder: string, globs: readonly string[]): Matcher[] => {
   const prefix = folder === '.' ? '' : `${folder}/`
-  return globs.map((glob) => new RegExp(`^${prefix}${globAsRegex(glob)}$`))
+  return globs.map((glob) => {
+    const pattern = `${prefix}${glob}`
+    return (path: string) => posix.matchesGlob(path, pattern)
+  })
 }
-
-/** A glob as a regular expression for one path: `**` crosses a folder, `*` and `?` do not. */
-const globAsRegex = (glob: string): string =>
-  glob
-    .split('**')
-    .map((part) =>
-      part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]'),
-    )
-    .join('.*')
 
 /** The test patterns of every package's manifest at the merge base, and the packages that have none there. */
 const patternsAt = (repository: string, mergeBase: string, paths: readonly string[]): Patterns | Unreadable => {
-  const matchers: RegExp[] = []
+  const matchers: Matcher[] = []
   const skipped: string[] = []
   for (const folder of PACKAGES) {
     const manifestPath = folder === '.' ? 'package.json' : `${folder}/package.json`
@@ -106,6 +111,8 @@ const readingManifestAt = (
 /** A base path whose file moved, mapped to where the head holds it. */
 const renamedToIn = (repository: string, mergeBase: string, head: string): ReadonlyMap<string, string> => {
   const renamed = new Map<string, string>()
+  // A diff git refuses is read as "no renames", which can only leave a moved file judged at its old path and so
+  // make the check redder. It can never turn a dropped test into a pass.
   const parts = (git(repository, ['diff', '--find-renames', '--name-status', '-z', mergeBase, head]) ?? '')
     .split('\0')
     .filter((part) => part !== '')
@@ -158,7 +165,7 @@ export function scan(repository: string, base: string, head: string): Scan {
   if (headPaths === undefined) return { verdict: 'unreadable', reason: `the tree at ${headCommit} could not be read` }
   const patterns = patternsAt(repository, mergeBase, basePaths)
   if ('reason' in patterns) return { verdict: 'unreadable', reason: patterns.reason }
-  const testFiles = basePaths.filter((path) => patterns.matchers.some((matcher) => matcher.test(path)))
+  const testFiles = basePaths.filter((path) => patterns.matchers.some((matches) => matches(path)))
   if (testFiles.length === 0) return { verdict: 'unreadable', reason: `the base holds no file the test scripts name, so nothing was compared` }
   const comparison = comparisonOf(repository, mergeBase, headCommit, testFiles, headPaths)
   if ('reason' in comparison) return { verdict: 'unreadable', reason: comparison.reason }

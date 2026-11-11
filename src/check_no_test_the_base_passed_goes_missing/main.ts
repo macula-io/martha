@@ -28,7 +28,10 @@ const report = (comparison: Comparison): number => {
     const named = claim.title === undefined ? '' : `: '${claim.title}'`
     console.error(`${claim.file}: the commit drops a test that is still there${named}`)
   }
-  console.error(`${NAME}: ${comparison.missing.length} test(s) the base passed are not at the tip`)
+  console.error(
+    `${NAME}: ${comparison.missing.length} test(s) the base passed are not at the tip, ` +
+      `${comparison.staleClaims.length} claim(s) that excuse nothing`,
+  )
   return 1
 }
 
