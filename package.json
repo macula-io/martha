@@ -11,6 +11,7 @@
     "test": "node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
+    "check:posted-text": "node src/check_posted_text_carries_nothing_private/main.ts",
     "check:links": "node src/check_every_link_resolves/main.ts",
     "check:logos": "node src/check_the_logos_are_valid_svg/main.ts",
     "check:base-tests": "node src/check_no_test_the_base_passed_goes_missing/main.ts",
