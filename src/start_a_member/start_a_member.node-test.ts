@@ -30,7 +30,7 @@ import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_ma
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
-import { until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
+import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
@@ -108,9 +108,12 @@ function fakeClaude(place: Place): { readonly command: string; readonly ran: str
 
 /**
  * A fake `claude` that starts a child writing into the home until it is killed, and then waits to be stopped: the shape
- * of the run the teardown race came from (martha#272). The child's pid is left where the test can read it, and it puts
- * an entry into the home every few microseconds, so a teardown that removes the home under it is removing a tree that
- * is not quiet.
+ * of the run the teardown race came from (martha#272). The child puts an entry into the home every few microseconds, so
+ * a teardown that removes the home under it is removing a tree that is not quiet.
+ *
+ * The child's pid is written to a file of its own, and the write is worth care: the pid file is read by the test, and a
+ * reader can see the file after it is made and before the number is in it. So the number goes to a temporary name that
+ * is renamed into place, which is one step to a reader: a pid file that is there holds a whole pid.
  */
 function aHostWritingIn(place: Place): { readonly command: string; readonly child: string } {
   const dir = join(place.home, 'writer')
@@ -127,7 +130,7 @@ function aHostWritingIn(place: Place): { readonly command: string; readonly chil
       '#!/bin/sh',
       ...hostAnswers(),
       `node -e '${theChild}' '${place.home}' &`,
-      `echo $! > '${child}'`,
+      `printf '%s\\n' "$!" > '${child}.being-written' && mv '${child}.being-written' '${child}'`,
       'exec sleep 600',
       '',
     ].join('\n'),
@@ -136,14 +139,47 @@ function aHostWritingIn(place: Place): { readonly command: string; readonly chil
   return { command, child }
 }
 
-/** Whether a process is still there: a signal that does nothing, and the answer is whether it could be sent. */
+/** The pid a file names, or 0 when it names none: a pid file is read, and reading it may find it still being written. */
+function pidIn(path: string): number {
+  try {
+    const named = Number(readFileSync(path, 'utf8').trim())
+    return Number.isInteger(named) && named > 0 ? named : 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Whether a process is still running: a signal that does nothing, and then the state the kernel keeps for it. A process
+ * that has been killed is a zombie (`Z`) or exiting (`X`) for a moment after, and either answers the signal, so the
+ * signal alone would call it running. Where there is no `/proc` to ask, the signal's answer is the answer.
+ */
 function isRunning(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 1) return false
   try {
     process.kill(pid, 0)
-    return true
   } catch {
     return false
   }
+  return !['Z', 'X'].includes(stateOf(pid) ?? '')
+}
+
+/** A process's state letter, as `/proc` keeps it; undefined where it cannot be read. */
+function stateOf(pid: number): string | undefined {
+  try {
+    return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.charAt(0)
+  } catch {
+    return undefined
+  }
+}
+
+/** How long a test waits for the child it killed to be gone. A zombie is reaped in a moment; this is far above that. */
+const GONE_WITHIN_MS = 5_000
+
+/** Waits for a killed child to be gone, within a bound: a wait that never ends fails the test when the bound runs out. */
+async function untilItIsGone(pid: number): Promise<void> {
+  const deadline = Date.now() + GONE_WITHIN_MS
+  while (isRunning(pid) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
 }
 
 function requestFor(place: Place, command: string, member: string, lines: string[]): MemberStartRequest {
@@ -240,8 +276,9 @@ test('a place ends the member it started before it removes the home, while a chi
   const lines: string[] = []
   const started = await startedOn(place, requestFor(place, writer.command, BUILDER!.name, lines))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the host\'s child to write into the home', () => existsSync(writer.child), t)
-  const child = Number(readFileSync(writer.child, 'utf8').trim())
+  await until('the host\'s child to name its pid', () => pidIn(writer.child) > 1, t)
+  const child = pidIn(writer.child)
+  assert.ok(child > 1, 'the pid the child wrote is a pid of its own, never 0: a signal to 0 is sent to every process of this test\'s group')
   assert.ok(isRunning(child), 'the child that writes into the home is running when the test ends')
   // The order is read, not raced: the two things the teardown does are noted as they happen. Nothing here stops the
   // member or removes the home — the place does both — and this hook is registered after the place's own, so it reads
@@ -271,6 +308,7 @@ test('a place ends the member it started before it removes the home, while a chi
       `a place ends the member it started before it removes the home it was writing in (martha#272): ${happened.join(', then ')}`,
     )
     assert.equal(existsSync(place.home), false, 'the home is gone')
+    await untilItIsGone(child)
     assert.equal(isRunning(child), false, 'the child that kept writing in the home went with it')
   })
 })
@@ -440,6 +478,6 @@ test("a run reading a member's rows derives the same place the launcher writes t
     assert.ok('rows' in places, 'the launcher places are made')
     assert.equal(crewRowsDirectoryOf(join(state_home, '.local', 'state'), checkout), places.rows, 'the reader derives the place the launcher built')
   } finally {
-    rmSync(state_home, { recursive: true, force: true })
+    removeTheTree(state_home)
   }
 })

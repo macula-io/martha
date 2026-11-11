@@ -122,3 +122,100 @@ export function removalsWithoutARetry(sources: readonly CoreSource[]): RemovalWi
     .flatMap(findingsIn)
     .sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line)
 }
+
+// --- the one removal keeps its retry ---------------------------------------------------
+
+/** Where the one removal is defined, and the constants that bound it. */
+export const THE_ONE_REMOVAL = 'src/launch_a_claude_code_member/relay_copy.ts'
+
+/** The removal the whole suite goes through. */
+const THE_REMOVAL = 'removeTheTree'
+
+/**
+ * The options that removal's own `rmSync` must carry, each naming the constant that bounds it. Named here so a reader of
+ * this check and a reader of that file read the same two names, and so losing one is a failure with a name rather than a
+ * file that quietly stops retrying.
+ */
+export const THE_RETRY_OPTIONS: readonly (readonly [string, string])[] = [
+  ['maxRetries', 'REMOVAL_ATTEMPTS'],
+  ['retryDelay', 'REMOVAL_DELAY_MS'],
+]
+
+export interface RemovalWithoutItsRetry {
+  readonly path: string
+  readonly line: number
+  readonly why: string
+}
+
+const isPositiveWholeNumber = (node: ts.Expression): boolean =>
+  ts.isNumericLiteral(node) && Number.isInteger(Number(node.text)) && Number(node.text) > 0
+
+/** A constant's declaration, wherever it is in these sources. */
+function constantIn(sources: readonly CoreSource[], name: string): { source: CoreSource; node: ts.Node } | undefined {
+  for (const source of sources) {
+    const { file } = parseSource(source.text, source.path)
+    const found = nodesOf(file).find(
+      (node) => ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name,
+    )
+    if (found !== undefined) return { source, node: found }
+  }
+  return undefined
+}
+
+/** Why a bounding constant does not bound anything, or is not there at all. */
+function boundWhy(sources: readonly CoreSource[], name: string): RemovalWithoutItsRetry[] {
+  const constant = constantIn(sources, name)
+  if (constant === undefined) {
+    return [{ path: THE_ONE_REMOVAL, line: 1, why: `${name} is not declared: the retry has no bound to read` }]
+  }
+  const { initializer } = constant.node as ts.VariableDeclaration
+  if (initializer !== undefined && isPositiveWholeNumber(initializer)) return []
+  return [
+    {
+      path: constant.source.path,
+      line: lineOf(parseSource(constant.source.text, constant.source.path).file, constant.node),
+      why: `${name} is not a positive whole number: a retry bounded by it never retries`,
+    },
+  ]
+}
+
+// The `rmSync` call the removal makes, and the options it was given.
+const theRemovalsOwnCall = (file: ts.SourceFile): ts.CallExpression | undefined =>
+  nodesOf(file).find(
+    (node): node is ts.CallExpression => ts.isCallExpression(node) && calleeName(node.expression) === 'rmSync',
+  )
+
+const namesIt = (property: ts.PropertyAssignment, option: string): boolean =>
+  (ts.isIdentifier(property.name) ? property.name.text : '') === option
+
+/** The retry options the removal's own call does not name, or names with something other than its bounding constant. */
+const unbounded = (call: ts.CallExpression): readonly (readonly [string, string])[] => {
+  const options = call.arguments.find((argument): argument is ts.ObjectLiteralExpression =>
+    ts.isObjectLiteralExpression(argument),
+  )
+  return THE_RETRY_OPTIONS.filter(([option, constant]) => {
+    const property = options?.properties.find(
+      (candidate): candidate is ts.PropertyAssignment => ts.isPropertyAssignment(candidate) && namesIt(candidate, option),
+    )
+    return property === undefined || !ts.isIdentifier(property.initializer) || property.initializer.text !== constant
+  })
+}
+
+/** Every way the one removal fails to keep its bounded retry, with the file and line of the thing that is wrong. */
+export function removalsWithoutTheirRetry(sources: readonly CoreSource[]): RemovalWithoutItsRetry[] {
+  const source = sources.find((candidate) => candidate.path === THE_ONE_REMOVAL)
+  if (source === undefined) {
+    return [{ path: THE_ONE_REMOVAL, line: 1, why: `the one removal is not in these sources` }]
+  }
+  const { file } = parseSource(source.text, source.path)
+  const call = theRemovalsOwnCall(file)
+  const missing = call === undefined ? THE_RETRY_OPTIONS : unbounded(call)
+  const findings = missing.map(([option, constant]) => ({
+    path: source.path,
+    line: call === undefined ? 1 : lineOf(file, call),
+    why: `${THE_REMOVAL}'s own removal does not carry ${option}: ${constant}, so it never retries (martha#272)`,
+  }))
+  return [...findings, ...THE_RETRY_OPTIONS.flatMap(([, constant]) => boundWhy(sources, constant))].sort(
+    (a, b) => a.line - b.line,
+  )
+}

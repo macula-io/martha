@@ -12,7 +12,13 @@ import { test } from 'node:test'
 
 import type { CoreSource } from '../src/host_contract/core_source.ts'
 import { coreSources } from './core_sources.ts'
-import { removalsWithoutARetry, THE_REMOVAL_THAT_RETRIES } from './removals_without_a_retry.ts'
+import {
+  removalsWithoutARetry,
+  removalsWithoutTheirRetry,
+  THE_ONE_REMOVAL,
+  THE_REMOVAL_THAT_RETRIES,
+  THE_RETRY_OPTIONS,
+} from './removals_without_a_retry.ts'
 
 const repository = join(import.meta.dirname, '..')
 
@@ -86,7 +92,57 @@ test('a removal whose failure is asserted is an expectation, not a teardown, and
   assert.deepEqual(removalsWithoutARetry([planted(text)]), [])
 })
 
-test('a file that is not a test file is not judged: the core removes trees of its own', () => {
-  const text = "import { rmSync } from 'node:fs'\nexport const a = (home: string): void => { rmSync(home, { recursive: true, force: true }) }\n"
-  assert.deepEqual(removalsWithoutARetry([planted(text, 'src/planted/planted.ts')]), [])
+test('a teardown in the suite\'s own shape, t.after(() => rmSync(...)), is named: the exemption is not "inside any call"', () => {
+  const text = [
+    "import { rmSync } from 'node:fs'",
+    'export const a = (t: { after: (hook: () => void) => void }, home: string): void => {',
+    '  t.after(() => rmSync(home, { recursive: true, force: true }))',
+    '}',
+    '',
+  ].join('\n')
+  const findings = removalsWithoutARetry([planted(text)])
+  assert.deepEqual(
+    findings.map(({ line, why }) => [line, why.startsWith('rmSync(…, { recursive: true }) removes a tree with no retry')]),
+    [[3, true]],
+  )
+})
+
+// --- the one removal keeps its retry ---------------------------------------------------
+
+const [maxRetriesOption, retryDelayOption] = THE_RETRY_OPTIONS as readonly (readonly [string, string])[]
+const [MAX_RETRIES, ATTEMPTS] = maxRetriesOption!
+const [RETRY_DELAY, DELAY] = retryDelayOption!
+
+/** The one removal's own file, as this test plants it: a bound for each option, and the options the call is given. */
+const aRemovalCalling = (attempts: number, options: readonly string[]): CoreSource => ({
+  path: THE_ONE_REMOVAL,
+  text: [
+    `export const ${ATTEMPTS} = ${attempts}`,
+    `export const ${DELAY} = 100`,
+    'export function removeTheTree(directory: string): void {',
+    `  rmSync(directory, { recursive: true, force: true${options.map((option) => `, ${option}`).join('')} })`,
+    '}',
+    '',
+  ].join('\n'),
+})
+
+const BOTH = [`${MAX_RETRIES}: ${ATTEMPTS}`, `${RETRY_DELAY}: ${DELAY}`] as const
+
+test('the one removal carries its bounded retry, and both bounds are positive whole numbers (martha#272)', () => {
+  const findings = removalsWithoutTheirRetry(coreSources(repository))
+  assert.deepEqual(
+    findings,
+    [],
+    `the one removal no longer retries:\n${findings.map(({ path, line, why }) => `  ${path}:${line} ${why}`).join('\n')}`,
+  )
+})
+
+test('a removal that loses one of its retry options is named, and so is a bound that never retries', () => {
+  assert.deepEqual(removalsWithoutTheirRetry([aRemovalCalling(10, BOTH)]), [], 'the planted file is the one that is right')
+  const withoutMax = removalsWithoutTheirRetry([aRemovalCalling(10, [BOTH[1]])])
+  const withoutDelay = removalsWithoutTheirRetry([aRemovalCalling(10, [BOTH[0]])])
+  const neverRetries = removalsWithoutTheirRetry([aRemovalCalling(0, BOTH)])
+  assert.deepEqual(withoutMax.map(({ why }) => why.includes(MAX_RETRIES)), [true])
+  assert.deepEqual(withoutDelay.map(({ why }) => why.includes(RETRY_DELAY)), [true])
+  assert.deepEqual(neverRetries.map(({ why }) => why.includes('never retries')), [true])
 })

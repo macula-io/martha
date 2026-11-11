@@ -409,7 +409,7 @@ test('#264: the drive hands its waits the stand-in\'s record, so a real stall na
   // The very wait the drive builds, with the drive's own view: if the wiring is dropped, this case reads the message
   // #264 removes and every recorded-host red goes back to being ambiguous.
   const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
-  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  t.after(() => removeTheTree(directory))
   relayJournalKeptIn(directory, 'launch-of-the-test').received('tool_called', THE_CALL).answered('deny', 'the call writes outside the checkout')
   const received_at = Date.now() - 1_000
   const wait = aWaitOfTheRun('model request 2', () => false, {
