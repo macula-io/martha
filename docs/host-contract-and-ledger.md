@@ -55,6 +55,15 @@ tool registration with two pieces of glue any POSIX host can use,
 [`src/linux_process_identity/`](../src/linux_process_identity/) for the
 launcher's records and which process holds a pid.
 
+One file inside an adapter is a decision rather than the adapter's own
+machinery: `martha.decisionFiles` names it, and the slice rule's Node modules
+apply to it wherever it sits, so it reads the machine through the contract and
+imports no Node module but pure computation (`node:path`, `node:crypto`).
+Declaring a file this way says which other rules it is still outside of; today
+that is one file, the one that reads a member's own write back
+([`src/launch_a_claude_code_member/remember_own_write_of_a_call.ts`](../src/launch_a_claude_code_member/remember_own_write_of_a_call.ts),
+martha#158).
+
 - **Rows** live one directory per stream, the name encoded so it is never a
   path, one file per row named by its position. A row is staged, then linked to
   its position, and a link never replaces a file, so two writers cannot both
