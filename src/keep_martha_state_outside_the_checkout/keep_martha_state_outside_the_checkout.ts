@@ -37,12 +37,14 @@
 // (../linux_process_identity/launch_records_directory.ts).
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { dirname, join } from 'node:path'
 import { getuid } from 'node:process'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import {
   latestAtEachPath,
   lineOfOwnWrite,
@@ -90,6 +92,8 @@ const STAGING_PREFIX = '.staging-'
 /** One project's state directory, opened and checked. */
 export interface MarthaState {
   readonly directory: string
+  /** The root every project's and every crew's state sits under, which a crew's place is resolved from (martha#254). */
+  readonly state_root: string
 }
 
 /** One yes of the owner's: the fingerprint, what they were shown, and when. */
@@ -132,7 +136,7 @@ export function projectStateDirectory(state_root: string, root: string): string 
 export function openState(state_root: string, root: string): MarthaState | Refused {
   const directory = projectStateDirectory(state_root, root)
   const unsafe = closedDirectory(state_root) ?? closedDirectory(directory)
-  return unsafe === undefined ? { directory } : { refusal: `Martha keeps no state there: ${unsafe}.` }
+  return unsafe === undefined ? { directory, state_root } : { refusal: `Martha keeps no state there: ${unsafe}.` }
 }
 
 /** A directory inside the state, made mode 0700 when missing; why it may not be used, or its path. */
@@ -140,6 +144,76 @@ export function stateSubdirectory(state: MarthaState, name: string): { readonly 
   const path = join(state.directory, name)
   const unsafe = closedDirectory(path)
   return unsafe === undefined ? { path } : { refusal: `Martha keeps no state there: ${unsafe}.` }
+}
+
+/** The directory under the state root that holds each crew's place, one per repository (martha#254). */
+export const CREWS_PLACE = 'crews'
+
+/** The directory under a crew's place that holds every append-only stream (martha#254 R1). */
+export const CREW_ROWS_PLACE = 'rows'
+
+/** The directory under a crew's place that holds one dashboard row per member (martha#254). */
+export const CREW_ROW_PLACE = 'row'
+
+/**
+ * The directory a crew shares, `<state root>/crews/<sha256 of the repository's git common dir>` (martha#254 R1).
+ *
+ * This exists so every member of one crew reads one place, however many checkouts the crew works in: the rows a
+ * member beats, the ledger a successor reads and the streams later slices add all sit here, so two worktrees of one
+ * repository are one crew with one history. It is keyed by the git common directory, which is the one thing every
+ * worktree of a repository agrees on; a directory that is not in git is keyed by its own real path, which is one
+ * checkout and so one place.
+ *
+ * The place is resolved before a member starts and written into its launch, so a later reader — a pane, a successor
+ * after a refresh — derives the same place without asking the checkout it happens to be standing in. It and the
+ * directories above it are made mode 0700 and refused when they are not this user's own (the same speed bump the
+ * rest of this module takes, martha#1 decision 2).
+ */
+export function crewStateDirectory(state_root: string, root: string): { readonly path: string } | Refused {
+  const crews = join(state_root, CREWS_PLACE)
+  const unsafe = closedDirectory(state_root) ?? closedDirectory(crews)
+  if (unsafe !== undefined) return { refusal: `Martha keeps no crew state there: ${unsafe}.` }
+  const directory = join(crews, crewKeyOf(root))
+  const unclosed = closedDirectory(directory)
+  return unclosed === undefined ? { path: directory } : { refusal: `Martha keeps no crew state there: ${unclosed}.` }
+}
+
+/** A directory inside one crew's place, made mode 0700 when missing (martha#254 R1). */
+export function crewSubdirectory(state_root: string, root: string, name: string): { readonly path: string } | Refused {
+  const crew = crewStateDirectory(state_root, root)
+  if ('refusal' in crew) return crew
+  const inside = join(crew.path, name)
+  const unsafe = closedDirectory(inside)
+  return unsafe === undefined ? { path: inside } : { refusal: `Martha keeps no crew state there: ${unsafe}.` }
+}
+
+/** The directory one crew's streams live in, `<crew>/rows`, made mode 0700 when missing (martha#254 R1). */
+export function crewRowsDirectory(state_root: string, root: string): { readonly path: string } | Refused {
+  return crewSubdirectory(state_root, root, CREW_ROWS_PLACE)
+}
+
+/**
+ * The name one crew's place is kept under: the sha256 of the git common directory, with every link resolved. Git's
+ * own answer, taken with Martha's own settings (../run_marthas_own_git), so a checkout cannot rename its way into
+ * another crew's place.
+ */
+export function crewKeyOf(root: string): string {
+  return createHash('sha256').update(gitCommonDirectoryOf(root)).digest('hex')
+}
+
+/** The git common directory of the checkout at `root`, or `root` itself when it is in no checkout git can tell about. */
+function gitCommonDirectoryOf(root: string): string {
+  try {
+    const said = execFileSync('git', marthasOwnGitArgs(['rev-parse', '--path-format=absolute', '--git-common-dir']), {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (said !== '') return fs.realpathSync(said)
+  } catch {
+    // Not a checkout, or git cannot say which one it is: below, the directory is its own place.
+  }
+  return fs.realpathSync(root)
 }
 
 /** A state file's text, '' when it is missing, or why it may not be read. */

@@ -38,8 +38,11 @@ export type Act = (typeof ACTS)[number]
  */
 export const OWNER = 'owner'
 
-/** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice'] as const
+/**
+ * The house rules a crew can switch on. Each is off unless the declaration says true, so a crew that names none of
+ * them opens no pane and reports nothing (martha#254's `dashboard` among them).
+ */
+export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', 'dashboard'] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */

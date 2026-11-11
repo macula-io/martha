@@ -126,6 +126,7 @@ import {
   type PreparedLaunch,
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
@@ -160,8 +161,10 @@ export const CLAUDE_CODE = 'claude-code'
 
 /** Where the launcher keeps a member's files: directories this user owns. */
 export interface LauncherPlaces {
-  /** The row streams, the session records among them. */
+  /** The crew's row streams, the session records among them, which every member of the crew shares (martha#254). */
   readonly rows: string
+  /** The crew's dashboard rows, one file per member (martha#254). */
+  readonly dashboard: string
   /** The launcher's records, which the binder reads (#14). */
   readonly launch_records: string
   /** The parent of each launch's relay socket directory: owned by this user, written by no one else. */
@@ -201,6 +204,8 @@ export interface ClaudeCodeMemberLaunch {
   readonly trust_answer_deadline_ms?: number
   /** The member's signed runs (martha#129): `martha start` gives them; without them the member runs no shape. */
   readonly signed_runs?: SignedRuns
+  /** The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. */
+  readonly crew_tools?: () => CrewTools
   /**
    * A test's ear on what the relay is handed, so that what the relay calls `started_with` is measured against what
    * the host was really spawned with rather than inferred from the code that builds both (martha#135). A real
@@ -676,6 +681,11 @@ function launchDirectories(
   return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir }
 }
 
+/** The crew's tools for this launch, or nothing at all: a launch given no crew place answers no tool (martha#254). */
+function crewOf(launch: ClaudeCodeMemberLaunch): { readonly crew?: CrewTools } {
+  return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools() }
+}
+
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
@@ -703,6 +713,7 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
+    ...crewOf(launch),
     // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
     // (martha#240).
     journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
@@ -717,10 +728,14 @@ async function servedRelay(
       return answering.answer(event, body)
     },
     run: (body) => answering.run(body),
+    answerTool: (body) => answering.answerTool(body),
   }
 
   try {
-    return await serveTheRelay(relay, socket_path)
+    const server = await serveTheRelay(relay, socket_path)
+    // The member's row is kept fresh while it runs, and stops being beaten when its launcher closes the relay.
+    const stopBeating = place.crew?.startBeating()
+    return { close: async () => { stopBeating?.(); await server.close() } }
   } catch (error) {
     return `${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`
   }

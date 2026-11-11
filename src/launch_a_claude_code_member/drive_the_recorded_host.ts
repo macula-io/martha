@@ -27,6 +27,18 @@ import { removeTheTree } from './relay_copy.ts'
 import { readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
 import { waitWhileTheHostKeepsShowing } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
+import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+
+/**
+ * Where a run derived from this home and checkout reads the crew's streams (martha#254): the same place the launcher
+ * writes them, derived the launcher's way — the git common directory behind the checkout — so a run that reads a
+ * member's rows reads the crew's, and never an empty directory of its own.
+ */
+export function crewRowsDirectoryOf(state_home: string, checkout: string): string {
+  const rows = crewRowsDirectory(join(state_home, STATE_ROOT_NAME), checkout)
+  if ('refusal' in rows) throw new Error(rows.refusal)
+  return rows.path
+}
 
 /** The variable the relay CI job names the recorded host's binary in. */
 export const RECORDED_HOST_VARIABLE = 'MARTHA_RECORDED_HOST'

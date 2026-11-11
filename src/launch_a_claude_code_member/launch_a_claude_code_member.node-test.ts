@@ -75,6 +75,7 @@ interface Place {
   /** A git checkout under it, with an approved tool-server config committed. */
   readonly checkout: string
   readonly rows: string
+  readonly dashboard: string
   readonly launch_records: string
   readonly relay_root: string
   readonly snapshot_root: string
@@ -151,6 +152,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     home,
     checkout,
     rows: closed('rows'),
+    dashboard: closed('dashboard'),
     launch_records: closed('launches'),
     relay_root,
     snapshot_root: closed('snapshots'),
@@ -1118,7 +1120,7 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
+    places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
     // The managed settings the host would read, under the place: never the machine's own.
     managed_settings: managedSettingsOf(place),
@@ -2275,7 +2277,7 @@ function launcherProcess(
       `  node_id: ${JSON.stringify(NODE_ID)},`,
       '  place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },',
       '  policy: { may_send_executable_text: [] },',
-      '  places: { rows: place.rows, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
+      '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,

@@ -11,7 +11,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
-import { RELAY_PATHS, RUN_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { RELAY_PATHS, RUN_PATH, TOOL_ANSWER_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { MemberRelay } from './answer_the_relay.ts'
 
 /**
@@ -59,6 +59,12 @@ function reply(response: ServerResponse, status: number, body: unknown): void {
 
 async function answerOne(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (request.method === 'POST' && request.url === RUN_PATH) return runOne(relay, request, response)
+  if (request.method === 'POST' && request.url === TOOL_ANSWER_PATH) return answerAToolOne(relay, request, response)
+  return answerAnEvent(relay, request, response)
+}
+
+/** A hook event's request: the launcher's answer, or a refusal. */
+async function answerAnEvent(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const event = EVENT_OF_PATH.get(request.url ?? '')
   if (request.method !== 'POST' || event === undefined) return reply(response, 404, { refused: 'no such event' })
 
@@ -68,6 +74,13 @@ async function answerOne(relay: MemberRelay, request: IncomingMessage, response:
   const answer = await relay.answer(event, body)
   // A member being stopped gets no answer: its hook waits for the kill.
   if (answer.answered) reply(response, 200, answer.body)
+}
+
+/** The crew's mod asking for a core tool's answer (martha#254), or a refusal when the body is not JSON. */
+async function answerAToolOne(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const body = await bodyOf(request)
+  if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
+  reply(response, 200, await relay.answerTool(body))
 }
 
 /** `martha run`'s request: the run's answer, or a refusal when the body is not JSON. */

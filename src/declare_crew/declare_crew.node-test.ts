@@ -111,6 +111,14 @@ test('a team declaration gives typed settings through the same function', async 
   assert.equal(settings.paths.conventions, join(crew_directory, 'conventions.md'))
 })
 
+test('the dashboard is a switch like the others: off unless the declaration names it (martha#254)', async () => {
+  const unnamed = await declare(solo).settings
+  assert.equal(unnamed.house_rules.dashboard, false, 'a crew that names no dashboard opens no pane')
+
+  const named = await declare({ ...solo, house_rules: { dashboard: true } }).settings
+  assert.equal(named.house_rules.dashboard, true, 'a crew that switches it on reads it on')
+})
+
 test('the mode is data: a mode of any name reads exactly as the same table named team', async () => {
   const renamed = { ...team, mode: { ...team.mode, name: 'pairing' } }
   const as_team = await declare(team).settings
