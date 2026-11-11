@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { DROPS_TEST_FILE_TRAILER, DROPS_TEST_TRAILER } from './check_no_test_the_base_passed_goes_missing.ts'
 
 const REPO = join(import.meta.dirname, '..', '..')
@@ -27,7 +28,7 @@ interface Commit {
 
 const scratch = (t: TestContext): string => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-dropped-test-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 
