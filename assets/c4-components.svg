@@ -208,13 +208,13 @@
 <text class="t-type" x="680" y="1184">[the crew's rows and its ledger]</text>
 <text class="t-desc" x="680" y="1208">show_dashboard_beat holds a member's row</text>
 <text class="t-desc" x="680" y="1224">and the rule the newest beat wins;</text>
-<text class="t-desc" x="680" y="1240">report_progress moves it, and</text>
-<text class="t-desc" x="680" y="1256">see_the_crew lays every row out;</text>
-<text class="t-desc" x="680" y="1272">a_crews_tools answers all six tools.</text>
+<text class="t-desc" x="680" y="1240">report_progress moves it, see_the_crew</text>
+<text class="t-desc" x="680" y="1256">lays every one out, and a_crews_tools</text>
+<text class="t-desc" x="680" y="1272">answers all six tools.</text>
 <text class="t-desc" x="680" y="1288">keep_the_ledger loads log_ledger, whose</text>
 <text class="t-desc" x="680" y="1304">streams sit in the crew's own state;</text>
 <text class="t-desc" x="680" y="1320">keep_the_crew_channel is where a message</text>
-<text class="t-desc" x="680" y="1336">lives, send_a_crew_message writes one,</text>
+<text class="t-desc" x="680" y="1336">lives, send_a_crew_message writes one, and</text>
 <text class="t-desc" x="680" y="1352">show_what_a_message_became reads back</text>
 <text class="t-desc" x="680" y="1368">what became of it, and read_a_crew_line</text>
 <text class="t-desc" x="680" y="1384">reads the HANDOFF and VERDICT lines</text>
