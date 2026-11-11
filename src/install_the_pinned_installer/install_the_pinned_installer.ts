@@ -180,8 +180,9 @@ export function installThePinnedInstaller(request: InstallRequest): InstallOutco
   const pin = pinnedInstaller(request.tree)
   if (!('name' in pin)) return pin
   const work = mkdtempSync(join(tmpdir(), `${TEMP_DIR_PREFIX}${basename(request.tree)}-`))
-  request.onWorkDir?.(work)
   try {
+    // Inside the try: a callback that throws must not leave the work directory behind either.
+    request.onWorkDir?.(work)
     return installingIn(work, pin, request)
   } finally {
     rmSync(work, { recursive: true, force: true })

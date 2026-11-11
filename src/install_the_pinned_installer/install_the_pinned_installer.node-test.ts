@@ -6,7 +6,7 @@
 // own installed tree.
 
 import assert from 'node:assert/strict'
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
@@ -59,22 +59,33 @@ function aNeighbourRunsHere(t: TestContext): string {
 }
 
 /**
- * The run's own temporary directory, as the run announced it: in the temporary directory and named as the
- * installer names one, there while the run goes, and gone once the run has answered. Nothing else in the
- * temporary directory is looked at, so a neighbour's directory cannot decide what this case reads (martha#270).
+ * How this run's own work directory is named, which no neighbour's is: the installer's prefix, this tree's name,
+ * a dash. `tree` comes from scratch(), a mkdtempSync, so its basename belongs to this case alone.
  */
-function watchingTheRunsOwnTempDir(): { readonly onWorkDir: (work: string) => void; readonly gone: (claim: string) => void } {
-  let work: string | undefined
+const thisRunsWorkDirectory = (tree: string): string => `${TEMP_DIR_PREFIX}${basename(tree)}-`
+
+/** The entries in a directory that are named with `prefix`, which for this run's own name must be none. */
+const entriesNamed = (inDirectory: string, prefix: string): string[] =>
+  readdirSync(inDirectory).filter((entry) => entry.startsWith(prefix))
+
+/**
+ * The run's own temporary directory (martha#270): named for this case's tree, there while the run goes, and gone
+ * once the run has answered. The name is the half that needs no hook -- a neighbour's directory has its own tree's
+ * name, so it can neither be mistaken for this run's nor decide what this case reads.
+ */
+function watchingTheRunsOwnTempDir(tree: string): { readonly onWorkDir: (work: string) => void; readonly gone: (claim: string) => void } {
+  const name = thisRunsWorkDirectory(tree)
+  let announced = false
   return {
     onWorkDir: (dir) => {
-      work = dir
+      announced = true
       assert.ok(existsSync(dir), "the run's own temporary directory is there while the run goes")
       assert.ok(dir.startsWith(tmpdir()), `the run's own directory is outside the temporary directory: ${dir}`)
-      assert.ok(basename(dir).startsWith(TEMP_DIR_PREFIX), `the run's own directory is not named as the installer names one: ${dir}`)
+      assert.ok(basename(dir).startsWith(name), `the run's own directory is not named for its tree: ${dir}`)
     },
     gone: (claim) => {
-      assert.ok(work !== undefined, 'the run said where its temporary directory was')
-      assert.equal(existsSync(work), false, claim)
+      assert.ok(announced, 'the run said where its temporary directory was')
+      assert.deepEqual(entriesNamed(tmpdir(), name), [], claim)
     }
   }
 }
@@ -199,8 +210,9 @@ test('the installer the pin names installs with its bundled dependency, and the 
   const registry = await fakeNpmRegistry([installerPackage()])
   t.after(registry.stop)
   const out = join(scratch(t, 'out'), 'reported.json')
-  const ownTempDir = watchingTheRunsOwnTempDir()
-  const outcome = installThePinnedInstaller(requestFor(treeOf(t, pinFor(registry)), { registry: registry.registry, env: { ...process.env, MARTHA_TEST_OUT: out }, onWorkDir: ownTempDir.onWorkDir }))
+  const tree = treeOf(t, pinFor(registry))
+  const ownTempDir = watchingTheRunsOwnTempDir(tree)
+  const outcome = installThePinnedInstaller(requestFor(tree, { registry: registry.registry, env: { ...process.env, MARTHA_TEST_OUT: out }, onWorkDir: ownTempDir.onWorkDir }))
   aNeighbourRunsHere(t)
   assert.deepEqual('status' in outcome ? outcome.status : -1, 0)
   assert.equal(reported(out).bundle, true, 'the bundled node_modules arrived inside the tarball')
@@ -210,8 +222,9 @@ test('the installer the pin names installs with its bundled dependency, and the 
 test('the temporary directory is removed after a refusal too', async (t) => {
   const empty = await fakeNpmRegistry([])
   t.after(empty.stop)
-  const ownTempDir = watchingTheRunsOwnTempDir()
-  refusalOf(installThePinnedInstaller(requestFor(treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' }), { registry: empty.registry, onWorkDir: ownTempDir.onWorkDir })))
+  const tree = treeOf(t, { name: NAME, version: VERSION, integrity: 'sha512-x' })
+  const ownTempDir = watchingTheRunsOwnTempDir(tree)
+  refusalOf(installThePinnedInstaller(requestFor(tree, { registry: empty.registry, onWorkDir: ownTempDir.onWorkDir })))
   aNeighbourRunsHere(t)
   ownTempDir.gone('the temporary directory is removed after a refusal')
 })
