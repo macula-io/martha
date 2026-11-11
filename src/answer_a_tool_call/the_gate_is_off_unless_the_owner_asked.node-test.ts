@@ -83,7 +83,10 @@ const afterAnUnplacedResult = () =>
   )
 
 test('off: a member keeps its shell after a tool result Martha could not place', () => {
-  assert.equal(bash(afterAnUnplacedResult(), { strict_gate: false }), undefined)
+  const session = afterAnUnplacedResult()
+  assert.equal(bash(session, { strict_gate: false }), undefined)
+  // The record is not switched off with the gate: what arrived is still written down, and nothing reads it.
+  assert.equal(session.gate.ingested.length, 1, 'the unplaced result is still recorded')
 })
 
 test('on: the same unplaced result still closes the shell', () => {
@@ -122,7 +125,10 @@ const afterARefresh = () => {
 }
 
 test("off: a successor that read a tainted predecessor's handover keeps its shell", () => {
-  assert.equal(bash(afterARefresh(), { strict_gate: false }), undefined)
+  const successor = afterARefresh()
+  assert.equal(bash(successor, { strict_gate: false }), undefined)
+  // The carry is not switched off with it: the successor's record still holds the predecessor's text, unread.
+  assert.equal(successor.gate.ingested.length, 1, 'the predecessor\'s record is still carried')
 })
 
 test('on: the same handover still carries the taint', () => {
