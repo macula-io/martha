@@ -39,6 +39,10 @@ const scanning: Rules = { ...strict, allowSynthetic: true }
 // A fixed answer per repository, so no unit test touches the network.
 const resolveFixed: Resolve = async () => 'public'
 
+// The forms a public text may write: a placeholder the class cannot match, the
+// allow_home names, and each synthetic form.
+const FORMS = 'see /home/<user>, /home/test, /home/probe, /home/x, /home/ops, /home/synthetic, ci-synthetic.lab, 192.168.255.7'
+
 const REPO = 'macula-io/martha'
 const CLEAN = 'ran the suite; see martha#14'
 const HOME_PATH = '/home/synthetic/notes'
@@ -131,17 +135,22 @@ test('a title is read as posted text, and a pull is read once though it is liste
 
 test('the forms a public tree may write pass beside a real-shaped value that is refused', async () => {
   const drawn = randomBytes(32).toString('hex')
-  const forms = 'see /home/<user>, /home/test, /home/probe, /home/x, /home/ops, /home/synthetic, ci-synthetic.lab, 192.168.255.7'
-  assert.deepEqual(await wheresOf(answersWith('issue comment', forms), scanning), [], 'a legitimate form was refused')
-  const beside = await hitsOf(answersWith('issue comment', `${forms} and ${drawn}`), scanning)
+  assert.deepEqual(await wheresOf(answersWith('issue comment', FORMS), scanning), [], 'a legitimate form was refused')
+  const beside = await hitsOf(answersWith('issue comment', `${FORMS} and ${drawn}`), scanning)
   assert.deepEqual(beside.map((hit) => hit.where), ['issue #170 comment 6765201999:1'])
   assert.match(beside[0]?.what ?? '', /^a 64-hex id/, 'the drawn value was not refused')
   // The same forms, with the allowance off: each synthetic form is refused, so
   // what passes above passed because the allowance is on, not because it passed unseen.
   assert.deepEqual(
-    (await hitsOf(answersWith('issue comment', forms))).map((hit) => hit.what),
+    (await hitsOf(answersWith('issue comment', FORMS))).map((hit) => hit.what),
     ['a lab hostname (value withheld)', 'a home directory (/home/synthetic)', 'a private address (192.168.255.7)'],
   )
+})
+
+test('a real scan\'s rules allow the synthetic forms, and the same rules with the allowance off refuse them', async () => {
+  const none = familiesFrom('[]', false)
+  assert.deepEqual(await wheresOf(answersWith('issue comment', FORMS), rulesOf(none, true)), [])
+  assert.deepEqual((await hitsOf(answersWith('issue comment', FORMS), rulesOf(none, false))).length, 3)
 })
 
 test('a home path inside a fenced code block is refused like any other', async () => {
