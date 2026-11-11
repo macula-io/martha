@@ -53,6 +53,22 @@ test('#253: a message is handed in the exact frame [crew #<position>] <sender>: 
   assert.equal(await carrier.next(), '[crew #1] A: a hand-off', 'two messages with one sender and one text were handed in the same frame')
 })
 
+test('#253: a message already handed is not handed again until the host raises it back', async () => {
+  const b = bench()
+  await say(b, 'A', ['B'], 'a hand-off')
+  await say(b, 'A', ['B'], 'a second hand-off')
+  const carrier = b.carrierFor('B')
+
+  assert.equal(await carrier.next(), '[crew #0] A: a hand-off')
+  // The host queues every submit until it is idle, so a second hand of the same text while the first is unanswered
+  // puts the same message in the model's context again — once per read tick. Mercurius r=1 saw ten copies of one.
+  assert.equal(await carrier.next(), null, 'the same message was handed again before the host raised it')
+  assert.equal(await carrier.next(), null, 'the same message was handed again before the host raised it')
+
+  await raised(b, '[crew #0] A: a hand-off')
+  assert.equal(await carrier.next(), '[crew #1] A: a second hand-off', 'nothing was handed after the first message was taken in')
+})
+
 test('#253: a message that arrives after the carrier has asked once is handed on the next ask', async () => {
   const b = bench()
   const carrier = b.carrierFor('B')

@@ -12,11 +12,19 @@
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { sendOutwardAct } from '../log_ledger/log_ledger.ts'
 import { type Addressee, type ChannelHost, appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 
-/** What the tool says it is for, as the model reads it. */
-export const CREW_SAY_DESCRIPTION =
-  'A message to another member of this crew, or to all of them: a hand-off, a verdict, a question, a remark. It reaches the member as a turn of its own session; there is nothing to poll.'
+/**
+ * What the tool says it is for, as the model reads it. The shapes a hand-off and a verdict take are not written here:
+ * they are the lines the cards teach, generated from the one definition in crew_lines.ts, so what a member is told and
+ * what a sent line is read against cannot drift apart (Mercurius, r=1: the generated lines reached no member at all).
+ */
+export const CREW_SAY_DESCRIPTION = [
+  'A message to another member of this crew, or to all of them: a hand-off, a verdict, a question, a remark. It reaches the member as a turn of its own session; there is nothing to poll.',
+  'A hand-off and a verdict each open with a line of their own, read as they are sent; the others are read as words:',
+  ...linesACardTeaches().map(({ line, says }) => `${line} — ${says}`),
+].join('\n')
 
 /** What a member says, and to whom. */
 export interface Saying {  /** The member the launcher started: never the model's to supply. */

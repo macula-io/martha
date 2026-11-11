@@ -7,9 +7,12 @@
 // raises it back through the prompt hook; only then is it taken in.
 //
 // Being handed is not being taken in. The taken row is written when the turn the host raised carries exactly the text
-// that was handed, from the origin kind a mod's own submitted prompt carries; anything else writes nothing. So a
-// message handed over just before a session ended is handed to the next session first, and a message taken in is
-// never handed again. Being handed twice is acceptable; being lost is not.
+// that was handed, from the origin kind a mod's own submitted prompt carries; anything else writes nothing. A message
+// is handed **once per session**: the host queues every prompt a mod submits until it is next idle, so handing the
+// same text again on each read tick put one message into the model's context once per tick (Mercurius, r=1, seen live
+// on the recorded host: ten copies of one message, one taken row). While a handed message is unanswered the carrier
+// hands nothing, and a message handed but never raised is handed by the next session's carrier, one per session.
+// Being late is acceptable; being lost is not, and neither is being read ten times.
 
 import type { ArrivingTurn } from '../host_contract/host_contract.ts'
 import { type ChannelHost, addressedTo, keepTakenIn, readTheChannel, takenInBy } from '../keep_the_crew_channel/crew_channel.ts'
@@ -26,7 +29,8 @@ export const framed = (position: number, from: string, text: string): string => 
 
 /** What a member's launcher hands its session, one message at a time. */
 export interface MessageCarrier {
-  /** The next message this member has not taken in, framed, or null when there is none. */
+  /** The next message this member has not taken in, framed; or null when there is none, or when the one already
+   * handed has not been raised back yet. */
   next(): Promise<string | null>
 }
 
@@ -59,6 +63,9 @@ export function carryingTo(input: CarryingTo): MessageCarrier {
 
   return {
     async next(): Promise<string | null> {
+      // One message per session at a time: what was handed and not yet raised is not handed again, because the host
+      // queues each submit until it is idle and the model would read the same message once per read tick.
+      if (handed !== null) return null
       const [taken, messages] = await Promise.all([takenInBy(input.host, input.member), readTheChannel(input.host)])
       const nextOne = messages.find(({ position, message }) => !taken.has(position) && forThisMember(message, input.member))
       if (nextOne === undefined) return null

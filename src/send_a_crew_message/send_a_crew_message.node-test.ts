@@ -18,7 +18,8 @@ import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { readLedger, ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { addresseesOf, sendACrewMessage } from './send_a_crew_message.ts'
+import { addresseesOf, CREW_SAY_DESCRIPTION, sendACrewMessage } from './send_a_crew_message.ts'
+import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -195,4 +196,12 @@ test('#253: a well-formed hand-off sent through the crew says its line reached t
   const announced = rows[0]
   assert.ok(announced !== undefined && 'act' in announced)
   assert.equal(announced.act.kind, 'handoff')
+})
+
+test('#253: the description a member reads teaches every line a card teaches', () => {
+  const taught = linesACardTeaches()
+  assert.equal(taught.length, 4, 'the cards teach two verbs, each on a range and on a design')
+  for (const { line } of taught) {
+    assert.ok(CREW_SAY_DESCRIPTION.includes(line), `the description a member reads does not teach ${line}`)
+  }
 })
