@@ -33,10 +33,29 @@ export const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\
 
 const TEST_SCRIPT = 'test'
 
+/** A named path is a glob when it holds a wildcard; the runner and its flags name no paths. */
+const GLOB = /\*/
+
+/**
+ * Every glob the test script names, as written, such as `src/**\/*.node-test.ts`
+ * and `rehearse_a_release/**\/*.node-test.mjs` (martha#274). A glob is quoted in
+ * the script; the program `node` and its flags are not, so only quoted words are
+ * read. The one definition the other readers below are built on.
+ */
+export function testGlobsOf(manifest: Manifest): string[] {
+  const quoted = /'([^']+)'/g
+  return [...(manifest.scripts[TEST_SCRIPT] ?? '').matchAll(quoted)]
+    .map((match) => match[1] ?? '')
+    .filter((named) => GLOB.test(named))
+}
+
 /** The endings of the test files the test script runs under the core, such as `.node-test.ts`. */
 export function testSuffixesOf(manifest: Manifest): string[] {
-  const glob = new RegExp(`'${escaped(CORE)}/\\*\\*/\\*([^']+)'`, 'g')
-  return [...(manifest.scripts[TEST_SCRIPT] ?? '').matchAll(glob)].map((match) => match[1] ?? '')
+  const underCore = new RegExp(`^${escaped(CORE)}/\\*\\*/\\*([^*]+)$`)
+  return testGlobsOf(manifest).flatMap((glob) => {
+    const suffix = underCore.exec(glob)?.[1]
+    return suffix === undefined ? [] : [suffix]
+  })
 }
 
 /** The directories under the core holding a program another script runs with node. */
