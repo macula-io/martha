@@ -161,6 +161,13 @@ jobs:
       # `sha256:<hex>`, the form the nothing-private check reads as a digest
       # rather than as a node id; fetch_the_direnvs.sh verifies it and runs what
       # it verified, and nothing else.
+      #
+      # The fetch's check is proved before it is trusted: the real download only
+      # ever offers the right bytes, so the step below hands it bytes another
+      # release serves under the digest this one names, and requires the run to
+      # end red, naming the version, with nothing run.
+      - name: the direnv fetch refuses bytes that are not the ones its digest names
+        run: fetch_the_direnvs/fetch_the_direnvs.sh --self-test
       - name: the two direnvs, from their GitHub releases
         env:
           DIRENV_PINNED_VERSION: 'v2.38.2'
