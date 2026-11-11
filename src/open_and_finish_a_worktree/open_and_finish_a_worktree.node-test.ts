@@ -4,11 +4,12 @@
 // `clones` place and an empty `worktrees` place beside it. The tools run real git through the host contract's
 // processes.run, so what is pinned here is what git really does, not what a stand-in says.
 //
-// Four things are pinned: that a worktree is made where the crew's declaration says and on a branch of its own
+// Five things are pinned: that a worktree is made where the crew's declaration says and on a branch of its own
 // member's name; that an argument which would steer the path out of those places is refused by name; that the
-// refusal that keeps work from being lost stands — an uncommitted change, and a commit no remote has; and that
-// finishing removes the worktree, its local branch and, once the default branch holds its tip, its branch on
-// origin too.
+// refusal that keeps work from being lost stands — an uncommitted change, and a commit no remote has; that a
+// worktree on a branch Martha's naming did not make is refused rather than taken for one of its own; and that
+// finishing removes the worktree, its local branch and, once the default branch holds what origin has, its branch
+// on origin too.
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -150,6 +151,28 @@ test('worktree_finish is refused while the worktree holds a change, or a commit 
   assert.ok(existsSync(path), 'the worktree is still there, with the work in it')
 })
 
+test('worktree_finish refuses a worktree that is on another branch, and leaves that branch where it is (#256)', async (t) => {
+  const fixture = aCrew(t)
+  const { open, finish } = toolsOf(settingsFor(fixture, fixture))
+  await open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'work.txt'), 'the work\n')
+  commitIn(path, 'the work')
+  // Another branch is cut where the work stands and the worktree is switched onto it, then that branch is pushed: it
+  // is the shape a member's own branch takes, holding pushed work and clean, so only Martha's own naming tells the two
+  // apart. Removing the worktree on this branch would delete a branch Martha never made.
+  gitIn(path, 'checkout', '--quiet', '-b', 'other')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', 'other')
+  assert.match(
+    await finish.answer(asked('acme/widget', SLUG)),
+    /is on other, not Ceres\/261-the-refusals: Martha removes only the worktree its own naming made/,
+  )
+  assert.ok(existsSync(path), 'the worktree is still there')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'other'), 'other', 'the other branch is still there')
+  const onOrigin = execFileSync('git', ['--git-dir', fixture.origin, 'for-each-ref', '--format=%(refname)', 'refs/heads'], { encoding: 'utf8' })
+  assert.ok(onOrigin.includes('other'), 'the other branch is still on origin')
+})
+
 test('worktree_finish removes the worktree, its local branch and the branch on origin once the default holds its tip (#256)', async (t) => {
   const fixture = aCrew(t)
   const { open, finish } = toolsOf(settingsFor(fixture, fixture))
@@ -210,6 +233,49 @@ test('worktree_finish leaves the branch on origin, naming its moved head, when a
   assert.ok(onOrigin.includes(y), 'origin still holds the commit another checkout pushed, which no other branch has')
   const anywhere = execFileSync('git', ['--git-dir', fixture.origin, 'branch', '--contains', y], { encoding: 'utf8' }).trim()
   assert.notEqual(anywhere, '', 'the commit is still on a branch of origin')
+})
+
+test('worktree_finish removes the branch on origin when its head moved past the tip, and the default branch holds it (#256)', async (t) => {
+  const fixture = aCrew(t)
+  const { open, finish } = toolsOf(settingsFor(fixture, fixture))
+  await open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'x.txt'), 'x\n')
+  commitIn(path, 'X')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  // X lands on the default branch. A fold-in pushes Y onto the branch on origin, and Y lands too: origin's head is no
+  // longer the tip this worktree holds, but nothing is lost by removing it, so the branch goes.
+  gitIn(path, 'push', '--quiet', 'origin', 'HEAD:main')
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, 'checkout', '--quiet', '-b', 'other', `origin/${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, 'y.txt'), 'y\n')
+  commitIn(fixture.seed, 'Y')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', `HEAD:refs/heads/${MEMBER}/${SLUG}`)
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'HEAD:main')
+  assert.match(await finish.answer(asked('acme/widget', SLUG)), /removed Ceres\/261-the-refusals on origin/)
+  const onOrigin = execFileSync('git', ['--git-dir', fixture.origin, 'for-each-ref', '--format=%(refname)', 'refs/heads'], { encoding: 'utf8' })
+  assert.equal(onOrigin.includes(`${MEMBER}/${SLUG}`), false, 'the branch on origin is gone, since the default branch holds where it stood')
+})
+
+test('worktree_finish answers that the branch is gone when origin no longer has it, rather than trusting a stale ref (#256)', async (t) => {
+  const fixture = aCrew(t)
+  const { open, finish } = toolsOf(settingsFor(fixture, fixture))
+  await open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'work.txt'), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  // The work lands and the branch is deleted on origin by someone else. The crew's own clone still carries the ref,
+  // so a fetch that does not prune would read it as a branch that is there and report a failed delete instead.
+  gitIn(path, 'push', '--quiet', 'origin', 'HEAD:main')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', '--delete', `${MEMBER}/${SLUG}`)
+  assert.notEqual(
+    gitIn(fixture.clone, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${MEMBER}/${SLUG}`),
+    '',
+    'the clone still remembers the branch origin no longer has',
+  )
+  assert.match(await finish.answer(asked('acme/widget', SLUG)), /is no longer on origin/)
+  assert.equal(existsSync(path), false, 'the worktree is gone')
 })
 
 test('a crew with no workspace layout is told which fields to add, not given a worktree in a place nobody named (#256)', async (t) => {

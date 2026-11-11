@@ -6,9 +6,10 @@
 //
 // Both are a convenience and nothing enforces them: under the owner's reset of 2026-11-11 the safety is review
 // plus the owner's yes on every push and tag, not a shim in front of git (the design on martha#256 says so). The
-// one refusal that stays is the one that keeps work from being lost: a worktree with uncommitted changes, or with
-// a commit that is on no remote branch, is not removed, because its branch is deleted right after and the work
-// would go with it. That is a refusal about losing work, not a guard.
+// refusals that stay are the ones that keep work from being lost, and they are not a guard: a worktree on a branch
+// Martha's own naming did not make is refused, because removing it would delete a branch that belongs to someone
+// else; and a worktree with uncommitted changes, or with a commit that is on no remote branch, is not removed,
+// because its branch is deleted right after and the work would go with it.
 //
 // Every path is built from a validated name — a repo is `org/name`, a slug is lowercase letters, digits and
 // hyphens, and the member is one the declaration names — so no argument can steer a worktree out of the places
@@ -162,34 +163,34 @@ async function removeTheWorktree(host: WorktreesRequest['host'], places: Places,
 
 /** What became of the branch on origin: removed when the default branch already holds its tip, otherwise left. */
 async function originWord(host: WorktreesRequest['host'], clone: string, tip: string | undefined, branch: string): Promise<string> {
-  // Read afresh: the package may have landed since this clone last heard from origin, and a stale ref would keep a
-  // branch origin no longer needs.
-  const fetched = await git(host, clone, ['fetch', '--quiet', 'origin'])
+  // Read afresh, and pruned: the package may have landed since this clone last heard from origin, so a stale ref
+  // would keep a branch origin no longer needs; and a branch deleted on origin by someone else would still be
+  // remembered here, so the answer would read as a delete that failed instead of a branch that is already gone.
+  const fetched = await git(host, clone, ['fetch', '--quiet', '--prune', 'origin'])
   if (fetched.exit_code !== 0) return `; ${branch} stays on origin, since git fetch did not work (${saidBy(fetched)})`
   const default_branch = await defaultBranchIn(host, clone)
   if (default_branch === undefined) return `; ${branch} stays on origin, since the clone cannot say which branch is the default`
   if (tip === undefined) return `; ${branch} stays on origin, since git did not name the commit removed`
   const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
   if (held.exit_code !== 0) return `; ${branch} stays on origin, which its tip is not on yet`
-  return removeTheBranch(host, clone, branch, tip, default_branch)
+  return removeTheBranch(host, clone, branch, default_branch)
 }
 
 /**
- * Removes the branch on origin, or says why it stays. The branch's own head on origin has to be the tip that was
- * removed, or a commit the default branch already holds: another checkout may have pushed onto it after the tip
- * landed, and deleting it then would leave that commit on no branch at all.
+ * Removes the branch on origin, or says why it stays. Its head on origin has to be a commit the default branch
+ * already holds: another checkout may have pushed onto it after this worktree's tip landed, and deleting a head the
+ * default branch does not hold would leave that commit on no branch at all.
  */
 async function removeTheBranch(
   host: WorktreesRequest['host'],
   clone: string,
   branch: string,
-  tip: string,
   default_branch: string,
 ): Promise<string> {
   const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
   if (on_origin === undefined) return `; ${branch} is no longer on origin`
-  const elsewheres = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
-  if (on_origin !== tip && elsewheres.exit_code !== 0) {
+  const held = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
+  if (held.exit_code !== 0) {
     return `; ${branch} stays on origin, where it is at ${on_origin}, which the default branch does not hold`
   }
   const pushed = await git(host, clone, ['push', '--quiet', 'origin', '--delete', branch])
