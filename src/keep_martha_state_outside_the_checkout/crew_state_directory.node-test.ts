@@ -81,6 +81,24 @@ test('the place is <state root>/crews/<64 hex>, mode 0700, and its rows sit unde
   assert.equal(modeOf(rows), 0o700, 'only the owner may enter the rows directory')
 })
 
+test('the crews directory itself is refused when it is a link, or when others may write into it (r=1 R1)', (t) => {
+  const state_root = aDirectory(t, 'state')
+  const repo = aRepository(t)
+
+  // The directory every crew's place sits in, as a link to one this test owns.
+  symlinkSync(aDirectory(t, 'elsewhere'), join(state_root, CREWS_PLACE))
+  const linked = crewStateDirectory(state_root, repo)
+  assert.ok('refusal' in linked, 'a linked crews directory is refused')
+  assert.match(linked.refusal, /is a link/, 'and the refusal says it is a link')
+
+  rmSync(join(state_root, CREWS_PLACE))
+  mkdirSync(join(state_root, CREWS_PLACE), { recursive: true, mode: 0o700 })
+  chmodSync(join(state_root, CREWS_PLACE), 0o777)
+  const written = crewStateDirectory(state_root, repo)
+  assert.ok('refusal' in written, 'a crews directory anyone may write into is refused')
+  assert.match(written.refusal, /may be written by others/, 'and the refusal says so')
+})
+
 test('a crew place that a link stands in for is refused, never followed (R1)', (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
