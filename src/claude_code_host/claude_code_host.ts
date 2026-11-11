@@ -5,14 +5,16 @@
 //
 // It is a composer and decides nothing: every behaviour is a slice's. It takes
 // the few engine calls it needs (the clock, submitting a prompt, registering a
-// tool) and the two directories the host keeps for the crew, and builds:
+// tool) and the directories the host keeps for the crew, and builds:
 //
 //   - clock: the engine's;
 //   - stores: rows in ../row_streams_directory, documents read from disk, and
 //     the launcher's records from ../linux_process_identity, handed to slices
 //     only as `readingOnly` (#42): the writable store is the launcher's seam and
-//     never leaves the launcher; and the disk's files and scratch directories,
-//     also from ../linux_process_identity (#26);
+//     never leaves the launcher; the disk's files and scratch directories, also
+//     from ../linux_process_identity (#26); and the crew's own store in
+//     ../crew_files_directory, over the crew's directory the launcher resolved
+//     (martha#255);
 //   - processes: a child process run directly, so a signal reads as a null exit
 //     code (the engine's own runner reports it as 1), one run now and waited for
 //     (#26), and which process holds a pid from the kernel, boot included;
@@ -53,6 +55,7 @@ import { readFile } from 'node:fs/promises'
 
 import { bindNothing, type Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import {
   readingOnly,
   type HostContract,
@@ -87,6 +90,8 @@ export interface ClaudeCodeEngine {
 export interface ClaudeCodePlaces {
   readonly rows: string
   readonly launch_records: string
+  /** The crew's own directory, `crews/<key>` under Martha's state root (../keep_martha_state_outside_the_checkout). */
+  readonly crew: string
 }
 
 /**
@@ -144,6 +149,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
       launches: readingOnly(launchRecordsDirectory(places.launch_records)),
       files: filesOnThisMachine,
       scratch: scratchOnThisMachine,
+      crew: crewFilesDirectory(places.crew),
     },
     processes: {
       run: runProcess,

@@ -26,8 +26,15 @@ test('the host contract has exactly the five parts decided on #1', () => {
   assert.deepEqual({ extra, missing }, { extra: [], missing: [] })
 })
 
-test('stores are rows, documents, the launcher\'s records (#42), files and scratch (#26), nothing else', () => {
-  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['documents', 'files', 'launches', 'rows', 'scratch'])
+// The crew's own store is #254 R1's, reached here rather than by a path a slice names
+// (martha#255): a slice keeps a handover or a park marker through it and never imports
+// the glue that writes one, which prove_the_core/only_the_launcher_writes_launch_records
+// holds it to. The title gained "the crew's own (#255)" for it: the base's copy named the
+// five stores and said nothing else was there, which is no longer true of this contract.
+// The commit that carries this comment names the title it replaced, in the trailer the
+// dropped-title check keeps in one file, which is how a title changed on purpose is recorded.
+test('stores are rows, documents, the launcher\'s records (#42), files and scratch (#26), the crew\'s own (#255), nothing else', () => {
+  assert.deepEqual(Object.keys(hostForTests().host.stores).sort(), ['crew', 'documents', 'files', 'launches', 'rows', 'scratch'])
 })
 
 // The launcher's records name which member a pid is, so a slice that could write

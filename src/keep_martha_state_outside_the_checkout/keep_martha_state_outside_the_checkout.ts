@@ -43,6 +43,7 @@ import { dirname, join } from 'node:path'
 import { getuid } from 'node:process'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
+import type { Refused } from '../host_contract/host_contract.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import {
@@ -104,7 +105,8 @@ export interface Approval {
   readonly tree: string | null
 }
 
-type Refused = { readonly refusal: string }
+/** Why the store would not do it, in the words the owner reads: the host contract's own word for it, named by the slices that build on the store too (martha#255). */
+export type { Refused }
 
 /** Why a directory may not hold Martha's state, or undefined when it may. */
 function unsafeDirectory(path: string): string | undefined {
@@ -236,12 +238,17 @@ export function readStateFile(path: string): { readonly text: string } | Refused
   }
 }
 
-/** Writes a state file whole: under a staging name, then renamed into place. */
-export function keepStateFile(state: MarthaState, name: string, text: string): void {
-  const staged = join(state.directory, `${STAGING_PREFIX}${randomUUID()}`)
+/** Writes a file into a directory this store owns, whole: under a staging name, then renamed into place. */
+function keepFileWhole(directory: string, name: string, text: string): void {
+  const staged = join(directory, `${STAGING_PREFIX}${randomUUID()}`)
   fs.writeFileSync(staged, text, { mode: STATE_FILE_MODE, flag: 'wx' })
   fs.chmodSync(staged, STATE_FILE_MODE)
-  fs.renameSync(staged, join(state.directory, name))
+  fs.renameSync(staged, join(directory, name))
+}
+
+/** Writes a state file whole: under a staging name, then renamed into place. */
+export function keepStateFile(state: MarthaState, name: string, text: string): void {
+  keepFileWhole(state.directory, name, text)
 }
 
 const isNodeIds = (value: unknown): value is Record<string, string> =>

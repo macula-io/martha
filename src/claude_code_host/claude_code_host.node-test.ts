@@ -58,7 +58,7 @@ const recordedEngine = (now = 1_700_000_000_000) => {
 
 const adapterIn = (t: TestContext) => {
   const root = scratch(t)
-  const places = { rows: join(root, 'rows'), launch_records: join(root, 'launches') }
+  const places = { rows: join(root, 'rows'), launch_records: join(root, 'launches'), crew: join(root, 'crew') }
   mkdirSync(places.rows, { mode: 0o700 })
   mkdirSync(places.launch_records, { mode: 0o700 })
   const recorded = recordedEngine()
@@ -81,7 +81,7 @@ const turnsOf = (adapter: ReturnType<typeof claudeCodeHost>): ArrivingTurn[] => 
 test('the adapter implements the five parts of the host contract', (t) => {
   const { adapter } = adapterIn(t)
   assert.deepEqual(Object.keys(adapter.host).sort(), ['clock', 'delivery', 'processes', 'stores', 'tools'])
-  assert.deepEqual(Object.keys(adapter.host.stores).sort(), ['documents', 'files', 'launches', 'rows', 'scratch'])
+  assert.deepEqual(Object.keys(adapter.host.stores).sort(), ['crew', 'documents', 'files', 'launches', 'rows', 'scratch'])
   assert.deepEqual(Object.keys(adapter.host.processes).sort(), ['identityOf', 'run', 'runNow'])
   assert.equal(adapter.host.clock.now(), 1_700_000_000_000)
 })

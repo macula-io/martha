@@ -93,12 +93,12 @@ function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWi
   return theReading
 }
 
-/** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
 /** The agent an event belongs to: the host stamps a subagent's turn with one, and the main turn with none. */
 function agentIdIn(event: unknown): unknown {
   return typeof event === 'object' && event !== null ? (event as { agentId?: unknown }).agentId : undefined
 }
 
+/** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
 async function startReadingTheChannel($: CrewEngine): Promise<void> {
   if (readingTheChannel !== null) return
   const heard = await hearTheLauncher($, THE_CHANNEL_READ, {})
