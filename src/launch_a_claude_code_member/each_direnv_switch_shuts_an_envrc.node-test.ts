@@ -15,10 +15,11 @@ import { test, type TestContext } from 'node:test'
 import { DIRENV_CONFIG_VARIABLE, DIRENV_OFF_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { DIRENVS_VARIABLE, direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
+import { removeTheTree } from './relay_copy.ts'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-direnv-switch-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 

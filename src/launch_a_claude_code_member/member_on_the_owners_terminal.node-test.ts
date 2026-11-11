@@ -13,7 +13,7 @@
 // changes nothing about when the member runs.
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -22,11 +22,12 @@ import { test, type TestContext } from 'node:test'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 // One namespace, so a test of a name the module lacks fails by its own name.
 import * as onTheTerminal from './member_on_the_owners_terminal.ts'
+import { removeTheTree } from './relay_copy.ts'
 
 /** A member that leaves a mark and exits at once: it is gone as soon as it may run. */
 function markThenExit(t: TestContext): { readonly command: string; readonly args: readonly string[]; readonly mark: string } {
   const dir = mkdtempSync(join(tmpdir(), 'martha-94-job-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const mark = join(dir, 'ran')
   return { command: '/bin/sh', args: ['-c', `: > '${mark}'`], mark }
 }

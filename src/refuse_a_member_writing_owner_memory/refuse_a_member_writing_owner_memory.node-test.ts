@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
@@ -32,7 +33,7 @@ import {
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
 function placeFor(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'martha-136-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const home = join(root, 'home')
   const config = join(home, '.claude')
   const mainMemory = join(config, 'projects', '-work-main-clone', 'memory')
@@ -124,7 +125,7 @@ test('a config dir whose projects folder is a link to another disk denies a real
   const place = placeFor(t)
   const disk = join(place.root, 'other-disk')
   mkdirSync(join(disk, '-home-owner-work'), { recursive: true })
-  rmSync(join(place.config, 'projects'), { recursive: true, force: true })
+  removeTheTree(join(place.config, 'projects'))
   symlinkSync(disk, join(place.config, 'projects'))
   const places = placesFor(place)
   // No folder for this project yet anywhere, so only the projects folder as it leads can catch it.
@@ -169,7 +170,7 @@ test('a memory folder that is a two-hop chain of links is denied where the chain
 test('a projects folder that is a link to a disk folder that does not exist yet denies a write into it (#136 r=4)', (t) => {
   const place = placeFor(t)
   const disk = join(place.root, 'disk-not-yet')
-  rmSync(join(place.config, 'projects'), { recursive: true, force: true })
+  removeTheTree(join(place.config, 'projects'))
   symlinkSync(disk, join(place.config, 'projects'))
   const places = placesFor(place)
   assertDenied(places, place.worktree, place.home, join(disk, '-new', 'memory', 'MEMORY.md'), 'a project under the disk the projects folder will be')
@@ -225,7 +226,7 @@ test('a link that turns on itself is refused, and a read of the same path is not
 test('a projects folder that is a chain of links past the cap is refused, not dropped (#136 r=5)', (t) => {
   const place = placeFor(t)
   const disk = join(place.root, 'disk-past-cap')
-  rmSync(join(place.config, 'projects'), { recursive: true, force: true })
+  removeTheTree(join(place.config, 'projects'))
   symlinkSync(chainAt(join(place.root, 'projects-past-cap'), LINK_HOPS, disk), join(place.config, 'projects'))
   const places = placesFor(place)
   for (const file_path of [join(disk, '-new', 'memory', 'MEMORY.md'), join(place.worktree, 'notes.md')]) {
@@ -246,7 +247,7 @@ test('a project folder that is a chain of links past the cap is refused, not dro
 test('a projects folder that is a chain of links at the cap is followed and denied where it ends (#136 r=5)', (t) => {
   const place = placeFor(t)
   const disk = join(place.root, 'disk-at-cap')
-  rmSync(join(place.config, 'projects'), { recursive: true, force: true })
+  removeTheTree(join(place.config, 'projects'))
   symlinkSync(chainAt(join(place.root, 'projects-at-cap'), LINK_HOPS - 1, disk), join(place.config, 'projects'))
   const places = placesFor(place)
   assertDenied(places, place.worktree, place.home, join(disk, '-new', 'memory', 'MEMORY.md'), 'a project under a chain at the cap')

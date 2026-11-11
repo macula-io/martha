@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type RunCopy } from './run_in_a_sandbox.ts'
 import { SANDBOX_REQUIRED_VARIABLE, skipWithoutTheSandbox } from './sandbox_under_test.ts'
@@ -16,7 +17,7 @@ const unavailable = skipWithoutTheSandbox()
 /** A run directory built from `copy` in a fresh parent; removed after the test. */
 function runDirectory(t: { after(fn: () => void): void }, copy: Partial<RunCopy> = {}) {
   const parent = mkdtempSync(join(tmpdir(), 'martha-129-run-'))
-  t.after(() => rmSync(parent, { recursive: true, force: true }))
+  t.after(() => removeTheTree(parent))
   const built = buildTheRunDirectory(parent, { files: [], packages: [], bin_links: [], ...copy })
   if (typeof built === 'string') throw new Error(built)
   return built
@@ -45,10 +46,10 @@ test('the network, the real home, /tmp, the launcher environment and anything no
   t.after(() => server.close())
   const port = (server.address() as { port: number }).port
   const outside = mkdtempSync(join(homedir(), '.martha-129-home-'))
-  t.after(() => rmSync(outside, { recursive: true, force: true }))
+  t.after(() => removeTheTree(outside))
   writeFileSync(join(outside, 'secret'), MARKER)
   const in_tmp = mkdtempSync(join(tmpdir(), 'martha-129-tmp-'))
-  t.after(() => rmSync(in_tmp, { recursive: true, force: true }))
+  t.after(() => removeTheTree(in_tmp))
   writeFileSync(join(in_tmp, 'secret'), MARKER)
   process.env['MARTHA_129_MARKER'] = MARKER
   t.after(() => delete process.env['MARTHA_129_MARKER'])
@@ -96,7 +97,7 @@ test('every bin name gets a link inside its package, and the run calls each one'
 
 test('a bin link whose target was not copied builds no run directory', (t) => {
   const parent = mkdtempSync(join(tmpdir(), 'martha-129-run-'))
-  t.after(() => rmSync(parent, { recursive: true, force: true }))
+  t.after(() => removeTheTree(parent))
   mkdirSync(join(parent, 'x'))
   const built = buildTheRunDirectory(parent, { files: [], packages: [], bin_links: [{ link: 'node_modules/.bin/x', target: 'node_modules/x/cli', points_at: '../x/cli' }] })
   assert.match(String(built), /not a file of its package/)

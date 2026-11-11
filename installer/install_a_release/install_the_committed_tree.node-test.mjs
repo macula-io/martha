@@ -3,12 +3,13 @@
 // running it through the link answers with the version that tree's package.json carries.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
 
+import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
 import { SIGNER, release, scratchMachine, serveRegistry, sigstoreStandIn } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { installRelease } from './install_a_release.mjs'
 
@@ -28,7 +29,7 @@ const committedTree = (scratch) => {
 
 test('the committed tree carries martha/bin/martha, and the command linked from it runs', async (t) => {
   const scratch = mkdtempSync(join(tmpdir(), 'martha-committed-tree-'))
-  t.after(() => rmSync(scratch, { recursive: true, force: true }))
+  t.after(() => removeTheTree(scratch))
   const r = release({ version: VERSION, gzipped: committedTree(scratch) })
   const registry = await serveRegistry([r])
   const machine = scratchMachine()

@@ -3,11 +3,12 @@
 // role's paths. This calls both through the installed tree, offline, so a bump that changes either call shape fails
 // here rather than in an owner's install.
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
 
 const require = createRequire(import.meta.url)
 // The two call sites, resolved from the installer the way the bundled sigstore resolves them. DelegatedRole is not in
@@ -31,7 +32,7 @@ async function globKeepsItsShape (glob) {
     assert.ok(Array.isArray(found), 'glob(pattern, options) resolves to an array')
     assert.deepEqual(found, [join(dir, 'index-a.json')])
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    removeTheTree(dir)
   }
 }
 

@@ -3,16 +3,17 @@
 // Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { lstatSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
+import { lstatSync, mkdtempSync, readdirSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { EMPTY_DIRECTORY_MODE, makeEmptyDirectory } from './empty_directory.ts'
+import { removeTheTree } from './relay_copy.ts'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-empty-directory-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   return dir
 }
 
