@@ -137,7 +137,7 @@ function exitOf(stopped: { readonly exit_code: number | null; readonly signal: s
 
 async function start(io: CommandIo, places: Places, member: string, args: readonly string[]): Promise<number> {
   const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
-  const launcher = launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`))
+  const launcher = launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
   if ('refusal' in launcher) return refused(io, launcher.refusal)
   const started = await startMember({
     ...places,
