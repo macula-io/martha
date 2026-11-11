@@ -60,7 +60,7 @@ import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
@@ -3457,12 +3457,12 @@ test('a member’s first mesh answer records nothing, so its ring reaches A5 ins
   const hello = recordedHello()
   const ring = hello['ring'] as Readonly<Record<string, unknown>>
   const policy_file = String(ring['policy_file'])
-  const home = policy_file.slice(0, policy_file.length - '/.config/macula-mcp/contact_policy.json'.length)
+  const home = policy_file.slice(0, policy_file.length - `/${CONTACT_POLICY_FILE_UNDER_HOME}`.length)
   const { relay, rows } = answering(place, undefined, [], undefined, undefined, true, undefined, {
     node_id: String(hello['node_id']),
     env: { HOME: home },
     home,
-    host_version: '2.1.322',
+    host_version: RECORDED_HOST.host_version,
   })
   await relay.answer('session_started', start('startup'))
   const helloAnswer = [{ type: 'text', text: JSON.stringify(hello, null, 2) }]
@@ -3487,4 +3487,72 @@ test('a member’s first mesh answer records nothing, so its ring reaches A5 ins
   assert.ok(after.some((entry) => entry.startsWith(`${PATH_OF_SOURCE.ring_answer}:`)), `the ring's answer reached its own row: ${after.join(', ')}`)
   assert.equal(after.filter((entry) => entry.startsWith('B2:')).length, 0, 'and nothing landed on B2')
   assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'id' }))), 'the ring’s answer is another agent’s text, so the shell closes on it, as the gate means it to')
+})
+
+/**
+ * What the launch hands the relay about its mesh answers, driven through the launch itself rather than handed in
+ * (martha#251 review r=1): the reading is only worth anything if a real launch carries it.
+ */
+
+/** The mesh server entry the host is really started with, out of the config the launch wrote. */
+function theMeshServerStarted(argsFile: string): { readonly env?: Readonly<Record<string, string>> } {
+  const entry = serverConfigIn(argsFile).mcpServers[SERVER_NAME] as { env?: Record<string, string> } | undefined
+  assert.ok(entry !== undefined, `the host was started with no ${SERVER_NAME} server`)
+  return entry
+}
+
+test('with one exact-pin mesh server, the launch hands the relay that server’s own environment, its home and the launch’s node id (martha#251)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  // A HOME the server is really given, and not the one its host runs with: only a reading of the server's own
+  // environment carries it, and the contact-policy default is walked from it.
+  const serverHome = join(place.home, 'the-server-home')
+  mkdirSync(serverHome)
+  ownerSettings(place, { HOME: serverHome })
+  const fake = fakeClaude(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await aMemberStartedIn(t, place, {
+    ...memberLaunch(place, fake.command, place.approved, [], recording),
+    hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
+  })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  const passed = heard[0]?.wordless_answers
+  assert.ok(passed !== undefined, 'the launch handed the relay no reading of its mesh answers')
+  assert.deepEqual(passed.env, theMeshServerStarted(fake.argsFile).env, 'the relay was handed an environment other than the one its server is started with')
+  assert.equal(passed.home, serverHome, 'the relay would walk the contact-policy default from a home the server never ran with')
+  assert.equal(passed.node_id, NODE_ID, 'the relay was handed another launch’s node id')
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test('with no exact-pin mesh server, the launch hands the relay no reading of its mesh answers, so every answer taints as before (martha#251)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command), hearRelayPlace: (relayPlace) => void heard.push(relayPlace) })
+  if (!started.started) assert.fail(started.refusal)
+  assert.equal(heard.length, 1, 'the launcher handed the relay one place')
+  assert.equal(heard[0]?.wordless_answers, undefined, 'a launch with no mesh server told the relay how to read an answer anyway')
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test('with two exact-pin mesh servers, the launch hands the relay no reading: one server’s environment is not the other’s (martha#251)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, JSON.stringify({ mcpServers: { [SERVER_NAME]: memberShapeAt(recorded.server_version), another: memberShapeAt(recorded.server_version) } }))
+  const fake = fakeClaude(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await aMemberStartedIn(t, place, {
+    ...memberLaunch(place, fake.command, place.approved, [], recording),
+    hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
+  })
+  if (!started.started) assert.fail(started.refusal)
+  assert.equal(heard[0]?.wordless_answers, undefined, 'a launch with two mesh servers picked one of them to read its answers by')
+  started.stop('the test is over')
+  await started.stopped
 })

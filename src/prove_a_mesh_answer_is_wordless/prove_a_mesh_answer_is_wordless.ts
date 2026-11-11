@@ -43,13 +43,16 @@
 // records on B2 exactly as before.
 
 import { petnameOf } from '../name_a_node_by_its_petname/name_a_node_by_its_petname.ts'
+import { MESH_GOODBYE, MESH_HELLO } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import recording from './recorded_mesh_answer_shapes.json' with { type: 'json' }
 
-/** The tool that starts a member's presence: the answer this slice exists for. */
-export const MESH_HELLO = 'mesh_hello'
-
-/** The tool that ends it: the same shape of answer, and the same reasoning. */
-export const MESH_GOODBYE = 'mesh_goodbye'
+/**
+ * The two tools whose answers are read here: the one that starts a member's presence, which this slice exists for, and
+ * the one that ends it, whose answer has the same shape and the same reasoning. Their names are the allow-list's own
+ * (../read_a_room_through_its_gate builds every mesh tool's name from MESH_TOOL_PREFIX), imported rather than typed
+ * again, and exported here because this is where a reader asks which answers are read.
+ */
+export { MESH_GOODBYE, MESH_HELLO }
 
 /** The tools whose answers are read here, by their own names. */
 export const WORDLESS_TOOLS: readonly string[] = [MESH_HELLO, MESH_GOODBYE]
@@ -67,7 +70,7 @@ export const CONTACT_POLICY_FILE_VARIABLE = 'MACULA_MCP_CONTACT_POLICY_FILE'
 export const REALM_URL_VARIABLE = 'MACULA_MCP_REALM_URL'
 
 /** Where the pinned server keeps its contact-policy file when the entry names none, under the HOME it was given. */
-const CONTACT_POLICY_FILE_UNDER_HOME = '.config/macula-mcp/contact_policy.json'
+export const CONTACT_POLICY_FILE_UNDER_HOME = '.config/macula-mcp/contact_policy.json'
 
 /** One server version's answer shapes and defaults, as recorded. */
 export interface RecordedMeshAnswerShape {
