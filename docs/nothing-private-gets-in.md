@@ -44,7 +44,10 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   handled as an incident, not by a later commit: the range keeps failing on
   that commit, so the work lands from a fresh branch of clean commits and the
   old branch is deleted.
-- **The pull request's title, body and comments** are not code and are not read.
+- **The pull request's title, body and comments** are not code, so this check
+  does not read them. A second check, `check_posted_text_carries_nothing_private`,
+  does: every surface this repository posts on GitHub is read for the same
+  classes, and a daily run fails by name when one is in it (see below).
 - **A private fact said in plain words** ("the box in the cupboard") matches no
   shape. The check guards shapes; the rewrite rule below guards the rest.
 
@@ -116,6 +119,34 @@ synthetic form when the allowance is off, and a structural test holds every form
 to a whole-value match, so an allowance cannot swallow a real value that merely
 contains one.
 
+## The text posted on GitHub
+
+The text a member posts is public the moment it is posted, and it has an edit
+box. `check_posted_text_carries_nothing_private` reads all of it: issue titles
+and bodies, issue comments (a pull request's conversation too), pull-request
+titles and bodies, review bodies, inline review comments and commit comments,
+closed issues and merged pull requests included. It builds the same sources and
+holds the same classes as the tree scan, and the same repository lookup refuses a
+private repository a comment names.
+
+It reads; it never refuses. GitHub has no hook in its posting forms, so a check
+before posting could only be a script each member remembered to run, which is
+what the two 2026-11-11 instances were. The read runs daily
+(`.github/workflows/posted-text.yml`) with a read-only token, writes nothing,
+opens no issue and posts no comment: a red run is the signal, and its author
+edits the text through the Supervisor. What proves it bites on every pull
+request is its `--self-test`, which plants a cited path on each surface in
+memory and needs no token.
+
+Legitimate text passes by its form, exactly as in the tree: a placeholder such as
+`/home/<user>`, the `allow_home` names, the synthetic forms, or a public
+repository. There is no exemption for a document, a fenced block or a table — an
+evidence citation and a code sample are the same bytes, and both instances
+leaked inside inline code.
+
+A run that could not look — a surface refused, a page unreadable, the families
+missing — exits 2. It never passes because it could not look.
+
 ## The rewrite rule for moved code
 
 Keep the reasoning, drop the link.
@@ -142,3 +173,18 @@ MARTHA_LAB_HOSTS='["<family>"]' GITHUB_TOKEN=... npm run check:private -- --rang
 
 Exit 0 is clean, 1 lists one hit per line as `where: what`, and 2 means the check
 could not be made.
+
+The text posted on GitHub, read whole, and one draft before it is posted:
+
+```sh
+# Every surface of this repository's posted text (read-only token, families from
+# the secret; the run writes nothing):
+GITHUB_REPOSITORY=<owner>/<repo> GITHUB_TOKEN=... MARTHA_LAB_HOSTS='["<family>"]' npm run check:posted-text
+
+# One draft, before it is posted:
+MARTHA_LAB_HOSTS='[]' npm run check:posted-text -- --text <file>
+```
+
+Its `where` names the object a person acts on: `issue #170 comment 6765201999:12`,
+`pull 263 body:4`, `pull 263 review 4810:2`, `commit 8ca6eb3 comment 12:1`, and a
+`draft <file>` for a draft.

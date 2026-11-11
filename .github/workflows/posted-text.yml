@@ -1,0 +1,45 @@
+# Posted text (martha#265): the text members post on GitHub is read for the classes nothing private may
+# carry — a home path, a lab host name, a private repository or address — in issue titles and bodies,
+# issue comments (a pull request's conversation too), pull-request titles and bodies, review bodies,
+# inline review comments and commit comments, closed and merged objects included.
+#
+# It is a REPORT, not a guard. It writes nothing, opens no issue and posts no comment, and its token is
+# read-only: a red run is the whole signal, and the Supervisor routes it, the text's author edits it,
+# and the run goes green when it is edited (the 2026-11-07 ruling on martha#139).
+#
+# When it runs: daily at its own minute, and by hand. NOT on pull requests, for the reason host-drift.yml
+# gives: text posted months ago must never fail a pull request that did not cause it. Not on a push to
+# main either, since a push posts no new text.
+#
+# That the check can fail at all is proven on every PR, with no token, by ci.yml's `posted-text-bites` job.
+
+name: posted text
+
+on:
+  schedule:
+    - cron: '40 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  posted:
+    name: the text posted on GitHub carries nothing private
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      # The lab's machine families are a secret and are never printed. Missing, the run stops rather
+      # than passing: it never passes because it could not look.
+      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: the text posted on GitHub
+        run: npm run --silent check:posted-text
