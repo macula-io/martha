@@ -34,6 +34,7 @@ import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import {
+  crewRowsDirectory,
   nodeIdsFor,
   PERMISSION_BITS,
   readApprovals,
@@ -72,7 +73,8 @@ export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; re
 /** The directory inside Martha's state that holds the launcher's launch records. */
 const LAUNCH_RECORDS_PLACE = 'launches'
 
-const STATE_PLACES = ['rows', LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
+/** Everything the launcher keeps per checkout: the rows are the crew's, not a checkout's (martha#254 R1). */
+const STATE_PLACES = [LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
@@ -83,14 +85,16 @@ function closedRelayRoot(relay_root: string): string | undefined {
 }
 
 /** The launcher's places in Martha's state, and the relay root for its sockets; or why one cannot be used. */
-export function launcherPlacesOf(state: MarthaState, relay_root: string): MemberPlaces | { readonly refusal: string } {
+export function launcherPlacesOf(state: MarthaState, relay_root: string, root: string): MemberPlaces | { readonly refusal: string } {
+  const rows = crewRowsDirectory(state.state_root, root)
+  if ('refusal' in rows) return rows
   const made = STATE_PLACES.map((name) => stateSubdirectory(state, name))
   const refused = made.find((place) => 'refusal' in place)
   if (refused !== undefined && 'refusal' in refused) return refused
-  const [rows, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
+  const [launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
+  return { rows: rows.path, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
 }
 
 export interface MemberStartRequest {

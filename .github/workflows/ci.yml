@@ -10,13 +10,41 @@ permissions:
 
 jobs:
   # The wordmark must stay well-formed SVG, or GitHub shows a broken image.
+  #
+  # The parse runs this repository's own Node code on the Node the other jobs pin
+  # (martha#271). It used to be xmllint, installed from the Ubuntu archive through
+  # apt; on 2026-11-11 a hosted runner could not resolve archive.ubuntu.com, and
+  # this job went red in the install with nothing of this repository run. The
+  # planted logo below holds the check to the other half: an SVG a browser shows
+  # as a broken image still goes red here, by name.
   logos:
     name: logos are valid SVG
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: sudo apt-get install -y --no-install-recommends libxml2-utils
-      - run: xmllint --noout assets/*.svg
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: plant a broken logo
+        run: |
+          mkdir -p "${{ runner.temp }}/logos-self-test"
+          printf '<svg xmlns="http://www.w3.org/2000/svg"><g></svg>\n' > "${{ runner.temp }}/logos-self-test/broken-logo.svg"
+      - name: the check bites
+        # Exit 1 (refused) is required, not any non-zero: exit 2 is "could not
+        # look", which must never read as a bite either.
+        run: |
+          status=0
+          npm run --silent check:logos -- "${{ runner.temp }}"/logos-self-test/*.svg \
+            > "${{ runner.temp }}/logos-self-test/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then
+            cat "${{ runner.temp }}/logos-self-test/verdict.txt"
+            exit 1
+          fi
+          grep -q broken-logo.svg "${{ runner.temp }}/logos-self-test/verdict.txt"
+      - name: the logos are valid SVG
+        run: npm run --silent check:logos -- assets/*.svg
 
   # Every link in every document resolves, relative ones included. A host that
   # answers slowly is retried before its link is called broken; the badge URLs
@@ -118,39 +146,51 @@ jobs:
           cache: npm
       # A checkout's .envrc is one of the doors martha#24 shuts, in two ways:
       # DIRENV_DISABLE for direnv 2.38 and later, and the DIRENV_CONFIG fallback
-      # for older ones. Ubuntu's direnv is older, so it proves the fallback; a
-      # pinned release proves DIRENV_DISABLE. MARTHA_TESTS_DIRENV names both, and
-      # a test fails by name when either is missing, so CI never drops the door.
+      # for older ones. Both kinds are proven: a 2.38 direnv for the first, and
+      # the older version Ubuntu ships for the second, which has only the
+      # fallback. MARTHA_TESTS_DIRENV names both, and a test fails by name when
+      # either is missing, so CI never drops the door
+      # (src/launch_a_claude_code_member/direnvs_under_test.ts).
       #
-      # The pinned direnv is built from its tag with go install, which checks the
-      # module against Go's public checksum database (sum.golang.org): a tag that
-      # moved, or a source that differs from what everyone else got, is refused.
-      # That keeps the pin without writing a digest here, which the nothing-private
-      # check would take for a node id.
-      - run: sudo apt-get install -y --no-install-recommends direnv && direnv version && git --version
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: false
-      - name: a pinned direnv that knows DIRENV_DISABLE
+      # Both come from their GitHub releases rather than the Ubuntu archive: on
+      # 2026-11-11 a hosted runner could not resolve archive.ubuntu.com, and this
+      # job went red in the install of one of them with nothing of this
+      # repository run (martha#271). github.com answers on these runners -- the
+      # checkout comes from it -- and each download is held to the sha256 named
+      # here, once per version and restated nowhere. Each digest is written
+      # `sha256:<hex>`, the form the nothing-private check reads as a digest
+      # rather than as a node id; fetch_the_direnvs.sh verifies it and runs what
+      # it verified, and nothing else.
+      #
+      # The fetch's check is proved before it is trusted: the real download only
+      # ever offers the right bytes, so the step below hands it bytes another
+      # release serves under the digest this one names, and requires the run to
+      # end red, naming the version, with nothing run.
+      - name: the direnv fetch refuses bytes that are not the ones its digest names
+        run: fetch_the_direnvs/fetch_the_direnvs.sh --self-test
+      - name: the two direnvs, from their GitHub releases
         env:
-          DIRENV_MODULE: github.com/direnv/direnv/v2@v2.38.2
-          GOBIN: ${{ runner.temp }}/direnv-pinned
-          GOPROXY: https://proxy.golang.org
-          GOSUMDB: sum.golang.org
-          GONOSUMDB: ''
-          GOPRIVATE: ''
-          GOINSECURE: ''
-          GOFLAGS: ''
+          DIRENV_PINNED_VERSION: 'v2.38.2'
+          DIRENV_PINNED_SHA256: 'sha256:148820a187930d36ca6a204504e5cdb30d8396cd1a97e64c3b3f10d793c11247'
+          DIRENV_OLDER_VERSION: 'v2.32.1'
+          DIRENV_OLDER_SHA256: 'sha256:650d4698e8281a91d045aa0adc6cd45dc94e07957de5f64a8acda27cc431f634'
         run: |
-          go install "$DIRENV_MODULE"
-          "$GOBIN/direnv" version
-          echo "MARTHA_TESTS_DIRENV=$(command -v direnv):$GOBIN/direnv" >> "$GITHUB_ENV"
+          paths="$(fetch_the_direnvs/fetch_the_direnvs.sh --to "${{ runner.temp }}/direnvs" \
+            --version "$DIRENV_PINNED_VERSION" --sha256 "$DIRENV_PINNED_SHA256" \
+            --version "$DIRENV_OLDER_VERSION" --sha256 "$DIRENV_OLDER_SHA256")"
+          echo "MARTHA_TESTS_DIRENV=$paths" >> "$GITHUB_ENV"
       # bubblewrap builds the sandbox from unprivileged user namespaces, which
       # Ubuntu 24.04 restricts through AppArmor by default; this runner lifts it.
+      # It is the one package here that must come from the archive -- it is the
+      # distro's own sandbox binary, with no release to fetch instead -- so it
+      # goes through the retry, and the step before proves the retry both ways:
+      # a blink is survived, and an archive that never comes back is red naming
+      # the runner's network rather than reading as a failure of ours.
+      - name: the archive install survives a blink, and names the runner when it cannot
+        run: install_from_the_ubuntu_archive/install_from_the_ubuntu_archive.sh --self-test
       - name: a sandbox for signed runs
         run: |
-          sudo apt-get install -y --no-install-recommends bubblewrap
+          install_from_the_ubuntu_archive/install_from_the_ubuntu_archive.sh bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind / / true && bwrap --version
       - run: npm ci

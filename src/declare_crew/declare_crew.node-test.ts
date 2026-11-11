@@ -236,11 +236,33 @@ test('the strict gate is a house rule, off unless the declaration names it, and 
 })
 
 test('every declared switch is read from the one list, so a new rule is neither misspelt nor forgotten', async () => {
+  // The workspace layout is the one switch that also names its places (martha#256): switching it on alone is
+  // refused, as the test below says, so it is named here with them.
+  const places = { clones: '/crew-place/clones', worktrees: '/crew-place/worktrees' }
   for (const name of HOUSE_RULE_SWITCHES) {
-    const named = await declare({ ...solo, house_rules: { [name]: true } }).settings
+    const named = await declare({ ...solo, house_rules: { ...(name === 'workspace_layout' ? places : {}), [name]: true } }).settings
     assert.equal(named.house_rules[name], true, name)
   }
   assert.ok(HOUSE_RULE_SWITCHES.includes(STRICT_GATE), 'the strict gate is one of the declared switches')
+})
+
+// --- where a crew keeps its clones and its worktrees (martha#256) -------------
+
+test('a crew whose workspace layout is on must name where its clones and worktrees live, each field by name', async () => {
+  const layout = { workspace_layout: true, clones: '/crew-place/clones', worktrees: '/crew-place/worktrees' }
+  const declared = await declare({ ...solo, house_rules: layout }).settings
+  assert.equal(declared.house_rules.clones, '/crew-place/clones')
+  assert.equal(declared.house_rules.worktrees, '/crew-place/worktrees')
+  await refusedWith({ ...solo, house_rules: { workspace_layout: true, worktrees: '/crew-place/worktrees' } }, 'house_rules.clones')
+  await refusedWith({ ...solo, house_rules: { workspace_layout: true, clones: '/crew-place/clones' } }, 'house_rules.worktrees')
+})
+
+test('a place that is not an absolute path is refused by name, and a crew with the layout off needs none', async () => {
+  await refusedWith({ ...solo, house_rules: { clones: 'clones' } }, 'house_rules.clones')
+  await refusedWith({ ...solo, house_rules: { worktrees: '' } }, 'house_rules.worktrees')
+  const off = await declare(solo).settings
+  assert.equal(off.house_rules.clones, null)
+  assert.equal(off.house_rules.worktrees, null)
 })
 
 test('an act the mode table does not know is refused by name', async () => {
