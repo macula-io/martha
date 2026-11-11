@@ -12,6 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { opensAtStartOf, rowsToOpen } from './pane_rule.ts'
+import { readingTheChannelWith } from './crew_channel_reading.ts'
 
 /**
  * The server name the host gives this plugin's tools: `mcp__<server>__<tool>`. It is the plugin's own name, and each
@@ -70,15 +71,26 @@ const THE_CHANNEL_READ = 'channel_read_seconds'
 /** The interval the channel is read on, once the launcher has named it; null until it has. */
 let readingTheChannel: { cancel(): void } | null = null
 
+/** The one reading of the channel this session holds, built on first use. */
+let theReading: ReturnType<typeof readingTheChannelWith> | null = null
+
 /**
- * Hands this session the next crew message it has not taken in (martha#253, slice 2): the launcher answers with the
- * framed text, or nothing, and the mod submits it as a prompt. The host raises that prompt back through the prompt
- * hook, which is what counts the message as taken in; a text that is never raised is handed again.
+ * The reading this session holds (martha#253, slice 2): the launcher answers with the framed text of the next crew
+ * message the member has not taken in, and the mod submits it as a prompt. Only an idle submit is raised back through
+ * the prompt hook, and that raise is what counts the message as taken in — so the reading is the one rule in
+ * ./crew_channel_reading.ts, and every hook here goes through it.
  */
-async function takeTheNextMessage($: CrewEngine): Promise<void> {
-  const heard = await hearTheLauncher($, THE_NEXT_MESSAGE, {})
-  if (!('said' in heard) || heard.said === '') return
-  await $.prompt.submit({ text: heard.said })
+function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWith> {
+  theReading ??= readingTheChannelWith(
+    async () => {
+      const heard = await hearTheLauncher($, THE_NEXT_MESSAGE, {})
+      return 'said' in heard ? heard.said : null
+    },
+    async (text) => {
+      await $.prompt.submit({ text })
+    },
+  )
+  return theReading
 }
 
 /** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
@@ -87,8 +99,9 @@ async function startReadingTheChannel($: CrewEngine): Promise<void> {
   const heard = await hearTheLauncher($, THE_CHANNEL_READ, {})
   const seconds = 'said' in heard ? Number.parseInt(heard.said, 10) : Number.NaN
   if (!Number.isInteger(seconds) || seconds < 1) return
-  readingTheChannel = $.clock.every(seconds * 1000, () => void takeTheNextMessage($))
-  await takeTheNextMessage($)
+  const reading = theChannelReading($)
+  readingTheChannel = $.clock.every(seconds * 1000, () => void reading.readWhileIdle())
+  await reading.readWhileIdle()
 }
 
 /** What the launcher heard, or why it could not be heard: the two are not the same, and only one of them is an answer. */
@@ -299,10 +312,23 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
     return next(e)
   })
 
+  // A turn is running from `turn.start` until it ends, and the channel is read only outside one: the host queues a
+  // submit made during a turn and never raises it back, so it could never be counted as taken in (martha#253 r=2).
+  on('turn.start', ($: CrewEngine, e: unknown, next: CrewNext) => {
+    theChannelReading($).aTurnStarted()
+    return next(e)
+  })
+
   // A turn ended, so the host is idle and can take the next message the launcher hands it (martha#253, slice 2). The
   // submit from `turn.complete` is the one shape the host's own guidance names for submitting while the session idles.
   on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
-    await takeTheNextMessage($)
+    await theChannelReading($).aTurnEnded()
+    return next(e)
+  })
+
+  // An aborted turn never completes, so without this the session would read nothing again (martha#253 r=2).
+  on('turn.abort', ($: CrewEngine, e: unknown, next: CrewNext) => {
+    void theChannelReading($).aTurnEnded()
     return next(e)
   })
 }
