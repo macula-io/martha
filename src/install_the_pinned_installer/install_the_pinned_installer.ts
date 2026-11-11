@@ -33,6 +33,8 @@ export const INSTALLER_ENTRY = 'bin/martha-install.mjs'
 
 /** The name the lock is made under, so every install names the same project. */
 const LOCK_PROJECT = 'martha-installer-pin'
+/** What every run's own temporary directory is named under, so it is told from the machine's other entries. */
+export const TEMP_DIR_PREFIX = 'martha-install-'
 /** npm's own home for the run: its empty config files and its cache, in the temporary directory that is removed. */
 const NPM_HOME = '.npm'
 const NODE_MODULES = 'node_modules'
@@ -60,6 +62,11 @@ export interface InstallRequest {
   readonly npm?: string
   /** The registry to ask: NPM_REGISTRY, unless a test serves the pinned bytes itself. */
   readonly registry?: string
+  /**
+   * Told where the run's own temporary directory is, the moment it is made: a test can watch the directory this
+   * run made, rather than every entry the machine's temporary directory holds while other runs go (martha#270).
+   */
+  readonly onWorkDir?: (work: string) => void
 }
 
 /** The installer's own exit status, or why nothing was installed. */
@@ -172,8 +179,10 @@ function installingIn(work: string, pin: Pin, request: InstallRequest): InstallO
 export function installThePinnedInstaller(request: InstallRequest): InstallOutcome {
   const pin = pinnedInstaller(request.tree)
   if (!('name' in pin)) return pin
-  const work = mkdtempSync(join(tmpdir(), `martha-install-${basename(request.tree)}-`))
+  const work = mkdtempSync(join(tmpdir(), `${TEMP_DIR_PREFIX}${basename(request.tree)}-`))
   try {
+    // Inside the try: a callback that throws must not leave the work directory behind either.
+    request.onWorkDir?.(work)
     return installingIn(work, pin, request)
   } finally {
     rmSync(work, { recursive: true, force: true })
