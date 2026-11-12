@@ -15,11 +15,16 @@
 // hyphens, and the member is one the declaration names — so no argument can steer a worktree out of the places
 // the crew declared. git runs carry marthasOwnGitArgs (../run_marthas_own_git) and go through the contract's
 // processes.run, as every other run of Martha's own git does.
+//
+// Finishing sends one thing over the network: the deletion of the branch on origin. That is an outward act, so it
+// goes out through the ledger (../log_ledger, martha#25): its row is kept first, and when the store will not keep
+// it, git is not run. The package it is kept under is named by the member, as it is on every other row.
 
 import { join } from 'node:path'
 
 import { type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
+import { ActNotSent, OutcomeNotKept, WORK_PACKAGE, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The tools this slice registers. */
@@ -36,11 +41,17 @@ export const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const NO_LAYOUT =
   'this crew declares no workspace layout: put "workspace_layout": true with "clones" and "worktrees" in its house rules, then start the member again.'
 
-/** What the two tools need: the host's own git and its tools, the crew's declaration, and the member they answer for. */
+/** What the two tools need: the host's own git, its tools and the ledger's store, the crew's declaration, and the member they answer for. */
 export interface WorktreesRequest {
-  readonly host: Pick<HostContract, 'processes' | 'tools'>
+  readonly host: Pick<HostContract, 'processes' | 'tools'> & LedgerHost
   readonly settings: CrewSettings
   /** The member whose branches these are: the launcher starts it, so the model never supplies this. */
+  readonly member: string
+}
+
+/** Whoever an act is sent as: the package it is kept under, and the member sending it. */
+interface TheAct {
+  readonly package: string
   readonly member: string
 }
 
@@ -66,7 +77,8 @@ export function openAndFinishAWorktree(request: WorktreesRequest): void {
   })
   request.host.tools.register({
     name: WORKTREE_FINISH,
-    description: 'Removes a worktree and its branch once its work has landed. Refused while it holds work no remote has.',
+    description:
+      'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has.',
     answer: (args) => finishAWorktree(request, args),
   })
 }
@@ -125,12 +137,23 @@ async function openAWorktree(request: WorktreesRequest, args: Readonly<Record<st
 async function finishAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
   const places = placesOf(request, args)
   if ('refusal' in places) return places.refusal
+  const package_name = packageOf(args)
+  if ('refusal' in package_name) return package_name.refusal
   const { host } = request
   const branch = await branchAt(host, places)
   if ('refusal' in branch) return branch.refusal
   const held = await workNoOtherCopyHas(host, places)
   if (held !== undefined) return held.refusal
-  return removeTheWorktree(host, places, branch.name)
+  return removeTheWorktree(host, places, branch.name, { package: package_name.name, member: request.member })
+}
+
+/** The package a finish keeps its act's row under, or why the argument names none: an act is filed against one. */
+function packageOf(args: Readonly<Record<string, unknown>>): { readonly name: string } | Refusal {
+  const package_name = args['package']
+  if (typeof package_name !== 'string' || !WORK_PACKAGE.test(package_name)) {
+    return refused(`${JSON.stringify(package_name)} is not a work package, as owner/repo#n.`)
+  }
+  return { name: package_name }
 }
 
 /** The branch the worktree at `places.path` really has: the one Martha's own naming gives, or why it is not that. */
@@ -152,17 +175,17 @@ async function workNoOtherCopyHas(host: WorktreesRequest['host'], places: Places
   return undefined
 }
 
-async function removeTheWorktree(host: WorktreesRequest['host'], places: Places, branch: string): Promise<string> {
+async function removeTheWorktree(host: WorktreesRequest['host'], places: Places, branch: string, work: TheAct): Promise<string> {
   const tip = await gitSaid(host, places.path, ['rev-parse', 'HEAD'])
   const removed = await git(host, places.clone, ['worktree', 'remove', places.path])
   if (removed.exit_code !== 0) return `${places.path} was not removed: ${saidBy(removed)}.`
   const local = await git(host, places.clone, ['branch', '-D', branch])
   const branchWord = local.exit_code === 0 ? `removed ${branch}` : `left ${branch} (${saidBy(local)})`
-  return `removed ${places.path} and ${branchWord}${await originWord(host, places.clone, tip, branch)}`
+  return `removed ${places.path} and ${branchWord}${await originWord(host, places.clone, tip, branch, work)}`
 }
 
 /** What became of the branch on origin: removed when the default branch already holds its tip, otherwise left. */
-async function originWord(host: WorktreesRequest['host'], clone: string, tip: string | undefined, branch: string): Promise<string> {
+async function originWord(host: WorktreesRequest['host'], clone: string, tip: string | undefined, branch: string, work: TheAct): Promise<string> {
   // Read afresh, and pruned: the package may have landed since this clone last heard from origin, so a stale ref
   // would keep a branch origin no longer needs; and a branch deleted on origin by someone else would still be
   // remembered here, so the answer would read as a delete that failed instead of a branch that is already gone.
@@ -173,7 +196,7 @@ async function originWord(host: WorktreesRequest['host'], clone: string, tip: st
   if (tip === undefined) return `; ${branch} stays on origin, since git did not name the commit removed`
   const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
   if (held.exit_code !== 0) return `; ${branch} stays on origin, which its tip is not on yet`
-  return removeTheBranch(host, clone, branch, default_branch)
+  return removeTheBranch(host, clone, branch, default_branch, work)
 }
 
 /**
@@ -186,6 +209,7 @@ async function removeTheBranch(
   clone: string,
   branch: string,
   default_branch: string,
+  work: TheAct,
 ): Promise<string> {
   const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
   if (on_origin === undefined) return `; ${branch} is no longer on origin`
@@ -193,6 +217,42 @@ async function removeTheBranch(
   if (held.exit_code !== 0) {
     return `; ${branch} stays on origin, where it is at ${on_origin}, which the default branch does not hold`
   }
-  const pushed = await git(host, clone, ['push', '--quiet', 'origin', '--delete', branch])
-  return pushed.exit_code === 0 ? `; removed ${branch} on origin` : `; ${branch} stays on origin (${saidBy(pushed)})`
+  return deleteTheBranch(host, clone, branch, work)
+}
+
+/**
+ * The deletion itself: the one outward act this slice sends. Its row is kept before git runs, and when the store
+ * will not keep it, git is not run — so what a successor reads never claims an act that did not happen, and never
+ * misses one that did.
+ */
+async function deleteTheBranch(host: WorktreesRequest['host'], clone: string, branch: string, work: TheAct): Promise<string> {
+  try {
+    const said = await sendOutwardAct(
+      host,
+      { package: work.package, member: work.member, act: { kind: 'push', what: `origin ${branch}` } },
+      async () => {
+        const pushed = await git(host, clone, ['push', '--quiet', 'origin', '--delete', branch])
+        if (pushed.exit_code !== 0) throw new Error(saidBy(pushed))
+        return `removed ${branch} on origin`
+      },
+    )
+    return `; ${said}`
+  } catch (failure) {
+    return `; ${whatBecameOfTheDeletion(failure, branch)}`
+  }
+}
+
+/**
+ * What the answer says when the deletion did not end cleanly. The three endings are kept apart, as the ledger keeps
+ * them apart, because each says what the next attempt may do: the row was not kept, so nothing was sent and sending
+ * again is safe; git failed, so it was sent and its failure is the row that was kept; or it was sent and its outcome
+ * was not kept, so whoever reads it next checks what happened rather than sending it again.
+ */
+function whatBecameOfTheDeletion(failure: unknown, branch: string): string {
+  if (failure instanceof ActNotSent) return `${branch} stays on origin, since ${failure.message}`
+  if (failure instanceof OutcomeNotKept) {
+    const state = failure.sent.succeeded ? 'was deleted on origin' : 'may still be on origin'
+    return `${branch} ${state}, and its ledger row was not concluded: ${failure.message}. Check what happened before sending anything again.`
+  }
+  return `${branch} stays on origin (${failure instanceof Error ? failure.message : String(failure)})`
 }

@@ -4,12 +4,13 @@
 // `clones` place and an empty `worktrees` place beside it. The tools run real git through the host contract's
 // processes.run, so what is pinned here is what git really does, not what a stand-in says.
 //
-// Five things are pinned: that a worktree is made where the crew's declaration says and on a branch of its own
+// Six things are pinned: that a worktree is made where the crew's declaration says and on a branch of its own
 // member's name; that an argument which would steer the path out of those places is refused by name; that the
 // refusal that keeps work from being lost stands — an uncommitted change, and a commit no remote has; that a
-// worktree on a branch Martha's naming did not make is refused rather than taken for one of its own; and that
+// worktree on a branch Martha's naming did not make is refused rather than taken for one of its own; that
 // finishing removes the worktree, its local branch and, once the default branch holds what origin has, its branch
-// on origin too.
+// on origin too; and that the deletion of that branch is an outward act kept in the package's ledger before it
+// runs, so a successor knows whether it was sent (martha#25).
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -20,8 +21,9 @@ import { test, type TestContext } from 'node:test'
 
 import { type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest, Tool } from '../host_contract/host_contract.ts'
-import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { readLedger } from '../log_ledger/log_ledger.ts'
 import {
   NO_LAYOUT,
   WORKTREE_FINISH,
@@ -32,6 +34,9 @@ import {
 /** The member these tools answer for, and the branch prefix its worktrees carry. */
 const MEMBER = 'Ceres'
 const SLUG = '261-the-refusals'
+
+/** The package a finished worktree's deletion is kept under, as the member names it (martha#25). */
+const PACKAGE = 'macula-io/martha#25'
 
 interface Fixture {
   readonly origin: string
@@ -100,20 +105,68 @@ const runReal = async (request: ProcessRequest): Promise<ProcessOutcome> => {
 interface Tools {
   readonly open: Tool
   readonly finish: Tool
+  /** The host the tools run over: its store's rows are the package's ledger (martha#25). */
+  readonly host: HostForTests
 }
 
-function toolsOf(settings: CrewSettings, member: string = MEMBER): Tools {
-  const { host, registeredTool } = hostForTests({ run: runReal })
-  openAndFinishAWorktree({ host, settings, member })
+function toolsOf(
+  settings: CrewSettings,
+  member: string = MEMBER,
+  run: (request: ProcessRequest) => Promise<ProcessOutcome> = runReal,
+): Tools {
+  const testHost = hostForTests({ run })
+  openAndFinishAWorktree({ host: testHost.host, settings, member })
   const tool = (name: string): Tool => {
-    const registered = registeredTool(name)
+    const registered = testHost.registeredTool(name)
     assert.ok(registered !== undefined, `${name} is registered`)
     return registered
   }
-  return { open: tool(WORKTREE_OPEN), finish: tool(WORKTREE_FINISH) }
+  return { open: tool(WORKTREE_OPEN), finish: tool(WORKTREE_FINISH), host: testHost }
 }
 
 const asked = (repo: string, slug: string): Readonly<Record<string, unknown>> => ({ repo, slug })
+
+/** What `worktree_finish` is given: the worktree, and the package its deletion is kept under. */
+const finished = (repo: string, slug: string, package_name: string = PACKAGE): Readonly<Record<string, unknown>> => ({ ...asked(repo, slug), package: package_name })
+
+/** The kinds of row a package's ledger holds, in order, as the ledger reads them back. */
+const rowKinds = async (testHost: HostForTests): Promise<readonly string[]> =>
+  (await readLedger(testHost.host, PACKAGE)).map((row) => row.kind)
+
+/** The one act the package's ledger announced, or a failure naming what was read instead. */
+const theAnnouncedAct = (rows: Awaited<ReturnType<typeof readLedger>>): { readonly kind: string; readonly what: string } => {
+  const announced = rows[0]
+  assert.equal(announced?.kind, 'act_announced', 'the first row is the act, kept before it ran')
+  return announced?.kind === 'act_announced' ? announced.act : assert.fail('no act was announced')
+}
+
+/** The outcome kept for the announced act, or a failure naming what was read instead. */
+const theKeptOutcome = (rows: Awaited<ReturnType<typeof readLedger>>): { readonly succeeded: boolean; readonly detail: string } => {
+  const concluded = rows[1]
+  assert.equal(concluded?.kind, 'act_concluded', 'the second row is the act\'s outcome')
+  return concluded?.kind === 'act_concluded' ? concluded.outcome : assert.fail('the act was not concluded')
+}
+
+/** Whether origin still has `branch` among its branches. */
+const onOrigin = (fixture: Fixture, branch: string): boolean =>
+  execFileSync('git', ['--git-dir', fixture.origin, 'for-each-ref', '--format=%(refname)', 'refs/heads'], { encoding: 'utf8' }).includes(`refs/heads/${branch}`)
+
+/** The landing of the worktree's branch: pushed from the seed checkout, so the crew's clone has not heard of it. */
+const landTheBranch = (fixture: Fixture): void => {
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, 'merge', '--ff-only', '--quiet', `origin/${MEMBER}/${SLUG}`)
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+}
+
+/** A worktree with one commit, pushed, so its branch is on origin and on no other branch. */
+const aPushedWorktree = async (fixture: Fixture, tools: Tools): Promise<string> => {
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'work.txt'), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  return path
+}
 
 test('worktree_open makes the path and the branch from the origin\'s default branch, and answers where it is (#256)', async (t) => {
   const fixture = aCrew(t)
@@ -149,9 +202,9 @@ test('worktree_finish is refused while the worktree holds a change, or a commit 
   await open.answer(asked('acme/widget', SLUG))
   const path = join(fixture.worktrees, `widget-${SLUG}`)
   writeFileSync(join(path, 'work.txt'), 'not committed yet\n')
-  assert.match(await finish.answer(asked('acme/widget', SLUG)), /has uncommitted changes \(.*work\.txt/)
+  assert.match(await finish.answer(finished('acme/widget', SLUG)), /has uncommitted changes \(.*work\.txt/)
   commitIn(path, 'the work')
-  assert.match(await finish.answer(asked('acme/widget', SLUG)), /holds 1 commit\(s\) on no remote branch: push Ceres\/261-the-refusals/)
+  assert.match(await finish.answer(finished('acme/widget', SLUG)), /holds 1 commit\(s\) on no remote branch: push Ceres\/261-the-refusals/)
   assert.ok(existsSync(path), 'the worktree is still there, with the work in it')
 })
 
@@ -168,7 +221,7 @@ test('worktree_finish refuses a worktree that is on another branch, and leaves t
   gitIn(path, 'checkout', '--quiet', '-b', 'other')
   gitIn(path, 'push', '--quiet', '-u', 'origin', 'other')
   assert.match(
-    await finish.answer(asked('acme/widget', SLUG)),
+    await finish.answer(finished('acme/widget', SLUG)),
     /is on other, not Ceres\/261-the-refusals: Martha removes only the worktree its own naming made/,
   )
   assert.ok(existsSync(path), 'the worktree is still there')
@@ -191,7 +244,7 @@ test('worktree_finish removes the worktree, its local branch and the branch on o
   gitIn(fixture.seed, 'merge', '--ff-only', '--quiet', `origin/${MEMBER}/${SLUG}`)
   gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
   assert.notEqual(gitIn(fixture.clone, 'rev-parse', 'origin/main'), gitIn(fixture.seed, 'rev-parse', 'HEAD'), 'the clone has not heard of the landing yet')
-  const answer = await finish.answer(asked('acme/widget', SLUG))
+  const answer = await finish.answer(finished('acme/widget', SLUG))
   assert.match(answer, new RegExp(`removed ${path.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')} and removed Ceres/261-the-refusals`))
   assert.match(answer, /removed Ceres\/261-the-refusals on origin/)
   assert.equal(existsSync(path), false, 'the worktree is gone')
@@ -209,7 +262,7 @@ test('worktree_finish leaves the branch on origin while the default branch does 
   commitIn(path, 'the work')
   gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
   gitIn(fixture.clone, 'fetch', '--quiet', 'origin')
-  assert.match(await finish.answer(asked('acme/widget', SLUG)), /stays on origin, which its tip is not on yet/)
+  assert.match(await finish.answer(finished('acme/widget', SLUG)), /stays on origin, which its tip is not on yet/)
   const onOrigin = execFileSync('git', ['--git-dir', fixture.origin, 'for-each-ref', '--format=%(refname)', 'refs/heads'], { encoding: 'utf8' })
   assert.ok(onOrigin.includes(`${MEMBER}/${SLUG}`), 'the branch on origin is still there, holding work main does not have')
 })
@@ -231,7 +284,7 @@ test('worktree_finish leaves the branch on origin, naming its moved head, when a
   commitIn(fixture.seed, 'Y')
   const y = gitIn(fixture.seed, 'rev-parse', 'HEAD')
   gitIn(fixture.seed, 'push', '--quiet', 'origin', `HEAD:refs/heads/${MEMBER}/${SLUG}`)
-  const answer = await finish.answer(asked('acme/widget', SLUG))
+  const answer = await finish.answer(finished('acme/widget', SLUG))
   assert.match(answer, new RegExp(`stays on origin, where it is at ${y}, which the default branch does not hold`))
   const onOrigin = execFileSync('git', ['ls-remote', fixture.origin, `refs/heads/${MEMBER}/${SLUG}`], { encoding: 'utf8' }).trim()
   assert.ok(onOrigin.includes(y), 'origin still holds the commit another checkout pushed, which no other branch has')
@@ -256,7 +309,7 @@ test('worktree_finish removes the branch on origin when its head moved past the 
   commitIn(fixture.seed, 'Y')
   gitIn(fixture.seed, 'push', '--quiet', 'origin', `HEAD:refs/heads/${MEMBER}/${SLUG}`)
   gitIn(fixture.seed, 'push', '--quiet', 'origin', 'HEAD:main')
-  assert.match(await finish.answer(asked('acme/widget', SLUG)), /removed Ceres\/261-the-refusals on origin/)
+  assert.match(await finish.answer(finished('acme/widget', SLUG)), /removed Ceres\/261-the-refusals on origin/)
   const onOrigin = execFileSync('git', ['--git-dir', fixture.origin, 'for-each-ref', '--format=%(refname)', 'refs/heads'], { encoding: 'utf8' })
   assert.equal(onOrigin.includes(`${MEMBER}/${SLUG}`), false, 'the branch on origin is gone, since the default branch holds where it stood')
 })
@@ -278,7 +331,7 @@ test('worktree_finish answers that the branch is gone when origin no longer has 
     '',
     'the clone still remembers the branch origin no longer has',
   )
-  assert.match(await finish.answer(asked('acme/widget', SLUG)), /is no longer on origin/)
+  assert.match(await finish.answer(finished('acme/widget', SLUG)), /is no longer on origin/)
   assert.equal(existsSync(path), false, 'the worktree is gone')
 })
 
@@ -287,3 +340,91 @@ test('a crew with no workspace layout is told which fields to add, not given a w
   const { open } = toolsOf(settingsFor(fixture, { clones: null, worktrees: null }))
   assert.equal(await open.answer(asked('acme/widget', SLUG)), NO_LAYOUT)
 })
+
+test('the deletion of the branch on origin is a push in the package\'s ledger, its row before its outcome (#25)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  assert.match(await tools.finish.answer(finished('acme/widget', SLUG)), /removed Ceres\/261-the-refusals on origin/)
+  const rows = await readLedger(tools.host.host, PACKAGE)
+  assert.deepEqual(rows.map((row) => row.kind), ['act_announced', 'act_concluded'], 'the act, then its outcome')
+  assert.deepEqual(theAnnouncedAct(rows), { kind: 'push', what: `origin ${MEMBER}/${SLUG}` })
+  assert.equal(rows[0]?.member, MEMBER, 'the row says whose act it was')
+  assert.equal(rows[0]?.package, PACKAGE, 'the row is kept under the package the member named')
+  assert.deepEqual(theKeptOutcome(rows), { succeeded: true, detail: `removed ${MEMBER}/${SLUG} on origin` })
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch on origin is gone')
+})
+
+test('a deletion whose row the store will not keep is not sent, and the branch stays on origin (#25)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const refusal = 'the disk would not take it'
+  tools.host.refuseNextAppend(refusal)
+  const answer = await tools.finish.answer(finished('acme/widget', SLUG))
+  assert.match(answer, /stays on origin, since the push was not sent: its row was not kept \(the store refused the row: the disk would not take it\)/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is still on origin, because nothing was sent')
+  assert.deepEqual(await rowKinds(tools.host), [], 'no row was kept, and nothing was concluded')
+})
+
+test('a deletion git refuses is concluded as failed, and its own words are kept (#25)', async (t) => {
+  const fixture = aCrew(t)
+  const denied = 'remote: deleting a branch is not allowed here\n'
+  const runDenyingTheDelete = async (request: ProcessRequest): Promise<ProcessOutcome> =>
+    request.args.includes('--delete') ? { exit_code: 1, stdout: '', stderr: denied } : runReal(request)
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, runDenyingTheDelete)
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const answer = await tools.finish.answer(finished('acme/widget', SLUG))
+  assert.match(answer, /stays on origin \(remote: deleting a branch is not allowed here\)/)
+  const rows = await readLedger(tools.host.host, PACKAGE)
+  assert.deepEqual(rows.map((row) => row.kind), ['act_announced', 'act_concluded'], 'a failed act is concluded, not lost')
+  assert.deepEqual(theKeptOutcome(rows), { succeeded: false, detail: 'remote: deleting a branch is not allowed here' })
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is still on origin')
+})
+
+test('a deletion whose outcome the store will not keep is told as sent, and left awaiting (#25)', async (t) => {
+  const fixture = aCrew(t)
+  let refuseTheOutcome: (() => void) | undefined
+  // The row is announced, git runs, and only then does the store refuse: the one window in which the act happened
+  // and its outcome was not kept.
+  const runRefusingTheOutcome = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (request.args.includes('--delete')) refuseTheOutcome?.()
+    return runReal(request)
+  }
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, runRefusingTheOutcome)
+  refuseTheOutcome = (): void => tools.host.refuseNextAppend('the disk would not take it')
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const answer = await tools.finish.answer(finished('acme/widget', SLUG))
+  assert.match(
+    answer,
+    /was deleted on origin, and its ledger row was not concluded: the push at row 0 was sent, and its outcome was not kept \(the store refused the row: the disk would not take it\)/,
+  )
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch is gone: it was sent')
+  assert.deepEqual(await rowKinds(tools.host), ['act_announced'], 'the act is left awaiting, for a successor to check')
+})
+
+test('a finish that never sends the deletion keeps no row, since no act happened (#25)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  gitIn(fixture.clone, 'fetch', '--quiet', 'origin')
+  assert.match(await tools.finish.answer(finished('acme/widget', SLUG)), /stays on origin, which its tip is not on yet/)
+  assert.deepEqual(await rowKinds(tools.host), [], 'the guard refused before any act was sent, so nothing was announced')
+})
+
+test('worktree_finish names the package its row is kept under, and refuses before it removes anything (#25)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const path = await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  assert.match(await tools.finish.answer(asked('acme/widget', SLUG)), /is not a work package, as owner\/repo#n/)
+  assert.match(await tools.finish.answer(finished('acme/widget', SLUG, 'acme/widget')), /is not a work package, as owner\/repo#n/)
+  assert.ok(existsSync(path), 'the worktree is still there: a package it cannot keep a row under is refused first')
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is still on origin')
+  assert.deepEqual(await rowKinds(tools.host), [], 'nothing was kept')
+})
+
