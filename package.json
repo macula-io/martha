@@ -15,6 +15,7 @@
     "check:links": "node src/check_every_link_resolves/main.ts",
     "check:logos": "node src/check_the_logos_are_valid_svg/main.ts",
     "check:base-tests": "node src/check_no_test_the_base_passed_goes_missing/main.ts",
+    "check:restated-values": "node src/check_no_literal_restates_a_value/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",

@@ -86,6 +86,7 @@ test('a module specifier, a property name, a word below the minimum and a word u
     'a_user/a_user.ts',
     [
       "import { TOOL } from './a_tool/a_tool.ts'",
+      "import { other } from 'the-tool'",
       "const settings = { 'the-tool': 1 }",
       "const id = 'env'",
     ].join('\n'),

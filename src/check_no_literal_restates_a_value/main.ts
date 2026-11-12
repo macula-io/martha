@@ -37,9 +37,10 @@ import {
 } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { EXCEPTIONS } from './exceptions.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { CORE } from './the_core_the_check_reads.ts'
+import { addedLinesIn, underCore } from './the_lines_a_change_adds.ts'
 
 const ZERO = /^0+$/
-const CORE = 'src'
 
 const git = (root: string, args: readonly string[]): string =>
   execFileSync('git', ['-C', root, ...marthasOwnGitArgs(args)], {
@@ -51,32 +52,6 @@ const git = (root: string, args: readonly string[]): string =>
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
   return at === -1 ? undefined : process.argv[at + 1]
-}
-
-/** A path relative to the check's root, as the findings name it. */
-const underCore = (path: string): string => (path.startsWith(`${CORE}/`) ? path.slice(CORE.length + 1) : path)
-
-/**
- * The lines a unified diff adds, as `path:line` with the path under the core. The
- * new side of each hunk is what the change wrote; a hunk that only removes lines
- * adds none.
- */
-export function addedLinesIn(diff: string): Set<string> {
-  const added = new Set<string>()
-  let path: string | undefined
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('+++ ')) {
-      const named = line.slice(4)
-      path = named === '/dev/null' ? undefined : underCore(named.replace(/^b\//, ''))
-      continue
-    }
-    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line)
-    if (hunk === null || path === undefined) continue
-    const first = Number(hunk[1])
-    const count = hunk[2] === undefined ? 1 : Number(hunk[2])
-    for (let at = first; at < first + count; at += 1) added.add(`${path}:${at}`)
-  }
-  return added
 }
 
 /** The lines the change adds, under the core, read as one net diff against the merge base. */
@@ -104,6 +79,7 @@ export function constantsTheChangeDefines(root: string, merge_base: string, head
     const now = constantsIn(readFileSync(join(root, path), 'utf8'), under)
     const before = constantsIn(readGitFile(root, merge_base, path), under)
     for (const constant of now) {
+      if (!constant.exported) continue
       if (!added.has(`${under}:${constant.line}`)) continue
       const was = before.find((each) => each.name === constant.name)
       defined.push({ value: constant.value, module: under, name: constant.name })
