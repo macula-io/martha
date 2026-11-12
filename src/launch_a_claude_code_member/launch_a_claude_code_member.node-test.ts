@@ -63,6 +63,7 @@ import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUs
 import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -957,6 +958,7 @@ test('a session starting on a package is handed its predecessor\'s unfinished ac
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
+    stores: { crew: crewFilesDirectory(join(place.rows, 'crew')) },
   })
   // The predecessor's row: the member holds a package, and says so where the launcher reads it.
   const kept = dashboardRowsIn(place.dashboard).keep({
@@ -1002,6 +1004,7 @@ test('a session starting on no package is handed nothing, and its start is taken
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
+    stores: { crew: crewFilesDirectory(join(place.rows, 'crew')) },
   })
 
   const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)

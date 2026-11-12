@@ -14,9 +14,9 @@
 
 import { join } from 'node:path'
 
-import { stampHandover, type HandoverStampStore } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, HostContract, Refused } from '../host_contract/host_contract.ts'
+import type { CrewPlace, HandoverStampStore, Refused, Stores } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
@@ -26,7 +26,7 @@ export const CREW_HANDOVER_WRITTEN = 'CREW-HANDOVER-WRITTEN'
 export const HANDOVERS_PLACE = 'handovers'
 
 /** What this slice asks of a host: the crew's own store, and nothing else. */
-export type HandingOverHost = Pick<HostContract, 'stores'>
+export type HandingOverHost = { readonly stores: Pick<Stores, 'crew'> }
 
 /**
  * The file a member's handover written on `at` has: the day it was written and the member, and nothing the member
@@ -63,11 +63,13 @@ export function writeMyHandover(host: HandingOverHost, handing: HandingOver): st
   const refused = place.keep(name, handing.content)
   if (refused !== undefined) return refused
   // Stamped with the same moment the file is named for, so the day in the name and the stamp can never disagree.
-  stampHandover(
+  const unstamped = stampHandover(
     handing.stamps,
     { member: handing.member, session: handing.session },
     { file: join(place.path, name), content: handing.content },
     () => handing.at.getTime(),
   )
-  return CREW_HANDOVER_WRITTEN
+  // A file no stamp was kept for is nobody's handover, so nothing will be cleared or woken from it; the member is told
+  // rather than shown the word, and the next handover replaces the file rather than leaving two to choose between.
+  return unstamped ?? CREW_HANDOVER_WRITTEN
 }

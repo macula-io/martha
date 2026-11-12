@@ -13,7 +13,8 @@ import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import type { DocumentStore } from '../host_contract/host_contract.ts'
+import type { DocumentStore, Stores } from '../host_contract/host_contract.ts'
+import { parkAMember, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import {
   CREW_LOG_DESCRIPTION,
   NOTE_WHAT_BECAME_DESCRIPTION,
@@ -30,7 +31,7 @@ import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
-export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts'] as const
+export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts', 'crew_park'] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
 /**
@@ -60,6 +61,8 @@ export interface CrewToolPlaces {
   /** The checkout the crew is declared in. */
   readonly root: string
   readonly documents: DocumentStore
+  /** The crew's own store: the park marker this member keeps, and the handovers a wake reads (../park_and_wake_a_member). */
+  readonly stores: Pick<Stores, 'crew'>
   /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
@@ -87,6 +90,10 @@ export interface CrewTools {
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
 const A_PACKAGE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The work package, owner/repo#n, as the issue is named' }
+
+/** What `crew_park` says it is for: the design's own words, and what a park does and does not do. */
+export const CREW_PARK_DESCRIPTION =
+  'Park a member, or bring one out of a park. A parked member is not refreshed between tasks and is never started by Martha on its own; the owner or a member whose role may resume parked work wakes it. Leave `member` out to park yourself.'
 
 /** The tools, as the mod registers them. */
 export const CREW_TOOLS: readonly CrewTool[] = [
@@ -163,6 +170,19 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     name: 'crew_receipts',
     description: CREW_RECEIPTS_DESCRIPTION,
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'crew_park',
+    description: CREW_PARK_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parked: { type: 'boolean', description: 'Whether you are parking (true) or coming out of a park (false)' },
+        reason: { type: 'string', description: 'Why, in one line: the owner reads it, and so does whoever wakes you' },
+        member: { type: 'string', description: 'Whose park to move; leave it out for your own' },
+      },
+      required: ['parked', 'reason'],
+    },
   },
 ]
 
@@ -251,6 +271,11 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
       return 'refused' in sent ? { refused: sent.refused } : { answer: sent.told }
     },
     crew_log: async (args) => ({ answer: (await keepTheMilestone(places.ledger, { ...workerOf(args), event: args['event'], note: args['note'] })).told }),
+    crew_park: async (args) => {
+      const declared = await crewOrRefusal(places)
+      if ('refused' in declared) return declared
+      return parkOrUnpark(places, declared.settings, args)
+    },
     what_was_sent: async (args) => ({ answer: (await whatWasSent(places.ledger, workerOf(args).package)).told }),
     note_what_became_of_an_act: async (args) => {
       const { announced_at, succeeded, detail } = args
@@ -304,6 +329,32 @@ async function reportProgress(places: CrewToolPlaces, state: SessionState, args:
   })
   return { answer: report.told }
 }
+
+/** `crew_park`: the member parks or unparks itself, or another member it may, and is told what landed. */
+function parkOrUnpark(places: CrewToolPlaces, settings: CrewSettings, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
+  const reason = textOf(args['reason'])
+  if (reason === '') return { refused: 'a park or an unpark says why in one line, and this one says nothing' }
+  // A park and an unpark are two acts, and only `true` and `false` say which one is asked for. Anything else — a word
+  // that looks like one, or nothing at all — would otherwise read as an unpark and answer "not parked" about a member
+  // nobody was ever brought out of a park (martha#255 part 2 r=1 R3).
+  const parked = args['parked']
+  if (typeof parked !== 'boolean') {
+    return { refused: `a park or an unpark says which one it is, and this one says ${JSON.stringify(parked)}: say true to park, false to come out of a park.` }
+  }
+  const member = textOf(args['member']) === '' ? places.member : textOf(args['member'])
+  const names = settings.members.map((one) => one.name)
+  if (!names.includes(member)) return { refused: `${member} is not on this crew (its members are ${names.join(', ')}), so there is no park to move.` }
+  const asked = { actor: places.member, member, reason, at: new Date(places.ledger.clock.now()), declaration: theDeclarationOf(settings) }
+  const said = parked ? parkAMember(places, asked) : unparkAMember(places, asked)
+  if ('refusal' in said) return { refused: said.refusal }
+  return { answer: `${said.parked ? 'parked' : 'not parked'}: ${member} — ${said.reason}` }
+}
+
+/** The declaration as parking reads it: each member's name and role, and the table of who may what. */
+const theDeclarationOf = (settings: CrewSettings): TheDeclaration => ({
+  members: settings.members.map((member) => ({ name: member.name, role: member.role })),
+  mode: { may: settings.mode.may },
+})
 
 /** `see_the_crew`: every member's row, and whether the declaration switches the pane on at a session's start. */
 async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {

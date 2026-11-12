@@ -220,6 +220,34 @@ export interface CrewPlace {
   names(): readonly string[] | Refused
 }
 
+/** What the host keeps next to a handover file it wrote for a member. */
+export interface HandoverStamp {
+  readonly member: string
+  readonly predecessor_id: string
+  /**
+   * When the host stamped it, on the machine's clock. It is what the newest handover of a member is read by
+   * (martha#255): the file's own name carries a day, and a day cannot tell two handovers apart.
+   */
+  readonly written_at: string
+  readonly digest: string
+  /** How many ingestions the predecessor's record held when stamped. */
+  readonly record_length: number
+  /** A digest of those ingestions, in order. */
+  readonly record_digest: string
+}
+
+/**
+ * Where stamps live: the host's, keyed by handover file. A model writes none of it.
+ *
+ * Neither member answers two facts with one: a stamp the store will not hand over is `Refused` with its reason, never
+ * `undefined`, and one it will not keep is the same (martha#255 part 2, decision 1). `undefined` means the store holds
+ * no stamp for that file and says so.
+ */
+export interface HandoverStampStore {
+  read(file: string): HandoverStamp | Refused | undefined
+  write(file: string, stamp: HandoverStamp): Refused | undefined
+}
+
 /**
  * The crew's own store, outside the checkout, one directory per place (martha#254 R1, #255).
  *

@@ -10,11 +10,13 @@ import { after, test } from 'node:test'
 import {
   CREW_DIRECTORY_MODE,
   CREW_FILE_MODE,
+  HANDOVER_STAMPS_PLACE,
   STAGING_PREFIX,
   crewFilesDirectory,
+  handoverStampsIn,
   isAPlainName,
 } from './crew_files_directory.ts'
-import type { CrewPlace } from '../host_contract/host_contract.ts'
+import type { CrewPlace, HandoverStamp } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-crew-files-'))
@@ -123,6 +125,33 @@ test('#255: a file the disk kept only part of is refused, and none of it is left
   assert.ok(refused !== undefined, 'a short write was taken as a whole file, so a successor could be handed half a handover')
   assert.match(refused.refusal, /kept only 4 of the \d+ bytes/, 'the refusal does not say that only part of the file was written')
   assert.deepEqual(readdirSync(place.path), [], 'a refused short write left a file behind')
+})
+
+// part 2, decision 1: the stamp store is one of the two places a wake asks, and it answers three ways. A stamp file
+// the store will not read is the store saying it cannot tell when that handover was written — never the same answer as
+// a handover nothing stamped, or a wake would pass over a handover to land on an older one (martha#255 part 2 r=1 R2).
+test('#255 part 2: a stamp the store will not read is a refusal, never a handover that was never stamped', () => {
+  const crew = aCrew('stamps')
+  const stamps = handoverStampsIn(crew)
+  const handover = join(crew, 'handovers', 'HANDOVER_2026-11-12_builder.md')
+  const stamp: HandoverStamp = {
+    member: 'builder',
+    predecessor_id: 'a-session',
+    written_at: '2026-11-12T09:00:00.000Z',
+    digest: 'a-digest',
+    record_length: 0,
+    record_digest: 'a-record-digest',
+  }
+  assert.equal(stamps.write(handover, stamp), undefined, 'the store refused the stamp the test needed it to keep')
+  assert.deepEqual(stamps.read(handover), stamp, 'a stamp the store kept does not read back as it was kept')
+
+  // Readable by others: the store refuses the file, so the stamp is one it will not answer for.
+  const kept = join(crew, HANDOVER_STAMPS_PLACE, 'HANDOVER_2026-11-12_builder.md')
+  chmodSync(kept, 0o644)
+  const read = stamps.read(handover)
+  assert.ok(read !== undefined && 'refusal' in read, 'a stamp anyone may read was answered as though it were the host\'s own')
+  assert.match(read.refusal, /only this user may read and write/, 'the refusal is not the store\'s own reason for the file')
+  chmodSync(kept, CREW_FILE_MODE)
 })
 
 test('#255: a place or a file name that is a path is refused, never translated into one', () => {

@@ -26,9 +26,14 @@ import { isatty } from 'node:tty'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
+import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { crewStateDirectory, openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { wakeAMember } from '../wake_a_member/wake_a_member.ts'
 import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.ts'
+import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 
@@ -44,7 +49,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha wake <member> | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -136,10 +141,66 @@ function exitOf(stopped: { readonly exit_code: number | null; readonly signal: s
 }
 
 async function start(io: CommandIo, places: Places, member: string, args: readonly string[]): Promise<number> {
+  const started = await startingTheMember(io, places, member, args)
+  if (!started.started) return EXIT_REFUSED
+  io.out(startedLine(member, started.pid))
+  return exitOf(await started.stopped)
+}
+
+/**
+ * `martha wake <member>` (martha#255 part 2): the member unparked and started from its newest handover. Every refusal
+ * is told to the owner before anything is started, and the member holds the terminal afterwards exactly as `martha
+ * start` does, so the two verbs end the same way.
+ */
+async function wake(io: CommandIo, places: Places, member: string): Promise<number> {
+  const crew = crewStateDirectory(places.state.state_root, places.root)
+  if ('refusal' in crew) return refused(io, crew.refusal)
+  const declaration = await theDeclarationsOf(places)
+  if (typeof declaration === 'string') return refused(io, declaration)
+  let running: MemberStarted | undefined
+  const woken = await wakeAMember(
+    { stores: { crew: crewFilesDirectory(crew.path) }, stamps: handoverStampsIn(crew.path) },
+    { member, declaration, at: new Date() },
+    async (asking) => {
+      const started = await startingTheMember(io, places, asking.member, [], asking.prompt)
+      running = started
+      return started.started ? { started: true } : { started: false, refusal: started.refusal }
+    },
+  )
+  if ('refusal' in woken) return woken.told_by_the_start === true ? EXIT_REFUSED : refused(io, woken.refusal)
+  io.out(`${woken.member} woken from ${woken.handover.file}`)
+  if (woken.park.kind === 'could_not_be_cleared') tellOwnerOn(io)(`${woken.member} is running, but its park could not be cleared: ${woken.park.refusal}`)
+  return running !== undefined && running.started ? exitOf(await running.stopped) : EXIT_DONE
+}
+
+/** The declaration as parking and waking read it; or why it could not be read. */
+async function theDeclarationsOf(places: Places): Promise<TheDeclaration | string> {
+  try {
+    const settings = await declareCrew(documents, places.root)
+    return { members: settings.members.map((member) => ({ name: member.name, role: member.role })), mode: { may: settings.mode.may } }
+  } catch (error) {
+    return `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
+/**
+ * The member started on this project, its refusal told to the owner in the words the launcher gives: `prompt` is
+ * Martha's own, and is added after the owner's arguments rather than passing the switch rule they pass.
+ */
+async function startingTheMember(
+  io: CommandIo,
+  places: Places,
+  member: string,
+  args: readonly string[],
+  prompt?: string,
+): Promise<MemberStarted> {
   const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
   const launcher = launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
-  if ('refusal' in launcher) return refused(io, launcher.refusal)
-  const started = await startMember({
+  if ('refusal' in launcher) {
+    tellOwnerOn(io)(launcher.refusal)
+    return { started: false, refusal: launcher.refusal }
+  }
+  return startMember({
     ...places,
     member,
     args,
@@ -150,10 +211,8 @@ async function start(io: CommandIo, places: Places, member: string, args: readon
     stdio: io.stdio,
     documents,
     tellOwner: tellOwnerOn(io),
+    ...(prompt === undefined ? {} : { initial_prompt: prompt }),
   })
-  if (!started.started) return EXIT_REFUSED
-  io.out(startedLine(member, started.pid))
-  return exitOf(await started.stopped)
 }
 
 /**
@@ -209,7 +268,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
 const ACTS_ALONE: readonly string[] = ['init', 'approve', '--version']
 /** The acts that take exactly one argument (martha#129). */
-const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes']
+const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake']
 /** The switches `martha install` passes through to the installer; any other is no way the command is used. */
 const INSTALL_SWITCHES: readonly string[] = ['--downgrade', '-h', '--help']
 /** The switch that takes the next word as its value. */
@@ -308,12 +367,13 @@ async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
   return typeof places === 'string' ? refused(io, places) : actIn(asked, places, io)
 }
 
-/** The acts that work inside a project: the owner's two, and the three that read or start a member. */
+/** The acts that work inside a project: the owner's two, and the four that read or start a member. */
 async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<number> {
   if (asked.act === 'pin-key') return pinKey(io, places, asked.args[0]!)
   if (asked.act === 'keep-shapes') return keepShapes(io, places, asked.args[0]!)
   if (asked.act === 'init') return init(io, places)
   if (asked.act === 'approve') return approve(io, places)
+  if (asked.act === 'wake') return wake(io, places, asked.args[0]!)
   return start(io, places, asked.member!, asked.args)
 }
 

@@ -23,6 +23,11 @@ import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -304,4 +309,53 @@ test('martha install with a switch it does not know is a usage error, and the us
   assert.equal(run.status, EXIT_USAGE)
   assert.ok(USAGE.includes('martha install'), USAGE)
   assert.doesNotMatch(run.err, /installer pin/)
+})
+
+/**
+ * A fake claude on the place's PATH that keeps every call's arguments, each call separated from the last, then ends at
+ * once as the owner's host would end a session it finished with. The launcher asks its host several questions before
+ * it starts a member, so what a test reads is the last call that carries the member's own switches.
+ */
+function claudeThatWritesItsArguments(place: Place, t: TestContext): { readonly args: string; readonly env: Readonly<Record<string, string>> } {
+  const bin = join(place.home, 'wake-bin')
+  mkdirSync(bin)
+  const args = join(place.home, 'wake-args')
+  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `{ printf '%s\\n' "$@"; echo '---'; } >> '${args}'`, 'exit 0', ''].join('\n'), { mode: 0o700 })
+  return { args, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
+}
+
+// The verb's whole point (martha#255 part 2, R1): `martha wake <member>` really does start the member on the prompt
+// the wake composed, and it starts it on the handover its stamp names. Measured at the host's own arguments, because
+// a wake that starts a member with no prompt, or with someone else's words, still prints "woken".
+test('martha wake starts the member on its newest handover, and the prompt it is started on names that file', (t) => {
+  const place = placeFor(t)
+  const claude = claudeThatWritesItsArguments(place, t)
+  assert.equal(marthaWith(place, claude.env, 'init').status, 0, 'the test could not declare a crew')
+  const [builder] = SOLO_MEMBERS
+  const member = builder!.name
+  const content = 'What stands: the package, its branch, its tip.\n'
+  const at = new Date('2026-11-12T09:00:00Z')
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
+  const crew = crewStateDirectory(state.state_root, place.root)
+  assert.ok(!('refusal' in crew), `the test could not reach the crew's store: ${'refusal' in crew ? crew.refusal : ''}`)
+  const stamps = handoverStampsIn(crew.path)
+  const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
+  const written = writeMyHandover({ stores: { crew: crewFilesDirectory(crew.path) } }, { member, content, at, stamps, session })
+  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${JSON.stringify(written)}`)
+  const handovers = crewFilesDirectory(crew.path).place(HANDOVERS_PLACE)
+  assert.ok(!('refusal' in handovers), 'the crew store refused its handovers place')
+  const file = join(handovers.path, theHandoverFile(member, at))
+
+  const run = marthaOnATerminal(place, claude.env, 'wake', member)
+
+  assert.equal(run.status, 0, run.said)
+  assert.match(run.said, new RegExp(`^${member} woken from .*HANDOVER_2026-11-12_${member}\\.md$`, 'm'), 'the wake did not say which handover it woke the member from')
+  const calls = readFileSync(claude.args, 'utf8')
+    .split('---\n')
+    .map((call) => call.split('\n').filter((line) => line !== ''))
+    .filter((call) => call.length > 0)
+  const started = calls.find((call) => call.includes('--plugin-dir'))
+  assert.ok(started !== undefined, `the wake never started the member: ${JSON.stringify(calls)}`)
+  assert.ok(started.includes(theResumePrompt({ file, content }, member)), `the member was not started on the prompt its wake composed: ${JSON.stringify(started)}`)
 })

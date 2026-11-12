@@ -112,6 +112,31 @@ function fakeClaude(place: Place): { readonly command: string; readonly ran: str
 }
 
 /**
+ * A fake `claude` that keeps every call's arguments, each call separated from the last, then waits to be stopped. The
+ * launcher asks its host several questions before it starts a member, so a file that kept only the last call would be
+ * the last question's, never the member's own start (martha#255 part 2 R1).
+ */
+function aClaudeThatWritesEachCall(place: Place): { readonly command: string; readonly args: string } {
+  const dir = join(place.home, 'fake-each-call')
+  mkdirSync(dir)
+  const args = join(dir, 'args')
+  const command = join(dir, 'claude')
+  writeFileSync(
+    command,
+    ['#!/bin/sh', ...hostAnswers(), `{ printf '%s\\n' "$@"; echo '---'; } >> '${args}'`, 'exec sleep 600', ''].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, args }
+}
+
+/** Every call the fake host kept, each as the arguments it was spawned with, in the order it was spawned. */
+const callsIn = (file: string): string[][] =>
+  readFileSync(file, 'utf8')
+    .split('---\n')
+    .map((call) => call.split('\n').filter((line) => line !== ''))
+    .filter((call) => call.length > 0)
+
+/**
  * A fake `claude` that starts a child writing into the home until it is killed, and then waits to be stopped: the shape
  * of the run the teardown race came from (martha#272). The child puts an entry into the home every few microseconds, so
  * a teardown that removes the home under it is removing a tree that is not quiet.
@@ -389,6 +414,25 @@ test('the switches that load no config reach the host as the owner gave them', a
   await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
   const passed = readFileSync(fake.args, 'utf8').split('\n')
   for (const arg of args) assert.ok(passed.includes(arg), arg)
+})
+
+// A woken member is started on the prompt the wake wrote for it (../wake_a_member), and the owner's own arguments are
+// still the owner's. The prompt is measured where it lands — in the arguments the member's host was spawned with,
+// after every one of the owner's — rather than in the line that builds them (martha#255 part 2 r=1 R1).
+test("a member started with Martha's own prompt carries it after the owner's arguments, and no earlier one (martha#255 part 2)", async (t) => {
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = aClaudeThatWritesEachCall(place)
+  const args = ['--effort', 'high']
+  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args, initial_prompt: prompt })
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  await until('the fake host to write the arguments it was started as a member with', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
+  const member = callsIn(fake.args).at(-1)
+  assert.ok(member !== undefined && member.includes('--plugin-dir'), 'the launcher never started the member')
+  assert.equal(member.filter((arg) => arg === prompt).length, 1, 'the prompt the wake wrote reached the host a number of times other than once')
+  // The prompt is the member's own last argument: directly after the owner's. The launcher's own switches follow it.
+  assert.equal(member[member.indexOf('high') + 1], prompt, `Martha's prompt does not follow the owner's arguments: ${JSON.stringify(member)}`)
 })
 
 /** An own write of one launch, as the launcher keeps one. */

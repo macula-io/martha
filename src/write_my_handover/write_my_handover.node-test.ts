@@ -15,14 +15,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import {
-  CLAUDE_CODE_SESSION_EVENTS,
-  readHandover,
-  startSession,
-  type HandoverStamp,
-  type HandoverStampStore,
-} from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, readHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -134,7 +129,7 @@ test('#255: the stamp carries the moment the handover is named for, never the cl
   const file = theHandoverFile(MEMBER, longAgo)
   assert.equal(file, 'HANDOVER_2001-02-03_builder.md', 'the file is not named for the day it is stamped for')
   assert.equal(
-    stamps.read(join(thePlace(host), file))?.written_at,
+    stamps.all.get(join(thePlace(host), file))?.written_at,
     longAgo.toISOString(),
     'the stamp was written with the clock rather than the moment the handover is named for, so the day in the name and the stamp can disagree',
   )
@@ -154,6 +149,23 @@ test('#255: a name that is not a member\'s name is refused, and no handover is w
   }
   assert.equal(stamps.all.size, 0, 'a refused handover was stamped anyway, so a file that was never written could be inherited from')
   assert.deepEqual(placeNames(host), before, 'a handover was written outside the crew store, under a name that is not a member\'s')
+})
+
+// The stamp is the only thing that makes a written file a handover (martha#255): a wake reads the newest handover by
+// its stamp, and clears what it supersedes. So a store that will not keep the stamp is answered as the refusal it is,
+// never with the word a member reads when its handover was written and stamped (part 2 r=1 R3).
+test('#255 part 2: a handover whose stamp the store would not keep is refused, never answered as written', () => {
+  const host = aHost()
+  const refusing: HandoverStampStore = {
+    read: () => undefined,
+    write: (file) => ({ refusal: `${file} could not be stamped, so no successor could tell when it was written.` }),
+  }
+  const session = startSession(sessions(), CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
+
+  const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps: refusing, session })
+
+  assert.ok(typeof said !== 'string' && 'refusal' in said, 'a handover no stamp was kept for answered as though it were written and stamped')
+  assert.match(said.refusal, /could not be stamped/, 'the refusal is not the store\'s own reason')
 })
 
 test('#255: a crew store the host will not write into refuses the handover, and stamps nothing', () => {

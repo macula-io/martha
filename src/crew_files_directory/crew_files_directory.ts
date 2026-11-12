@@ -25,10 +25,10 @@
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { getuid } from 'node:process'
 
-import type { CrewPlace, CrewStore, Refused } from '../host_contract/host_contract.ts'
+import type { CrewPlace, CrewStore, HandoverStamp, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 
 /** Only the owner may enter a place, or read and write a file in it. */
 export const CREW_DIRECTORY_MODE = 0o700
@@ -53,6 +53,54 @@ export function isAPlainName(name: string): boolean {
  */
 export function crewFilesDirectory(crew: string): CrewStore {
   return { place: (name) => placeIn(crew, name) }
+}
+
+/** The place a crew keeps its handover stamps in: one file per handover file, named as the handover is. */
+export const HANDOVER_STAMPS_PLACE = 'handover-stamps'
+
+/**
+ * The handover stamps a crew keeps, over its own directory (#255): the host's record of which handovers it wrote, when,
+ * and for which member — the one thing that tells a wake which handover is newest, since a file's name carries a day
+ * and a day cannot tell two apart. Keyed by the handover's own file, kept as `<place>/<handover file name>`.
+ *
+ * A store that will not answer is said, never answered `undefined`: a stamp it will not hand over, or will not keep, is
+ * a refusal with its reason (martha#255 part 2, decision 1).
+ */
+export function handoverStampsIn(crew: string): HandoverStampStore {
+  return {
+    read: (file) => {
+      const place = placeIn(crew, HANDOVER_STAMPS_PLACE)
+      if ('refusal' in place) return place
+      const read = place.read(basename(file))
+      if (read === undefined) return undefined
+      if ('refusal' in read) return read
+      return stampOf(read.text, file)
+    },
+    write: (file, stamp) => {
+      const place = placeIn(crew, HANDOVER_STAMPS_PLACE)
+      if ('refusal' in place) return place
+      return place.keep(basename(file), `${JSON.stringify(stamp)}\n`)
+    },
+  }
+}
+
+/** The stamp `text` holds for `file`, or why it is no stamp this host would read. */
+function stampOf(text: string, file: string): HandoverStamp | Refused {
+  let held: unknown
+  try {
+    held = JSON.parse(text)
+  } catch {
+    return { refusal: `${file} has a stamp that is not readable as one, so Martha cannot say when it was written.` }
+  }
+  const { member, predecessor_id, written_at, digest, record_length, record_digest } = (held ?? {}) as Record<string, unknown>
+  const whole =
+    typeof member === 'string' &&
+    typeof predecessor_id === 'string' &&
+    typeof written_at === 'string' &&
+    typeof digest === 'string' &&
+    typeof record_length === 'number' &&
+    typeof record_digest === 'string'
+  return whole ? (held as HandoverStamp) : { refusal: `${file} has a stamp that is missing what Martha reads one for.` }
 }
 
 /** The place `name` under the crew's directory, made 0700 when missing; or why it may not be used. */
