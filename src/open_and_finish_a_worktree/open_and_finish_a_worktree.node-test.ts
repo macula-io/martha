@@ -407,6 +407,29 @@ test('a deletion whose outcome the store will not keep is told as sent, and left
   assert.deepEqual(await rowKinds(tools.host), ['act_announced'], 'the act is left awaiting, for a successor to check')
 })
 
+test('a deletion that failed, whose failure the store will not keep, may still be on origin (#25)', async (t) => {
+  const fixture = aCrew(t)
+  let refuseTheOutcome: (() => void) | undefined
+  // git refuses the deletion, and the store then refuses to keep that failure: the branch is where it was, and the
+  // ledger holds only the announced act, so whoever reads it next checks rather than assumes.
+  const runFailingAndRefusing = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (!request.args.includes('--delete')) return runReal(request)
+    refuseTheOutcome?.()
+    return { exit_code: 1, stdout: '', stderr: 'remote: deleting a branch is not allowed here\n' }
+  }
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, runFailingAndRefusing)
+  refuseTheOutcome = (): void => tools.host.refuseNextAppend('the disk would not take it')
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const answer = await tools.finish.answer(finished('acme/widget', SLUG))
+  assert.match(
+    answer,
+    /may still be on origin, and its ledger row was not concluded: the push at row 0 was sent, and its outcome was not kept \(the store refused the row: the disk would not take it\)/,
+  )
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is where it was: the deletion failed')
+  assert.deepEqual(await rowKinds(tools.host), ['act_announced'], 'the act is left awaiting, for a successor to check')
+})
+
 test('a finish that never sends the deletion keeps no row, since no act happened (#25)', async (t) => {
   const fixture = aCrew(t)
   const tools = toolsOf(settingsFor(fixture, fixture))
