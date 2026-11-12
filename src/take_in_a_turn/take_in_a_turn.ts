@@ -160,6 +160,9 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A12', // a compaction summary is inherited through the record, not taken in
   // a row no text reaches the model on is never taken in: it says why in its control (B1, B8, A16)
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'no-text-reaches-the-model').map((path) => path.id),
+  // an answer read as the member's own is never taken in either: the rule says every leaf
+  // of it came from this launch (B9, ../prove_a_mesh_answer_is_wordless, martha#251)
+  ...INBOUND_PATHS.filter((path) => path.control.kind === 'no-words-to-admit').map((path) => path.id),
   // code the host starts by itself is not text taken in: the launch gate stands there
   ...INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id),
   // words refused before the host starts never become a turn: the argument gate stands there

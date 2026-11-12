@@ -63,6 +63,16 @@ export const RINGS_AND_RETURNS_THE_ANSWER = `${MESH_TOOL_PREFIX}ring`
 export const ANSWERS_A_RING = `${MESH_TOOL_PREFIX}answer_ring`
 
 /**
+ * The tool that starts a member's presence. Its answer is the one
+ * ../prove_a_mesh_answer_is_wordless exists for; the name is defined here,
+ * beside its siblings, because this is where every tool's name is built.
+ */
+export const MESH_HELLO = `${MESH_TOOL_PREFIX}hello`
+
+/** The tool that ends a member's presence: the same shape of answer, and the same reasoning. */
+export const MESH_GOODBYE = `${MESH_TOOL_PREFIX}goodbye`
+
+/**
  * The mesh tools that may be called, by their own name. None of them returns
  * a room's messages: each sends, manages the member's own presence and rooms,
  * or looks a record up. A result that carries text with no sender to admit
@@ -79,8 +89,8 @@ export const MESH_TOOLS_THAT_RUN: readonly string[] = [
   'mesh_find_records',
   'mesh_find_records_by_type',
   'mesh_get',
-  'mesh_goodbye',
-  'mesh_hello',
+  MESH_GOODBYE,
+  MESH_HELLO,
   'mesh_join_realm',
   'mesh_leave_room',
   'mesh_list_realms',

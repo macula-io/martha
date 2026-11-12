@@ -144,7 +144,9 @@
 <text class="t-desc" x="364" y="678">sender, refuse_execution_after_ungated_</text>
 <text class="t-desc" x="364" y="694">text, trust_only_framed_envelopes; keep_</text>
 <text class="t-desc" x="364" y="710">the_shell_for_an_owner_signed_command;</text>
-<text class="t-desc" x="364" y="726">hash_a_file_under_a_tree, what a file is</text>
+<text class="t-desc" x="364" y="726">hash_a_file_under_a_tree, what a file is;</text>
+<text class="t-desc" x="364" y="742">prove_a_mesh_answer_is_wordless,</text>
+<text class="t-desc" x="364" y="758">name_a_node_by_its_petname</text>
 <rect class="b-cmp" x="664" y="542" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="570">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="588">[whose text it was]</text>

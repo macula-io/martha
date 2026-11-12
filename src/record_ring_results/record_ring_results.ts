@@ -31,7 +31,7 @@ import { argv, exit, stderr } from 'node:process'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { MESH_TREE_RECORDING } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { ANSWERS_A_RING, RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { ANSWERS_A_RING, MESH_HELLO, RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 const RECORDING = new URL('../read_a_ring_results_sender/recorded_ring_result_keys.json', import.meta.url)
 const ANSWER_SECONDS = 90_000
@@ -181,9 +181,9 @@ async function record(server_file: string, server_version: string, integrity: st
   try {
     await ringer.initialize()
     await answerer.initialize()
-    const answererId = nodeIdsIn(await answerer.tool('mesh_hello', {}))[0]
+    const answererId = nodeIdsIn(await answerer.tool(MESH_HELLO, {}))[0]
     if (answererId === undefined) throw new Error('the answering server named no node id of its own')
-    await ringer.tool('mesh_hello', {})
+    await ringer.tool(MESH_HELLO, {})
 
     const ring = await ringer.tool(RINGS_AND_RETURNS_THE_ANSWER, {
       to: answererId,

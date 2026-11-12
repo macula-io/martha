@@ -19,7 +19,7 @@ import { removeTheTree } from './relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
@@ -43,7 +43,7 @@ import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, t
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
+import { MCP_CONFIG_SWITCH, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
@@ -60,6 +60,9 @@ import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from './session_records_in_rows.ts'
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
+import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -220,6 +223,7 @@ function answering(
   journal?: RelayJournal,
   strict_gate?: boolean,
   crew?: CrewTools,
+  wordless_answers?: Omit<WhatTheLaunchSupplies, 'input'>,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -243,6 +247,7 @@ function answering(
     ...(journal === undefined ? {} : { journal }),
     ...(strict_gate === undefined ? {} : { strict_gate }),
     ...(crew === undefined ? {} : { crew }),
+    ...(wordless_answers === undefined ? {} : { wordless_answers }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -3434,4 +3439,120 @@ test('an allow the relay gave up on is journalled as the deny the host took, and
   assert.equal(kept.events.at(-1)?.answer, 'deny', 'an allow the relay gave up on was journalled as an allow')
   assert.equal(kept.events.at(-1)?.why, GAVE_UP_BEFORE_ALLOW)
   assert.deepEqual(kept.open, [], 'the late allow opened a call, so a run would wait on a tool that never ran')
+})
+
+// --- a member's first mesh answer (martha#251) ------------------------------------
+
+/** The recording's own bare `mesh_hello` answer: an answer the pinned server really gave. */
+function recordedHello(): Readonly<Record<string, unknown>> {
+  const version = RECORDED_MESH_ANSWER_SHAPES.at(-1)
+  const bare = version?.states['bare'] as Readonly<Record<string, unknown>> | undefined
+  const hello = bare?.[MESH_HELLO] as Readonly<Record<string, unknown>> | undefined
+  assert.ok(hello !== undefined, 'the recording carries no bare mesh_hello answer')
+  return hello
+}
+
+test('a member’s first mesh answer records nothing, so its ring reaches A5 instead of being refused (martha#251)', async (t) => {
+  const place = placeFor(t)
+  const hello = recordedHello()
+  const ring = hello['ring'] as Readonly<Record<string, unknown>>
+  const policy_file = String(ring['policy_file'])
+  const home = policy_file.slice(0, policy_file.length - `/${CONTACT_POLICY_FILE_UNDER_HOME}`.length)
+  const { relay, rows } = answering(place, undefined, [], undefined, undefined, true, undefined, {
+    node_id: String(hello['node_id']),
+    env: { HOME: home },
+    home,
+    host_version: RECORDED_HOST.host_version,
+  })
+  await relay.answer('session_started', start('startup'))
+  const helloAnswer = [{ type: 'text', text: JSON.stringify(hello, null, 2) }]
+  const session = (extra: Record<string, unknown>) => ({ session_id: SESSION, ...extra })
+
+  // The call's own input is the member's words, and the launcher reads them from the call itself.
+  assert.deepEqual(
+    await relay.answer('tool_answered', session({ call: { tool: `mcp__macula__${MESH_HELLO}`, operator_name: 'martha recorder' }, answer: helloAnswer })),
+    TAKEN_REPLY,
+  )
+  assert.deepEqual(await recordedPaths(rows), [], 'the member’s own hello answer took nothing in')
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'id' })), ALLOW_REPLY, 'and the shell it needs for the ring is still there')
+  assert.deepEqual(await relay.answer('tool_called', call(`mcp__macula__${RINGS_AND_RETURNS_THE_ANSWER}`, { to: 'f'.repeat(64), purpose: 'a check' })), ALLOW_REPLY, 'the ring itself is not refused')
+
+  const ringAnswer = RECORDED_RING_ANSWERS[RINGS_AND_RETURNS_THE_ANSWER]
+  assert.ok(ringAnswer !== undefined, 'the recording carries no mesh_ring answer')
+  assert.deepEqual(
+    await relay.answer('tool_answered', session({ call: { tool: `mcp__macula__${RINGS_AND_RETURNS_THE_ANSWER}`, ...ringAnswer.tool_input }, answer: ringAnswer.tool_call_answer })),
+    TAKEN_REPLY,
+  )
+  const after = await recordedPaths(rows)
+  assert.ok(after.some((entry) => entry.startsWith(`${PATH_OF_SOURCE.ring_answer}:`)), `the ring's answer reached its own row: ${after.join(', ')}`)
+  assert.equal(after.filter((entry) => entry.startsWith('B2:')).length, 0, 'and nothing landed on B2')
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'id' }))), 'the ring’s answer is another agent’s text, so the shell closes on it, as the gate means it to')
+})
+
+/**
+ * What the launch hands the relay about its mesh answers, driven through the launch itself rather than handed in
+ * (martha#251 review r=1): the reading is only worth anything if a real launch carries it.
+ */
+
+/** The mesh server entry the host is really started with, out of the config the launch wrote. */
+function theMeshServerStarted(argsFile: string): { readonly env?: Readonly<Record<string, string>> } {
+  const entry = serverConfigIn(argsFile).mcpServers[SERVER_NAME] as { env?: Record<string, string> } | undefined
+  assert.ok(entry !== undefined, `the host was started with no ${SERVER_NAME} server`)
+  return entry
+}
+
+test('with one exact-pin mesh server, the launch hands the relay that server’s own environment, its home and the launch’s node id (martha#251)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, meshServerAt(recorded.server_version))
+  // A HOME the server is really given, and not the one its host runs with: only a reading of the server's own
+  // environment carries it, and the contact-policy default is walked from it.
+  const serverHome = join(place.home, 'the-server-home')
+  mkdirSync(serverHome)
+  ownerSettings(place, { HOME: serverHome })
+  const fake = fakeClaude(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await aMemberStartedIn(t, place, {
+    ...memberLaunch(place, fake.command, place.approved, [], recording),
+    hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
+  })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
+  const passed = heard[0]?.wordless_answers
+  assert.ok(passed !== undefined, 'the launch handed the relay no reading of its mesh answers')
+  assert.deepEqual(passed.env, theMeshServerStarted(fake.argsFile).env, 'the relay was handed an environment other than the one its server is started with')
+  assert.equal(passed.home, serverHome, 'the relay would walk the contact-policy default from a home the server never ran with')
+  assert.equal(passed.node_id, NODE_ID, 'the relay was handed another launch’s node id')
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test('with no exact-pin mesh server, the launch hands the relay no reading of its mesh answers, so every answer taints as before (martha#251)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command), hearRelayPlace: (relayPlace) => void heard.push(relayPlace) })
+  if (!started.started) assert.fail(started.refusal)
+  assert.equal(heard.length, 1, 'the launcher handed the relay one place')
+  assert.equal(heard[0]?.wordless_answers, undefined, 'a launch with no mesh server told the relay how to read an answer anyway')
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test('with two exact-pin mesh servers, the launch hands the relay no reading: one server’s environment is not the other’s (martha#251)', async (t) => {
+  const recorded = RECORDED_MESH_SERVERS[0]
+  assert.ok(recorded !== undefined)
+  const { recording } = await recordedTreeOf(t, recorded.server_version)
+  const place = placeFor(t, JSON.stringify({ mcpServers: { [SERVER_NAME]: memberShapeAt(recorded.server_version), another: memberShapeAt(recorded.server_version) } }))
+  const fake = fakeClaude(place)
+  const heard: MemberRelayPlace[] = []
+  const started = await aMemberStartedIn(t, place, {
+    ...memberLaunch(place, fake.command, place.approved, [], recording),
+    hearRelayPlace: (relayPlace) => void heard.push(relayPlace),
+  })
+  if (!started.started) assert.fail(started.refusal)
+  assert.equal(heard[0]?.wordless_answers, undefined, 'a launch with two mesh servers picked one of them to read its answers by')
+  started.stop('the test is over')
+  await started.stopped
 })
