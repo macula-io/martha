@@ -253,11 +253,11 @@
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>
 <text class="t-desc" x="24" y="1738">Every box is a directory in src/: the name is the capability, and its test sits beside it. These 7 directories are drawn nowhere on purpose:</text>
 <text class="t-desc" x="24" y="1756">check_a_range_before_the_owner_says_yes: the range check, verify_range (martha#256); a member's session cannot call it yet, because the launcher</text>
-<text class="t-desc" x="24" y="1774">registers no tool (martha#253).</text>
+<text class="t-desc" x="24" y="1774">registers no such tool, though it registers the crew's own (martha#253).</text>
 <text class="t-desc" x="24" y="1792">land_passed_work_as_one_batch: the batch landing and the fast-forward the owner's yes unlocks (martha#256); a member's session cannot call them yet,</text>
-<text class="t-desc" x="24" y="1810">because the launcher registers no tool (martha#253).</text>
+<text class="t-desc" x="24" y="1810">because the launcher registers no such tool, though it registers the crew's own (martha#253).</text>
 <text class="t-desc" x="24" y="1828">open_and_finish_a_worktree: the two worktree tools, worktree_open and worktree_finish (martha#256); a member's session cannot call them yet, because the</text>
-<text class="t-desc" x="24" y="1846">launcher registers no tool (martha#253).</text>
+<text class="t-desc" x="24" y="1846">launcher registers no worktree tool, though it registers the crew's own (martha#253).</text>
 <text class="t-desc" x="24" y="1864">read_the_origin_a_clone_has: what a clone's origin says, org/name and the default branch (martha#256); read by the three slices beside it, and by nothing that</text>
 <text class="t-desc" x="24" y="1882">runs yet.</text>
 <text class="t-desc" x="24" y="1900">probe_launch_hosts: a script run by hand, npm run probe:launch, to probe a host; the command never loads it.</text>

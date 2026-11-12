@@ -569,15 +569,15 @@ export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
 export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
   {
     name: 'check_a_range_before_the_owner_says_yes',
-    why: 'the range check, verify_range (martha#256); a member\'s session cannot call it yet, because the launcher registers no tool (martha#253)',
+    why: 'the range check, verify_range (martha#256); a member\'s session cannot call it yet, because the launcher registers no such tool, though it registers the crew\'s own (martha#253)',
   },
   {
     name: 'land_passed_work_as_one_batch',
-    why: 'the batch landing and the fast-forward the owner\'s yes unlocks (martha#256); a member\'s session cannot call them yet, because the launcher registers no tool (martha#253)',
+    why: 'the batch landing and the fast-forward the owner\'s yes unlocks (martha#256); a member\'s session cannot call them yet, because the launcher registers no such tool, though it registers the crew\'s own (martha#253)',
   },
   {
     name: 'open_and_finish_a_worktree',
-    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no tool (martha#253)',
+    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no worktree tool, though it registers the crew\'s own (martha#253)',
   },
   {
     name: 'read_the_origin_a_clone_has',

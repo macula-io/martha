@@ -4,12 +4,16 @@ This page shows, in three pictures, what Martha talks to, what it is made of, an
 what its code is made of, drawn from the code that is here rather than from the
 design it grew from.
 
-> **Status: the launcher is built; the crew protocol is not.** The `martha`
-> command (`init`, `approve`, `start`), the approval and launch gates and the
-> relay are in `src/` and run. The crew's own protocol — the room, the ledger,
-> parking and waking, the dashboard — is still to be ported; the order is in
-> [the port map](../docs/port-map.md). A box drawn for something not built says
-> so, and is dashed in the pictures.
+> **Status: the launcher is built, and the crew's own tools with it.** The `martha`
+> command (`init`, `approve`, `start`, and the `run`, `install`, `pin-key`, `keep-shapes`
+> and `--version` words beside them), the approval and launch gates and the relay are in
+> `src/` and run. So do the crew's tools (`a_crews_tools`): the dashboard's rows and the
+> pane that draws them (`show_dashboard_beat`), the ledger of what a member did
+> (`keep_the_ledger`), and a message from one member to another (`send_a_crew_message`).
+> What does not run yet is the room across machines, and the handover that would let a
+> member outlive its context; the order the rest arrives in is in
+> [the port map](../docs/port-map.md). A box drawn for something not built says so, and is
+> dashed in the pictures.
 
 ## Context: who uses Martha, and what it reaches
 
@@ -101,9 +105,9 @@ box:
 
 | Left out | Why |
 |---|---|
-| `open_and_finish_a_worktree` | The two worktree tools, `worktree_open` and `worktree_finish`. A member's session cannot call them yet, because the launcher registers no tool. |
-| `check_a_range_before_the_owner_says_yes` | The range check, `verify_range`. A member's session cannot call it yet, because the launcher registers no tool. |
-| `land_passed_work_as_one_batch` | The batch landing, `land_batch`, and the fast-forward the owner's yes unlocks. A member's session cannot call them yet, because the launcher registers no tool. |
+| `open_and_finish_a_worktree` | A member's session cannot call `worktree_open` or `worktree_finish` yet: the launcher registers no worktree tool, though it registers the crew's own (martha#253, #256). |
+| `check_a_range_before_the_owner_says_yes` | The range check, `verify_range`. A member's session cannot call `verify_range` yet, because the launcher registers no such tool, though it registers the crew's own. |
+| `land_passed_work_as_one_batch` | The batch landing, `land_batch`, and the fast-forward the owner's yes unlocks. A member's session cannot call `land_batch` yet, because the launcher registers no such tool, though it registers the crew's own. |
 | `read_the_origin_a_clone_has` | What a clone's origin says — `org/name` and the default branch — read by the three slices beside it and by nothing that runs yet. |
 | `record_mesh_answers` | A script run by hand, `npm run record:mesh-answers`, when a version of the mesh server is recorded. The gate reads the answer shapes it wrote; the script itself never runs. |
 | `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
