@@ -126,6 +126,16 @@ test("2.1.323's shapes are read: safe mode's trailing constant, and the argument
   assert.deepEqual(switches.managed, ['allowManagedHooksOnly', 'disableAllHooks', 'strictPluginOnlyCustomization'])
 })
 
+test('a host rebuilt from a recording reads back as the host it stands for, the flag written whole', () => {
+  // The recorder's own check builds a host out of the recorded functions and reads it again. A recording carries the
+  // flag itself rather than the constant, so the shape that cuts a host's text has to take both forms: without that,
+  // a recording of 2.1.323 could not be read back, and the check would fail as "unreadable: hook switches".
+  const fromTheRecording = HOST_TEXT_323.replace(VARIABLE_OR_ARGUMENT_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED)
+  const calls = hookExitCallsIn(fromTheRecording, HOOK_SET_FUNCTION_323)
+  assert.deepEqual(calls, [SAFE_MODE_FUNCTION_323, STRICT_FUNCTION_323, BOTH_FUNCTION_323, NO_TERMINAL_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED])
+  assert.deepEqual(hookSwitchesOf(HOOK_SET_FUNCTION_323, calls).outside_a_terminal, { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: [ARGUMENT] })
+})
+
 test("2.1.323's added shapes fail the recording when they are of no shape this module knows, each named", () => {
   // A constant the host defines as no one flag, or as two that differ: the switch cannot be told.
   assert.throws(() => hookExitCallsIn(HOST_TEXT_323.replace(ARGUMENT_CONSTANT_DEFINITION, ''), HOOK_SET_FUNCTION_323), /D9s/)
