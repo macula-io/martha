@@ -236,6 +236,29 @@ function builtEnvironment(host: Readonly<Record<string, string | undefined>>, ow
   return { ...emptied, ...kept, ...settings }
 }
 
+/**
+ * The environment each mesh server of an approved config is started with, by the server's name in that config: every
+ * variable the host is given emptied but the few the server needs, then the entry's own approved settings (martha#65).
+ *
+ * Exported so the launcher can hand a mesh answer's reading the environment its server really got, rather than a
+ * second copy of this rule (martha#251). Only entries that pin an exact release of the mesh server are here: every
+ * other server's environment is not this module's business.
+ */
+export function meshServerEnvironments(placement: Pick<MeshServerPlacement, 'serverConfig' | 'hostEnvironment'>): Readonly<Record<string, Readonly<Record<string, string>>>> {
+  let config: { mcpServers?: Record<string, Entry> }
+  try {
+    config = JSON.parse(placement.serverConfig) as typeof config
+  } catch {
+    return {}
+  }
+  const built: Record<string, Readonly<Record<string, string>>> = {}
+  for (const [name, entry] of Object.entries(config.mcpServers ?? {})) {
+    if (!isExactMeshServerPin(pinOf(entry))) continue
+    built[name] = builtEnvironment(placement.hostEnvironment, entry.env)
+  }
+  return built
+}
+
 export interface MeshServerPlacement {
   /** The approved server config, as JSON text. */
   readonly serverConfig: string

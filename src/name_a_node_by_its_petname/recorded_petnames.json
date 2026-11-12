@@ -1,0 +1,52 @@
+{
+  "_why": "The petname each node id gets from the pinned mesh server, so Martha's own copy of the derivation (./name_a_node_by_its_petname.ts) is proved against the server and not against itself (martha#251). Taken by ../record_mesh_answers from the installed module's own petname(): `node -e \"import('<tree>/node_modules/@macula-io/mcp/dist/petname.js').then((m) => m.petname(id))\"`. No id here is anybody's: each is written as how it is made — 64 copies of one hex digit, or the sha256 of a written-down name — so every pair can be re-taken and a public repository keeps no node id, not even a synthetic one written as 64 hex. The same seven pairs were read from 0.51.0 and 0.51.2.",
+  "server": "@macula-io/mcp",
+  "server_versions": [
+    "0.51.0",
+    "0.51.2"
+  ],
+  "pairs": [
+    {
+      "id": {
+        "repeat": "0"
+      },
+      "petname": "bold_rust_moose_4847"
+    },
+    {
+      "id": {
+        "repeat": "f"
+      },
+      "petname": "jolly_ruby_owl_3585"
+    },
+    {
+      "id": {
+        "sha256_of": "martha petnames 1"
+      },
+      "petname": "jolly_tan_iguana_1501"
+    },
+    {
+      "id": {
+        "sha256_of": "martha petnames 2"
+      },
+      "petname": "zealous_scarlet_mongoose_4979"
+    },
+    {
+      "id": {
+        "sha256_of": "martha petnames 3"
+      },
+      "petname": "mellow_teal_owl_5074"
+    },
+    {
+      "id": {
+        "sha256_of": "martha petnames 4"
+      },
+      "petname": "gentle_coral_ferret_9376"
+    },
+    {
+      "id": {
+        "sha256_of": "martha petnames 5"
+      },
+      "petname": "brave_blue_owl_0029"
+    }
+  ]
+}

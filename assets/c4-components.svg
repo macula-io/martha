@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1750" role="img" aria-label="Martha components">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1798" role="img" aria-label="Martha components">
 <title>Martha components</title>
 <style>
 .t-name { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; }
@@ -48,7 +48,7 @@
 }
 </style>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
-<rect class="bg" x="0" y="0" width="1000" height="1750"/>
+<rect class="bg" x="0" y="0" width="1000" height="1798"/>
 <rect class="b-sys" x="32" y="70" width="300" height="132" rx="10"/>
 <text class="t-code" x="48" y="98">run_the_martha_command</text>
 <text class="t-type" x="48" y="116">[the acts]</text>
@@ -134,7 +134,7 @@
 <text class="t-desc" x="48" y="714">every way a checkout starts code, each</text>
 <text class="t-desc" x="48" y="730">row naming the gate on it; check_every_</text>
 <text class="t-desc" x="48" y="746">path_is_gated fails CI on a gap</text>
-<rect class="b-cmp" x="348" y="628" width="300" height="198" rx="10"/>
+<rect class="b-cmp" x="348" y="628" width="300" height="230" rx="10"/>
 <text class="t-code" x="364" y="656">take_in_a_turn, shell_tools,</text>
 <text class="t-code" x="364" y="674">answer_a_tool_call</text>
 <text class="t-type" x="364" y="692">[the shell gate]</text>
@@ -144,7 +144,9 @@
 <text class="t-desc" x="364" y="764">sender, refuse_execution_after_ungated_</text>
 <text class="t-desc" x="364" y="780">text, trust_only_framed_envelopes; keep_</text>
 <text class="t-desc" x="364" y="796">the_shell_for_an_owner_signed_command;</text>
-<text class="t-desc" x="364" y="812">hash_a_file_under_a_tree, what a file is</text>
+<text class="t-desc" x="364" y="812">hash_a_file_under_a_tree, what a file is;</text>
+<text class="t-desc" x="364" y="828">prove_a_mesh_answer_is_wordless,</text>
+<text class="t-desc" x="364" y="844">name_a_node_by_its_petname</text>
 <rect class="b-cmp" x="664" y="628" width="300" height="148" rx="10"/>
 <text class="t-code" x="680" y="656">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="674">[whose text it was]</text>
@@ -153,107 +155,108 @@
 <text class="t-desc" x="680" y="730">carry_taint_across_a_refresh, and the shell</text>
 <text class="t-desc" x="680" y="746">gate's reading; trust_only_signed_lists is</text>
 <text class="t-desc" x="680" y="762">how every list a gate trusts is opened</text>
-<rect class="b-cmp" x="32" y="842" width="300" height="148" rx="10"/>
-<text class="t-code" x="48" y="870">admit_a_room_message</text>
-<text class="t-type" x="48" y="888">[loaded; the room is not built]</text>
-<text class="t-desc" x="48" y="912">Every launch loads these, though the room</text>
-<text class="t-desc" x="48" y="928">they serve is not built: the node id a</text>
-<text class="t-desc" x="48" y="944">member has; read_a_room_through_its_gate</text>
-<text class="t-desc" x="48" y="960">gives the mesh server's tools, and refuse_</text>
-<text class="t-desc" x="48" y="976">widening_a_member_reach refuses the rest</text>
-<rect class="b-cmp" x="348" y="842" width="300" height="166" rx="10"/>
-<text class="t-code" x="364" y="870">claude_code_host,</text>
-<text class="t-code" x="364" y="888">claude_code_relay</text>
-<text class="t-type" x="364" y="906">[the Claude Code host]</text>
-<text class="t-desc" x="364" y="930">The host contract on Claude Code: the</text>
-<text class="t-desc" x="364" y="946">plugin, its hooks, the relay on a socket</text>
-<text class="t-desc" x="364" y="962">and the member's tools; refuse_a_member_</text>
-<text class="t-desc" x="364" y="978">writing_owner_memory keeps a member's</text>
-<text class="t-desc" x="364" y="994">writes out of the owner's memory</text>
-<rect class="b-cmp" x="664" y="842" width="300" height="262" rx="10"/>
-<text class="t-code" x="680" y="870">check_nothing_private_gets_in,</text>
-<text class="t-code" x="680" y="888">check_every_link_resolves</text>
-<text class="t-type" x="680" y="906">[this repository's own checks]</text>
-<text class="t-desc" x="680" y="930">A private issue link, an internal host</text>
-<text class="t-desc" x="680" y="946">name or a private remote fails CI by</text>
-<text class="t-desc" x="680" y="962">name; so does a home path in the text</text>
-<text class="t-desc" x="680" y="978">members post on GitHub, which check_</text>
-<text class="t-desc" x="680" y="994">posted_text_carries_nothing_private</text>
-<text class="t-desc" x="680" y="1010">reads daily. A badge host that answers</text>
-<text class="t-desc" x="680" y="1026">408 is asked again before its link is</text>
-<text class="t-desc" x="680" y="1042">broken; check_the_logos_are_valid_svg</text>
-<text class="t-desc" x="680" y="1058">holds every logo to well-formed XML;</text>
-<text class="t-desc" x="680" y="1074">check_no_test_the_base_passed_goes_</text>
-<text class="t-desc" x="680" y="1090">missing names a dropped test; each bites</text>
-<rect class="b-cmp" x="32" y="1120" width="300" height="148" rx="10"/>
-<text class="t-code" x="48" y="1148">install_the_pinned_installer</text>
-<text class="t-type" x="48" y="1166">[the installer this release pins]</text>
-<text class="t-desc" x="48" y="1190">martha install: reads the pin from the</text>
-<text class="t-desc" x="48" y="1206">running release, fetches exactly that</text>
-<text class="t-desc" x="48" y="1222">installer version through run_the_nodes_</text>
-<text class="t-desc" x="48" y="1238">own_npm_alone, refuses other bytes, and</text>
-<text class="t-desc" x="48" y="1254">runs it with the words unchanged</text>
-<rect class="b-cmp" x="348" y="1120" width="300" height="164" rx="10"/>
-<text class="t-code" x="364" y="1148">run_the_nodes_own_npm_alone</text>
-<text class="t-type" x="364" y="1166">[npm, and nothing of the machine's]</text>
-<text class="t-desc" x="364" y="1190">The npm beside this node, run with</text>
-<text class="t-desc" x="364" y="1206">empty user and global config, one named</text>
-<text class="t-desc" x="364" y="1222">registry, --ignore-scripts and an</text>
-<text class="t-desc" x="364" y="1238">environment built from HOME and PATH</text>
-<text class="t-desc" x="364" y="1254">alone: the mesh server and the installer,</text>
-<text class="t-desc" x="364" y="1270">one isolation</text>
-<rect class="b-cmp" x="664" y="1120" width="300" height="278" rx="10"/>
-<text class="t-code" x="680" y="1148">show_dashboard_beat,</text>
-<text class="t-code" x="680" y="1166">keep_the_ledger</text>
-<text class="t-type" x="680" y="1184">[the crew's rows and its ledger]</text>
-<text class="t-desc" x="680" y="1208">show_dashboard_beat holds a member's row</text>
-<text class="t-desc" x="680" y="1224">and the rule the newest beat wins;</text>
-<text class="t-desc" x="680" y="1240">report_progress moves it, see_the_crew</text>
-<text class="t-desc" x="680" y="1256">lays every one out, and a_crews_tools</text>
-<text class="t-desc" x="680" y="1272">answers all six tools.</text>
-<text class="t-desc" x="680" y="1288">keep_the_ledger loads log_ledger, whose</text>
-<text class="t-desc" x="680" y="1304">streams sit in the crew's own state;</text>
-<text class="t-desc" x="680" y="1320">keep_the_crew_channel is where a message</text>
-<text class="t-desc" x="680" y="1336">lives, send_a_crew_message writes one, and</text>
-<text class="t-desc" x="680" y="1352">show_what_a_message_became reads back</text>
-<text class="t-desc" x="680" y="1368">what became of it, and read_a_crew_line</text>
-<text class="t-desc" x="680" y="1384">reads the HANDOFF and VERDICT lines</text>
-<rect class="b-cmp" x="32" y="1414" width="300" height="148" rx="10"/>
-<text class="t-code" x="48" y="1442">write_my_handover</text>
-<text class="t-type" x="48" y="1460">[the host writes a handover]</text>
-<text class="t-desc" x="48" y="1484">A member's handover is written by the</text>
-<text class="t-desc" x="48" y="1500">host, at the path the host chose, and</text>
-<text class="t-desc" x="48" y="1516">stamped: one file per member per day</text>
-<text class="t-desc" x="48" y="1532">in the crew's own store, so a file the</text>
-<text class="t-desc" x="48" y="1548">member wrote itself is not a handover</text>
-<rect class="b-cmp" x="348" y="1414" width="300" height="148" rx="10"/>
-<text class="t-code" x="364" y="1442">park_and_wake_a_member</text>
-<text class="t-type" x="364" y="1460">[a park that outlives a session]</text>
-<text class="t-desc" x="364" y="1484">A member's park is a marker in the</text>
-<text class="t-desc" x="364" y="1500">crew's store, so a clear, a restart or a</text>
-<text class="t-desc" x="364" y="1516">refresh cannot lose it; who may park</text>
-<text class="t-desc" x="364" y="1532">another member is the declaration's</text>
-<text class="t-desc" x="364" y="1548">table, not who_may_act (martha#255 r=3)</text>
-<rect class="b-cmp" x="664" y="1414" width="300" height="148" rx="10"/>
-<text class="t-code" x="680" y="1442">crew_files_directory</text>
-<text class="t-type" x="680" y="1460">[the crew's store, on this machine]</text>
-<text class="t-desc" x="680" y="1484">The host contract's crew store as files</text>
-<text class="t-desc" x="680" y="1500">in one directory: a place per name, a</text>
-<text class="t-desc" x="680" y="1516">file kept whole under a staging name</text>
-<text class="t-desc" x="680" y="1532">and 0600, and nothing read that is not</text>
-<text class="t-desc" x="680" y="1548">this user's alone (martha#254, #255)</text>
-<rect class="bound" x="16" y="40" width="968" height="1546" rx="12"/>
+<rect class="b-cmp" x="32" y="874" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="902">admit_a_room_message</text>
+<text class="t-type" x="48" y="920">[loaded; the room is not built]</text>
+<text class="t-desc" x="48" y="944">Every launch loads these, though the room</text>
+<text class="t-desc" x="48" y="960">they serve is not built: the node id a</text>
+<text class="t-desc" x="48" y="976">member has; read_a_room_through_its_gate</text>
+<text class="t-desc" x="48" y="992">gives the mesh server's tools, and refuse_</text>
+<text class="t-desc" x="48" y="1008">widening_a_member_reach refuses the rest</text>
+<rect class="b-cmp" x="348" y="874" width="300" height="166" rx="10"/>
+<text class="t-code" x="364" y="902">claude_code_host,</text>
+<text class="t-code" x="364" y="920">claude_code_relay</text>
+<text class="t-type" x="364" y="938">[the Claude Code host]</text>
+<text class="t-desc" x="364" y="962">The host contract on Claude Code: the</text>
+<text class="t-desc" x="364" y="978">plugin, its hooks, the relay on a socket</text>
+<text class="t-desc" x="364" y="994">and the member's tools; refuse_a_member_</text>
+<text class="t-desc" x="364" y="1010">writing_owner_memory keeps a member's</text>
+<text class="t-desc" x="364" y="1026">writes out of the owner's memory</text>
+<rect class="b-cmp" x="664" y="874" width="300" height="262" rx="10"/>
+<text class="t-code" x="680" y="902">check_nothing_private_gets_in,</text>
+<text class="t-code" x="680" y="920">check_every_link_resolves</text>
+<text class="t-type" x="680" y="938">[this repository's own checks]</text>
+<text class="t-desc" x="680" y="962">A private issue link, an internal host</text>
+<text class="t-desc" x="680" y="978">name or a private remote fails CI by</text>
+<text class="t-desc" x="680" y="994">name; so does a home path in the text</text>
+<text class="t-desc" x="680" y="1010">members post on GitHub, which check_</text>
+<text class="t-desc" x="680" y="1026">posted_text_carries_nothing_private</text>
+<text class="t-desc" x="680" y="1042">reads daily. A badge host that answers</text>
+<text class="t-desc" x="680" y="1058">408 is asked again before its link is</text>
+<text class="t-desc" x="680" y="1074">broken; check_the_logos_are_valid_svg</text>
+<text class="t-desc" x="680" y="1090">holds every logo to well-formed XML;</text>
+<text class="t-desc" x="680" y="1106">check_no_test_the_base_passed_goes_</text>
+<text class="t-desc" x="680" y="1122">missing names a dropped test; each bites</text>
+<rect class="b-cmp" x="32" y="1152" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="1180">install_the_pinned_installer</text>
+<text class="t-type" x="48" y="1198">[the installer this release pins]</text>
+<text class="t-desc" x="48" y="1222">martha install: reads the pin from the</text>
+<text class="t-desc" x="48" y="1238">running release, fetches exactly that</text>
+<text class="t-desc" x="48" y="1254">installer version through run_the_nodes_</text>
+<text class="t-desc" x="48" y="1270">own_npm_alone, refuses other bytes, and</text>
+<text class="t-desc" x="48" y="1286">runs it with the words unchanged</text>
+<rect class="b-cmp" x="348" y="1152" width="300" height="164" rx="10"/>
+<text class="t-code" x="364" y="1180">run_the_nodes_own_npm_alone</text>
+<text class="t-type" x="364" y="1198">[npm, and nothing of the machine's]</text>
+<text class="t-desc" x="364" y="1222">The npm beside this node, run with</text>
+<text class="t-desc" x="364" y="1238">empty user and global config, one named</text>
+<text class="t-desc" x="364" y="1254">registry, --ignore-scripts and an</text>
+<text class="t-desc" x="364" y="1270">environment built from HOME and PATH</text>
+<text class="t-desc" x="364" y="1286">alone: the mesh server and the installer,</text>
+<text class="t-desc" x="364" y="1302">one isolation</text>
+<rect class="b-cmp" x="664" y="1152" width="300" height="294" rx="10"/>
+<text class="t-code" x="680" y="1180">show_dashboard_beat,</text>
+<text class="t-code" x="680" y="1198">keep_the_ledger</text>
+<text class="t-type" x="680" y="1216">[the crew's rows and its ledger]</text>
+<text class="t-desc" x="680" y="1240">show_dashboard_beat holds a member's row</text>
+<text class="t-desc" x="680" y="1256">and the rule the newest beat wins;</text>
+<text class="t-desc" x="680" y="1272">report_progress moves it, see_the_crew</text>
+<text class="t-desc" x="680" y="1288">lays every one out, and a_crews_tools</text>
+<text class="t-desc" x="680" y="1304">answers all six tools.</text>
+<text class="t-desc" x="680" y="1320">keep_the_ledger loads log_ledger, whose</text>
+<text class="t-desc" x="680" y="1336">streams sit in the crew's own state;</text>
+<text class="t-desc" x="680" y="1352">keep_the_crew_channel is where a message</text>
+<text class="t-desc" x="680" y="1368">lives, send_a_crew_message writes one, and</text>
+<text class="t-desc" x="680" y="1384">show_what_a_message_became reads back</text>
+<text class="t-desc" x="680" y="1400">what became of it; read_a_crew_line reads</text>
+<text class="t-desc" x="680" y="1416">the HANDOFF and VERDICT lines, and find_</text>
+<text class="t-desc" x="680" y="1432">the_work_a_verdict_passed the head passed</text>
+<rect class="b-cmp" x="32" y="1462" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="1490">write_my_handover</text>
+<text class="t-type" x="48" y="1508">[the host writes a handover]</text>
+<text class="t-desc" x="48" y="1532">A member's handover is written by the</text>
+<text class="t-desc" x="48" y="1548">host, at the path the host chose, and</text>
+<text class="t-desc" x="48" y="1564">stamped: one file per member per day</text>
+<text class="t-desc" x="48" y="1580">in the crew's own store, so a file the</text>
+<text class="t-desc" x="48" y="1596">member wrote itself is not a handover</text>
+<rect class="b-cmp" x="348" y="1462" width="300" height="148" rx="10"/>
+<text class="t-code" x="364" y="1490">park_and_wake_a_member</text>
+<text class="t-type" x="364" y="1508">[a park that outlives a session]</text>
+<text class="t-desc" x="364" y="1532">A member's park is a marker in the</text>
+<text class="t-desc" x="364" y="1548">crew's store, so a clear, a restart or a</text>
+<text class="t-desc" x="364" y="1564">refresh cannot lose it; who may park</text>
+<text class="t-desc" x="364" y="1580">another member is the declaration's</text>
+<text class="t-desc" x="364" y="1596">table, not who_may_act (martha#255 r=3)</text>
+<rect class="b-cmp" x="664" y="1462" width="300" height="148" rx="10"/>
+<text class="t-code" x="680" y="1490">crew_files_directory</text>
+<text class="t-type" x="680" y="1508">[the crew's store, on this machine]</text>
+<text class="t-desc" x="680" y="1532">The host contract's crew store as files</text>
+<text class="t-desc" x="680" y="1548">in one directory: a place per name, a</text>
+<text class="t-desc" x="680" y="1564">file kept whole under a staging name</text>
+<text class="t-desc" x="680" y="1580">and 0600, and nothing read that is not</text>
+<text class="t-desc" x="680" y="1596">this user's alone (martha#254, #255)</text>
+<rect class="bound" x="16" y="40" width="968" height="1594" rx="12"/>
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>
-<text class="t-desc" x="24" y="1626">Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:</text>
-<text class="t-desc" x="24" y="1644">the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew's</text>
-<text class="t-desc" x="24" y="1662">own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>
-<text class="t-desc" x="24" y="1680">room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
-<rect class="b-sys" x="24" y="1720" width="22" height="14" rx="3"/>
-<text class="t-leg" x="54" y="1732">Martha</text>
-<rect class="b-cmp" x="103.168" y="1720" width="22" height="14" rx="3"/>
-<text class="t-leg" x="133.168" y="1732">Container or component</text>
-<rect class="b-dat" x="277.93999999999994" y="1720" width="22" height="14" rx="3"/>
-<text class="t-leg" x="307.93999999999994" y="1732">Data, in the project</text>
-<rect class="bound" x="424.5719999999999" y="1720" width="22" height="14" rx="3"/>
-<text class="t-leg" x="454.5719999999999" y="1732">Boundary</text>
+<text class="t-desc" x="24" y="1674">Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:</text>
+<text class="t-desc" x="24" y="1692">the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew's</text>
+<text class="t-desc" x="24" y="1710">own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the</text>
+<text class="t-desc" x="24" y="1728">room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
+<rect class="b-sys" x="24" y="1768" width="22" height="14" rx="3"/>
+<text class="t-leg" x="54" y="1780">Martha</text>
+<rect class="b-cmp" x="103.168" y="1768" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.168" y="1780">Container or component</text>
+<rect class="b-dat" x="277.93999999999994" y="1768" width="22" height="14" rx="3"/>
+<text class="t-leg" x="307.93999999999994" y="1780">Data, in the project</text>
+<rect class="bound" x="424.5719999999999" y="1768" width="22" height="14" rx="3"/>
+<text class="t-leg" x="454.5719999999999" y="1780">Boundary</text>
 </svg>

@@ -193,7 +193,13 @@ export interface RepoReference {
 const URL_REFERENCE = String.raw`(?:api\.)?github\.com[:/]+(?:repos/)?([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)`
 const RAW_REFERENCE = String.raw`raw\.githubusercontent\.com/([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)`
 const ISSUE_REFERENCE = String.raw`(?<![A-Za-z0-9._/-])([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)#[0-9]+\b`
-const SHORTHAND_REFERENCE = String.raw`(?<![A-Za-z0-9._/-])([A-Za-z][A-Za-z0-9._-]*)#[0-9]+\b`
+// A repository's own name never ends in a hyphen, so a hyphen before the `#`
+// separates prose from the reference: "the pre-#189 original" and "the post-#12
+// cleanup" name no repository, and reading `pre-` as one spent the daily run's
+// whole signal on a sentence that was correct (martha#287). A trailing dot or
+// underscore stays allowed: a repository may end in one, and missing a
+// reference is worse than reading one.
+const SHORTHAND_REFERENCE = String.raw`(?<![A-Za-z0-9._/-])([A-Za-z](?:[A-Za-z0-9._-]*[A-Za-z0-9._])?)#[0-9]+\b`
 
 // The host is matched in any case (GitHub.com, GITHUB.COM); owner and repo are
 // kept as written.

@@ -108,7 +108,7 @@ import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch, typ
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import { meshServerEnvironments, placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -699,6 +699,34 @@ function beatingWhileItRuns(crew: CrewTools | undefined, server: RelayServer): R
   return { close: async () => { stopBeating(); await server.close() } }
 }
 
+/**
+ * What this launch supplied a mesh answer, so the relay can read a session answer as the member's own and keep its
+ * shell (martha#251); or nothing at all, and then every mesh answer records on B2 as before. Nothing is offered when
+ * the launch carries no server config, or when exactly one mesh server entry cannot be identified: a reading against
+ * a guess is worse than the taint it would lift.
+ */
+function wordlessAnswersOf(
+  launch: ClaudeCodeMemberLaunch,
+  ready: ReadyLaunch,
+  starting: Starting,
+): { readonly wordless_answers: NonNullable<MemberRelayPlace['wordless_answers']> } | Record<string, never> {
+  const carried = ready.prepared.carried_files[CLAUDE_SERVERS]
+  if (carried === undefined) return {}
+  const environments = Object.values(
+    meshServerEnvironments({ serverConfig: new TextDecoder().decode(carried), hostEnvironment: { ...starting.env, ...ready.settingsEnv } }),
+  )
+  const env = environments.length === 1 ? environments[0] : undefined
+  if (env === undefined) return {}
+  return {
+    wordless_answers: {
+      node_id: launch.node_id,
+      env,
+      home: env['HOME'] ?? ready.hookSettings.home,
+      host_version: RECORDED_HOST.host_version,
+    },
+  }
+}
+
 /** The crew's tools for this launch, or nothing at all: a launch given no crew place answers no tool (martha#254). */
 function crewOf(launch: ClaudeCodeMemberLaunch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools() }
@@ -739,6 +767,7 @@ async function servedRelay(
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     ...crewOf(launch),
+    ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
     // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
     // (martha#240).

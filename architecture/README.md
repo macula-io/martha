@@ -102,6 +102,7 @@ them. The same test above fails if any other directory joins them without a box:
 |---|---|
 | `log_ledger` | The crew ledger — a row per milestone and per outward act. Nothing this release runs loads it yet: the crew protocol it belongs to is still to be ported. |
 | `open_and_finish_a_worktree` | The two worktree tools, `worktree_open` and `worktree_finish`. A member's session cannot call them yet, because the launcher registers no tool. |
+| `record_mesh_answers` | A script run by hand, `npm run record:mesh-answers`, when a version of the mesh server is recorded. The gate reads the answer shapes it wrote; the script itself never runs. |
 | `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
 | `record_claude_code_host` | A script run by hand, `npm run record:claude-code-host`, when the coding tool is upgraded. The adapter reads the recording it writes; the script itself never runs. |
 
