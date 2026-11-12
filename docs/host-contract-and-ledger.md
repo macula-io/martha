@@ -124,9 +124,12 @@ append-only stream per work package:
   | the act's own error | the act failed, and that is its kept outcome | as for any failed act |
   | `OUTCOME_NOT_KEPT` | the act ran, and its outcome is not in the ledger | never: check it first |
 
-  Every act sent through `sendOutwardAct` has its row first. The slices that
-  send pushes, handoffs, room messages and tags route them through it as they
-  land.
+  Every act sent through `sendOutwardAct` has its row first. Room messages go
+  through it in `send_a_crew_message`, handoffs in `read_a_crew_line`, and the
+  deletion of a worktree's branch on origin in `open_and_finish_a_worktree`. No
+  other slice sends one: a member pushes with git in its own shell and a tag
+  goes out from CI, so a push or a tag of Martha's own gets a row the day
+  Martha has a sender of one.
 - **What is unresolved**: `actsAwaitingOutcome` returns every act with no
   outcome. A successor checks each one (is the push on the remote? did the
   handoff arrive?) and records what it found with `concludeAct`. An outcome for
