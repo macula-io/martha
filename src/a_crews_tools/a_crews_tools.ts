@@ -334,11 +334,18 @@ async function reportProgress(places: CrewToolPlaces, state: SessionState, args:
 function parkOrUnpark(places: CrewToolPlaces, settings: CrewSettings, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
   const reason = textOf(args['reason'])
   if (reason === '') return { refused: 'a park or an unpark says why in one line, and this one says nothing' }
+  // A park and an unpark are two acts, and only `true` and `false` say which one is asked for. Anything else — a word
+  // that looks like one, or nothing at all — would otherwise read as an unpark and answer "not parked" about a member
+  // nobody was ever brought out of a park (martha#255 part 2 r=1 R3).
+  const parked = args['parked']
+  if (typeof parked !== 'boolean') {
+    return { refused: `a park or an unpark says which one it is, and this one says ${JSON.stringify(parked)}: say true to park, false to come out of a park.` }
+  }
   const member = textOf(args['member']) === '' ? places.member : textOf(args['member'])
   const names = settings.members.map((one) => one.name)
   if (!names.includes(member)) return { refused: `${member} is not on this crew (its members are ${names.join(', ')}), so there is no park to move.` }
   const asked = { actor: places.member, member, reason, at: new Date(places.ledger.clock.now()), declaration: theDeclarationOf(settings) }
-  const said = args['parked'] === true ? parkAMember(places, asked) : unparkAMember(places, asked)
+  const said = parked ? parkAMember(places, asked) : unparkAMember(places, asked)
   if ('refusal' in said) return { refused: said.refusal }
   return { answer: `${said.parked ? 'parked' : 'not parked'}: ${member} — ${said.reason}` }
 }

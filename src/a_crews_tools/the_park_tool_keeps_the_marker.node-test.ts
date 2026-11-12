@@ -98,6 +98,20 @@ test('#255 part 2: a park naming somebody the crew does not have is refused with
   assert.deepEqual(theParkInTheStore(crew, 'nobody'), { kind: 'not_parked', last_marker: null }, 'a refused park left a marker behind')
 })
 
+// A park and an unpark are two acts, and the word that asks for one is a boolean or it is nothing. A `parked` that is
+// missing, or a word that looks like one, once went down the unpark path and answered "not parked" about a member
+// nobody had brought out of a park (martha#255 part 2 r=1 R3).
+test('#255 part 2: a park or an unpark the tool cannot read as true or false is refused, and moves no marker', async () => {
+  const { tools, crew } = await aCrewOfTools('builder')
+  assert.ok('answer' in (await tools.answer('crew_park', { parked: true, reason: 'waiting for the owner' }, 'a-session')), 'the test could not park the member first')
+  for (const parked of [undefined, 'true', 'false', 1, 0, null]) {
+    const answered = await tools.answer('crew_park', { parked, reason: 'the owner is back' }, 'a-session')
+    assert.ok('refused' in answered, `${JSON.stringify(parked)} was read as a park or an unpark`)
+    assert.match(answered.refused, /say true to park, false to come out of a park/, 'the refusal does not say what to send instead')
+    assert.equal(theParkInTheStore(crew, 'builder').kind, 'parked', `${JSON.stringify(parked)} moved the marker it could not be read for`)
+  }
+})
+
 test('#255 part 2: a park with no reason is refused, rather than kept as a line the owner cannot read', async () => {
   const { tools, crew } = await aCrewOfTools('builder')
   const answered = await tools.answer('crew_park', { parked: true, reason: '  ' }, 'a-session')

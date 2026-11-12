@@ -194,6 +194,26 @@ test('#255: a marker the store will not vouch for is a question the store would 
   chmodSync(marker, 0o600)
 })
 
+// A stamp the store refuses is the same question as a place it cannot list: the store will not say when that handover
+// was written, so it cannot say which is newest. Skipping it would silently land the wake on an older handover, or on
+// none (martha#255 part 2 r=1 R2).
+test('#255 part 2: a stamp the store refuses is a question it would not answer, never a handover it skips', () => {
+  const host = aHost()
+  const place = handoversPlace(host.host)
+  assert.ok(!('refusal' in place), 'the host refused the handovers place')
+  const name = theHandoverFile('builder', AT)
+  assert.equal(place.keep(name, 'What stands: the package, its branch, its tip.'), undefined, 'the store refused the handover the test needed it to keep')
+  const unanswerable: HandoverStampStore = {
+    read: (file) => (file.endsWith(name) ? { refusal: `${file} has a stamp that will not be read, so Martha cannot say when it was written.` } : undefined),
+    write: () => undefined,
+  }
+
+  const newest = theNewestHandover(place, unanswerable, 'builder')
+
+  assert.equal(newest.kind, 'unreadable', 'a stamp the store refused was skipped, and the handover read as one nobody has')
+  assert.match(newest.kind === 'unreadable' ? newest.refusal : '', /cannot say when it was written/, 'the refusal is not the store\'s own reason')
+})
+
 test('#255: a handovers place that cannot be listed is a question the store would not answer, not "no handover"', () => {
   const host = aHost()
   const place = handoversPlace(host.host)

@@ -227,7 +227,8 @@ function theCrewStore(state: MarthaState, root: string): CrewStore {
 }
 
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
-export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {  const ready = await readyToStart(request)
+export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
+  const ready = await readyToStart(request)
   if (typeof ready === 'string') {
     request.tellOwner(ready)
     return { started: false, refusal: ready }

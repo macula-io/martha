@@ -142,6 +142,7 @@ test('#255 part 2: a park the store will not answer for refuses the wake instead
   const woken = await wakeAMember(host, { member: 'builder', declaration: THE_CREW, at: AT }, start)
 
   assert.ok('refusal' in woken, 'a park the store would not answer for was read as a member nobody parked')
+  assert.match(woken.refusal, /^builder cannot be woken: /, 'the refusal is not the wake\'s own line, so the owner is not told which member it stopped')
   assert.match(woken.refusal, /builder\.parked\.json/, 'the refusal does not name the marker it could not read')
   assert.equal(asked.length, 0, 'the wake started a member whose park it had just admitted it could not read')
 })

@@ -151,6 +151,23 @@ test('#255: a name that is not a member\'s name is refused, and no handover is w
   assert.deepEqual(placeNames(host), before, 'a handover was written outside the crew store, under a name that is not a member\'s')
 })
 
+// The stamp is the only thing that makes a written file a handover (martha#255): a wake reads the newest handover by
+// its stamp, and clears what it supersedes. So a store that will not keep the stamp is answered as the refusal it is,
+// never with the word a member reads when its handover was written and stamped (part 2 r=1 R3).
+test('#255 part 2: a handover whose stamp the store would not keep is refused, never answered as written', () => {
+  const host = aHost()
+  const refusing: HandoverStampStore = {
+    read: () => undefined,
+    write: (file) => ({ refusal: `${file} could not be stamped, so no successor could tell when it was written.` }),
+  }
+  const session = startSession(sessions(), CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
+
+  const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps: refusing, session })
+
+  assert.ok(typeof said !== 'string' && 'refusal' in said, 'a handover no stamp was kept for answered as though it were written and stamped')
+  assert.match(said.refusal, /could not be stamped/, 'the refusal is not the store\'s own reason')
+})
+
 test('#255: a crew store the host will not write into refuses the handover, and stamps nothing', () => {
   // A crew whose handovers place cannot be made: a file is already there under the place's name.
   const blocked = join(home, 'a-crew-that-cannot-write')
