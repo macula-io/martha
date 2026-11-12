@@ -14,7 +14,9 @@
 // member refreshed mid-push leaves a package whose ledger says a push was sent and what became of it is not recorded.
 //
 // A package that cannot be landed stops the whole batch before anything is merged, and a merge that does not go cleanly
-// stops it there, naming the pull request and listing the packages not tried. Every run of git carries
+// stops it there, naming the pull request and listing the packages not tried. The clone is left where it stood — on the
+// branch it was on, its HEAD unmoved and clean, the integration branch removed here and kept on origin — whether the
+// batch landed or stopped, so the clone a workspace keeps on its default branch does not leave it. Every run of git carries
 // marthasOwnGitArgs (../run_marthas_own_git) and goes through the contract's processes.run, and the repository and
 // default branch are read from the clone's own origin (../read_the_origin_a_clone_has), never from an argument.
 
@@ -103,11 +105,14 @@ export async function landPassedWorkAsOneBatch(host: LandingHost, member: string
   if ('refused' in identity) return identity
   const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path })
   if ('refused' in work) return work
+  const stood = await theBranchTheCloneStandsOn(host, batch.path)
+  if ('refused' in stood) return stood
   const cut = await cutTheBatchBranch(host, batch.path, batch, origin.origin)
   if ('refused' in cut) return cut
-  const merged = await mergeEveryHead(host, batch.path, work.work)
-  if ('refused' in merged) return merged
-  return pushTheBatch(host, member, { batch, origin: origin.origin, work: work.work, ...cut.ok })
+  const the_cut: TheCutBatch = { batch, origin: origin.origin, work: work.work, ...cut.ok }
+  const landing = await mergeEveryHeadAndPush(host, member, the_cut)
+  const back = await theCloneBackWhereItStood(host, batch.path, the_cut.branch, stood.ok)
+  return withTheCloneBack(landing, back)
 }
 
 /**
@@ -191,6 +196,18 @@ async function theCloneSaysWhoCommits(host: LandingHost, path: string): Promise<
   )
 }
 
+/**
+ * The branch the clone stood on. A clone on no branch has none to go back to, so it is refused here, before anything is
+ * cut: the landing's own branch is where the merges happen, and this is where the clone has to end up again.
+ */
+async function theBranchTheCloneStandsOn(host: LandingHost, path: string): Promise<Step<string>> {
+  const branch = await gitSaid(host, path, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
+  if (branch === undefined || branch === '') {
+    return no(`${path} is on no branch, so a landing would have none to put it back on: go to its default branch there, then land again.`)
+  }
+  return { ok: branch }
+}
+
 /** Cuts `land/<date>-<n>` from the origin's default branch, and answers it with the base it started from. */
 async function cutTheBatchBranch(host: LandingHost, path: string, batch: TheBatch, origin: TheOrigin): Promise<Step<Omit<TheCutBatch, 'batch' | 'origin' | 'work'>>> {
   const base = await gitSaid(host, path, ['rev-parse', '--verify', '--quiet', origin.default_branch])
@@ -220,6 +237,15 @@ async function landingsOn(host: LandingHost, path: string, date: string): Promis
   return numbers.length === 0 ? 0 : Math.max(...numbers)
 }
 
+/**
+ * Merges every passed head `--no-ff`, in the batch's order; the first that will not merge aborts its merge and stops the
+ * batch there, leaving the branch cut with the merges that did go through and nothing pushed.
+ */
+async function mergeEveryHeadAndPush(host: LandingHost, member: string, cut: TheCutBatch): Promise<Landing> {
+  const merged = await mergeEveryHead(host, cut.batch.path, cut.work)
+  return 'refused' in merged ? merged : pushTheBatch(host, member, cut)
+}
+
 /** Merges every passed head `--no-ff`, in the batch's order; the first that will not merge stops the batch there. */
 async function mergeEveryHead(host: LandingHost, path: string, work: readonly LandedWork[]): Promise<Step<true>> {
   for (const [at, one] of work.entries()) {
@@ -235,6 +261,31 @@ async function mergeEveryHead(host: LandingHost, path: string, work: readonly La
 
 /** The message the merge carries: which pull request landed, which package it is, and that its verdict passed. */
 const theMergeMessage = (one: LandedWork): string => `Land #${String(one.pr)} (${one.package}, PASS)`
+
+/**
+ * Puts the clone back on the branch it stood on and removes the integration branch it cut here. It runs after the
+ * landing's own answer, so a stop and a landing both come back; the branch the batch pushed stays on the origin.
+ */
+async function theCloneBackWhereItStood(host: LandingHost, path: string, branch: string, stood: string): Promise<Step<true>> {
+  const back = await git(host, path, ['checkout', '--quiet', stood])
+  if (back.exit_code !== 0) {
+    return no(
+      `${path} was left on ${branch} (${saidBy(back)}): go back to ${stood} there with git checkout ${stood}, and remove the branch with git branch -D ${branch}.`,
+    )
+  }
+  const removed = await git(host, path, ['branch', '--quiet', '-D', branch])
+  if (removed.exit_code !== 0) {
+    return no(`the branch ${branch} was left in ${path} (${saidBy(removed)}): remove it there with git branch -D ${branch}.`)
+  }
+  return { ok: true }
+}
+
+/** What the landing says, with what became of the clone: a batch that landed is still told, and says the clone is not back. */
+function withTheCloneBack(landing: Landing, back: Step<true>): Landing {
+  if (!('refused' in back)) return landing
+  const why = back.refused
+  return 'told' in landing ? { told: `${landing.told} ${why}` } : no(`${landing.refused} ${why}`)
+}
 
 /** Pushes the integration branch, announced in every package's ledger before it runs. */
 async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch): Promise<Landing> {

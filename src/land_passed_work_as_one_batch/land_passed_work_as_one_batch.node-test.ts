@@ -162,13 +162,22 @@ function threePassedPackages(fixture: Fixture): Passed {
 /** What a landing answered, as the words a refusal or a telling gives. */
 const wordsOf = (landing: Landing): string => ('told' in landing ? landing.told : landing.refused)
 
+/** A git answer read from the bare origin itself: the refs there are what was pushed, whatever the clone knows. */
+const inTheOrigin = (fixture: Fixture, ...args: readonly string[]): string =>
+  execFileSync(GIT, ['--git-dir', fixture.origin, ...args], { encoding: 'utf8' }).trim()
+
 /** Where the bare origin's default branch stands. */
-const theOriginMain = (fixture: Fixture): string => execFileSync(GIT, ['--git-dir', fixture.origin, 'rev-parse', 'refs/heads/main'], { encoding: 'utf8' }).trim()
+const theOriginMain = (fixture: Fixture): string => inTheOrigin(fixture, 'rev-parse', 'refs/heads/main')
 
 /** The integration branches the bare origin holds; the passed branches this test pushed are not the landing's. */
 const theLandBranchesOnOrigin = (fixture: Fixture): readonly string[] =>
-  execFileSync(GIT, ['--git-dir', fixture.origin, 'for-each-ref', '--format=%(refname:short)', `refs/heads/${LAND}`], { encoding: 'utf8' })
-    .trim()
+  inTheOrigin(fixture, 'for-each-ref', '--format=%(refname:short)', `refs/heads/${LAND}`)
+    .split('\n')
+    .filter((branch) => branch !== '')
+
+/** The integration branches the clone holds itself; a landing's own branch is pushed, not kept here. */
+const theLandBranchesIn = (clone: string): readonly string[] =>
+  gitIn(clone, 'for-each-ref', '--format=%(refname:short)', `refs/heads/${LAND}`)
     .split('\n')
     .filter((branch) => branch !== '')
 
@@ -199,13 +208,12 @@ test('#256: three passed packages land as one batch, one --no-ff merge each, on 
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: passed.packages })
   assert.ok('told' in landed, `a batch of three passed packages was refused: ${wordsOf(landed)}`)
-  const branch = gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD')
-  assert.ok(branch.startsWith(`${LAND}/`), `the batch was not landed on a ${LAND}/ branch: ${branch}`)
+  const branches = theLandBranchesOnOrigin(fixture)
+  assert.equal(branches.length, 1, `the batch was not pushed as one ${LAND}/ branch: ${branches.join(', ')}`)
+  const branch = branches[0] ?? ''
   assert.ok(landed.told.includes(branch), 'the answer did not name the branch it made')
-  const tip = gitIn(fixture.clone, 'rev-parse', 'HEAD')
-  assert.ok(theLandBranchesOnOrigin(fixture).includes(branch), 'the integration branch was not pushed')
-  assert.equal(execFileSync(GIT, ['--git-dir', fixture.origin, 'rev-parse', `refs/heads/${branch}`], { encoding: 'utf8' }).trim(), tip)
-  const merges = gitIn(fixture.clone, 'log', '--first-parent', '--format=%P', '-3').split('\n').reverse()
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${branch}`)
+  const merges = inTheOrigin(fixture, 'log', '--first-parent', '--format=%P', '-3', branch).split('\n').reverse()
   assert.deepEqual(
     merges.map((parents) => parents.trim().split(/\s+/)[1]),
     passed.heads,
@@ -217,6 +225,72 @@ test('#256: three passed packages land as one batch, one --no-ff merge each, on 
   }
   const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: passed.packages })
   assert.ok('told' in checked, `the range the landing named did not pass the check: ${wordsOf(checked)}`)
+})
+
+test('#256: a landing leaves the clone on the branch and commit it stood on, clean, and keeps no land branch of its own', async (t) => {
+  const fixture = aRepository(t)
+  const stood_on = gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD')
+  const stood_at = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const passed = threePassedPackages(fixture)
+  // Cutting the passed branches left the clone on the last of them; a landing starts where a workspace clone stands.
+  gitIn(fixture.clone, 'checkout', '--quiet', stood_on)
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, passed.pulls)))
+  for (const [entry, work_package] of passed.packages.entries()) await aPassedVerdict(tests, work_package, base, at(passed.heads, entry))
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: passed.packages })
+  assert.ok('told' in landed, `a batch of three passed packages was refused: ${wordsOf(landed)}`)
+  assert.equal(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD'), stood_on, 'the clone was left on the integration branch the landing cut')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', 'HEAD'), stood_at, 'the clone moved its HEAD, although a landing commits on its own branch')
+  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after a landing')
+  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a land branch was kept in the clone, where nothing would remove it')
+  assert.equal(theLandBranchesOnOrigin(fixture).length, 1, 'the integration branch the landing made was not pushed')
+})
+
+test('#256: a stopped batch aborts its merge and leaves the clone where it stood, clean, with no land branch left', async (t) => {
+  const fixture = aRepository(t)
+  const stood_on = gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD')
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const packages = [1, 2, 3].map((entry) => `${fixture.repo}#${String(250 + entry)}`)
+  // The first two change the same line of one file, so the second is a conflict; the third is never reached.
+  const heads = [
+    aBranchWithOneCommit(fixture, 'passed0', base, 'shared.txt', 'two\n'),
+    aBranchWithOneCommit(fixture, 'passed1', base, 'shared.txt', 'three\n'),
+    aBranchWithOneCommit(fixture, 'passed2', base, 'later.txt', 'later\n'),
+  ]
+  gitIn(fixture.clone, 'checkout', '--quiet', stood_on)
+  const pulls = new Map<string, unknown>()
+  heads.forEach((head, entry) => pulls.set(`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(281 + entry, head)))
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, pulls)))
+  for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.match(wordsOf(landed), /stopped at/)
+  assert.equal(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD'), stood_on, 'the clone was left on the integration branch a stopped batch cut')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', 'HEAD'), base, 'the clone moved its HEAD, although the batch stopped before anything was pushed')
+  // Without the abort, git refuses the checkout back and the clone stands mid-merge on the branch, which this reads.
+  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left mid-merge after the batch stopped')
+  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'the stopped batch left its land branch in the clone, holding a merge never pushed')
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a stopped batch pushed something')
+})
+
+test('#256: a clone on no branch is refused before a branch is cut, because a landing would have none to go back to', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#251`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const pulls = new Map<string, unknown>([[`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(281, head)]])
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, pulls)))
+  await aPassedVerdict(tests, work_package, base, head)
+  // The clone stands on a commit rather than a branch, so there is no branch to put it back on afterwards.
+  gitIn(fixture.clone, 'checkout', '--quiet', '--detach', base)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: [work_package] })
+  assert.match(wordsOf(landed), /is on no branch/)
+  assert.match(wordsOf(landed), /default branch/, 'the answer did not say where to go before landing again')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', 'HEAD'), base, 'the clone moved for a batch that could never be put back')
+  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a branch was cut in a clone with no branch to go back to')
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch was pushed from a clone with no branch to go back to')
 })
 
 test('#256: a package with no PASS row stops the whole batch before a branch is cut, merged or pushed', async (t) => {
@@ -265,7 +339,9 @@ test('#256: a package is landed as the pull request its verdict passed, whose nu
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: [work_package] })
   assert.ok('told' in landed, `a package whose pull request number differs from its issue was refused: ${wordsOf(landed)}`)
   assert.ok(landed.told.includes(`${work_package} (PR 246)`), `the answer did not name the pull request: ${landed.told}`)
-  assert.match(gitIn(fixture.clone, 'log', '-1', '--format=%s'), /Land #246 \(.*#243, PASS\)/)
+  // The clone is back on its default branch, so the merge is read where it was pushed: on the origin's land branch.
+  const branch = theLandBranchesOnOrigin(fixture)[0] ?? ''
+  assert.match(inTheOrigin(fixture, 'log', '-1', '--format=%s', `refs/heads/${branch}`), /Land #246 \(.*#243, PASS\)/)
 })
 
 test('#256: a pull request that does not merge cleanly stops the batch there and names the packages not tried', async (t) => {

@@ -3,8 +3,8 @@
 // Every test works on a throwaway origin and a clone of it, so what is pinned is what git really does: the three
 // refusals the design names (a base that is not the default tip, a tip that does not descend from it, a committed
 // conflict marker), the one menu line with the CI GitHub holds on the tip, a range touching a workflow asking for a
-// by-eye read, and a batch: one --no-ff merge per package passes, and a merge carrying a change of its own fails naming
-// its package and its pull request.
+// by-eye read, and a batch: one --no-ff merge per package passes, a merge carrying a change of its own fails naming
+// its package and its pull request, and a range that lands none of a passed package is refused naming that package.
 //
 // GitHub's answer for a green tip is a recording kept beside this slice (recorded_runs_on_a_tip.json); the states it
 // cannot hold — a skipped job, a run with no jobs, no run at all — are written in the tests that need them and said to
@@ -292,6 +292,28 @@ test('#256: a batch of three passed packages passes, and one merge carrying a ch
   assert.match(refused.refused, /carries a change of its own/)
   assert.ok(refused.refused.includes(packages[2] ?? ''), 'the answer did not name the package whose merge it is')
   assert.match(refused.refused, /PR 283/, 'the answer did not name the pull request whose merge it is')
+})
+
+test('#256: a range that lands none of a passed package is refused, naming that package and its pull request', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const packages = [1, 2, 3].map((at) => `${fixture.repo}#${String(250 + at)}`)
+  const heads = packages.map((_, at) => aBranchWithOneCommit(fixture, `passed${String(at)}`, base, `work${String(at)}.txt`, `work ${String(at)}\n`))
+  // The batch lands two of the three: the third package's verdict passed work that the owner's yes would not land, so
+  // the menu line must not name it as a PASS the range carries.
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'batch', base)
+  for (const at of [0, 1]) mergeHere(fixture.clone, heads[at] ?? '', `Land #${String(281 + at)} (${packages[at] ?? ''}, PASS)`)
+  const tip = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  const tests = aHostOver(aGithub(oneOpenPullRequestAtEach(fixture.repo, heads, 281)))
+  for (const [at, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, heads[at] ?? '')
+
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages })
+  assert.ok('refused' in checked, `a range that lands two of three passed packages was checked: ${JSON.stringify(checked)}`)
+  assert.equal(
+    checked.refused,
+    `no merge lands ${packages[2] ?? ''} (PR 283).`,
+    'the refusal did not name exactly the package the range does not land, and its pull request',
+  )
 })
 
 test('#256: a range that is not one merge per package is refused, naming the commit that is not a merge', async (t) => {
