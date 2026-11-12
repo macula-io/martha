@@ -336,6 +336,26 @@ export class OutcomeNotKept extends Error {
 }
 
 /**
+ * Announces an outward act: its row first, and only then may it run. Answers the row the act was kept at, or throws
+ * ActNotSent when the store would not keep it, so a caller that could not announce knows the act did not run.
+ *
+ * It is apart from sendOutwardAct for an act that lands several packages at once (martha#256's batch landing and its
+ * fast-forward): the act runs once, and every package it lands holds the announcement before it runs, so no package's
+ * ledger is told afterwards that the act was sent. An act that is one package's alone goes through sendOutwardAct.
+ */
+export async function announceAct(host: LedgerHost, input: Work & { readonly act: OutwardAct }): Promise<number> {
+  return keep(host, {
+    kind: ACT_ANNOUNCED,
+    package: input.package,
+    member: input.member,
+    at: host.clock.now(),
+    act: input.act,
+  }).catch((cause: unknown) => {
+    throw new ActNotSent(input.act, cause)
+  })
+}
+
+/**
  * Sends an outward act: its row first, then the act, then its outcome.
  *
  * A caller can tell three failures apart, and each says what a retry may do:
@@ -359,15 +379,7 @@ export async function sendOutwardAct(
   input: Work & { readonly act: OutwardAct },
   send: () => Promise<string>,
 ): Promise<string> {
-  const announced_at = await keep(host, {
-    kind: ACT_ANNOUNCED,
-    package: input.package,
-    member: input.member,
-    at: host.clock.now(),
-    act: input.act,
-  }).catch((cause: unknown) => {
-    throw new ActNotSent(input.act, cause)
-  })
+  const announced_at = await announceAct(host, input)
 
   const keepOutcome = async (outcome: Outcome, sent: OutcomeNotKept['sent'], send_error?: unknown) => {
     try {
