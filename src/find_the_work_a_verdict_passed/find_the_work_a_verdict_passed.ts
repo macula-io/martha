@@ -18,6 +18,7 @@
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { readLedger, WORK_PACKAGE, type LedgerHost, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { readACrewLine, type CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** A package to look up, as the landing knows it: the package, the repository being landed, and where gh runs. */
 export interface TheLookUp {
@@ -56,7 +57,7 @@ export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookU
     return refused(`the PASS row of ${look.package} carries no range, so it names no head to land.`)
   }
   const outcome = await host.processes.run({
-    command: 'gh',
+    command: GITHUB_CLI,
     args: ['api', `repos/${look.repo}/commits/${head}/pulls`],
     cwd: look.cwd,
   })

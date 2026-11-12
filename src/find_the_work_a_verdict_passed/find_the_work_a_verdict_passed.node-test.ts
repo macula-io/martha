@@ -20,6 +20,7 @@ import { hostForTests, type HostForTests } from '../host_contract/host_for_tests
 import { keepTheMilestone } from '../keep_the_ledger/keep_the_ledger.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
 import { readACrewLine, keepTheLinesRow } from '../read_a_crew_line/read_a_crew_line.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { findTheWorkAVerdictPassed } from './find_the_work_a_verdict_passed.ts'
 
 /** One pull request as the recording kept it, to the fields this slice reads and GitHub's nesting of `head`. */
@@ -101,7 +102,7 @@ test('#256: the one open pull request at the head the latest PASS row names is f
   assert.notEqual(String(recorded.number), issueNumber(PACKAGE), 'the recorded pull request carries the package\'s own issue number, so this case proves nothing')
   assert.equal(asked.length, 1, 'GitHub was asked once')
   assert.deepEqual(asked[0], {
-    command: 'gh',
+    command: GITHUB_CLI,
     args: ['api', `repos/${REPO}/commits/${OPEN.sha}/pulls`],
     cwd: CWD,
   })
