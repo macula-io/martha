@@ -135,18 +135,22 @@ test('#255: a second `clear` start for a session already made a refresh does not
   assert.equal((await theRecordOf(places, SUCCESSOR))?.ingested.length, 1, 'a second clear start wiped the inherited record')
 })
 
-test('#255: a repeat start answers as taken and leaves the session able to take a turn in', async (t) => {
+test('#255: a repeat start answers as taken and leaves the record it inherited as it was', async (t) => {
   const places = placesOf(t)
   const relay = relayFor(places, aCrewClearingFrom(SESSION))
   await relay.answer('session_started', { session_id: SESSION, source: 'startup' })
   await relay.answer('prompt_submitted', { session_id: SESSION, text: 'a ring from a stranger', origin: { kind: 'plugin' } })
+  const before = await theRecordOf(places, SESSION)
   await relay.answer('session_started', { session_id: SUCCESSOR, source: 'clear' })
-  // The same start reported again: it changes nothing, and only a session still holding its record can show that, so
-  // the next prompt is taken in rather than refused for a session whose record was begun a second time and lost.
+  // The same start reported again. A session whose record is begun a second time is refused that begin and reads from
+  // then on as one whose record was lost, so a successor that only kept the right NUMBER of ingestions would still
+  // have handed its handover to a session that trusts none of them.
   assert.equal((await relay.answer('session_started', { session_id: SUCCESSOR, source: 'clear' })).answered, true)
-  const taken = await relay.answer('prompt_submitted', { session_id: SUCCESSOR, text: 'what became of the pushes I sent', origin: { kind: 'plugin' } })
-  assert.equal(taken.answered, true, 'a repeat start replaced the session with one whose record was lost')
-  assert.equal((await theRecordOf(places, SUCCESSOR))?.ingested.length, 2, 'the successor lost what it inherited, or the prompt was not taken in')
+  assert.deepEqual(
+    (await theRecordOf(places, SUCCESSOR))?.ingested,
+    before?.ingested,
+    'a repeat start replaced the record the successor inherited with one that reads as lost',
+  )
 })
 
 test('#255: with no clear in flight, a `clear` start is still a fresh session', async (t) => {
