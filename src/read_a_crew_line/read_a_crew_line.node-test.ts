@@ -102,3 +102,23 @@ test('#253: a VERDICT adds the round it closed, and a HANDOFF the act it announc
   await keepTheLinesRow(host, 'Pallas', handoff.line)
   assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['review_round_closed', 'act_announced', 'act_concluded'])
 })
+
+/** The text each row kept of a line: a VERDICT's note, or the act a HANDOFF announced. */
+const keptTextOf = (rows: Awaited<ReturnType<typeof readLedger>>): readonly string[] =>
+  rows.flatMap((row) => (row.kind === 'review_round_closed' ? [row.note] : row.kind === 'act_announced' ? [row.act.what] : []))
+
+test('#256: the row a line writes carries the whole line, so its range reads back out of the ledger', async () => {
+  for (const written of WELL_FORMED) {
+    const host = ledgerHost()
+    const reading = readACrewLine(written)
+    assert.ok('line' in reading && reading.line !== null, `the line did not read: ${written}`)
+    await keepTheLinesRow(host, 'Mercurius', reading.line)
+
+    const kept = keptTextOf(await readLedger(host, PACKAGE))
+    assert.equal(kept.length, 1, `a line did not keep one text to read back: ${JSON.stringify(kept)}`)
+    const back = readACrewLine(kept[0] ?? '')
+    assert.ok('line' in back && back.line !== null, `the row does not read as the line it was: ${JSON.stringify(kept[0])}`)
+    assert.deepEqual(back.line, reading.line, 'the row dropped something of the line it was written from, the range among it')
+    assert.ok(back.line.words.includes(`${BASE}..${TIP}`), 'the range is not in the words the row kept')
+  }
+})

@@ -1,0 +1,31 @@
+{
+  "_why": "Two answers GitHub gave to `gh api repos/<repo>/commits/<sha>/pulls`, recorded on 2026-11-12 and kept to the fields this slice reads (number, state, merged_at, head.sha) so a test reads GitHub's own shape and not one written to fit (martha#256, slice 2's read-back). Nothing else of GitHub's answer is used, and head is kept as GitHub nests it. `open` was recorded while PR 284 stood open at macula-io/martha's reviewed head, which is also a case the design asks for: the pull request's number is not its package's issue number (#284 against #251). `closed` was recorded at the head of PR 246, which landed as package #243, so an answer holding only a closed pull request is a real answer and not a shape made up to be refused. Record another with: gh api repos/<repo>/commits/<sha>/pulls --jq '[.[] | {number,state,merged_at,head:{sha:.head.sha}}]'.",
+  "open": {
+    "repo": "macula-io/martha",
+    "sha": "83e3af7bdac2aef9d766339c8036bd075ce0410a",
+    "answer": [
+      {
+        "number": 284,
+        "state": "open",
+        "merged_at": null,
+        "head": {
+          "sha": "83e3af7bdac2aef9d766339c8036bd075ce0410a"
+        }
+      }
+    ]
+  },
+  "closed": {
+    "repo": "macula-io/martha",
+    "sha": "eee04301e0698b4c15f88a0fc25c04ed8b00e954",
+    "answer": [
+      {
+        "number": 246,
+        "state": "closed",
+        "merged_at": "2026-11-10T17:28:01Z",
+        "head": {
+          "sha": "eee04301e0698b4c15f88a0fc25c04ed8b00e954"
+        }
+      }
+    ]
+  }
+}
