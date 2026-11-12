@@ -25,7 +25,7 @@ import process from 'node:process'
 import { StringDecoder } from 'node:string_decoder'
 
 import { removeTheTree } from './relay_copy.ts'
-import { readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
+import { anyJournalHasALine, readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -103,6 +103,12 @@ export interface RecordedHostRun {
   readonly script: ModelScript
   /** How many model requests the run waits for before it ends the host itself; a stopped member ends it sooner. */
   readonly requests: number
+  /**
+   * Whether the run is done, asked of every request heard so far (martha#251, martha#253). A member's flow completes
+   * here rather than at a count, because the host sends requests of its own — a suggestion for the owner's next turn
+   * among them — so `requests` is a ceiling, never the flow's last step. A run given none ends at that ceiling.
+   */
+  readonly completesWhen?: (requests: readonly ModelRequest[]) => boolean
   /** How long the host may show nothing new before the run gives up on it; a host that is working is never cut off. */
   readonly silence_ms: number
 }
@@ -114,6 +120,27 @@ export interface RecordedHostRan {
   /** How martha start ended. */
   readonly exit_code: number | null
 }
+
+/**
+ * A launch that stopped waiting, carrying what it had seen: the terminal and the requests the stand-in heard. It is
+ * thrown where the wait gave up, so an observation can still report, by name, what a launch did see instead of only
+ * that it threw (martha#251, martha#253).
+ */
+export class ALaunchThatStopped extends Error {
+  readonly requests: readonly ModelRequest[]
+  readonly shown: string
+
+  constructor(why: string, seen: { readonly requests: readonly ModelRequest[]; readonly shown: string }) {
+    super(why)
+    this.name = 'ALaunchThatStopped'
+    this.requests = [...seen.requests]
+    this.shown = seen.shown
+  }
+}
+
+/** What a launch had seen when it stopped waiting, or undefined for an error that is not that. */
+export const whatTheLaunchSaw = (error: unknown): { readonly requests: readonly ModelRequest[]; readonly shown: string } | undefined =>
+  error instanceof ALaunchThatStopped ? { requests: error.requests, shown: error.shown } : undefined
 
 /** The repository's own `martha` command. */
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -254,11 +281,13 @@ function record(heard: ModelRequest[], body: Record<string, unknown>): ModelRequ
 }
 
 /**
- * Why a run read no journal, once the host has sent a model request: the journal it watches has no line in it, so the
- * wait is standing on the terminal alone and the false red #240 fixes would come back unnamed (r=1).
+ * Why a run read no journal, once the host has sent a model request: no launch in the project's state has a line in
+ * its journal, so the wait is standing on the terminal alone and the false red #240 fixes would come back unnamed
+ * (r=1). It asks the project, not the newest file: a member started beside the one the run watches writes its own
+ * journal as it is made, and that empty file would otherwise fail the running member's run (martha#253).
  */
 export function journalNeverWritten(heard: readonly ModelRequest[], directory: string): string | undefined {
-  if (heard.length === 0 || readTheNewestRelayJournal(directory).written > 0) return undefined
+  if (heard.length === 0 || anyJournalHasALine(directory)) return undefined
   return `The launcher wrote no line to the journal at ${directory} by the host's first model request, so this run read no journal: a tool that outlasts the silence budget would red it as it did before martha#240`
 }
 
@@ -369,7 +398,10 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
     try {
       await waitWhileTheHostKeepsShowing(aWaitOfTheRun(what, done, seen))
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`)
+      throw new ALaunchThatStopped(
+        `${error instanceof Error ? error.message : String(error)}. The terminal last showed:\n${plainTextOf(shown).slice(-2000)}`,
+        { requests: heard, shown },
+      )
     }
   }
   try {
@@ -381,7 +413,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
       await new Promise((resolve) => setTimeout(resolve, 500))
       terminal.stdin.write('\r')
     }
-    await until(`model request ${run.requests}`, () => heard.length >= run.requests || exit_code !== undefined)
+    await until(`model request ${run.requests}`, () => heard.length >= run.requests || run.completesWhen?.(heard) === true || exit_code !== undefined)
     if (exit_code === undefined) {
       // The last turn ends in text; once the host has drawn it, end the host the way an owner does.
       await new Promise((resolve) => setTimeout(resolve, 2000))

@@ -24,7 +24,9 @@ import {
   plainTextOf,
   RECORDED_HOST_VARIABLE,
   stateHomeUnder,
+  whatTheLaunchSaw,
   type ModelRequest,
+  type RecordedHostRan,
 } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
 import type { Ingestion } from '../src/refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { ROW_SUFFIX } from '../src/row_streams_directory/row_streams_directory.ts'
@@ -190,6 +192,62 @@ export function aReport(): Report {
 /** Removes what a run made, however it ended. */
 export function sweep(paths: readonly string[]): void {
   for (const path of paths) rmSync(path, { recursive: true, force: true })
+}
+
+/**
+ * Keeps the requests a launch's stand-in answered under the directory a failed run keeps, so a person reading a red can
+ * see what the member was shown, not only what it did (martha#251, martha#253). A run with no failure sweeps it with
+ * everything else it made.
+ */
+export function keepTheRequests(work: string, name: string, requests: readonly ModelRequest[]): string {
+  const path = join(work, `${name}.requests.json`)
+  writeFileSync(path, `${JSON.stringify(requests, null, 2)}\n`)
+  return path
+}
+
+/** Keeps a launch's terminal beside its requests, as plain text. */
+export function keepTheTerminal(work: string, name: string, shown: string): string {
+  const path = join(work, `${name}.terminal.txt`)
+  writeFileSync(path, plainTextOf(shown))
+  return path
+}
+
+/**
+ * Whether the member has called `tool` and the host has sent its result back (martha#251, martha#253): the last step of
+ * a flow that ends with a tool's answer, so a launch is ended there rather than at a count the host's own requests
+ * (a suggestion for the owner's next turn among them) would make meaningless.
+ */
+export function aCallAndItsResult(requests: readonly ModelRequest[], tool: string): boolean {
+  const call = requests.flatMap((request) => toolCallsIn(request)).find((one) => one.tool === tool)
+  return call !== undefined && requests.some((request) => toolResultsIn(request).has(call.id))
+}
+
+/**
+ * What one member's launch gave an observation: the terminal and the requests the stand-in heard, whether the launch
+ * reached its end or stopped waiting. A launch that went silent is the observation's to report by name — a member that
+ * never took a message in is exactly what the live observations exist to show — so it is a record with `stopped` set,
+ * not an exception that ends the report before a single check is made.
+ */
+export interface MemberRan {
+  readonly requests: readonly ModelRequest[]
+  readonly shown: string
+  /** How martha start ended, or null when the launch stopped waiting before it did. */
+  readonly exit_code: number | null
+  /** Why the launch stopped waiting, when it did. */
+  readonly stopped?: string
+}
+
+/** One member's launch, read the same way whether it ran to its end or stopped waiting. */
+export async function aMemberRan(start: () => Promise<RecordedHostRan>): Promise<MemberRan> {
+  try {
+    const ran = await start()
+    return { requests: ran.requests, shown: ran.shown, exit_code: ran.exit_code }
+  } catch (error) {
+    const seen = whatTheLaunchSaw(error)
+    // An error that is not a stopped launch is the observation's own setup failing, and no record can be read from it.
+    if (seen === undefined) throw error
+    return { ...seen, exit_code: null, stopped: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 /** A tool call the model made, as the request that carries it shows it. */

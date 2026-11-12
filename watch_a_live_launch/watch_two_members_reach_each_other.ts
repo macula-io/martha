@@ -24,21 +24,26 @@ import process from 'node:process'
 
 import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
 import { FRAME_OPENING, framed } from '../src/hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import type { ModelRequest, RecordedHostRan, ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
+import type { ModelRequest, ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf, stateHomeUnder } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { HOST_SILENCE_MS } from '../src/launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
 import { addressedTo, type ChannelHost, type PlacedMessage, readTheChannel, takenInBy } from '../src/keep_the_crew_channel/crew_channel.ts'
 import { CREW_LINES, VALUE_SHAPES } from '../src/read_a_crew_line/crew_lines.ts'
+import { readACrewLine } from '../src/read_a_crew_line/read_a_crew_line.ts'
 import { rowStreamsDirectory } from '../src/row_streams_directory/row_streams_directory.ts'
 import {
+  aCallAndItsResult,
   aCheckoutToWatch,
+  aMemberRan,
   anObservationDirectory,
   aReport,
+  keepTheRequests,
+  keepTheTerminal,
   sweep,
   theRecordedHost,
   theResultOfTheLastCallTo,
   toolCallsIn,
-  toolResultsIn,
+  type MemberRan,
   type WatchedPlace,
 } from './a_launch_to_watch.ts'
 
@@ -66,13 +71,31 @@ const REVIEWER = SOLO_MEMBERS[1].name
 /** The package the two members talk about: this one, so the line they send is about real work. */
 const PACKAGE = 'macula-io/martha#253'
 
+/** How many model requests each launch may take at most: a ceiling, since the host sends requests of its own. */
+const REVIEWERS_REQUESTS = 12
+const BUILDERS_REQUESTS = 10
+
 /** A range of forty hex digits each side, as the line's own shape demands. */
 const A_RANGE = `${'a'.repeat(40)}..${'b'.repeat(40)}`
 
-/** One line of the crew's protocol, rendered from the shape its reader accepts (../src/read_a_crew_line). */
+/**
+ * One line of the crew's protocol, rendered from the shape its reader accepts (../src/read_a_crew_line), and put back
+ * through that reader before it is used: a line the crew refuses would reach the member as an error and the
+ * observation would observe nothing (a first run's VERDICT carried no PASS).
+ */
 function aLineOfItsOwn(verb: string, values: Readonly<Record<string, string>>): string {
   const shape = CREW_LINES.find((line) => line.verb === verb)
   if (shape === undefined) throw new Error(`the crew's protocol has no ${verb} line, so this observation cannot send one`)
+  const words = shape.parts.map((part) => {
+    if ('word' in part) return part.word
+    // A part that is one of a few words: a verdict's PASS or FAIL, and this observation sends a passing one.
+    if ('oneOf' in part) return part.oneOf[0] ?? ''
+    const value = values[part.name]
+    if (value === undefined || !VALUE_SHAPES[part.value].matches.test(value)) {
+      throw new Error(`the ${verb} line this observation builds carries no ${part.name}, or one the reader refuses`)
+    }
+    return value
+  })
   const carried = shape.shown.range.map((key) => {
     const value = values[key]
     if (value === undefined || !VALUE_SHAPES[shape.keys[key] ?? 'number'].matches.test(value)) {
@@ -80,7 +103,10 @@ function aLineOfItsOwn(verb: string, values: Readonly<Record<string, string>>): 
     }
     return `${key}=${value}`
   })
-  return [shape.verb, values['package'] ?? '', values['range'] ?? '', ...carried].join(' ')
+  const line = [shape.verb, ...words, ...carried].join(' ')
+  const read = readACrewLine(line)
+  if (!('line' in read) || read.line === null) throw new Error(`the crew's own reader did not take ${JSON.stringify(line)}`)
+  return line
 }
 
 const HANDOFF = aLineOfItsOwn('HANDOFF', { package: PACKAGE, range: A_RANGE, r: '1', ci: '1' })
@@ -136,9 +162,24 @@ const theReviewersScript =
   }
 
 /** One member's launch: the real launcher on the recorded host, its own stand-in model, on the crew's own checkout. */
-async function aMemberWasStarted(place: WatchedPlace, member: string, requests: number, script: (request: ModelRequest) => ScriptedTurn): Promise<RecordedHostRan> {
-  return driveTheRecordedHost({ claude: theRecordedHost(), home: place.home, checkout: place.checkout, member, owner_turn: 'Do what the crew needs.', requests, silence_ms: HOST_SILENCE_MS, script })
+function aMemberWasStarted(place: WatchedPlace, member: string, ceiling: number, script: (request: ModelRequest) => ScriptedTurn, done: (requests: readonly ModelRequest[]) => boolean): Promise<MemberRan> {
+  return aMemberRan(() =>
+    driveTheRecordedHost({
+      claude: theRecordedHost(),
+      home: place.home,
+      checkout: place.checkout,
+      member,
+      owner_turn: 'Do what the crew needs.',
+      requests: ceiling,
+      completesWhen: done,
+      silence_ms: HOST_SILENCE_MS,
+      script,
+    }),
+  )
 }
+
+/** The first line of why a launch stopped waiting: the rest of its message is the terminal it last showed. */
+const whyItStopped = (ran: MemberRan): string => (ran.stopped === undefined ? '' : `; its launch stopped waiting: ${ran.stopped.split('\n')[0] ?? ''}`)
 
 /** The crew's own streams, read the way the crew's own slices read them. */
 const theCrewsChannel = (place: WatchedPlace): ChannelHost => ({
@@ -149,30 +190,41 @@ const theCrewsChannel = (place: WatchedPlace): ChannelHost => ({
 /** The one message a member sent that this observation reads, with the row the channel placed it at; or undefined. */
 const theMessageFrom = (messages: readonly PlacedMessage[], from: string): PlacedMessage | undefined => messages.find((placed) => placed.message.from === from)
 
-/** How many of a member's model requests carried the given frame: a message taken in is handed once. */
-const turnsCarrying = (requests: readonly ModelRequest[], frame: string): readonly ModelRequest[] => requests.filter((request) => framedIn(transcriptOf(request), frame))
+/**
+ * How many of one request's messages carry the given frame (martha#253). The transcript grows with every request, so a
+ * turn is counted inside ONE request: a message taken in once appears in every request after it, which is the
+ * transcript working, not the message arriving again.
+ */
+const carryingIn = (request: ModelRequest, frame: string): number =>
+  messagesOf(request).filter((message) => JSON.stringify(message).includes(frame)).length
 
-/** Whether the text carries the frame as the frame, not as part of a shorter one (a position ten is not one). */
-const framedIn = (text: string, frame: string): boolean => text.includes(`${frame} `) || text.includes(`${frame}\\u0000`) || text.includes(`${frame}"`)
+/**
+ * Whether the text carries the frame, whole (martha#253). The position and the message's own text are part of the frame,
+ * so a shorter frame is not this one; what follows it is the host's to decide — the recorded host puts a newline and a
+ * sentence of its own around a prompt a plugin submits.
+ */
+const framedIn = (text: string, frame: string): boolean => frame !== '' && text.includes(frame)
 
-/** The index of the request the host sent after the agent tool's own answer: the member's turn, resumed. */
-function afterTheAgentsAnswer(requests: readonly ModelRequest[], agentCall: string | undefined): number {
-  if (agentCall === undefined) return -1
-  return requests.findIndex((request) => toolResultsIn(request).has(agentCall))
+/**
+ * The index of the request that carries the subagent's own answer, as the host raises it: the background agent's
+ * report arrives as a turn of the member's session (martha#253: a message must not be taken in during the subagent's
+ * turn, and must be after it).
+ */
+function theSubagentsAnswerIn(requests: readonly ModelRequest[]): number {
+  return requests.findIndex((request) => messagesOf(request).some((message) => JSON.stringify(message).includes('<task-notification>')))
 }
 
 const work = anObservationDirectory()
 const report = aReport()
-let place: WatchedPlace | undefined
+let keptForReading: readonly string[] = []
 try {
   const crew = aCheckoutToWatch(work, theConfigToApprove())
-  place = crew
   const channel = theCrewsChannel(crew)
-  let builders: Promise<RecordedHostRan> | undefined
+  let builders: Promise<MemberRan> | undefined
   const startTheBuilder = (): void => {
-    builders ??= aMemberWasStarted(crew, BUILDER, 4, theBuildersScript)
+    builders ??= aMemberWasStarted(crew, BUILDER, BUILDERS_REQUESTS, theBuildersScript, (requests) => aCallAndItsResult(requests, RECEIPTS))
   }
-  const reviewers = await aMemberWasStarted(crew, REVIEWER, 5, theReviewersScript(startTheBuilder))
+  const reviewers = await aMemberWasStarted(crew, REVIEWER, REVIEWERS_REQUESTS, theReviewersScript(startTheBuilder), (requests) => aCallAndItsResult(requests, SAY))
   if (builders === undefined) throw new Error('the reviewer never started the builder, so there was nobody to say the hand-off')
   const buildersRan = await builders
 
@@ -181,49 +233,69 @@ try {
   const verdict = theMessageFrom(messages, REVIEWER)
   const handoffFrame = handoff === undefined ? '' : framed(handoff.position, BUILDER, HANDOFF)
   const verdictFrame = verdict === undefined ? '' : framed(verdict.position, REVIEWER, VERDICT)
-  const agentCall = toolCallsIn(reviewers.requests[0] ?? { number: 0, body: {}, received_at: 0 }).find((call) => call.tool === THE_HOSTS_AGENT_TOOL)?.id
-  const resumed = afterTheAgentsAnswer(reviewers.requests, agentCall)
+  const answeredIn = theSubagentsAnswerIn(reviewers.requests)
+  const handoffFirstIn = handoffFrame === '' ? -1 : reviewers.requests.findIndex((request) => framedIn(JSON.stringify(request.body['messages']), handoffFrame))
+  const handoffAfterAnswer = handoffFirstIn > answeredIn && answeredIn !== -1 && reviewers.requests.slice(handoffFirstIn).every((request) => carryingIn(request, handoffFrame) === 1)
+  const verdictFirstIn = verdictFrame === '' ? -1 : buildersRan.requests.findIndex((request) => framedIn(JSON.stringify(request.body['messages']), verdictFrame))
+  const takenInByTheReviewer = await takenInBy(channel, REVIEWER)
+  const takenInByTheBuilder = await takenInBy(channel, BUILDER)
+  // What each member was shown and drew, kept with the directory a failed run leaves: a red is read from them.
+  keptForReading = [
+    keepTheRequests(work, 'the-reviewer', reviewers.requests),
+    keepTheTerminal(work, 'the-reviewer', reviewers.shown),
+    keepTheRequests(work, 'the-builder', buildersRan.requests),
+    keepTheTerminal(work, 'the-builder', buildersRan.shown),
+  ]
 
   report.check(
     'the builder said its hand-off, and the channel holds it for the reviewer',
     handoff !== undefined && handoff.message.text === HANDOFF && addressedTo(handoff.message, REVIEWER),
-    handoff === undefined ? `the channel holds ${JSON.stringify(messages.map((placed) => placed.message.from))}` : String(handoff.message.text),
+    handoff === undefined ? `the channel holds ${JSON.stringify(messages.map((placed) => placed.message.from))}${whyItStopped(buildersRan)}` : String(handoff.message.text),
   )
   report.check(
     'the hand-off reached the reviewer as one turn, after its own subagent had answered',
-    turnsCarrying(reviewers.requests, handoffFrame).length === 1 && reviewers.requests.findIndex((request) => framedIn(transcriptOf(request), handoffFrame)) > resumed,
-    `the reviewer sent the model ${reviewers.requests.length} requests; the agent answered in request ${resumed + 1}, the hand-off first appeared in request ${reviewers.requests.findIndex((request) => framedIn(transcriptOf(request), handoffFrame)) + 1}`,
+    handoffAfterAnswer,
+    `the reviewer sent the model ${reviewers.requests.length} requests; its subagent's answer arrived in request ${answeredIn + 1}, the hand-off first appeared in request ${handoffFirstIn + 1}${whyItStopped(reviewers)}`,
   )
   report.check(
     'the reviewer took the hand-off in, once',
-    (await takenInBy(channel, REVIEWER)).size === 1 && handoff !== undefined && (await takenInBy(channel, REVIEWER)).has(handoff.position),
-    `the positions the reviewer took in: ${JSON.stringify([...(await takenInBy(channel, REVIEWER))])}`,
+    takenInByTheReviewer.size === 1 && handoff !== undefined && takenInByTheReviewer.has(handoff.position),
+    `the positions the reviewer took in: ${JSON.stringify([...takenInByTheReviewer])}${whyItStopped(reviewers)}`,
   )
   report.check(
     'the reviewer said its verdict, and the channel holds it for the builder',
     verdict !== undefined && verdict.message.text === VERDICT && addressedTo(verdict.message, BUILDER),
-    verdict === undefined ? 'the channel holds no message from the reviewer' : String(verdict.message.text),
+    verdict === undefined ? `the channel holds no message from the reviewer${whyItStopped(reviewers)}` : String(verdict.message.text),
   )
   report.check(
     'the verdict reached the builder as one turn',
-    turnsCarrying(buildersRan.requests, verdictFrame).length === 1,
-    `the builder sent the model ${buildersRan.requests.length} requests`,
+    verdictFirstIn !== -1 && carryingIn(buildersRan.requests[verdictFirstIn]!, verdictFrame) === 1 && buildersRan.requests.slice(verdictFirstIn).every((request) => carryingIn(request, verdictFrame) === 1),
+    `the builder sent the model ${buildersRan.requests.length} requests; the verdict first appeared in request ${verdictFirstIn + 1}${whyItStopped(buildersRan)}`,
   )
   report.check(
     'the builder took the verdict in',
-    verdict !== undefined && (await takenInBy(channel, BUILDER)).has(verdict.position),
-    `the positions the builder took in: ${JSON.stringify([...(await takenInBy(channel, BUILDER))])}`,
+    verdict !== undefined && takenInByTheBuilder.has(verdict.position),
+    `the positions the builder took in: ${JSON.stringify([...takenInByTheBuilder])}${whyItStopped(buildersRan)}`,
   )
   report.check(
     'the builder read its receipts, and they say the reviewer took the hand-off in',
-    String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).includes(`taken in by ${REVIEWER}`),
+    // Said, not not-said: the launcher's own line is "written, not yet taken in by <member>" until it is.
+    String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).includes(`taken in by ${REVIEWER}`) &&
+      !String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).includes('not yet taken in'),
     String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).slice(0, 300),
   )
-  report.check(
-    'neither member was stopped',
-    !plainTextOf(reviewers.shown).includes('is stopped') && !plainTextOf(buildersRan.shown).includes('is stopped'),
-    'no stop line',
-  )
+  const stoppedIn = (ran: MemberRan, member: string): string | undefined => (plainTextOf(ran.shown).includes(`${member} is stopped`) ? `${member}'s terminal shows it stopped` : undefined)
+  const stops = [stoppedIn(reviewers, REVIEWER), stoppedIn(buildersRan, BUILDER)].filter((stop): stop is string => stop !== undefined)
+  report.check('neither member was stopped', stops.length === 0, stops.length === 0 ? 'no stop line' : stops.join('; '))
+  // A launch ends where its flow ends (its own completion, or the ceiling a host that keeps sending requests reaches),
+  // so what must hold is that it got as far as the call its flow is about: not that it took its whole ceiling.
+  const howItEnded = (ran: MemberRan, tool: string, wanted: number): string => {
+    if (ran.stopped !== undefined) return `its launch stopped waiting: ${ran.stopped.split('\n')[0] ?? ''}`
+    if (!aCallAndItsResult(ran.requests, tool)) return `${tool} was never answered: martha start ended (code ${String(ran.exit_code)}) after ${ran.requests.length} of the ${wanted} requests this run waits for`
+    return ''
+  }
+  const ends = [howItEnded(reviewers, SAY, REVIEWERS_REQUESTS), howItEnded(buildersRan, RECEIPTS, BUILDERS_REQUESTS)].filter((why) => why !== '')
+  report.check('both launches reached the step their flow is about', ends.length === 0, ends.length === 0 ? 'both were answered where the flow ends' : ends.join('; '))
 } catch (error) {
   report.check(`the observation ran to its end (${error instanceof Error ? error.message : String(error)})`, false, 'the launch threw')
 } finally {
@@ -231,6 +303,6 @@ try {
 }
 
 const status = report.end()
-if (status !== 0) console.log(`kept for reading: ${place === undefined ? work : work}`)
+if (status !== 0) console.log(`kept for reading: ${work}${keptForReading.length === 0 ? '' : `; kept for reading it: ${keptForReading.join(' ')}`}`)
 else sweep([work])
 process.exit(status)
