@@ -16,17 +16,9 @@ import {
   type HostSession,
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
-import {
-  CLAUDE_CODE_SESSION_EVENTS,
-  SESSION_START_OUTCOMES,
-  readHandover,
-  stampHandover,
-  startSession,
-  undeclaredSessionEvents,
-  type HandoverStamp,
-  type HandoverStampStore,
-} from './carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, SESSION_START_OUTCOMES, readHandover, stampHandover, startSession, undeclaredSessionEvents } from './carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
 const names = claudeCodeToolNames

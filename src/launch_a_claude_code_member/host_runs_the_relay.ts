@@ -122,7 +122,8 @@ const HOST_ANSWER_MAX_BYTES = 4 * 1024 * 1024
 /** Why a launch starts nothing: its command names no file the launcher can run. */
 export const notACommandThisLauncherCanRun = (command: string): string => `${command} is not a command this launcher can run.`
 
-const isRunnableFile = (path: string): boolean => {
+/** Whether `path` is a file this user can run: what a PATH lookup answers with, and never a folder (martha#304). */
+export const isRunnableFile = (path: string): boolean => {
   try {
     accessSync(path, constants.X_OK)
     return statSync(path).isFile()

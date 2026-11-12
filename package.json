@@ -65,7 +65,8 @@
     },
     "loaderImports": {
       "src/install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts": "node:module",
-      "architecture/c4_diagrams.node-test.ts": "node:module"
+      "architecture/c4_diagrams.node-test.ts": "node:module",
+      "architecture/what_runs_today.node-test.ts": "node:module"
     },
     "installerPackage": "@macula-io/martha"
   },
