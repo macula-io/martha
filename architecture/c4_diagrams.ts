@@ -701,9 +701,10 @@ export function components(): Diagram {
   // each directory it leaves out is named with the reason that entry gives, so a directory added to the
   // array is said here without anyone remembering to edit this prose.
   const noteWidth = d.w - 48
+  const count = LEFT_OUT.length
   const notes = wrapped(
     'Every box is a directory in src/: the name is the capability, and its test sits beside it. ' +
-    `${LEFT_OUT.length} ${LEFT_OUT.length === 1 ? 'directory is' : 'directories are'} drawn nowhere on purpose:`,
+    `${count === 1 ? 'This directory is' : `These ${count} directories are`} drawn nowhere on purpose:`,
     noteWidth,
   )
   for (const entry of LEFT_OUT) notes.push(...wrapped(`${entry.name}: ${entry.why}.`, noteWidth))

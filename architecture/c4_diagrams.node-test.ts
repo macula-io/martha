@@ -275,9 +275,11 @@ const COUNT_WORDS: Readonly<Record<string, number>> = {
 /** The page's own count of what it draws nowhere, held to the array: the failure lines, or nothing. */
 const countWrong = (page: string): string[] => {
   const words = Object.keys(COUNT_WORDS).join('|')
-  const counted = new RegExp(`\\b(\\d+|${words})\\b (?:directory is|directories are) drawn nowhere on purpose`, 'i').exec(page)
+  const counted = new RegExp(
+    `(?:(?:These )?(\\d+|${words}) directories are|This directory is) drawn nowhere on purpose`, 'i',
+  ).exec(page)
   if (counted === null) return ['the page does not say how many directories are drawn nowhere on purpose']
-  const said = COUNT_WORDS[counted[1]!.toLowerCase()] ?? Number(counted[1])
+  const said = counted[1] === undefined ? 1 : COUNT_WORDS[counted[1].toLowerCase()] ?? Number(counted[1])
   return said === LEFT_OUT.length
     ? []
     : [`the page says ${said} directories are drawn nowhere on purpose, and LEFT_OUT holds ${LEFT_OUT.length}`]
@@ -300,17 +302,39 @@ test('the components page names every directory it leaves out, and says why', ()
 // A box's height is the taller of the height it is given and the height its text needs, while a
 // boundary's bottom was measured from its text alone (Mercurius's O1 on martha#283, folded in as
 // martha#296). A box made taller by its given h therefore stood past the room its boundary's bottom
-// label needs, and every check passed. The relay is given a taller h than its text needs here, and
-// the boundary must still be drawn below it.
-test('a box given a taller height than its text needs still ends inside its boundary', () => {
-  const taller = PACKAGE_BOXES.map((box) => (box.name === 'the relay' ? { ...box, h: box.h + 40 } : box))
-  const diagram = containers(taller)
+// label needs, and every check passed. The relay is grown each of the two ways a box grows here, and
+// the boundary must be drawn below it either way.
+
+/** What ends in the ground a boundary's bottom label keeps, as the failure lines, or nothing. */
+const overrunsOfBottomLabel = (diagram: ReturnType<typeof containers>): string[] => {
   const bound = diagram.bounds.find((drawn) => drawn.atTheBottom)!
   const held = diagram.boxes.filter((box) => box.x >= bound.x && box.x + box.w <= bound.x + bound.w)
-  const overrun = held
+  return held
     .filter((box) => box.y + box.h > bound.labelBand.y)
     .map((box) => `${box.name} ends at ${box.y + box.h}, into the band its boundary's bottom label takes from ${bound.labelBand.y}, though the boundary ends at ${bound.y + bound.h}`)
+}
+
+const assertInsideItsBoundary = (diagram: ReturnType<typeof containers>): void => {
+  const overrun = overrunsOfBottomLabel(diagram)
   assert.deepEqual(overrun, [], `a box overruns the room its boundary's bottom label needs:\n${overrun.join('\n')}`)
+}
+
+/** The relay, grown by its hand-given h: the taller of the two heights a box is drawn at. */
+const grownByItsGivenHeight = PACKAGE_BOXES.map((box) =>
+  box.name === 'the relay' ? { ...box, h: box.h + 40 } : box)
+
+/** The relay, grown by its own text: it is given no height at all, and two lines more than it had. */
+const grownByItsText = PACKAGE_BOXES.map((box) =>
+  box.name === 'the relay'
+    ? { ...box, h: 0, desc: [...box.desc, 'A line its given height never counted,', 'and one more'] }
+    : box)
+
+test('a box given a taller height than its text needs still ends inside its boundary', () => {
+  assertInsideItsBoundary(containers(grownByItsGivenHeight))
+})
+
+test('a box given less height than its text needs still ends inside its boundary', () => {
+  assertInsideItsBoundary(containers(grownByItsText))
 })
 
 // No room runs in this release, and a picture can easily say "solo loads none of it" and be wrong: the
