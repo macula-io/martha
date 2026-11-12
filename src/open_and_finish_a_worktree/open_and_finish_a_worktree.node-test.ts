@@ -269,7 +269,8 @@ test('worktree_finish leaves the branch on origin while the default branch does 
 
 test('worktree_finish leaves the branch on origin, naming its moved head, when another checkout pushed past the tip (#256)', async (t) => {
   const fixture = aCrew(t)
-  const { open, finish } = toolsOf(settingsFor(fixture, fixture))
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const { open, finish } = tools
   await open.answer(asked('acme/widget', SLUG))
   const path = join(fixture.worktrees, `widget-${SLUG}`)
   writeFileSync(join(path, 'x.txt'), 'x\n')
@@ -290,6 +291,7 @@ test('worktree_finish leaves the branch on origin, naming its moved head, when a
   assert.ok(onOrigin.includes(y), 'origin still holds the commit another checkout pushed, which no other branch has')
   const anywhere = execFileSync('git', ['--git-dir', fixture.origin, 'branch', '--contains', y], { encoding: 'utf8' }).trim()
   assert.notEqual(anywhere, '', 'the commit is still on a branch of origin')
+  assert.deepEqual(await rowKinds(tools.host), [], 'the guard refused before any act was sent, so nothing was announced')
 })
 
 test('worktree_finish removes the branch on origin when its head moved past the tip, and the default branch holds it (#256)', async (t) => {
@@ -316,7 +318,8 @@ test('worktree_finish removes the branch on origin when its head moved past the 
 
 test('worktree_finish answers that the branch is gone when origin no longer has it, rather than trusting a stale ref (#256)', async (t) => {
   const fixture = aCrew(t)
-  const { open, finish } = toolsOf(settingsFor(fixture, fixture))
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const { open, finish } = tools
   await open.answer(asked('acme/widget', SLUG))
   const path = join(fixture.worktrees, `widget-${SLUG}`)
   writeFileSync(join(path, 'work.txt'), 'the work\n')
@@ -333,6 +336,7 @@ test('worktree_finish answers that the branch is gone when origin no longer has 
   )
   assert.match(await finish.answer(finished('acme/widget', SLUG)), /is no longer on origin/)
   assert.equal(existsSync(path), false, 'the worktree is gone')
+  assert.deepEqual(await rowKinds(tools.host), [], 'the guard refused before any act was sent, so nothing was announced')
 })
 
 test('a crew with no workspace layout is told which fields to add, not given a worktree in a place nobody named (#256)', async (t) => {
