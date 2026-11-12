@@ -22,8 +22,8 @@ const ledgerHost = (): LedgerHost => {
   return { clock: host.clock, stores: { rows: host.stores.rows } }
 }
 
-/** A well-formed line of each verb, on a range, with every key the shape requires. */
-const WELL_FORMED = [`HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=41700170944`, `VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=2 ci=41700170944 req=1`]
+/** A well-formed line of each verb, on a range, with every key the shape requires, as the crew really sends them: a verdict that passed required no change, so it says `req=0`. */
+const WELL_FORMED = [`HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=41700170944`, `VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=2 ci=41700170944 req=0`]
 
 test('#253: a well-formed HANDOFF and VERDICT read, with the package and the verdict they name', () => {
   const handoff = readACrewLine(WELL_FORMED[0] ?? '')
@@ -33,7 +33,24 @@ test('#253: a well-formed HANDOFF and VERDICT read, with the package and the ver
   const verdict = readACrewLine(WELL_FORMED[1] ?? '')
   assert.ok('line' in verdict && verdict.line !== null)
   assert.equal(verdict.line.verdict, 'PASS')
-  assert.equal(verdict.line.keys['req'], '1')
+  assert.equal(verdict.line.keys['req'], '0')
+})
+
+test('#256: a PASS that required no change reads, because req=0 is what the crew sends when a review passes', () => {
+  const reading = readACrewLine(`VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=1 ci=41700170944 req=0`)
+  assert.ok('line' in reading && reading.line !== null, `a real PASS line was refused, so it would write no row: ${JSON.stringify(reading)}`)
+  assert.equal(reading.line.verdict, 'PASS')
+  assert.equal(reading.line.keys['req'], '0')
+})
+
+test('#256: the round is still one or more, and req is still a whole number', () => {
+  const round_zero = readACrewLine(`VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=0 ci=41700170944 req=0`)
+  assert.ok('refused' in round_zero, `a round of zero read: ${JSON.stringify(round_zero)}`)
+  assert.match(round_zero.refused, /r is not/, 'the answer did not name the round that is wrong')
+
+  const negative = readACrewLine(`VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=1 ci=41700170944 req=-1`)
+  assert.ok('refused' in negative, `a negative count read: ${JSON.stringify(negative)}`)
+  assert.match(negative.refused, /req is not/, 'the answer did not name the count that is wrong')
 })
 
 test('#253: a tip of thirty-nine hex digits is answered with the field, and nothing reaches a ledger', () => {
@@ -64,7 +81,7 @@ test('#253: a design reads with its URL in place of the range', () => {
   assert.ok('line' in handoff && handoff.line !== null)
   assert.equal(handoff.line.keys['doc'], 'https://github.com/macula-io/martha/issues/253#issuecomment-1')
 
-  const verdict = readACrewLine('VERDICT macula-io/martha#253 PASS doc=https://github.com/macula-io/martha/issues/253#issuecomment-2 r=2 req=1')
+  const verdict = readACrewLine('VERDICT macula-io/martha#253 PASS doc=https://github.com/macula-io/martha/issues/253#issuecomment-2 r=2 req=0')
   assert.ok('line' in verdict && verdict.line !== null)
   assert.equal(verdict.line.verdict, 'PASS')
 })

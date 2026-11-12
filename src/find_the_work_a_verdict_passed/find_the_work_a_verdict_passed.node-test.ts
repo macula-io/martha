@@ -17,13 +17,23 @@ import { test } from 'node:test'
 
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
+import { keepTheMilestone } from '../keep_the_ledger/keep_the_ledger.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
+import { readACrewLine, keepTheLinesRow } from '../read_a_crew_line/read_a_crew_line.ts'
 import { findTheWorkAVerdictPassed } from './find_the_work_a_verdict_passed.ts'
+
+/** One pull request as the recording kept it, to the fields this slice reads and GitHub's nesting of `head`. */
+interface RecordedPull {
+  readonly number: number
+  readonly state: string
+  readonly merged_at: string | null
+  readonly head: { readonly sha: string }
+}
 
 interface RecordedAnswer {
   readonly repo: string
   readonly sha: string
-  readonly answer: readonly Readonly<Record<string, unknown>>[]
+  readonly answer: readonly RecordedPull[]
 }
 
 const RECORDED = JSON.parse(readFileSync(new URL('./recorded_pulls_at_a_head.json', import.meta.url), 'utf8')) as {
@@ -32,15 +42,25 @@ const RECORDED = JSON.parse(readFileSync(new URL('./recorded_pulls_at_a_head.jso
 }
 
 const PACKAGE = 'macula-io/martha#251'
-const REPO = 'macula-io/martha'
-const CWD = '/clones/macula-io/martha'
+const REPO = PACKAGE.slice(0, PACKAGE.indexOf('#'))
+const CWD = `/clones/${REPO}`
 const OPEN = RECORDED.open
 const CLOSED = RECORDED.closed
 const BASE = 'e7009dfbd2b89172efccfa077c849a927648daee'
 
-/** A line a reviewer sent about a package, as the row that kept it holds it. */
+/** The pull request the recording holds, read from the recording rather than written out a second time. */
+const recordedPull = (recorded: RecordedAnswer): RecordedPull => {
+  const [one] = recorded.answer
+  assert.ok(one !== undefined, `the recording of ${recorded.sha} holds no pull request`)
+  return one
+}
+
+/** The number after `#` in a package's name: its issue number. */
+const issueNumber = (work_package: string): string => work_package.slice(work_package.indexOf('#') + 1)
+
+/** A line a reviewer sent about a package, as the row that kept it holds it, in the shape the crew really sends. */
 const verdictLine = (work_package: string, verdict: 'PASS' | 'FAIL', tip: string): string =>
-  `VERDICT ${work_package} ${verdict} ${BASE}..${tip} r=2 ci=1`
+  `VERDICT ${work_package} ${verdict} ${BASE}..${tip} r=2 ci=1 req=0`
 
 interface LedgerWithGithub {
   readonly host: HostContract
@@ -74,15 +94,37 @@ const ghSaid = (answer: unknown): { readonly ok: ProcessOutcome } => ({
 })
 
 test('#256: the one open pull request at the head the latest PASS row names is found, and its number is not the issue number', async () => {
+  const recorded = recordedPull(OPEN)
   const { host, asked } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(OPEN.answer))
   const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
-  assert.deepEqual(found, { pr: 284, head: OPEN.sha }, 'the recorded answer holds one open pull request at that head')
+  assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, 'the recorded answer holds one open pull request at that head')
+  assert.notEqual(String(recorded.number), issueNumber(PACKAGE), 'the recorded pull request carries the package\'s own issue number, so this case proves nothing')
   assert.equal(asked.length, 1, 'GitHub was asked once')
   assert.deepEqual(asked[0], {
     command: 'gh',
     args: ['api', `repos/${REPO}/commits/${OPEN.sha}/pulls`],
     cwd: CWD,
   })
+})
+
+test('#256: the PASS line the crew really sends, with req=0, is kept and read back as the pull request and its head', async () => {
+  const recorded = recordedPull(OPEN)
+  const reading = readACrewLine(verdictLine(PACKAGE, 'PASS', OPEN.sha))
+  assert.ok('line' in reading && reading.line !== null, `the line the crew sends was refused, so it would write no row: ${JSON.stringify(reading)}`)
+
+  const { host } = await aLedgerOf(PACKAGE, [], ghSaid(OPEN.answer))
+  await keepTheLinesRow(host, 'Pluto', reading.line)
+  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
+  assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, `the row a real PASS line wrote did not read back: ${JSON.stringify(found)}`)
+})
+
+test('#256: a reviewer\'s own words in a review round row after the VERDICT do not hide the passed head', async () => {
+  const recorded = recordedPull(OPEN)
+  const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(OPEN.answer))
+  // The row `crew_log` writes for a review round: the same row kind, in the reviewer's own words rather than a line.
+  await keepTheMilestone(host, { package: PACKAGE, member: 'Pluto', event: 'review_round', note: 'round 1 closed: three changes folded in and the tip is green again' })
+  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
+  assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, `a free-text review round row was taken for the latest verdict: ${JSON.stringify(found)}`)
 })
 
 test('#256: the latest VERDICT decides, so an older PASS never answers after a later FAIL', async () => {
@@ -155,7 +197,7 @@ test('#256: a PASS row written before the range was kept is refused by name, nev
 })
 
 test('#256: a verdict on a design names no head, so it is refused by name too', async () => {
-  const on_a_design = `VERDICT ${PACKAGE} PASS doc=https://github.com/macula-io/martha/issues/251#issuecomment-1 r=3`
+  const on_a_design = `VERDICT ${PACKAGE} PASS doc=https://github.com/macula-io/martha/issues/251#issuecomment-1 r=3 req=0`
   const { host } = await aLedgerOf(PACKAGE, [on_a_design], ghSaid(OPEN.answer))
   const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
   assert.ok('refused' in found, `a verdict on a design was taken for a head: ${JSON.stringify(found)}`)
