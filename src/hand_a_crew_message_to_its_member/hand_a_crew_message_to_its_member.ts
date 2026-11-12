@@ -24,8 +24,11 @@ const A_MODS_OWN_TURN = 'mcp_result'
 /** What the mod asks the launcher for: the next message this member has not taken in (martha#253). */
 export const THE_NEXT_MESSAGE_ASK = 'take_a_crew_message'
 
+/** What every handed message's text opens with, before the position it names: a reader tells a crew's turn by it. */
+export const FRAME_OPENING = '[crew #'
+
 /** The frame a message is handed in: its position, so the text a host raises back names one message and no other. */
-export const framed = (position: number, from: string, text: string): string => `[crew #${position}] ${from}: ${text}`
+export const framed = (position: number, from: string, text: string): string => `${FRAME_OPENING}${position}] ${from}: ${text}`
 
 /** What a member's launcher hands its session, one message at a time. */
 export interface MessageCarrier {
