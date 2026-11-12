@@ -226,15 +226,23 @@ function heldByARunningFlow(flow: ARefresh | undefined): Due | undefined {
 function heldByItsLastAsk(reading: TheSessionsReading): Due | undefined {
   const flow = reading.flow
   if (flow === undefined) return undefined
-  const belowTheLimitOrADeclineAtIt = reading.percent < HANDOVER_LIMIT_PERCENT || aDeclineTakenAtTheLimit(flow)
-  if (reading.finished_report !== '' && flow.asked_on === reading.finished_report && belowTheLimitOrADeclineAtIt) {
-    return { due: false, why: flow.phase === 'declined' ? 'it declined on this task' : 'this task was already asked about' }
-  }
-  const measuredFromItsDecline = flow.phase === 'declined' && flow.trigger === 'after_a_task'
-  if (measuredFromItsDecline && reading.percent < HANDOVER_LIMIT_PERCENT && reading.percent < flow.percent + REFRESH_MARGIN_PERCENT) {
-    return { due: false, why: 'it has not grown past the share it declined at' }
-  }
-  return undefined
+  return heldOnTheTaskItAskedOn(reading, flow) ?? heldOnTheShareItDeclinedAt(reading, flow)
+}
+
+/** One finished task is asked once, held back only below the limit — or on a decline taken at the limit. */
+function heldOnTheTaskItAskedOn(reading: TheSessionsReading, flow: ARefresh): Due | undefined {
+  if (reading.finished_report === '' || flow.asked_on !== reading.finished_report) return undefined
+  const theLimitAnswersOverIt = reading.percent >= HANDOVER_LIMIT_PERCENT && !aDeclineTakenAtTheLimit(flow)
+  if (theLimitAnswersOverIt) return undefined
+  return { due: false, why: flow.phase === 'declined' ? 'it declined on this task' : 'this task was already asked about' }
+}
+
+/** A decline is held until another task finishes past the share it was taken at, by the margin every threshold uses. */
+function heldOnTheShareItDeclinedAt(reading: TheSessionsReading, flow: ARefresh): Due | undefined {
+  if (flow.phase !== 'declined' || flow.trigger !== 'after_a_task') return undefined
+  if (reading.percent >= HANDOVER_LIMIT_PERCENT) return undefined
+  if (reading.percent >= flow.percent + REFRESH_MARGIN_PERCENT) return undefined
+  return { due: false, why: 'it has not grown past the share it declined at' }
 }
 
 /** Whether the flow was declined at a share at or past the limit: the one hold the limit does not answer over. */
