@@ -265,6 +265,8 @@ function theSubagentsAnswerIn(requests: readonly ModelRequest[]): number {
 const work = anObservationDirectory()
 const report = aReport()
 let keptForReading: readonly string[] = []
+/** Why the run could not be set up, when it could not: the case that exits 2 rather than reporting a failed check. */
+let couldNotBeSetUp: string | undefined
 try {
   const crew = aCheckoutToWatch(work, theConfigToApprove())
   const channel = theCrewsChannel(crew)
@@ -355,11 +357,14 @@ try {
   const ends = [howItEnded(reviewers, SAY, REVIEWERS_REQUESTS), howItEnded(buildersRan, RECEIPTS, BUILDERS_REQUESTS)].filter((why) => why !== '')
   report.check('both launches reached the step their flow is about', ends.length === 0, ends.length === 0 ? 'both were answered where the flow ends' : ends.join('; '))
 } catch (error) {
-  report.check(`the observation ran to its end (${error instanceof Error ? error.message : String(error)})`, false, 'the launch threw')
+  // A member that goes silent is a check above, not this (`aMemberRan` keeps it a record): only a failure to set the
+  // run up ends the observation here, and that is the exit 2 both .sh headers promise (review r=2).
+  couldNotBeSetUp = error instanceof Error ? error.message : String(error)
+  report.check('the observation could be set up', false, `it stopped before its checks could run: ${couldNotBeSetUp}`)
 }
 // Each launch ends its own member, so there is nothing to stop here. A run with a failure keeps its directory for reading.
 
 const status = report.end()
-if (status !== 0) console.log(`kept for reading: ${work}${keptForReading.length === 0 ? '' : `; kept for reading it: ${keptForReading.join(' ')}`}`)
+if (status !== 0 || couldNotBeSetUp !== undefined) console.log(`kept for reading: ${work}${keptForReading.length === 0 ? '' : `; kept for reading it: ${keptForReading.join(' ')}`}`)
 else sweep([work])
-process.exit(status)
+process.exit(couldNotBeSetUp === undefined ? status : 2)
