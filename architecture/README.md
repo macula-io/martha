@@ -111,10 +111,12 @@ them. The same test above fails if any other directory joins them without a box:
 The three SVGs are drawn by [`c4_diagrams.ts`](c4_diagrams.ts), and a test fails
 when an SVG in `assets/` is not what that file draws. That test holds the picture to
 its own geometry too, and names what is wrong: a text a box prints below its bottom
-edge or past its right edge, a legend drawn across a box, two boxes drawn on each
-other, and anything drawn off the canvas. A box is never drawn smaller than its text
-needs, and the Component page places its boxes in rows rather than at a height each
-one was given by hand. After changing a box:
+edge or past its right edge, a legend drawn across a box, a boundary's label drawn on
+a box, two boxes drawn on each other, and anything drawn off the canvas. A box is never
+drawn smaller than its text needs, and the Component page places its boxes in rows
+rather than at a height each one was given by hand; the Container page's boundary takes
+its height from the boxes it holds, so the label under them keeps its own ground. After
+changing a box:
 
 ```sh
 node architecture/c4_diagrams.ts

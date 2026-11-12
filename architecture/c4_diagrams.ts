@@ -207,6 +207,21 @@ export interface DrawnLegendEntry {
   readonly labelWidth: number
 }
 
+/**
+ * A boundary as it was drawn: its rectangle, its label, and the band that label's ink takes. The test
+ * beside this file holds every box off every label's band, the way it holds a legend off the boxes.
+ */
+export interface DrawnBound {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+  readonly label: string
+  readonly atTheBottom: boolean
+  /** The band the label is drawn in: its x to its x plus its width, above and below its baseline. */
+  readonly labelBand: { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+}
+
 /** One line when a name fits its box, else two, broken between names at a comma, or inside one at its underscore nearest the middle. */
 function nameLines(name: string, code: boolean, width: number): string[] {
   const cls = code ? 't-code' : 't-name'
@@ -238,6 +253,23 @@ interface Label {
 const BELOW_THE_LAST_LINE = 14
 
 /**
+ * The band a label's line of type takes: a full em stands above its baseline and this share hangs below.
+ * A box drawn into that band sits on the label's own line (martha#283). The em above over-estimates where
+ * the ink ends, the same way ADVANCE over-estimates a character, so a label never has to be re-measured.
+ */
+const INK_ABOVE_THE_BASELINE = 1
+const INK_BELOW_THE_BASELINE = 0.25
+
+/** Where a boundary's bottom label puts its baseline: this far above the boundary's own bottom edge. */
+const LABEL_ABOVE_THE_EDGE = 12
+
+/**
+ * The clear ground a boundary's bottom label keeps under the lowest box it holds: more than the six
+ * pixels the test asks for, because the band above is an estimate of where the ink ends.
+ */
+const UNDER_A_LABEL = 8
+
+/**
  * The height a box needs to hold its own text, from the baselines box() draws on. A box is
  * drawn at least this tall, so a description line added to a box can never print outside it
  * (martha#283).
@@ -245,6 +277,16 @@ const BELOW_THE_LAST_LINE = 14
 function heightFor(b: { readonly name: string; readonly code?: true; readonly desc: readonly string[] }, w: number): number {
   const room = 18 * (nameLines(b.name, b.code === true, w - 32).length - 1)
   return 70 + room + 16 * (b.desc.length - 1) + BELOW_THE_LAST_LINE
+}
+
+/**
+ * The room a boundary's bottom label needs under the lowest box the boundary holds: the band above its
+ * baseline, its clear ground, and the edge it sits above. A boundary given less draws its label on that
+ * box, so a page derives its boundary's height from this and from the boxes, never from a number of its
+ * own (martha#283).
+ */
+function roomUnderABottomLabel(): number {
+  return Math.ceil(SIZE['t-bound']! * INK_ABOVE_THE_BASELINE) + UNDER_A_LABEL + LABEL_ABOVE_THE_EDGE
 }
 
 class Diagram {
@@ -255,6 +297,8 @@ class Diagram {
   readonly boxes: DrawnBox[] = []
   /** Every legend entry as drawn, for the test that keeps a legend off the boxes. */
   readonly legendEntries: DrawnLegendEntry[] = []
+  /** Every boundary label as drawn, for the test that keeps a box off a label's band. */
+  readonly bounds: DrawnBound[] = []
   readonly file: string
   readonly title: string
   readonly w: number
@@ -299,9 +343,19 @@ class Diagram {
 
   bound(x: number, y: number, w: number, h: number, label: string, atTheBottom = false): void {
     this.parts.push(`<rect class="bound" x="${x}" y="${y}" width="${w}" height="${h}" rx="12"/>`)
-    // A label at the bottom sits inside the boundary's own left edge, never across its right one.
-    if (atTheBottom) this.text('t-bound', x + 16, y + h - 12, label)
-    else this.text('t-bound', x + 16, y + 22, label)
+    // A label at the bottom sits inside the boundary's own left edge, never across its right one, and
+    // the page gives the boundary the room its label needs (roomUnderABottomLabel).
+    const drawn = this.text('t-bound', x + 16, atTheBottom ? y + h - LABEL_ABOVE_THE_EDGE : y + 22, label)
+    const size = SIZE['t-bound']!
+    this.bounds.push({
+      x, y, w, h, label, atTheBottom,
+      labelBand: {
+        x: drawn.x,
+        y: drawn.y - size * INK_ABOVE_THE_BASELINE,
+        w: drawn.width,
+        h: size * (INK_ABOVE_THE_BASELINE + INK_BELOW_THE_BASELINE),
+      },
+    })
   }
 
   edge(d: string, label: Label, team = false): void {
@@ -410,26 +464,38 @@ function containerEdges(d: Diagram): void {
 }
 
 /** Level 2: what Martha is made of, and which container reaches which system. */
+const PACKAGE_LABEL = 'Martha [the package, on the owner\'s machine]'
+
+/**
+ * The boxes the package boundary holds, left to right. The boundary is drawn from this list, so a box
+ * that grows carries the boundary's bottom label with it (martha#283).
+ */
+const PACKAGE_BOXES: readonly Box[] = [
+  { kind: 'b-cmp', x: 32, y: 76, w: 268, h: 150, name: 'the martha command', type: '[bin/martha, a Node process]', code: true,
+    desc: ['init, approve, start <member>,', '--version. Reads the declaration and', 'the approval, then starts one member', 'and holds its terminal'] },
+  { kind: 'b-dat', x: 32, y: 246, w: 268, h: 120, name: 'Martha\'s state', type: '[~/.local/state/martha]',
+    desc: ['Per project, outside the checkout:', 'each member\'s node id, the approvals', 'given, launch records and snapshots'] },
+  { kind: 'b-later', x: 32, y: 546, w: 268, h: 132, name: 'the team mode', type: '[planned]',
+    desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing.', 'The parts every launch loads are', 'drawn below'] },
+
+  { kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.crew/crew.json]',
+    desc: ['Who is on the crew, and the mode\'s', 'table of who may do what; written', 'once by init, never written over'] },
+  { kind: 'b-cmp', x: 332, y: 216, w: 268, h: 140, name: 'the approval', type: '[approve_a_checkouts_config]', code: true,
+    desc: ['Shows every file that would start code', 'and the checkout\'s tree, then takes one', 'word: yes. Its fingerprint covers the', 'files and the tree'] },
+  { kind: 'b-cmp', x: 332, y: 376, w: 268, h: 140, name: 'the launcher', type: '[launch_a_claude_code_member]', code: true,
+    desc: ['Snapshots approved config, writes a', 'launch record before the host starts,', 'and runs the host with the arguments', 'the crew\'s member may pass'] },
+  { kind: 'b-cmp', x: 332, y: 546, w: 268, h: 120, name: 'the relay', type: '[claude_code_relay, a plugin]', code: true,
+    desc: ['Loads in the member\'s session and', 'gates its turns: what it may run, and', 'whose text it took in'] },
+]
+
 export function containers(): Diagram {
   const d = new Diagram('c4-container.svg', 'Martha containers', 1120, 780)
 
-  d.bound(16, 40, 600, 660, 'Martha [the package, on the owner\'s machine]', true)
-
-  d.box({ kind: 'b-cmp', x: 32, y: 76, w: 268, h: 150, name: 'the martha command', type: '[bin/martha, a Node process]', code: true,
-    desc: ['init, approve, start <member>,', '--version. Reads the declaration and', 'the approval, then starts one member', 'and holds its terminal'] })
-  d.box({ kind: 'b-dat', x: 32, y: 246, w: 268, h: 120, name: 'Martha\'s state', type: '[~/.local/state/martha]',
-    desc: ['Per project, outside the checkout:', 'each member\'s node id, the approvals', 'given, launch records and snapshots'] })
-  d.box({ kind: 'b-later', x: 32, y: 546, w: 268, h: 132, name: 'the team mode', type: '[planned]',
-    desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing.', 'The parts every launch loads are', 'drawn below'] })
-
-  d.box({ kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.crew/crew.json]',
-    desc: ['Who is on the crew, and the mode\'s', 'table of who may do what; written', 'once by init, never written over'] })
-  d.box({ kind: 'b-cmp', x: 332, y: 216, w: 268, h: 140, name: 'the approval', type: '[approve_a_checkouts_config]', code: true,
-    desc: ['Shows every file that would start code', 'and the checkout\'s tree, then takes one', 'word: yes. Its fingerprint covers the', 'files and the tree'] })
-  d.box({ kind: 'b-cmp', x: 332, y: 376, w: 268, h: 140, name: 'the launcher', type: '[launch_a_claude_code_member]', code: true,
-    desc: ['Snapshots approved config, writes a', 'launch record before the host starts,', 'and runs the host with the arguments', 'the crew\'s member may pass'] })
-  d.box({ kind: 'b-cmp', x: 332, y: 546, w: 268, h: 120, name: 'the relay', type: '[claude_code_relay, a plugin]', code: true,
-    desc: ['Loads in the member\'s session and', 'gates its turns: what it may run, and', 'whose text it took in'] })
+  // The boundary's bottom is the lowest box it holds, drawn at the height box() gives it, plus the room
+  // its own label needs: derived, so the label cannot be left standing on a box that grew.
+  const lowestBox = PACKAGE_BOXES.reduce((bottom, b) => Math.max(bottom, b.y + heightFor(b, b.w)), 0)
+  d.bound(16, 40, 600, lowestBox + roomUnderABottomLabel() - 40, PACKAGE_LABEL, true)
+  for (const b of PACKAGE_BOXES) d.box(b)
 
   systemsTheContainersReach(d)
   containerEdges(d)
