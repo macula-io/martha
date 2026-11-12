@@ -24,8 +24,9 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { StringDecoder } from 'node:string_decoder'
 
-import { removeTheTree } from './relay_copy.ts'
+import { isRunnableFile } from './host_runs_the_relay.ts'
 import { readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
+import { removeTheTree } from './relay_copy.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -116,15 +117,33 @@ const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 interface RunEnvironment {
   /** The one value the launcher finds its state in, and the one the run derives the journal's directory from (#240 r=1). */
   readonly XDG_STATE_HOME: string
+  /** Where a run's processes find their commands, the recorded host's own link first (martha#304). */
+  readonly PATH: string
   readonly [name: string]: string
 }
 
-/** The places a run's processes find their state and sockets in, under its home. */
-function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: string, runtime: string): RunEnvironment {
+/**
+ * The recorded host's binary, refused by name when `claude` is not a file this machine can run (martha#304): a run
+ * whose host path is wrong must stop, not fall through PATH to whichever other claude is installed and report that
+ * host's results as the recorded one's.
+ */
+export function theRecordedHostAt(claude: string): string {
+  if (isRunnableFile(claude)) return claude
+  throw new Error(
+    `${RECORDED_HOST_VARIABLE} names ${claude}, which is not an executable file: a run that went on would drive whichever claude PATH finds next, and its results would not be the recorded host's`,
+  )
+}
+
+/**
+ * The places a run's processes find their state and sockets in, under its home; exported so a case can read the PATH
+ * it builds and the refusal a host it cannot run is given (martha#304).
+ */
+export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: string, runtime: string): RunEnvironment {
+  const claude = theRecordedHostAt(run.claude)
   const bin = join(run.home, 'bin')
   mkdirSync(bin, { recursive: true })
   rmSync(join(bin, 'claude'), { force: true })
-  symlinkSync(run.claude, join(bin, 'claude'))
+  symlinkSync(claude, join(bin, 'claude'))
   return {
     HOME: run.home,
     PATH: [bin, join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'),
@@ -327,6 +346,10 @@ export function aWaitOfTheRun(what: string, holds: () => boolean, view: TheRunsV
  * `run.silence_ms`, with the last screen (martha#210).
  */
 export async function driveTheRecordedHost(run: RecordedHostRun): Promise<RecordedHostRan> {
+  // A host path that names nothing runnable is refused here, before the stand-in's server and this run's directory are
+  // made, so a run that cannot start leaves nothing behind (martha#304); `environmentOf` refuses it again, where the
+  // link to the host is made.
+  theRecordedHostAt(run.claude)
   // When the run began, for the elapsed figure a silence is reported with: four waits follow, and each counts its own
   // silence, so none of them may call its own time the run's (martha#210 r=1).
   const run_started_at = Date.now()
