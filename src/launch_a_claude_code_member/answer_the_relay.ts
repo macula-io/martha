@@ -430,13 +430,13 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
 }
 
 /**
- * The start the crew's own refresh makes of a session, when this start is the successor's (martha#255): a session
- * already taken in is left as it is — the refresh that made it stands — and one the crew's flow says it cleared from
- * is started as `crew_refresh` with that predecessor, whatever the host called it. So a `clear` after a refresh can
- * never wipe the record the successor inherited.
+ * The start the crew's own refresh makes of a session, when this start is the successor's (martha#255): one the crew's
+ * flow says it cleared from is started as `crew_refresh` with that predecessor, whatever the host called it. So a
+ * `clear` after a refresh can never wipe the record the successor inherited. A session this launch already holds never
+ * reaches here — its start was answered as taken — and one it holds is refused a predecessor by
+ * `theRefreshTheSessionInherits`, so the refresh that made it stands.
  */
 async function asTheCrewsRefresh(state: RelayState, reported: SessionStart): Promise<SessionStart> {
-  if (state.sessions.has(reported.session_id)) return reported
   const predecessor = await theRefreshTheSessionInherits(state, reported.session_id)
   return predecessor === null ? reported : { event: CREW_REFRESH, session_id: reported.session_id, predecessor_id: predecessor }
 }
