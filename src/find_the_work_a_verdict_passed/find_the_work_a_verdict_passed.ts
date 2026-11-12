@@ -30,6 +30,31 @@ export interface TheLookUp {
 /** What a verdict passed: the pull request and the exact head, or why there is nothing to land. */
 export type PassedWork = { readonly pr: number; readonly head: string } | { readonly refused: string }
 
+/** The work one package's verdict passed, named as the batch that asked for it named the package. */
+export interface LandedWork {
+  readonly package: string
+  readonly pr: number
+  readonly head: string
+}
+
+/**
+ * The work a batch of packages' verdicts passed, in the order the batch names them, or the first answer that refuses.
+ * A batch is what lands as one act (martha#256's landing), so its packages are read one after another and the first
+ * one that cannot be landed answers for the whole batch, before anything is merged.
+ */
+export async function findTheWorkTheseVerdictsPassed(
+  host: LookUpHost,
+  look: { readonly packages: readonly string[]; readonly repo: string; readonly cwd: string },
+): Promise<{ readonly work: readonly LandedWork[] } | { readonly refused: string }> {
+  const work: LandedWork[] = []
+  for (const work_package of look.packages) {
+    const found = await findTheWorkAVerdictPassed(host, { package: work_package, repo: look.repo, cwd: look.cwd })
+    if ('refused' in found) return found
+    work.push({ package: work_package, pr: found.pr, head: found.head })
+  }
+  return { work }
+}
+
 /** What this needs of a host: the package's ledger, and the process runner gh goes through. */
 export type LookUpHost = LedgerHost & Pick<HostContract, 'processes'>
 
