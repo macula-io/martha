@@ -133,19 +133,19 @@ test('#255: a handover written before the flow asked for one is not this flow’
 })
 
 test('#255: a handover missing the line of a package the row holds is sent back once, and clears on the second miss', () => {
-  const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['macula-io/a-repo#7'] }
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: ['no line naming macula-io/a-repo#7'] })
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: ['no line naming macula-io/a-repo#7'] })
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: ['no line naming macula-io/a-repo#7'] })
+  const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['synthetic-owner/repo#7'] }
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
   assert.deepEqual(
-    whatBecameOfTheHandover({ ...asked, text: 'it holds macula-io/a-repo#7, at a branch and a sha', sent_back: 1, at_limit: false }),
+    whatBecameOfTheHandover({ ...asked, text: 'it holds synthetic-owner/repo#7, at a branch and a sha', sent_back: 1, at_limit: false }),
     { kind: 'accepted', missing: [] },
   )
 })
 
 test('#255: the send-back note names what was missing and the word to answer with', () => {
-  const note = theSendBackNote(['no line naming macula-io/a-repo#7'])
-  assert.ok(note.includes('no line naming macula-io/a-repo#7'), 'the note does not say what was missing')
+  const note = theSendBackNote(['no line naming synthetic-owner/repo#7'])
+  assert.ok(note.includes('no line naming synthetic-owner/repo#7'), 'the note does not say what was missing')
   assert.ok(note.includes(CREW_HANDOVER_WRITTEN), 'the note does not say which word to answer with')
 })
 
