@@ -31,6 +31,8 @@ import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
+import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import type { HandoverStampStore } from '../host_contract/host_contract.ts'
 import type { CrewStore, DocumentStore } from '../host_contract/host_contract.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
@@ -226,6 +228,16 @@ function theCrewStore(state: MarthaState, root: string): CrewStore {
   return 'refusal' in crew ? { place: () => crew } : crewFilesDirectory(crew.path)
 }
 
+/**
+ * The stamps this crew's handovers carry (martha#255): the host's record of which it wrote, when, and for which member.
+ * A crew directory that is not this user's own is answered as a store that refuses both ways, so the handover tool
+ * says why instead of writing a file nothing stamped.
+ */
+function theHandoverStamps(state: MarthaState, root: string): HandoverStampStore {
+  const crew = crewStateDirectory(state.state_root, root)
+  return 'refusal' in crew ? { read: () => crew, write: () => crew } : handoverStampsIn(crew.path)
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -256,7 +268,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     tellOwner: (line) => request.tellOwner(line),
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
     turns,
-    crew_tools: () =>
+    crew_tools: (sessions) =>
       crewToolsOver({
         member: request.member,
         ledger: channel,
@@ -265,6 +277,10 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         documents: request.documents,
         stores: { crew: theCrewStore(request.state, request.root) },
         carrier: carryingTo({ member: request.member, host: channel, turns }),
+        sessions,
+        // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
+        // session writes is the one its successor inherits.
+        stamps: theHandoverStamps(request.state, request.root),
       }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
