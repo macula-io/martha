@@ -131,6 +131,7 @@ import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
+import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   hostTrustsTheFolder,
   hostVersionLine,
@@ -211,7 +212,7 @@ export interface ClaudeCodeMemberLaunch {
   /** The member's signed runs (martha#129): `martha start` gives them; without them the member runs no shape. */
   readonly signed_runs?: SignedRuns
   /** The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. */
-  readonly crew_tools?: () => CrewTools
+  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }) => CrewTools
   /**
    * What this launch raises every turn the host took in to (martha#253): the crew channel's carrier builds one and
    * reads it, so a message counts as taken in only once the host raised it back. A launch given none raises nothing.
@@ -727,9 +728,13 @@ function wordlessAnswersOf(
   }
 }
 
-/** The crew's tools for this launch, or nothing at all: a launch given no crew place answers no tool (martha#254). */
-function crewOf(launch: ClaudeCodeMemberLaunch): { readonly crew?: CrewTools } {
-  return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools() }
+/**
+ * The crew's tools for this launch, or nothing at all: a launch given no crew place answers no tool (martha#254). The
+ * sessions are this launch's own, handed over so a handover is stamped with the session it came from and a refreshed
+ * session inherits the one it was cleared from (martha#255).
+ */
+function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>): { readonly crew?: CrewTools } {
+  return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }) }
 }
 
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
@@ -747,6 +752,9 @@ async function servedRelay(
   starting: Starting,
   ownerMemory: OwnerMemoryPlaces,
 ): Promise<RelayServer | string> {
+  // One map of this launch's sessions, shared by the relay that keeps them and the crew's tools that read them
+  // (martha#255): a handover is stamped with the session it came from, and a refresh's successor inherits it.
+  const sessions = new Map<string, HostSession>()
   const place: MemberRelayPlace = {
     records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
     launch: {
@@ -766,7 +774,7 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
-    ...crewOf(launch),
+    ...crewOf(launch, sessions),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
     // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
@@ -775,7 +783,7 @@ async function servedRelay(
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)
-  const answering = memberRelay(place)
+  const answering = memberRelay(place, sessions)
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
   const relay: MemberRelay = {
     answer: (event, body) => {

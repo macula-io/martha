@@ -38,7 +38,8 @@ interface CrewEngine {
   readonly http: {
     fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }>
   }
-  readonly session: { id(): Promise<string> }
+  /** The session's id, and the host's own reading of it: its context as a share of the limit, and what it has cost. */
+  readonly session: { id(): Promise<string>; usage(): Promise<ASessionsUsage> }
   readonly clock: {
     after(ms: number, fn: () => void): { cancel(): void }
     every(ms: number, fn: () => void): { cancel(): void }
@@ -46,7 +47,11 @@ interface CrewEngine {
   /** Submits a prompt into this session (martha#253): the text a message is handed in. */
   readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
-  readonly command: { register(command: { name: string; description: string }): Promise<unknown> }
+  readonly command: {
+    register(command: { name: string; description: string }): Promise<unknown>
+    /** Runs one of the host's own commands in this session: the refresh flow's clear is this one (martha#255). */
+    run(command: { command: string; args?: string }): Promise<unknown>
+  }
   readonly ui: {
     open(view: { id: string; title: string; rows: number }): Promise<unknown>
     close(view: { id: string }): Promise<unknown>
@@ -67,6 +72,9 @@ const THE_NEXT_MESSAGE = 'take_a_crew_message'
 
 /** What the mod asks the launcher for: how often, in seconds, to read the channel again (martha#253). */
 const THE_CHANNEL_READ = 'channel_read_seconds'
+
+/** What the mod asks the launcher for: what this session should do now, if a refresh is due (martha#255). */
+const THE_REFRESH_QUESTION = 'the_refresh_of_this_session'
 
 /** The interval the channel is read on, once the launcher has named it; null until it has. */
 let readingTheChannel: { cancel(): void } | null = null
@@ -107,6 +115,63 @@ async function startReadingTheChannel($: CrewEngine): Promise<void> {
   const reading = theChannelReading($)
   readingTheChannel = $.clock.every(seconds * 1000, () => void reading.readWhileIdle())
   await reading.readWhileIdle()
+}
+
+/** The host's own reading of a session (martha#255): its context as a share of its limit, and what it has cost. */
+interface ASessionsUsage {
+  readonly context?: { readonly percent?: number | null }
+  readonly cost?: { readonly usd?: number | null }
+}
+
+/** The act a session is told to take, as the launcher answers it: nothing, one prompt, or the clear. */
+type TheAct = { readonly act: 'none' } | { readonly act: 'prompt'; readonly text: string } | { readonly act: 'clear' }
+
+/** The act the launcher's answer carries, or null when it is not one this mod knows. */
+function actIn(said: string): TheAct | null {
+  try {
+    const parsed = JSON.parse(said) as { readonly act?: unknown; readonly text?: unknown }
+    if (parsed.act === 'none') return { act: 'none' }
+    if (parsed.act === 'clear') return { act: 'clear' }
+    if (parsed.act === 'prompt' && typeof parsed.text === 'string' && parsed.text !== '') return { act: 'prompt', text: parsed.text }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Asks the launcher what this session should do now, and does it (martha#255). What the session knows goes with the
+ * question — its context, the turn that just ended and the answer it ended with — and the launcher decides; this does
+ * nothing but carry the act out. A clear is run out of the turn's own hook, because a `/clear` cannot run inside one.
+ */
+async function takeTheAct($: CrewEngine, e: unknown): Promise<void> {
+  const usage = await $.session.usage().catch(() => undefined)
+  const percent = usage?.context?.percent
+  const heard = await hearTheLauncher($, THE_REFRESH_QUESTION, {
+    percent: typeof percent === 'number' && Number.isFinite(percent) ? percent : 0,
+    cost_usd: typeof usage?.cost?.usd === 'number' ? usage.cost.usd : null,
+    turn_id: textIn(e, 'turnId'),
+    answer: textIn(e, 'answer'),
+    at_start: textIn(e, 'turnId') === '',
+  })
+  if (!('said' in heard)) return
+  const act = actIn(heard.said)
+  if (act === null || act.act === 'none') return
+  if (act.act === 'prompt') {
+    await $.prompt.submit({ text: act.text })
+    return
+  }
+  // Out of the turn's hook: /clear cannot run inside a hook the turn waits on.
+  $.clock.after(CLEAR_DELAY_MS, () => void $.command.run({ command: 'clear' }).catch(() => undefined))
+}
+
+/** How long after the turn the clear is run: out of the hook, so the host is not holding a turn while it clears. */
+const CLEAR_DELAY_MS = 500
+
+/** A field of an event as text, or '' — the two shapes the host stamps a turn's answer with. */
+function textIn(e: unknown, field: 'turnId' | 'answer'): string {
+  const held = typeof e === 'object' && e !== null ? (e as Record<string, unknown>)[field] : undefined
+  return typeof held === 'string' ? held : ''
 }
 
 /** What the launcher heard, or why it could not be heard: the two are not the same, and only one of them is an answer. */
@@ -267,6 +332,8 @@ const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promis
 const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
 const answerCrewSay = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_say')
 const answerCrewReceipts = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_receipts')
+const answerWriteMyHandover = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'write_my_handover')
+const answerCrewRefresh = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_refresh')
 const answerCrewPark = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_park')
 
 /** The crew's tools registered with this host, and the pane drawn. */
@@ -278,6 +345,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha-relay__see_the_crew' }, answerSeeTheCrew)
   on('tool.call', { tool: 'mcp__martha-relay__crew_say' }, answerCrewSay)
   on('tool.call', { tool: 'mcp__martha-relay__crew_receipts' }, answerCrewReceipts)
+  on('tool.call', { tool: 'mcp__martha-relay__write_my_handover' }, answerWriteMyHandover)
+  on('tool.call', { tool: 'mcp__martha-relay__crew_refresh' }, answerCrewRefresh)
   on('tool.call', { tool: 'mcp__martha-relay__crew_park' }, answerCrewPark)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
@@ -316,6 +385,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (opensAtStartOf(first)) await openThePane($)
     await startReadingTheChannel($)
+    await takeTheAct($, e)
     return next(e)
   })
 
@@ -333,6 +403,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // is the one shape the host's own guidance names for submitting while the session idles.
   on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
     await theChannelReading($).aTurnEnded(agentIdIn(e))
+    await takeTheAct($, e)
     return next(e)
   })
 }

@@ -1,0 +1,169 @@
+// The refresh flow as a member's session meets it (martha#255): the tool that writes the handover, the question the
+// mod asks, and the one act it is answered with.
+//
+// Nothing here decides anything of its own: the tool writes what the core says to write, where the core says, and the
+// question is answered by the flow. The crew's own store is the real one on this disk (../crew_files_directory), so the
+// handover read back is the file a launched member would have left, and the stamp is the host's own.
+
+import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { after, test } from 'node:test'
+
+import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { HANDOVER_LIMIT_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
+import { crewToolsOver, CREW_TOOL_NAMES, type CrewTools } from './a_crews_tools.ts'
+
+const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-refresh-tool-'))
+after(() => removeTheTree(homeOfAll))
+
+const documents = { read: (path: string) => readFile(path, 'utf8') }
+
+/** An in-memory session store, so a session is a real one this launch took in. */
+const aSessionStore = (): SessionRecordStore => {
+  const held = new Map<string, Parameters<SessionRecordStore['write']>[1]>()
+  return { read: (id) => held.get(id), write: (id, session) => void held.set(id, session) }
+}
+
+/** One crew the test made: its member's tools, where its own store is, and the session that member's launcher holds. */
+interface ACrew {
+  readonly tools: CrewTools
+  readonly crew: string
+  /** The clock the launcher reads: a test moves it on, as a real one does, so the newest beat is the newest. */
+  readonly clock: { at: number }
+}
+
+let crewsSoFar = 0
+async function aCrewOfTools(member: string): Promise<ACrew> {
+  crewsSoFar += 1
+  const home = join(homeOfAll, `crew-${crewsSoFar}`)
+  const root = join(home, 'checkout')
+  const crew = join(home, 'crew')
+  const clock = { at: 1_000 }
+  mkdirSync(root, { recursive: true })
+  mkdirSync(join(home, 'row'), { recursive: true })
+  const state = openState(join(home, 'state'), root)
+  assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
+  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents })
+  assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
+  const records = aSessionStore()
+  const session = beginSession(records, 'a-session')
+  const tools = crewToolsOver({
+    member,
+    ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } },
+    beats: dashboardRowsIn(join(home, 'row')),
+    root,
+    documents,
+    stores: { crew: crewFilesDirectory(crew) },
+    stamps: handoverStampsIn(crew),
+    sessions: { of: (id) => (id === session.id ? session : undefined) },
+  })
+  return { tools, crew, clock }
+}
+
+/** What the row this crew keeps for its member reads as now. */
+function theRowOf(member: string, home: string) {
+  return dashboardRowsIn(join(home, 'row')).read(member)
+}
+
+test('#255: write_my_handover is one of the crew’s tools, and its answer is the file the host wrote and stamped', async () => {
+  assert.ok((CREW_TOOL_NAMES as readonly string[]).includes(WRITE_MY_HANDOVER_TOOL), 'the handover tool is not one the crew registers')
+  const { tools, crew, clock } = await aCrewOfTools('builder')
+  const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules\nwhat runs' }, 'a-session')
+  assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
+  const place = { stores: { crew: crewFilesDirectory(crew) } }.stores.crew.place(HANDOVERS_PLACE)
+  assert.ok(!('refusal' in place), 'the crew store refused the handovers place')
+  const written = place.read(`HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`)
+  assert.ok(written !== undefined && !('refusal' in written), 'the tool wrote no handover file')
+  assert.ok(written.text.includes('first rules'), 'the handover written is not the text the member gave')
+  const stamp = handoverStampsIn(crew).read(join(place.path, `HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`))
+  assert.ok(stamp !== undefined && !('refusal' in stamp), 'the handover was written and not stamped')
+})
+
+test('#255: a handover that carries no text is refused rather than written, so nothing clears on it', async () => {
+  const { tools } = await aCrewOfTools('builder')
+  const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: '   ' }, 'a-session')
+  assert.ok('refused' in answered, 'an empty handover was accepted')
+})
+
+test('#255: a session past the limit is answered with the handover prompt, and its row says where it began', async () => {
+  const { tools, crew, clock } = await aCrewOfTools('builder')
+  const home = crew.replace(/\/crew$/, '')
+  // The session's own start is where it began, and every threshold is measured from there: a session that opens at
+  // 75% is never refreshed into the same 75% (#470), so the test opens it low and grows it past the limit.
+  const opened = await tools.answer('the_refresh_of_this_session', { percent: 10, cost_usd: 0.1, turn_id: '', answer: '', at_start: true }, 'a-session')
+  assert.ok('answer' in opened, 'the flow refused the session’s first question')
+  clock.at += 5_000
+  const answered = await tools.answer('the_refresh_of_this_session', { percent: HANDOVER_LIMIT_PERCENT + 5, cost_usd: 0.4, turn_id: 't-1', answer: '', at_start: false }, 'a-session')
+  assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
+  const act = JSON.parse(answered.answer) as { readonly act?: unknown }
+  assert.equal(act.act, 'prompt', `the flow answered ${JSON.stringify(act)} rather than a prompt`)
+  const row = theRowOf('builder', home)
+  assert.ok(row !== null, 'the question wrote no row')
+  assert.equal(row.host.contextPercent, HANDOVER_LIMIT_PERCENT + 5, 'the row does not carry the context the session reported')
+  assert.equal(row.refresh?.phase, 'handing_over', 'the row does not say a refresh is in flight')
+})
+
+test('#255: a member whose session began above the limit is not asked on its first report (#470)', async () => {
+  const { tools } = await aCrewOfTools('builder')
+  const question = { percent: HANDOVER_LIMIT_PERCENT + 5, cost_usd: null, turn_id: 't-1', answer: '', at_start: true }
+  const first = await tools.answer('the_refresh_of_this_session', question, 'a-session')
+  assert.ok('answer' in first)
+  assert.deepEqual(JSON.parse(first.answer), { act: 'none' })
+})
+
+test('#255: crew_refresh asks for a refresh, and the next question is answered with the handover prompt', async () => {
+  const { tools } = await aCrewOfTools('builder')
+  const asked = await tools.answer('crew_refresh', { reason: 'the owner is moving me off a large context' }, 'a-session')
+  assert.ok('answer' in asked, `crew_refresh refused the ask: ${'refused' in asked ? asked.refused : ''}`)
+  const answered = await tools.answer('the_refresh_of_this_session', { percent: 5, cost_usd: null, turn_id: 't-2', answer: '', at_start: false }, 'a-session')
+  assert.ok('answer' in answered)
+  const act = JSON.parse(answered.answer) as { readonly act?: unknown; readonly text?: unknown }
+  assert.equal(act.act, 'prompt', 'a refresh someone asked for was not asked')
+})
+
+test('#255: the clear is told with the session it was told in, so its successor inherits that one', async () => {
+  const { tools, crew, clock } = await aCrewOfTools('builder')
+  const place = refreshesPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  assert.ok(!('refusal' in place), 'the crew store refused the flow place')
+  const flow = aFlowStarting({ trigger: 'at_the_limit', reason: 'its context reached the handover limit', at: clock.at, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
+  assert.equal(keepTheFlow(place, 'builder', flow), undefined)
+  assert.equal(await tools.thePredecessorOf('a-session'), null, 'the session the clear was told in was named its own successor')
+  const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'a handover naming no package' }, 'a-session')
+  assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
+  const moved = await tools.answer('the_refresh_of_this_session', { percent: 80, cost_usd: null, turn_id: 't-3', answer: CREW_HANDOVER_WRITTEN, at_start: false }, 'a-session')
+  assert.ok('answer' in moved)
+  assert.deepEqual(JSON.parse(moved.answer), { act: 'clear' })
+  const after = theFlowOf(place, 'builder')
+  assert.ok(after !== undefined && !('refusal' in after), 'the flow the clear left cannot be read')
+  assert.equal(after.phase, 'clearing')
+  assert.equal(after.clear_from, 'a-session')
+  assert.equal(await tools.thePredecessorOf('a-new-session'), 'a-session')
+})
+
+test('#255: a handover written before the flow asked is sent back, not cleared', async () => {
+  const { tools, crew, clock } = await aCrewOfTools('builder')
+  const place = refreshesPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  assert.ok(!('refusal' in place))
+  // The member writes its handover first, then a flow asks for one: the file predates the ask, so it is not this
+  // flow's handover and nothing is cleared on it.
+  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'an old handover' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
+  const flow = aFlowStarting({ trigger: 'after_a_task', reason: 'its task finished', at: clock.at + 1_000, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
+  assert.equal(keepTheFlow(place, 'builder', flow), undefined)
+  const answered = await tools.answer('the_refresh_of_this_session', { percent: 80, cost_usd: null, turn_id: 't-4', answer: CREW_HANDOVER_WRITTEN, at_start: false }, 'a-session')
+  assert.ok('answer' in answered)
+  const act = JSON.parse(answered.answer) as { readonly act?: unknown }
+  assert.equal(act.act, 'prompt', 'a stale handover cleared the session rather than being sent back')
+  const after = theFlowOf(place, 'builder')
+  assert.ok(after !== undefined && !('refusal' in after))
+  assert.equal(after.sent_back, 1)
+})
