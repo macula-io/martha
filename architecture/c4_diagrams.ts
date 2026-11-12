@@ -148,7 +148,29 @@ function widthOf(cls: string, text: string): number {
   return ems * size
 }
 
-interface Box {
+/**
+ * Breaks a note into lines no wider than the column it is drawn in, at its spaces, the way a printed
+ * note wraps. A word wider than the column is left on a line of its own rather than cut in two.
+ * Wrapping at a space keeps the note readable as the sentence it was written as, and keeps every line
+ * inside the canvas.
+ */
+function wrapped(text: string, width: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const next = line === '' ? word : `${line} ${word}`
+    if (line === '' || widthOf('t-desc', next) <= width) {
+      line = next
+    } else {
+      lines.push(line)
+      line = word
+    }
+  }
+  if (line !== '') lines.push(line)
+  return lines
+}
+
+export interface Box {
   readonly kind: Kind
   readonly x: number
   readonly y: number
@@ -280,6 +302,16 @@ function heightFor(b: { readonly name: string; readonly code?: true; readonly de
 }
 
 /**
+ * The height a box is drawn at: never less than its own text needs, whatever height the page gave it.
+ * box() and the boundary that holds it both measure with this one function, so a box grown by its
+ * hand-given h carries the boundary's bottom with it, and the boundary's label cannot end up on it
+ * (martha#296).
+ */
+function drawnHeight(b: Box): number {
+  return Math.max(b.h, heightFor(b, b.w))
+}
+
+/**
  * The room a boundary's bottom label needs under the lowest box the boundary holds: the band above its
  * baseline, its clear ground, and the edge it sits above. A boundary given less draws its label on that
  * box, so a page derives its boundary's height from this and from the boxes, never from a number of its
@@ -326,7 +358,7 @@ class Diagram {
   box(b: Box): void {
     // A box is never drawn smaller than its text needs, whatever the page gave it: the fault this
     // check was written for was a box given six lines of description and the height of five.
-    const h = Math.max(b.h, heightFor(b, b.w))
+    const h = drawnHeight(b)
     this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${h}" rx="10"/>`)
     const tx = b.person ? b.x + 44 : b.x + 16
     if (b.person) this.parts.push(`<circle class="head" cx="${b.x + 26}" cy="${b.y + 24}" r="9"/>`)
@@ -470,7 +502,7 @@ const PACKAGE_LABEL = 'Martha [the package, on the owner\'s machine]'
  * The boxes the package boundary holds, left to right. The boundary is drawn from this list, so a box
  * that grows carries the boundary's bottom label with it (martha#283).
  */
-const PACKAGE_BOXES: readonly Box[] = [
+export const PACKAGE_BOXES: readonly Box[] = [
   { kind: 'b-cmp', x: 32, y: 76, w: 268, h: 150, name: 'the martha command', type: '[bin/martha, a Node process]', code: true,
     desc: ['init, approve, start <member>,', '--version. Reads the declaration and', 'the approval, then starts one member', 'and holds its terminal'] },
   { kind: 'b-dat', x: 32, y: 246, w: 268, h: 120, name: 'Martha\'s state', type: '[~/.local/state/martha]',
@@ -488,16 +520,22 @@ const PACKAGE_BOXES: readonly Box[] = [
     desc: ['Loads in the member\'s session and', 'gates its turns: what it may run, and', 'whose text it took in'] },
 ]
 
-export function containers(): Diagram {
+/**
+ * The boxes are a parameter so the test can draw this page with one box given a taller h than its text
+ * needs, and hold the boundary's bottom to the room its label needs (martha#296). Every page the
+ * generator draws passes none, and gets PACKAGE_BOXES.
+ */
+export function containers(boxes: readonly Box[] = PACKAGE_BOXES): Diagram {
   const d = new Diagram('c4-container.svg', 'Martha containers', 1120, 780)
 
-  // The boundary's bottom is the lowest box it holds, drawn at the height box() gives it, plus the room
-  // its own label needs: derived, so the label cannot be left standing on a box that grew.
+  // The boundary's bottom is the lowest box it holds, drawn at the height box() draws it, plus the room
+  // its own label needs: derived, so the label cannot be left standing on a box that grew. It measures
+  // with drawnHeight, the function box() draws with, so a box made taller by its hand-given h counts too.
   const packageBoundary = { x: 16, y: 40, w: 600 } as const
-  const lowestBox = PACKAGE_BOXES.reduce((bottom, b) => Math.max(bottom, b.y + heightFor(b, b.w)), 0)
+  const lowestBox = boxes.reduce((bottom, b) => Math.max(bottom, b.y + drawnHeight(b)), 0)
   d.bound(packageBoundary.x, packageBoundary.y, packageBoundary.w,
     lowestBox + roomUnderABottomLabel() - packageBoundary.y, PACKAGE_LABEL, true)
-  for (const b of PACKAGE_BOXES) d.box(b)
+  for (const b of boxes) d.box(b)
 
   systemsTheContainersReach(d)
   containerEdges(d)
@@ -671,12 +709,23 @@ export function components(): Diagram {
   d.bound(16, 40, 968, boundaryBottom - 40, 'Martha [the code in src/, one directory per capability]')
 
   const notesAt = boundaryBottom + 40
-  const notes = [
-    'Every box is a directory in src/: the name is the capability, and its test sits beside it. Two directories are drawn nowhere on purpose:',
-    'the two scripts run by hand when a host is recorded, probe_launch_hosts and record_claude_code_host. The crew ledger is drawn in the crew\'s',
-    'own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it recorded; the',
-    'room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.',
-  ]
+  // The note is drawn from LEFT_OUT instead of beside it (martha#296): its count is the array's, and
+  // each directory it leaves out is named with the reason that entry gives, so a directory added to the
+  // array is said here without anyone remembering to edit this prose.
+  const noteWidth = d.w - 48
+  const count = LEFT_OUT.length
+  const notes = wrapped(
+    'Every box is a directory in src/: the name is the capability, and its test sits beside it. ' +
+    `${count === 1 ? 'This directory is' : `These ${count} directories are`} drawn nowhere on purpose:`,
+    noteWidth,
+  )
+  for (const entry of LEFT_OUT) notes.push(...wrapped(`${entry.name}: ${entry.why}.`, noteWidth))
+  notes.push(...wrapped(
+    'The crew ledger is drawn in the crew\'s own box because a lockup now loads it. record_mesh_server_tools ' +
+    'is drawn because the launcher imports what it recorded; the room itself is not built, and solo admits ' +
+    'nothing, though every launch loads the node id, the tool list and the gates its slices hold.',
+    noteWidth,
+  ))
   d.notes(24, notesAt, notes)
   const legendAt = notesAt + 18 * (notes.length - 1) + 40
   d.legend(legendAt, ['b-sys', 'b-cmp', 'b-dat'], 'Boundary')

@@ -69,7 +69,7 @@ refusal, and the Components table below names each of those slices.
 
 Every box is a directory in `src/`, and its test sits beside it. The names are
 the capabilities, not the layers. A test fails when a directory in `src/` is in
-none of the boxes and in none of the three left out below, so the picture cannot
+none of the boxes and in none of those left out below, so the picture cannot
 fall behind the code.
 
 | Component | What it does |
@@ -101,7 +101,6 @@ box:
 
 | Left out | Why |
 |---|---|
-| `log_ledger` | The crew ledger — a row per milestone and per outward act. Nothing this release runs loads it yet: the crew protocol it belongs to is still to be ported. |
 | `open_and_finish_a_worktree` | The two worktree tools, `worktree_open` and `worktree_finish`. A member's session cannot call them yet, because the launcher registers no tool. |
 | `check_a_range_before_the_owner_says_yes` | The range check, `verify_range`. A member's session cannot call it yet, because the launcher registers no tool. |
 | `land_passed_work_as_one_batch` | The batch landing, `land_batch`, and the fast-forward the owner's yes unlocks. A member's session cannot call them yet, because the launcher registers no tool. |
@@ -119,8 +118,10 @@ edge or past its right edge, a legend drawn across a box, a boundary's label dra
 a box, two boxes drawn on each other, and anything drawn off the canvas. A box is never
 drawn smaller than its text needs, and the Component page places its boxes in rows
 rather than at a height each one was given by hand; the Container page's boundary takes
-its height from the boxes it holds, so the label under them keeps its own ground. After
-changing a box:
+its height from the boxes it holds, so the label under them keeps its own ground. The
+foot of the Component page is drawn from the left-out list rather than beside it, and a
+check holds it there: the count, and each directory's name and the reason its own entry
+gives. After changing a box:
 
 ```sh
 node architecture/c4_diagrams.ts
