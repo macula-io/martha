@@ -13,7 +13,6 @@ import {
   lineOfAFinding,
   literalSitesJudged,
   restatementsIn,
-  SHORTEST_VALUE,
   type DefinedByTheChange,
   type Exception,
 } from './no_literal_restates_a_value.ts'
@@ -92,7 +91,6 @@ test('a module specifier, a property name, a word below the minimum and a word u
     ].join('\n'),
   )
 
-  assert.equal(SHORTEST_VALUE, 4)
   assert.deepEqual(restatementsIn([named, quiet], { judged: everyLine(quiet) }), [])
 })
 

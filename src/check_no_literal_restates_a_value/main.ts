@@ -16,6 +16,12 @@
 // left. That number is a report and never a gate: the cleanup is its own package,
 // cut by slice, and the gate turns whole-tree when the count reaches zero.
 //
+// The range is read as git holds it, so a range whose two ends are the same commit
+// adds no line and brings no value: it judges nothing and passes, and says so with
+// its own count. Only a range that cannot be read at all — `--range` left out, an
+// end missing, or a base of zeroes, which is what a repository's first push hands
+// over — falls back to the whole tree.
+//
 // The exceptions (`./exceptions.ts`) are read in both modes, and a list that no
 // longer matches the tree is an error, never a pass.
 
@@ -208,6 +214,6 @@ const mergeBaseOf = (root: string, base: string, head: string): string | null =>
 try {
   process.exit(main())
 } catch (failure) {
-  console.error(`check_no_literal_restates_a_value: the check could not be made: ${failure instanceof Error ? failure.message : String(failure)}`)
+  console.error(`${NAME}: the check could not be made: ${failure instanceof Error ? failure.message : String(failure)}`)
   process.exit(2)
 }
