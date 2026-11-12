@@ -66,6 +66,7 @@ import {
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import type { HandoverStamp, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 /** What an event that starts a session does to the record. */
@@ -140,28 +141,6 @@ export function undeclaredSessionEvents(declared: HostSessionEvents, produced: r
   return produced.filter((event) => !Object.hasOwn(declared.events, event))
 }
 
-/** What the host keeps next to a handover file it wrote for a member. */
-export interface HandoverStamp {
-  readonly member: string
-  readonly predecessor_id: string
-  /**
-   * When the host stamped it, on the machine's clock. It is what the newest handover of a member is read by
-   * (martha#255): the file's own name carries a day, and a day cannot tell two handovers apart.
-   */
-  readonly written_at: string
-  readonly digest: string
-  /** How many ingestions the predecessor's record held when stamped. */
-  readonly record_length: number
-  /** A digest of those ingestions, in order. */
-  readonly record_digest: string
-}
-
-/** Where stamps live: the host's, keyed by handover file. A model writes none of it. */
-export interface HandoverStampStore {
-  read(file: string): HandoverStamp | undefined
-  write(file: string, stamp: HandoverStamp): void
-}
-
 /** A handover file, as the host wrote it or the reader sees it. */
 export interface Handover {
   readonly file: string
@@ -181,14 +160,14 @@ function recordStillHolds(stamp: HandoverStamp, ingested: readonly Ingestion[]):
   return digestOfRecord(ingested.slice(0, stamp.record_length)) === stamp.record_digest
 }
 
-/** Stamp a handover the host wrote for the member whose session is handing over. */
+/** Stamp a handover the host wrote for the member whose session is handing over; or why the store would not keep it. */
 export function stampHandover(
   stamps: HandoverStampStore,
   writer: { readonly member: string; readonly session: HostSession },
   handover: Handover,
   now: () => number = Date.now,
-): void {
-  stamps.write(handover.file, {
+): Refused | undefined {
+  return stamps.write(handover.file, {
     member: writer.member,
     predecessor_id: writer.session.id,
     written_at: new Date(now()).toISOString(),
@@ -211,7 +190,7 @@ export function readHandover(
   handover: Handover,
 ): HostSession {
   const stamp = stamps.read(handover.file)
-  if (stamp === undefined || stamp.digest !== digestOf(handover.content)) return lose(reader.session)
+  if (stamp === undefined || 'refusal' in stamp || stamp.digest !== digestOf(handover.content)) return lose(reader.session)
   if (stamp.member !== reader.member) return takeInTurn(reader.session, { source: 'checkout_file' }, bindNothing)
 
   const predecessor = sessionFromRecord(stamp.predecessor_id, store.read(stamp.predecessor_id))

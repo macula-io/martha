@@ -15,14 +15,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import {
-  CLAUDE_CODE_SESSION_EVENTS,
-  readHandover,
-  startSession,
-  type HandoverStamp,
-  type HandoverStampStore,
-} from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, readHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -134,7 +129,7 @@ test('#255: the stamp carries the moment the handover is named for, never the cl
   const file = theHandoverFile(MEMBER, longAgo)
   assert.equal(file, 'HANDOVER_2001-02-03_builder.md', 'the file is not named for the day it is stamped for')
   assert.equal(
-    stamps.read(join(thePlace(host), file))?.written_at,
+    stamps.all.get(join(thePlace(host), file))?.written_at,
     longAgo.toISOString(),
     'the stamp was written with the clock rather than the moment the handover is named for, so the day in the name and the stamp can disagree',
   )

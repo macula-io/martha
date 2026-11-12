@@ -20,6 +20,7 @@ import { readLedger, ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -145,6 +146,7 @@ function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typ
     beats: NO_BEATS,
     root: home,
     documents: host.stores.documents,
+    stores: { crew: crewFilesDirectory(join(home, 'crew')) },
   })
 }
 
