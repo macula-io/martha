@@ -99,6 +99,8 @@ export async function landPassedWorkAsOneBatch(host: LandingHost, member: string
   if ('refused' in origin) return origin
   const clean = await theCloneHoldsNoChange(host, batch.path)
   if ('refused' in clean) return clean
+  const identity = await theCloneSaysWhoCommits(host, batch.path)
+  if ('refused' in identity) return identity
   const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path })
   if ('refused' in work) return work
   const cut = await cutTheBatchBranch(host, batch.path, batch, origin.origin)
@@ -175,6 +177,18 @@ async function theCloneHoldsNoChange(host: LandingHost, path: string): Promise<S
   if (changes === undefined) return no(`${path} could not be read: git would not say what it holds.`)
   if (changes !== '') return no(`${path} has uncommitted changes (${changes.split('\n')[0] ?? ''}): commit them or remove them, then land again.`)
   return { ok: true }
+}
+
+/**
+ * A merge commit carries a committer, and git refuses the merge when the clone cannot name one. It is checked before a
+ * branch is cut, so a clone that would fail on its first merge is told what to set instead of being left half landed.
+ */
+async function theCloneSaysWhoCommits(host: LandingHost, path: string): Promise<Step<true>> {
+  const identity = await git(host, path, ['var', 'GIT_COMMITTER_IDENT'])
+  if (identity.exit_code === 0) return { ok: true }
+  return no(
+    `${path} does not say who commits, so its merges would be refused: set user.name and user.email there (git config user.name "..." and git config user.email "..."), then land again.`,
+  )
 }
 
 /** Cuts `land/<date>-<n>` from the origin's default branch, and answers it with the base it started from. */

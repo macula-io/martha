@@ -78,6 +78,10 @@ function aRepository(t: TestContext): Fixture {
   gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
   const clone = join(root, 'clone')
   execFileSync(GIT, ['clone', '--quiet', origin, clone])
+  // Who commits is set in the clone itself: a merge writes a commit, and a machine with no global identity (a CI
+  // runner is one) would refuse it. The test that wants the refusal empties this.
+  gitIn(clone, 'config', 'user.name', 'Ann')
+  gitIn(clone, 'config', 'user.email', 'ann@example.invalid')
   return { root, origin, seed, clone, repo: repoOfTheOrigin(origin) ?? '' }
 }
 
@@ -397,4 +401,20 @@ test('#256: a fast-forward whose row one package will not keep does not run, and
   const concluded = (await readLedger(tests.host, at(packages, 0))).filter((row) => row.kind === 'act_concluded')
   assert.equal(concluded.length, 1, 'the package announced before the refusal was left without an outcome')
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : true, false, 'an act that was never sent was kept as succeeded')
+})
+
+test('#256: a clone that does not say who commits is refused before a branch is cut, with what to set', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  // A merge writes a commit, and git refuses one with no committer: the run must say so rather than cut a branch it
+  // cannot merge onto.
+  gitIn(fixture.clone, 'config', 'user.name', '')
+  gitIn(fixture.clone, 'config', 'user.email', '')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: [`${fixture.repo}#251`] })
+  assert.match(wordsOf(landed), /does not say who commits/)
+  assert.match(wordsOf(landed), /user\.name/, 'the answer did not name the setting to make')
+  assert.match(wordsOf(landed), /user\.email/, 'the answer did not name the setting to make')
+  assert.doesNotMatch(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD'), new RegExp(`^${LAND}/`), 'a branch was cut for a batch that could not merge')
+  assert.equal(base, gitIn(fixture.clone, 'rev-parse', 'origin/main'))
 })
