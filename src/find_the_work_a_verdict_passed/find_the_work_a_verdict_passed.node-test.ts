@@ -33,7 +33,7 @@ const RECORDED = JSON.parse(readFileSync(new URL('./recorded_pulls_at_a_head.jso
 
 const PACKAGE = 'macula-io/martha#251'
 const REPO = 'macula-io/martha'
-const CWD = '/home/rl/work/github.com/macula-io/martha'
+const CWD = '/clones/macula-io/martha'
 const OPEN = RECORDED.open
 const CLOSED = RECORDED.closed
 const BASE = 'e7009dfbd2b89172efccfa077c849a927648daee'
