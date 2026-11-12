@@ -13,8 +13,11 @@
 // tool, and the stand-in answers that agent's request while the member's turn is still open.
 //
 // The order is what this observes: the builder says its hand-off while the reviewer is inside its subagent, so a member
-// that read its channel on a subagent's turn would take the message in there. What passes is that the reviewer took it
-// in once, after its own turn, and that the verdict came back the same way.
+// that read its channel on a subagent's turn would take the message in there. The run MAKES that order rather than
+// hoping for it (review r=1): the subagent's own answer is held until the crew's channel holds the builder's message, so
+// the hand-off was said while the subagent ran, and the check compares the hand-off's sent time with the time that
+// request was answered. What passes is that the reviewer took it in once, after its own turn, and that the verdict came
+// back the same way.
 //
 //   ./watch_a_live_launch/watch_two_members_reach_each_other.sh
 
@@ -24,10 +27,10 @@ import process from 'node:process'
 
 import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
 import { FRAME_OPENING, framed } from '../src/hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import type { ModelRequest, ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
+import type { ModelRequest, ModelScript, ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf, stateHomeUnder } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { HOST_SILENCE_MS } from '../src/launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
-import { addressedTo, type ChannelHost, type PlacedMessage, readTheChannel, takenInBy } from '../src/keep_the_crew_channel/crew_channel.ts'
+import { addressedTo, readTheChannel, tookInRowsOf, type ChannelHost, type PlacedMessage } from '../src/keep_the_crew_channel/crew_channel.ts'
 import { CREW_LINES, VALUE_SHAPES } from '../src/read_a_crew_line/crew_lines.ts'
 import { readACrewLine } from '../src/read_a_crew_line/read_a_crew_line.ts'
 import { rowStreamsDirectory } from '../src/row_streams_directory/row_streams_directory.ts'
@@ -42,6 +45,7 @@ import {
   sweep,
   theRecordedHost,
   theResultOfTheLastCallTo,
+  theStoppedLine,
   toolCallsIn,
   type MemberRan,
   type WatchedPlace,
@@ -130,10 +134,18 @@ const messagesOf = (request: ModelRequest): readonly Record<string, unknown>[] =
     (message): message is Record<string, unknown> => typeof message === 'object' && message !== null,
   )
 
-/** Whether this request is the one the subagent's own model answers: its whole transcript is the prompt it was given. */
+/**
+ * Whether this request is the one the subagent's own model answers: its first turn. A conversation that has not spoken
+ * yet carries no assistant message, and the whole of it is the prompt the reviewer's agent tool was called with. The
+ * prompt is looked for at the END of a user message, and the number of messages is not counted: the host puts its own
+ * `<system-reminder>` ahead of the prompt and sends a system message beside it, so a reading that required one message
+ * whose whole text was the prompt matched no request the host ever sent — and the subagent was answered at once, before
+ * the builder could speak (review r=1).
+ */
 const theSubagentsRequest = (request: ModelRequest): boolean => {
   const messages = messagesOf(request)
-  return messages.length === 1 && textOfContent(messages[0]?.['content']).trim() === SUBAGENTS_PROMPT
+  if (messages.some((message) => message['role'] === 'assistant')) return false
+  return messages.some((message) => message['role'] === 'user' && textOfContent(message['content']).trimEnd().endsWith(SUBAGENTS_PROMPT))
 }
 
 /** Everything the model has been shown by this request, as one text: where a raised crew turn is looked for. */
@@ -141,6 +153,39 @@ const transcriptOf = (request: ModelRequest): string => JSON.stringify(request.b
 
 /** Whether the model has already made a call of `tool` by this request. */
 const hasCalled = (request: ModelRequest, tool: string): boolean => toolCallsIn(request).some((call) => call.tool === tool)
+
+/** How long the subagent's own answer may wait for the builder's hand-off before the run answers without it. */
+const THE_BUILDERS_HAND_OFF_SECONDS = 90
+
+/** How long one look at the channel waits before looking again: short next to the launch it waits for. */
+const WAIT_POLL_MS = 500
+
+/**
+ * Waits until the crew's channel holds a message from the builder, or the deadline passes, and answers whether it did.
+ * This is what makes the order this observation is about true rather than hoped for (review r=1): the subagent's own
+ * answer is held until the hand-off exists, so "the hand-off arrived while the subagent was running" is a fact the
+ * run made, not a race it got away with. Whether it arrived is not read from this answer — the check compares the two
+ * times the record carries — so a deadline that passes only means the subagent answered anyway, and that check says so
+ * by name.
+ */
+async function waitForTheBuildersMessage(channel: ChannelHost): Promise<boolean> {
+  const deadline = Date.now() + THE_BUILDERS_HAND_OFF_SECONDS * 1000
+  while (Date.now() < deadline) {
+    if (await theChannelHoldsTheBuildersMessage(channel)) return true
+    await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS))
+  }
+  return false
+}
+
+/** One look at the crew's channel for a message from the builder; one that cannot be read yet says not yet. */
+async function theChannelHoldsTheBuildersMessage(channel: ChannelHost): Promise<boolean> {
+  try {
+    const placed = await readTheChannel(channel)
+    return placed.some((message) => message.message.from === BUILDER)
+  } catch {
+    return false
+  }
+}
 
 /** The builder's turns: its hand-off, then the receipts once the verdict is back. */
 const theBuildersScript = (request: ModelRequest): ScriptedTurn => {
@@ -150,9 +195,12 @@ const theBuildersScript = (request: ModelRequest): ScriptedTurn => {
 
 /** The reviewer's turns: its subagent first, then the verdict once the builder's hand-off reaches it. */
 const theReviewersScript =
-  (startTheBuilder: () => void) =>
-  (request: ModelRequest): ScriptedTurn => {
-    if (theSubagentsRequest(request)) return { text: 'I looked it up: nothing to report.' }
+  (channel: ChannelHost, startTheBuilder: () => void) =>
+  async (request: ModelRequest): Promise<ScriptedTurn> => {
+    if (theSubagentsRequest(request)) {
+      await waitForTheBuildersMessage(channel)
+      return { text: 'I looked it up: nothing to report.' }
+    }
     if (request.number === 1) {
       startTheBuilder()
       return { tool: THE_HOSTS_AGENT_TOOL, input: { description: 'look one thing up', prompt: SUBAGENTS_PROMPT, subagent_type: AGENTS_KIND } }
@@ -162,7 +210,7 @@ const theReviewersScript =
   }
 
 /** One member's launch: the real launcher on the recorded host, its own stand-in model, on the crew's own checkout. */
-function aMemberWasStarted(place: WatchedPlace, member: string, ceiling: number, script: (request: ModelRequest) => ScriptedTurn, done: (requests: readonly ModelRequest[]) => boolean): Promise<MemberRan> {
+function aMemberWasStarted(place: WatchedPlace, member: string, ceiling: number, script: ModelScript, done: (requests: readonly ModelRequest[]) => boolean): Promise<MemberRan> {
   return aMemberRan(() =>
     driveTheRecordedHost({
       claude: theRecordedHost(),
@@ -224,7 +272,7 @@ try {
   const startTheBuilder = (): void => {
     builders ??= aMemberWasStarted(crew, BUILDER, BUILDERS_REQUESTS, theBuildersScript, (requests) => aCallAndItsResult(requests, RECEIPTS))
   }
-  const reviewers = await aMemberWasStarted(crew, REVIEWER, REVIEWERS_REQUESTS, theReviewersScript(startTheBuilder), (requests) => aCallAndItsResult(requests, SAY))
+  const reviewers = await aMemberWasStarted(crew, REVIEWER, REVIEWERS_REQUESTS, theReviewersScript(channel, startTheBuilder), (requests) => aCallAndItsResult(requests, SAY))
   if (builders === undefined) throw new Error('the reviewer never started the builder, so there was nobody to say the hand-off')
   const buildersRan = await builders
 
@@ -236,9 +284,15 @@ try {
   const answeredIn = theSubagentsAnswerIn(reviewers.requests)
   const handoffFirstIn = handoffFrame === '' ? -1 : reviewers.requests.findIndex((request) => framedIn(JSON.stringify(request.body['messages']), handoffFrame))
   const handoffAfterAnswer = handoffFirstIn > answeredIn && answeredIn !== -1 && reviewers.requests.slice(handoffFirstIn).every((request) => carryingIn(request, handoffFrame) === 1)
+  // The order proved, not assumed (review r=1): the subagent's own answer was held until the hand-off existed, so the
+  // hand-off was said before that request was answered. Both times are this machine's clock, read either side of it.
+  const theSubagentsAnswerAt = answeredIn === -1 ? undefined : reviewers.requests[answeredIn]?.received_at
+  const theHandOffCameFirst = handoff !== undefined && theSubagentsAnswerAt !== undefined && handoff.message.sent_at < theSubagentsAnswerAt
   const verdictFirstIn = verdictFrame === '' ? -1 : buildersRan.requests.findIndex((request) => framedIn(JSON.stringify(request.body['messages']), verdictFrame))
-  const takenInByTheReviewer = await takenInBy(channel, REVIEWER)
-  const takenInByTheBuilder = await takenInBy(channel, BUILDER)
+  // Rows, not positions: a message taken in twice is two rows, and the set a receipt reads would show one (review r=1).
+  const theReviewersRows = await tookInRowsOf(channel, REVIEWER)
+  const theBuildersRows = await tookInRowsOf(channel, BUILDER)
+  const theHandOffTakenIn = handoff === undefined ? [] : theReviewersRows.filter((position) => position === handoff.position)
   // What each member was shown and drew, kept with the directory a failed run leaves: a red is read from them.
   keptForReading = [
     keepTheRequests(work, 'the-reviewer', reviewers.requests),
@@ -254,13 +308,14 @@ try {
   )
   report.check(
     'the hand-off reached the reviewer as one turn, after its own subagent had answered',
-    handoffAfterAnswer,
-    `the reviewer sent the model ${reviewers.requests.length} requests; its subagent's answer arrived in request ${answeredIn + 1}, the hand-off first appeared in request ${handoffFirstIn + 1}${whyItStopped(reviewers)}`,
+    handoffAfterAnswer && theHandOffCameFirst,
+    `the reviewer sent the model ${reviewers.requests.length} requests; its subagent's answer arrived in request ${answeredIn + 1}, the hand-off first appeared in request ${handoffFirstIn + 1}; ` +
+      `the hand-off was said at ${String(handoff?.message.sent_at)} and that request was answered at ${String(theSubagentsAnswerAt)}, so the hand-off ${theHandOffCameFirst ? 'was' : 'was not'} said while the subagent ran${whyItStopped(reviewers)}`,
   )
   report.check(
     'the reviewer took the hand-off in, once',
-    takenInByTheReviewer.size === 1 && handoff !== undefined && takenInByTheReviewer.has(handoff.position),
-    `the positions the reviewer took in: ${JSON.stringify([...takenInByTheReviewer])}${whyItStopped(reviewers)}`,
+    theHandOffTakenIn.length === 1,
+    `the rows the reviewer took in: ${JSON.stringify(theReviewersRows)}${whyItStopped(reviewers)}`,
   )
   report.check(
     'the reviewer said its verdict, and the channel holds it for the builder',
@@ -274,17 +329,20 @@ try {
   )
   report.check(
     'the builder took the verdict in',
-    verdict !== undefined && takenInByTheBuilder.has(verdict.position),
-    `the positions the builder took in: ${JSON.stringify([...takenInByTheBuilder])}${whyItStopped(buildersRan)}`,
+    verdict !== undefined && theBuildersRows.includes(verdict.position),
+    `the rows the builder took in: ${JSON.stringify(theBuildersRows)}${whyItStopped(buildersRan)}`,
   )
+  // The builder's own last request carries its receipts read, or nothing does: reading another member's request instead
+  // would answer a question this check never asked (review r=1).
+  const theBuildersLastRequest = buildersRan.requests.at(-1)
+  const theReceiptsRead = theBuildersLastRequest === undefined ? undefined : theResultOfTheLastCallTo(theBuildersLastRequest, RECEIPTS)
   report.check(
     'the builder read its receipts, and they say the reviewer took the hand-off in',
     // Said, not not-said: the launcher's own line is "written, not yet taken in by <member>" until it is.
-    String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).includes(`taken in by ${REVIEWER}`) &&
-      !String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).includes('not yet taken in'),
-    String(theResultOfTheLastCallTo(buildersRan.requests.at(-1) ?? reviewers.requests[0]!, RECEIPTS)).slice(0, 300),
+    theReceiptsRead !== undefined && theReceiptsRead.includes(`taken in by ${REVIEWER}`) && !theReceiptsRead.includes('not yet taken in'),
+    theReceiptsRead === undefined ? `the builder's last request carries no receipts read${whyItStopped(buildersRan)}` : theReceiptsRead.slice(0, 300),
   )
-  const stoppedIn = (ran: MemberRan, member: string): string | undefined => (plainTextOf(ran.shown).includes(`${member} is stopped`) ? `${member}'s terminal shows it stopped` : undefined)
+  const stoppedIn = (ran: MemberRan, member: string): string | undefined => (plainTextOf(ran.shown).includes(theStoppedLine(member)) ? `${member}'s terminal shows it stopped` : undefined)
   const stops = [stoppedIn(reviewers, REVIEWER), stoppedIn(buildersRan, BUILDER)].filter((stop): stop is string => stop !== undefined)
   report.check('neither member was stopped', stops.length === 0, stops.length === 0 ? 'no stop line' : stops.join('; '))
   // A launch ends where its flow ends (its own completion, or the ceiling a host that keeps sending requests reaches),

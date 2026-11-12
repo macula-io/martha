@@ -18,12 +18,18 @@
 // What it prints: PASS or FAIL by name, the launch's name first. Everything it makes is one directory, removed when
 // every check passed, and a run with a failure says where it kept it.
 //
+// A member that goes silent is a red the observation exists to show, not an ending: `aMemberRan` keeps what the launch
+// had seen and the checks say so by name, so the second launch still runs and every check is still reported. Only a
+// failure to set the run up (the host, the peer, a checkout) ends it early, and says so with exit 2.
+//
 //   ./watch_a_live_launch/watch_a_member_keep_its_shell.sh
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
+import { CLAUDE_CODE_SHELL_TOOL } from '../src/claude_code_host/claude_code_host.ts'
+import { PINNED_TRANSPORT } from '../src/claude_code_host/mesh_server_install.ts'
 import { STRICT_GATE } from '../src/declare_crew/declare_crew.ts'
 import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
 import { driveTheRecordedHost, plainTextOf, type ModelRequest, type ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
@@ -32,7 +38,9 @@ import { MESH_HELLO, RINGS_AND_RETURNS_THE_ANSWER } from '../src/read_a_room_thr
 import { ANSWERS_THAT_ANSWERED } from '../src/read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { PATH_OF_SOURCE } from '../src/take_in_a_turn/take_in_a_turn.ts'
 import {
+  aCallAndItsResult,
   aCheckoutToWatch,
+  aMemberRan,
   anObservationDirectory,
   APeerOnTheMesh,
   aReport,
@@ -42,6 +50,8 @@ import {
   theMeshServersCommand,
   theRecordedHost,
   theResultOfTheLastCallTo,
+  theStoppedLine,
+  type MemberRan,
   type WatchedPlace,
 } from './a_launch_to_watch.ts'
 
@@ -61,17 +71,14 @@ const THE_FILES_NAME = 'the-shell-kept.txt'
 /** The keys the ring tool takes, as the pinned server's own input schema names them. */
 const RINGS_INPUT = { to: 'to', purpose: 'purpose', wait_join_seconds: 'wait_join_seconds' } as const
 
-/** How the launcher words a stop, where it tells the owner one: `launch_a_claude_code_member.ts`'s own line. */
-const stoppedLine = (member: string): string => `${member} is stopped`
-
 /** The call the host makes of one of the mesh's tools. */
 const called = (tool: string): string => `mcp__${MESH_SERVER_IN_THE_CHECKOUT}__${tool}`
 
 /** The approved config both launches start on. */
 function theConfigToApprove(): { settings: unknown; servers: unknown; house_rules: Record<string, unknown> } {
   return {
-    settings: { permissions: { defaultMode: 'default', allow: ['Bash', called(MESH_HELLO), called(RINGS_AND_RETURNS_THE_ANSWER)] } },
-    servers: { mcpServers: { [MESH_SERVER_IN_THE_CHECKOUT]: { type: 'stdio', command: THE_SERVERS_COMMAND[0], args: THE_SERVERS_COMMAND.slice(1) } } },
+    settings: { permissions: { defaultMode: 'default', allow: [CLAUDE_CODE_SHELL_TOOL, called(MESH_HELLO), called(RINGS_AND_RETURNS_THE_ANSWER)] } },
+    servers: { mcpServers: { [MESH_SERVER_IN_THE_CHECKOUT]: { type: PINNED_TRANSPORT, command: THE_SERVERS_COMMAND[0], args: THE_SERVERS_COMMAND.slice(1) } } },
     house_rules: { [STRICT_GATE]: true },
   }
 }
@@ -92,7 +99,7 @@ const helloThen = (after: (number: number) => ScriptedTurn) => (request: ModelRe
 
 /** A command of the member's own, then text that ends the turn. */
 const theCommandOfItsOwn = (number: number): ScriptedTurn =>
-  number === 2 ? { tool: 'Bash', input: { command: `touch "$HOME/${THE_FILES_NAME}" && echo ran` } } : { text: 'Done.' }
+  number === 2 ? { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: `touch "$HOME/${THE_FILES_NAME}" && echo ran` } } : { text: 'Done.' }
 
 /** The ring to the peer, then text that ends the turn. */
 const theRing = (peer: string) => (number: number): ScriptedTurn =>
@@ -100,34 +107,54 @@ const theRing = (peer: string) => (number: number): ScriptedTurn =>
     ? { tool: called(RINGS_AND_RETURNS_THE_ANSWER), input: { [RINGS_INPUT.to]: peer, [RINGS_INPUT.purpose]: 'the martha#251 observation', [RINGS_INPUT.wait_join_seconds]: 0 } }
     : { text: 'Done.' }
 
-/** What one launch leaves for the checks: the terminal, the record, and the last request the model was sent. */
+/** What one launch leaves for the checks: the terminal, the record, and the requests the model was sent. */
 interface Launched {
   readonly shown: string
   readonly kept: ReturnType<typeof rowsTheLauncherKept>
-  readonly last: ModelRequest
+  readonly requests: readonly ModelRequest[]
+  /** Why the launch stopped waiting, when it did: the red this observation exists to report, not an ending. */
+  readonly stopped: string | undefined
 }
 
 /** One launch of the member, on its own fresh checkout. */
 async function oneLaunch(work: string, script: (request: ModelRequest) => ScriptedTurn, requests: number): Promise<{ readonly place: WatchedPlace; readonly launched: Launched }> {
   const place = aCheckoutToWatch(work, theConfigToApprove())
-  const ran = await driveTheRecordedHost({
-    claude: theRecordedHost(),
-    home: place.home,
-    checkout: place.checkout,
-    member: BUILDER,
-    owner_turn: 'Say hello to the mesh, then do what I asked.',
-    requests,
-    silence_ms: HOST_SILENCE_MS,
-    script,
-  })
-  const last = ran.requests[ran.requests.length - 1]
-  if (last === undefined) throw new Error('the member sent the model no request, so there is nothing to read')
-  return { place, launched: { shown: plainTextOf(ran.shown), kept: rowsTheLauncherKept(place), last } }
+  const ran: MemberRan = await aMemberRan(() =>
+    driveTheRecordedHost({
+      claude: theRecordedHost(),
+      home: place.home,
+      checkout: place.checkout,
+      member: BUILDER,
+      owner_turn: 'Say hello to the mesh, then do what I asked.',
+      requests,
+      silence_ms: HOST_SILENCE_MS,
+      script,
+    }),
+  )
+  return { place, launched: { shown: plainTextOf(ran.shown), kept: rowsTheLauncherKept(place), requests: ran.requests, stopped: ran.stopped } }
 }
+
+/** The first line of why a launch stopped waiting: the rest of its message is the terminal it last showed. */
+const whyItStopped = (launched: Launched): string => (launched.stopped === undefined ? '' : `; its launch stopped waiting: ${launched.stopped.split('\n')[0] ?? ''}`)
+
+/** Whether the launcher's terminal shows a stop for this member. */
+const itShowsAStop = (launched: Launched): boolean => launched.shown.includes(theStoppedLine(BUILDER))
+
+/** Whether the member got as far as asking the model anything: a launch that never started cannot be "not stopped". */
+const itRan = (launched: Launched): boolean => launched.requests.length > 0
+
+/** What a "was not stopped" check reports: a launch that never started says nothing about a stop. */
+const theStopCheck = (launched: Launched): { readonly holds: boolean; readonly detail: string } =>
+  itShowsAStop(launched)
+    ? { holds: false, detail: 'the terminal shows a stop' }
+    : itRan(launched)
+      ? { holds: true, detail: 'no stop line' }
+      : { holds: false, detail: `the member never started, so there is no stop to read${whyItStopped(launched)}` }
 
 const work = anObservationDirectory()
 const report = aReport()
 let peer: APeerOnTheMesh | undefined
+let couldNotBeSetUp: string | undefined
 try {
   peer = await new APeerOnTheMesh(THE_SERVERS_COMMAND, join(work, 'peer'), 'martha-251-observation-peer').start()
   const peerId = nodeIdIn(await peer.tool(MESH_HELLO, {}))
@@ -135,37 +162,52 @@ try {
 
   const shell = await oneLaunch(join(work, 'shell'), helloThen(theCommandOfItsOwn), 3)
   const meaning = shell.launched.kept.filter((ingestion) => ingestion.path === PATH_OF_SOURCE.mcp_result)
+  // Said hello and nothing was taken in, both: a launch that never reached its hello kept nothing, and "nothing was
+  // taken in" would be true of it for no reason at all (a member that stopped waiting is exactly that case).
   report.check(
     'shell: the first mesh answer takes nothing in',
-    meaning.length === 0,
-    meaning.length === 0 ? `no row on ${PATH_OF_SOURCE.mcp_result}; the launcher kept ${JSON.stringify(shell.launched.kept)}` : `the hello's answer was taken in as words: ${JSON.stringify(meaning)}`,
+    aCallAndItsResult(shell.launched.requests, called(MESH_HELLO)) && meaning.length === 0,
+    meaning.length > 0
+      ? `the hello's answer was taken in as words: ${JSON.stringify(meaning)}`
+      : `no row on ${PATH_OF_SOURCE.mcp_result}; the launcher kept ${JSON.stringify(shell.launched.kept)}${whyItStopped(shell.launched)}`,
   )
+  const keptInItsHome = existsSync(join(shell.place.home, THE_FILES_NAME))
   report.check(
     'shell: the member kept its shell after saying hello',
-    existsSync(join(shell.place.home, THE_FILES_NAME)),
-    `${THE_FILES_NAME} ${existsSync(join(shell.place.home, THE_FILES_NAME)) ? 'is' : 'is not'} in its home`,
+    keptInItsHome,
+    `${THE_FILES_NAME} ${keptInItsHome ? 'is' : 'is not'} in its home${whyItStopped(shell.launched)}`,
   )
-  report.check('shell: the member was not stopped', !shell.launched.shown.includes(stoppedLine(BUILDER)), shell.launched.shown.includes(stoppedLine(BUILDER)) ? 'the terminal shows a stop' : 'no stop line')
+  const shellStop = theStopCheck(shell.launched)
+  report.check('shell: the member was not stopped', shellStop.holds, shellStop.detail)
 
   const ring = await oneLaunch(join(work, 'ring'), helloThen(theRing(peerId)), 3)
-  const answer = aRingAnswer(theResultOfTheLastCallTo(ring.launched.last, called(RINGS_AND_RETURNS_THE_ANSWER)))
+  const theRingsLastRequest = ring.launched.requests.at(-1)
+  const rang = theRingsLastRequest === undefined ? undefined : theResultOfTheLastCallTo(theRingsLastRequest, called(RINGS_AND_RETURNS_THE_ANSWER))
+  const answer = aRingAnswer(rang)
   const onTheAnswerRow = ring.launched.kept.filter((ingestion) => ingestion.path === PATH_OF_SOURCE.ring_answer)
   report.check(
     'ring: the ring was placed, and the crew mate answered it',
     ANSWERS_THAT_ANSWERED.includes(Number(answer.answer)) && answer.to === peerId,
-    `the ring's result: ${String(theResultOfTheLastCallTo(ring.launched.last, called(RINGS_AND_RETURNS_THE_ANSWER))).slice(0, 400)}`,
+    theRingsLastRequest === undefined
+      ? `the member sent the model no request, so it never rang${whyItStopped(ring.launched)}`
+      : `the ring's result: ${String(rang).slice(0, 400)}${whyItStopped(ring.launched)}`,
   )
   report.check(
     "ring: the ring's answer is recorded with the crew mate's node id",
     onTheAnswerRow.some((ingestion) => ingestion.from_node_id === peerId),
     onTheAnswerRow.length === 0 ? `no row on ${PATH_OF_SOURCE.ring_answer}` : JSON.stringify(onTheAnswerRow),
   )
-  report.check('ring: the member was not stopped', !ring.launched.shown.includes(stoppedLine(BUILDER)), ring.launched.shown.includes(stoppedLine(BUILDER)) ? 'the terminal shows a stop' : 'no stop line')
+  const ringStop = theStopCheck(ring.launched)
+  report.check('ring: the member was not stopped', ringStop.holds, ringStop.detail)
+} catch (error) {
+  // A member that went silent is a check above, not this: only the run's own setup ends the observation early.
+  couldNotBeSetUp = error instanceof Error ? error.message : String(error)
+  report.check('the observation could be set up', false, `it stopped before its checks could run: ${couldNotBeSetUp}`)
 } finally {
   peer?.stop()
 }
 
 const status = report.end()
-if (status !== 0) console.log(`kept for reading: ${work}`)
+if (status !== 0 || couldNotBeSetUp !== undefined) console.log(`kept for reading: ${work}`)
 else sweep([work])
-process.exit(status)
+process.exit(couldNotBeSetUp === undefined ? status : 2)

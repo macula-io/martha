@@ -17,6 +17,7 @@ import {
   readTheChannel,
   takenInBy,
   takenStreamOf,
+  tookInRowsOf,
   type ChannelHost,
   type ChannelRow,
 } from './crew_channel.ts'
@@ -68,6 +69,18 @@ test('#253: what a member took in is kept per member, by position', async () => 
   assert.equal(takenStreamOf('B'), 'crew_channel_taken/B')
   assert.deepEqual([...(await takenInBy(channel, 'B'))], [position])
   assert.deepEqual([...(await takenInBy(channel, 'C'))], [], 'one member taking a message in said nothing about another')
+})
+
+test('#253: a message taken in twice is two rows, and one position', async () => {
+  const channel = host()
+  const position = await appendToTheChannel(channel, message('A', ['B'], 'a hand-off'))
+  await keepTakenIn(channel, 'B', position)
+  await keepTakenIn(channel, 'B', position)
+
+  // What the carrier does while its take-in never fires: it offers the same message again. The set a receipt reads
+  // cannot see that, which is why a check that says "once" counts the rows.
+  assert.deepEqual([...(await takenInBy(channel, 'B'))], [position], 'the set of positions is the same however many times it was taken in')
+  assert.deepEqual(await tookInRowsOf(channel, 'B'), [position, position], 'the second take-in of one message was not kept as a row of its own')
 })
 
 test('#253: a stream another code wrote into is not read as messages', async () => {

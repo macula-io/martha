@@ -16,6 +16,8 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { INSTALL_WITHOUT_ASKING, PACKAGE_SWITCH, PINNED_INSTALLER } from '../src/claude_code_host/mesh_server_install.ts'
+import { YES } from '../src/approve_a_checkouts_config/approve_a_checkouts_config.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../src/declare_crew/declare_crew.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../src/read_a_room_through_its_gate/mesh_server_tools.ts'
 import {
   crewRowsDirectoryOf,
@@ -36,8 +38,15 @@ import { RECORD_LOST } from '../src/take_in_a_turn/take_in_a_turn.ts'
 export const OWNER_NAME = 'martha-observation'
 export const OWNER_EMAIL = 'martha-observation@example.invalid'
 
-/** What the owner types to approve a config, once the gate has shown what it approves. */
-const YES = 'yes\r'
+/** What the owner types to approve a config, once the gate has shown what it approves: the one answer that approves,
+ * and the terminal's carriage return that ends the line. */
+const YES_ON_A_TERMINAL = `${YES}\r`
+
+/**
+ * How the launcher words a stop, where it tells the owner one: `launch_a_claude_code_member.ts` builds this line
+ * inline, so there is no constant to import and both observations read it from here rather than spelling it twice.
+ */
+export const theStoppedLine = (member: string): string => `${member} is stopped`
 
 /** One observation's home and the checkout inside it, both removed by the caller. */
 export interface WatchedPlace {
@@ -80,7 +89,7 @@ function marthaSaid(place: { readonly home: string; readonly checkout: string },
 /** The declaration `martha init` wrote, with the house rules this observation turns on, written back as data. */
 function declareHouseRules(checkout: string, rules: Readonly<Record<string, unknown>> | undefined): void {
   if (rules === undefined) return
-  const path = join(checkout, '.crew', 'crew.json')
+  const path = join(checkout, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const declaration = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
   writeFileSync(path, `${JSON.stringify({ ...declaration, house_rules: rules }, null, 2)}\n`)
 }
@@ -93,7 +102,7 @@ export function aCheckoutToWatch(work: string, config: CheckoutConfig): WatchedP
   declareHouseRules(place.checkout, config.house_rules)
   git(place.checkout, 'add', '--all')
   git(place.checkout, 'commit', '-q', '-m', 'the crew')
-  marthaSaid(place, ['approve'], YES)
+  marthaSaid(place, ['approve'], YES_ON_A_TERMINAL)
   return place
 }
 
