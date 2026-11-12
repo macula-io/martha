@@ -161,7 +161,7 @@
 <text class="t-desc" x="48" y="992">installer version through run_the_nodes_</text>
 <text class="t-desc" x="48" y="1008">own_npm_alone, refuses other bytes, and</text>
 <text class="t-desc" x="48" y="1024">runs it with the words unchanged</text>
-<rect class="b-cmp" x="664" y="940" width="300" height="140" rx="10"/>
+<rect class="b-cmp" x="664" y="940" width="300" height="170" rx="10"/>
 <text class="t-code" x="680" y="968">show_dashboard_beat,</text>
 <text class="t-code" x="680" y="986">keep_the_ledger</text>
 <text class="t-type" x="680" y="1004">[the crew's rows and its ledger]</text>
@@ -174,8 +174,9 @@
 <text class="t-desc" x="680" y="1124">keep_the_crew_channel is where a message</text>
 <text class="t-desc" x="680" y="1140">lives, send_a_crew_message writes one, and</text>
 <text class="t-desc" x="680" y="1156">show_what_a_message_became reads back</text>
-<text class="t-desc" x="680" y="1172">what became of it, and read_a_crew_line</text>
-<text class="t-desc" x="680" y="1188">reads the HANDOFF and VERDICT lines</text>
+<text class="t-desc" x="680" y="1172">what became of it; read_a_crew_line reads</text>
+<text class="t-desc" x="680" y="1188">the HANDOFF and VERDICT lines, and find_</text>
+<text class="t-desc" x="680" y="1204">the_work_a_verdict_passed the head passed</text>
 <rect class="b-cmp" x="348" y="890" width="300" height="140" rx="10"/>
 <text class="t-code" x="364" y="918">run_the_nodes_own_npm_alone</text>
 <text class="t-type" x="364" y="936">[npm, and nothing of the machine's]</text>

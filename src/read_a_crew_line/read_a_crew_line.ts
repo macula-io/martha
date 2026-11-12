@@ -121,5 +121,9 @@ export async function keepTheLinesRow(host: LedgerHost, member: string, line: Cr
   await sendOutwardAct(host, { package: line.package, member, act: { kind: 'handoff', what: saidOf(line) } }, async () => 'read as a crew line and added to this package\'s ledger')
 }
 
-/** The line in one sentence, as the ledger's own words ask. */
-const saidOf = (line: CrewLineRead): string => [line.verb, line.package, ...(line.verdict === undefined ? [] : [line.verdict]), ...Object.entries(line.keys).map(([key, value]) => `${key}=${value}`)].join(' ')
+/**
+ * The line as it was written: its verb, the words in their order (the package, a verdict's PASS or FAIL, and the
+ * range), then the keys. The note the row keeps is itself a crew line, so it reads back with `readACrewLine` and the
+ * range a VERDICT passed is not lost on the way into the ledger (martha#256).
+ */
+const saidOf = (line: CrewLineRead): string => [line.verb, ...line.words, ...Object.entries(line.keys).map(([key, value]) => `${key}=${value}`)].join(' ')
