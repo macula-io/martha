@@ -49,8 +49,8 @@
 </style>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
 <rect class="bg" x="0" y="0" width="1120" height="780"/>
-<rect class="bound" x="16" y="40" width="600" height="660" rx="12"/>
-<text class="t-bound" x="32" y="688">Martha [the package, on the owner's machine]</text>
+<rect class="bound" x="16" y="40" width="600" height="670" rx="12"/>
+<text class="t-bound" x="32" y="698">Martha [the package, on the owner's machine]</text>
 <rect class="b-cmp" x="32" y="76" width="268" height="150" rx="10"/>
 <text class="t-code" x="48" y="104">the martha command</text>
 <text class="t-type" x="48" y="122">[bin/martha, a Node process]</text>
@@ -64,12 +64,13 @@
 <text class="t-desc" x="48" y="316">Per project, outside the checkout:</text>
 <text class="t-desc" x="48" y="332">each member's node id, the approvals</text>
 <text class="t-desc" x="48" y="348">given, launch records and snapshots</text>
-<rect class="b-later" x="32" y="546" width="268" height="120" rx="10"/>
+<rect class="b-later" x="32" y="546" width="268" height="132" rx="10"/>
 <text class="t-name" x="48" y="574">the team mode</text>
 <text class="t-type" x="48" y="592">[planned]</text>
 <text class="t-desc" x="48" y="616">Realm admission and the shared room,</text>
-<text class="t-desc" x="48" y="632">not built here; solo admits nothing. The</text>
-<text class="t-desc" x="48" y="648">parts every launch loads are drawn below</text>
+<text class="t-desc" x="48" y="632">not built here; solo admits nothing.</text>
+<text class="t-desc" x="48" y="648">The parts every launch loads are</text>
+<text class="t-desc" x="48" y="664">drawn below</text>
 <rect class="b-dat" x="332" y="76" width="268" height="120" rx="10"/>
 <text class="t-name" x="348" y="104">the crew declaration</text>
 <text class="t-type" x="348" y="122">[.crew/crew.json]</text>

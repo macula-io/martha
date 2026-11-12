@@ -108,9 +108,9 @@
 <text class="t-name" x="736" y="458">Macula mesh and realm</text>
 <text class="t-type" x="736" y="476">[Macula]</text>
 <text class="t-desc" x="736" y="500">A mesh server runs only when your</text>
-<text class="t-desc" x="736" y="516">project's config names one; the room</text>
-<text class="t-desc" x="736" y="532">and admission are team mode, and this</text>
-<text class="t-desc" x="736" y="548">release runs neither</text>
+<text class="t-desc" x="736" y="516">project's config names one; the</text>
+<text class="t-desc" x="736" y="532">room and admission are team mode,</text>
+<text class="t-desc" x="736" y="548">and this release runs neither</text>
 <path class="edge" d="M155 144V180H420V210" marker-end="url(#a)"/>
 <text class="t-rel" x="300" y="172">runs init, approve, start</text>
 <path class="edge-team" d="M500 144V210" marker-end="url(#a)"/>
@@ -132,12 +132,12 @@
 <text class="t-desc" x="30" y="654">Team mode adds teammates, and the room and admission drawn dashed here; a mesh server is installed and run only when a project's config names one.</text>
 <rect class="b-sys" x="24" y="690" width="22" height="14" rx="3"/>
 <text class="t-leg" x="54" y="702">Martha</text>
-<rect class="b-per" x="103.6" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="133.6" y="702">Person</text>
-<rect class="b-mac" x="183.2" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="213.2" y="702">Macula, room not shipped</text>
-<rect class="b-ext" x="381.59999999999997" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="411.59999999999997" y="702">External system</text>
-<rect class="b-later" x="520.5999999999999" y="690" width="22" height="14" rx="3"/>
-<text class="t-leg" x="550.5999999999999" y="702">Planned, not built</text>
+<rect class="b-per" x="103.168" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.168" y="702">Person</text>
+<rect class="b-mac" x="182.9" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="212.9" y="702">Macula, room not shipped</text>
+<rect class="b-ext" x="370.75199999999995" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="400.75199999999995" y="702">External system</text>
+<rect class="b-later" x="503.6439999999999" y="690" width="22" height="14" rx="3"/>
+<text class="t-leg" x="533.6439999999999" y="702">Planned, not built</text>
 </svg>

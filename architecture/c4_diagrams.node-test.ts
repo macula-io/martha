@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join, relative } from 'node:path'
 import { ASSETS, components, DIAGRAMS, LEFT_OUT, ROOM_SLICES_WHICH_LOAD } from './c4_diagrams.ts'
+import type { DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
 const SRC = join(import.meta.dirname, '..', 'src')
@@ -95,6 +96,128 @@ test('the model is a Context, a Component and a Container diagram, and the gate 
   for (const kind of ['context', 'component', 'container']) {
     assert.ok(files.some((f) => f.includes(kind)), `no ${kind} diagram in the generator`)
   }
+})
+
+// The picture is drawn by hand, so a box may be given more text than it has room for, or
+// two boxes may land on each other, and every check above still passes: they hold the
+// picture to src/, not to its own geometry (martha#283). These five hold it to that, and
+// each names the box it fails, so the next box that arrives too small is answered where it
+// is written rather than by someone reading the page.
+
+/** The clearance a text keeps from its box's bottom edge and right edge. */
+const INSIDE_BY = 6
+
+interface Rect {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+}
+
+const overlaps = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+
+/** The swatch and its label are one entry: a label wide enough to reach a box counts too. */
+const legendRow = (entry: DrawnLegendEntry): Rect => ({
+  x: entry.x,
+  y: entry.y,
+  w: entry.labelX + entry.labelWidth - entry.x,
+  h: entry.h,
+})
+
+const within = (canvas: Rect, rect: Rect): boolean =>
+  rect.x >= canvas.x && rect.y >= canvas.y &&
+  rect.x + rect.w <= canvas.x + canvas.w && rect.y + rect.h <= canvas.y + canvas.h
+
+/** What is wrong with one text in one box, as the lines of a failure, or nothing when it is inside. */
+const outsideItsBox = (file: string, box: DrawnBox, text: DrawnText): string[] => {
+  const bottom = box.y + box.h - INSIDE_BY
+  const right = box.x + box.w - INSIDE_BY
+  const below = text.y > bottom
+    ? [`${file}: ${box.name} draws "${text.text}" with its baseline at ${text.y}, below ${bottom}, where its box's text must end`]
+    : []
+  const past = text.x + text.width > right
+    ? [`${file}: ${box.name} draws "${text.text}", ${Math.round(text.width)} wide from ${text.x}, and it must end by ${right}`]
+    : []
+  return [...below, ...past]
+}
+
+const textsOutsideTheirBox = (): string[] =>
+  DIAGRAMS.flatMap((make) => {
+    const diagram = make()
+    return diagram.boxes.flatMap((box) => box.texts.flatMap((text) => outsideItsBox(diagram.file, box, text)))
+  })
+
+const legendsAcrossABox = (): string[] =>
+  DIAGRAMS.flatMap((make) => {
+    const diagram = make()
+    return diagram.legendEntries.flatMap((entry) => diagram.boxes
+      .filter((box) => overlaps(legendRow(entry), box))
+      .map((box) => `${diagram.file}: the legend entry "${entry.label}" is drawn across ${box.name}`))
+  })
+
+const boxesOnEachOther = (): string[] =>
+  DIAGRAMS.flatMap((make) => {
+    const diagram = make()
+    const pairs = diagram.boxes.flatMap((box, i) => diagram.boxes.slice(i + 1).map((other) => [box, other] as const))
+    return pairs
+      .filter(([box, other]) => overlaps(box, other))
+      .map(([box, other]) => `${diagram.file}: ${box.name} overlaps ${other.name}`)
+  })
+
+/**
+ * A boundary's label is held off the boxes the way a legend entry is: the band its line of type takes is
+ * what no box may be drawn into (martha#283).
+ */
+const boxesOnABoundaryLabel = (): string[] =>
+  DIAGRAMS.flatMap((make) => {
+    const diagram = make()
+    return diagram.bounds.flatMap((bound) => diagram.boxes
+      .filter((box) => overlaps(bound.labelBand, box))
+      .map((box) => `${diagram.file}: the boundary label "${bound.label}" is drawn on ${box.name}`))
+  })
+
+// A page whose rows grew past the canvas is a page a reader loses the bottom of, so the last
+// thing drawn sets the height, and this holds it to that.
+const drawnOffTheCanvas = (): string[] =>
+  DIAGRAMS.flatMap((make) => {
+    const diagram = make()
+    const canvas: Rect = { x: 0, y: 0, w: diagram.w, h: diagram.h }
+    const boxes = diagram.boxes
+      .filter((box) => !within(canvas, box))
+      .map((box) => `${diagram.file}: ${box.name} is drawn at ${box.x},${box.y} to ${box.x + box.w},${box.y + box.h}`)
+    const legends = diagram.legendEntries
+      .filter((entry) => !within(canvas, legendRow(entry)))
+      .map((entry) => `${diagram.file}: the legend entry "${entry.label}" is drawn at ${entry.x},${entry.y}`)
+    const labels = diagram.bounds
+      .filter((bound) => !within(canvas, bound.labelBand))
+      .map((bound) => `${diagram.file}: the boundary label "${bound.label}" is drawn at ${bound.labelBand.x},${Math.round(bound.labelBand.y)}`)
+    return [...boxes, ...legends, ...labels]
+  })
+
+test('every text a box draws sits inside that box', () => {
+  const outside = textsOutsideTheirBox()
+  assert.deepEqual(outside, [], `a box prints its text outside itself:\n${outside.join('\n')}`)
+})
+
+test('no legend is drawn across a box', () => {
+  const across = legendsAcrossABox()
+  assert.deepEqual(across, [], `a legend is drawn on a box:\n${across.join('\n')}`)
+})
+
+test('no two boxes are drawn on each other', () => {
+  const on = boxesOnEachOther()
+  assert.deepEqual(on, [], `two boxes are drawn on each other:\n${on.join('\n')}`)
+})
+
+test('no boundary label is drawn on a box', () => {
+  const on = boxesOnABoundaryLabel()
+  assert.deepEqual(on, [], `a boundary's label is drawn on a box:\n${on.join('\n')}`)
+})
+
+test('everything drawn is on the canvas', () => {
+  const off = drawnOffTheCanvas()
+  assert.deepEqual(off, [], `drawn off the canvas:\n${off.join('\n')}`)
 })
 
 // The Component diagram is the code, so a slice cannot reach src/ and stay off it unseen:
