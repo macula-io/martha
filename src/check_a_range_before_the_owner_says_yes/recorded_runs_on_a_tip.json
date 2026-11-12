@@ -1,0 +1,132 @@
+{
+  "_why": "One answer GitHub gave to `gh api repos/macula-io/martha/actions/runs?head_sha=<sha>` and to `.../actions/runs/<id>/jobs`, recorded on 2026-11-12 and kept to the fields this slice reads (a run's id, name, status, conclusion and head_sha; a job's id, name, status and conclusion), so a test reads GitHub's own shape and not one written to fit (martha#256, slice 1). The tip is one macula-io/martha's own review round ended on, so every run on it succeeded and so did every job: the all-green case, recorded rather than written. The states a recording of this tip cannot hold -- a skipped job, a run with no jobs, no run at all -- are written in the tests that need them and said to be written. Record another with: gh api repos/<repo>/actions/runs?head_sha=<sha> --jq '[.workflow_runs[] | {id,name,status,conclusion,head_sha}]', then the same run ids through .../actions/runs/<id>/jobs --jq '[.jobs[] | {id,name,status,conclusion}]'.",
+  "jobs": {
+    "43129361731": [
+      {
+        "conclusion": "success",
+        "id": 130889367652,
+        "name": "the relay loads in the recorded host",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889367843,
+        "name": "the posted text check bites",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889367906,
+        "name": "workflows are valid",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889367933,
+        "name": "links resolve",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889367983,
+        "name": "the clean-install proof removes its container",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368014,
+        "name": "logos are valid SVG",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368022,
+        "name": "structural floor",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368028,
+        "name": "the host drift check bites",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368049,
+        "name": "gate coverage",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368061,
+        "name": "installer",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368174,
+        "name": "nothing private",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889368317,
+        "name": "no test the base passed goes missing",
+        "status": "completed"
+      }
+    ],
+    "43129362280": [
+      {
+        "conclusion": "success",
+        "id": 130889369224,
+        "name": "c4-model / c4-model",
+        "status": "completed"
+      }
+    ],
+    "43129362392": [
+      {
+        "conclusion": "success",
+        "id": 130889370094,
+        "name": "advisories / node in installer",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "id": 130889370315,
+        "name": "advisories / node in .",
+        "status": "completed"
+      },
+      {
+        "conclusion": "skipped",
+        "id": 130889372133,
+        "name": "advisories / ${{ inputs.ecosystem }} in ${{ matrix.directory }} (container)",
+        "status": "completed"
+      }
+    ]
+  },
+  "repo": "macula-io/martha",
+  "sha": "66f19eac85d325f47a823fb622285e7521b8f65d",
+  "workflow_runs": [
+    {
+      "conclusion": "success",
+      "head_sha": "66f19eac85d325f47a823fb622285e7521b8f65d",
+      "id": 43129362280,
+      "name": "c4 model",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "66f19eac85d325f47a823fb622285e7521b8f65d",
+      "id": 43129362392,
+      "name": "dependency advisories",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "66f19eac85d325f47a823fb622285e7521b8f65d",
+      "id": 43129361731,
+      "name": "CI",
+      "status": "completed"
+    }
+  ]
+}

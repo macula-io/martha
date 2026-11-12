@@ -95,15 +95,19 @@ export async function keepTakenIn(host: ChannelHost, member: string, position: n
   await host.stores.rows.append(takenStreamOf(member), { took_in: position })
 }
 
+/**
+ * Every took-in row a member has, one entry per row, oldest first: a message taken in twice is two entries of the same
+ * position. `takenInBy` reads the same rows as a set, which is the question "did it take this in at all"; this is the
+ * question "how many times", which a run that re-offers a message has to be able to ask (martha#253).
+ */
+export async function tookInRowsOf(host: ChannelHost, member: string): Promise<readonly number[]> {
+  const rows: readonly StoredRow[] = await host.stores.rows.read(takenStreamOf(member))
+  return rows.flatMap(({ row }) => (typeof row['took_in'] === 'number' ? [row['took_in']] : []))
+}
+
 /** The positions a member has taken in, as its own stream records them. */
 export async function takenInBy(host: ChannelHost, member: string): Promise<ReadonlySet<number>> {
-  const rows: readonly StoredRow[] = await host.stores.rows.read(takenStreamOf(member))
-  const taken = new Set<number>()
-  for (const { row } of rows) {
-    const position = row['took_in']
-    if (typeof position === 'number') taken.add(position)
-  }
-  return taken
+  return new Set(await tookInRowsOf(host, member))
 }
 
 /** The messages the channel really holds, each with the position that is its id. */

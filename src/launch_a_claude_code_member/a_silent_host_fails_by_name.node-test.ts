@@ -16,7 +16,7 @@
 // before all of this.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -339,6 +339,30 @@ test('#240: a run that read no journal by the host\'s first model request fails 
   )
   relayJournalKeptIn(directory, 'launch-of-the-test').received('session_started', {})
   assert.equal(journalNeverWritten(heard, directory), undefined, 'a journal with a line in it was read as no journal')
+})
+
+// --- martha#253: two members in one project, each with its own journal ---------------------------------------------
+
+test('#253: a launch made beside the one a run watches does not fail that run for a journal it never watched', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-journal-'))
+  t.after(() => removeTheTree(directory))
+  const heard = [{ number: 1, body: {}, received_at: Date.now() }]
+  // The launch the run watches wrote its line first. A second member's launch is made later and, before it starts
+  // anything, writes its own journal with no line in it yet (martha#240), so the newest file here is that empty one.
+  relayJournalKeptIn(directory, 'the-launch-the-run-watches').received('session_started', {})
+  relayJournalKeptIn(directory, 'the-second-member')
+  const later = (Date.now() + 1_000) / 1_000
+  utimesSync(join(directory, 'the-second-member.json'), later, later)
+  assert.equal(
+    readTheNewestRelayJournal(directory).launch,
+    'the-second-member',
+    'the case did not put the second launch first, so it proves nothing about reading a journal that is not the newest',
+  )
+  assert.equal(
+    journalNeverWritten(heard, directory),
+    undefined,
+    'a project holds a launch that wrote a line, and the run was failed for reading no journal: two members in one checkout red the run the moment the second one starts (martha#253)',
+  )
 })
 
 // --- martha#264: which side of the model request went silent ---------------------------------------------------------

@@ -99,12 +99,16 @@ fall behind the code.
 
 ### Left out of the Component diagram on purpose
 
-Four directories in `src/` are drawn in no box, because nothing that runs loads
-them. The same test above fails if any other directory joins them without a box:
+The directories in `src/` below are drawn in no box, because nothing that runs
+loads them. The same test above fails if any other directory joins them without a
+box:
 
 | Left out | Why |
 |---|---|
 | `open_and_finish_a_worktree` | A member's session cannot call `worktree_open` or `worktree_finish` yet: the launcher registers no worktree tool, though it registers the crew's own (martha#253, #256). |
+| `check_a_range_before_the_owner_says_yes` | The range check, `verify_range`. A member's session cannot call `verify_range` yet, because the launcher registers no such tool, though it registers the crew's own. |
+| `land_passed_work_as_one_batch` | The batch landing, `land_batch`, and the fast-forward the owner's yes unlocks. A member's session cannot call `land_batch` yet, because the launcher registers no such tool, though it registers the crew's own. |
+| `read_the_origin_a_clone_has` | What a clone's origin says — `org/name` and the default branch — read by the three slices beside it and by nothing that runs yet. |
 | `record_mesh_answers` | A script run by hand, `npm run record:mesh-answers`, when a version of the mesh server is recorded. The gate reads the answer shapes it wrote; the script itself never runs. |
 | `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
 | `record_claude_code_host` | A script run by hand, `npm run record:claude-code-host`, when the coding tool is upgraded. The adapter reads the recording it writes; the script itself never runs. |
