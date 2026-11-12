@@ -93,6 +93,14 @@ test('a hyphen separating a word from its reference is not a repository name', a
   assert.deepEqual(await hitsOf(`${endsInAnUnderscore}#13`), [
     `a shorthand reference to another repository (${endsInAnUnderscore}#...): write owner/repo#n so it can be checked`,
   ])
+  // A one-letter name is a repository too: the guard makes the rest of the name
+  // optional, and a rule that required it would read this reference as nothing
+  // (Mercurius's r=1 on this change, mutant M4). Built from a constant like the
+  // values around it, so the tree scan does not read this line as a reference.
+  const oneLetter = 'q'
+  assert.deepEqual(await hitsOf(`${oneLetter}#12`), [
+    `a shorthand reference to another repository (${oneLetter}#...): write owner/repo#n so it can be checked`,
+  ])
 })
 
 test('a private remote is refused, over ssh, https and as a bare slug', async () => {
