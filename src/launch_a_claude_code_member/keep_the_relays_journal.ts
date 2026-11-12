@@ -327,13 +327,16 @@ export function readTheRelayJournalAt(path: string): RelayJournalRead {
   }
 }
 
-const newestJournalIn = (directory: string): string | undefined => {
-  let names: string[]
+/** Every launch's journal in `directory`, or none when the directory cannot be read. */
+const journalNamesIn = (directory: string): readonly string[] => {
   try {
-    names = fs.readdirSync(directory).filter((name) => name.endsWith(RELAY_JOURNAL_SUFFIX))
+    return fs.readdirSync(directory).filter((name) => name.endsWith(RELAY_JOURNAL_SUFFIX))
   } catch {
-    return undefined
+    return []
   }
+}
+
+const newestJournalIn = (directory: string): string | undefined => {
   const lastWritten = (name: string): number => {
     try {
       return fs.statSync(join(directory, name)).mtimeMs
@@ -341,16 +344,29 @@ const newestJournalIn = (directory: string): string | undefined => {
       return 0
     }
   }
-  return names.map((name) => ({ name, last: lastWritten(name) })).sort((one, other) => other.last - one.last || one.name.localeCompare(other.name))[0]?.name
+  return journalNamesIn(directory).map((name) => ({ name, last: lastWritten(name) })).sort((one, other) => other.last - one.last || one.name.localeCompare(other.name))[0]?.name
 }
 
 /**
- * The journal of the launch running in `directory`: its newest file, or NO_JOURNAL when it holds none. A run has one
- * member, so the newest journal in the project's state is the one the run is watching.
+ * The journal of the launch running in `directory`: its newest file, or NO_JOURNAL when it holds none. A project with
+ * one member has one journal, which is that launch's. A project with more than one member has one journal per launch,
+ * and the newest is the closest a run can get: the launcher names a journal by a launch id the run is never given
+ * (martha#253). Where a run only needs to know whether any launch has written at all, `anyJournalHasALine` asks the
+ * project rather than its newest file.
  */
 export function readTheNewestRelayJournal(directory: string): RelayJournalRead {
   const name = newestJournalIn(directory)
   return name === undefined ? NO_JOURNAL : readTheRelayJournalAt(join(directory, name))
+}
+
+/**
+ * Whether any launch in `directory` has written a line (martha#253). A project can hold more than one member — two
+ * members of one crew share a checkout and its journal directory — and a launch writes its journal before it starts
+ * anything, so the newest file can belong to a member that started beside the one a run is watching and has written
+ * nothing yet. Whether a run read a journal at all is a question about the project, not about the newest file.
+ */
+export function anyJournalHasALine(directory: string): boolean {
+  return journalNamesIn(directory).some((name) => readTheRelayJournalAt(join(directory, name)).written > 0)
 }
 
 /** One stretch a run can be waiting in, as the journal shows it: the launcher deciding, the tool, or the launcher answering. */
