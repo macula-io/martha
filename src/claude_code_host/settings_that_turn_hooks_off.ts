@@ -126,9 +126,11 @@ const NO_TERMINAL_SHAPE = /^function ([\w$]+)\(\)\{return![\w$]+\(\)\.host\.laun
 const VARIABLE_SET_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)(?:\|\|process\.argv\.includes\("(--[a-z][a-z0-9-]*)"\))?\}$/
 // The same function in a host's own text, where 2.1.323 names that argument
 // through a constant; the recorder writes that constant as the flag it is
-// defined as, so `VARIABLE_SET_SHAPE` is what both a recording and a reader hold.
+// defined as, so this shape takes the flag written whole as well. A recording
+// rebuilt into a host text holds the flag itself, and `VARIABLE_SET_SHAPE` is
+// what both a recording and a reader then hold.
 const VARIABLE_OR_ARGUMENT_SHAPE =
-  /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)(?:\|\|process\.argv\.includes\(([\w$]+)\))?\}$/
+  /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)(?:\|\|process\.argv\.includes\((?:"(--[a-z][a-z0-9-]*)"|[\w$]+)\))?\}$/
 
 const CLOSER: Readonly<Record<string, string>> = { '{': '}', '(': ')', '[': ']' }
 
