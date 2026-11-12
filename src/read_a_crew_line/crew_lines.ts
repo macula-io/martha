@@ -12,11 +12,11 @@
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 
 /** A value a line carries, with the shape that value must have. */
-export type ValueName = 'package' | 'range' | 'url' | 'number' | 'ids'
+export type ValueName = 'package' | 'range' | 'url' | 'number' | 'count' | 'ids'
 
 /** How a card writes a value's placeholder: the words the crew's own lines use. */
 export const placeholderOf = (value: ValueName): string =>
-  ({ package: '<org/repo#n>', range: '<base40>..<tip40>', url: '<url>', number: '<N>', ids: '<run ids>' })[value]
+  ({ package: '<org/repo#n>', range: '<base40>..<tip40>', url: '<url>', number: '<N>', count: '<N>', ids: '<run ids>' })[value]
 
 /** The shapes of a value: the fourty hex digits of a commit, a run id list, and the ledger's own package name. */
 export const VALUE_SHAPES: Readonly<Record<ValueName, { readonly what: string; readonly matches: RegExp }>> = {
@@ -24,6 +24,8 @@ export const VALUE_SHAPES: Readonly<Record<ValueName, { readonly what: string; r
   range: { what: 'a range, <base40>..<tip40>, each forty hex digits', matches: /^[0-9a-f]{40}\.\.[0-9a-f]{40}$/ },
   url: { what: 'a URL', matches: /^https?:\/\/\S+$/ },
   number: { what: 'a whole number, at least 1', matches: /^[1-9][0-9]*$/ },
+  // A count of things a verdict found: none is the usual answer to `req`, so 0 is a whole number here too (#256).
+  count: { what: 'a whole number, zero or more', matches: /^(?:0|[1-9][0-9]*)$/ },
   ids: { what: 'run ids, comma separated, or none:paths', matches: /^(?:[0-9]+(?:,[0-9]+)*|none:paths)$/ },
 }
 
@@ -63,7 +65,9 @@ export const CREW_LINES: readonly LineShape[] = [
   {
     verb: 'VERDICT',
     parts: [PACKAGE, { oneOf: ['PASS', 'FAIL'] }, RANGE],
-    keys: { r: 'number', ci: 'ids', req: 'number', doc: 'url' },
+    // `r` is the round, which is one or more; `req` is how many changes the review required, and a PASS usually needs
+    // none, so it takes a count that is 0 or more (#256: a passing verdict read as a broken line wrote no row).
+    keys: { r: 'number', ci: 'ids', req: 'count', doc: 'url' },
     required: ['r'],
     inPlaceOf: { doc: 2 },
     shown: { range: ['r', 'ci', 'req'], design: ['doc', 'r', 'req'] },
