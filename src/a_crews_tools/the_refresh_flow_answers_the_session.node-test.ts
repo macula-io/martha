@@ -6,7 +6,7 @@
 // handover read back is the file a launched member would have left, and the stamp is the host's own.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,13 +14,14 @@ import { after, test } from 'node:test'
 
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { HANDOVER_LIMIT_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
+import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, type CrewTools } from './a_crews_tools.ts'
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-refresh-tool-'))
@@ -34,40 +35,94 @@ const aSessionStore = (): SessionRecordStore => {
   return { read: (id) => held.get(id), write: (id, session) => void held.set(id, session) }
 }
 
+/** What a crew the test makes varies from the next: the sessions it took in, and what its declaration switches on. */
+interface ACrewOptions {
+  /** Every session this launcher took in, the first is the one a test drives unless it names another. */
+  readonly sessions?: readonly string[]
+  /** Whether the declaration switches the after-a-task trigger on, which is off unless it says so. */
+  readonly refresh_between_tasks?: boolean
+  /** Whether the crew has a member whose role is `supervisor`: the one a flow's own lines go to. */
+  readonly supervisor?: boolean
+}
+
 /** One crew the test made: its member's tools, where its own store is, and the session that member's launcher holds. */
 interface ACrew {
   readonly tools: CrewTools
+  readonly home: string
   readonly crew: string
-  /** The clock the launcher reads: a test moves it on, as a real one does, so the newest beat is the newest. */
   readonly clock: { at: number }
+  /** The crew's channel as the store holds it: what the flow said, and to whom. */
+  readonly saidInTheChannel: () => Promise<readonly { readonly message: { readonly to: unknown; readonly text: string } }[]>
+  /** A session's first question, which is where its thresholds are measured from. */
+  readonly openTheSession: (session: string, percent: number) => Promise<string>
+  /** What the mod asks at a turn's end, one turn after the last write, as a real launcher does. */
+  readonly ask: (session: string, percent: number, answer?: string) => Promise<string>
+  /** A report of the member's own progress, one turn after the last write. */
+  readonly report: (task: string, step: number, of: number) => Promise<void>
 }
 
 let crewsSoFar = 0
-async function aCrewOfTools(member: string): Promise<ACrew> {
+async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise<ACrew> {
   crewsSoFar += 1
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
   const crew = join(home, 'crew')
+  const rows = rowStreamsDirectory(join(home, 'rows'))
   const clock = { at: 1_000 }
   mkdirSync(root, { recursive: true })
   mkdirSync(join(home, 'row'), { recursive: true })
+  mkdirSync(join(home, 'rows'), { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
   const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
+  if (options.refresh_between_tasks === true || options.supervisor === true) switchOnInTheDeclaration(root, options)
   const records = aSessionStore()
-  const session = beginSession(records, 'a-session')
+  const held = new Map((options.sessions ?? ['a-session']).map((id) => [id, beginSession(records, id)] as const))
+  const ledger = { clock: { now: () => clock.at }, stores: { rows } }
   const tools = crewToolsOver({
     member,
-    ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } },
+    ledger,
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
     stores: { crew: crewFilesDirectory(crew) },
     stamps: handoverStampsIn(crew),
-    sessions: { of: (id) => (id === session.id ? session : undefined) },
+    sessions: { of: (id) => held.get(id) },
   })
-  return { tools, crew, clock }
+  /** The act of the next question, one turn later than the last write: a beat the row store takes as the newest. */
+  const answerWith = async (session: string, percent: number, answer: string, at_start: boolean): Promise<string> => {
+    clock.at += 60_000
+    const answered = await tools.answer('the_refresh_of_this_session', { percent, cost_usd: null, turn_id: `t-${clock.at}`, answer, at_start }, session)
+    assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
+    return (JSON.parse(answered.answer) as { readonly act: string }).act
+  }
+  return {
+    tools,
+    home,
+    crew,
+    clock,
+    saidInTheChannel: async () => (await readTheChannel(ledger)) as readonly { readonly message: { readonly to: unknown; readonly text: string } }[],
+    openTheSession: (session, percent) => answerWith(session, percent, '', true),
+    ask: (session, percent, answer = '') => answerWith(session, percent, answer, false),
+    report: async (task, step, of) => {
+      clock.at += 1_000
+      const answered = await tools.answer('report_progress', { task, step, of }, 'a-session')
+      assert.ok('answer' in answered, `a report was refused: ${'refused' in answered ? answered.refused : ''}`)
+    },
+  }
+}
+
+/** The declaration as a test needs it to read: the after-a-task trigger on, or a member whose role is `supervisor`. */
+function switchOnInTheDeclaration(root: string, options: ACrewOptions): void {
+  const file = join(root, '.crew', 'crew.json')
+  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; role: string }[]; mode: { roles: string[] }; house_rules?: Record<string, unknown> }
+  if (options.supervisor === true) {
+    declared.members = [...declared.members, { name: 'supervisor', role: 'supervisor' }]
+    declared.mode.roles = [...declared.mode.roles, 'supervisor']
+  }
+  if (options.refresh_between_tasks === true) declared.house_rules = { ...(declared.house_rules ?? {}), refresh_between_tasks: true }
+  writeFileSync(file, `${JSON.stringify(declared, null, 2)}\n`)
 }
 
 /** What the row this crew keeps for its member reads as now. */
@@ -166,4 +221,73 @@ test('#255: a handover written before the flow asked is sent back, not cleared',
   const after = theFlowOf(place, 'builder')
   assert.ok(after !== undefined && !('refusal' in after))
   assert.equal(after.sent_back, 1)
+})
+
+// The three findings of Mercurius's r=1 on PR 331, each as the reviewer drove it: a finished task is asked once
+// whatever ended the flow, a decline is held by the share it was taken at, and the Supervisor is told once.
+
+test('#255: a decline after a task holds the ask back on that task, turn after turn (r=1 R1)', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true })
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', 40), 'prompt', 'the finished task did not ask')
+  assert.equal(await crew.ask('a-session', 40, `${CREW_REFRESH_DECLINED} a change in hand`), 'none', 'the decline was not taken')
+  // The row is rewritten by every question, so a name that moved with it would ask again on the same finished task.
+  assert.equal(await crew.ask('a-session', 41, 'a turn that only answered'), 'none', 'the same finished task was asked again after a decline')
+  assert.equal(await crew.ask('a-session', 45), 'none', 'the same finished task was asked again on a later turn')
+})
+
+test('#255: a decline after a task holds until another task finishes past the share it declined at (r=1 R2, design test 7)', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true })
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', 40), 'prompt')
+  assert.equal(await crew.ask('a-session', 40, `${CREW_REFRESH_DECLINED} a change in hand`), 'none')
+  await crew.report('task y', 1, 1)
+  assert.equal(await crew.ask('a-session', 45), 'none', 'asked again inside the margin above the share it declined at')
+  assert.equal(await crew.ask('a-session', 40 + REFRESH_MARGIN_PERCENT + 1), 'prompt', 'a finished task past the margin above the decline did not ask')
+})
+
+test('#255: a successor is not asked on the finished report its predecessor already answered (r=1 R1, P3)', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true, sessions: ['a-session', 'b-session'] })
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', 40), 'prompt')
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules; what runs' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
+  assert.equal(await crew.ask('a-session', 41, CREW_HANDOVER_WRITTEN), 'clear')
+  assert.equal(await crew.openTheSession('b-session', 5), 'prompt', 'the successor was not resumed from its handover')
+  // The row still shows the predecessor's finished task, and the flow file outlives the clear: the successor's first
+  // flow reads the report its predecessor was asked on, rather than handing over again into the same work.
+  assert.equal(await crew.ask('b-session', 25, 'read my handover, carrying on'), 'none', 'the successor was asked on its predecessor\'s finished task')
+})
+
+test('#255: a refresh someone asked for that is declined is abandoned, and the Supervisor is told once (r=1 R3)', async () => {
+  const crew = await aCrewOfTools('builder', { supervisor: true })
+  assert.ok('answer' in (await crew.tools.answer('crew_refresh', { reason: 'the owner is moving me off a large context' }, 'a-session')))
+  assert.equal(await crew.ask('a-session', 30), 'prompt', 'the ask someone made did not start a flow')
+  assert.equal(await crew.ask('a-session', 30, `${CREW_REFRESH_DECLINED} a change in hand`), 'none')
+  const said = await crew.saidInTheChannel()
+  assert.equal(said.length, 1, `the Supervisor was not told once, it was told ${said.length} times`)
+  assert.deepEqual(said[0]?.message.to, ['supervisor'], 'the line did not go to the crew\'s supervisor')
+  assert.ok(said[0]?.message.text.includes('builder'), 'the line does not name the member')
+  // A second turn in the same state sends nothing more: one line per flow, not one per ask.
+  assert.equal(await crew.ask('a-session', 31), 'none')
+  assert.equal((await crew.saidInTheChannel()).length, 1, 'a second ask sent the Supervisor another line')
+})
+
+test('#255: a decline at the limit is said once, and a later decline at the limit says nothing more (r=1 R3)', async () => {
+  const crew = await aCrewOfTools('builder', { supervisor: true })
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 1), 'prompt', 'a session past the limit did not hand over')
+  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 1, `${CREW_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
+  const said = await crew.saidInTheChannel()
+  assert.equal(said.length, 1, `the Supervisor was not told once at the limit, it was told ${said.length} times`)
+  assert.deepEqual(said[0]?.message.to, ['supervisor'])
+  assert.ok(said[0]?.message.text.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the line does not say the member is at its limit')
+  // The member is asked again on the next finished task, as the design has it, and declines again: the Supervisor is
+  // told once, not once per ask.
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2), 'prompt', 'a finished task past the limit did not ask again')
+  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2, `${CREW_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
+  assert.equal((await crew.saidInTheChannel()).length, 1, 'the second decline at the limit sent another line')
 })

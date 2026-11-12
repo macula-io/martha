@@ -78,6 +78,11 @@ export interface ARefresh {
   readonly clear_from: string
   /** When this member was last refreshed, oldest first: what the storm is counted over. */
   readonly refreshed_at: readonly number[]
+  /**
+   * Whether the Supervisor has been told about this flow already: one line per flow, and a new flow carries it from a
+   * decline, so a member that keeps declining at the limit is not a line per ask (design r=2's "told once").
+   */
+  readonly told: boolean
 }
 
 /** The file one member's flow is kept in: one per member, so two flows never disagree. */
@@ -122,6 +127,7 @@ const FLOW_FIELDS: readonly ((flow: Record<string, unknown>) => boolean)[] = [
   (flow) => typeof flow['percent'] === 'number',
   (flow) => typeof flow['clear_from'] === 'string',
   (flow) => Array.isArray(flow['refreshed_at']),
+  (flow) => typeof flow['told'] === 'boolean',
 ]
 
 /** True when `value` is a flow this launcher wrote, every field of it. */
@@ -140,6 +146,8 @@ export function aFlowStarting(starting: {
   readonly percent: number
   readonly asked_on: string
   readonly refreshed_at: readonly number[]
+  /** Whether the Supervisor was already told, which a flow begun after a decline carries (see `told`). */
+  readonly told?: boolean
 }): ARefresh {
   return {
     phase: 'handing_over',
@@ -154,6 +162,7 @@ export function aFlowStarting(starting: {
     percent: starting.percent,
     clear_from: '',
     refreshed_at: starting.refreshed_at,
+    told: starting.told === true,
   }
 }
 
@@ -188,7 +197,7 @@ export function aRefreshIsDue(reading: TheSessionsReading): Due {
   const running = heldByARunningFlow(reading.flow)
   if (running !== undefined) return running
   if (reading.asked) return { due: true, trigger: 'asked' }
-  return heldByItsDecline(reading) ?? heldByWhereItBegan(reading) ?? atTheLimitOrAfterATask(reading)
+  return heldByItsLastAsk(reading) ?? heldByWhereItBegan(reading) ?? atTheLimitOrAfterATask(reading)
 }
 
 /** A flow still running holds every later ask back, whatever else would have asked. */
@@ -197,14 +206,27 @@ function heldByARunningFlow(flow: ARefresh | undefined): Due | undefined {
   return { due: false, why: `its flow is ${flow.phase}` }
 }
 
-/** The task a decline was taken on: a decline is honoured for that task, and no further. */
-function heldByItsDecline(reading: TheSessionsReading): Due | undefined {
+/**
+ * The member's last flow, whatever its end, holds two asks back: one finished task is asked once, and a decline is
+ * measured exactly as an ask is.
+ *
+ * - The finished report the flow asked on is the row's own finished report, and the flow file outlives the clear, so a
+ *   successor is not asked to hand over again on the work its predecessor was already asked about (#470's loop, caught
+ *   at the ask rather than at the clear). The report is named by its task, which no row write changes and only another
+ *   report can replace; a second report on the same task is the task it was already asked about (design test 12).
+ * - A decline is held until another task finishes past the share it was taken at, plus the same margin every other
+ *   threshold uses. Past the limit the limit answers (design §4: "past it, the limit trigger hands over whatever else
+ *   says"), and a decline at the limit is asked again once per finished task, which the hold above already gives.
+ */
+function heldByItsLastAsk(reading: TheSessionsReading): Due | undefined {
   const flow = reading.flow
-  // The design has the limit asked once per turn a member finishes, so the next finished task asks again rather than
-  // waiting for the context to grow (r=2's margin was written for the after-a-task ask, where the limit is not what
-  // fired).
-  if (flow?.phase === 'declined' && reading.finished_report !== '' && flow.asked_on === reading.finished_report) {
-    return { due: false, why: 'it declined on this task' }
+  if (flow === undefined) return undefined
+  if (reading.finished_report !== '' && flow.asked_on === reading.finished_report) {
+    return { due: false, why: flow.phase === 'declined' ? 'it declined on this task' : 'this task was already asked about' }
+  }
+  const measuredFromItsDecline = flow.phase === 'declined' && flow.trigger === 'after_a_task'
+  if (measuredFromItsDecline && reading.percent < HANDOVER_LIMIT_PERCENT && reading.percent < flow.percent + REFRESH_MARGIN_PERCENT) {
+    return { due: false, why: 'it has not grown past the share it declined at' }
   }
   return undefined
 }
@@ -355,6 +377,25 @@ export function theStormLine(storm: { readonly member: string; readonly percents
   return (
     `${storm.member} was parked after ${storm.percents.length} refreshes inside ${minutes} minutes ` +
     `(at ${storm.percents.join('%, ')}%), the last from ${storm.file}. It stays parked until the owner or the Supervisor wakes it.`
+  )
+}
+
+/**
+ * The line a decline at the limit sends the Supervisor, once: the member is past the limit, has not handed over, and
+ * says why it cannot. Sent as the storm's is, so the Supervisor hears it without watching the dashboard.
+ */
+export function theLimitLine(refusal: { readonly member: string; readonly percent: number; readonly said: string }): string {
+  return (
+    `${refusal.member} is at ${refusal.percent}% of its context, past the ${HANDOVER_LIMIT_PERCENT}% handover limit, and has not handed over: ` +
+    `it declined at the limit, saying ${refusal.said}. It is asked again when it finishes a task.`
+  )
+}
+
+/** The line a refresh someone asked for that ends abandoned sends the Supervisor, once. */
+export function theAskedLine(refusal: { readonly member: string; readonly why: string }): string {
+  return (
+    `${refusal.member} was asked to refresh and could not hand over: ${refusal.why}. ` +
+    'The flow is abandoned with that reason on its row, and that instruction asks nothing more of it.'
   )
 }
 

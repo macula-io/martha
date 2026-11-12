@@ -31,6 +31,8 @@ import {
   theFlowOf,
   theFlowSentBack,
   theHandoverPrompt,
+  theAskedLine,
+  theLimitLine,
   theResumePrompt,
   theSendBackNote,
   theStormLine,
@@ -114,8 +116,7 @@ export async function theRefreshAct(places: TheRefreshPlaces, question: TheSessi
   }
   const due = theDueOf(places, question, opened, beganAt)
   if (!due.due) return NO_ACT
-  const refreshedBefore: readonly number[] = flow === undefined ? [] : flow.refreshed_at
-  return startTheFlow(places, opened.place, due, question, refreshedBefore, beganAt, now)
+  return startTheFlow(places, opened.place, due, question, flow, beganAt, now)
 }
 
 /** What a question is answered over: the member's flow as the store keeps it, the place it is kept in, and the crew. */
@@ -155,7 +156,7 @@ function startTheFlow(
   place: CrewPlace,
   due: { readonly due: true; readonly trigger: RefreshTrigger },
   question: TheSessionsQuestion,
-  refreshed_at: readonly number[],
+  previous: ARefresh | undefined,
   beganAt: number,
   now: number,
 ): TheAct {
@@ -166,7 +167,10 @@ function startTheFlow(
     started_at_percent: beganAt,
     percent: question.percent,
     asked_on: finishedReportIn(places),
-    refreshed_at,
+    refreshed_at: previous === undefined ? [] : previous.refreshed_at,
+    // A decline ends its flow, so a member that keeps declining at the limit would be a line per ask. The flow that
+    // follows a decline carries whether the Supervisor was told, and the clear, which ends a flow by `resumed`, resets it.
+    told: previous?.phase === 'declined' && previous.told,
   })
   keepTheFlow(place, places.member, starting)
   // An ask someone made is consumed here, once: a member that has answered it is not asked again by the same one.
@@ -188,7 +192,7 @@ async function carryOn(
   now: number,
 ): Promise<TheAct> {
   const stalled = aFlowStalled(flow, now)
-  if (flow.phase === 'clearing') return await carryTheClear(places, place, flow, question, now, stalled)
+  if (flow.phase === 'clearing') return await carryTheClear(places, place, flow, question, settings, now, stalled)
   return await carryTheHandover(places, place, flow, question, settings, now, stalled)
 }
 
@@ -198,12 +202,13 @@ async function carryTheClear(
   place: CrewPlace,
   flow: ARefresh,
   question: TheSessionsQuestion,
+  settings: CrewSettings,
   now: number,
   stalled: boolean,
 ): Promise<TheAct> {
   const aSuccessorAsks = flow.clear_from !== '' && question.session_id !== flow.clear_from && question.at_start
   if (aSuccessorAsks) return await resume(places, place, flow, now)
-  if (stalled) return abandon(places, place, flow, 'the clear never produced a new session', now)
+  if (stalled) return abandon(places, place, flow, 'the clear never produced a new session', now, settings)
   return NO_ACT
 }
 
@@ -217,13 +222,13 @@ async function carryTheHandover(
   now: number,
   stalled: boolean,
 ): Promise<TheAct> {
-  if (stalled) return abandon(places, place, flow, 'no answer to the handover ask', now)
+  if (stalled) return abandon(places, place, flow, 'no answer to the handover ask', now, settings)
   const answer = question.answer
-  if (answer.includes(CREW_REFRESH_DECLINED)) return declined(places, place, flow, answer, now)
+  if (answer.includes(CREW_REFRESH_DECLINED)) return declined(places, place, flow, answer, settings, now)
   if (!answer.includes(CREW_HANDOVER_WRITTEN)) return NO_ACT
   const judged = theJudgementOf(places, flow)
   if (judged.kind === 'sent_back') return sentBack(places, place, flow, judged.missing, now)
-  if (judged.kind === 'not_written') return sentBackOnceOrAbandoned(places, place, flow, judged.why, now)
+  if (judged.kind === 'not_written') return sentBackOnceOrAbandoned(places, place, flow, judged.why, now, settings)
   return clearTheSession(places, place, flow, question, settings, judged.missing, now)
 }
 
@@ -242,8 +247,8 @@ function theJudgementOf(places: TheRefreshPlaces, flow: ARefresh): HandoverVerdi
 }
 
 /** A handover that was never written: sent back once, and abandoned the second time, with the reason on the row. */
-function sentBackOnceOrAbandoned(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, why: string, now: number): TheAct {
-  return flow.sent_back >= 1 ? abandon(places, place, flow, why, now) : sentBack(places, place, flow, [why], now)
+function sentBackOnceOrAbandoned(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, why: string, now: number, settings: CrewSettings): TheAct {
+  return flow.sent_back >= 1 ? abandon(places, place, flow, why, now, settings) : sentBack(places, place, flow, [why], now)
 }
 
 /** The clear itself, with the row saying what the handover was missing — and the storm that parks a member that loops. */
@@ -294,39 +299,76 @@ function sentBack(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, mi
   return { act: 'prompt', text: theSendBackNote(missing), refresh: { phase: 'handing_over', reason: `sent back: ${missing.join('; ')}` } }
 }
 
-/** The member's own decline: kept with its ground, and never honoured when someone else asked for the refresh. */
-function declined(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, answer: string, now: number): TheAct {
+/**
+ * The member's own decline: kept with its ground, never honoured when someone else asked for the refresh, and said once
+ * to the Supervisor when it was taken at the limit.
+ */
+function declined(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, answer: string, settings: CrewSettings, now: number): TheAct {
   const ground = answer.slice(answer.indexOf(CREW_REFRESH_DECLINED) + CREW_REFRESH_DECLINED.length).trim().replace(/^[:\s-]+/, '')
   const said = ground === '' ? 'it gave no ground' : ground
-  if (!aDeclineIsAllowed(flow.trigger)) return abandon(places, place, flow, `declined a refresh that was asked for: ${said}`, now)
-  keepTheFlow(place, places.member, theFlowDeclined(flow, said, now))
+  if (!aDeclineIsAllowed(flow.trigger)) return abandon(places, place, flow, `declined a refresh that was asked for: ${said}`, now, settings)
+  // A decline at the limit is the member saying it cannot reach a safe point at all, and the Supervisor hears it once:
+  // the design's row and one line, not a line per turn.
+  const ended =
+    flow.trigger === 'at_the_limit' && !flow.told
+      ? tellTheSupervisor(places, place, flow, settings, theLimitLine({ member: places.member, percent: flow.percent, said }))
+      : flow
+  keepTheFlow(place, places.member, theFlowDeclined(ended, said, now))
   return { act: 'none', refresh: { phase: 'declined', reason: `declined: ${said}` } }
 }
 
-/** Ends a flow with its reason, on the row and in the store, and tells the member nothing. */
-function abandon(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, why: string, now: number): TheAct {
-  keepTheFlow(place, places.member, theFlowAbandoned(flow, why, now))
+/**
+ * Ends a flow with its reason, on the row and in the store, and tells the member nothing. A refresh someone asked for
+ * that ends here is the member failing to write the handover an instruction needed, so the Supervisor is told once.
+ */
+function abandon(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, why: string, now: number, settings: CrewSettings): TheAct {
+  const ended =
+    flow.trigger === 'asked' && !flow.told
+      ? tellTheSupervisor(places, place, flow, settings, theAskedLine({ member: places.member, why }))
+      : flow
+  keepTheFlow(place, places.member, theFlowAbandoned(ended, why, now))
   return { act: 'none', refresh: { phase: 'abandoned', reason: why } }
+}
+
+/**
+ * Says one line to the crew's supervisor, once per flow: the flow is kept with `told` before anything is sent, so a
+ * second ask in the same flow sends nothing more, and the line is kept in the ledger as well, so a Supervisor that was
+ * not listening still reads it. A crew with no such member keeps the row and sends nothing.
+ */
+function tellTheSupervisor(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, settings: CrewSettings, line: string): ARefresh {
+  const told = { ...flow, told: true }
+  keepTheFlow(place, places.member, told)
+  sayToTheSupervisor(places, settings, line)
+  return told
+}
+
+/**
+ * One line to the member whose role is `supervisor`, on the crew's channel and in the ledger of the package the member
+ * holds. A crew with no such member sends nothing: the row still says what happened.
+ */
+function sayToTheSupervisor(places: TheRefreshPlaces, settings: CrewSettings, line: string): void {
+  const supervisor = settings.members.find((one) => one.role === 'supervisor')
+  if (supervisor === undefined) return
+  const held = places.beats.read(places.member)?.holds ?? ''
+  // A milestone is kept in the ledger of the package the member holds, and a member that holds none has no ledger to
+  // keep it in: the line still goes on the channel.
+  if (held !== '') void keepTheMilestone(places.ledger, { package: held, member: places.member, event: 'checkpoint', note: line })
+  void sendACrewMessage(places.ledger, {
+    member: places.member,
+    roster: settings.members.map((one) => one.name),
+    package: held === '' ? null : held,
+    to: [supervisor.name],
+    text: line,
+  })
 }
 
 /** Parks the member a storm would loop, and says one line about it in the crew's own channel. */
 function parkForTheStorm(places: TheRefreshPlaces, flow: ARefresh, settings: CrewSettings, now: number): void {
   const declaration: TheDeclaration = { members: settings.members.map((one) => ({ name: one.name, role: one.role })), mode: { may: settings.mode.may } }
   parkAMember(places, { actor: places.member, member: places.member, reason: A_STORM_PARK, at: new Date(now), declaration })
-  const supervisor = settings.members.find((one) => one.role === 'supervisor')
-  if (supervisor === undefined) return
   const newest = theMembersNewestHandover(places)
   const file = newest === undefined || 'refusal' in newest ? 'no handover the store would read' : newest.file
-  const line = theStormLine({ member: places.member, percents: [...flow.refreshed_at.map(() => flow.percent), flow.percent], file })
-  // The line is kept in the ledger as well as sent, so a Supervisor that was not listening still reads it.
-  void keepTheMilestone(places.ledger, { package: places.beats.read(places.member)?.holds ?? '', member: places.member, event: 'checkpoint', note: line })
-  void sendACrewMessage(places.ledger, {
-    member: places.member,
-    roster: settings.members.map((one) => one.name),
-    package: places.beats.read(places.member)?.holds ?? null,
-    to: [supervisor.name],
-    text: line,
-  })
+  sayToTheSupervisor(places, settings, theStormLine({ member: places.member, percents: [...flow.refreshed_at.map(() => flow.percent), flow.percent], file }))
 }
 
 /** The member's newest handover, read by the host's stamp, or undefined when the store holds none. */
@@ -354,7 +396,9 @@ function holdsOf(places: TheRefreshPlaces): readonly string[] {
 function finishedReportIn(places: TheRefreshPlaces): string {
   const row = places.beats.read(places.member)
   if (row === null || row.progress.of < 1 || row.progress.step < row.progress.of) return ''
-  return `${row.task}@${row.at}`
+  // The task, and nothing that moves when the row is written again: `at` is rewritten by every question the mod asks, so
+  // a name carrying it named a different report every turn. Only a report that names another task changes this one.
+  return row.task
 }
 
 /** Whether the member is parked, as the store answers it; a store that will not answer is not "not parked". */
