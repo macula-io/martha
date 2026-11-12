@@ -20,7 +20,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { StringDecoder } from 'node:string_decoder'
 
@@ -126,9 +126,15 @@ interface RunEnvironment {
  * The recorded host's binary, refused by name when `claude` is not a file this machine can run (martha#304): a run
  * whose host path is wrong must stop, not fall through PATH to whichever other claude is installed and report that
  * host's results as the recorded one's.
+ *
+ * The path is made absolute once, here, before it is checked and returned: a relative path is looked for from this
+ * process's folder, but the link `environmentOf` makes carries the same text into the run's `bin`, where a relative
+ * target leads nowhere, so PATH fell through to the system claude (martha#304 r=1). The refusal names the path as the
+ * variable held it, which is what a person has to fix.
  */
 export function theRecordedHostAt(claude: string): string {
-  if (isRunnableFile(claude)) return claude
+  const host = resolve(claude)
+  if (isRunnableFile(host)) return host
   throw new Error(
     `${RECORDED_HOST_VARIABLE} names ${claude}, which is not an executable file: a run that went on would drive whichever claude PATH finds next, and its results would not be the recorded host's`,
   )

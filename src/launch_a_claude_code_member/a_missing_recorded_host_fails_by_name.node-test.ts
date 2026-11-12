@@ -61,6 +61,25 @@ test('a host path that names something this user cannot run is refused the same 
   assert.throws(() => theRecordedHostAt(aDirectory), { message: refusal(aDirectory) })
 })
 
+test('a host path given relative names the file it leads to, and the link to it follows (martha#304 r=1)', (t) => {
+  const home = aHome(t)
+  const host = aRunnableFile(home, 'the-recorded-host')
+  const from = process.cwd()
+  process.chdir(home)
+  try {
+    // The variable holds a path a person types from their own folder; the link is made in the run's bin, where that
+    // same relative target would lead somewhere else entirely — to no file at all, so PATH fell through (r=1).
+    assert.equal(theRecordedHostAt('the-recorded-host'), join(process.cwd(), 'the-recorded-host'))
+    assert.throws(() => theRecordedHostAt('not-a-host'), { message: refusal('not-a-host') })
+
+    const environment = environmentOf({ claude: 'the-recorded-host', home }, AN_ADDRESS_NOTHING_ANSWERS, join(home, 'runtime'))
+    const [first] = environment.PATH.split(delimiter)
+    assert.equal(realpathSync(join(first ?? '', 'claude')), realpathSync(host))
+  } finally {
+    process.chdir(from)
+  }
+})
+
 test('the PATH a run is given finds claude at the link, first, so no later claude can answer for it', (t) => {
   const home = aHome(t)
   const host = aRunnableFile(home, 'the-recorded-host')
