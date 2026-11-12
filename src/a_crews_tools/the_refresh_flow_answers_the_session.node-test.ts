@@ -261,6 +261,19 @@ test('#255: a successor is not asked on the finished report its predecessor alre
   assert.equal(await crew.ask('b-session', 25, 'read my handover, carrying on'), 'none', 'the successor was asked on its predecessor\'s finished task')
 })
 
+test('#255: a successor taken past the limit hands over on the task its predecessor was asked about (r=3 R1′, P4)', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true, sessions: ['a-session', 'b-session'] })
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', 40), 'prompt')
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules; what runs' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
+  assert.equal(await crew.ask('a-session', 41, CREW_HANDOVER_WRITTEN), 'clear')
+  assert.equal(await crew.openTheSession('b-session', 5), 'prompt', 'the successor was not resumed from its handover')
+  // The same row and the same flow file as P3, and the successor is past the limit: the limit answers over the past ask
+  // rather than holding it back, so a member that grew to 90% hands over instead of holding forever on older work.
+  assert.equal(await crew.ask('b-session', HANDOVER_LIMIT_PERCENT + 20, 'read my handover, carrying on'), 'prompt', 'a successor past the limit was held on its predecessor\'s finished task')
+})
+
 test('#255: a refresh someone asked for that is declined is abandoned, and the Supervisor is told once (r=1 R3)', async () => {
   const crew = await aCrewOfTools('builder', { supervisor: true })
   assert.ok('answer' in (await crew.tools.answer('crew_refresh', { reason: 'the owner is moving me off a large context' }, 'a-session')))

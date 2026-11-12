@@ -217,11 +217,17 @@ function heldByARunningFlow(flow: ARefresh | undefined): Due | undefined {
  * - A decline is held until another task finishes past the share it was taken at, plus the same margin every other
  *   threshold uses. Past the limit the limit answers (design §4: "past it, the limit trigger hands over whatever else
  *   says"), and a decline at the limit is asked again once per finished task, which the hold above already gives.
+ * - The limit answers over this hold too, because it is not a setting: a session taken past the limit hands over even
+ *   on the finished report its flow already asked about. A successor inherits the flow file and the row still names
+ *   its predecessor's finished task, so a hold that outlasted the limit would grow a member to 90% and never ask it.
+ *   The one flow the limit does not answer over is a decline taken at the limit: that hold is the at-limit rule's one
+ *   ask per finished turn, and a decline is measured exactly as an ask is.
  */
 function heldByItsLastAsk(reading: TheSessionsReading): Due | undefined {
   const flow = reading.flow
   if (flow === undefined) return undefined
-  if (reading.finished_report !== '' && flow.asked_on === reading.finished_report) {
+  const belowTheLimitOrADeclineAtIt = reading.percent < HANDOVER_LIMIT_PERCENT || aDeclineTakenAtTheLimit(flow)
+  if (reading.finished_report !== '' && flow.asked_on === reading.finished_report && belowTheLimitOrADeclineAtIt) {
     return { due: false, why: flow.phase === 'declined' ? 'it declined on this task' : 'this task was already asked about' }
   }
   const measuredFromItsDecline = flow.phase === 'declined' && flow.trigger === 'after_a_task'
@@ -229,6 +235,11 @@ function heldByItsLastAsk(reading: TheSessionsReading): Due | undefined {
     return { due: false, why: 'it has not grown past the share it declined at' }
   }
   return undefined
+}
+
+/** Whether the flow was declined at a share at or past the limit: the one hold the limit does not answer over. */
+function aDeclineTakenAtTheLimit(flow: ARefresh): boolean {
+  return flow.phase === 'declined' && flow.percent >= HANDOVER_LIMIT_PERCENT
 }
 
 /** The one comparison both thresholds are measured by: a session that began at 75% is not refreshed into the same 75%. */

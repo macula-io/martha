@@ -107,6 +107,17 @@ test('#255: a decline holds the ask back on the very task it was taken on, and t
   assert.deepEqual(nextTask, { due: true, trigger: 'at_the_limit' })
 })
 
+test('#255: a successor past the limit is asked on the finished task its predecessor was (r=3 R1′, P4)', () => {
+  // A successor inherits the flow file, and the row it reads still names its predecessor's finished task. Below the
+  // limit that task holds the ask back (P3); past it the limit answers over the hold, because the limit is not a
+  // setting and a hold that outlasted it would grow a member to 90% and never ask (design §4).
+  const itsPredecessorsFlow = aFlow({ phase: 'abandoned', percent: 40, asked_on: 'a task' })
+  const pastTheLimit = aRefreshIsDue(
+    reading({ percent: HANDOVER_LIMIT_PERCENT + 20, started_at_percent: 5, refresh_between_tasks: true, finished_report: 'a task', flow: itsPredecessorsFlow }),
+  )
+  assert.deepEqual(pastTheLimit, { due: true, trigger: 'at_the_limit' })
+})
+
 test('#255: a flow that is still running holds every later ask back; an ended one does not', () => {
   for (const phase of ['handing_over', 'clearing'] as const) {
     assert.deepEqual(aRefreshIsDue(reading({ percent: 99, flow: aFlow({ phase }) })), { due: false, why: `its flow is ${phase}` })
