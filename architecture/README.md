@@ -4,12 +4,16 @@ This page shows, in three pictures, what Martha talks to, what it is made of, an
 what its code is made of, drawn from the code that is here rather than from the
 design it grew from.
 
-> **Status: the launcher is built; the crew protocol is not.** The `martha`
-> command (`init`, `approve`, `start`), the approval and launch gates and the
-> relay are in `src/` and run. The crew's own protocol — the room, the ledger,
-> parking and waking, the dashboard — is still to be ported; the order is in
-> [the port map](../docs/port-map.md). A box drawn for something not built says
-> so, and is dashed in the pictures.
+> **Status: the launcher is built, and the crew's own tools with it.** The `martha`
+> command (`init`, `approve`, `start`, and the `run`, `install`, `pin-key`, `keep-shapes`
+> and `--version` words beside them), the approval and launch gates and the relay are in
+> `src/` and run. So do the crew's tools (`a_crews_tools`): the dashboard's rows and the
+> pane that draws them (`show_dashboard_beat`), the ledger of what a member did
+> (`keep_the_ledger`), and a message from one member to another (`send_a_crew_message`).
+> What does not run yet is the room across machines, and the handover that would let a
+> member outlive its context; the order the rest arrives in is in
+> [the port map](../docs/port-map.md). A box drawn for something not built says so, and is
+> dashed in the pictures.
 
 ## Context: who uses Martha, and what it reaches
 
@@ -91,7 +95,7 @@ fall behind the code.
 | `check_nothing_private_gets_in`, `check_every_link_resolves` | This repository's own checks. A private issue link, an internal host name or a private remote fails CI by name. A link is called broken only when it really is: a host that answers 408, 429 or a 5xx, or times out, is asked again before its link fails, while a 404 or a missing file fails at once, by name. `check_posted_text_carries_nothing_private` reads the text members post on GitHub — issue titles and bodies, issue comments, pull-request titles and bodies, review bodies, inline review comments and commit comments — and refuses the same classes there, by name; it writes nothing, and a red run is the signal. `check_the_logos_are_valid_svg` holds every logo to well-formed XML, on this repository's own Node rather than through `xmllint` from the Ubuntu archive. `check_no_test_the_base_passed_goes_missing` names every test title the merge base holds that the branch's tip no longer does, by file and title; a deliberate removal passes only when a commit in the range says which title (or file) it drops, and a claim that excuses nothing fails too. |
 | `install_the_pinned_installer` | `martha install`: the installer the running release pins, and no other — the pin read from the release's own tree, the exact version fetched, other bytes refused by name, and the installer run with the words unchanged. |
 | `run_the_nodes_own_npm_alone` | npm, and nothing of the machine's: the npm beside this node, empty user and global config, one named registry, `--ignore-scripts`, and an environment built from `HOME` and `PATH` alone. The mesh server's install and the pin's install share it, so they cannot drift apart. |
-| `write_my_handover`, `park_and_wake_a_member` | A member outliving its context: the host writes the one handover file a member has and stamps it, and a park is a marker in the crew's store that a clear, a restart or a refresh cannot lose. `crew_files_directory` is the host glue that keeps both whole there, so no slice touches a disk. Part 1 of the package: the refresh flow, the tool and the wake verb come with part 2, so no launch loads them yet. |
+| `write_my_handover`, `park_and_wake_a_member` | A member outliving its context: the host writes the one handover file a member has and stamps it, and a park is a marker in the crew's store that a clear, a restart or a refresh cannot lose. `crew_files_directory` is the host glue that keeps both whole there, so no slice touches a disk. Part 1 of the package: the refresh flow, the tool and the wake verb come with part 2, so no launch loads `write_my_handover` or `park_and_wake_a_member` yet. |
 
 ### Left out of the Component diagram on purpose
 
@@ -100,7 +104,7 @@ them. The same test above fails if any other directory joins them without a box:
 
 | Left out | Why |
 |---|---|
-| `open_and_finish_a_worktree` | The two worktree tools, `worktree_open` and `worktree_finish`. A member's session cannot call them yet, because the launcher registers no tool. |
+| `open_and_finish_a_worktree` | A member's session cannot call `worktree_open` or `worktree_finish` yet: the launcher registers no worktree tool, though it registers the crew's own (martha#253, #256). |
 | `record_mesh_answers` | A script run by hand, `npm run record:mesh-answers`, when a version of the mesh server is recorded. The gate reads the answer shapes it wrote; the script itself never runs. |
 | `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
 | `record_claude_code_host` | A script run by hand, `npm run record:claude-code-host`, when the coding tool is upgraded. The adapter reads the recording it writes; the script itself never runs. |

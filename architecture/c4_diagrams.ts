@@ -569,7 +569,7 @@ export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
 export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
   {
     name: 'open_and_finish_a_worktree',
-    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no tool (martha#253)',
+    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no worktree tool, though it registers the crew\'s own (martha#253)',
   },
   {
     name: 'probe_launch_hosts',
