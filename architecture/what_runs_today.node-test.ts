@@ -63,7 +63,7 @@ const sentencesOf = (page: string): readonly string[] =>
  * does not know is a reviewer's to catch, not the test's.
  */
 const DENIES_RUNNING: readonly RegExp[] = [
-  /registers no (?:worktree )?tool/,
+  /registers no (?:worktree |such )?tool/,
   /cannot call (?:them|it) yet/,
   /no launch loads/,
   /never loads it/,
