@@ -493,8 +493,10 @@ export function containers(): Diagram {
 
   // The boundary's bottom is the lowest box it holds, drawn at the height box() gives it, plus the room
   // its own label needs: derived, so the label cannot be left standing on a box that grew.
+  const packageBoundary = { x: 16, y: 40, w: 600 } as const
   const lowestBox = PACKAGE_BOXES.reduce((bottom, b) => Math.max(bottom, b.y + heightFor(b, b.w)), 0)
-  d.bound(16, 40, 600, lowestBox + roomUnderABottomLabel() - 40, PACKAGE_LABEL, true)
+  d.bound(packageBoundary.x, packageBoundary.y, packageBoundary.w,
+    lowestBox + roomUnderABottomLabel() - packageBoundary.y, PACKAGE_LABEL, true)
   for (const b of PACKAGE_BOXES) d.box(b)
 
   systemsTheContainersReach(d)
