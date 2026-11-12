@@ -568,22 +568,6 @@ export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
  */
 export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
   {
-    name: 'check_a_range_before_the_owner_says_yes',
-    why: 'the range check, verify_range (martha#256); a member\'s session cannot call it yet, because the launcher registers no such tool, though it registers the crew\'s own (martha#253)',
-  },
-  {
-    name: 'land_passed_work_as_one_batch',
-    why: 'the batch landing and the fast-forward the owner\'s yes unlocks (martha#256); a member\'s session cannot call them yet, because the launcher registers no such tool, though it registers the crew\'s own (martha#253)',
-  },
-  {
-    name: 'open_and_finish_a_worktree',
-    why: 'the two worktree tools, worktree_open and worktree_finish (martha#256); a member\'s session cannot call them yet, because the launcher registers no worktree tool, though it registers the crew\'s own (martha#253)',
-  },
-  {
-    name: 'read_the_origin_a_clone_has',
-    why: 'what a clone\'s origin says, org/name and the default branch (martha#256); read by the three slices beside it, and by nothing that runs yet',
-  },
-  {
     name: 'probe_launch_hosts',
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
@@ -674,8 +658,12 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged'] },
     { col: 1, kind: 'b-cmp', name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
       desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] },
-    { col: 2, kind: 'b-cmp', name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message', 'show_what_a_message_became', 'read_a_crew_line', 'find_the_work_a_verdict_passed'], type: '[the crew\'s rows and its ledger]', code: true,
-      desc: ['show_dashboard_beat holds a member\'s row', 'and the rule the newest beat wins;', 'report_progress moves it, see_the_crew', 'lays every one out, and a_crews_tools', 'answers every tool the crew', 'registers.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, send_a_crew_message writes one, and', 'show_what_a_message_became reads back', 'what became of it; read_a_crew_line reads', 'the HANDOFF and VERDICT lines, and find_', 'the_work_a_verdict_passed the head passed'] },
+    { col: 2, kind: 'b-cmp', name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message', 'show_what_a_message_became', 'read_a_crew_line'], type: '[the crew\'s rows and its ledger]', code: true,
+      desc: ['show_dashboard_beat holds a member\'s row', 'and the rule the newest beat wins;', 'report_progress moves it, see_the_crew', 'lays every one out, and a_crews_tools', 'answers every tool the crew', 'registers.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, send_a_crew_message writes one, and', 'show_what_a_message_became reads back', 'what became of it; read_a_crew_line reads', 'the HANDOFF and VERDICT lines of a', 'message'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'check_a_range_before_the_owner_says_yes', names: ['check_a_range_before_the_owner_says_yes', 'land_passed_work_as_one_batch', 'find_the_work_a_verdict_passed', 'open_and_finish_a_worktree', 'read_the_origin_a_clone_has'], type: '[the crew\'s tools that act]', code: true,
+      desc: ['The five tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'write_my_handover', names: ['write_my_handover'], type: '[the host writes a handover]', code: true,

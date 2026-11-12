@@ -9,7 +9,7 @@
 // (src/refuse_launch_of_unapproved_config/); this file only does what it is told,
 // and refuses a scratch prefix or name that would leave its directory.
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
@@ -24,6 +24,7 @@ import type {
   ScratchDirectory,
 } from '../host_contract/host_contract.ts'
 import { OWNER_EXECUTES } from '../host_contract/host_contract.ts'
+import { linuxProcessIdentities } from './process_identity_from_proc.ts'
 
 /** The files on this machine's disk, read as they are. */
 export const filesOnThisMachine: FileTree = {
@@ -94,8 +95,35 @@ function codeOf(error: unknown): string | undefined {
   return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : undefined
 }
 
-/** This machine's files, scratch directories and processes run now, shaped as the host contract holds them. */
+/**
+ * Runs a process on this machine, waited for by a promise, with no shell: the async half of the two above
+ * (martha#256). Two places need it -- the coding tool's adapter, which runs the tools a member calls, and the
+ * launcher, whose crew tools read a range, land a batch and move a worktree without asking the member's session
+ * to act -- so it is one answer here rather than a second implementation beside each.
+ */
+export const runAProcessOnThisMachine: Processes['run'] = (request) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(request.command, [...request.args], { cwd: request.cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+    child.stdout.on('data', (chunk: Buffer) => void stdout.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => void stderr.push(chunk))
+    child.on('error', reject)
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) =>
+      resolve({
+        exit_code: signal === null ? code : null,
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8'),
+      }),
+    )
+  })
+
+/** This machine's files, scratch directories and processes, shaped as the host contract holds them. */
 export const thisMachine = {
   stores: { files: filesOnThisMachine, scratch: scratchOnThisMachine },
-  processes: { runNow: runNowOnThisMachine },
+  processes: {
+    run: runAProcessOnThisMachine,
+    runNow: runNowOnThisMachine,
+    identityOf: (pid: number) => linuxProcessIdentities.identityOf(pid),
+  } satisfies Processes,
 } as const

@@ -169,7 +169,7 @@ function approvalInUse(request: MemberStartRequest, approvals: readonly Approval
 }
 
 /** Everything a start needs before the launcher is asked, or why it may not start. */
-async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly strict_gate: boolean } | string> {
+async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly strict_gate: boolean; readonly settings: CrewSettings } | string> {
   if (!request.is_terminal) return NOT_A_TERMINAL
   const unpassed = unpassedOwnerArgument(request.args)
   if (unpassed !== undefined) return `${NOT_STARTED}: ${unpassed}`
@@ -184,7 +184,7 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   if ('refusal' in kept) return `${NOT_STARTED}: ${kept.refusal}`
   const approval = approvalInUse(request, kept.approvals)
   if (typeof approval === 'string') return approval
-  return { node_id: ids.ids[member.name]!, model: member.model, approval, strict_gate: settings.house_rules[STRICT_GATE] }
+  return { node_id: ids.ids[member.name]!, model: member.model, approval, strict_gate: settings.house_rules[STRICT_GATE], settings }
 }
 
 /**
@@ -265,6 +265,10 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         documents: request.documents,
         stores: { crew: theCrewStore(request.state, request.root) },
         carrier: carryingTo({ member: request.member, host: channel, turns }),
+        // The five tools that act run git and gh through the launcher's own processes, over the declaration's
+        // workspace places: nothing that acts runs inside the member's session (martha#256).
+        processes: thisMachine.processes,
+        settings: ready.settings,
       }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
