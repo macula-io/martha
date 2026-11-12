@@ -31,12 +31,14 @@ import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
-import type { DocumentStore } from '../host_contract/host_contract.ts'
+import type { CrewStore, DocumentStore } from '../host_contract/host_contract.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import {
   CREW_ROW_PLACE,
   crewRowsDirectory,
+  crewStateDirectory,
   crewSubdirectory,
   nodeIdsFor,
   PERMISSION_BITS,
@@ -115,6 +117,11 @@ export interface MemberStartRequest {
   readonly member: string
   /** The owner's own arguments for the host: only ../pass_only_switches_that_load_no_config's switches pass. */
   readonly args: readonly string[]
+  /**
+   * The one prompt Martha adds to the host's own arguments, after the owner's: what a woken member starts on
+   * (../wake_a_member). Martha's, never the owner's, so it is not read by the switch rule above.
+   */
+  readonly initial_prompt?: string
   /** Whether the input start was run with is a terminal: a member's shell tool's never is. */
   readonly is_terminal: boolean
   readonly state: MarthaState
@@ -209,6 +216,16 @@ function signedShapeNames(state: MarthaState): readonly string[] {
   return opened.trusted ? opened.shapes.map((shape) => shape.name) : []
 }
 
+/**
+ * The crew's own store for this launch (martha#254 R1, #255): a member's park marker and the handovers a wake reads.
+ * A crew directory that is not this user's own is answered as a store that refuses every place, so a tool that needed
+ * it says why rather than writing somewhere else.
+ */
+function theCrewStore(state: MarthaState, root: string): CrewStore {
+  const crew = crewStateDirectory(state.state_root, root)
+  return 'refusal' in crew ? { place: () => crew } : crewFilesDirectory(crew.path)
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -233,7 +250,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     strict_gate: ready.strict_gate,
     places,
     command: request.command,
-    args: [...(ready.model === null ? [] : ['--model', ready.model]), ...request.args],
+    args: [...(ready.model === null ? [] : ['--model', ready.model]), ...request.args, ...(request.initial_prompt === undefined ? [] : [request.initial_prompt])],
     inherited: request.inherited,
     stdio: request.stdio,
     tellOwner: (line) => request.tellOwner(line),
@@ -246,6 +263,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         beats: dashboardRowsIn(request.places.dashboard),
         root: request.root,
         documents: request.documents,
+        stores: { crew: theCrewStore(request.state, request.root) },
         carrier: carryingTo({ member: request.member, host: channel, turns }),
       }),
     signed_runs: signedRunsOf(

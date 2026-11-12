@@ -16,6 +16,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { CREW_TOOL_NAMES, crewToolsOver, THE_TOOLS_ASK } from './a_crews_tools.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 
 /** The crew's tools over a place of the test's own, which it removes. */
 function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typeof crewToolsOver> {
@@ -27,6 +28,7 @@ function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typ
     beats: dashboardRowsIn(join(home, 'row')),
     root: home,
     documents: { read: async () => '{}' },
+    stores: { crew: crewFilesDirectory(join(home, 'crew')) },
   })
 }
 

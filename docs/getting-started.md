@@ -189,6 +189,37 @@ its start, its stop and every call it makes are recorded, so the answer it
 hands back is placed by that record. By default the reviewer keeps its shell
 while the agent runs; the answer is recorded and nothing is refused.
 
+## Parking a member, and waking it
+
+A member can park itself when it has nothing to do, so it is not refreshed and
+does not take a turn you did not ask for. It calls the `crew_park` tool with a
+reason, and the reason is kept: the marker sits in the crew's own `parked/`
+place, one file per member, and a park outlives the session it was made in.
+
+To bring a member back, run, in the checkout:
+
+```sh
+martha wake builder
+```
+
+```text
+builder woken from ~/.local/state/martha/crews/6f2c…/handovers/HANDOVER_2026-11-12_builder.md
+```
+
+`martha wake` starts the member from the newest handover the host wrote and
+stamped for it, on a prompt that names that file and nothing else of it, and it
+clears the member's park as it goes. It refuses, saying why, when the member
+has handed nothing over, when the crew store cannot be read, and when the name
+is not on the crew — and it refuses before it starts anything, so a wake that
+fails leaves your crew exactly as it was.
+
+Two things it does not do. It will not start a member without a terminal, for
+the same reason `martha start` will not (a member's own shell must never bring
+up a sibling). And nothing yet asks a member to hand over: the handover tool
+and the refresh flow are the second half of this work package, so today a wake
+finds a handover only where the host wrote one — a file you put in
+`handovers/` yourself is not one, because nothing stamped it.
+
 ## If you want the strict shell gate
 
 Martha can be told that text it cannot trace stops every later shell command in
@@ -284,7 +315,12 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
   shared by every worktree of that repository — a member working in a worktree
   and one working in the clone read the same place. It holds the crew's streams
   (`rows/`): its session records, and the ledger of what a member did on a work
-  package. Nothing in your checkout holds any of it either.
+  package. It also holds the crew's files, one plain-text file each under a
+  place of its own: `handovers/` (a member's handover, written and stamped by
+  the host, never by the member), `handover-stamps/` (when the host wrote each
+  one, which is how the newest is chosen — a file's name carries a day, and a
+  day cannot tell two apart), and `parked/` (one marker per member).
+  Nothing in your checkout holds any of it either.
 - `$XDG_RUNTIME_DIR/martha-<your uid>`, or `/tmp/martha-<your uid>`: the sockets
   a running member answers over. Made 0700, and refused if it is not yours
   alone.
