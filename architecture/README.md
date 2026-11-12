@@ -114,8 +114,10 @@ edge or past its right edge, a legend drawn across a box, a boundary's label dra
 a box, two boxes drawn on each other, and anything drawn off the canvas. A box is never
 drawn smaller than its text needs, and the Component page places its boxes in rows
 rather than at a height each one was given by hand; the Container page's boundary takes
-its height from the boxes it holds, so the label under them keeps its own ground. After
-changing a box:
+its height from the boxes it holds, so the label under them keeps its own ground. The
+foot of the Component page is drawn from the left-out list rather than beside it, and a
+check holds it there: the count, and each directory's name and the reason its own entry
+gives. After changing a box:
 
 ```sh
 node architecture/c4_diagrams.ts
