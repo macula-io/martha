@@ -77,8 +77,9 @@ const REGISTERS_NO_TOOL = /registers no tool\b/
 const statusBlock = (): readonly string[] => {
   const lines = README.split('\n')
   const start = lines.findIndex((line) => line.startsWith('>'))
+  if (start === -1) return []
   const end = lines.findIndex((line, at) => at > start && !line.startsWith('>'))
-  return start === -1 ? [] : lines.slice(start + 1, end === -1 ? lines.length : end)
+  return lines.slice(start, end === -1 ? lines.length : end)
 }
 
 test('the page does not say the launcher registers no tool while the launcher registers some', () => {
