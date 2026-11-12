@@ -8,7 +8,9 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join, relative } from 'node:path'
-import { ASSETS, components, DIAGRAMS, LEFT_OUT, ROOM_SLICES_WHICH_LOAD } from './c4_diagrams.ts'
+import {
+  ASSETS, components, containers, DIAGRAMS, LEFT_OUT, PACKAGE_BOXES, ROOM_SLICES_WHICH_LOAD,
+} from './c4_diagrams.ts'
 import type { DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
@@ -257,6 +259,82 @@ test('what is left out says why, is a directory in src/, and is said on the page
     assert.ok(entry.why.trim().length > 0, `${entry.name} is left out with no reason`)
     assert.ok(README.includes(entry.name), `architecture/README.md does not say ${entry.name} is left out`)
   }
+})
+
+// The note at the foot of the Components page is drawn from LEFT_OUT since martha#296, so a directory
+// added to the array is named there with its own reason without anyone remembering to edit prose. The
+// words are read back out of the drawn SVG, so this holds the picture rather than the code that made
+// it: a note that drops an entry, or a drawing edited by hand, fails by naming the entry.
+const normalizeSpace = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
+/** A count a note may write in words, so a hand-written note is read as well as a generated one. */
+const COUNT_WORDS: Readonly<Record<string, number>> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+}
+
+/** The page's own count of what it draws nowhere, held to the array: the failure lines, or nothing. */
+const countWrong = (page: string): string[] => {
+  const words = Object.keys(COUNT_WORDS).join('|')
+  const counted = new RegExp(
+    `(?:(?:These )?(\\d+|${words}) directories are|This directory is) drawn nowhere on purpose`, 'i',
+  ).exec(page)
+  if (counted === null) return ['the page does not say how many directories are drawn nowhere on purpose']
+  const said = counted[1] === undefined ? 1 : COUNT_WORDS[counted[1].toLowerCase()] ?? Number(counted[1])
+  return said === LEFT_OUT.length
+    ? []
+    : [`the page says ${said} directories are drawn nowhere on purpose, and LEFT_OUT holds ${LEFT_OUT.length}`]
+}
+
+/** One left-out directory as the page must say it: its name, and the reason that entry gives. */
+const entryWrong = (page: string, entry: { readonly name: string; readonly why: string }): string[] => [
+  ...(page.includes(entry.name) ? [] : [`the page leaves out ${entry.name} and never names it`]),
+  ...(page.includes(normalizeSpace(entry.why))
+    ? []
+    : [`the page does not say why ${entry.name} is left out: "${entry.why}"`]),
+]
+
+test('the components page names every directory it leaves out, and says why', () => {
+  const page = normalizeSpace(textIn(readFileSync(join(ASSETS, 'c4-components.svg'), 'utf8')))
+  const wrong = [...countWrong(page), ...LEFT_OUT.flatMap((entry) => entryWrong(page, entry))]
+  assert.deepEqual(wrong, [], `the components page disagrees with LEFT_OUT:\n${wrong.join('\n')}`)
+})
+
+// A box's height is the taller of the height it is given and the height its text needs, while a
+// boundary's bottom was measured from its text alone (Mercurius's O1 on martha#283, folded in as
+// martha#296). A box made taller by its given h therefore stood past the room its boundary's bottom
+// label needs, and every check passed. The relay is grown each of the two ways a box grows here, and
+// the boundary must be drawn below it either way.
+
+/** What ends in the ground a boundary's bottom label keeps, as the failure lines, or nothing. */
+const overrunsOfBottomLabel = (diagram: ReturnType<typeof containers>): string[] => {
+  const bound = diagram.bounds.find((drawn) => drawn.atTheBottom)!
+  const held = diagram.boxes.filter((box) => box.x >= bound.x && box.x + box.w <= bound.x + bound.w)
+  return held
+    .filter((box) => box.y + box.h > bound.labelBand.y)
+    .map((box) => `${box.name} ends at ${box.y + box.h}, into the band its boundary's bottom label takes from ${bound.labelBand.y}, though the boundary ends at ${bound.y + bound.h}`)
+}
+
+const assertInsideItsBoundary = (diagram: ReturnType<typeof containers>): void => {
+  const overrun = overrunsOfBottomLabel(diagram)
+  assert.deepEqual(overrun, [], `a box overruns the room its boundary's bottom label needs:\n${overrun.join('\n')}`)
+}
+
+/** The relay, grown by its hand-given h: the taller of the two heights a box is drawn at. */
+const grownByItsGivenHeight = PACKAGE_BOXES.map((box) =>
+  box.name === 'the relay' ? { ...box, h: box.h + 40 } : box)
+
+/** The relay, grown by its own text: it is given no height at all, and two lines more than it had. */
+const grownByItsText = PACKAGE_BOXES.map((box) =>
+  box.name === 'the relay'
+    ? { ...box, h: 0, desc: [...box.desc, 'A line its given height never counted,', 'and one more'] }
+    : box)
+
+test('a box given a taller height than its text needs still ends inside its boundary', () => {
+  assertInsideItsBoundary(containers(grownByItsGivenHeight))
+})
+
+test('a box given less height than its text needs still ends inside its boundary', () => {
+  assertInsideItsBoundary(containers(grownByItsText))
 })
 
 // No room runs in this release, and a picture can easily say "solo loads none of it" and be wrong: the
