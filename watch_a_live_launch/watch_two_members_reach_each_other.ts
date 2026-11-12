@@ -298,9 +298,8 @@ try {
   report.check('both launches reached the step their flow is about', ends.length === 0, ends.length === 0 ? 'both were answered where the flow ends' : ends.join('; '))
 } catch (error) {
   report.check(`the observation ran to its end (${error instanceof Error ? error.message : String(error)})`, false, 'the launch threw')
-} finally {
-  // Each launch ends its own member. A run with a failure keeps its directory for reading.
 }
+// Each launch ends its own member, so there is nothing to stop here. A run with a failure keeps its directory for reading.
 
 const status = report.end()
 if (status !== 0) console.log(`kept for reading: ${work}${keptForReading.length === 0 ? '' : `; kept for reading it: ${keptForReading.join(' ')}`}`)
