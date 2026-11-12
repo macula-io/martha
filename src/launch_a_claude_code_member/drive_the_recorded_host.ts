@@ -31,6 +31,12 @@ import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /**
+ * The state home a run's processes find Martha's state in, under the home the run is given. Exported so a run that
+ * reads back what the launcher kept derives it here rather than spelling the shape a second time.
+ */
+export const stateHomeUnder = (home: string): string => join(home, '.local', 'state')
+
+/**
  * Where a run derived from this home and checkout reads the crew's streams (martha#254): the same place the launcher
  * writes them, derived the launcher's way — the git common directory behind the checkout — so a run that reads a
  * member's rows reads the crew's, and never an empty directory of its own.
@@ -129,7 +135,7 @@ function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: 
     HOME: run.home,
     PATH: [bin, join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'),
     TERM: HOST_TERMINAL,
-    XDG_STATE_HOME: join(run.home, '.local', 'state'),
+    XDG_STATE_HOME: stateHomeUnder(run.home),
     XDG_RUNTIME_DIR: runtime,
     ANTHROPIC_BASE_URL: base_url,
     ANTHROPIC_API_KEY: STAND_IN_KEY,
