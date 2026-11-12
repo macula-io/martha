@@ -31,10 +31,13 @@ import {
   literalSitesJudged,
   restatementsIn,
   SHORTEST_VALUE,
+  type ConstantInSource,
   type DefinedByTheChange,
+  type Exception,
   type Finding,
   type Rule,
 } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { CoreSource } from '../host_contract/core_source.ts'
 import { EXCEPTIONS } from './exceptions.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { CORE } from './the_core_the_check_reads.ts'
@@ -68,27 +71,32 @@ function touchedSources(root: string, merge_base: string, head: string): string[
     .filter((path) => scanned.has(path))
 }
 
+/** The values one constant brings when the change defines or revalues it: its value now, and the one it held. */
+function valuesOneConstantBrings(constant: ConstantInSource, before: readonly ConstantInSource[], under: string): DefinedByTheChange[] {
+  const now = { value: constant.value, module: under, name: constant.name }
+  const was = before.find((each) => each.name === constant.name)
+  if (was === undefined || was.value === constant.value || was.value.length < SHORTEST_VALUE) return [now]
+  return [now, { value: was.value, module: under, name: constant.name }]
+}
+
+/** The values one changed file brings: each of its exported constants whose value is written on a line the change adds. */
+function valuesOneFileBrings(root: string, merge_base: string, path: string, added: ReadonlySet<string>): DefinedByTheChange[] {
+  const under = underCore(path)
+  const now = constantsIn(readFileSync(join(root, path), 'utf8'), under)
+  const before = constantsIn(readGitFile(root, merge_base, path), under)
+  return now
+    .filter((constant) => constant.exported && added.has(`${under}:${constant.line}`))
+    .flatMap((constant) => valuesOneConstantBrings(constant, before, under))
+}
+
 /**
- * Every constant the change defines or revalues, with the value it holds now and,
- * for a revalued one, the value it held before — both judged over the whole tree.
+ * Every value the change defines or revalues, with the constant it belongs to,
+ * judged over the whole tree: a constant added today makes every old copy of its
+ * value stale at once, and a revalued one leaves every literal holding the value
+ * it had before behind (martha#289, R1).
  */
 export function constantsTheChangeDefines(root: string, merge_base: string, head: string, added: ReadonlySet<string>): DefinedByTheChange[] {
-  const defined: DefinedByTheChange[] = []
-  for (const path of touchedSources(root, merge_base, head)) {
-    const under = underCore(path)
-    const now = constantsIn(readFileSync(join(root, path), 'utf8'), under)
-    const before = constantsIn(readGitFile(root, merge_base, path), under)
-    for (const constant of now) {
-      if (!constant.exported) continue
-      if (!added.has(`${under}:${constant.line}`)) continue
-      const was = before.find((each) => each.name === constant.name)
-      defined.push({ value: constant.value, module: under, name: constant.name })
-      if (was !== undefined && was.value !== constant.value && was.value.length >= SHORTEST_VALUE) {
-        defined.push({ value: was.value, module: under, name: constant.name })
-      }
-    }
-  }
-  return defined
+  return touchedSources(root, merge_base, head).flatMap((path) => valuesOneFileBrings(root, merge_base, path, added))
 }
 
 /** A file as one commit holds it; empty when that commit does not hold it. */
@@ -124,62 +132,77 @@ function selfTest(): string[] {
   return failures
 }
 
+/** What this check is called, in every line it prints. */
+const NAME = 'check_no_literal_restates_a_value'
+
 const main = (): number => {
   const root = option('--root') ?? process.cwd()
   const sources = coreSources(join(root, CORE))
-
-  if (process.argv.includes('--self-test')) {
-    const failures = selfTest()
-    for (const failure of failures) console.log(`does not bite: ${failure}`)
-    console.log(failures.length === 0 ? 'check_no_literal_restates_a_value: the check bites (5/5)' : 'check_no_literal_restates_a_value: self-test failed')
-    return failures.length === 0 ? 0 : 1
-  }
-
+  if (process.argv.includes('--self-test')) return runSelfTest()
   const stale = exceptionsNotHeld(sources, EXCEPTIONS)
-  if (stale.length > 0) {
-    for (const entry of stale) console.error(`check_no_literal_restates_a_value: '${entry.value}' in ${entry.file} is declared an exception but matches nothing there, or carries no reason, or repeats another entry. Drop it or say why it stays.`)
-    return 2
-  }
+  if (stale.length > 0) return reportStale(stale)
+  if (process.argv.includes('--report')) return runReport(sources)
+  return runGate(root, sources)
+}
 
-  if (process.argv.includes('--report')) {
-    const remaining = restatementsIn(sources, { judged: null, exceptions: EXCEPTIONS })
-    console.log(`check_no_literal_restates_a_value: ${remaining.length} site(s) remain in the tree. This is a report, not a gate: the cleanup is its own package, cut by slice.`)
-    return 0
-  }
+function runSelfTest(): number {
+  const failures = selfTest()
+  for (const failure of failures) console.log(`does not bite: ${failure}`)
+  console.log(failures.length === 0 ? `${NAME}: the check bites (5/5)` : `${NAME}: self-test failed`)
+  return failures.length === 0 ? 0 : 1
+}
 
-  const range = option('--range')
-  const [base, head] = range === undefined ? ['', ''] : range.split('..')
-  const judged = range === undefined || base === undefined || head === undefined || ZERO.test(base) || base === '' || head === '' ? null : mergeBaseRange(root, base, head)
-  if (judged === null) {
-    console.log('check_no_literal_restates_a_value: no readable range, so the whole tree is judged')
+function reportStale(stale: readonly Exception[]): number {
+  for (const entry of stale) {
+    console.error(`${NAME}: '${entry.value}' in ${entry.file} is declared an exception but matches nothing there, or carries no reason, or repeats another entry. Drop it, or say why it stays.`)
   }
-  const defined: DefinedByTheChange[] = judged === null || base === undefined || head === undefined ? [] : constantsTheChangeDefines(root, judged.merge_base, head, judged.added)
+  return 2
+}
+
+function runReport(sources: readonly CoreSource[]): number {
+  const remaining = restatementsIn(sources, { judged: null, exceptions: EXCEPTIONS })
+  console.log(`${NAME}: ${remaining.length} site(s) remain in the tree. This is a report, not a gate: the cleanup is its own package, cut by slice.`)
+  return 0
+}
+
+function runGate(root: string, sources: readonly CoreSource[]): number {
+  const judged = rangeOf(root, option('--range'))
+  if (judged === null) console.log(`${NAME}: no readable range, so the whole tree is judged`)
+  const defined = judged === null ? [] : constantsTheChangeDefines(root, judged.merge_base, judged.head, judged.added)
   const findings = restatementsIn(sources, { judged: judged === null ? null : judged.added, defined, exceptions: EXCEPTIONS })
   report(findings)
-  if (judged !== null) console.log(`check_no_literal_restates_a_value: range ${judged.merge_base}..${head} (asked ${base}..${head}), ${literalSitesJudged(sources, judged.added)} literal site(s) judged, ${defined.length} value(s) judged over the whole tree`)
-  if (findings.length > 0) {
-    console.error(`check_no_literal_restates_a_value: ${findings.length} site(s) restate a value the tree defines. Import the constant, or declare the coincidence in src/check_no_literal_restates_a_value/exceptions.ts with its reason.`)
-    return 1
+  if (judged !== null) console.log(`${NAME}: range ${judged.merge_base}..${judged.head} (asked ${judged.asked}), ${literalSitesJudged(sources, judged.added)} literal site(s) judged, ${defined.length} value(s) judged over the whole tree`)
+  if (findings.length === 0) {
+    console.log(`${NAME}: no literal restates a defined value`)
+    return 0
   }
-  console.log('check_no_literal_restates_a_value: no literal restates a defined value')
-  return 0
+  console.error(`${NAME}: ${findings.length} site(s) restate a value the tree defines. Import the constant, or declare the coincidence in src/check_no_literal_restates_a_value/exceptions.ts with its reason.`)
+  return 1
 }
 
 interface Judged {
   readonly merge_base: string
+  readonly head: string
+  readonly asked: string
   readonly added: ReadonlySet<string>
 }
 
-/** The merge base of the range and the lines it adds; null when git cannot answer. */
-function mergeBaseRange(root: string, base: string, head: string): Judged | null {
-  let merge_base: string
+/** The range as asked, its merge base and the lines it adds; null when there is no readable range. */
+function rangeOf(root: string, range: string | undefined): Judged | null {
+  if (range === undefined) return null
+  const [base, head] = range.split('..')
+  if (base === undefined || head === undefined || base === '' || head === '' || ZERO.test(base)) return null
+  const merge_base = mergeBaseOf(root, base, head)
+  return merge_base === null ? null : { merge_base, head, asked: range, added: linesTheChangeAdds(root, merge_base, head) }
+}
+
+const mergeBaseOf = (root: string, base: string, head: string): string | null => {
   try {
-    merge_base = git(root, ['merge-base', base, head]).trim()
+    const merge_base = git(root, ['merge-base', base, head]).trim()
+    return merge_base === '' ? null : merge_base
   } catch {
     return null
   }
-  if (merge_base === '') return null
-  return { merge_base, added: linesTheChangeAdds(root, merge_base, head) }
 }
 
 try {

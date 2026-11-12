@@ -137,17 +137,20 @@ const namesAModule = (node: ts.Node): boolean => {
   )
 }
 
+/** The declarations whose `name` is a property's name rather than a value. */
+const DECLARATIONS_WITH_A_NAME: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.PropertyAssignment,
+  ts.SyntaxKind.PropertySignature,
+  ts.SyntaxKind.PropertyDeclaration,
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.EnumMember,
+])
+
 /** Whether a literal names a property rather than carrying a value. */
 const namesAProperty = (node: ts.Node): boolean => {
   const parent = node.parent
-  return (
-    (ts.isPropertyAssignment(parent) && parent.name === node) ||
-    (ts.isPropertySignature(parent) && parent.name === node) ||
-    (ts.isPropertyDeclaration(parent) && parent.name === node) ||
-    (ts.isMethodDeclaration(parent) && parent.name === node) ||
-    (ts.isEnumMember(parent) && parent.name === node) ||
-    (ts.isBindingElement(parent) && parent.propertyName === node)
-  )
+  if (ts.isBindingElement(parent)) return parent.propertyName === node
+  return DECLARATIONS_WITH_A_NAME.has(parent.kind) && (parent as ts.NamedDeclaration).name === node
 }
 
 const isALiteral = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral =>
@@ -192,6 +195,52 @@ const holdersOf = (value: string, definitions: readonly Definition[], module: st
     .filter((definition) => definition.exported && definition.value === value)
     .sort((a, b) => Number(a.path === module) - Number(b.path === module) || a.path.localeCompare(b.path) || a.name.localeCompare(b.name))
 
+/** One finding, as the rule reports it. */
+const findingAt = (path: string, line: number, literal: string, constant: { readonly module: string; readonly name: string }, rule: Rule): Finding => ({
+  path,
+  line,
+  literal,
+  module: constant.module,
+  name: constant.name,
+  rule,
+})
+
+/**
+ * What a literal that DEFINES a constant is: a copy of another module's value
+ * (R2), or the definition itself — and the constant the change itself defines is
+ * the one definition that is not a copy.
+ */
+function findingsForADefinition(definition: Definition, line: number, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] {
+  const isItsOwnDefinition = declared.some((entry) => entry.value === definition.value && entry.module === definition.path && entry.name === definition.name)
+  if (isItsOwnDefinition) return []
+  const fromTheChange = declared.find((entry) => entry.value === definition.value)
+  if (fromTheChange !== undefined) return [findingAt(definition.path, line, definition.value, fromTheChange, 'restates_a_value_the_change_defines')]
+  const holder = definitions.find((each) => each.exported && each.value === definition.value && each.path !== definition.path)
+  return holder === undefined ? [] : [findingAt(definition.path, line, definition.value, { module: holder.path, name: holder.name }, 'defines_an_exported_value')]
+}
+
+/** What a literal that USES a value is: a copy of the constant holding it, or of the value the change defines. */
+function findingsForAUse(path: string, line: number, literal: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] {
+  const fromTheChange = declared.find((entry) => entry.value === literal)
+  if (fromTheChange !== undefined) return [findingAt(path, line, literal, fromTheChange, 'restates_a_value_the_change_defines')]
+  const holder = holdersOf(literal, definitions, path)[0]
+  return holder === undefined ? [] : [findingAt(path, line, literal, { module: holder.path, name: holder.name }, 'restates_a_constant')]
+}
+
+/** The literals of a source that can carry a value: not a module's path, not a property's name. */
+const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
+  nodesOf(file).filter(isALiteral).filter((node) => !namesAModule(node) && !namesAProperty(node))
+
+/** What one literal is, if it restates something. */
+function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
+  const literal = (node as ts.StringLiteral).text
+  if (literal.length < SHORTEST_VALUE) return []
+  const definition = definitionAt.get(node)
+  return definition === undefined
+    ? findingsForAUse(path, line, literal, declared, definitions)
+    : findingsForADefinition(definition, line, declared, definitions)
+}
+
 /**
  * The restatements to name, among `sources`, on the lines `judge.judged` names
  * (every line when it is null) and over the whole tree for a value the change
@@ -202,47 +251,16 @@ export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Fi
   const definitions = reads.flatMap(definitionsIn)
   const declared = judge.defined ?? []
   const exceptions = judge.exceptions ?? []
+  const judged = judge.judged
   const definitionAt = new Map(definitions.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
-
-  const reported = (finding: Finding): boolean => {
-    if (exceptions.some((exception) => exception.value === finding.literal && exception.file === finding.path)) return false
-    if (judge.judged === null || judge.judged.has(at(finding.path, finding.line))) return true
-    return declared.some((entry) => entry.value === finding.literal)
-  }
-
-  const findings = reads.flatMap(({ path, file }) =>
-    nodesOf(file)
-      .filter(isALiteral)
-      .filter((node) => !namesAModule(node) && !namesAProperty(node))
-      .flatMap((node): Finding[] => {
-        const line = lineOf(file, node)
-        return findingsAt(node, line, path)
-      }),
-  )
-  return findings.filter(reported).sort(byPlace)
-
-  // What one literal is, if it restates something.
-  function findingsAt(node: ts.Node, line: number, path: string): Finding[] {
-    const literal = (node as ts.StringLiteral).text
-    if (literal.length < SHORTEST_VALUE) return []
-    const fromTheChange = declared.find((entry) => entry.value === literal)
-    const definition = definitionAt.get(node)
-    if (definition !== undefined) {
-      // A definition is a restatement of ANOTHER module's exported value (R2), never of itself: the constant the
-      // change itself defines or revalues is the one definition that is not a copy.
-      if (declared.some((entry) => entry.value === literal && entry.module === path && entry.name === definition.name)) return []
-      const holder = definitions.find((each) => each.exported && each.value === literal && each.path !== path)
-      return fromTheChange === undefined && holder === undefined
-        ? []
-        : [{ path, line, literal, module: fromTheChange?.module ?? holder!.path, name: fromTheChange?.name ?? holder!.name, rule: fromTheChange === undefined ? 'defines_an_exported_value' : 'restates_a_value_the_change_defines' }]
-    }
-    const holder = holdersOf(literal, definitions, path)[0]
-    if (holder === undefined) {
-      return fromTheChange === undefined ? [] : [{ path, line, literal, module: fromTheChange.module, name: fromTheChange.name, rule: 'restates_a_value_the_change_defines' }]
-    }
-    const rule: Rule = fromTheChange === undefined ? 'restates_a_constant' : 'restates_a_value_the_change_defines'
-    return [{ path, line, literal, module: fromTheChange?.module ?? holder.path, name: fromTheChange?.name ?? holder.name, rule }]
-  }
+  const isDeclaredACoincidence = (finding: Finding): boolean =>
+    exceptions.some((exception) => exception.value === finding.literal && exception.file === finding.path)
+  const isJudged = (finding: Finding): boolean =>
+    judged === null || judged.has(at(finding.path, finding.line)) || declared.some((entry) => entry.value === finding.literal)
+  return reads
+    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, definitionAt)))
+    .filter((finding) => !isDeclaredACoincidence(finding) && isJudged(finding))
+    .sort(byPlace)
 }
 
 /** The literal sites a set of judged lines holds, read from the sources: what the gate may say it looked at. */
