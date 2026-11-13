@@ -12,6 +12,7 @@
 // words.
 
 import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
+import { admitsAnAskToTheOwner } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
@@ -84,6 +85,18 @@ export const ARGUMENT_GATES = {
 export type KnownArgumentGate = keyof typeof ARGUMENT_GATES
 
 /**
+ * The ask gates a row may use: what decides whether an ask a member queued may be handed to the session that offers it
+ * (martha#313, ../queue_the_owners_asks). A delivery gate cannot stand here: an ask carries the member its launcher
+ * started, never a node id, so the questions are about that record and about the text, and the check drives this one
+ * once per question.
+ */
+export const ASK_GATES = {
+  'a-crews-own-asker': admitsAnAskToTheOwner,
+} as const
+
+export type KnownAskGate = keyof typeof ASK_GATES
+
+/**
  * The path gates a row may name: a control that checks every path a member's
  * own file tools name (martha#168). The function behind the name is built where
  * the machine is reachable, in the host adapter that holds the guard
@@ -119,6 +132,10 @@ export type KnownPathGate = 'nothing-a-later-git-run-reads'
  *   else is words and belongs on the row that holds a shell gate against words. `why`
  *   says which answer, and where the rule is. Only a `fetched` row may declare it.
  * - `none` — no control. A row in this state fails CI on purpose.
+ * - `ask-gate` — the text is an ask a member queued, and the question before it is handed to another session is about
+ *   the asker the launcher holds and the text itself: a member this crew started, and text the queue capped and
+ *   stripped, which ../queue_the_owners_asks decides and the coverage check drives. Only a `delivered` row may declare
+ *   it.
  * - `check_every_path_is_gated` — a member's own file tools are refused, path by
  *   path, by the gate the row names: the owner's memory and instructions, and
  *   what a later git run of the owner's reads (martha#168). `also` names the
@@ -126,6 +143,7 @@ export type KnownPathGate = 'nothing-a-later-git-run-reads'
  */
 export type Control =
   | { readonly kind: 'delivery-gate'; readonly gate: KnownDeliveryGate }
+  | { readonly kind: 'ask-gate'; readonly gate: KnownAskGate }
   | { readonly kind: 'shell-gate' }
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
   | { readonly kind: 'no-words-to-admit'; readonly why: string }
@@ -336,6 +354,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     what: "the Supervisor's standing items a starting session is handed (martha#317): what it holds back, who owes what, and the rulings it recorded as the owner's words, read from the crew's own `standing` stream and handed only to a member the table lets assign work. A ruling there is the Supervisor's record of the owner's words, never the owner's yes, and no gate reads the stream as an approval. Not closed: a process of the same OS user can append to the stream (martha#1 decision 2's residual), which is why the line is taken in rather than exempt",
     klass: 'delivered',
     control: { kind: 'shell-gate' },
+    attestation: 'none',
+  },
+  {
+    id: 'A21',
+    what: "an ask a member queued for the owner, handed to the session that takes the batch and offers it as one menu: the queue_ask tools' question, which reaches another member's model as the launcher's own answer to take_asks (martha#313, ../queue_the_owners_asks). The seam records that answer on B2, the row every MCP tool's result is taken in on; this row is the path its gate stands on, and no source of its own (../take_in_a_turn). Not closed: a row written into the crew's ask stream by a shell of the same OS user, which the gate refuses by name when it is taken but which is in the stream the session reads",
+    klass: 'delivered',
+    control: { kind: 'ask-gate', gate: 'a-crews-own-asker' },
     attestation: 'none',
   },
   {

@@ -13,17 +13,12 @@
 # bites: this host, started interactively on a writable copy of the relay, writes its types there. The host runs with no
 # account and no key, in a home that says onboarding is done and the folder is trusted.
 #
-# Then every test case that drives the recorded host runs here, with this binary in MARTHA_RECORDED_HOST, and nowhere
-# else: each skips on RECORDED_HOST_SKIP wherever the variable is unset. recorded_host_runs.json lists them, one entry
-# per file (and name pattern), with how many cases must pass; check_every_recorded_host_test_is_run holds that count to
-# the cases in the file, so a case the list misses fails CI by name (martha#385). Among them: a launch leaves the
+# Then every test case that drives the recorded host runs here, with this binary in MARTHA_RECORDED_HOST, through
+# run_the_recorded_host_runs.sh: one file at a time, each held to the case count recorded_host_runs.json lists for it,
+# the way `npm test` runs them before its parallel run (martha#383, martha#385). Among them: a launch leaves the
 # installed relay folder as it was (martha#117); a member's own writes do not stop it and an outsider's change does
 # (martha#132); every rule the launch writes is one this host matches (martha#226); a member's model switch runs in this
 # host (martha#315); a permission prompt this host draws reaches the owner's row and clears once answered (martha#363).
-#
-# One function decides whether a run counts, the_run_is_whole: exactly the listed number of passes, none skipped, none
-# failed. It is proved on three planted summaries before any run, one for each condition, so a guard that stopped
-# checking one of them fails here by name rather than passing every run.
 #
 # And that switch leaves the owner's own default for new sessions alone (martha#359): the file the host really wrote is
 # the one Martha puts back, which the mechanism's own tests could agree with a mistake about. These cases read the same
@@ -40,7 +35,6 @@ RELAY="${REPO}/src/claude_code_relay"
 REGISTER="hooks/register.ts"
 HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
 HOST_TYPES_FILE="tsconfig.json"
-RUN_TIMEOUT_MS=300000
 HOST_WRITES_WITHIN_S=60
 VARIABLE_CONSTANT="RELAY_SOCKET_VARIABLE"
 WORK="${1:-$(mktemp -d)}"
@@ -55,30 +49,6 @@ defined_in_harness() { sed -n "s/^export const $1 = '\([^']*\)'$/\1/p" "${HARNES
 HOST_VARIABLE="$(defined_in_harness RECORDED_HOST_VARIABLE)"
 HOST_TERMINAL="$(defined_in_harness HOST_TERMINAL)"
 [[ -n "${HOST_VARIABLE}" && -n "${HOST_TERMINAL}" ]] || { echo "prove_the_relay_loads: ${HARNESS} defines no RECORDED_HOST_VARIABLE or HOST_TERMINAL" >&2; exit 2; }
-
-MARKER_FILE="${REPO}/src/check_every_recorded_host_test_is_run/recorded_host_skip.ts"
-RUNS="${REPO}/$(sed -n "s/^export const RECORDED_HOST_RUNS = '\([^']*\)'$/\1/p" "${MARKER_FILE}")"
-[[ -f "${RUNS}" ]] || { echo "prove_the_relay_loads: ${MARKER_FILE} names no RECORDED_HOST_RUNS list there is" >&2; exit 2; }
-jq -e 'type == "array" and length > 0 and all(.[]; (.file | type == "string") and (.cases | type == "number" and . >= 1 and floor == .) and (.proves | type == "string"))' "${RUNS}" > /dev/null \
-  || { echo "prove_the_relay_loads: ${RUNS} is not a list of {file, name_pattern?, cases >= 1, proves}" >&2; exit 2; }
-
-# the_run_is_whole <summary-file> <cases>: the one test of a run (martha#385). Exactly <cases> passed, none was skipped
-# and none failed; anything else, a case filtered out, skipped for want of the host or failed, is a run that proves
-# nothing.
-the_run_is_whole() {
-  grep -qx "ℹ pass $2" "$1" && grep -qx 'ℹ skipped 0' "$1" && grep -qx 'ℹ fail 0' "$1"
-}
-
-# The guard bites, on each of its three conditions: each planted summary meets the other two, so only the one it plants
-# can refuse it. Plain text, so this needs no host.
-planted_cases="$(jq -r '.[0].cases' "${RUNS}")"
-plant() { printf 'ℹ pass %s\nℹ fail %s\nℹ skipped %s\n' "$2" "$3" "$4" > "${WORK}/planted_$1.txt"; }
-plant skipped "${planted_cases}" 0 1
-plant short "$((planted_cases - 1))" 0 0
-plant failed "${planted_cases}" 1 0
-the_run_is_whole "${WORK}/planted_skipped.txt" "${planted_cases}" && { echo "prove_the_relay_loads: the run guard accepts a run with a skipped case; it would not bite" >&2; exit 1; }
-the_run_is_whole "${WORK}/planted_short.txt" "${planted_cases}" && { echo "prove_the_relay_loads: the run guard accepts a run one case short; it would not bite" >&2; exit 1; }
-the_run_is_whole "${WORK}/planted_failed.txt" "${planted_cases}" && { echo "prove_the_relay_loads: the run guard accepts a run with a failed case; it would not bite" >&2; exit 1; }
 
 npm install --prefix "${WORK}/host" --no-save --no-package-lock --no-audit --no-fund "@anthropic-ai/claude-code@${version}" > /dev/null \
   || { echo "prove_the_relay_loads: Claude Code ${version} could not be installed" >&2; exit 2; }
@@ -122,21 +92,4 @@ wait "${started}" 2> /dev/null || true
 
 echo "prove_the_relay_loads: with Claude Code ${version}, the host writes its types into a writable relay folder"
 
-# Every listed run, in this host, each held to the_run_is_whole.
-while IFS= read -r run; do
-  file="$(jq -r '.file' <<< "${run}")"
-  pattern="$(jq -r '.name_pattern // empty' <<< "${run}")"
-  cases="$(jq -r '.cases' <<< "${run}")"
-  proves="$(jq -r '.proves' <<< "${run}")"
-  narrowed=()
-  [[ -n "${pattern}" ]] && narrowed=(--test-name-pattern="${pattern}")
-  log="${WORK}/run_$(basename "${file}").txt"
-  if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout="${RUN_TIMEOUT_MS}" "${narrowed[@]}" "${REPO}/${file}" > "${log}" 2>&1; then
-    echo "prove_the_relay_loads: with Claude Code ${version}, a case of ${file} failed:" >&2
-    cat "${log}" >&2
-    exit 1
-  fi
-  the_run_is_whole "${log}" "${cases}" \
-    || { echo "prove_the_relay_loads: ${file} did not run its ${cases} listed case(s) whole in this host; a skipped or missing case proves nothing:" >&2; cat "${log}" >&2; exit 1; }
-  echo "prove_the_relay_loads: with Claude Code ${version}, ${proves}"
-done < <(jq -c '.[]' "${RUNS}")
+env "${HOST_VARIABLE}=${claude}" "${HERE}/run_the_recorded_host_runs.sh"

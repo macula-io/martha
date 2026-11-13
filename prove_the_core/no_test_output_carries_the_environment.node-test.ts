@@ -10,8 +10,8 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../src/launch_a_claude_code_member/relay_copy.ts'
-import { manifestOf, PACKAGES } from './declared_in_package_json.ts'
-import { TEST_SCRIPT, testRunFlagsOf } from './every_test_run_ends.ts'
+import { manifestOf, PACKAGES, testCommandsOf } from './declared_in_package_json.ts'
+import { testRunFlagsOf } from './every_test_run_ends.ts'
 import {
   environmentLeakReportOf,
   FAILING_TESTS_HEADING,
@@ -106,7 +106,8 @@ const nodeTestOn = (file: string): string[] => [process.execPath, '--test', ...t
 for (const folder of PACKAGES) {
   test(`npm test in ${folder} runs node --test through ${RUNNER}`, () => {
     const at = join(repository, folder)
-    const [program, runner, ...rest] = (manifestOf(at).scripts[TEST_SCRIPT] ?? '').split(/\s+/)
+    // The command that runs node --test is the script's last: the recorded-host runs may come before it (martha#383).
+    const [program, runner, ...rest] = testCommandsOf(manifestOf(at)).at(-1)?.words ?? []
     assert.equal(program, 'node')
     assert.equal(resolve(at, runner ?? ''), resolve(repository, RUNNER), `${folder}'s test script starts with ${runner}`)
     assert.deepEqual(rest.slice(0, 2), ['node', '--test'])

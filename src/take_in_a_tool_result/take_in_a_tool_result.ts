@@ -94,6 +94,14 @@ const UNPLACED_TOOL_RESULT = 'tool-result-unplaced'
 /** The command whose first word names the GitHub CLI: its output is B3's. */
 export const GITHUB_CLI = 'gh'
 export const GIT = 'git'
+
+/**
+ * The program a tree's own scripts are run by, held once for every slice that runs one: a landing runs `npm test` over a
+ * tree it merged (martha#381), and the ceilings check names it in the command it prints (martha#322). It sits here
+ * beside the other command names, because a slice reaches the machine through the host's processes by exactly these.
+ */
+export const NPM = 'npm'
+
 /** Git subcommands that print history: commit messages and authors, B5's. */
 export const HISTORY_SUBCOMMANDS: readonly string[] = ['log', 'show', 'blame', 'reflog', 'shortlog']
 

@@ -239,7 +239,7 @@ test('a file that does not parse is named, since nothing in it can be judged', (
 })
 
 test('the code folders are the ones the test script runs', () => {
-  assert.deepEqual(codeFoldersOf(manifest).sort(), ['architecture', 'prove_the_core', 'rehearse_a_release', 'src'])
+  assert.deepEqual(codeFoldersOf(manifest).sort(), ['architecture', 'prove_the_core', 'prove_the_relay_loads', 'rehearse_a_release', 'src'])
 })
 
 test('every glob form the test script uses is read, and one naming no folder fails by name', () => {
@@ -256,4 +256,15 @@ test('every glob form the test script uses is read, and one naming no folder fai
   assert.throws(() => codeFoldersOf(testing("node --test 'src/**/*.ts' '*.node-test.ts'")), /'\*\.node-test\.ts'/)
   assert.throws(() => codeFoldersOf(testing('node --test lone.node-test.ts')), /'lone\.node-test\.ts'/)
   assert.throws(() => codeFoldersOf(testing("node --test '**/*.node-test.ts'")), /'\*\*\/\*\.node-test\.ts'/)
+})
+
+test('the separator between two commands names no folder, and both commands are read (martha#383)', () => {
+  const testing = (command: string): Manifest => ({ scripts: { test: command } })
+  assert.deepEqual(codeFoldersOf(testing("first/run.sh && node --test 'src/**/*.node-test.ts'")), ['first', 'src'])
+})
+
+test('an env -u <name> before a command names no folder, and a bare env still fails by name (martha#383)', () => {
+  const testing = (command: string): Manifest => ({ scripts: { test: command } })
+  assert.deepEqual(codeFoldersOf(testing("env -u SOME_VARIABLE node --test 'src/**/*.node-test.ts'")), ['src'])
+  assert.throws(() => codeFoldersOf(testing("env node --test 'src/**/*.node-test.ts'")), /'env'/)
 })

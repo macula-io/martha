@@ -5,7 +5,7 @@
 // `launcherPlacesOf`, as a real launch does, and drive the channel, the carrier and the receipts through those places:
 // A says something to B from the worktree, B is handed it in the clone, and A reads that B took it in.
 
-import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -33,7 +33,7 @@ const DECLARATION = JSON.stringify({
   version: 1,
   owner: 'Ann',
   members: MEMBERS.map((name) => ({ name, role: name === 'Builder' ? 'builder' : 'reviewer' })),
-  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [RESTART_MEMBER]: [OWNER] } },
+  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
   channel_read_seconds: 30,
 })
 
