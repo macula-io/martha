@@ -11,7 +11,6 @@
 
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
-import { opensAtStartOf, rowsToOpen } from './pane_rule.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 
 /**
@@ -38,8 +37,8 @@ interface CrewEngine {
   readonly http: {
     fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }>
   }
-  /** The session's id, and the host's own reading of it: its context as a share of the limit, and what it has cost. */
-  readonly session: { id(): Promise<string>; usage(): Promise<ASessionsUsage> }
+  /** The session's id, and the host's own reading of it: its usage, taken as it comes and read by the core. */
+  readonly session: { id(): Promise<string>; usage(): Promise<unknown> }
   readonly clock: {
     after(ms: number, fn: () => void): { cancel(): void }
     every(ms: number, fn: () => void): { cancel(): void }
@@ -117,22 +116,15 @@ async function startReadingTheChannel($: CrewEngine): Promise<void> {
   await reading.readWhileIdle()
 }
 
-/** The host's own reading of a session (martha#255): its context as a share of its limit, and what it has cost. */
-interface ASessionsUsage {
-  readonly context?: { readonly percent?: number | null }
-  readonly cost?: { readonly usd?: number | null }
-}
+/** The order a session is given (martha#255): submit this text, clear the session, or nothing at all. */
+type TheOrder = { readonly carry: 'submit'; readonly text: string } | { readonly carry: 'clear' } | { readonly carry: 'none' }
 
-/** The act a session is told to take, as the launcher answers it: nothing, one prompt, or the clear. */
-type TheAct = { readonly act: 'none' } | { readonly act: 'prompt'; readonly text: string } | { readonly act: 'clear' }
-
-/** The act the launcher's answer carries, or null when it is not one this mod knows. */
-function actIn(said: string): TheAct | null {
+/** The order the launcher's answer carries, or null when it is not one this mod knows. */
+function orderIn(said: string): TheOrder | null {
   try {
-    const parsed = JSON.parse(said) as { readonly act?: unknown; readonly text?: unknown }
-    if (parsed.act === 'none') return { act: 'none' }
-    if (parsed.act === 'clear') return { act: 'clear' }
-    if (parsed.act === 'prompt' && typeof parsed.text === 'string' && parsed.text !== '') return { act: 'prompt', text: parsed.text }
+    const parsed = JSON.parse(said) as { readonly carry?: unknown; readonly text?: unknown }
+    if (parsed.carry === 'clear' || parsed.carry === 'none') return { carry: parsed.carry }
+    if (parsed.carry === 'submit' && typeof parsed.text === 'string' && parsed.text !== '') return { carry: 'submit', text: parsed.text }
     return null
   } catch {
     return null
@@ -145,39 +137,26 @@ function actIn(said: string): TheAct | null {
  * nothing but carry the act out. A clear is run out of the turn's own hook, because a `/clear` cannot run inside one.
  */
 async function takeTheAct($: CrewEngine, e: unknown): Promise<void> {
-  const act = await theActTheLauncherAnswers($, e)
-  if (act === null || act.act === 'none') return
-  await carryOutTheAct($, act)
+  const order = await theOrderTheLauncherAnswers($, e)
+  if (order === null || order.carry === 'none') return
+  await carryOutTheAct($, order)
 }
 
-/** The act the launcher answers this session's question with, or null when it said none this mod could read. */
-async function theActTheLauncherAnswers($: CrewEngine, e: unknown): Promise<TheAct | null> {
+/** The order the launcher answers this session's question with, or null when it said none this mod could read. */
+async function theOrderTheLauncherAnswers($: CrewEngine, e: unknown): Promise<TheOrder | null> {
   const heard = await hearTheLauncher($, THE_REFRESH_QUESTION, await whatTheSessionSays($, e))
-  return 'said' in heard ? actIn(heard.said) : null
+  return 'said' in heard ? orderIn(heard.said) : null
 }
 
-/** What the session reports about itself: the host's own usage, and the turn that just ended with the answer it ended on. */
+/** What the session knows of itself, as the host reports it: its usage, the turn that just ended, and its answer. */
 async function whatTheSessionSays($: CrewEngine, e: unknown): Promise<Readonly<Record<string, unknown>>> {
-  const usage = await $.session.usage().catch(() => undefined)
-  const turn = textIn(e, 'turnId')
-  return {
-    percent: aPercent(usage?.context?.percent),
-    cost_usd: typeof usage?.cost?.usd === 'number' ? usage.cost.usd : null,
-    turn_id: turn,
-    answer: textIn(e, 'answer'),
-    at_start: turn === '',
-  }
+  return { usage: await $.session.usage().catch(() => undefined), turn_id: textIn(e, 'turnId'), answer: textIn(e, 'answer') }
 }
 
-/** A share of the context limit as the host reports it, or 0 when it reports none this mod can trust. */
-function aPercent(percent: number | null | undefined): number {
-  return typeof percent === 'number' && Number.isFinite(percent) ? percent : 0
-}
-
-/** The one act the launcher named: a prompt submitted, or the clear run out of the turn's own hook. */
-async function carryOutTheAct($: CrewEngine, act: TheAct): Promise<void> {
-  if (act.act === 'prompt') return await $.prompt.submit({ text: act.text })
-  if (act.act !== 'clear') return
+/** The one order the launcher gave: a text submitted, or the clear run out of the turn's own hook. */
+async function carryOutTheAct($: CrewEngine, order: TheOrder): Promise<void> {
+  if (order.carry === 'submit') return await $.prompt.submit({ text: order.text })
+  if (order.carry !== 'clear') return
   // Out of the turn's hook: /clear cannot run inside a hook the turn waits on.
   $.clock.after(CLEAR_DELAY_MS, () => void $.command.run({ command: 'clear' }).catch(() => undefined))
 }
@@ -229,11 +208,13 @@ interface FromTheLauncher {
   readonly tools: readonly CrewTool[]
 }
 
-/** The crew as the launcher answered it, with the interval its pane is to be drawn again on. */
-interface TheCrewShown {
-  readonly rows: readonly ShownRow[]
-  readonly counts: Record<string, number>
-  readonly pane_redraw_ms: number | null
+/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
+interface ThePaneShown {
+  readonly header: string
+  readonly lines: readonly string[]
+  readonly open_at_start: boolean
+  readonly rows: number
+  readonly redraw_ms: number | null
 }
 
 /** Asks the launcher for the tools to register, which it alone names and describes. */
@@ -256,65 +237,34 @@ function startRedrawing($: CrewEngine, every_ms: number | null): void {
   redrawing = $.clock.every(every_ms, () => void $.ui.invalidate(THE_PANES_RENDER))
 }
 
-/** Stops asking the host to draw the pane: it is closed, or the session is over. */
-function stopRedrawing(): void {
+/** Closes the pane, and stops asking the host to draw it again: it is closed, or the session is over. */
+async function shutThePane($: CrewEngine): Promise<void> {
   redrawing?.cancel()
   redrawing = null
-}
-
-/** Closes the pane, and stops asking the host to draw it again. */
-async function shutThePane($: CrewEngine): Promise<void> {
-  stopRedrawing()
   await $.ui.close({ id: PANE })
 }
 
-/** Opens the pane, with the rows the host draws it in, and asks it to keep drawing while it is open. */
+/** Opens the pane, with the rows the launcher asks the host for, and asks it to keep drawing while it is open. */
 async function openThePane($: CrewEngine): Promise<void> {
   const heard = await hearTheLauncher($, 'see_the_crew', {})
-  const shown = 'said' in heard ? crewIn(heard.said) : null
-  await $.ui.open({ id: PANE, title: 'Crew', rows: rowsToOpen('said' in heard ? heard.said : '') })
-  if (shown !== null) startRedrawing($, shown.pane_redraw_ms)
+  const shown = 'said' in heard ? paneIn(heard.said) : null
+  await $.ui.open({ id: PANE, title: 'Crew', rows: shown === null ? PANE_CHROME_ROWS : shown.rows })
+  if (shown !== null) startRedrawing($, shown.redraw_ms)
 }
 
-/** What the pane draws, from the answer the launcher gives. */
-interface ShownRow {
-  readonly member: string
-  readonly state: string
-  readonly holds: string
-  readonly task: string
-  readonly progress: { readonly step: number; readonly of: number }
-  readonly waits: { readonly on: string; readonly for: string } | null
-  readonly needs: string
-  readonly quiet_for: number | null
-}
+/** The pane's own chrome, for an answer that does not say how many rows it wants (martha#254). */
+const PANE_CHROME_ROWS = 3
 
-/** One member's line: who, how far, and what holds it up. */
-function lineOf(row: ShownRow): string {
-  const bar = `${row.progress.step}/${row.progress.of}`
-  const waits = row.waits === null ? '' : ` · waits on ${row.waits.on} for ${row.waits.for}`
-  const needs = row.needs === '' ? '' : ` · needs you: ${row.needs}`
-  const holds = row.holds === '' ? '' : ` · ${row.holds}`
-  return `${row.member}: ${row.state} · ${row.task} ${bar}${holds}${waits}${needs}`
-}
-
-/** The crew as the launcher answered it, or null when the answer is not one. */
-function crewIn(said: string): TheCrewShown | null {
+/** What the pane draws, from the answer the launcher gives, or null when the answer is not one it can draw. */
+function paneIn(said: string): ThePaneShown | null {
   try {
-    const parsed = JSON.parse(said) as { rows?: readonly ShownRow[]; counts?: Record<string, number>; pane_redraw_ms?: unknown }
-    const every = parsed.pane_redraw_ms
-    return {
-      rows: parsed.rows ?? [],
-      counts: parsed.counts ?? {},
-      pane_redraw_ms: typeof every === 'number' && every > 0 ? every : null,
-    }
+    const parsed = JSON.parse(said) as Partial<ThePaneShown>
+    if (typeof parsed.header !== 'string' || !Array.isArray(parsed.lines)) return null
+    const { header, lines, rows, redraw_ms } = parsed
+    return { header, lines, open_at_start: parsed.open_at_start === true, rows: rows ?? PANE_CHROME_ROWS, redraw_ms: redraw_ms ?? null }
   } catch {
     return null
   }
-}
-
-/** Why the pane could not read the crew: the launcher's own words, or the shape it answered with. */
-function unreadableOf(heard: Heard): string {
-  return 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why
 }
 
 /**
@@ -384,21 +334,19 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($: CrewEngine, e: unknown) => {
     const { Box, Text, Button } = $.ui.resolve(e) as { Box: unknown; Text: unknown; Button: unknown }
     const heard = await hearTheLauncher($, 'see_the_crew', {})
-    const crew = 'said' in heard ? crewIn(heard.said) : null
-    if (crew === null) return unreadablePane($, { Box, Text, Button }, unreadableOf(heard))
+    const shown = 'said' in heard ? paneIn(heard.said) : null
+    if (shown === null) return unreadablePane($, { Box, Text, Button }, 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why)
     // A pane that is being drawn is a pane that is open: if nothing is asking the host to draw it again, ask, so a
     // member who reports after it opened is drawn without the owner typing anything (part 2 r=2 R1).
-    startRedrawing($, crew.pane_redraw_ms)
-    const { rows, counts } = crew
+    startRedrawing($, shown.redraw_ms)
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between">
-          <Text bold>{`${counts.online ?? 0}/${counts.members ?? 0} online · ${counts.waiting ?? 0} waiting · ${counts.needs_you ?? 0} need you`}</Text>
+          <Text bold>{shown.header}</Text>
           <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
         </Box>
-        {rows.length === 0 ? <Text dimColor>No member of this crew has reported yet.</Text> : null}
-        {rows.map((row) => (
-          <Text key={row.member}>{lineOf(row)}</Text>
+        {shown.lines.map((line, at) => (
+          <Text key={`${at}`}>{line}</Text>
         ))}
       </Box>
     )
@@ -410,7 +358,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
     const fromTheLauncher = await toolsFromTheLauncher($)
     for (const tool of fromTheLauncher.tools) await $.tool.register(tool)
     const first = await askTheLauncher($, 'see_the_crew', {})
-    if (opensAtStartOf(first)) await openThePane($)
+    if (paneIn(first)?.open_at_start === true) await openThePane($)
     await startReadingTheChannel($)
     await takeTheAct($, e)
     return next(e)

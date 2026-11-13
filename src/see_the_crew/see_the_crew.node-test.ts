@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { seeTheCrew } from './see_the_crew.ts'
+import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, seeTheCrew, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
 
 const CREW = { members: [{ name: 'Vesta' }, { name: 'Uranus' }, { name: 'Terra' }] }
 const NOW = 1_762_900_000_000
@@ -72,4 +72,29 @@ test('a member waiting on somebody keeps that wait, and a member that needs the 
   assert.deepEqual(seen.rows[0]!.waits, { on: 'Supervisor', for: 'a verdict', since: NOW - 60_000 }, 'the wait is shown as the member recorded it')
   assert.equal(seen.rows[1]!.needs, 'a menu: land or hold', 'what needs the owner is shown as the member said it')
   assert.deepEqual(seen.counts, { members: 3, online: 2, working: 0, waiting: 1, needs_you: 1 }, 'a wait and a need are each counted')
+})
+
+test('the rows the pane asks for are one per member, one more for each member that needs the owner, and the chrome (test 8)', () => {
+  const seen = seeTheCrew(CREW, { Uranus: beat('Uranus', NOW - 1_000), Terra: beat('Terra', NOW - 2_000, { state: 'needs-you' }) }, NOW)
+
+  assert.equal(theRowsThePaneAsksFor([]), PANE_CHROME_ROWS, 'a crew with no member still draws its box')
+  assert.equal(theRowsThePaneAsksFor(seen.rows), 3 + 1 + PANE_CHROME_ROWS, 'one row per member, one more for the member that needs the owner, and the chrome')
+})
+
+test('the pane is answered as words: its header, and one line per member, so the mod formats nothing (martha#255)', () => {
+  const seen = seeTheCrew(CREW, { Uranus: beat('Uranus', NOW - 1_000, { waits: { on: 'Supervisor', for: 'a verdict', since: NOW - 1_000 } }) }, NOW)
+
+  assert.equal(thePaneHeader(seen.counts), '1/3 online · 0 waiting · 0 need you', 'the header is the counts, in the owner\'s words')
+  const lines = seen.rows.map(thePaneLine)
+  assert.equal(lines[0], 'Vesta: idle ·  0/1', 'a member that never beat is one line, and nothing else')
+  assert.equal(lines[1], 'Uranus: working · Build the crew store 2/5 · macula-io/martha#254 · waits on Supervisor for a verdict', 'who, how far, what it holds, and what holds it up')
+  assert.equal(NO_MEMBER_HAS_REPORTED, 'No member of this crew has reported yet.', 'the empty pane says so in the same words it always has')
+})
+
+test('the pane opens by itself only when the declaration switched the dashboard on (test 8)', () => {
+  const seen = seeTheCrew(CREW, {}, NOW)
+  const answered = (switched_on: boolean): boolean => thePaneAnsweredBy(seen, switched_on, 1_000).open_at_start
+
+  assert.equal(answered(true), true, 'a crew that switched the dashboard on opens the pane at a start')
+  assert.equal(answered(false), false, 'a crew that did not switch it on opens nothing')
 })

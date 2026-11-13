@@ -585,8 +585,8 @@ test('a member started from the crew answers the crew\'s tools over its relay (m
   // beat's own (r=2 R1): a redraw on a literal would drift from the beat the rows are written on.
   const shown = await postOverSocket(socket_path, TOOL_ANSWER_PATH, toolCallBody('session-254', 'see_the_crew', {}))
   assert.equal(shown.status, 200, shown.text)
-  const crew = JSON.parse((JSON.parse(shown.text) as { answer: string }).answer) as { pane_redraw_ms: number }
-  assert.equal(crew.pane_redraw_ms, BEAT_INTERVAL_MS, 'the pane redraws on the beat\'s own interval')
+  const crew = JSON.parse((JSON.parse(shown.text) as { answer: string }).answer) as { redraw_ms: number }
+  assert.equal(crew.redraw_ms, BEAT_INTERVAL_MS, 'the pane redraws on the beat\'s own interval')
 
   // The five tools that act are handed the host's own processes and the crew's declaration (martha#256 r=2 R2): a
   // member Martha started calls them and is answered by the slice, not told that its launch can act in nothing. The

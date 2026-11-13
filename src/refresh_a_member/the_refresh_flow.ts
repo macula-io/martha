@@ -469,3 +469,15 @@ async function settingsOrNull(places: TheRefreshPlaces): Promise<CrewSettings | 
     return null
   }
 }
+
+/**
+ * The order the mod carries out (martha#255): the one thing it is told to do, and the text for the one that needs
+ * it. It is answered in place of the act, so the mod reads three words and decides nothing.
+ */
+export type TheOrder = { readonly carry: 'submit'; readonly text: string } | { readonly carry: 'clear' } | { readonly carry: 'none' }
+
+/** The act as the order the mod runs: a prompt is a text to submit, a clear is the clear, and nothing is nothing. */
+export function theOrderOf(act: TheAct): TheOrder {
+  if (act.act === 'prompt') return { carry: 'submit', text: act.text }
+  return act.act === 'clear' ? { carry: 'clear' } : { carry: 'none' }
+}

@@ -304,10 +304,9 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   assert.deepEqual(specifiers('register.ts'), ['./relay_protocol.ts'])
   assert.deepEqual(specifiers('relay_protocol.ts'), [])
   // The crew's mod is the second module the host loads (martha#254): it carries its tools' calls to the launcher the
-  // same way, and the one rule it applies — whether the pane opens by itself — is a plain file with no imports at all,
-  // so what it decides is readable and testable without the host.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './pane_rule.ts', './crew_channel_reading.ts'])
-  assert.deepEqual(specifiers('pane_rule.ts'), [])
+  // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
+  // given all come from the launcher's answer, so the mod holds no rule that would need a file of its own.
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_channel_reading.ts'])
   // The rule for when a session reads its crew's channel (martha#253 r=2): also a plain file with no imports, so a
   // fake engine can drive it.
   assert.deepEqual(specifiers('crew_channel_reading.ts'), [])

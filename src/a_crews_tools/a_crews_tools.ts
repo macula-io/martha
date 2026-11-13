@@ -37,7 +37,7 @@ import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a
 import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
-import { askAMemberToRefresh, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
+import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theHandoverAToolWrote, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import {
@@ -52,7 +52,7 @@ import {
 } from '../keep_the_ledger/keep_the_ledger.ts'
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
-import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
+import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -437,7 +437,7 @@ async function theSessionsAct(
   if (typeof question === 'string') return { refused: question }
   const act: TheAct = await theRefreshAct(refreshPlacesOf(places, state), question)
   keepWhatTheSessionSaid(places, state, question, act)
-  return { answer: JSON.stringify({ act: act.act, ...('text' in act ? { text: act.text } : {}) }) }
+  return { answer: JSON.stringify(theOrderOf(act)) }
 }
 
 /**
@@ -654,35 +654,52 @@ async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   // from the declaration the launcher already read, so the mod decides nothing on its own. The interval it redraws on
   // is the beat's own, named here and read there, so the pane cannot drift from the beat the rows are written on
   // (part 2 r=2 R1): the host draws a `ui.render` once and caches it until a plugin invalidates it.
-  return { answer: JSON.stringify({ ...seen, pane_at_start: declared.settings.house_rules.dashboard, pane_redraw_ms: READER_BEAT_MS }) }
+  // What it draws is answered as words (martha#255): its header, one line per member, and how many rows it asks for,
+  // so the mod parses no row and formats nothing.
+  return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS)) }
 }
 
-/** Whether `value` is a context share: a number between 0 and 100, which is what the host reports. */
-function isAPercent(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+/** The host's own reading of a session (martha#255), as the mod hands it over untouched. */
+interface AHostsUsage {
+  readonly context?: { readonly percent?: number | null }
+  readonly cost?: { readonly usd?: number | null }
+}
+
+/** The host's usage, read as the object it is, or undefined when what arrived is not one. */
+function usageIn(args: Readonly<Record<string, unknown>>): AHostsUsage | undefined {
+  const usage = args['usage']
+  return typeof usage === 'object' && usage !== null ? (usage as AHostsUsage) : undefined
+}
+
+/**
+ * A share of the context limit as the host reports it, or 0 when it reports none this launcher can trust (martha#255).
+ * The host's own number is taken as it comes: a session that says nothing about its context has not reached a limit.
+ */
+function aPercentOf(usage: AHostsUsage | undefined): number {
+  const percent = usage?.context?.percent
+  return typeof percent === 'number' && Number.isFinite(percent) ? percent : 0
+}
+
+/** What the session has cost as the host reports it, or null when it reports nothing this launcher can trust. */
+function aCostOf(usage: AHostsUsage | undefined): number | null {
+  const cost = usage?.cost?.usd
+  return typeof cost === 'number' ? cost : null
 }
 
 /** What each field of the question must be, and what is said when it is not: read in order, the first miss refused. */
 const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => string | undefined)[] = [
-  (args) => (isAPercent(args['percent']) ? undefined : 'the refresh question carries no context percent, as a share between 0 and 100'),
-  (args) => (args['cost_usd'] === null || args['cost_usd'] === undefined || typeof args['cost_usd'] === 'number' ? undefined : 'the refresh question carries a cost that is not a number'),
   (args) => (typeof args['turn_id'] === 'string' && typeof args['answer'] === 'string' ? undefined : 'the refresh question carries no turn, or no answer for one'),
-  (args) => (typeof args['at_start'] === 'boolean' ? undefined : 'the refresh question does not say whether this is its session’s start'),
 ]
 
 /** The question the refresh flow is answered on, read strictly: a shape this launcher does not know is refused. */
 function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
   const refused = QUESTION_FIELDS.map((holds) => holds(args)).find((said) => said !== undefined)
   if (refused !== undefined) return refused
-  const cost = args['cost_usd']
-  return {
-    session_id,
-    percent: args['percent'] as number,
-    cost_usd: typeof cost === 'number' ? cost : null,
-    turn_id: args['turn_id'] as string,
-    answer: args['answer'] as string,
-    at_start: args['at_start'] as boolean,
-  }
+  const usage = usageIn(args)
+  const turn_id = args['turn_id'] as string
+  // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
+  // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
+  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '' }
 }
 
 /**
