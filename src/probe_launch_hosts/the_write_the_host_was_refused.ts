@@ -7,6 +7,7 @@
 // place, and not at the call site.
 
 import { isRecord } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { FILE_PATH_ARGUMENT, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** The text a run printed. */
 export function printedText(stdout: Buffer | null): string {
@@ -25,6 +26,6 @@ export function deniedWriteIn(printed: string, target: string): boolean {
   const denials = isRecord(answer) && Array.isArray(answer['permission_denials']) ? (answer['permission_denials'] as unknown[]) : []
   return denials.some((denial) => {
     const input = isRecord(denial) && isRecord(denial['tool_input']) ? denial['tool_input'] : {}
-    return isRecord(denial) && denial['tool_name'] === 'Write' && input['file_path'] === target
+    return isRecord(denial) && denial['tool_name'] === WHOLE_FILE_TOOL && input[FILE_PATH_ARGUMENT] === target
   })
 }

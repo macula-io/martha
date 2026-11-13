@@ -24,6 +24,7 @@ import {
   STATE_FILE_MODE,
   type MarthaState,
 } from './keep_martha_state_outside_the_checkout.ts'
+import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const ownWritesDirectory = (state: MarthaState): string => join(state.directory, OWN_WRITES_PLACE)
 
@@ -59,7 +60,7 @@ function ownWrite(fields: Partial<OwnWrite> = {}): OwnWrite {
     path: '/project/hello.txt',
     blob: SHA1_BLOB,
     mode: OWN_WRITE_MODES[0],
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_1',
     session: 'session-1',
     launch: 'launch-1',
@@ -101,9 +102,9 @@ test('an own write is kept in a file named for its launch, as one line with exac
 test('every launch is read back in the order of its first record, and one path keeps the last write made to it (martha#157)', (t) => {
   const { state } = stateFor(t)
   const first = ownWrite({ recorded_at: new Date(1000).toISOString() })
-  const ofAnother = ownWrite({ launch: 'launch-2', tool: 'Edit', tool_use_id: 'toolu_2', recorded_at: new Date(2000).toISOString() })
+  const ofAnother = ownWrite({ launch: 'launch-2', tool: EDIT_TOOL, tool_use_id: 'toolu_2', recorded_at: new Date(2000).toISOString() })
   // A second write to a path the launch already wrote replaces it, so the history gives the bytes the checkout holds.
-  const later = ownWrite({ blob: OTHER_SHA1_BLOB, tool: 'NotebookEdit', tool_use_id: 'toolu_3', recorded_at: new Date(3000).toISOString() })
+  const later = ownWrite({ blob: OTHER_SHA1_BLOB, tool: NOTEBOOK_EDIT_TOOL, tool_use_id: 'toolu_3', recorded_at: new Date(3000).toISOString() })
   for (const write of [first, ofAnother, later]) kept(state, write)
   assert.deepEqual(allOwnWrites(state), { writes: [ofAnother, later], unread: [] })
   assert.equal(readFileSync(filePath(state, 'launch-1'), 'utf8'), `${JSON.stringify(later)}${NEWLINE}`)
@@ -114,7 +115,7 @@ test('a launch reads only its own writes, and at one path the last kept is the o
   const first = ownWrite()
   const elsewhere = ownWrite({ path: '/project/other.txt', tool_use_id: 'toolu_2' })
   const otherLaunch = ownWrite({ path: '/project/third.txt', launch: 'launch-2', tool_use_id: 'toolu_3' })
-  const later = ownWrite({ blob: OTHER_SHA1_BLOB, mode: OWN_WRITE_MODES[1], tool: 'Edit', tool_use_id: 'toolu_4' })
+  const later = ownWrite({ blob: OTHER_SHA1_BLOB, mode: OWN_WRITE_MODES[1], tool: EDIT_TOOL, tool_use_id: 'toolu_4' })
   for (const write of [first, elsewhere, otherLaunch, later]) kept(state, write)
   assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [elsewhere, later] })
   assert.deepEqual(ofLaunch(state, 'launch-2'), { writes: [otherLaunch] })
