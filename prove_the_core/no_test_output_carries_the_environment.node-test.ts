@@ -81,6 +81,8 @@ const aRunSummary = RUN_SUMMARY_LABELS.map((label) => `${RUN_SUMMARY_MARK} ${lab
 const writesThenExits = (text: string, code: number): string[] => [process.execPath, '-e', `process.stdout.write(${JSON.stringify(text)}); process.exit(${code})`]
 /** What the runner says when the command's output did not end with the summary. */
 const CUT_RUN_REPORT = /a run ends with its summary \(martha#325\): the command's output did not end with node --test's summary/
+/** What the runner says when the command could not be started. */
+const CANNOT_START_REPORT = /a run ends with its summary \(martha#325\): the command could not start/
 
 /** How many result lines the command below writes: megabytes, many times what a pipe or socket holds. */
 const MANY_LINES = 400_000
@@ -188,10 +190,10 @@ test('the runner removes the files the command wrote into once the run ends', as
 })
 
 test('the summary is found at the end of stdout wherever the stream splits it, colours and blank lines included', () => {
-  const ends = (chunks: readonly string[]): boolean => {
+  const ends = (chunks: readonly string[], code = 0): boolean => {
     const counter = runEndCounter()
     for (const chunk of chunks) counter.scan(chunk)
-    return counter.endsWithTheSummary()
+    return counter.endsWithTheSummary(code)
   }
   const text = `✔ a\n${aRunSummary}\n\n`
   assert.equal(ends([text]), true)
@@ -204,7 +206,50 @@ test('the summary is found at the end of stdout wherever the stream splits it, c
   assert.equal(ends([aRunSummary.split('\n').slice(0, -2).join('\n')]), false, 'the last line missing')
   assert.equal(ends([`${aRunSummary}more\n`]), false, 'output after it')
   assert.equal(ends([aRunSummary.replace(' 1', ' many')]), false, 'a count that is not a number')
-  assert.equal(ends([`${aRunSummary}\n${FAILING_TESTS_HEADING}\n✖ a\n`]), true, 'the failing tests after it')
+  assert.equal(ends([`${aRunSummary}\n${FAILING_TESTS_HEADING}\n✖ a\n`], 1), true, 'the failing tests after it')
+})
+
+/** The summary with its labels at `i` and `i + 1` swapped. */
+const withTwoLabelsSwapped = (i: number): string => {
+  const lines = aRunSummary.split('\n')
+  const [first, second] = [lines[i] ?? '', lines[i + 1] ?? '']
+  return [...lines.slice(0, i), second, first, ...lines.slice(i + 2)].join('\n')
+}
+
+test('a summary whose labels are out of order is not the summary', () => {
+  for (let i = 0; i < RUN_SUMMARY_LABELS.length - 1; i += 1) {
+    const counter = runEndCounter()
+    counter.scan(withTwoLabelsSwapped(i))
+    assert.equal(counter.endsWithTheSummary(0), false, `${RUN_SUMMARY_LABELS[i]} and ${RUN_SUMMARY_LABELS[i + 1]} swapped`)
+  }
+})
+
+test('failing tests listed after the summary count only when the command failed', () => {
+  const listed = (code: number, text: string): boolean => {
+    const counter = runEndCounter()
+    counter.scan(text)
+    return counter.endsWithTheSummary(code)
+  }
+  const failures = `\n${FAILING_TESTS_HEADING}\n✖ a\n`
+  assert.equal(listed(1, `${aRunSummary}${failures}`), true, 'a failed run lists its failures after the summary')
+  assert.equal(listed(0, `${aRunSummary}${failures}`), false, 'a run that exits 0 lists no failures: the summary must be its end')
+  assert.equal(listed(1, `✔ a\n${failures}`), false, 'the heading with no summary before it')
+})
+
+test('a command that exits 0 after a printed summary and a failing-tests heading fails the run, naming the check', async (t) => {
+  const run = await throughTheRunner(t, writesThenExits(`✔ a fixture prints a run's report\n${aRunSummary}\n${FAILING_TESTS_HEADING}\n\n✔ more tests run\n✔ cut here\n`, 0))
+  assert.equal(run.code, 1, run.output)
+  assert.match(run.output, CUT_RUN_REPORT)
+})
+
+test('a command that cannot start fails the run, naming the check, and leaves nothing behind', async (t) => {
+  const temporary = mkdtempSync(join(tmpdir(), 'martha-runner-tmpdir-'))
+  t.after(() => removeTheTree(temporary))
+  const missing = join(temporary, 'no-such-program')
+  const run = await throughTheRunnerVia(t, [process.execPath, RUNNER, missing], { TMPDIR: temporary })
+  assert.equal(run.code, 1, run.output)
+  assert.match(run.output, CANNOT_START_REPORT)
+  assert.deepEqual(readdirSync(temporary), [])
 })
 
 test('a character the command writes in two pieces reaches the output whole', async (t) => {

@@ -18,8 +18,10 @@
 // short never reads as a pass: one cut by a tool's time limit has been seen to
 // end 0 with half the tests printed and no summary. The runner keeps the last
 // lines of stdout and fails the run, by name, unless they are node --test's own
-// summary (RUN_SUMMARY_LABELS, in order), followed by nothing but blank lines or
-// the failing tests node lists after it. The summary must be the END, not merely
+// summary (RUN_SUMMARY_LABELS, in order), followed by nothing but blank lines; a
+// command that exited non-zero may instead end with the failing tests node lists
+// right after the summary (it lists them only on a failed run). A command that
+// cannot start fails the run by name too. The summary must be the END, not merely
 // present: a test's own console.log reaches the run's stdout as it is, so a
 // summary-shaped line can appear anywhere before it.
 //
@@ -104,19 +106,25 @@ const isTheSummary = (lines: readonly string[]): boolean =>
   lines.length === RUN_SUMMARY_LABELS.length && RUN_SUMMARY_LABELS.every((label, i) => isSummaryLine(lines[i] ?? '', label))
 
 /**
- * Follows a stream that arrives in chunks and says whether it ended with the
- * summary: the last RUN_SUMMARY_LABELS.length lines that are not blank, and not
- * part of the failing tests listed after the summary, are the summary in order.
+ * Follows a stream that arrives in chunks and says, given the command's exit
+ * code, whether it ended with the summary: the last RUN_SUMMARY_LABELS.length
+ * lines that are not blank are the summary in order. node --test lists failing
+ * tests after the summary only when the run failed, so only a command that
+ * exited non-zero may end with that list instead, and only when its heading
+ * came right after the summary (a test can print the heading too).
  */
-export function runEndCounter(): { readonly scan: (chunk: string) => void; readonly endsWithTheSummary: () => boolean } {
+export function runEndCounter(): {
+  readonly scan: (chunk: string) => void
+  readonly endsWithTheSummary: (code: number | null) => boolean
+} {
   let partial = ''
   let lastLines: string[] = []
-  let listingFailures = false
+  let failuresFollowedTheSummary = false
   const take = (raw: string) => {
     const line = stripVTControlCharacters(raw).trim()
-    if (line === '' || listingFailures) return
-    if (isTheSummary(lastLines) && line === FAILING_TESTS_HEADING) listingFailures = true
-    else lastLines = [...lastLines, line].slice(-RUN_SUMMARY_LABELS.length)
+    if (line === '') return
+    if (line === FAILING_TESTS_HEADING && isTheSummary(lastLines)) failuresFollowedTheSummary = true
+    lastLines = [...lastLines, line].slice(-RUN_SUMMARY_LABELS.length)
   }
   return {
     scan: (chunk) => {
@@ -124,10 +132,10 @@ export function runEndCounter(): { readonly scan: (chunk: string) => void; reado
       partial = lines.pop() ?? ''
       for (const line of lines) take(line)
     },
-    endsWithTheSummary: () => {
+    endsWithTheSummary: (code) => {
       take(partial)
       partial = ''
-      return listingFailures || isTheSummary(lastLines)
+      return isTheSummary(lastLines) || (code !== 0 && failuresFollowedTheSummary)
     },
   }
 }
@@ -142,12 +150,20 @@ export function cutRunReportOf(ended: { readonly code: number | null; readonly s
   )
 }
 
+/** What the run says when the command could not be started at all. */
+export function cannotStartReportOf(program: string, reason: string): string {
+  return (
+    `a run ends with its summary (martha#325): the command could not start (${program}: ${reason}), so no test ran. ` +
+    'Check that the program the test script names is installed and on PATH.'
+  )
+}
+
 /** How long the runner waits before it reads a file the command writes into again, once it has read to its end. */
 const READ_AGAIN_MS = 50
 /** How much of a file the runner reads at once. */
 const READ_BYTES = 64 * 1024
 
-type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | null }
+type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly cannotStart?: string }
 
 /**
  * Hands `take` what is written into the file at `path`, decoded as it comes (a
@@ -193,7 +209,11 @@ export async function runWithAPlantedSecret(command: readonly string[], env: Nod
     process[stream].write(text)
   }
   const ended = await runIntoFiles(program, args, { ...env, [PLANTED_VARIABLE]: value }, passThrough)
-  const complete = runEnd.endsWithTheSummary()
+  if (ended.cannotStart !== undefined) {
+    process.stderr.write(`\n${cannotStartReportOf(program, ended.cannotStart)}\n`)
+    return 1
+  }
+  const complete = runEnd.endsWithTheSummary(ended.code)
   if (!complete) process.stderr.write(`\n${cutRunReportOf(ended)}\n`)
   const counts = { stdout: counters.stdout.count(), stderr: counters.stderr.count() }
   const own = ended.code ?? 1
@@ -223,8 +243,17 @@ async function runIntoFiles(
     const forward = (signal: NodeJS.Signals) => () => void child.kill(signal)
     process.on('SIGINT', forward('SIGINT'))
     process.on('SIGTERM', forward('SIGTERM'))
+    // A command that cannot start emits 'error' and never 'exit'; the first of
+    // the two to come is how the command ended, and it lets the readers stop.
     let ended: Ended | undefined
-    const exited = new Promise<Ended>((resolve) => child.on('exit', (code, signal) => resolve((ended = { code, signal }))))
+    const exited = new Promise<Ended>((resolve) => {
+      const end = (how: Ended) => {
+        ended ??= how
+        resolve(ended)
+      }
+      child.once('exit', (code, signal) => end({ code, signal }))
+      child.on('error', (error) => end({ code: null, signal: null, cannotStart: error.message }))
+    })
     const isEnded = () => ended !== undefined
     await Promise.all([
       readAsItGrows(paths.stdout, passThrough('stdout'), isEnded),
