@@ -68,6 +68,7 @@ import {
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { HandoverStamp, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { recordDigestOf, releasedRecordOf, type ReleaseMark } from '../apply_the_owners_release/apply_the_owners_release.ts'
 
 /** What an event that starts a session does to the record. */
 export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
@@ -151,9 +152,8 @@ function digestOf(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
-function digestOfRecord(ingested: readonly Ingestion[]): string {
-  return digestOf(JSON.stringify(ingested.map((ingest) => [ingest.path, ingest.from_node_id])))
-}
+/** A record's digest, from the release slice, so a mark and a stamp can never be computed two ways. */
+const digestOfRecord = recordDigestOf
 
 /** True when the record still begins with exactly what the stamp saw; a shorter one cannot. */
 function recordStillHolds(stamp: HandoverStamp, ingested: readonly Ingestion[]): boolean {
@@ -188,14 +188,23 @@ export function readHandover(
   stamps: HandoverStampStore,
   reader: { readonly member: string; readonly session: HostSession },
   handover: Handover,
+  marks: readonly ReleaseMark[] = [],
 ): HostSession {
   const stamp = stamps.read(handover.file)
   if (stamp === undefined || 'refusal' in stamp || stamp.digest !== digestOf(handover.content)) return lose(reader.session)
   if (stamp.member !== reader.member) return takeInTurn(reader.session, { source: 'checkout_file' }, bindNothing)
 
   const predecessor = sessionFromRecord(stamp.predecessor_id, store.read(stamp.predecessor_id))
-  if (predecessor.record_missing || !recordStillHolds(stamp, predecessor.gate.ingested)) return lose(reader.session)
-  return { ...reader.session, gate: recordIngestion(reader.session.gate, predecessor.gate.ingested) }
+  if (predecessor.record_missing) return lose(reader.session)
+  // The owner's release is applied here, at inheritance, and never written back into the session's own stream
+  // (martha#321). The stamp is held to either record: a handover may be stamped before the release, when the record
+  // was whole, or after it, when the record had already begun further along. Both are the owner's own succession; a
+  // record the stamp holds in neither shape is lost, never inheriting what the owner cleared.
+  const released = releasedRecordOf(predecessor.gate.ingested, marks)
+  if (!recordStillHolds(stamp, predecessor.gate.ingested) && !recordStillHolds(stamp, released.ingested)) {
+    return lose(reader.session)
+  }
+  return { ...reader.session, gate: recordIngestion(reader.session.gate, released.ingested) }
 }
 
 function lose(session: HostSession): HostSession {
