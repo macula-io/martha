@@ -10,8 +10,16 @@
 
 import { join } from 'node:path'
 
-import { GATE_AUDIT_PLACE, theLinesIn, type AnAuditLine } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
+import { GATE_AUDIT_PLACE, theLinesIn, type AnAuditLine, type StateLines } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { gateModeFor, type GateMode, type GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
+
+/** The crew's own place, and how the host keeps and reads a file in it: the audit's folder is inside it. */
+export interface TheCrewsOwnPlace {
+  /** `<state root>/<the crew's key>`, the directory every member of the crew reads. */
+  readonly directory: string
+  /** How the host keeps and reads a file in it: a slice names a file, never a path on the machine. */
+  readonly lines: StateLines
+}
 
 /** What the owner asked to see. */
 export interface GateAsked {
@@ -20,7 +28,7 @@ export interface GateAsked {
   /** The gate as the declaration asked for it. */
   readonly gate: GateSetting
   /** The crew's own place: the audit folder is inside it. */
-  readonly crew: string
+  readonly crew: TheCrewsOwnPlace
   /** The one member whose lines the owner asked for; absent asks for the summary. */
   readonly member?: string
 }
@@ -28,7 +36,7 @@ export interface GateAsked {
 /** What to print, or why the audit cannot be read. */
 export type TheGate = { readonly shown: true; readonly lines: readonly string[] } | { readonly shown: false; readonly refusal: string }
 
-const auditPlaceIn = (asked: GateAsked, member: string) => ({ directory: join(asked.crew, GATE_AUDIT_PLACE), member })
+const auditPlaceIn = (asked: GateAsked, member: string) => ({ directory: join(asked.crew.directory, GATE_AUDIT_PLACE), member, lines: asked.crew.lines })
 
 /** A line to print, or why the audit could not be read. */
 type AShownLine = { readonly line: string } | { readonly refusal: string }

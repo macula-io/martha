@@ -113,7 +113,7 @@ export interface MemberRelayPlace {
    * Where an audited member's would-be refusals are kept (martha#321). Absent, an audited member's call is refused: the
    * audit never runs without a place to write its evidence.
    */
-  readonly audit?: GateAuditPlace
+  readonly audit?: GateAuditPlace | undefined
   /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
   readonly ownerMemory: OwnerMemoryPlaces
   /** The member's signed runs (martha#129); a member without them runs no shape. */

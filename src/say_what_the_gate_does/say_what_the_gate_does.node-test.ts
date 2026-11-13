@@ -11,23 +11,27 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+
+/** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
+const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
-import { sayWhatTheGateDoes, type TheGate } from './say_what_the_gate_does.ts'
+import { sayWhatTheGateDoes, type TheCrewsOwnPlace, type TheGate } from './say_what_the_gate_does.ts'
 
 const MEMBERS: readonly string[] = ['builder', 'reviewer', 'writer']
 
 /** A crew's own folder for this test, removed after it, holding the audit lines given. */
-function aCrewsPlace(t: TestContext, lines: Readonly<Record<string, readonly string[]>> = {}): string {
+function aCrewsPlace(t: TestContext, audit: Readonly<Record<string, readonly string[]>> = {}): TheCrewsOwnPlace {
   const crew = mkdtempSync(join(tmpdir(), 'martha-321-gate-'))
   t.after(() => removeTheTree(crew))
   mkdirSync(join(crew, GATE_AUDIT_PLACE), { mode: 0o700 })
-  for (const [member, each] of Object.entries(lines)) {
+  for (const [member, each] of Object.entries(audit)) {
     writeFileSync(join(crew, GATE_AUDIT_PLACE, `${member}.jsonl`), each.map((line) => `${line}\n`).join(''), { mode: 0o600 })
   }
-  return crew
+  return { directory: crew, lines: STATE_LINES }
 }
 
 const aLine = (path: string, tool: string): string =>
@@ -75,7 +79,7 @@ test('#321: --member for a member the declaration does not know is refused by na
 
 test('#321: an audit file that cannot be read is a refusal, never a member shown as quiet', (t) => {
   const crew = aCrewsPlace(t)
-  writeFileSync(join(crew, GATE_AUDIT_PLACE, 'builder.jsonl'), 'not a line of json\n', { mode: 0o600 })
+  writeFileSync(join(crew.directory, GATE_AUDIT_PLACE, 'builder.jsonl'), 'not a line of json\n', { mode: 0o600 })
   const gate: GateSetting = { kind: 'named', enforced: [], audited: ['builder'] }
   const gate_shown = sayWhatTheGateDoes({ members: MEMBERS, gate, crew })
   assert.equal(gate_shown.shown, false)

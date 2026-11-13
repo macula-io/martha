@@ -26,6 +26,10 @@ import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+
+/** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
+const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { GATE_AUDIT_PLACE, theLinesIn } from './audit_the_gate_for_a_member.ts'
 
@@ -108,10 +112,10 @@ const deniedTo = (reply: { readonly answered: boolean }): string => {
 
 test('#321: the launcher hands the gate’s audit folder to the relay, and an audited call writes its line there', async (t) => {
   const places = placesOf(t)
-  const relay = relayFor(places, 'audited', { directory: places.audit, member: MEMBER })
+  const relay = relayFor(places, 'audited', { directory: places.audit, member: MEMBER, lines: STATE_LINES })
   await aSessionAForeignerReached(relay)
   assert.deepEqual(await relay.answer('tool_called', bash), { answered: true, body: { allow: 1 } })
-  const lines = theLinesIn({ directory: places.audit, member: MEMBER })
+  const lines = theLinesIn({ directory: places.audit, member: MEMBER, lines: STATE_LINES })
   assert.ok(!('refusal' in lines))
   assert.equal(lines.length, 1, 'the audited call left no line')
 })
@@ -125,9 +129,9 @@ test('#321: an audited member whose launch kept no audit folder has its call ref
 
 test('#321: an enforced member’s refusal leaves the audit folder empty', async (t) => {
   const places = placesOf(t)
-  const relay = relayFor(places, 'enforced', { directory: places.audit, member: MEMBER })
+  const relay = relayFor(places, 'enforced', { directory: places.audit, member: MEMBER, lines: STATE_LINES })
   await aSessionAForeignerReached(relay)
   const answer = await relay.answer('tool_called', bash)
   assert.match(deniedTo(answer), /Nothing executes in this session/)
-  assert.deepEqual(theLinesIn({ directory: places.audit, member: MEMBER }), [])
+  assert.deepEqual(theLinesIn({ directory: places.audit, member: MEMBER, lines: STATE_LINES }), [])
 })

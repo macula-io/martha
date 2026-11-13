@@ -33,7 +33,7 @@
 // not, because a crew checkout pulls other people's commits.
 //
 // This slice only computes the settings. The launcher makes the empty directory
-// they name (../switch_a_checkouts_hooks_off/empty_directory.ts), since making
+// they name (../empty_directory_of_a_launch/empty_directory.ts), since making
 // one is machine work a slice does not do.
 //
 // This is a partial measure, not a boundary. It closes the common doors; it

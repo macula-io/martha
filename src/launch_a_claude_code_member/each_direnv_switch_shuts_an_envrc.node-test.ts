@@ -14,7 +14,7 @@ import { test, type TestContext } from 'node:test'
 
 import { DIRENV_CONFIG_VARIABLE, DIRENV_OFF_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { DIRENVS_VARIABLE, direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
-import { makeEmptyDirectory } from '../switch_a_checkouts_hooks_off/empty_directory.ts'
+import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { removeTheTree } from './relay_copy.ts'
 
 function scratch(t: TestContext): string {

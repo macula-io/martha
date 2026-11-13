@@ -29,7 +29,7 @@ import { installThePinnedInstaller } from '../install_the_pinned_installer/insta
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { crewRowsDirectory, crewStateDirectory, openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
@@ -327,11 +327,11 @@ async function theGate(io: CommandIo, places: Places, member: string | undefined
   const shown = sayWhatTheGateDoes({
     members: crew.settings.members.map((one) => one.name),
     gate: crew.settings.gate,
-    crew: crew.crew,
+    crew: { directory: crew.crew, lines: { append: appendStateLine, read: readStateFile } },
     ...(member === undefined ? {} : { member }),
   })
   if (!shown.shown) return refused(io, shown.refusal)
-  for (const line of shown.lines) io.out(line)
+  shown.lines.forEach((line) => io.out(line))
   return EXIT_DONE
 }
 

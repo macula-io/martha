@@ -73,8 +73,11 @@ export interface ToolCall {
    * cannot be kept, because an audit that can lose its evidence is worse than none.
    */
   readonly gate?: GateMode
-  /** Where this member's audit lines are kept; required for an audited member, and refused without when it is audited. */
-  readonly audit?: GateAuditPlace
+  /**
+   * Where this member's audit lines are kept; required for an audited member, and refused without when it is audited.
+   * A caller with no audit folder says so rather than leaving the field out, so a launcher reads one line here.
+   */
+  readonly audit?: GateAuditPlace | undefined
 }
 
 /** The refusal an audited member's call gets when its own line cannot be kept: the gate's words, then why it stopped. */

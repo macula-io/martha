@@ -28,7 +28,7 @@ import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
-import { EMPTY_DIRECTORY_MODE } from '../switch_a_checkouts_hooks_off/empty_directory.ts'
+import { EMPTY_DIRECTORY_MODE } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { CLAUDE_CODE, EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'

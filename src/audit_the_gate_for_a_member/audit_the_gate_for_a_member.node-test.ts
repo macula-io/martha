@@ -11,6 +11,10 @@ import { join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+
+/** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
+const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
@@ -44,7 +48,7 @@ function aCrewsPlace(t: TestContext): GateAuditPlace {
   t.after(() => removeTheTree(crew))
   const directory = join(crew, GATE_AUDIT_PLACE)
   mkdirSync(directory, { mode: 0o700 })
-  return { directory, member: 'builder' }
+  return { directory, member: 'builder', lines: STATE_LINES }
 }
 
 /** A session that took a stranger's ring in: the arrival the gate refuses on, and the one the audit names. */

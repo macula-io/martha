@@ -20,11 +20,22 @@
 import { join } from 'node:path'
 
 import type { Refused } from '../host_contract/host_contract.ts'
-import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 /** The folder inside the crew's own state directory that holds one file per audited member. */
 export const GATE_AUDIT_PLACE = 'gate_would_refuse'
+
+/**
+ * The crew's own state files, as the host keeps them: a slice names a file and the host writes or reads it, so no
+ * slice reaches a path on this machine itself (../keep_martha_state_outside_the_checkout is the adapter's own answer,
+ * and a slice may not import it).
+ */
+export interface StateLines {
+  /** Keeps one more line in `path`, or says why it could not. */
+  readonly append: (path: string, line: string, what: string) => Refused | undefined
+  /** The whole text of `path`, or why it cannot be read. */
+  readonly read: (path: string) => { readonly text: string } | Refused
+}
 
 /** One member's audit lines, and the folder they live in. */
 export interface GateAuditPlace {
@@ -32,6 +43,8 @@ export interface GateAuditPlace {
   readonly directory: string
   /** The member whose calls are audited. */
   readonly member: string
+  /** How the host keeps and reads a file in this place. */
+  readonly lines: StateLines
 }
 
 /** A refusal the gate would have given this call, before it was allowed to run. */
@@ -64,7 +77,7 @@ export function lineOfAWouldRefusal(refusal: AWouldRefusal, at: number): string 
 
 /** Keeps one line for a refusal the gate would have given; or why it could not be kept. */
 export function keepAWouldRefusal(place: GateAuditPlace, refusal: AWouldRefusal, at: number = Date.now()): Refused | undefined {
-  return appendStateLine(auditFileIn(place), lineOfAWouldRefusal(refusal, at), 'would-be refusal')
+  return place.lines.append(auditFileIn(place), lineOfAWouldRefusal(refusal, at), 'would-be refusal')
 }
 
 /** One line an audited member's call left, read back for the owner. */
@@ -83,7 +96,7 @@ function anAuditLineOr(row: string): AnAuditLine | undefined {
 
 /** Every line this member's audit holds, oldest first; or why the file cannot be read as lines. */
 export function theLinesIn(place: GateAuditPlace): readonly AnAuditLine[] | Refused {
-  const read = readStateFile(auditFileIn(place))
+  const read = place.lines.read(auditFileIn(place))
   if ('refusal' in read) return read
   const written = read.text.split('\n').filter((line) => line !== '')
   const lines = written.map(anAuditLineOr)

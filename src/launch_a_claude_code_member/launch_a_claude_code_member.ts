@@ -145,7 +145,7 @@ import {
   TRUST_ANSWER_DEADLINE_MS,
   whatTheHostSaysWithTheseSettings,
 } from './host_runs_the_relay.ts'
-import { makeEmptyDirectory } from '../switch_a_checkouts_hooks_off/empty_directory.ts'
+import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -158,6 +158,7 @@ import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
+import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
@@ -821,9 +822,7 @@ async function servedRelay(
     policy: launch.policy,
     // What the gate does to this member, read from the declaration once (martha#321): absent means enforced, never off.
     gate: launch.crew_settings === undefined ? 'enforced' : gateModeFor(launch.crew_settings.gate, launch.member_name),
-    ...(launch.places.gate_audit === undefined
-      ? {}
-      : { audit: { directory: launch.places.gate_audit, member: launch.member_name } }),
+    audit: launch.places.gate_audit === undefined ? undefined : { directory: launch.places.gate_audit, member: launch.member_name, lines: { append: appendStateLine, read: readStateFile } },
     names: { ownNameOf: ownNameOfCalledTool },
     started_with: startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, starting.args, starting.env),
     binder: bindNothing,
