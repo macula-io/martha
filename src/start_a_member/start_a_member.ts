@@ -40,6 +40,7 @@ import { readingOnly } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import {
@@ -173,7 +174,9 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   if ('refusal' in ids) return `${NOT_STARTED}: ${ids.refusal}`
   const kept = readApprovals(request.state)
   if ('refusal' in kept) return `${NOT_STARTED}: ${kept.refusal}`
-  const inUse = theApprovalInUse({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }, kept.approvals, thisMachine)
+  // The crew's own text files are read as entries of the approval (martha#306), so the approval in use is asked about
+  // the same files the launch will read.
+  const inUse = theApprovalInUse({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, crew_text_files: crewTextFilesOf(settings) }, kept.approvals, thisMachine)
   // What the owner reads when the checkout holds a config nobody approved: the entries, and the command that fixes it.
   if ('needs_approval' in inUse) {
     return `${NOT_STARTED}: this checkout holds config that starts code by itself (${inUse.needs_approval.join(', ')}), and you have not approved it as it is now. Run martha approve, read what it shows, and answer yes.`
@@ -262,9 +265,10 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   const started = await launchClaudeCodeMember({
     member_name: request.member,
     node_id: ready.node_id,
-    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, ...approvedPlace(request, ready.approval) },
+    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, crew_text_files: crewTextFilesOf(ready.settings), ...approvedPlace(request, ready.approval) },
     policy: { may_send_executable_text: [] },
     strict_gate: ready.strict_gate,
+    crew_settings: ready.settings,
     owner_bell: ready.settings.house_rules[OWNER_BELL],
     places,
     command: request.command,

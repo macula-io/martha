@@ -84,6 +84,14 @@ export const WORKTREES = 'worktrees'
 export const HOUSE_RULE_PLACES = [CLONES, WORKTREES] as const
 export type HouseRulePlace = (typeof HOUSE_RULE_PLACES)[number]
 
+/**
+ * The two directories a role's text and a mode's text sit in (martha#306), named once here because two trees use the
+ * same layout: a crew writes its own under its crew directory, and Martha ships the ones a crew has not written under
+ * the same two names, so a crew overrides a shipped text by putting a file of the same name in the same place.
+ */
+export const ROLE_TEXTS_DIRECTORY = 'roles'
+export const MODE_TEXTS_DIRECTORY = 'modes'
+
 /** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
@@ -362,6 +370,20 @@ function conventionsOf(refuse: Refuse, value: unknown, crew: string): string | n
   const path = normalize(join(crew, value))
   if (!path.startsWith(crew + sep)) refuse.at('conventions', 'leaves the crew directory')
   return path
+}
+
+/**
+ * The crew's own text files, as the owner's approval names and fingerprints them (martha#306): a role's text for every
+ * role of its mode, its mode's text, and its conventions when it names one. A file the crew has not written is named
+ * all the same, so the approval records that it is absent rather than leaving it out.
+ */
+export function crewTextFilesOf(settings: CrewSettings): readonly string[] {
+  const crew = settings.paths.crew
+  return [
+    ...settings.mode.roles.map((role) => join(crew, ROLE_TEXTS_DIRECTORY, `${role}.md`)),
+    join(crew, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`),
+    ...(settings.paths.conventions === null ? [] : [settings.paths.conventions]),
+  ]
 }
 
 function deepFreeze<T>(value: T): T {
