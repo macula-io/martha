@@ -24,6 +24,7 @@ import {
   type OwnerDialogEvent,
   type RaisingADialog,
 } from './tell_the_owner_a_session_waits.ts'
+import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 function row(at = 100): DashboardRow {
   return {
@@ -57,7 +58,7 @@ test('a permission dialog opens and then closes: the row reads needs you, then e
   const after = takeAnOwnerDialog(asking, closed(theKeyOfAPermission('', CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })))
   assert.deepEqual(whatTheOwnerIsShown(after), whatTheOwnerIsShown(held), 'the row reads exactly what it read before the dialog')
   assert.equal(after[OWNER_DIALOGS_FIELD], undefined, 'and holds no dialog at all, rather than an empty list')
-  const elsewhere = takeAnOwnerDialog(asking, closed(theKeyOfAPermission('', 'Edit', { file_path: 'a' })))
+  const elsewhere = takeAnOwnerDialog(asking, closed(theKeyOfAPermission('', EDIT_TOOL, { file_path: 'a' })))
   assert.deepEqual(whatTheOwnerIsShown(elsewhere), { state: 'needs-you', needs: `permission for ${CLAUDE_CODE_SHELL_TOOL}` }, 'a close for another key clears nothing')
 })
 
@@ -71,12 +72,12 @@ test('two agents raising a dialog for the same tool are two dialogs, and one clo
 })
 
 test('a dialog is keyed by what raised it, never by its text: the same input in another order is the same dialog (test 2)', () => {
-  const one = theKeyOfAPermission('', 'Edit', { a: 1, b: { c: 2, d: 3 } })
-  const same = theKeyOfAPermission('', 'Edit', { b: { d: 3, c: 2 }, a: 1 })
-  assert.equal(one, theKeyOfAPermission('', 'Edit', { b: { d: 3, c: 2 }, a: 1 }), 'a digest does not depend on the order the fields were built in')
+  const one = theKeyOfAPermission('', EDIT_TOOL, { a: 1, b: { c: 2, d: 3 } })
+  const same = theKeyOfAPermission('', EDIT_TOOL, { b: { d: 3, c: 2 }, a: 1 })
+  assert.equal(one, theKeyOfAPermission('', EDIT_TOOL, { b: { d: 3, c: 2 }, a: 1 }), 'a digest does not depend on the order the fields were built in')
   assert.equal(one, same, 'the same call, written another way, is the same dialog')
-  assert.notEqual(one, theKeyOfAPermission('', 'Edit', { a: 1, b: { c: 2, d: 4 } }), 'different input is a different dialog')
-  assert.notEqual(one, theKeyOfAPermission('agent-1', 'Edit', { a: 1, b: { c: 2, d: 3 } }), 'and so is another agent')
+  assert.notEqual(one, theKeyOfAPermission('', EDIT_TOOL, { a: 1, b: { c: 2, d: 4 } }), 'different input is a different dialog')
+  assert.notEqual(one, theKeyOfAPermission('agent-1', EDIT_TOOL, { a: 1, b: { c: 2, d: 3 } }), 'and so is another agent')
   assert.notEqual(theKeyOfAnElicitation('e-1', 'mesh', 'q'), theKeyOfAnElicitation('e-2', 'mesh', 'q'), 'an elicitation is keyed by its own id')
   assert.equal(theKeyOfAnElicitation(undefined, 'mesh', 'q'), theKeyOfAnElicitation('', 'mesh', 'q'), 'a host that gives no id falls back to the same key either way')
 })
