@@ -150,8 +150,13 @@ function isOutcome(value: unknown): value is LifecycleOutcome {
   if (!isObject(value)) return false
   const { id, ended_by, at, restarted, mid_turn, resumed_from } = value
   const kept = typeof id === 'string' && typeof at === 'string' && ENDED_BY.includes(ended_by as EndedBy)
+  return kept && isARestartsPart(restarted, mid_turn, resumed_from)
+}
+
+/** A restart's own fields, each absent on a stop: the start, the mid-turn note, and the handover it started on. */
+function isARestartsPart(restarted: unknown, mid_turn: unknown, resumed_from: unknown): boolean {
   const resumed = resumed_from === undefined || resumed_from === null || typeof resumed_from === 'string'
-  return kept && resumed && (restarted === undefined || isRestarted(restarted)) && (mid_turn === undefined || typeof mid_turn === 'boolean')
+  return resumed && (restarted === undefined || isRestarted(restarted)) && (mid_turn === undefined || typeof mid_turn === 'boolean')
 }
 
 function isRestarted(value: unknown): boolean {
