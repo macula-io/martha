@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { CoreToolAnswer, CrewTools } from './a_crews_tools.ts'
 import { crewToolsOver } from './a_crews_tools.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
@@ -98,14 +98,16 @@ function aCrew(t: TestContext, changes: { readonly member?: string; readonly nud
   const home = mkdtempSync(join(tmpdir(), 'martha-320-pane-'))
   t.after(() => removeTheTree(home))
   const root = join(home, 'checkout')
-  mkdirSync(join(root, '.crew'), { recursive: true })
-  writeFileSync(join(root, '.crew', 'crew.json'), theDeclaration(changes.nudges ?? true))
-  const crew = join(home, 'crew')
+  const declared = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  mkdirSync(join(root, DECLARATION_DIRECTORY), { recursive: true })
+  writeFileSync(declared, theDeclaration(changes.nudges ?? true))
+  const crew = join(home, 'crew-store')
   mkdirSync(crew, { recursive: true })
 
   const started = hostForTests({ now: NOW - 12 * HOUR })
-  const ledger = { clock: started.host.clock, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } }
-  mkdirSync(join(home, 'rows'), { recursive: true, mode: 0o700 })
+  const rows = join(home, 'row-streams')
+  mkdirSync(rows, { recursive: true, mode: 0o700 })
+  const ledger = { clock: started.host.clock, stores: { rows: rowStreamsDirectory(rows) } }
   mkdirSync(join(home, 'row'), { recursive: true, mode: 0o700 })
   const beats = dashboardRowsIn(join(home, 'row'))
   const tools = crewToolsOver({
