@@ -30,6 +30,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { reviewModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
@@ -543,9 +544,15 @@ test('a declaration naming a reviewer model this host runs starts the member, an
   assert.ok(started.started, started.started ? '' : started.refusal)
   const crew = handed[0]?.crew
   assert.ok(crew !== undefined, 'the member was started with no crew tools')
-  // What the started member's crew holds, asked of the crew itself rather than inferred from the line that built it.
-  const refused = await crew.refusesTheSubagent({ tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!, input: { [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch' } })
-  assert.match(refused ?? '', new RegExp(`crew reviews run on ${review_model}`), 'the crew handed to the member holds no review to the model the owner declared')
+  // What the started member's crew holds, asked of the crew itself rather than inferred from the line that built it:
+  // the rule's own answer for the same call, compared exactly, so this pins the reviewer model and no copy of the
+  // rule's wording.
+  const review = { tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!, input: { [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch' } }
+  assert.equal(
+    await crew.refusesTheSubagent(review),
+    reviewModelRefusal(review, { spawn: CLAUDE_CODE_SUBAGENT_SPAWN, review_model }),
+    'the crew handed to the member holds no review to the model the owner declared',
+  )
 })
 
 test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
