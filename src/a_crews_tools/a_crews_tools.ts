@@ -46,7 +46,7 @@ import {
   windowsOf,
   type SentMessage,
 } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { landedPackagesOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
@@ -837,7 +837,7 @@ async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows
   if (!receivers.some((receiver) => receiver.toLowerCase() === places.member.toLowerCase())) return []
   const channel = await readTheChannel(places.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
-  const waits = reviewWaitsIn(messages, await landedPackagesOf(places.ledger, packagesNamed(messages)), receivers)
+  const waits = reviewWaitsIn(messages, await landingsOf(places.ledger, packagesNamed(messages)), receivers)
   const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
   return theNudgesPartLines(nudgesOf(input, deadlockNudges(input)), settings)
 }

@@ -21,6 +21,7 @@
 // the same rule and the tests hold it.
 
 import { MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
@@ -92,9 +93,6 @@ const reachesAReviewer = (to: Addressee, receivers: readonly string[]): boolean 
   return to.some((name) => !isAReceiver(name, receivers))
 }
 
-/** A package a landing answered, as the ledger read it: the wait on it ends. */
-export type LandedPackages = ReadonlySet<string>
-
 /** The crew-line verbs a message starts with, as `readACrewLine` names them. */
 const verbOf = (text: string): { verb: string; package: string } | null => {
   const read = readACrewLine(text)
@@ -102,23 +100,57 @@ const verbOf = (text: string): { verb: string; package: string } | null => {
   return { verb: read.line.verb, package: read.line.package }
 }
 
+/** One fact a wait is read from, in the moment it happened: a line of the channel, or a landing the ledger keeps. */
+interface TheFact {
+  /** Milliseconds since the epoch, when it happened. */
+  readonly at: number
+  /** Which fact of that instant it is: the channel's own order for its messages, then the ledger's for its landings. */
+  readonly order: number
+  /** The message, or null when the fact is a landing. */
+  readonly message: SentMessage | null
+  /** The package that landed, or null when the fact is a message. */
+  readonly landed: string | null
+}
+
+/**
+ * Every fact, oldest first: the channel's messages in the order the crew wrote them, and the landings the ledgers keep,
+ * each at its own moment. A message and a landing at the same millisecond are read message first, so a landing answers
+ * only a wait that had already begun when it landed.
+ */
+const factsInOrder = (messages: readonly SentMessage[], landings: readonly LandedPackage[]): readonly TheFact[] =>
+  [
+    ...messages.map((message, order) => ({ at: message.sent_at, order, message, landed: null })),
+    ...landings.map((landing, order) => ({ at: landing.at, order: messages.length + order, message: null, landed: landing.package })),
+  ].sort((one, two) => one.at - two.at || one.order - two.order)
+
+/**
+ * What one message of the channel does to the waits: a HANDOFF that reached a reviewer starts one, and a VERDICT or a
+ * LAND ends it. A copy addressed only to the receivers does either nothing, since no verdict was ever coming back.
+ */
+const theWaitAMessageLeaves = (message: SentMessage, waits: Map<string, ReviewWait>, receivers: readonly string[]): void => {
+  const line = verbOf(message.text)
+  if (line === null) return
+  if (line.verb === 'HANDOFF' && reachesAReviewer(message.to, receivers)) {
+    waits.set(line.package, { package: line.package, from: message.from, to: toTheWholeCrew(message.to) ? [] : message.to, at: message.sent_at })
+    return
+  }
+  if ((ANSWERING_VERBS as readonly string[]).includes(line.verb)) waits.delete(line.package)
+}
+
 /**
  * The review waits the channel's messages leave (martha#320), oldest first and one per package: a HANDOFF that reached a
- * reviewer starts one, and a VERDICT, a landing, or a newer HANDOFF for that package ends it. The messages are read in
- * the order the crew wrote them, so a verdict that arrived before a hand-off cannot answer it.
+ * reviewer starts one, and a VERDICT, a landing, or a newer HANDOFF for that package ends it. Every fact is read in the
+ * moment it happened — the channel's own messages, and the landings the ledgers keep with their time — so a verdict that
+ * arrived before a hand-off cannot answer it, and a landing ends only the waits that began before it. That order is what
+ * two packages of one issue need: they share a name, so a set of landed names would silence the second one's hand-off
+ * for good once the first landed.
  */
-export function reviewWaitsIn(messages: readonly SentMessage[], landed: LandedPackages, receivers: readonly string[]): readonly ReviewWait[] {
+export function reviewWaitsIn(messages: readonly SentMessage[], landings: readonly LandedPackage[], receivers: readonly string[]): readonly ReviewWait[] {
   const waits = new Map<string, ReviewWait>()
-  for (const message of messages) {
-    const line = verbOf(message.text)
-    if (line === null) continue
-    // A copy starts no wait and ends none; a landing or a verdict is what a wait ends on.
-    const startsAWait = line.verb === 'HANDOFF' && !landed.has(line.package) && reachesAReviewer(message.to, receivers)
-    if (startsAWait) {
-      waits.set(line.package, { package: line.package, from: message.from, to: toTheWholeCrew(message.to) ? [] : message.to, at: message.sent_at })
-      continue
-    }
-    if ((ANSWERING_VERBS as readonly string[]).includes(line.verb)) waits.delete(line.package)
+  for (const fact of factsInOrder(messages, landings)) {
+    // A landing ends the wait it happened after, and starts none of its own.
+    if (fact.landed !== null) waits.delete(fact.landed)
+    else if (fact.message !== null) theWaitAMessageLeaves(fact.message, waits, receivers)
   }
   return [...waits.values()]
 }

@@ -112,8 +112,19 @@ test('a wait on the owner is the owner\'s nudge, and it keeps what the member sa
   assert.equal(theNudgeLine(nudges[0]!, CREW)?.includes('land or hold'), false, 'and never reaches a line')
 })
 
-// --- 2. parked and quiet rows are never stalled, and never a blocker ---------
+test('r=2 R3: zero turns a kind of nudge off, and every kind is checked, not only the stalled one', () => {
+  const stalled = row('Vesta', { progress: { step: 1, of: 4, at: NOW - 10 * STALLED } })
+  const held = row('Mars', { state: 'waiting', waits: { on: 'Uranus', for: 'a menu', since: NOW - 10 * PERSON }, progress: { step: 1, of: 4, at: NOW - 1_000 } })
+  const waits = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - 10 * REVIEW)], [], RECEIVERS)
+  const turnedOff = { stalled_ms: 0, review_ms: 0, person_ms: 0 }
 
+  assert.deepEqual(nudgesOf(input([stalled, held], { waits, windows: turnedOff })), [], 'a crew that turned all three windows to zero is told nothing at all')
+  assert.deepEqual(nudgesOf(input([stalled], { windows: { ...WINDOWS, stalled_ms: 0 } })), [], 'a stall window of zero turns stalled nudges off')
+  assert.deepEqual(nudgesOf(input([], { waits, windows: { ...WINDOWS, review_ms: 0 } })), [], 'a review window of zero turns review nudges off')
+  assert.deepEqual(nudgesOf(input([held], { windows: { ...WINDOWS, person_ms: 0 } })), [], 'a person window of zero turns person nudges off')
+})
+
+// --- 2. parked and quiet rows are never stalled, and never a blocker ---------
 test('a parked member is never stalled, by its row or by the marker the crew keeps beside it', () => {
   const byState = row('Vesta', { state: PARKED_STATE, progress: { step: 1, of: 4, at: NOW - STALLED } })
   assert.deepEqual(nudgesOf(input([byState])), [], 'a parked row is not expected to move')
@@ -131,20 +142,20 @@ test('a row that has gone quiet is not a stall: it is already read as offline', 
 
 test('a HANDOFF to a reviewer opens a wait, and a copy addressed only to the receivers does not', () => {
   const toReviewer = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW)]
-  assert.deepEqual(reviewWaitsIn(toReviewer, new Set(), RECEIVERS).map((wait) => wait.package), ['macula-io/martha#320'], 'a hand-off to a reviewer waits for its verdict')
+  assert.deepEqual(reviewWaitsIn(toReviewer, [], RECEIVERS).map((wait) => wait.package), ['macula-io/martha#320'], 'a hand-off to a reviewer waits for its verdict')
 
   const copy = [sent('Vesta', RECEIVERS, handoff('macula-io/martha#320'), NOW - REVIEW)]
-  assert.deepEqual(reviewWaitsIn(copy, new Set(), RECEIVERS), [], 'a copy addressed only to the receivers is no wait: no verdict was coming back')
+  assert.deepEqual(reviewWaitsIn(copy, [], RECEIVERS), [], 'a copy addressed only to the receivers is no wait: no verdict was coming back')
 
   const toCrew = [sent('Vesta', everyone, handoff('macula-io/martha#320'), NOW - REVIEW)]
-  assert.equal(reviewWaitsIn(toCrew, new Set(), RECEIVERS).length, 1, 'a hand-off to the whole crew reached a reviewer')
+  assert.equal(reviewWaitsIn(toCrew, [], RECEIVERS).length, 1, 'a hand-off to the whole crew reached a reviewer')
 })
 
 test('an unanswered hand-off is a nudge at the review window, and a copy is never one', () => {
-  const waits = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW)], new Set(), RECEIVERS)
+  const waits = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW)], [], RECEIVERS)
   assert.deepEqual(nudgesOf(input([], { waits })).map((one) => [one.kind, one.member, one.package]), [['review', 'Vesta', 'macula-io/martha#320']])
 
-  const younger = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW + 1)], new Set(), RECEIVERS)
+  const younger = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW + 1)], [], RECEIVERS)
   assert.deepEqual(nudgesOf(input([], { waits: younger })), [], 'one millisecond short of the window, nothing is said')
 })
 
@@ -152,21 +163,40 @@ test('an unanswered hand-off is a nudge at the review window, and a copy is neve
 
 test('a VERDICT ends a hand-off\'s wait, and taking the verdict away brings it back', () => {
   const answered = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 2), sent('Mars', ['Vesta'], verdict('macula-io/martha#320'), NOW - REVIEW)]
-  assert.deepEqual(reviewWaitsIn(answered, new Set(), RECEIVERS), [], 'the verdict is the fact the wait ends on')
+  assert.deepEqual(reviewWaitsIn(answered, [], RECEIVERS), [], 'the verdict is the fact the wait ends on')
 
   const unanswered = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 2)]
-  assert.equal(reviewWaitsIn(unanswered, new Set(), RECEIVERS).length, 1, 'without it the same hand-off waits again')
+  assert.equal(reviewWaitsIn(unanswered, [], RECEIVERS).length, 1, 'without it the same hand-off waits again')
 })
 
-test('a landing ends a wait, and a newer HANDOFF starts a new one from its own moment', () => {
-  const landed = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 2)]
-  assert.deepEqual(reviewWaitsIn(landed, new Set(['macula-io/martha#320']), RECEIVERS), [], 'a landed package waits for nothing')
+test('a landing ends the wait it happened after, and a hand-off made after it waits on its own', () => {
+  const handedThenLanded = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 3)]
+  assert.deepEqual(reviewWaitsIn(handedThenLanded, [{ package: 'macula-io/martha#320', at: NOW - REVIEW * 2 }], RECEIVERS), [], 'a package that landed after its hand-off waits for nothing')
+
+  const landedThenHanded = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW)]
+  assert.equal(reviewWaitsIn(landedThenHanded, [{ package: 'macula-io/martha#320', at: NOW - REVIEW * 2 }], RECEIVERS).length, 1, 'a hand-off made after the landing is a wait of its own')
 
   const again = [
     sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 2),
     sent('Vesta', ['Mars'], handoff('macula-io/martha#320', 2), NOW - 1_000),
   ]
-  assert.deepEqual(reviewWaitsIn(again, new Set(), RECEIVERS).map((wait) => wait.at), [NOW - 1_000], 'a newer hand-off is the wait that stands')
+  assert.deepEqual(reviewWaitsIn(again, [], RECEIVERS).map((wait) => wait.at), [NOW - 1_000], 'a newer hand-off is the wait that stands')
+})
+
+test('r=2 R1: package B hands off after package A landed, and B\'s wait stands', () => {
+  // Two packages of one issue share a name (`org/repo#n`), so a set of landed names would silence B for good: B's
+  // hand-off came after A landed, and it is the hand-off nobody answered that this work exists to surface.
+  const aHanded = NOW - REVIEW * 6
+  const aLanded = NOW - REVIEW * 4
+  const bHanded = NOW - REVIEW * 2
+  const messages = [
+    sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), aHanded),
+    sent('Vesta', ['Mars'], handoff('macula-io/martha#320', 2), bHanded),
+  ]
+  const waits = reviewWaitsIn(messages, [{ package: 'macula-io/martha#320', at: aLanded }], RECEIVERS)
+
+  assert.deepEqual(waits.map((wait) => [wait.package, wait.at]), [['macula-io/martha#320', bHanded]], 'A\'s landing ended A\'s wait, and B\'s hand-off after it is the wait that stands')
+  assert.deepEqual(nudgesOf(input([], { waits })).map((one) => [one.kind, one.package]), [['review', 'macula-io/martha#320']], 'and B is nudged')
 })
 
 // --- 6. who receives a nudge ------------------------------------------------

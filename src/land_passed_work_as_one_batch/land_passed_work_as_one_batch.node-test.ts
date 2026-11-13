@@ -28,7 +28,7 @@ import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.
 import {
   LAND,
   fastForwardAfterTheOwnersYes,
-  landedPackagesOf,
+  landingsOf,
   landPassedWorkAsOneBatch,
   theBatchACallNames,
   theFastForwardACallNames,
@@ -403,7 +403,7 @@ test('#320: a package that reached the default branch is noted as landed, and re
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
   await aPassedVerdict(tests, landed_package, base, tip)
 
-  assert.deepEqual([...(await landedPackagesOf(tests.host, [landed_package]))], [], 'a package that has not landed holds no landing row')
+  assert.deepEqual(await landingsOf(tests.host, [landed_package]), [], 'a package that has not landed holds no landing row')
   const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] })
   assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
 
@@ -411,7 +411,8 @@ test('#320: a package that reached the default branch is noted as landed, and re
   const landings = rows.filter((row) => row.kind === 'package_landed')
   assert.equal(landings.length, 1, 'the landing was not noted once in the ledger')
   assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip}`, 'the note holds the range that landed, as the two shas')
-  assert.deepEqual([...(await landedPackagesOf(tests.host, [landed_package]))], [landed_package], 'the package did not read back as landed')
+  const read_back = await landingsOf(tests.host, [landed_package])
+  assert.deepEqual(read_back, [{ package: landed_package, at: landings[0]?.kind === 'package_landed' ? landings[0].at : -1 }], 'the package did not read back as landed, with the moment its own row carries')
 })
 
 test('#256: the fast-forward is refused when the default branch moved after the range was checked', async (t) => {

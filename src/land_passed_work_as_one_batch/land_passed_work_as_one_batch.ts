@@ -25,7 +25,7 @@ import {
   findTheWorkTheseVerdictsPassed,
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
-import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type Outcome } from '../log_ledger/log_ledger.ts'
+import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type LedgerRow, type Outcome } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -56,6 +56,13 @@ export interface TheFastForward {
 
 /** What a landing answered: what it did, with the range for the check; or why it did nothing. */
 export type Landing = { readonly told: string } | { readonly refused: string }
+
+/** A package the ledger says landed, and the moment it did: the fact a package's waits end on (martha#320). */
+export interface LandedPackage {
+  readonly package: string
+  /** Milliseconds since the epoch, from the clock the landing was recorded at. */
+  readonly at: number
+}
 
 /** What this needs of a host: its own git, its clock and the packages' ledgers, and the tools it registers into. */
 export type LandingHost = Pick<HostContract, 'processes' | 'clock'> & {
@@ -149,19 +156,23 @@ async function noteTheLanding(host: LandingHost, member: string, forward: TheFas
 }
 
 /**
- * The packages, of those asked about, whose ledger says they landed (martha#320): the fact a package's waits end on. A
- * package whose ledger holds no such row is not landed — a package dropped without landing keeps its waits — which is not
- * the same as a ledger that could not be read: a read that fails rejects, so a caller cannot take an unreadable ledger for
- * a package that never landed.
+ * The packages, of those asked about, whose ledger says they landed (martha#320): the fact a package's waits end on, each
+ * with the moment it landed, because a landing ends only the waits that began before it. A package whose ledger holds no
+ * such row is not landed — a package dropped without landing keeps its waits — which is not the same as a ledger that
+ * could not be read: a read that fails rejects, so a caller cannot take an unreadable ledger for a package that never
+ * landed.
  */
-export async function landedPackagesOf(host: LedgerHost, packages: readonly string[]): Promise<ReadonlySet<string>> {
-  const landed = new Set<string>()
+export async function landingsOf(host: LedgerHost, packages: readonly string[]): Promise<readonly LandedPackage[]> {
+  const landings: LandedPackage[] = []
   for (const package_name of packages) {
-    const rows = await readLedger(host, package_name)
-    if (rows.some((row) => row.kind === 'package_landed')) landed.add(package_name)
+    landings.push(...theLandingsIn(package_name, await readLedger(host, package_name)))
   }
-  return landed
+  return landings
 }
+
+/** The landings one package's ledger keeps, in the order it keeps them. */
+const theLandingsIn = (package_name: string, rows: readonly LedgerRow[]): readonly LandedPackage[] =>
+  rows.filter((row) => row.kind === 'package_landed').map((row) => ({ package: package_name, at: row.at }))
 
 /** What `land_batch` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const LAND_BATCH_DESCRIPTION =
