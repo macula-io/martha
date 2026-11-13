@@ -737,7 +737,10 @@ function packagesNamed(messages: readonly SentMessage[]): readonly string[] {
 function parkedMembersOf(places: CrewToolPlaces, settings: CrewSettings): readonly string[] {
   const place = parkedPlace(places)
   if ('refusal' in place) return []
-  return settings.members.flatMap((member) => (theParkOf(place, member.name).kind === 'parked' ? [member.name] : []))
+  return settings.members.flatMap((member) => {
+    const park = theParkOf(place, member.name)
+    return 'marker' in park && park.marker.parked ? [member.name] : []
+  })
 }
 
 /** The host's own reading of a session (martha#255), as the mod hands it over untouched. */

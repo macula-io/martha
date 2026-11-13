@@ -7,6 +7,9 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   DECLARATION_DIRECTORY,
+  PERSON_MINUTES,
+  REVIEW_MINUTES,
+  STALLED_MINUTES,
   DECLARATION_FILE,
   DECLARATION_VERSION,
   DeclarationRefused,
@@ -250,7 +253,7 @@ test('every declared switch is read from the one list, so a new rule is neither 
   // Two switches also name what they read with (martha#256's places, martha#320's windows): switching either on alone is
   // refused, as the tests below say, so each is named here with them.
   const places = { clones: '/crew-place/clones', worktrees: '/crew-place/worktrees' }
-  const windows = { stalled_minutes: 60, review_minutes: 45, person_minutes: 30 }
+  const windows = { [STALLED_MINUTES]: 60, [REVIEW_MINUTES]: 45, [PERSON_MINUTES]: 30 }
   const withIt = (name: string) => (name === 'workspace_layout' ? places : name === NUDGES ? windows : {})
   for (const name of HOUSE_RULE_SWITCHES) {
     const named = await declare({ ...solo, house_rules: { ...withIt(name), [name]: true } }).settings
@@ -331,10 +334,10 @@ test('#253: the interval a crew declares is the one its settings carry', async (
 
 // --- 7. the windows a crew that reads nudges names (martha#320) ---------------
 
-const nudging = { ...solo, house_rules: { nudges: true, stalled_minutes: 60, review_minutes: 45, person_minutes: 30 } }
+const nudging = { ...solo, house_rules: { nudges: true, [STALLED_MINUTES]: 60, [REVIEW_MINUTES]: 45, [PERSON_MINUTES]: 30 } }
 
 test('#320: a crew that reads nudges and names no window is refused, naming the field that is missing', async () => {
-  for (const missing of ['stalled_minutes', 'review_minutes', 'person_minutes']) {
+  for (const missing of [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES]) {
     await refusedWith({ ...nudging, house_rules: without(missing, nudging.house_rules) }, `house_rules.${missing}`)
   }
 })
