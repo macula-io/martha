@@ -21,7 +21,7 @@ import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { CARRY_A_MODEL, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { CARRY_A_MODEL, CARRY_A_TEXT, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { modelPlace, theModelMarker, theModelOf, type TheModel } from '../switch_a_members_model/switch_a_members_model.ts'
 import {
@@ -232,7 +232,7 @@ test('#315 r2: a refresh due in the turn a switch is made goes out, and the swit
 
   // This turn's one order is the flow's own: the prompt it has already committed to.
   const first = await theOrderTheModGets(crew)
-  assert.equal(first.carry, 'submit', 'the handover prompt the refresh flow committed to was replaced by the model order, so the member was never told to hand over')
+  assert.equal(first.carry, CARRY_A_TEXT, 'the handover prompt the refresh flow committed to was replaced by the model order, so the member was never told to hand over')
   assert.match(String(first.text), /handover/i, 'the order sent in the refresh act\'s place is not the handover prompt')
 
   // And the switch was not dropped: it kept `directed: false`, so the next turn's question carries it, once.
