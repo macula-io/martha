@@ -132,7 +132,7 @@ import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
-import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace, type TheMembersTelling } from './answer_the_relay.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   hostTrustsTheFolder,
@@ -156,6 +156,8 @@ import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { THE_CREWS_OWN_NAME } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 
 /** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
@@ -778,9 +780,10 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  * started on no approval names itself, martha#240), and the owner's screen (martha#313) — the member's own row, moved
  * by what the host asks, and the bell that change is worth, rung on the terminal this launcher was started on.
  */
-function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen'> {
+function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
   return {
     journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
+    telling: theMembersTelling(launch),
     screen: theOwnersScreen({
       beats: dashboardRowsIn(launch.places.dashboard),
       member: launch.member_name,
@@ -788,6 +791,26 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlac
       onTheOwnersTerminal: isOnTheOwnersTerminal(launch.stdio),
       write: (bytes) => void process.stdout.write(bytes),
     }),
+  }
+}
+
+/**
+ * Where a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member's own session,
+ * which is handed the line through the crew's channel the way every crew message is. A row the store does not hold yet
+ * is not made here: the line waits for a row there is, as the dialogs slice leaves it.
+ */
+function theMembersTelling(launch: ClaudeCodeMemberLaunch): TheMembersTelling {
+  const beats = dashboardRowsIn(launch.places.dashboard)
+  return {
+    theRow: (line) => {
+      const held = beats.read(launch.member_name)
+      if (held !== null) beats.keep({ ...held, needs: line, at: Date.now() })
+    },
+    theMember: (line) =>
+      appendToTheChannel(
+        { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(launch.places.rows) } },
+        { from: THE_CREWS_OWN_NAME, to: [launch.member_name], text: line, sent_at: Date.now() },
+      ).then(() => undefined),
   }
 }
 

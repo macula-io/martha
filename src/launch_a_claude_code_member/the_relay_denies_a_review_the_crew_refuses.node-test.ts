@@ -75,6 +75,8 @@ function aCrewRefusingEverything(asked: string[]): CrewTools {
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
     thePredecessorOf: async () => null,
+    theReviewModelOfTheCall: async () => null,
+    theReviewModel: async () => null,
     refusesTheSubagent: async (call) => {
       asked.push(call.tool)
       return A_REFUSED_REVIEW
