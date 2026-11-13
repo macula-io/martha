@@ -6,7 +6,7 @@
 //
 // A beat is a whole row, not a change, and the store writes every field every time, so a reader never merges fields
 // and never sees half a row: the store that keeps them is the host's (`DashboardStore`, implemented by the launcher
-// in ../launch_a_claude_code_member/dashboard_rows_in_state), because a slice of the core reads no disk.
+// in ../dashboard_rows_directory/dashboard_rows_directory), because a slice of the core reads no disk.
 //
 // The newest `at` wins, and the WRITER settles it (r=1, O1): a beat taken earlier and landing later is dropped whole
 // when it is offered, not blended into the row a newer beat got there. `beatAfter` is that rule, and the store asks it
@@ -102,6 +102,12 @@ export interface DashboardRow {
    * without a writer having to put back what the member said before.
    */
   readonly dialogs?: readonly AnOwnerDialogOnARow[]
+  /**
+   * When the member last reported its progress (martha#319): only `report_progress` writes it, so a heartbeat that keeps
+   * `at` fresh cannot hide a member that stopped reporting. Absent on a row written before the field existed, and on a
+   * member that has not reported yet.
+   */
+  readonly reported_at?: number
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -197,6 +203,8 @@ const KEPT_FIELDS: readonly ((row: Record<string, unknown>) => boolean)[] = [
   (row) => isText(row['holds']),
   (row) => isText(row['task']),
   (row) => isText(row['needs']),
+  // Absent on every row written before a report kept it (martha#319), so it is optional and never demanded.
+  (row) => row['reported_at'] === undefined || isPosition(row['reported_at']),
 ]
 
 /** Whether a progress is one this slice writes: a step at or above zero, of a total of at least one. */

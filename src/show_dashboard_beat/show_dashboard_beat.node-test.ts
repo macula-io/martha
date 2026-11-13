@@ -1,6 +1,6 @@
 // The row's shape, its naming, and the rule that settles which beat is the row (martha#254 tests 2 and 3, the rule).
 //
-// The store that writes a row is the host's (../launch_a_claude_code_member/dashboard_rows_in_state), and its own
+// The store that writes a row is the host's (../dashboard_rows_directory/dashboard_rows_directory), and its own
 // test proves a beat is written whole; what is pinned here is what a reader and a writer must agree on whichever of
 // them is looking: what a row is, what it is called, and which of two beats wins.
 
@@ -61,6 +61,13 @@ test('the refresh field belongs to the row, and what it holds is checked like ev
   assert.equal(isDashboardRow(beat('Vesta', 1, { refresh: null })), true, 'a row taken outside a flow reads as one')
   assert.equal(isDashboardRow({ ...beat('Vesta', 1), refresh: 'not a phase' }), false, 'a refresh that is not a phase is not a row')
   assert.equal(isDashboardRow({ ...beat('Vesta', 1), refresh: { phase: 'parking' } }), false, 'a phase with no reason is not a row')
+})
+
+test('a report\'s time belongs to the row only as a position, and a row written before it was kept still reads (martha#319)', () => {
+  assert.equal(isDashboardRow(beat('Vesta', 1, { reported_at: 1 })), true, 'a row with a report time reads as one')
+  assert.equal(isDashboardRow(beat('Vesta', 1)), true, 'a row written before a report kept the time reads as one')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), reported_at: 'a while ago' }), false, 'a report time that is not a position is a row')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), reported_at: -1 }), false, 'a report time before the epoch is a row')
 })
 
 test('the beat interval and its offline threshold are named once, and the threshold is a whole multiple of it (test 3, the constants)', () => {

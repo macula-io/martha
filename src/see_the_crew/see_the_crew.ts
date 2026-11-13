@@ -25,6 +25,8 @@ export interface CrewRow {
   readonly at: number | null
   /** How long the row has been quiet, in milliseconds; null for a member that never beat. */
   readonly quiet_for: number | null
+  /** When the member last reported its progress (martha#319); null when it never reported. */
+  readonly reported_at: number | null
 }
 
 /** What the pane's header counts. */
@@ -63,6 +65,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
       host: { model: '', provider: '', contextPercent: null, costUsd: null },
       at: null,
       quiet_for: null,
+      reported_at: null,
     }
   }
   const quiet_for = Math.max(0, now - beat.at)
@@ -82,6 +85,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
     host: beat.host,
     at: beat.at,
     quiet_for,
+    reported_at: beat.reported_at ?? null,
   }
 }
 
