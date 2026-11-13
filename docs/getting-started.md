@@ -262,8 +262,10 @@ checkout whose config changed since you approved it is refused there: the member
 stays ended, and both terminals say to run `martha approve`. If it was in the
 middle of a turn, that turn is lost, and the line says so, so the work can be
 sent again. Restarting a member that is not running does nothing and points you
-at `martha wake`. If no terminal's Martha answers within two minutes, nothing is
-ended: only the terminal holding a member may start it again.
+at `martha wake`. If no terminal's Martha answers within two minutes and the
+member is still running, nothing was ended: only the terminal holding a member
+may start it again. If it was ended and its terminal has not said it started
+again, `martha ls` shows whether it is back.
 
 A member whose role the declaration grants `restart_member` can restart another
 from inside the crew with the `restart_a_member` tool and a reason. It may not

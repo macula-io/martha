@@ -61,11 +61,16 @@ export type Restarted =
 export const notRunningToRestart = (member: string): string =>
   `${member} is not running, so nothing was restarted. martha wake ${member} starts it from its newest handover.`
 
-/** The words for a restart that started the member again. */
+/** The words for a restart that started the member again: the handover it was started on, as its launcher said. */
 function toldRestarted(member: string, request: LifecycleRequest, outcome: LifecycleOutcome): string {
-  const on = request.fresh ? 'fresh, with no handover' : 'from its newest handover'
+  const on = theHandoverToldOf(request, outcome)
   const lost = outcome.mid_turn === true ? '; it ended mid-turn, so send again what it was working on' : ''
   return `${member} is restarted ${on}${lost}.`
+}
+
+function theHandoverToldOf(request: LifecycleRequest, outcome: LifecycleOutcome): string {
+  if (typeof outcome.resumed_from === 'string') return `from its handover at ${outcome.resumed_from}`
+  return request.fresh ? 'fresh, with no handover' : 'with no handover, since it has handed nothing over'
 }
 
 /**
@@ -98,6 +103,12 @@ export async function restartAMember(host: StoppingHost, asking: AskingToRestart
     await host.wait(ANSWER_POLL_MS)
   }
   const seconds = Math.round(RESTART_ANSWER_DEADLINE_MS / 1_000)
+  if (host.processes.identityOf(request.launch.pid) !== request.launch.process_started_at) {
+    return {
+      kind: 'refused',
+      told: `${member} was ended and its launcher has not said within ${seconds} s that it started again. martha ls shows whether it is back, and martha wake ${member} starts it from its newest handover if it is not.`,
+    }
+  }
   return {
     kind: 'refused',
     told: `no launcher answered the restart of ${member} within ${seconds} s, so it was not restarted from here: only the launcher holding its terminal may start it again. martha stop ${member} ends it, and martha wake ${member} starts it from its newest handover.`,
@@ -220,18 +231,21 @@ function theRestartAskedOf<Ended>(host: HoldingHost<Ended>, member: string, laun
   return read.kind === 'pending' && read.request.act === RESTART && sameLaunch(read.request.launch, launch) ? read.request : undefined
 }
 
+/** A restart's prompt, and the handover file it names, or null when it names none. */
+type ThePromptToRestartOn = { readonly prompt: string | undefined; readonly from: string | null }
+
 /** The prompt a restarted member starts on: none when fresh or when it never handed over, else the wake's own. */
-function thePromptToRestartOn<Ended>(host: HoldingHost<Ended>, member: string, fresh: boolean): { readonly prompt: string | undefined } | Refused {
-  if (fresh) return { prompt: undefined }
+function thePromptToRestartOn<Ended>(host: HoldingHost<Ended>, member: string, fresh: boolean): ThePromptToRestartOn | Refused {
+  if (fresh) return { prompt: undefined, from: null }
   const place = host.stores.crew.place(HANDOVERS_PLACE)
   if ('refusal' in place) return place
   const newest = theNewestHandover(place, host.stamps, member)
   if (newest.kind === 'unreadable') return { refusal: newest.refusal }
   if (newest.kind === 'no_handover') {
     host.tellOwner(`${member} has handed nothing over, so it is restarted with no handover.`)
-    return { prompt: undefined }
+    return { prompt: undefined, from: null }
   }
-  return { prompt: theResumePrompt(newest.handover, member) }
+  return { prompt: theResumePrompt(newest.handover, member), from: newest.handover.file }
 }
 
 /** The member started again for `asked`, and the restart answered once, with its ledger row, whether it started or not. */
@@ -241,7 +255,8 @@ async function startAgain<Ended>(host: HoldingHost<Ended>, member: string, asked
   const started: AStart<Ended> = 'refusal' in prompt ? { started: false, refusal: prompt.refusal } : await host.start(prompt.prompt)
   if ('refusal' in prompt) host.tellOwner(`${member} was not restarted: ${prompt.refusal}`)
   const restarted = started.started ? ({ started: true } as const) : ({ started: false, refusal: started.refusal } as const)
-  const outcome: LifecycleOutcome = { id: asked.id, ended_by: 'launcher', at: new Date(host.clock.now()).toISOString(), restarted, mid_turn }
+  const resumed_from = 'refusal' in prompt ? null : prompt.from
+  const outcome: LifecycleOutcome = { id: asked.id, ended_by: 'launcher', at: new Date(host.clock.now()).toISOString(), restarted, mid_turn, resumed_from }
   await keepTheRestart(host, member, asked, outcome)
   return started
 }
@@ -255,7 +270,8 @@ async function keepTheRestart<Ended>(host: HoldingHost<Ended>, member: string, a
   const { started } = outcome.restarted ?? { started: true }
   const refusal = outcome.restarted !== undefined && !outcome.restarted.started ? { refusal: outcome.restarted.refusal } : {}
   const row = { event: MEMBER_RESTARTED, member, by: asked.by, reason: asked.reason, id: asked.id, fresh: asked.fresh, asked_at: asked.at, started, mid_turn: outcome.mid_turn ?? false, ...refusal, at: outcome.at }
+  const what = started ? 'was restarted' : 'was ended and not started again'
   await host.stores.rows.append(LIFECYCLE_STREAM, row).catch((error: unknown) =>
-    host.tellOwner(`${member} was restarted, and the ledger did not keep it: ${error instanceof Error ? error.message : String(error)}`),
+    host.tellOwner(`${member} ${what}, and the ledger did not keep it: ${error instanceof Error ? error.message : String(error)}`),
   )
 }

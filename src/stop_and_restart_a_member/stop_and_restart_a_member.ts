@@ -99,6 +99,8 @@ export interface LifecycleOutcome {
   readonly restarted?: { readonly started: true } | { readonly started: false; readonly refusal: string }
   /** A restart that ended a member whose row read working: its turn is lost, so the asker knows to send it again. */
   readonly mid_turn?: boolean
+  /** A restart's handover: the file the member was started on, or null when it was started on none. A stop carries none. */
+  readonly resumed_from?: string | null
 }
 
 /** A member's request as the store holds it: none, waiting for its launcher, answered, or a file nobody can read. */
@@ -146,9 +148,10 @@ function isRequest(value: unknown): value is LifecycleRequest {
 
 function isOutcome(value: unknown): value is LifecycleOutcome {
   if (!isObject(value)) return false
-  const { id, ended_by, at, restarted, mid_turn } = value
+  const { id, ended_by, at, restarted, mid_turn, resumed_from } = value
   const kept = typeof id === 'string' && typeof at === 'string' && ENDED_BY.includes(ended_by as EndedBy)
-  return kept && (restarted === undefined || isRestarted(restarted)) && (mid_turn === undefined || typeof mid_turn === 'boolean')
+  const resumed = resumed_from === undefined || resumed_from === null || typeof resumed_from === 'string'
+  return kept && resumed && (restarted === undefined || isRestarted(restarted)) && (mid_turn === undefined || typeof mid_turn === 'boolean')
 }
 
 function isRestarted(value: unknown): boolean {

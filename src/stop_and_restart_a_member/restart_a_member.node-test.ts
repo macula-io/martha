@@ -21,7 +21,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STORM_WINDOW_MS } from '../refresh_a_member/refresh_a_member.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
-import { CREW_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { holdTheMember, notRunningToRestart, restartAMember, restartByTool, type AStart, type HoldingHost } from './restart_a_member.ts'
 import {
   ANSWER_DEADLINE_MS,
@@ -141,6 +141,76 @@ test('#312 test 4: a restart starts the member again on the wake\'s prompt, nami
   assert.deepEqual(ledger.map((row) => [row['event'], row['by'], row['fresh'], row['started']]), [[MEMBER_RESTARTED, 'lead', false, true]])
 })
 
+test('#312 r=2: the launcher answers which handover the member was started on', async () => {
+  const crew = aCrew()
+  const newest = handedOver(crew, new Date(START - 60_000))
+  keepARestart(crew.lifecycle)
+  const { rows } = anAskingHost(crew.lifecycle, {})
+  const { host } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('done') }], rows)
+  await holdTheMember(host, 'builder', ended('restarted'))
+  const read = theRequestOf(crew.lifecycle, 'builder')
+  const handovers = crew.crew.place(HANDOVERS_PLACE)
+  assert.ok(!('refusal' in handovers))
+  assert.equal(read.kind === 'answered' && read.outcome.resumed_from, join(handovers.path, newest))
+})
+
+test('#312 r=2: a member with no handover is answered as started on none, and the asker is not told of a handover', async () => {
+  const crew = aCrew()
+  keepARestart(crew.lifecycle)
+  const asking = anAskingHost(crew.lifecycle, {})
+  const { host, asked } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('done') }], asking.rows)
+  await holdTheMember(host, 'builder', ended('restarted'))
+  assert.deepEqual(asked, [undefined])
+  const held = theRequestOf(crew.lifecycle, 'builder')
+  assert.ok(held.kind === 'answered' && held.outcome.resumed_from === null, 'the answer names no handover')
+  const reading = aCrew()
+  const asker = anAskingHost(reading.lifecycle, { [LAUNCH.pid]: LAUNCH.process_started_at }, () => {
+    const read = theRequestOf(reading.lifecycle, 'builder')
+    if (read.kind !== 'pending') return
+    reading.lifecycle.keep('builder.json', JSON.stringify({ request: read.request, outcome: held.kind === 'answered' ? { ...held.outcome, id: read.request.id } : null }))
+  })
+  const told = await restartAMember(asker.host, { member: 'builder', by: OWNER, reason: 'r', id: 'n', fresh: false })
+  assert.deepEqual(told, { kind: 'restarted', told: 'builder is restarted with no handover, since it has handed nothing over.' })
+})
+
+test('#312 r=2: a fresh restart is told as fresh', async () => {
+  const crew = aCrew()
+  const { host } = anAskingHost(crew.lifecycle, { [LAUNCH.pid]: LAUNCH.process_started_at }, () => {
+    const read = theRequestOf(crew.lifecycle, 'builder')
+    if (read.kind !== 'pending') return
+    crew.lifecycle.keep('builder.json', JSON.stringify({ request: read.request, outcome: { id: read.request.id, ended_by: 'launcher', at: read.request.at, restarted: { started: true }, mid_turn: false, resumed_from: null } }))
+  })
+  assert.deepEqual(await restartAMember(host, { member: 'builder', by: OWNER, reason: 'r', id: 'f', fresh: true }), { kind: 'restarted', told: 'builder is restarted fresh, with no handover.' })
+})
+
+test('#312 r=2: a restart unanswered after its launch is gone does not say nothing was ended', async () => {
+  const crew = aCrew()
+  let ended_it = false
+  const table: Record<number, string> = { [LAUNCH.pid]: LAUNCH.process_started_at }
+  const { host } = anAskingHost(crew.lifecycle, table, () => {
+    if (ended_it) return
+    // The launcher ended the member and never answered: from here on the recorded launch is gone.
+    ended_it = true
+  })
+  const processes = host.processes
+  const gone: StoppingHost = { ...host, processes: { ...processes, identityOf: (pid) => (ended_it ? null : processes.identityOf(pid)) } }
+  const told = await restartAMember(gone, { member: 'builder', by: OWNER, reason: 'r', id: 'g', fresh: false })
+  assert.deepEqual(told, {
+    kind: 'refused',
+    told: 'builder was ended and its launcher has not said within 120 s that it started again. martha ls shows whether it is back, and martha wake builder starts it from its newest handover if it is not.',
+  })
+})
+
+test('#312 r=2: a ledger that fails after a refused start says the member was not started again', async () => {
+  const crew = aCrew()
+  keepARestart(crew.lifecycle)
+  const { rows } = anAskingHost(crew.lifecycle, {})
+  const failing: RowStore = { ...rows, append: async () => Promise.reject(new Error('disk full')) }
+  const { host, told } = aHold(crew, [{ started: false, refusal: 'not approved' }], failing)
+  await holdTheMember(host, 'builder', ended('restarted'))
+  assert.ok(told.includes('builder was ended and not started again, and the ledger did not keep it: disk full'), told.join(' | '))
+})
+
 test('#312 test 4: a fresh restart carries no handover', async () => {
   const crew = aCrew()
   handedOver(crew, new Date(START - 60_000))
@@ -226,10 +296,10 @@ test('#312: the asker reads a restart its launcher answered, and a launcher that
   const answering = anAskingHost(crew.lifecycle, { [LAUNCH.pid]: LAUNCH.process_started_at }, () => {
     const read = theRequestOf(crew.lifecycle, 'builder')
     if (read.kind !== 'pending') return
-    crew.lifecycle.keep('builder.json', JSON.stringify({ request: read.request, outcome: { id: read.request.id, ended_by: 'launcher', at: read.request.at, restarted: { started: true }, mid_turn: true } }))
+    crew.lifecycle.keep('builder.json', JSON.stringify({ request: read.request, outcome: { id: read.request.id, ended_by: 'launcher', at: read.request.at, restarted: { started: true }, mid_turn: true, resumed_from: '/crew/handovers/builder-1.md' } }))
   })
   const restarted = await restartAMember(answering.host, { member: 'builder', by: OWNER, reason: 'r', id: 'y', fresh: false })
-  assert.deepEqual(restarted, { kind: 'restarted', told: 'builder is restarted from its newest handover; it ended mid-turn, so send again what it was working on.' })
+  assert.deepEqual(restarted, { kind: 'restarted', told: 'builder is restarted from its handover at /crew/handovers/builder-1.md; it ended mid-turn, so send again what it was working on.' })
   const silent = aCrew()
   const { host } = anAskingHost(silent.lifecycle, { [LAUNCH.pid]: LAUNCH.process_started_at })
   const unanswered = await restartAMember(host, { member: 'builder', by: OWNER, reason: 'r', id: 'z', fresh: true })
