@@ -41,9 +41,9 @@ export const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const NO_LAYOUT =
   'this crew declares no workspace layout: put "workspace_layout": true with "clones" and "worktrees" in its house rules, then start the member again.'
 
-/** What the two tools need: the host's own git, its tools and the ledger's store, the crew's declaration, and the member they answer for. */
+/** What the two tools need: the host's own git, the ledger's store, the crew's declaration, and the member they answer for. */
 export interface WorktreesRequest {
-  readonly host: Pick<HostContract, 'processes' | 'tools'> & LedgerHost
+  readonly host: Pick<HostContract, 'processes'> & LedgerHost
   readonly settings: CrewSettings
   /** The member whose branches these are: the launcher starts it, so the model never supplies this. */
   readonly member: string
@@ -65,23 +65,12 @@ interface Places {
 type Refusal = { readonly refusal: string }
 const refused = (why: string): Refusal => ({ refusal: why })
 
-/**
- * Registers `worktree_open` and `worktree_finish` for one member. A crew that declared no workspace layout gets
- * tools that answer why they have no places, rather than no tools at all: the answer names the field to add.
- */
-export function openAndFinishAWorktree(request: WorktreesRequest): void {
-  request.host.tools.register({
-    name: WORKTREE_OPEN,
-    description: 'Makes a worktree for one package of a repository, on a new branch of your own, and answers where it is.',
-    answer: (args) => openAWorktree(request, args),
-  })
-  request.host.tools.register({
-    name: WORKTREE_FINISH,
-    description:
-      'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has.',
-    answer: (args) => finishAWorktree(request, args),
-  })
-}
+/** What `worktree_open` says it is for, as the launcher answers the mod's ask (martha#256). */
+export const WORKTREE_OPEN_DESCRIPTION = 'Makes a worktree for one package of a repository, on a new branch of your own, and answers where it is.'
+
+/** What `worktree_finish` says it is for (martha#256). */
+export const WORKTREE_FINISH_DESCRIPTION =
+  'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has.'
 
 /** The places one call works in, or why the crew and the arguments name none. */
 function placesOf(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Places | Refusal {
@@ -120,7 +109,7 @@ function saidBy(outcome: ProcessOutcome): string {
 const defaultBranchIn = (host: WorktreesRequest['host'], clone: string): Promise<string | undefined> =>
   gitSaid(host, clone, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
 
-async function openAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
+export async function openAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
   const places = placesOf(request, args)
   if ('refusal' in places) return places.refusal
   const { host } = request
@@ -134,7 +123,7 @@ async function openAWorktree(request: WorktreesRequest, args: Readonly<Record<st
   return `opened ${places.path} on ${places.branch}, from ${from} at ${base ?? 'a commit git did not name'}`
 }
 
-async function finishAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
+export async function finishAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
   const places = placesOf(request, args)
   if ('refusal' in places) return places.refusal
   const package_name = packageOf(args)

@@ -120,23 +120,12 @@ export async function verifyRange(host: RangeCheckHost, range: TheRange): Promis
   return { told: [shape.ok.commits, shape.ok.stat, '', theLine(settled.ok, shape.ok, work.ok, ci.ok)].join('\n') }
 }
 
-/** Registers `verify_range`, which reads the clone it is given and writes nothing. */
-export function checkARangeBeforeTheOwnerSaysYes(request: { readonly host: RangeCheckHost & Pick<HostContract, 'tools'> }): void {
-  request.host.tools.register({
-    name: VERIFY_RANGE,
-    description:
-      'Checks a range before the owner says yes: the base is the origin default branch tip, the tip descends from it, no conflict marker is committed, and, with packages, one --no-ff merge per package at the head its reviewer passed. Reads the CI runs on the tip and answers one menu line.',
-    answer: async (args) => {
-      const asked = theRangeAsked(args)
-      if ('refused' in asked) return asked.refused
-      const checked = await verifyRange(request.host, asked.ok)
-      return 'told' in checked ? checked.told : checked.refused
-    },
-  })
-}
+/** What `verify_range` says it is for, as the launcher answers the mod's ask (martha#256). */
+export const VERIFY_RANGE_DESCRIPTION =
+  'Checks a range before the owner says yes: the base is the origin default branch tip, the tip descends from it, no conflict marker is committed, and, with packages, one --no-ff merge per package at the head its reviewer passed. Reads the CI runs on the tip and answers one menu line.'
 
-/** The range a call names, or why it names none: a path, two ends and, when it was given, the packages. */
-function theRangeAsked(args: Readonly<Record<string, unknown>>): Step<TheRange> {
+/** The range a call of `verify_range` names, or why it names none: a path, two ends and, when it was given, the packages. */
+export function theRangeACallNames(args: Readonly<Record<string, unknown>>): Step<TheRange> {
   const path = args['path']
   const base = args['base']
   const tip = args['tip']

@@ -23,7 +23,11 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { checkARangeBeforeTheOwnerSaysYes, VERIFY_RANGE, verifyRange, type CheckedRange } from './check_a_range_before_the_owner_says_yes.ts'
+import { theRangeACallNames, verifyRange, type CheckedRange } from './check_a_range_before_the_owner_says_yes.ts'
+
+/** What a call the slice refuses says, or a failure naming what it answered instead. */
+const refusedBy = (asked: { readonly ok?: unknown; readonly refused?: string }): string =>
+  asked.refused ?? assert.fail(`the call was not refused: ${JSON.stringify(asked)}`)
 
 const RECORDED = JSON.parse(readFileSync(new URL('./recorded_runs_on_a_tip.json', import.meta.url), 'utf8')) as {
   readonly workflow_runs: readonly RecordedRun[]
@@ -334,12 +338,8 @@ test('#256: a range that is not one merge per package is refused, naming the com
   assert.match(checked.refused, /is not a merge/)
 })
 
-test('#256: verify_range is registered, and a call that names no clone is refused by name', async () => {
-  const tests = hostForTests({ run: runReal })
-  checkARangeBeforeTheOwnerSaysYes({ host: tests.host })
-  const tool = tests.registeredTool(VERIFY_RANGE)
-  assert.ok(tool !== undefined, `${VERIFY_RANGE} was not registered`)
-  assert.match(await tool.answer({}), /names the clone it is checked in, as path/)
-  assert.match(await tool.answer({ path: '/clone', base: '', tip: 'b' }), /names its base/)
-  assert.match(await tool.answer({ path: '/clone', base: 'a', tip: 'b', packages: 'nope' }), /packages is the list of work packages/)
+test('#256: a verify_range call that names no clone, no end or no list is refused by name', () => {
+  assert.match(refusedBy(theRangeACallNames({})), /names the clone it is checked in, as path/)
+  assert.match(refusedBy(theRangeACallNames({ path: '/clone', base: '', tip: 'b' })), /names its base/)
+  assert.match(refusedBy(theRangeACallNames({ path: '/clone', base: 'a', tip: 'b', packages: 'nope' })), /packages is the list of work packages/)
 })

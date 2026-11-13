@@ -12,9 +12,29 @@
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
+import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import {
+  FAST_FORWARD_AFTER_THE_OWNERS_YES,
+  FAST_FORWARD_DESCRIPTION,
+  LAND_BATCH,
+  LAND_BATCH_DESCRIPTION,
+  fastForwardAfterTheOwnersYes,
+  landPassedWorkAsOneBatch,
+  theBatchACallNames,
+  theFastForwardACallNames,
+} from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import {
+  WORKTREE_FINISH,
+  WORKTREE_FINISH_DESCRIPTION,
+  WORKTREE_OPEN,
+  WORKTREE_OPEN_DESCRIPTION,
+  finishAWorktree,
+  openAWorktree,
+  type WorktreesRequest,
+} from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import type { DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
@@ -36,7 +56,23 @@ import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
-export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts', 'crew_park', WRITE_MY_HANDOVER_TOOL, CREW_REFRESH] as const
+export const CREW_TOOL_NAMES = [
+  'report_progress',
+  'crew_log',
+  'what_was_sent',
+  'note_what_became_of_an_act',
+  'see_the_crew',
+  'crew_say',
+  'crew_receipts',
+  'crew_park',
+  WRITE_MY_HANDOVER_TOOL,
+  CREW_REFRESH,
+  VERIFY_RANGE,
+  LAND_BATCH,
+  FAST_FORWARD_AFTER_THE_OWNERS_YES,
+  WORKTREE_OPEN,
+  WORKTREE_FINISH,
+] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
 /**
@@ -68,6 +104,14 @@ export interface CrewToolPlaces {
   readonly documents: DocumentStore
   /** The crew's own store: the park marker this member keeps, and the handovers a wake reads (../park_and_wake_a_member). */
   readonly stores: TheCrewFilesStores
+  /**
+   * The host's own processes: the tools that read a range, land a batch or move a worktree run git and gh through
+   * these, so nothing that acts runs inside the member's session (martha#256). A place that holds none refuses
+   * those five by name rather than pretending to act.
+   */
+  readonly processes?: HostContract['processes']
+  /** The crew's declaration, whose workspace places the two worktree tools read (martha#256). */
+  readonly settings?: CrewSettings
   /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
@@ -107,6 +151,31 @@ export interface CrewTools {
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
 const A_PACKAGE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The work package, owner/repo#n, as the issue is named' }
+
+/** The clone a tool works in (martha#256): where the repository is on this machine, never a URL. */
+const A_CLONE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The clone to work in, as a path on this machine' }
+
+/** The base a range was checked against (martha#256). */
+const A_BASE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The base the range was checked against, as a full sha' }
+
+/** The tip a range ends at (martha#256). */
+const A_TIP: Readonly<Record<string, unknown>> = { type: 'string', description: 'The tip the range ends at, as a full sha' }
+
+/** The work packages a landing or a checked range names (martha#256). */
+const THE_PACKAGES: Readonly<Record<string, unknown>> = {
+  type: 'array',
+  items: A_PACKAGE,
+  description: 'The work packages it lands, each as owner/repo#n',
+}
+
+/** The repository a worktree is made in or removed from (martha#256). */
+const A_REPOSITORY: Readonly<Record<string, unknown>> = { type: 'string', description: 'The repository, org/name' }
+
+/** What a worktree is for: the slug its path and branch carry (martha#256). */
+const A_SLUG: Readonly<Record<string, unknown>> = {
+  type: 'string',
+  description: 'What the worktree is for, as lowercase letters, digits and hyphens',
+}
 
 /** What `crew_park` says it is for: the design's own words, and what a park does and does not do. */
 export const CREW_PARK_DESCRIPTION =
@@ -225,6 +294,59 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       type: 'object',
       properties: { reason: { type: 'string', description: 'Why you are refreshing, in one line: the owner reads it on the row' } },
       required: ['reason'],
+    },
+  },
+  {
+    name: VERIFY_RANGE,
+    description: VERIFY_RANGE_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: A_CLONE,
+        base: A_BASE,
+        tip: A_TIP,
+        packages: THE_PACKAGES,
+      },
+      required: ['path', 'base', 'tip'],
+    },
+  },
+  {
+    name: LAND_BATCH,
+    description: LAND_BATCH_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { path: A_CLONE, packages: { ...THE_PACKAGES, minItems: 1 } },
+      required: ['path', 'packages'],
+    },
+  },
+  {
+    name: FAST_FORWARD_AFTER_THE_OWNERS_YES,
+    description: FAST_FORWARD_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { path: A_CLONE, base: A_BASE, tip: A_TIP, packages: { ...THE_PACKAGES, minItems: 1 } },
+      required: ['path', 'base', 'tip', 'packages'],
+    },
+  },
+  {
+    name: WORKTREE_OPEN,
+    description: WORKTREE_OPEN_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: A_REPOSITORY,
+        slug: A_SLUG,
+      },
+      required: ['repo', 'slug'],
+    },
+  },
+  {
+    name: WORKTREE_FINISH,
+    description: WORKTREE_FINISH_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { repo: A_REPOSITORY, slug: A_SLUG, package: A_PACKAGE },
+      required: ['repo', 'slug', 'package'],
     },
   },
 ]
@@ -375,6 +497,11 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
       const { announced_at, succeeded, detail } = args
       return { answer: (await noteWhatBecameOfAnAct(places.ledger, { ...workerOf(args), announced_at, succeeded, detail })).told }
     },
+    [VERIFY_RANGE]: (args) => verifyTheRange(places, args),
+    [LAND_BATCH]: (args) => landTheBatch(places, args),
+    [FAST_FORWARD_AFTER_THE_OWNERS_YES]: (args) => fastForwardOntoTheApprovedTip(places, args),
+    [WORKTREE_OPEN]: (args) => aWorktreeTool(places, openAWorktree, args),
+    [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
   }
 }
 
@@ -390,6 +517,60 @@ async function thePredecessorOf(places: CrewToolPlaces, session_id: string): Pro
   if (flow === undefined || 'refusal' in flow) return null
   if (flow.phase !== 'clearing' || flow.clear_from === '' || flow.clear_from === session_id) return null
   return flow.clear_from
+}
+
+/**
+ * What a place that holds no processes or no declaration is told when it calls one of the acting tools: a launch
+ * that cannot act says so, instead of answering for something it did not do (martha#256).
+ */
+export const NO_ACTING_PLACE = 'this launch holds no processes or no crew declaration, so this tool cannot act in it: start the member through Martha.'
+
+/** The host the acting tools run over: the launcher's own processes and the ledger's clock and rows (martha#256). */
+const actingHost = (places: CrewToolPlaces & { readonly processes: HostContract['processes'] }): Pick<HostContract, 'processes'> & LedgerHost => ({
+  processes: places.processes,
+  ...places.ledger,
+})
+
+/** What the two worktree tools are given, or null when this place holds no processes or no declaration. */
+const worktreesOf = (places: CrewToolPlaces): WorktreesRequest | null =>
+  places.processes === undefined || places.settings === undefined ? null : { host: actingHost({ ...places, processes: places.processes }), settings: places.settings, member: places.member }
+
+/** A landing's `told` or `refused`, as a tool answers it (martha#256). */
+const asAnAnswer = (landing: { readonly told: string } | { readonly refused: string }): CoreToolAnswer =>
+  'told' in landing ? { answer: landing.told } : { refused: landing.refused }
+
+/** `verify_range`: the range a call names, checked by the slice that reads it and writes nothing (martha#256). */
+async function verifyTheRange(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const asked = theRangeACallNames(args)
+  if ('refused' in asked) return { refused: asked.refused }
+  if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
+  return asAnAnswer(await verifyRange(actingHost({ ...places, processes: places.processes }), asked.ok))
+}
+
+/** `land_batch`: the batch a call names, landed as one integration branch by the slice that cuts it (martha#256). */
+async function landTheBatch(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const asked = theBatchACallNames(args)
+  if ('refused' in asked) return { refused: asked.refused }
+  if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
+  return asAnAnswer(await landPassedWorkAsOneBatch(actingHost({ ...places, processes: places.processes }), places.member, asked.ok))
+}
+
+/** `fast_forward_after_the_owners_yes`: the default branch moved onto the approved tip (martha#256). */
+async function fastForwardOntoTheApprovedTip(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const asked = theFastForwardACallNames(args)
+  if ('refused' in asked) return { refused: asked.refused }
+  if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
+  return asAnAnswer(await fastForwardAfterTheOwnersYes(actingHost({ ...places, processes: places.processes }), places.member, asked.ok))
+}
+
+/** `worktree_open` and `worktree_finish`, or the refusal of a place that can act in none (martha#256). */
+async function aWorktreeTool(
+  places: CrewToolPlaces,
+  act: (request: WorktreesRequest, args: Readonly<Record<string, unknown>>) => Promise<string>,
+  args: Readonly<Record<string, unknown>>,
+): Promise<CoreToolAnswer> {
+  const request = worktreesOf(places)
+  return request === null ? { refused: NO_ACTING_PLACE } : { answer: await act(request, args) }
 }
 
 /**

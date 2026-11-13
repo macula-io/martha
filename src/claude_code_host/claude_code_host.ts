@@ -50,7 +50,6 @@
 // The engine calls are typed here by shape, so the core imports no tool's
 // package (#25's import rule). The mod that loads Martha passes its `$`.
 
-import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 
 import { bindNothing, type Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -59,17 +58,10 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 import {
   readingOnly,
   type HostContract,
-  type ProcessOutcome,
-  type ProcessRequest,
   type Tool,
 } from '../host_contract/host_contract.ts'
-import {
-  filesOnThisMachine,
-  runNowOnThisMachine,
-  scratchOnThisMachine,
-} from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { filesOnThisMachine, scratchOnThisMachine, thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -151,11 +143,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
       scratch: scratchOnThisMachine,
       crew: crewFilesDirectory(places.crew),
     },
-    processes: {
-      run: runProcess,
-      runNow: runNowOnThisMachine,
-      identityOf: (pid) => linuxProcessIdentities.identityOf(pid),
-    },
+    processes: thisMachine.processes,
     delivery: {
       handToModel: async (text) => void (await engine.prompt.submit({ text })),
       onTurn: (take) => turns.onTurn(take),
@@ -244,23 +232,4 @@ export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
 /** Whether a called tool is an MCP server's: its result is that server's text (B2). */
 export function isMcpToolCall(called: string): boolean {
   return called.startsWith(MCP_NAME_PREFIX)
-}
-
-/** Runs a process directly, with no shell, and reports how it ended. */
-function runProcess(request: ProcessRequest): Promise<ProcessOutcome> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(request.command, request.args, { cwd: request.cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => void stdout.push(chunk))
-    child.stderr.on('data', (chunk: Buffer) => void stderr.push(chunk))
-    child.on('error', reject)
-    child.on('close', (code, signal) =>
-      resolve({
-        exit_code: signal === null ? code : null,
-        stdout: Buffer.concat(stdout).toString('utf8'),
-        stderr: Buffer.concat(stderr).toString('utf8'),
-      }),
-    )
-  })
 }
