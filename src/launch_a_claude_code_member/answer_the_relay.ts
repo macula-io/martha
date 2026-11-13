@@ -53,6 +53,8 @@ import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { theCallIn, TOOL_CHECK, whatTheHostSaidOf } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
@@ -128,6 +130,11 @@ export interface MemberRelayPlace {
    * it answers it. A run watching a launcher with none reads the terminal and the requests alone, as #210 left it.
    */
   readonly journal?: RelayJournal
+  /**
+   * The owner's dashboard as this launch keeps it (martha#313): the host's dialogs move the member's row, and the bell
+   * is the row's change. A launch given none writes no row and rings nothing.
+   */
+  readonly screen?: TheScreenKeeper
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -274,6 +281,8 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     tool_answered: async (body) => toolAnswered(state, body),
     subagent_started: async (body) => subagentStarted(state, body),
     subagent_stopped: async (body) => subagentStopped(state, body),
+    owner_dialog: async (body) => ownerDialog(state, body),
+    tool_checked: async (body) => toolChecked(state, body),
   }
 
   /** What an event gets when its body is no body, or its handler failed. */
@@ -286,6 +295,10 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     // shell; the event itself is only refused, never the member stopped, because nothing ran.
     subagent_started: refused,
     subagent_stopped: refused,
+    // A dialog or a check this launcher cannot read is refused and nothing else: neither is a gate on what the member
+    // may do, and the host's own dialog still reaches the owner.
+    owner_dialog: refused,
+    tool_checked: refused,
   }
 
   return {
@@ -315,6 +328,30 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
       return failed[event](`the launcher failed to answer (${error instanceof Error ? error.message : String(error)})`)
     }
   }
+}
+
+
+/** The moment the owner's row records, as the clock this process has: a beat's `at` is milliseconds since the epoch. */
+const now = (): number => Date.now()
+
+/**
+ * What the host is asking the owner (martha#313): the member's row moves, and the owner's bell rings on the change.
+ * Nothing is gated here and nothing is refused for the member: the host's own dialog is the owner's to answer, and a
+ * hook this launcher cannot read is refused as an event, never as the member's work.
+ */
+function ownerDialog(state: RelayState, body: Body): RelayReply {
+  const said = isText(body.hook) ? whatTheHostSaidOf(body.hook, isBody(body.fields) ? body.fields : {}) : undefined
+  if (said === undefined || !isText(body.session_id)) return refused('the dialog the host raised is not one this launcher reads')
+  state.place.screen?.heard(body.session_id, said, now())
+  return answered(TAKEN)
+}
+
+/** A call the host has checked and not yet run (martha#313): the id the permission about it will be keyed by. */
+function toolChecked(state: RelayState, body: Body): RelayReply {
+  const said = isText(body.session_id) ? whatTheHostSaidOf(TOOL_CHECK, isBody(body.check) ? body.check : {}) : undefined
+  if (said === undefined) return refused('the check the host ran names no call')
+  state.place.screen?.heard(body.session_id as string, said, now())
+  return answered(TAKEN)
 }
 
 /** What a launch with no crew place answers a tool call: nothing, by name (martha#254). */
@@ -486,11 +523,7 @@ async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<
 }
 
 async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {
-  if (isText(body.session_id)) {
-    const why = await takeInARefreshedSession(state, body.session_id)
-    if (why !== undefined) return refused(why)
-  }
-  const session = sessionNamed(state, body.session_id)
+  const session = await theSessionOfAPrompt(state, body)
   if (typeof session === 'string') return refused(session)
   const origin = body.origin
   if (typeof body.text !== 'string' || !isBody(origin) || !isText(origin.kind)) {
@@ -499,17 +532,27 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   if (why !== undefined) return refused(why)
+  // A dialog an earlier turn left open is dropped as this turn starts (martha#313): a prompt nobody answered cannot pin
+  // the row at "needs you" for the rest of the session. Only a prompt this launcher took in starts a turn.
+  state.place.screen?.heard(session.id, { said: 'turn-started' }, now())
   // The turn is kept, so the host really took it in: it is raised to whatever waits on turns, in the shape the host
   // contract names (martha#253). A prompt this launcher refused is never raised.
   state.place.turns?.prompted(body.text, origin.kind, whatAPromptCarries(body))
   return answered(TAKEN)
 }
 
-function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined } | undefined {
+/** The session a prompt is for, or why this launcher refuses it: a refreshed session is taken in before it is named. */
+async function theSessionOfAPrompt(state: RelayState, body: Body): Promise<HostSession | string> {
+  if (!isText(body.session_id)) return sessionNamed(state, body.session_id)
+  return (await takeInARefreshedSession(state, body.session_id)) ?? sessionNamed(state, body.session_id)
+}
+
+function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined; readonly id: string | undefined } | undefined {
   const call = body.call
   if (!isBody(call) || !isText(call.tool)) return undefined
   const { tool, ...input } = call
-  return { tool, input, agent_id: agentIdOf(call) }
+  const id = call['tool_use_id']
+  return { tool, input, agent_id: agentIdOf(call), id: isText(id) ? id : undefined }
 }
 
 /** The agent a tool result hands back, as the host stamps it: `tool_response.agentId` (martha#170). */
@@ -618,20 +661,27 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const unvouched = await vouchFor(state, session)
   if (unvouched !== undefined) return denied(unvouched)
   const agent_id = noteTheAgentsCall(state, session, body)
-  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
-  if (settings !== undefined) return denied(settings)
-  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
-  if (memory !== undefined) return denied(memory)
-  return await theVerdictOn(state, session, call, agent_id)
+  const denial = await theDenialOfACall(state, session, call, agent_id)
+  if (denial !== undefined) return denied(denial)
+  place.signed_runs?.callAllowed(call.tool, call.input)
+  // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
+  // the tool runs, and never when this launcher refused the call, because a refused call never runs.
+  closeTheDialogTheCallRan(state, session, body, call)
+  return answered(ALLOW)
 }
 
-/**
- * The verdict on one tool call: the gate's own answer (../answer_a_tool_call), then the crew's reviewer-model rule
- * beside it and never inside it (martha#315), and then the call is allowed. The signed-run receipt is taken only for a
- * call that will run.
- */
-async function theVerdictOn(state: RelayState, session: HostSession, call: { readonly tool: string; readonly input: Body }, agent_id: string | undefined): Promise<RelayReply> {
+/** Why this call is refused before it runs, or undefined when nothing does: the owner's settings, their memory, the gate, the crew's reviewer-model rule. */
+async function theDenialOfACall(
+  state: RelayState,
+  session: HostSession,
+  call: { readonly tool: string; readonly input: Body },
+  agent_id: string | undefined,
+): Promise<string | undefined> {
   const { place } = state
+  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
+  if (settings !== undefined) return settings
+  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
+  if (memory !== undefined) return memory
   const verdict = answerToolCall({
     tool: call.tool,
     session,
@@ -642,12 +692,19 @@ async function theVerdictOn(state: RelayState, session: HostSession, call: { rea
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.strict_gate === undefined ? {} : { strict_gate: place.strict_gate }),
-  })
-  if (verdict !== undefined) return denied(verdict.deny)
-  const offTheReviewModel = await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })
-  if (offTheReviewModel !== undefined) return denied(offTheReviewModel)
-  place.signed_runs?.callAllowed(call.tool, call.input)
-  return answered(ALLOW)
+  })?.deny
+  if (verdict !== undefined) return verdict
+  // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
+  // may not make is refused after the gate has allowed it, and never in place of the gate's own answer.
+  return place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })
+}
+
+/**
+ * The screen told that a call is about to run (martha#313). The host posts this before it checks the call and before it
+ * asks the owner, so it opens the host's own menu and closes nothing: the close is the call's answer.
+ */
+function closeTheDialogTheCallRan(state: RelayState, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
+  state.place.screen?.heard(session.id, { said: 'ran', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
 
 async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
@@ -658,6 +715,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
   const answering = noteAnAgentsAnswer(state, body)
+  closeTheDialogsTheCallAnswered(place, session, body, call)
   // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
   const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
   const unvouched = recheckBeforeRecording(place, session, call)
@@ -668,6 +726,20 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   const { reply, recorded } = await recordToolResult(state, session, call, body.answer)
   noteWhatItsCallsRead(state, answering, recorded)
   return reply
+}
+
+/**
+ * Every dialog a call raised, closed because that call was answered (martha#313): the permission the owner allowed
+ * and the menu they picked from are both answered by the call's own answer, and by nothing before it.
+ *
+ * This is the close the row relies on, because it is the only event the host offers after the owner has answered. The
+ * host posts the call (`tool_called`) before it checks it and before it asks (`tool_checked`, `owner_dialog`), and
+ * nothing more until the call is answered. So a dialog an owner allowed stays on the row while the call runs: for a
+ * long command that is the run's own length. That is the one limit this design accepts, and the row is otherwise the
+ * truth.
+ */
+function closeTheDialogsTheCallAnswered(place: MemberRelayPlace, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
+  place.screen?.heard(session.id, { said: 'answered', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
 
 /** The own write kept and every recheck, or why the member is stopped (#132, #121, #122). */

@@ -53,6 +53,16 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
   readonly memory_off: MemoryOff
   /** The host's SessionStart hook-input schema, as its binary spells it. */
   readonly session_start_schema: string
+  /**
+   * Every hook event the host offers a module, from the list it maps to its `classic.<event>` names (martha#313). A
+   * local type the host adds fails the coverage check by name rather than being read as one this build knows.
+   */
+  readonly classic_hook_events: readonly string[]
+  /**
+   * Every notification type the host can send (martha#313). Which of them the owner is told about is decided in
+   * ../tell_the_owner_a_session_waits; this is only the host's own list.
+   */
+  readonly notification_types: readonly string[]
   /** The engine's mapper from an ingress origin to the one a prompt.submit hook reads. */
   readonly prompt_origin_mapper: string
   /** The engine's origin for a prompt with no ingress origin. */
@@ -80,6 +90,12 @@ export const RECORDED_HOST: RecordedHost = recordedHostFrom(readFileSync(new URL
  */
 export function recordedHostFrom(text: string): RecordedHost {
   const recording = JSON.parse(text) as RecordedHost
+  if (!Array.isArray(recording.classic_hook_events) || recording.classic_hook_events.length === 0) {
+    throw new Error("The recording does not hold the hook events the host offers a module, so which dialogs reach the owner's row cannot be told (martha#313).")
+  }
+  if (!Array.isArray(recording.notification_types) || recording.notification_types.length === 0) {
+    throw new Error('The recording does not hold the notifications the host sends, so which of them are the owner\'s cannot be told (martha#313).')
+  }
   if (typeof recording.user_output_styles_dir !== 'string' || recording.user_output_styles_dir.trim() === '') {
     throw new Error('The recording does not hold the session-init response\'s user-output-styles field, so where a member may not write the owner\'s styles cannot be told (martha#154).')
   }
@@ -102,6 +118,12 @@ function filePermissionRulesOf(recording: RecordedHost): FilePermissionRules {
 
 /** Every SessionStart source the recorded host sends. */
 export const CLAUDE_CODE_SESSION_START_SOURCES: readonly string[] = sessionStartSourcesOf(RECORDED_HOST.session_start_schema)
+
+/** Every hook event the recorded host offers a module, as its own list names them (martha#313). */
+export const CLAUDE_CODE_CLASSIC_HOOK_EVENTS: readonly string[] = RECORDED_HOST.classic_hook_events
+
+/** Every notification type the recorded host can send, as its own list names them (martha#313). */
+export const CLAUDE_CODE_NOTIFICATION_TYPES: readonly string[] = RECORDED_HOST.notification_types
 
 /** Every event the Claude Code host emits when a session starts, the crew's refresh included. */
 export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [...CLAUDE_CODE_SESSION_START_SOURCES, CREW_REFRESH]

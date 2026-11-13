@@ -23,6 +23,7 @@ import { argv, exit, stderr, stdout } from 'node:process'
 
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
+import { classicHookEventsIn, notificationTypesIn } from '../claude_code_host/owner_dialogs_the_host_raises.ts'
 import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules.ts'
 import { markdownTheHostLoadsIn } from '../claude_code_host/markdown_the_host_loads.ts'
 import { protectedConfigPlacesIn } from '../claude_code_host/protected_config_places.ts'
@@ -35,6 +36,8 @@ const CHECK = '--check'
 /** Each part the recorder reads from a host's text, by the name a failed read reports. */
 const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string) => Partial<Derived> }> = [
   { part: 'session start schema', read: (text) => ({ session_start_schema: sessionStartSchemaIn(text) }) },
+  { part: 'hook events a module hears', read: (text) => ({ classic_hook_events: classicHookEventsIn(text) }) },
+  { part: 'notification types', read: (text) => ({ notification_types: notificationTypesIn(text) }) },
   { part: 'prompt origins', read: promptOriginsIn },
   { part: 'hook switches', read: hookSwitchesIn },
   { part: 'managed settings place', read: (text) => ({ managed_settings: managedSettingsPlaceIn(text) }) },
