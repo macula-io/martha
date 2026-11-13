@@ -333,7 +333,20 @@ export interface Processes {
    * Synchronous for the reason KeyedRows gives.
    */
   identityOf(pid: number): string | null
+  /**
+   * Sends `signal` to the process group `pid` leads, but only while `identityOf(pid)` still equals `identity`: the
+   * check and the signal are one call, so a pid handed to another process since it was recorded is never signalled
+   * (martha#312, crew-code's reused-pid rule). A group already gone, or a pid now another process's, is refused with
+   * the reason, and nothing is sent.
+   */
+  signalGroup(pid: number, identity: string, signal: GroupSignal): Signalled
 }
+
+/** The two signals a member's group is ended with: asked to end, then made to. */
+export type GroupSignal = 'SIGTERM' | 'SIGKILL'
+
+/** Whether a group was signalled, or why it was not. */
+export type Signalled = { readonly signalled: true } | { readonly signalled: false; readonly refusal: string }
 
 // --- where a turn came from ---------------------------------------------------
 //

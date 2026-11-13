@@ -82,7 +82,7 @@ test('the adapter implements the five parts of the host contract', (t) => {
   const { adapter } = adapterIn(t)
   assert.deepEqual(Object.keys(adapter.host).sort(), ['clock', 'delivery', 'processes', 'stores', 'tools'])
   assert.deepEqual(Object.keys(adapter.host.stores).sort(), ['crew', 'documents', 'files', 'launches', 'rows', 'scratch'])
-  assert.deepEqual(Object.keys(adapter.host.processes).sort(), ['identityOf', 'run', 'runNow'])
+  assert.deepEqual(Object.keys(adapter.host.processes).sort(), ['identityOf', 'run', 'runNow', 'signalGroup'])
   assert.equal(adapter.host.clock.now(), 1_700_000_000_000)
 })
 

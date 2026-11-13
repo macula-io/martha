@@ -61,6 +61,15 @@ export type MemberLaunch = {
    * reboot; the boot does not.
    */
   readonly process_started_at: string
+} & WhereAndSince
+
+/**
+ * What `martha ls` shows of a running member beside its row (martha#312): the checkout it runs in and when it started,
+ * on the machine's clock. The binder reads neither, so a record without them still binds.
+ */
+export type WhereAndSince = {
+  readonly checkout?: string
+  readonly started_at?: string
 }
 
 /**
@@ -87,7 +96,7 @@ export type Binder = (sender: AttestedSender | undefined) => string | null
 export const bindNothing: Binder = () => null
 
 /** What the launcher is about to record, before the kernel is asked when it started. */
-export interface Launched {
+export interface Launched extends WhereAndSince {
   readonly member_name: string
   readonly node_id: string
   readonly pid: number
@@ -132,9 +141,14 @@ export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessT
     }
   }
 
-  const launch: MemberLaunch = { member_name: launched.member_name, node_id, pid: launched.pid, process_started_at }
+  const launch: MemberLaunch = { member_name: launched.member_name, node_id, pid: launched.pid, process_started_at, ...whereAndSinceOf(launched) }
   store.keep(launched.member_name, launch)
   return { recorded: true }
+}
+
+/** The checkout and the start a launch named, and only those it named, so a record never holds an empty field. */
+function whereAndSinceOf({ checkout, started_at }: WhereAndSince): WhereAndSince {
+  return { ...(checkout === undefined ? {} : { checkout }), ...(started_at === undefined ? {} : { started_at }) }
 }
 
 /** Record that the launcher stopped a member: its record goes. */
