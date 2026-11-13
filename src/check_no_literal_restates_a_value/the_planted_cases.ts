@@ -79,9 +79,9 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: ["a_copy/a_copy.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
   },
   {
-    what: 'a record the change marks, with old copies of a key and a value',
-    base: { ...UNMARKED, 'a_user/a_user.ts': "call('Edit')\ncall('file_path')\n" },
-    head: MARKED,
+    what: 'a record the change marks on its closing line only, with old copies of a key and a value',
+    base: { 'a_tool/tools.ts': "export const TOOLS = Object.freeze({\n  Edit: 'file_path',\n})\n", 'a_user/a_user.ts': "call('Edit')\ncall('file_path')\n" },
+    head: { 'a_tool/tools.ts': "export const TOOLS = Object.freeze({\n  Edit: 'file_path',\n}) satisfies DefinesItsValues\n" },
     prints: ["a_user/a_user.ts:1: 'Edit' restates a_tool/tools.ts TOOLS.Edit (key)", "a_user/a_user.ts:2: 'file_path' restates a_tool/tools.ts TOOLS.Edit"],
   },
   {
