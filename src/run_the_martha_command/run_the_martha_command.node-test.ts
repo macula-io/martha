@@ -12,7 +12,6 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
@@ -28,6 +27,8 @@ import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/cr
 import { crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
+import { STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -358,4 +359,40 @@ test('martha wake starts the member on its newest handover, and the prompt it is
   const started = calls.find((call) => call.includes('--plugin-dir'))
   assert.ok(started !== undefined, `the wake never started the member: ${JSON.stringify(calls)}`)
   assert.ok(started.includes(theResumePrompt({ file, content }, member)), `the member was not started on the prompt its wake composed: ${JSON.stringify(started)}`)
+})
+
+// --- martha ls and martha stop (martha#312) -------------------------------------------------------------------------
+
+/** The relay root under the test's own home, so a verb that composes the launcher's places leaves nothing in /tmp. */
+const runtimeOf = (place: Place): Readonly<Record<string, string>> => ({ XDG_RUNTIME_DIR: join(place.home, 'run') })
+
+test('#312: martha ls takes no argument, and martha stop one member at most and no switch', (t) => {
+  const place = placeFor(t)
+  for (const args of [['ls', 'Terra'], [STOP, 'a', 'b'], [STOP, '--all'], [STOP, '']]) {
+    assert.equal(marthaWith(place, runtimeOf(place), ...args).status, EXIT_USAGE, args.join(' '))
+  }
+  assert.ok(USAGE.includes('martha ls | martha stop [<member>]'), USAGE)
+})
+
+test('#312: martha ls shows every declared member, in the declaration order, stopped when none was started', (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const listed = marthaWith(place, runtimeOf(place), 'ls')
+  assert.equal(listed.status, 0, listed.said)
+  const declaration = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: { name: string }[] }
+  const names = declaration.members.map((member) => member.name)
+  assert.ok(names.length > 1, 'a solo crew declares more than one member, so the order is a real check')
+  assert.deepEqual(listed.out.trimEnd().split('\n').map((line) => line.split('  ').slice(0, 2)), names.map((name) => [name, 'stopped']), listed.out)
+})
+
+test('#312: martha stop with nothing running says so and ends done; a name the crew does not have is refused', (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const none = marthaWith(place, runtimeOf(place), STOP)
+  assert.equal(none.status, 0, none.said)
+  assert.ok(none.err.includes('no member of this crew is running, so nothing was stopped.'), none.err)
+  allSaidByMartha(none.err)
+  const stranger = marthaWith(place, runtimeOf(place), STOP, 'nobody')
+  assert.equal(stranger.status, EXIT_REFUSED)
+  assert.match(stranger.err, /nobody is not on this crew \(its members are /)
 })
