@@ -48,7 +48,7 @@
 // the host it reads through.
 
 import { createHash } from 'node:crypto'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
@@ -291,7 +291,7 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
   if (unpinned !== undefined) {
     return {
       allow: false,
-      refusal: `${REFUSED}: ${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file.`,
+      refusal: `${REFUSED}: ${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`,
     }
   }
 
@@ -428,23 +428,43 @@ function crewTextDirectoryIn(crewText: readonly ConfigEntry[]): string | undefin
 /**
  * The crew's own text files as entries, read from the checkout the same way a host config is (martha#306): whether
  * git ignores one or not, the approval names it and its bytes are in the fingerprint. A path is written relative to
- * the directory the host starts in, as `/`, so an approval names a file the owner can find.
+ * the directory the host starts in, as `/`, so an approval names a file the owner can find. A link anywhere between
+ * that start and the text — the text itself, or any directory above it — is the entry, so the decision refuses it by
+ * name rather than following it to a file under a name the crew never wrote (martha#306 r=4).
  */
 export function readCrewText(place: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
   const start = realOrResolved(machine, place.launch_dir)
-  return (place.crew_text_files ?? []).map((file) => entryOf(machine, start, crewTextAt(machine, file)))
+  return (place.crew_text_files ?? []).map((file) => {
+    const at = join(start, crewTextAt(place, file))
+    return linkOnTheWayTo(machine, start, at) ?? entryOf(machine, start, at)
+  })
 }
 
 /**
- * Where a crew text file stands for the approval (martha#306 r=3): the directories above it resolved, as the launch's
- * own start is, and the file itself as the crew names it. A link at the file's own path stays a link, so the decision
- * refuses it by name — resolving the file too would approve the file it points at, and the launch would then hand the
- * link's path to a lookup keyed by the target, find nothing, and quietly hand Martha's shipped text instead (a link at
- * `.crew/roles/builder.md` pointing at `docs/builder.md` did exactly that).
+ * Where a crew text stands for the approval, the launch and the compose (martha#306 r=4): its path below the project
+ * root, spelled as the crew names it, with nothing below the root resolved. This is the one rule for a crew text's
+ * name: the approval's entry, the bytes the launch carries (keyed by that entry) and the compose that looks them up
+ * all spell the text this way, so no two of them can come to name the same file differently — whether the crew wrote a
+ * plain file, a link at the file, or a directory of theirs reached through a link.
  */
-function crewTextAt(machine: LaunchHost, file: string): string {
-  const absolute = resolve(file)
-  return join(realOrResolved(machine, dirname(absolute)), basename(absolute))
+function crewTextAt(place: LaunchPlace, file: string): string {
+  return pathFrom(resolve(place.launch_dir), resolve(file))
+}
+
+/**
+ * The first link on the way from the launch's start down to `at`, the text itself included, or undefined: a crew text
+ * is what stands where the crew put it, and a link is refused by name (martha#306 r=4). Two rounds tried approving
+ * what a link pointed at, and each time the launch and the compose then spelled the file differently — resolving the
+ * file, then the directories above it — and the member was quietly handed Martha's shipped text instead.
+ */
+function linkOnTheWayTo(machine: LaunchHost, start: string, at: string): ConfigEntry | undefined {
+  let walked = start
+  for (const part of pathFrom(start, at).split('/')) {
+    walked = join(walked, part)
+    const entry = entryOf(machine, start, walked)
+    if (entry.kind === 'symlink') return entry
+  }
+  return undefined
 }
 
 /**
@@ -453,8 +473,8 @@ function crewTextAt(machine: LaunchHost, file: string): string {
  * its paths through `crewTextAt`, the same way `readCrewText` does, so the two can never come to name a file
  * differently.
  */
-function crewTextPathsOf(place: LaunchPlace, start: string, machine: LaunchHost): ReadonlySet<string> {
-  return new Set((place.crew_text_files ?? []).map((file) => pathFrom(start, crewTextAt(machine, file))))
+function crewTextPathsOf(place: LaunchPlace): ReadonlySet<string> {
+  return new Set((place.crew_text_files ?? []).map((file) => crewTextAt(place, file)))
 }
 
 export type PreparedLaunch =
@@ -508,7 +528,7 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
   const snapshot_dir = snapshot.path
 
   const carrying: Carrying = { carried: [launch.project_config_off], carried_files: {}, not_carried: [] }
-  const crewText = crewTextPathsOf(place, start, machine)
+  const crewText = crewTextPathsOf(place)
   const changed = carryApproved(state.entries, { launch, start, snapshot, machine, crewText }, carrying)
   if (changed !== undefined) {
     snapshot.remove()
