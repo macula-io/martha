@@ -44,7 +44,7 @@ import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type Memb
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { stopTheCrew } from '../run_the_martha_command/list_and_stop_the_crew.ts'
+import { stopTheCrew } from '../run_the_martha_command/list_stop_and_restart_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 

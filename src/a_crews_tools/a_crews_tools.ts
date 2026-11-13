@@ -9,6 +9,8 @@
 // BEAT_INTERVAL_MS so a pane can tell a working member from a session that has died. The heartbeat runs here, in the
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
+import { randomUUID } from 'node:crypto'
+
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -54,6 +56,8 @@ import {
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
+import { restartByTool } from '../stop_and_restart_a_member/restart_a_member.ts'
+import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { WHO_IS_FREE, WHO_IS_FREE_DESCRIPTION, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
@@ -93,6 +97,9 @@ export const PARK_A_MEMBER = 'park_a_member'
 /** The name a member wakes another with (martha#343): the other half of the park, as a tool of its own. */
 export const WAKE_A_MEMBER = 'wake_a_member'
 
+/** The name the Supervisor restarts a stalled member with (martha#312): one act, asked of that member's own launcher. */
+export const RESTART_A_MEMBER = 'restart_a_member'
+
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
  * refreshed session is recorded with: the SessionStart source value keeps its own name, `CREW_REFRESH`, because a
@@ -124,6 +131,7 @@ export const CREW_TOOL_NAMES = [
   READ_THE_RECEIPTS,
   PARK_A_MEMBER,
   WAKE_A_MEMBER,
+  RESTART_A_MEMBER,
   SWITCH_YOUR_MODEL,
   RETURN_TO_YOUR_OWN_MODEL,
   WRITE_MY_HANDOVER_TOOL,
@@ -173,6 +181,11 @@ export interface CrewToolPlaces {
    * those five by name rather than pretending to act.
    */
   readonly processes?: HostContract['processes']
+  /**
+   * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
+   * the ledger. A launch given none refuses `restart_a_member` by name.
+   */
+  readonly lifecycle?: StoppingHost
   /** The crew's declaration, whose workspace places the two worktree tools read (martha#256). */
   readonly settings?: CrewSettings
   /**
@@ -276,6 +289,10 @@ export const PARK_A_MEMBER_DESCRIPTION =
 /** What `wake_a_member` says it is for: the other half, and what a wake does with the marker it finds. */
 export const WAKE_A_MEMBER_DESCRIPTION =
   'Bring a member out of a park, so it is refreshed between tasks again. The marker is written, not removed, so the reason stays readable. A member may always wake itself; waking another needs the declaration\'s table, and a refusal names the act that would have allowed it. Leave `member` out to wake yourself.'
+
+/** What `restart_a_member` says it is for: what a restart does to the member, and what refuses one. */
+export const RESTART_A_MEMBER_DESCRIPTION =
+  'Restart a stalled member: its session is ended and started again on its own terminal, from its newest handover, or with none when `fresh` is set. A turn it was in is lost; the answer says when it ended mid-turn, so you send that work again. Only a role the declaration grants restart_member may, never for itself, and one member is not restarted twice by a tool inside the refresh storm window. A member that is not running is started with martha wake, not this.'
 
 /** What `switch_your_model` says it is for: one package, one model the declaration names, and when it happens. */
 export const SWITCH_YOUR_MODEL_DESCRIPTION =
@@ -403,6 +420,19 @@ export const CREW_TOOLS: readonly CrewTool[] = [
         member: { type: 'string', description: 'Whose park to clear; leave it out for your own' },
       },
       required: ['reason'],
+    },
+  },
+  {
+    name: RESTART_A_MEMBER,
+    description: RESTART_A_MEMBER_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        member: { type: 'string', description: 'Whom to restart: a member of this crew other than you' },
+        reason: { type: 'string', description: 'Why, in one line: the member\'s terminal and the ledger keep it' },
+        fresh: { type: 'boolean', description: 'Start it with no handover; leave it out to resume from its newest one' },
+      },
+      required: ['member', 'reason'],
     },
   },
   {
@@ -733,6 +763,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LOG_A_MILESTONE]: async (args) => ({ answer: (await keepTheMilestone(places.ledger, { ...workerOf(args), event: args['event'], note: args['note'] })).told }),
     [PARK_A_MEMBER]: async (args) => moveThePark(places, args, parkAMember),
     [WAKE_A_MEMBER]: async (args) => moveThePark(places, args, unparkAMember),
+    [RESTART_A_MEMBER]: async (args) => restartOf(places, args),
     [SWITCH_YOUR_MODEL]: (args) => switchTheModel(places, args),
     [RETURN_TO_YOUR_OWN_MODEL]: (args) => returnTheModel(places, args),
     write_my_handover: async (args) => theHandoverTheMemberWrote(places, state, args),
@@ -907,6 +938,21 @@ async function moveThePark(
   const told = `${said.parked ? 'parked' : 'not parked'}: ${member} — ${said.reason}`
   const home = await theParkReturnsIt(places, act === parkAMember, said.parked)
   return { answer: home === null ? told : `${told} ${home}` }
+}
+
+/**
+ * `restart_a_member` (martha#312): the caller is this launch's member, never a name read out of the call, and the
+ * slice decides who may, when, and whom. The call waits for the member's launcher to answer.
+ */
+async function restartOf(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  if (places.lifecycle === undefined) return { refused: `this launch was given no place to ask a restart in, so ${RESTART_A_MEMBER} cannot run here.` }
+  const reason = textOf(args['reason'])
+  if (reason === '') return { refused: 'a restart says why in one line, and this one says nothing' }
+  const asking = { member: textOf(args['member']), by: places.member, reason, id: randomUUID(), fresh: args['fresh'] === true, declaration: theDeclarationOf(declared.settings) }
+  const said = await restartByTool(places.lifecycle, asking)
+  return said.kind === 'restarted' ? { answer: said.told } : { refused: said.told }
 }
 
 /**

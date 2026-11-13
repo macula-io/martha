@@ -34,7 +34,10 @@ import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
 import type { HandoverStampStore } from '../host_contract/host_contract.ts'
 import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
-import { LIFECYCLE_PLACE, watchForAStop } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { readingOnly } from '../host_contract/host_contract.ts'
+import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -227,6 +230,26 @@ function theHandoverStamps(state: MarthaState, root: string): HandoverStampStore
   return 'refusal' in crew ? { read: () => crew, write: () => crew } : handoverStampsIn(crew.path)
 }
 
+/**
+ * Where a stop or a restart of this crew's members is asked (martha#312): the crew's lifecycle requests, the launcher's
+ * records as the binder reads them, and the ledger. The owner's verbs and a member's restart tool ask through it alike.
+ */
+export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readonly crew: string }): StoppingHost {
+  return {
+    stores: { lifecycle: crewFilesDirectory(places.crew).place(LIFECYCLE_PLACE), rows: rowStreamsDirectory(places.launcher.rows) },
+    launches: () => launchesIn(readingOnly(launchRecordsDirectory(places.launcher.launch_records))),
+    processes: thisMachine.processes,
+    clock: { now: () => Date.now() },
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  }
+}
+
+/** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */
+function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: StoppingHost } {
+  const crew = crewStateDirectory(request.state.state_root, request.root)
+  return 'refusal' in crew ? {} : { lifecycle: stoppingHostOn({ launcher: request.places, crew: crew.path }) }
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -277,6 +300,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
+        ...theRestartPlaceOf(request),
       }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

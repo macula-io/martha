@@ -1,5 +1,5 @@
 // The `martha` command a stranger types (martha#98): `martha init`, `martha approve`, `martha start <member>`,
-// `martha ls` and `martha stop [<member>]` (martha#312), `martha todo` (martha#316), `martha install`, and `martha --version`.
+// `martha ls`, `martha stop [<member>]` and `martha restart <member> [--fresh]` (martha#312), `martha todo` (martha#316), `martha install`, and `martha --version`.
 //
 // This exists so a person who installed Martha gets a solo crew running without writing code or knowing its
 // internals. It is the one place that reads the machine's environment, and only to find places: the project
@@ -12,7 +12,7 @@
 // since a path, a member's name or a kept approval may hold bytes a terminal would act on. An error no act
 // expected is shown the same way, as one refused line, never as Node's own trace. `--version` prints the release's version on stdout; `init` prints the members it
 // declared; `start` prints one line naming the member and its pid once it is up, then holds the terminal until
-// the member ends, and ends the way the member did. Exit 0 is done, 1 refused, 2 not a way the command is used.
+// the member ends, and ends the way the member did; a restart asked of it starts it again on the same terminal. Exit 0 is done, 1 refused, 2 not a way the command is used.
 
 import { spawnSync, type StdioOptions } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -39,8 +39,8 @@ import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
-import { stopTheCrew, theCrewListed, type TheCrewsPlaces } from './list_and_stop_the_crew.ts'
-import { STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from './list_stop_and_restart_the_crew.ts'
+import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 
 /** The command ended as asked. */
 export const EXIT_DONE = 0
@@ -54,7 +54,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha ls | martha stop [<member>] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -161,7 +161,24 @@ async function start(io: CommandIo, places: Places, member: string, args: readon
   const started = await startingTheMember(io, places, member, args)
   if (!started.started) return EXIT_REFUSED
   io.out(startedLine(member, started.pid))
-  return exitOf(await started.stopped)
+  return held(io, places, member, args, started)
+}
+
+/**
+ * The member held on this terminal until it ends (martha#312): each restart asked of it ends it and starts it again
+ * here, through the same start, so the approval gate runs again; a restart whose start is refused ends the hold.
+ */
+async function held(io: CommandIo, places: Places, member: string, args: readonly string[], first: Extract<MemberStarted, { started: true }>): Promise<number> {
+  const launcher = launcherOf(io, places)
+  const crew = crewStateDirectory(places.state.state_root, places.root)
+  if ('refusal' in launcher || 'refusal' in crew) return exitOf(await first.stopped)
+  const again = async (prompt: string | undefined): Promise<MemberStarted> => {
+    const started = await startingTheMember(io, places, member, args, prompt)
+    if (started.started) io.out(startedLine(member, started.pid))
+    return started
+  }
+  const end = await holdOnThisTerminal({ launcher, crew: crew.path }, member, first, again, tellOwnerOn(io))
+  return end.kind === 'ended' ? exitOf(end.ended) : EXIT_REFUSED
 }
 
 /**
@@ -187,7 +204,7 @@ async function wake(io: CommandIo, places: Places, member: string): Promise<numb
   if ('refusal' in woken) return woken.told_by_the_start === true ? EXIT_REFUSED : refused(io, woken.refusal)
   io.out(`${woken.member} woken from ${woken.handover.file}`)
   if (woken.park.kind === 'could_not_be_cleared') tellOwnerOn(io)(`${woken.member} is running, but its park could not be cleared: ${woken.park.refusal}`)
-  return running !== undefined && running.started ? exitOf(await running.stopped) : EXIT_DONE
+  return running !== undefined && running.started ? held(io, places, member, [], running) : EXIT_DONE
 }
 
 /** The declaration as parking and waking read it; or why it could not be read. */
@@ -267,6 +284,15 @@ async function stop(io: CommandIo, places: Places, member: string | undefined): 
   return outcomes.some((outcome) => outcome.kind === 'refused') ? EXIT_REFUSED : EXIT_DONE
 }
 
+/** `martha restart <member> [--fresh]` (martha#312): the member's launcher asked to end it and start it again. */
+async function restart(io: CommandIo, places: Places, member: string, fresh: boolean): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const outcome = await restartTheMember(crew, member, fresh)
+  tellOwnerOn(io)(outcome.told)
+  return outcome.kind === 'restarted' ? EXIT_DONE : EXIT_REFUSED
+}
+
 /**
  * `martha install`: the installer this release pins, run with the words typed here unchanged (martha#84). It runs
  * before any place is read, so an installed machine with no checkout can still upgrade.
@@ -335,6 +361,7 @@ function actOf(argv: readonly string[]): Asked | undefined {
   if (ACTS_OF_ONE.includes(act)) return actOfOne(act, argv)
   if (act === 'install') return installOf(act, argv)
   if (act === STOP) return stopOf(act, argv)
+  if (act === RESTART) return restartOf(act, argv)
   return act === 'start' ? startOf(act, argv) : undefined
 }
 
@@ -365,6 +392,17 @@ function stopOf(act: string, argv: readonly string[]): Asked | undefined {
   const [, member] = argv
   if (argv.length === 1) return { act, args: [] }
   return argv.length === 2 && member !== undefined && member !== '' && !member.startsWith('-') ? { act, member, args: [] } : undefined
+}
+
+/** The switch that restarts a member with no handover. */
+const FRESH = '--fresh'
+
+/** `restart <member> [--fresh]`: one member's name, and the one switch. */
+function restartOf(act: string, argv: readonly string[]): Asked | undefined {
+  const [, member, ...rest] = argv
+  if (member === undefined || member === '' || member.startsWith('-')) return undefined
+  if (rest.length === 0) return { act, member, args: [] }
+  return rest.length === 1 && rest[0] === FRESH ? { act, member, args: [FRESH] } : undefined
 }
 
 /** An act of one argument: exactly one, and not empty. */
@@ -429,15 +467,21 @@ async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
 
 /** The acts that work inside a project: the owner's two, and the four that read or start a member. */
 async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<number> {
-  if (asked.act === 'pin-key') return pinKey(io, places, asked.args[0]!)
-  if (asked.act === 'keep-shapes') return keepShapes(io, places, asked.args[0]!)
-  if (asked.act === 'init') return init(io, places)
-  if (asked.act === 'approve') return approve(io, places)
-  if (asked.act === 'todo') return todo(io, places)
-  if (asked.act === 'wake') return wake(io, places, asked.args[0]!)
-  if (asked.act === 'ls') return ls(io, places)
-  if (asked.act === STOP) return stop(io, places, asked.member)
-  return start(io, places, asked.member!, asked.args)
+  const act = ACTS_IN_A_PROJECT[asked.act]
+  return act === undefined ? start(io, places, asked.member!, asked.args) : act(io, places, asked)
+}
+
+/** Each act that works inside a project but `start`, which every other word falls to, by its word. */
+const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places, asked: Asked) => Promise<number>>> = {
+  'pin-key': (io, places, asked) => pinKey(io, places, asked.args[0]!),
+  'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
+  init: (io, places) => init(io, places),
+  approve: (io, places) => approve(io, places),
+  todo: (io, places) => todo(io, places),
+  wake: (io, places, asked) => wake(io, places, asked.args[0]!),
+  ls: (io, places) => ls(io, places),
+  [STOP]: (io, places, asked) => stop(io, places, asked.member),
+  [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }
 
 /** The owner's terminal on this process's standard input; questions are asked on stderr. */

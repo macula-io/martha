@@ -27,7 +27,8 @@ import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/cr
 import { crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
-import { STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
+import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -393,6 +394,32 @@ test('#312: martha stop with nothing running says so and ends done; a name the c
   assert.ok(none.err.includes('no member of this crew is running, so nothing was stopped.'), none.err)
   allSaidByMartha(none.err)
   const stranger = marthaWith(place, runtimeOf(place), STOP, 'nobody')
+  assert.equal(stranger.status, EXIT_REFUSED)
+  assert.match(stranger.err, /nobody is not on this crew \(its members are /)
+})
+
+// --- martha restart (martha#312) ------------------------------------------------------------------------------------
+
+test('#312: martha restart takes one member and the one switch --fresh', (t) => {
+  const place = placeFor(t)
+  for (const args of [[RESTART], [RESTART, '--fresh'], [RESTART, 'a', 'b'], [RESTART, 'a', '--all'], [RESTART, 'a', '--fresh', '--fresh'], [RESTART, '']]) {
+    assert.equal(marthaWith(place, runtimeOf(place), ...args).status, EXIT_USAGE, args.join(' '))
+  }
+  assert.ok(USAGE.includes('martha restart <member> [--fresh]'), USAGE)
+})
+
+test('#312 test 9: martha restart of a member that is not running starts nothing and names martha wake; a stranger is refused', (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const declaration = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: { name: string }[] }
+  const member = declaration.members[0]!.name
+  for (const args of [[RESTART, member], [RESTART, member, '--fresh']]) {
+    const asked = marthaWith(place, runtimeOf(place), ...args)
+    assert.equal(asked.status, EXIT_REFUSED, asked.said)
+    assert.ok(asked.err.includes(notRunningToRestart(member)), asked.err)
+    allSaidByMartha(asked.err)
+  }
+  const stranger = marthaWith(place, runtimeOf(place), RESTART, 'nobody')
   assert.equal(stranger.status, EXIT_REFUSED)
   assert.match(stranger.err, /nobody is not on this crew \(its members are /)
 })

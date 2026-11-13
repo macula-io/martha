@@ -5,6 +5,8 @@
 // does, and reads what came back: the slice's own words for a tool it registers, and a refusal naming any name it
 // does not.
 
+import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
@@ -46,7 +48,7 @@ function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout:
     version: 1,
     owner: 'the-owner',
     members: [{ name: MEMBER, role: 'builder' }],
-    mode: { name: 'solo', roles: ['builder'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [RESTART_MEMBER]: [OWNER] } },
     channel_read_seconds: 30,
   }))
   const rows = join(home, 'crews', 'a-key', 'rows')
