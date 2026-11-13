@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
   ACTS,
+  CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
   DECLARATION_VERSION,
@@ -37,12 +38,10 @@ export const SOLO_MEMBERS = [
 ] as const
 
 /**
- * How often a new crew's sessions read the crew channel, as `martha init` writes it (martha#253). It is written into
- * the declaration the owner reads, never defaulted by the reader: a crew without the field is refused.
+ * A solo crew's declaration: the owner may do every act, and how often its sessions read the crew channel
+ * (martha#253) is the one value this slice writes and the reader reads a missing field as (../declare_crew,
+ * martha#374), so init and the reader cannot drift apart.
  */
-export const SOLO_CHANNEL_READ_SECONDS = 30
-
-/** A solo crew's declaration: the owner may do every act. */
 export function soloDeclaration(owner: string) {
   return {
     version: DECLARATION_VERSION,
@@ -53,7 +52,7 @@ export function soloDeclaration(owner: string) {
       roles: SOLO_MEMBERS.map((member) => member.role),
       may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
     },
-    channel_read_seconds: SOLO_CHANNEL_READ_SECONDS,
+    channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   }
 }
 

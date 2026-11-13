@@ -9,6 +9,7 @@ import { test } from 'node:test'
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, RECORDED_HOST } from './recorded_claude_code_host.ts'
 import { filePermissionRulesIn, ruleMatchersIn, theToolItsChecksMatch } from './file_permission_rules.ts'
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from './claude_code_file_tools.ts'
 
 /** A host text shaped as the bundle holds it, with the statement that decides which rules its checks match. */
 const A_HOST = (statement: string): string =>
@@ -27,9 +28,9 @@ test('each tool name the statement covers is checked as the tool it names, and o
   const recorded = ruleMatchersIn(RECORDED_HOST.file_permission_rules.matcher)
   // The recorded host's own answer, written out here rather than read from the mapping: a re-recording that changes it
   // fails this test until someone says so (martha#226).
-  assert.deepEqual(recorded, { Write: 'Edit', NotebookEdit: 'Edit', MultiEdit: 'Edit', Glob: 'Read' })
-  assert.equal(theToolItsChecksMatch(recorded, 'Write'), 'Edit')
-  assert.equal(theToolItsChecksMatch(recorded, 'Edit'), 'Edit')
+  assert.deepEqual(recorded, { Write: EDIT_TOOL, NotebookEdit: EDIT_TOOL, MultiEdit: EDIT_TOOL, Glob: 'Read' })
+  assert.equal(theToolItsChecksMatch(recorded, WHOLE_FILE_TOOL), EDIT_TOOL)
+  assert.equal(theToolItsChecksMatch(recorded, EDIT_TOOL), EDIT_TOOL)
   assert.equal(theToolItsChecksMatch(recorded, 'Bash'), 'Bash')
 })
 
@@ -42,5 +43,5 @@ test('a statement that maps nothing, or that ends by checking an unlisted tool a
 test('the tool a rule that refuses a write is written under is the recorded host\'s own answer (#226)', () => {
   // Literal on purpose: this is the one place the answer stands written down, so a host that maps a write elsewhere
   // fails here rather than quietly changing what every launch writes.
-  assert.equal(CLAUDE_CODE_FILE_RULE_TOOL, 'Edit')
+  assert.equal(CLAUDE_CODE_FILE_RULE_TOOL, EDIT_TOOL)
 })

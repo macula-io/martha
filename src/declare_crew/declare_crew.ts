@@ -14,8 +14,11 @@
 // Nothing is defaulted silently. A missing or unreadable declaration, a field of
 // the wrong shape and a key this slice does not know are each refused with the
 // file and the field, so a misspelt switch cannot leave a rule off while the
-// declaration looks right. The one default is a house rule the declaration does
-// not name: a rule a crew does not switch on does not run.
+// declaration looks right. What a release's init did not write is another matter,
+// and each such field reads as the value init writes today: a house rule the
+// declaration does not name is off, a table that names no act grants it to the
+// owner alone, and a declaration that names no channel_read_seconds reads that
+// value too (martha#374), so a file an earlier release wrote still declares.
 
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
@@ -27,6 +30,14 @@ export const DECLARATION_FILE = 'crew.json'
 
 /** The one declaration version this slice reads. */
 export const DECLARATION_VERSION = 1
+
+/**
+ * How often a session reads the crew's channel for a message it has not taken in (martha#253), for a declaration that
+ * does not say (martha#374, the owner's 2026-11-13 ruling "use init's value"). One definition, and both sides use it:
+ * `martha init` writes it into a new crew's file (../declare_a_solo_crew), and this slice reads a file an earlier
+ * release's init wrote as that same value, so a crew declared before the field existed reads as one declared today.
+ */
+export const CHANNEL_READ_SECONDS_WHEN_UNNAMED = 30
 
 /**
  * The act that lets a role's members end another member's session and start it again (martha#312): ending a session
@@ -149,7 +160,8 @@ export interface CrewSettings {
   readonly house_rules: HouseRules
   /**
    * How often, in seconds, a member's session reads the crew's channel for a message it has not taken in (martha#253).
-   * Required: there is no default in code, so a crew cannot carry messages without saying how often it looks.
+   * A declaration that names none reads as the value `martha init` writes (martha#374), so a crew declared by an
+   * earlier release carries messages without its owner editing the file.
    */
   readonly channel_read_seconds: number
 }
@@ -255,8 +267,13 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
   }
 }
 
-/** How often a session reads the channel for a message: a positive whole number of seconds, and never a default. */
+/**
+ * How often a session reads the channel for a message: a positive whole number of seconds. A declaration that names
+ * none reads as the value `martha init` writes today (martha#374), the same way a mode's table that does not name an
+ * act reads it as the owner's: a file an earlier release wrote still declares after an upgrade.
+ */
 function channelReadSecondsOf(refuse: Refuse, value: unknown): number {
+  if (value === undefined) return CHANNEL_READ_SECONDS_WHEN_UNNAMED
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return refuse.at('channel_read_seconds', 'is not a whole number of seconds, at least 1')
   return value
 }

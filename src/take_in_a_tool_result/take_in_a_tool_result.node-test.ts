@@ -37,6 +37,7 @@ import { latestOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/
 import { startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { takeInToolResult } from './take_in_a_tool_result.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const MEMBER = 'builder'
 const LAUNCH = 'launch-1'
@@ -110,7 +111,7 @@ function keptOwnWrite(place: Checkout, path: string): OwnWrite {
     path: file,
     blob,
     mode: '100644',
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: `toolu_${path}`,
     session: 'session-1',
     launch: LAUNCH,

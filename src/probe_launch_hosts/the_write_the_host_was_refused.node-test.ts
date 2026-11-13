@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const TARGET = '/scratch/owner-config/skills/probe-note.md'
 
@@ -14,7 +15,7 @@ const answerThatRefusedTheWrite = (target: string): string =>
   `${JSON.stringify({
     type: 'result',
     is_error: false,
-    permission_denials: [{ tool_name: 'Write', tool_use_id: 'call_1', tool_input: { file_path: target, content: 'probe\n' } }],
+    permission_denials: [{ tool_name: WHOLE_FILE_TOOL, tool_use_id: 'call_1', tool_input: { file_path: target, content: 'probe\n' } }],
     result: 'The write was blocked by permission settings.',
   })}\n`
 
