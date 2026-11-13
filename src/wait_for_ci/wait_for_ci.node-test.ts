@@ -158,11 +158,12 @@ test('#320 B: a crew at its GitHub floor is told so, and no call is made', async
   const place = aPlace()
   const clock = aClock(Date.now())
   place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), remaining: THE_FLOOR }))
-  const runner = aRunner([])
+  const runner = aRunner([], whatsLeft(THE_FLOOR))
   const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, sha: A_SHA })
   assert.equal(outcome.kind, 'out_of_budget', 'a wait at the floor was read anyway')
   assert.match(outcome.kind === 'out_of_budget' ? outcome.refusal : '', new RegExp(String(THE_FLOOR)))
-  assert.deepEqual(runner.asked, [], 'a call reached GitHub at the floor')
+  // The question is asked even at the floor; the read of the runs, which GitHub charges for, is not.
+  assert.deepEqual(theReadsOf(runner.asked), [], 'a read of the runs reached GitHub at the floor')
 })
 
 test('#320 B: a read GitHub cannot answer says so, rather than answering red', async () => {

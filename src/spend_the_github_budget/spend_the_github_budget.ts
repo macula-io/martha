@@ -11,9 +11,12 @@
 //   - what GitHub itself says is left of the token's allowance and when that window resets, asked before every call the
 //     wait allows — the one read GitHub does not charge against the core allowance — so the floor sees what everything
 //     else on the same token spent too, and not only this crew: a token drained by another reader, by the range check or
-//     by a member's own `gh` stops the crew at its floor just the same. An answer the crew cannot read keeps the count it
-//     already held, and every call still comes down off it, so a count the crew keeps is never one that overstates what
-//     is left;
+//     by a member's own `gh` stops the crew at its floor just the same;
+//   - the count it falls back on when GitHub cannot be read, and what that count is worth: GitHub's last answer less the
+//     crew's own reads since, with the free question taking nothing off it and other spenders unseen until GitHub answers
+//     again. It can therefore sit above the truth (an outside reader spent the token and the crew has not heard) or below
+//     it (GitHub's own answer already reflected reads the crew had not yet made). It is not a bound in either direction,
+//     which is why the crew asks again before every call rather than trusting it enough to refuse on it;
 //   - the wait in force for each thing the crew reads — a sha's runs, a package's head — so two readers do not hold
 //     each other: a package backing off no longer stops a sha from being read. The wait grows per thing, from a minute
 //     to five, and a thing's wait is over when the wait that held it ends;
@@ -157,16 +160,9 @@ export function theFloorsWord(budget: TheBudget): TheWord {
 export const theNextBackoff = (backoff_ms: number): number =>
   backoff_ms === 0 ? BACKOFF_MIN_MS : Math.min(backoff_ms * 2, BACKOFF_MAX_MS)
 
-/** The record after one call the crew made, whatever it read: the call is counted, and comes down off what is left. */
-const aCallSpent = (budget: TheBudget): TheBudget => ({
-  ...budget,
-  calls: budget.calls + 1,
-  remaining: budget.remaining === null ? null : Math.max(budget.remaining - 1, 0),
-})
-
 /**
- * The budget after one call was made at `now`, whatever GitHub answered. A call that could not be made at all is not
- * counted, so a machine with no `gh` never spends the crew's allowance.
+ * The budget after one call the crew made, whatever it read: the call is counted, and comes down off what is left. A call
+ * that could not be made at all is not counted, so a machine with no `gh` never spends the crew's allowance.
  *
  * The call is one this crew spent, so what GitHub said is left comes down by it. The wait it begins belongs to what was
  * read, and grows from the shortest to the longest by that thing's own calls, so a reader cannot hold another. Only a
@@ -175,7 +171,11 @@ const aCallSpent = (budget: TheBudget): TheBudget => ({
  * could be read at all.
  */
 export function afterACall(budget: TheBudget, now: number, of?: string): TheBudget {
-  const spent = aCallSpent(budget)
+  const spent: TheBudget = {
+    ...budget,
+    calls: budget.calls + 1,
+    remaining: budget.remaining === null ? null : Math.max(budget.remaining - 1, 0),
+  }
   if (of !== undefined) {
     return { ...spent, waits: { ...budget.waits, [of]: { last_at: now, wait_ms: theNextBackoff(budget.waits[of]?.wait_ms ?? 0) } } }
   }
@@ -184,16 +184,16 @@ export function afterACall(budget: TheBudget, now: number, of?: string): TheBudg
 
 /**
  * The budget after the one read that asks GitHub what is left. An answer this can read is the count itself, and takes the
- * place of the one the record held; an answer it cannot read — a `gh` that failed, or one that said something else —
- * keeps the last flag, with this call come down off it like any other. The read is counted as a call, and moves no wait:
- * the wait spaces out reads of the same thing, and this is the read that lets the next one be made at all.
+ * place of the one the record held; an answer it cannot read leaves the count exactly where it was, because the question
+ * is one GitHub does not charge for: taking it off would make the record disagree with GitHub's own number for a call
+ * nobody spent, and a crew whose record sits below the truth is a crew that refuses calls GitHub would have allowed.
  *
- * A count kept this way is never higher than the truth, so a crew that cannot hear GitHub stops at or above its floor
- * rather than eating into it.
+ * The read is counted among the crew's calls and moves no wait: the wait spaces out reads of the same thing, and this is
+ * the read that lets the next one be made at all.
  */
 export function afterWhatIsLeft(budget: TheBudget, left: WhatIsLeft | undefined): TheBudget {
-  const spent = aCallSpent(budget)
-  return left === undefined ? spent : { ...spent, remaining: left.remaining, resets_at: left.resets_at }
+  const asked: TheBudget = { ...budget, calls: budget.calls + 1 }
+  return left === undefined ? asked : { ...asked, remaining: left.remaining, resets_at: left.resets_at }
 }
 
 /** The green kept for `sha`, or undefined when the crew has not seen one. */
@@ -228,18 +228,6 @@ export function theEndOfTheWait(budget: TheBudget, sha: string): TheBudget {
   const reads = Object.fromEntries(Object.entries(budget.reads).filter(([read]) => read !== sha))
   return { ...budget, waits, reads }
 }
-
-/** Whether the window the record holds has turned since it was read, so GitHub has to be asked again. */
-const theWindowHasTurned = (budget: TheBudget, now: number): boolean =>
-  budget.resets_at !== null && now >= budget.resets_at
-
-/**
- * Whether the record already reads at or below its floor for the window in force, and the window has not turned, so
- * GitHub can only confirm what the crew would be refused for. A count the crew keeps is never higher than the truth, so
- * nothing is lost by refusing here: there is no call to make and no count worth asking for.
- */
-const theCrewIsOut = (budget: TheBudget, now: number): boolean =>
-  budget.remaining !== null && budget.remaining <= THE_FLOOR && !theWindowHasTurned(budget, now)
 
 /** What GitHub says the crew has left: the core allowance's count, and the second it resets at. */
 export interface WhatIsLeft {
@@ -353,10 +341,14 @@ export type Spent = { readonly said: ProcessOutcome; readonly budget: TheBudget 
 
 /**
  * Spends one GitHub call through the crew's budget, in the one order that keeps both promises: the wait first, so a read
- * it refuses makes no call at all; then GitHub asked what is left, so the floor sees every other spender on the same
- * token and not only this crew; then the floor, and the call. A crew whose store will not keep its count spends nothing
- * — the count is the only thing that bounds it. `of` is what the call reads — a sha, or a work package — and is left out
- * by a read that names nothing.
+ * it refuses makes no call at all; then GitHub asked what is left, on **every** call, so the floor sees every other
+ * spender on the same token and not only this crew; then the floor, and the call. A crew whose store will not keep its
+ * count spends nothing — the count is the only thing that bounds it.
+ *
+ * Nothing refuses on the count the record holds without asking first, not even a record that reads at its floor: a count
+ * GitHub cannot be asked about is not a bound (it can sit above the truth, and it can sit below it), so refusing on it
+ * alone is how a crew locks itself out of a window it could still spend in. `of` is what the call reads — a sha, or a
+ * work package — and is left out by a read that names nothing.
  */
 export async function spendTheGithubBudget(spender: TheGithubSpender, args: readonly string[], of?: string): Promise<Spent> {
   const place = spender.place
@@ -365,21 +357,12 @@ export async function spendTheGithubBudget(spender: TheGithubSpender, args: read
   if ('refusal' in held) return held
   const writable = keepTheBudget(place, held)
   if (writable !== undefined) return writable
-  const due = theWaitIsDue(spender, held, of)
-  if ('refusal' in due) return due
-  const learned = await theBudgetWithWhatIsLeft(spender, due.held)
+  const waited = theWaitsWord(held, spender.clock.now(), of)
+  if (!waited.may) return { refusal: waited.refusal }
+  const learned = await theBudgetWithWhatIsLeft(spender, held)
   if ('refusal' in learned) return learned
   keepTheBudget(place, learned.budget)
   return await theCall(spender, place, learned.budget, args, of)
-}
-
-/** The record once the wait on `of` is known to be over, or why no call may be made before GitHub is asked anything. */
-function theWaitIsDue(spender: TheGithubSpender, held: TheBudget, of?: string): { readonly held: TheBudget } | Refused {
-  const now = spender.clock.now()
-  const waited = theWaitsWord(held, now, of)
-  if (!waited.may) return { refusal: waited.refusal }
-  const floor = theCrewIsOut(held, now) ? theFloorsRefusal(held) : undefined
-  return floor === undefined ? { held } : { refusal: floor }
 }
 
 /**

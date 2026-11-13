@@ -132,12 +132,14 @@ test('#320 B: the budget asks GitHub what is left before it spends its first cal
 test('#320 B: at its floor the budget spends nothing, and says where the floor is', async () => {
   const place = aPlace()
   const clock = aClock(Date.now())
-  const runner = aRunner([anAnswer('{}')])
+  const runner = aRunner([anAnswer('{}')], whatsLeft(THE_FLOOR, MINUTE_MS * 60))
   place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), remaining: THE_FLOOR }))
   const spent = await spendTheGithubBudget(aSpender(place, clock, runner.run), ['api', 'repos/macula-io/martha/actions/runs'])
   assert.ok('refusal' in spent, 'a call was spent at the floor')
   assert.match(spent.refusal, new RegExp(String(THE_FLOOR)))
-  assert.deepEqual(runner.asked, [], 'a call reached GitHub at the floor')
+  // The question is asked even at the floor — a count GitHub is not asked about is not a bound — but no read GitHub
+  // charges for is made.
+  assert.deepEqual(theReadsOf(runner.asked), [], 'a read GitHub charges for reached GitHub at the floor')
 })
 
 test('#320 B: a call is followed by a wait that doubles to five minutes and then stays there', async () => {
@@ -294,11 +296,10 @@ test('#320 B: a call comes down off what GitHub said is left, so the floor is re
     await spendTheGithubBudget(spender, ['api', 'x'])
     clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
   }
-  // Every call the crew made comes down off the count — the question asked before each read included, since an answer
-  // this cannot read keeps the last flag rather than replacing it — so the crew stops after as many calls as it was
-  // above its floor.
-  assert.equal(asked.length, toSpend, `the crew spent ${String(asked.length)} calls from ${String(toSpend)} above its floor`)
-  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR, 'the count the crew held was never brought down by the calls spent')
+  // Every read the crew makes comes down off the count; the question asked before each does not, because GitHub does
+  // not charge for it — so the crew stops after as many reads as it was above its floor.
+  assert.equal(theReadsOf(asked).length, toSpend, `the crew made ${String(theReadsOf(asked).length)} reads from ${String(toSpend)} above its floor`)
+  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR, 'the count the crew held was never brought down by the reads spent')
 })
 
 test('#320 B: another spender on the same token is seen before the next call, and the crew stops at its floor', async () => {
@@ -322,6 +323,63 @@ test('#320 B: another spender on the same token is seen before the next call, an
   assert.ok('refusal' in second, 'a call was spent on a token another reader had already drained below the floor')
   assert.match(second.refusal, /is at its floor/, 'the refusal did not name the floor')
   assert.deepEqual(theReadsOf(asked), [['api', 'one']], 'the call refused at the floor reached GitHub anyway')
+})
+
+test('#320 B: a question GitHub cannot answer takes nothing off the count, and spending resumes when it can', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), remaining: THE_FLOOR + 1 }))
+  const asked: string[][] = []
+  let questions = 0
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    if (!asksWhatIsLeft(args)) return anAnswer('{}')
+    questions += 1
+    return questions === 1 ? aFailure('gh: connection reset') : whatsLeft(THE_FLOOR * 40, MINUTE_MS * 60)
+  }
+  const spender = aSpender(place, clock, run)
+  const first = await spendTheGithubBudget(spender, ['api', 'one'])
+  assert.ok(!('refusal' in first), `the first call was refused: ${JSON.stringify(first)}`)
+  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR, 'a question GitHub did not answer was taken off the count, as if the crew had spent it')
+  clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
+  const second = await spendTheGithubBudget(spender, ['api', 'two'])
+  assert.ok(!('refusal' in second), `the crew was refused, though GitHub then said ${String(THE_FLOOR * 40)} were left`)
+  assert.equal(questions, 2, 'GitHub, readable again with plenty left, was never asked')
+  assert.deepEqual(theReadsOf(asked), [['api', 'one'], ['api', 'two']], 'the second read was not made once GitHub could answer again')
+})
+
+test('#320 B: a record at its floor whose window has passed asks GitHub and spends again', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...A_FRESH_BUDGET, remaining: THE_FLOOR, resets_at: clock.now() - MINUTE_MS }))
+  const runner = aRunner([anAnswer('{}')], whatsLeft(THE_FLOOR * 20, MINUTE_MS * 60))
+  const spent = await spendTheGithubBudget(aSpender(place, clock, runner.run), ['api', 'one'])
+  assert.ok(!('refusal' in spent), `a crew whose window had turned was refused on the count of the window before: ${JSON.stringify(spent)}`)
+  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR * 20 - 1, 'the count of the new window, less the read, was not the one kept')
+})
+
+test('#320 B: a crew reads as many times as it is above its floor and no more, however often it is asked', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const toSpend = 100
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...A_FRESH_BUDGET, remaining: THE_FLOOR + toSpend, resets_at: clock.now() + MINUTE_MS * 60 * 100 }))
+  const asked: string[][] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    return anAnswer('{}')
+  }
+  const spender = aSpender(place, clock, run)
+  for (let i = 0; i < toSpend * 2; i += 1) {
+    await spendTheGithubBudget(spender, ['api', 'x'])
+    clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
+  }
+  assert.equal(theReadsOf(asked).length, toSpend, `the crew made ${String(theReadsOf(asked).length)} reads from ${String(toSpend)} above its floor`)
+  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR, 'the count was not brought down to the floor by the reads spent')
+  const before = theReadsOf(asked).length
+  clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
+  const past = await spendTheGithubBudget(spender, ['api', 'y'])
+  assert.ok('refusal' in past, 'a spend past the floor was made')
+  assert.equal(theReadsOf(asked).length, before, 'a spend past the floor reached the read GitHub charges for')
 })
 
 test('#320 B: a crew whose store will not keep its count spends nothing', async () => {
