@@ -22,7 +22,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_FILE_WRITING_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER_DIALOGS_FIELD, rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theKeyOfAPermission, theWordsOfADialog, whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
@@ -48,7 +48,7 @@ const OWNER_TURN = 'Do the first task.'
  * The project's approved settings: the file tools run without asking and the shell does not, so the one shell call the
  * stand-in offers is a prompt the host draws. The mode is pinned to the one where the allow list alone decides.
  */
-const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, 'Edit'] } })
+const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: Object.keys(CLAUDE_CODE_FILE_WRITING_TOOLS) } })
 /**
  * The file the asked-about call makes: there once the owner has allowed it, and only then. It is made in the run's home,
  * outside the checkout, because a file a shell call makes in the checkout is not the member's own write (only the file
