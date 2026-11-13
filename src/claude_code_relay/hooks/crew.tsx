@@ -267,10 +267,8 @@ const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promis
 
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
-  // Every tool is named here in full, `mcp__<the plugin's name>__<tool>`, because the host's plugin validator refuses
-  // a hook that builds its name. The plugin's name is the manifest's, in ./.claude-plugin/plugin.json, and the test
-  // that pairs every tool with its hook reads that manifest, so a rename fails there rather than in a silent session
-  // (martha#343).
+  // Every tool is named in full here, because the host refuses a hook that builds its name; the manifest holds the
+  // plugin's name, and the test pairing tools with hooks reads it, so a rename fails there (martha#343).
   on('tool.call', { tool: 'mcp__martha__report_progress' }, answerReportProgress)
   on('tool.call', { tool: 'mcp__martha__log_a_milestone' }, answerLogAMilestone)
   on('tool.call', { tool: 'mcp__martha__what_was_sent' }, answerWhatWasSent)
