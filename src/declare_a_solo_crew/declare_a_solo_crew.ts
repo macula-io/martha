@@ -38,12 +38,10 @@ export const SOLO_MEMBERS = [
 ] as const
 
 /**
- * The declaration a new crew is given says how often its sessions read the crew channel (martha#253): the one value
- * this slice writes and the reader reads a missing field as (../declare_crew, martha#374), so init and the reader
- * cannot drift apart.
+ * A solo crew's declaration: the owner may do every act, and how often its sessions read the crew channel
+ * (martha#253) is the one value this slice writes and the reader reads a missing field as (../declare_crew,
+ * martha#374), so init and the reader cannot drift apart.
  */
-
-/** A solo crew's declaration: the owner may do every act. */
 export function soloDeclaration(owner: string) {
   return {
     version: DECLARATION_VERSION,
