@@ -7,8 +7,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import { OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { NudgeInput } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { deadlockNudges, deadlocksOf } from './watch_waits.ts'
 
@@ -17,6 +17,8 @@ const PERSON = 30 * MINUTE_MS
 const STALLED = 60 * MINUTE_MS
 const WINDOWS = { stalled_ms: STALLED, review_ms: 45 * MINUTE_MS, person_ms: PERSON }
 const RECEIVERS = ['Supervisor']
+/** The dashboard's own word for a parked member, read here as the slice reads it. */
+const PARKED_STATE: State = 'parked'
 
 /** One member's row, busy and reported a while ago unless the test says otherwise. */
 function row(member: string, changes: Partial<DashboardRow> = {}): DashboardRow {
@@ -70,7 +72,7 @@ test('three members waiting in a ring are one cycle, not three', () => {
 test('a ring that runs through the owner is one deadlock, and its inferred wait is named', () => {
   const rows = [
     row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a ruling', since: NOW - 1_000 } }),
-    row('Mars', { state: 'waiting', waits: { on: 'owner', for: 'a yes', since: NOW - 2_000 } }),
+    row('Mars', { state: 'waiting', waits: { on: OWNER, for: 'a yes', since: NOW - 2_000 } }),
     row('Supervisor', { state: 'waiting', waits: { on: 'Vesta', for: 'a report', since: NOW - 3_000 } }),
   ]
   const found = deadlocksOf(input(rows))
@@ -79,7 +81,7 @@ test('a ring that runs through the owner is one deadlock, and its inferred wait 
 })
 
 test('a free member is never chained into a deadlock, and a parked one only while it rests', () => {
-  const free = row('Vesta', { state: 'idle', progress: { step: 4, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'work', since: NOW - PERSON } })
+  const free = row('Vesta', { state: IDLE, progress: { step: 4, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'work', since: NOW - PERSON } })
   assert.deepEqual(deadlocksOf(input([free])), [], 'a member with nothing in hand waits for work, which is nobody\'s fault')
 
   // The pair that would close a ring if a free member's wait counted: Mars waits on Vesta, and Vesta has nothing in hand.
@@ -88,7 +90,7 @@ test('a free member is never chained into a deadlock, and a parked one only whil
   const working = row('Vesta', { state: 'waiting', progress: { step: 1, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'a ruling', since: NOW - PERSON } })
   assert.equal(deadlocksOf(input([working, pair[1]!])).length, 1, 'the same pair, with the member at work, is the cycle it looks like')
 
-  const resting = row('Vesta', { state: 'parked', progress: { step: 1, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'a ruling', since: NOW - PERSON } })
+  const resting = row('Vesta', { state: PARKED_STATE, progress: { step: 1, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'a ruling', since: NOW - PERSON } })
   assert.deepEqual(deadlocksOf(input([resting])), [], 'a parked member waits on nobody while it rests')
 })
 

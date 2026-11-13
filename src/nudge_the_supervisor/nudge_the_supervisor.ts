@@ -25,8 +25,11 @@ import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
-/** The kinds of stall a nudge names, as the Supervisor reads them. */
-export const NUDGE_KINDS = ['stalled', 'review', 'person', 'owner', 'deadlock'] as const
+/** The addressee a message of the crew's channel names when it went to the whole crew (../keep_the_crew_channel). */
+const THE_WHOLE_CREW = 'crew'
+
+/** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge. */
+export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock'] as const
 export type NudgeKind = (typeof NUDGE_KINDS)[number]
 
 /**
@@ -62,7 +65,7 @@ export interface ReviewWait {
 /** A message of the crew's channel, as this rule reads it: who sent it, who it is for, what it said, and when. */
 export interface SentMessage {
   readonly from: string
-  readonly to: readonly string[] | 'crew'
+  readonly to: readonly string[] | typeof THE_WHOLE_CREW
   readonly text: string
   readonly sent_at: number
 }
@@ -82,8 +85,8 @@ export const ANSWERING_VERBS = ['VERDICT', 'LAND'] as const
  * copy outlives the verdict it copied. A send naming anyone else starts the wait, whatever it was also copied to; a send
  * naming nobody starts none, since no verdict was ever going to come back.
  */
-const reachesAReviewer = (to: readonly string[] | 'crew', receivers: readonly string[]): boolean => {
-  if (to === 'crew') return true
+const reachesAReviewer = (to: readonly string[] | typeof THE_WHOLE_CREW, receivers: readonly string[]): boolean => {
+  if (to === THE_WHOLE_CREW) return true
   return to.some((name) => !isAReceiver(name, receivers))
 }
 
@@ -110,7 +113,7 @@ export function reviewWaitsIn(messages: readonly SentMessage[], landed: LandedPa
     // A copy starts no wait and ends none; a landing or a verdict is what a wait ends on.
     const startsAWait = line.verb === 'HANDOFF' && !landed.has(line.package) && reachesAReviewer(message.to, receivers)
     if (startsAWait) {
-      waits.set(line.package, { package: line.package, from: message.from, to: message.to === 'crew' ? [] : message.to, at: message.sent_at })
+      waits.set(line.package, { package: line.package, from: message.from, to: message.to === THE_WHOLE_CREW ? [] : message.to, at: message.sent_at })
       continue
     }
     if ((ANSWERING_VERBS as readonly string[]).includes(line.verb)) waits.delete(line.package)
@@ -183,7 +186,7 @@ function personNudges(input: NudgeInput): Nudge[] {
 function ownerNudges(input: NudgeInput): Nudge[] {
   return heldWaits(input)
     .filter(({ wait }) => isTheOwner(wait.on, input))
-    .map(({ row, wait }) => ({ kind: 'owner' as const, member: row.member, package: '', since: wait.since, said: wait.for }))
+    .map(({ row, wait }) => ({ kind: OWNER, member: row.member, package: '', since: wait.since, said: wait.for }))
 }
 
 /** Whether a wait names the owner rather than a member of the crew: a row names the owner by the crew's own word, and a
