@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
+  CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   DECLARATION_DIRECTORY,
   PERSON_MINUTES,
   REVIEW_MINUTES,
@@ -16,6 +19,7 @@ import {
   HOUSE_RULE_SWITCHES,
   NUDGES,
   OWNER,
+  RESTART_MEMBER,
   STRICT_GATE,
   declareCrew,
   type CrewSettings,
@@ -329,15 +333,67 @@ test('the settings are frozen all the way down: no slice changes them for its ne
 
 // --- 6. how often a session reads the crew channel (martha#253) ---------------
 
-test('#253: a crew that does not say how often its sessions read the channel is refused, by field name', async () => {
-  await refusedWith(without('channel_read_seconds', solo), 'channel_read_seconds')
+test('#253: a crew that does not say how often its sessions read the channel reads as init writes it, and a value it cannot use is refused by field name', async () => {
+  assert.equal((await declare(without('channel_read_seconds', solo)).settings).channel_read_seconds, CHANNEL_READ_SECONDS_WHEN_UNNAMED)
   await refusedWith({ ...solo, channel_read_seconds: 0 }, 'channel_read_seconds')
   await refusedWith({ ...solo, channel_read_seconds: 1.5 }, 'channel_read_seconds')
   await refusedWith({ ...solo, channel_read_seconds: '30' }, 'channel_read_seconds')
 })
 
+// --- 7. a declaration an earlier release's init wrote (martha#374) ------------
+
+/** The declaration v0.1.0's `martha init` wrote, as its own soloDeclaration emitted it: three acts, none of them restart. */
+const DECLARED_BY_V0_1_0_TEXT = readFileSync(new URL('./the_crew_v0_1_0_declared.json', import.meta.url), 'utf8')
+
+/** The slice's own directory: the releases' declarations are kept beside it, one file per released `martha init`. */
+const declaredByReleases = new URL('.', import.meta.url)
+
+/** Every released init's declaration this tree keeps, by the file that keeps it, which names the release. */
+const declarationsOfReleases = (): readonly { readonly release: string; readonly text: string }[] =>
+  readdirSync(fileURLToPath(declaredByReleases))
+    .filter((name) => name.endsWith('_declared.json'))
+    .sort()
+    .map((release) => ({ release, text: readFileSync(fileURLToPath(new URL(release, declaredByReleases)), 'utf8') }))
+
+test("#374: every declaration a release's init wrote is still declared, and a refusal names the release's file", async () => {
+  const releases = declarationsOfReleases()
+  assert.ok(releases.length > 0, 'this tree keeps no released declaration, so this check would pass by looking at nothing')
+  for (const { release, text } of releases) {
+    const { store } = storeOf({ [declaration_path]: text })
+    await declareCrew(store, root, HOST_MODELS).catch((error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error)
+      assert.fail(`${release} is refused (${why}): an owner who declared a crew with that release can no longer start, wake, list, stop or restart its members`)
+    })
+  }
+})
+
+test('#374: the declaration v0.1.0 wrote declares, and its channel_read_seconds reads as the value init writes', async () => {
+  const { store } = storeOf({ [declaration_path]: DECLARED_BY_V0_1_0_TEXT })
+  const settings = await declareCrew(store, root, HOST_MODELS)
+  assert.equal(settings.channel_read_seconds, CHANNEL_READ_SECONDS_WHEN_UNNAMED)
+})
+
 test('#253: the interval a crew declares is the one its settings carry', async () => {
   assert.equal((await declare({ ...solo, channel_read_seconds: 7 }).settings).channel_read_seconds, 7)
+})
+
+// --- a crew declared before restart_member (martha#312 r=1 R1) ----------------------------------------------------
+
+const DECLARED_BY_V0_1_0: unknown = JSON.parse(DECLARED_BY_V0_1_0_TEXT)
+
+test('#312: a crew v0.1.0 declared is refused for nothing #312 added, and restart_member, which it never named, is the owner\'s alone', async () => {
+  const settings = await declare(DECLARED_BY_V0_1_0).settings
+  assert.deepEqual(settings.mode.may[RESTART_MEMBER], [OWNER])
+})
+
+test('#312: a table that names restart_member and names nobody is still refused', async () => {
+  const named = DECLARED_BY_V0_1_0 as unknown as { mode: { may: Record<string, unknown> } }
+  const empty = { ...named, mode: { ...named.mode, may: { ...named.mode.may, [RESTART_MEMBER]: [] } } }
+  await assert.rejects(declare(empty).settings, (error: unknown) => {
+    assert.ok(error instanceof DeclarationRefused)
+    assert.equal(error.field, `mode.may.${RESTART_MEMBER}`)
+    return true
+  })
 })
 
 // --- 7. the windows a crew that reads nudges names (martha#320) ---------------

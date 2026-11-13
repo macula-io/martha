@@ -12,6 +12,7 @@ import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { takeAnOwnerDialog, type RaisingADialog } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { NO_BELLS, NOTIFICATION_ENDING, NOTIFICATION_OPENING, theBellsFor, THE_BELL, type TheBellsSwitch } from './ring_the_owner.ts'
+import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const BOTH: TheBellsSwitch = { bell: true, notify: true }
 
@@ -30,7 +31,7 @@ function row(at = 100): DashboardRow {
   }
 }
 
-const A_PERMISSION: RaisingADialog = { kind: 'permission', agent: '', tool: 'Edit', input: { file_path: 'a' } }
+const A_PERMISSION: RaisingADialog = { kind: 'permission', agent: '', tool: EDIT_TOOL, input: { file_path: 'a' } }
 
 /** The row asking for a permission, as the launcher would write it at `at`. */
 const asking = (at: number): DashboardRow => takeAnOwnerDialog(row(at), { change: 'opened', at, raised: A_PERMISSION })

@@ -49,7 +49,7 @@
 import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
-import { asTheHostResolves } from './claude_code_file_tools.ts'
+import { FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT, asTheHostResolves } from './claude_code_file_tools.ts'
 
 import { hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, MANAGED_MARKDOWN_FOLDER, SKILLS_KIND, SYNCED_SKILLS_FOLDER, SYNC_OFF_SETTING, TRASH_FOLDER, type OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 
@@ -692,7 +692,7 @@ export function realPathOf(path: string): string {
 }
 
 /** The tool call arguments that name the file a file tool reads or writes. */
-export const FILE_ARGUMENTS = ['file_path', 'notebook_path'] as const
+export const FILE_ARGUMENTS = [FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT] as const
 
 /** Why a tool call names the owner's user settings file, or undefined. */
 export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string, home: string): string | undefined {

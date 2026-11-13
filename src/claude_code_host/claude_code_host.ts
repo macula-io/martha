@@ -70,6 +70,7 @@ import { HOSTS, type HostSwitches } from '../refuse_launch_of_unapproved_config/
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
+import { FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT } from './claude_code_file_tools.ts'
 
 /** The engine calls the adapter makes, as Claude Code's `$` offers them. */
 export interface ClaudeCodeEngine {
@@ -215,10 +216,10 @@ export const CLAUDE_CODE_SHELL_TOOL = 'Bash'
 export const CLAUDE_CODE_READ_ATTACHES_NOTHING: HostSwitches = HOSTS['claude-code'].project_config_off
 
 export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
-  Read: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
-  Edit: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
-  Write: { reads: 'a_file', source: 'checkout_file', field: 'file_path' },
-  NotebookEdit: { reads: 'a_file', source: 'checkout_file', field: 'notebook_path' },
+  Read: { reads: 'a_file', source: 'checkout_file', field: FILE_PATH_ARGUMENT },
+  Edit: { reads: 'a_file', source: 'checkout_file', field: FILE_PATH_ARGUMENT },
+  Write: { reads: 'a_file', source: 'checkout_file', field: FILE_PATH_ARGUMENT },
+  NotebookEdit: { reads: 'a_file', source: 'checkout_file', field: NOTEBOOK_PATH_ARGUMENT },
   Grep: { reads: 'a_search', source: 'checkout_file', field: 'path' },
   Glob: { reads: 'a_search', source: 'checkout_file', field: 'path' },
   Bash: { reads: 'a_command', source: 'checkout_run', field: 'command' },

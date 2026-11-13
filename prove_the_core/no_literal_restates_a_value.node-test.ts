@@ -10,6 +10,7 @@ import { test } from 'node:test'
 
 import {
   exceptionsNotHeld,
+  GONE,
   lineOfAFinding,
   literalSitesJudged,
   restatementsIn,
@@ -61,7 +62,7 @@ test('a value the change renames is still named where the OLD value was written 
 
   const found = restatementsIn([stillOld], { judged: new Set<string>(), defined })
 
-  assert.deepEqual(found.map(lineOfAFinding), ["a_old/a_old.ts:1: 'the-old-value' restates a_tool/a_tool.ts TOOL"])
+  assert.deepEqual(found.map(lineOfAFinding), [`a_old/a_old.ts:1: 'the-old-value' restates a_tool/a_tool.ts TOOL ${GONE}`])
 })
 
 test('a definition that restates another module\'s exported value is named (R2)', () => {

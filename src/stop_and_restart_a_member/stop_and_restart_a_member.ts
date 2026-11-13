@@ -31,15 +31,29 @@ export const LIFECYCLE_STREAM = 'member_lifecycle'
 /** The ledger's word for a member whose session was ended. */
 export const MEMBER_STOPPED = 'member_stopped'
 
-/** What a member is asked to do. Restart joins it in the second half of martha#312. */
+/** The ledger's word for a member whose session was ended and started again (../restart_a_member). */
+export const MEMBER_RESTARTED = 'member_restarted'
+
+/** What a member is asked to do: end, or end and start again on its own terminal (martha#312). */
 export const STOP = 'stop'
-export type LifecycleAct = typeof STOP
+export const RESTART = 'restart'
+export type LifecycleAct = typeof STOP | typeof RESTART
+const LIFECYCLE_ACTS: readonly LifecycleAct[] = [STOP, RESTART]
 
 /** How long a member's group has, once asked to end, before it is made to: crew-code's grace. */
 export const STOP_GRACE_MS = 10_000
 
 /** How long the owner's verb waits for the launcher's answer: the launcher's own grace, and as long again for its tick and its cleanup. */
 export const ANSWER_DEADLINE_MS = 2 * STOP_GRACE_MS
+
+/**
+ * How long a restart's asker waits for the launcher's answer: crew-code's `crew_restart` deadline. A restart is answered
+ * only once the member is started again, so it waits for the end and for a whole launch, and a launch prepares a tree.
+ */
+export const RESTART_ANSWER_DEADLINE_MS = 120_000
+
+/** How long a request of each act waits for its launcher before the asker stops waiting. */
+export const ANSWER_DEADLINE_OF: Readonly<Record<LifecycleAct, number>> = { [STOP]: ANSWER_DEADLINE_MS, [RESTART]: RESTART_ANSWER_DEADLINE_MS }
 
 /** How often the owner's verb looks for an answer, and for a group to be gone. */
 export const ANSWER_POLL_MS = 250
@@ -60,6 +74,8 @@ export interface TheLaunch {
 export interface LifecycleRequest {
   readonly id: string
   readonly act: LifecycleAct
+  /** A restart that starts the member with no handover; always false for a stop. */
+  readonly fresh: boolean
   readonly by: string
   readonly reason: string
   /** When it was asked, as an ISO time. */
@@ -79,6 +95,12 @@ export interface LifecycleOutcome {
   readonly id: string
   readonly ended_by: EndedBy
   readonly at: string
+  /** A restart's start: whether the member is running again, or why it is not. A stop carries none. */
+  readonly restarted?: { readonly started: true } | { readonly started: false; readonly refusal: string }
+  /** A restart that ended a member whose row read working: its turn is lost, so the asker knows to send it again. */
+  readonly mid_turn?: boolean
+  /** A restart's handover: the file the member was started on, or null when it was started on none. A stop carries none. */
+  readonly resumed_from?: string | null
 }
 
 /** A member's request as the store holds it: none, waiting for its launcher, answered, or a file nobody can read. */
@@ -120,13 +142,26 @@ function isRequest(value: unknown): value is LifecycleRequest {
   if (!isObject(value) || !isObject(value['launch'])) return false
   const { id, act, by, reason, at } = value
   const { pid, process_started_at } = value['launch']
-  return [id, by, reason, at, process_started_at].every((field) => typeof field === 'string') && act === STOP && typeof pid === 'number'
+  const strings = [id, by, reason, at, process_started_at].every((field) => typeof field === 'string')
+  return strings && LIFECYCLE_ACTS.includes(act as LifecycleAct) && typeof value['fresh'] === 'boolean' && typeof pid === 'number'
 }
 
 function isOutcome(value: unknown): value is LifecycleOutcome {
   if (!isObject(value)) return false
-  const { id, ended_by, at } = value
-  return typeof id === 'string' && typeof at === 'string' && ENDED_BY.includes(ended_by as EndedBy)
+  const { id, ended_by, at, restarted, mid_turn, resumed_from } = value
+  const kept = typeof id === 'string' && typeof at === 'string' && ENDED_BY.includes(ended_by as EndedBy)
+  return kept && isARestartsPart(restarted, mid_turn, resumed_from)
+}
+
+/** A restart's own fields, each absent on a stop: the start, the mid-turn note, and the handover it started on. */
+function isARestartsPart(restarted: unknown, mid_turn: unknown, resumed_from: unknown): boolean {
+  const resumed = resumed_from === undefined || resumed_from === null || typeof resumed_from === 'string'
+  return resumed && (restarted === undefined || isRestarted(restarted)) && (mid_turn === undefined || typeof mid_turn === 'boolean')
+}
+
+function isRestarted(value: unknown): boolean {
+  if (!isObject(value)) return false
+  return value['started'] === true || (value['started'] === false && typeof value['refusal'] === 'string')
 }
 
 /**
@@ -134,7 +169,7 @@ function isOutcome(value: unknown): value is LifecycleOutcome {
  * so a launcher and a verb that both reach the end of one stop keep one outcome and one ledger row between them (r=1
  * observation). Resolves to the answer that stands, and whether it was this caller's.
  */
-function answerOnce(place: CrewPlace, member: string, request: LifecycleRequest, outcome: LifecycleOutcome): { readonly outcome: LifecycleOutcome; readonly ours: boolean } | Refused {
+export function answerOnce(place: CrewPlace, member: string, request: LifecycleRequest, outcome: LifecycleOutcome): { readonly outcome: LifecycleOutcome; readonly ours: boolean } | Refused {
   const read = theRequestOf(place, member)
   if (read.kind === 'answered' && read.outcome.id === request.id) return { outcome: read.outcome, ours: false }
   if (read.kind !== 'pending' || read.request.id !== request.id) return { outcome, ours: false }
@@ -143,7 +178,7 @@ function answerOnce(place: CrewPlace, member: string, request: LifecycleRequest,
 }
 
 /** Keeps a member's request, answered or not, whole. */
-function keepTheRequest(place: CrewPlace, member: string, request: LifecycleRequest, outcome: LifecycleOutcome | null): Refused | undefined {
+export function keepTheRequest(place: CrewPlace, member: string, request: LifecycleRequest, outcome: LifecycleOutcome | null): Refused | undefined {
   return place.keep(theRequestFile(member), `${JSON.stringify({ request, outcome })}\n`)
 }
 
@@ -158,8 +193,8 @@ export function theRunningLaunchOf(launches: readonly MemberLaunch[], processes:
 
 export const sameLaunch = (one: TheLaunch, other: TheLaunch): boolean => one.pid === other.pid && one.process_started_at === other.process_started_at
 
-/** A request no launcher answered by the deadline: its launcher is gone, or is not reading. */
-export const isUnanswered = (request: LifecycleRequest, now: number): boolean => now - Date.parse(request.at) > ANSWER_DEADLINE_MS
+/** A request no launcher answered by its act's deadline: its launcher is gone, or is not reading. */
+export const isUnanswered = (request: LifecycleRequest, now: number): boolean => now - Date.parse(request.at) > ANSWER_DEADLINE_OF[request.act]
 
 /** The ledger's row for a member that was ended. */
 export async function keepTheStop(rows: RowStore, member: string, request: LifecycleRequest, outcome: LifecycleOutcome): Promise<void> {
@@ -209,6 +244,7 @@ export async function stopAMember(host: StoppingHost, asking: AskingToStop): Pro
   const request: LifecycleRequest = {
     id: asking.id,
     act: STOP,
+    fresh: false,
     by: asking.by,
     reason: asking.reason,
     at: new Date(host.clock.now()).toISOString(),
@@ -223,7 +259,7 @@ export async function stopAMember(host: StoppingHost, asking: AskingToStop): Pro
 }
 
 /** Why a new stop may not be asked: a request nobody can read, or one for this launch still waiting for its launcher. */
-function whatHoldsTheStop(place: CrewPlace, member: string, launch: TheLaunch, now: number): Stopped | undefined {
+export function whatHoldsTheStop(place: CrewPlace, member: string, launch: TheLaunch, now: number): Extract<Stopped, { readonly kind: 'in_flight' | 'refused' }> | undefined {
   const current = theRequestOf(place, member)
   if (current.kind === 'unreadable') return { kind: 'refused', told: current.refusal }
   if (current.kind !== 'pending' || !sameLaunch(current.request.launch, launch) || isUnanswered(current.request, now)) return undefined
@@ -306,9 +342,13 @@ function requestForThisLaunch(place: CrewPlace, held: Pick<TheHeldMember, 'membe
   return read.kind === 'pending' && sameLaunch(read.request.launch, held.launch) ? read.request : undefined
 }
 
+/** What the owner's terminal is told a member is being, by the act asked of it. */
+const BEING: Readonly<Record<LifecycleAct, string>> = { [STOP]: 'stopped', [RESTART]: 'restarted' }
+
 /**
- * Watches `held`'s request every `tick_ms` for as long as it runs, and acts on a stop for this launch once: the group
- * asked to end, made to after the grace, and the answer and the ledger's row kept once it has ended. Returns what ends
+ * Watches `held`'s request every `tick_ms` for as long as it runs, and acts on a stop or a restart for this launch once:
+ * the group asked to end, made to after the grace, and, for a stop, the answer and the ledger's row kept once it has
+ * ended. A restart's answer waits for the start that follows. Returns what ends
  * the watch; the member ending ends it too.
  */
 export function watchForAStop(host: WatchingHost, held: TheHeldMember, tick_ms: number): () => void {
@@ -319,7 +359,7 @@ export function watchForAStop(host: WatchingHost, held: TheHeldMember, tick_ms: 
     const asked = requestForThisLaunch(host.stores.lifecycle, held)
     if (asked === undefined) return
     acting = asked
-    held.tellOwner(`${held.member} is being stopped, asked by ${asked.by}: ${asked.reason}`)
+    held.tellOwner(`${held.member} is being ${BEING[asked.act]}, asked by ${asked.by}: ${asked.reason}`)
     host.processes.signalGroup(held.launch.pid, held.launch.process_started_at, 'SIGTERM')
     grace = setTimeout(() => held.stop(`asked by ${asked.by}: ${asked.reason}`), STOP_GRACE_MS)
   }, tick_ms)
@@ -333,7 +373,8 @@ export function watchForAStop(host: WatchingHost, held: TheHeldMember, tick_ms: 
     // A request for this launch that the tick had not yet read when the member ended is answered too (r=1 R1): the
     // member is stopped, by itself, and the verb waiting on it is told so rather than left to its deadline.
     const asked = acting ?? requestForThisLaunch(host.stores.lifecycle, held)
-    if (asked === undefined) return
+    // A restart is answered by whoever starts the member again (../restart_a_member's holdTheMember), once it has.
+    if (asked === undefined || asked.act === RESTART) return
     const outcome: LifecycleOutcome = { id: asked.id, ended_by: acting === undefined ? 'itself' : 'launcher', at: new Date(host.clock.now()).toISOString() }
     const answered = answerOnce(host.stores.lifecycle, held.member, asked, outcome)
     if ('refusal' in answered) return held.tellOwner(`${held.member} was stopped, and ${answered.refusal}`)

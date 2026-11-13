@@ -20,6 +20,7 @@ import { CLAUDE_CODE_SESSION_EVENTS, SESSION_START_OUTCOMES, readHandover, stamp
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const names = claudeCodeToolNames
 
@@ -194,7 +195,7 @@ test('a tainted session can still hand over: the host stamps it, no Write is nee
   const stamps = stampStore()
   const predecessor = taintedPredecessor(store, stamps)
 
-  assert.notEqual(answerToolCall({ names, tool: 'Write', session: predecessor, policy, launch, host: thisMachine }), undefined, 'the model may not Write')
+  assert.notEqual(answerToolCall({ names, tool: WHOLE_FILE_TOOL, session: predecessor, policy, launch, host: thisMachine }), undefined, 'the model may not Write')
   assert.equal(stamps.all.get(handover.file)?.predecessor_id, 'old')
 })
 

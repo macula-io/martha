@@ -1,32 +1,30 @@
 // On the recorded host, a member's own writes do not stop it, and an outsider's change still does (martha#132).
 //
 // The real `martha` command, the real Claude Code at the recorded version, the real relay and launcher; only the
-// model is a stand-in (./drive_the_recorded_host.ts). The relay CI job installs the recorded host and names it in
-// MARTHA_RECORDED_HOST; without it these tests are skipped. Everything a test makes is removed after it.
+// model is a stand-in (./drive_the_recorded_host.ts). Each case skips on RECORDED_HOST_SKIP:
+// ci.yml's relay job runs them with the recorded host, as prove_the_relay_loads/recorded_host_runs.json lists. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { approveAgain } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
 import {
   driveTheRecordedHost,
   firstRunDone,
   marthaOnATerminal,
   plainTextOf,
-  RECORDED_HOST_VARIABLE,
   type ModelScript,
   type RecordedHostRan,
 } from './drive_the_recorded_host.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
-
-const recordedHost = process.env[RECORDED_HOST_VARIABLE]
-const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -37,7 +35,7 @@ const OUTSIDER_BRANCH = 'outsider'
  * auto mode, which asks the model to judge each shell command first; the stand-in plays the member, not that judge,
  * so the mode is pinned to the one where the allow list alone decides.
  */
-const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: ['Write', 'Edit', 'Bash'] } })
+const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, EDIT_TOOL, CLAUDE_CODE_SHELL_TOOL] } })
 
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
@@ -75,7 +73,7 @@ function approvedProject(t: TestContext, more: Readonly<Record<string, string>> 
   git(checkout, 'commit', '-q', '-am', 'an outsider change')
   git(checkout, 'checkout', '-q', '-')
 
-  const place = { claude: recordedHost ?? '', home, checkout }
+  const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
   const declared = marthaOnATerminal(place, ['init'])
   assert.equal(declared.exit_code, 0, plainTextOf(declared.shown))
@@ -88,7 +86,7 @@ function approvedProject(t: TestContext, more: Readonly<Record<string, string>> 
 
 async function run(project: Project, requests: number, script: ModelScript): Promise<RecordedHostRan> {
   return driveTheRecordedHost({
-    claude: recordedHost ?? '',
+    claude: recordedHost(),
     ...project,
     member: MEMBER,
     owner_turn: OWNER_TURN,
@@ -106,11 +104,11 @@ const stoppedLine = (paths: string): string =>
 
 const END = { text: 'Done.' }
 
-test("a member's own Write, then one shell command that branches and commits it, does not stop it", { skip }, async (t) => {
+test("a member's own Write, then one shell command that branches and commits it, does not stop it", { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   const ran = await run(project, 3, ({ number }) =>
     [
-      { tool: 'Write', input: { file_path: join(project.checkout, 'hello.txt'), content: 'hello\n' } },
+      { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, 'hello.txt'), content: 'hello\n' } },
       { tool: 'Bash', input: { command: 'git checkout -q -b first-task && git add hello.txt && git commit -q -m "the hello note"' } },
     ][number - 1] ?? END,
   )
@@ -122,14 +120,14 @@ test("a member's own Write, then one shell command that branches and commits it,
   assert.equal(git(project.checkout, 'log', '-1', '--format=%s', 'first-task'), 'the hello note')
 })
 
-test('an outsider change brought in by a shell command stops the member, naming the path and martha approve', { skip }, async (t) => {
+test('an outsider change brought in by a shell command stops the member, naming the path and martha approve', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   const ran = await run(project, 2, ({ number }) => (number === 1 ? { tool: 'Bash', input: { command: `git checkout -q ${OUTSIDER_BRANCH}` } } : END))
   assert.ok(flat(ran.shown).includes(stoppedLine('README.md')), flat(ran.shown))
   assert.notEqual(ran.exit_code, 0)
 })
 
-test('an outsider writing beside the member is refused before its next call, and the model is told why', { skip }, async (t) => {
+test('an outsider writing beside the member is refused before its next call, and the model is told why', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   const read = { tool: 'Read', input: { file_path: join(project.checkout, 'README.md') } }
   const ran = await run(project, 3, ({ number }) => {
@@ -141,19 +139,19 @@ test('an outsider writing beside the member is refused before its next call, and
   assert.ok(third.includes('planted.txt') && third.includes('martha approve'), third.slice(-2000))
 })
 
-test("a member's own Write over a file whose lines end in CRLF does not stop it", { skip }, async (t) => {
+test("a member's own Write over a file whose lines end in CRLF does not stop it", { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   const ran = await run(project, 2, ({ number }) =>
-    number === 1 ? { tool: 'Write', input: { file_path: join(project.checkout, CRLF_FILE), content: 'one\r\ntwo\r\nthree\r\n' } } : END,
+    number === 1 ? { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, CRLF_FILE), content: 'one\r\ntwo\r\nthree\r\n' } } : END,
   )
   assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
   assert.equal(readFileSync(join(project.checkout, CRLF_FILE), 'utf8'), 'one\r\ntwo\r\nthree\r\n')
 })
 
-test("a member's own CRLF Write where git normalises line ends as it adds (text=auto) does not stop it", { skip }, async (t) => {
+test("a member's own CRLF Write where git normalises line ends as it adds (text=auto) does not stop it", { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t, { '.gitattributes': '* text=auto\n' })
   const ran = await run(project, 2, ({ number }) =>
-    number === 1 ? { tool: 'Write', input: { file_path: join(project.checkout, 'notes.txt'), content: 'one\r\ntwo\r\n' } } : END,
+    number === 1 ? { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, 'notes.txt'), content: 'one\r\ntwo\r\n' } } : END,
   )
   assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
   assert.equal(readFileSync(join(project.checkout, 'notes.txt'), 'utf8'), 'one\r\ntwo\r\n')
