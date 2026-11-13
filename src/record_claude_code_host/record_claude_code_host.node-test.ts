@@ -107,6 +107,20 @@ const RULE_PARTS: Readonly<Record<string, string>> = {
   file_permission_rules: `if(s.ruleContent!==void 0){${RECORDED_HOST.file_permission_rules.matcher}if(g!==void 0)return{valid:!0,warning:\`\${yn(s)} is not matched by file permission checks\`}}`,
 }
 
+
+/**
+ * The two lists the host keeps about the dialogs it raises (martha#313), in the shapes it spells them: the notification
+ * types as one array of its own words, and the hook events a module hears as the array the host maps to its
+ * `classic.<event>` names, through the one alias it holds it in.
+ */
+const DIALOG_PARTS: Readonly<Record<string, string>> = {
+  notification_types: `var aListOfTheHostsNotifications=[${RECORDED_HOST.notification_types.map((notification_type) => `"${notification_type}"`).join(',')}],kept=1`,
+  classic_hook_events: [
+    `var aListOfTheHostsEvents=[${RECORDED_HOST.classic_hook_events.map((event) => `"${event}"`).join(',')}],theAlias=aListOfTheHostsEvents`,
+    'var theModuleEvents=theAlias.map((e)=>`classic.${e}`)',
+  ].join(';'),
+}
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
   prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback,
@@ -121,6 +135,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...MARKDOWN_PARTS,
   ...PLACE_PARTS,
   ...RULE_PARTS,
+  ...DIALOG_PARTS,
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
