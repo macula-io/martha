@@ -67,18 +67,19 @@ const refused = (said: { told: string } | { refused: string }): string => {
 
 // --- test 1: every kind refuses a missing field, a line break, a hidden character, and a ruling a non-day -------------
 
+/** Every field of every kind, with each value it refuses and the words its refusal says. */
+const REFUSED_FIELDS = STANDING_KINDS.flatMap((kind) =>
+  FIELDS_OF_KIND[kind].flatMap((field) => [
+    { kind, field, value: undefined, says: `${field} is missing` },
+    ...['two\nlines', 'a\u202Ehidden turn', 'a\u200Bzero width'].map((value) => ({ kind, field, value, says: `${field} holds a line break` })),
+    { kind, field, value: 'x'.repeat(MAX_STANDING_FIELD + 1), says: `${field} is longer than ${MAX_STANDING_FIELD}` },
+  ]),
+)
+
 test('each kind refuses a missing field, a line break, a hidden character and an overlong field, by the field\'s name', () => {
-  for (const kind of STANDING_KINDS) {
-    for (const field of FIELDS_OF_KIND[kind]) {
-      const missing = theItemAsked({ ...A_CALL[kind], [field]: undefined }, 'Supervisor', NOW)
-      assert.ok('refused' in missing && missing.refused.includes(`${field} is missing`), `${kind}.${field} missing`)
-      for (const bad of ['two\nlines', 'a‮hidden turn', 'a​zero width']) {
-        const said = theItemAsked({ ...A_CALL[kind], [field]: bad }, 'Supervisor', NOW)
-        assert.ok('refused' in said && said.refused.includes(`${field} holds a line break`), `${kind}.${field} ${JSON.stringify(bad)}`)
-      }
-      const long = theItemAsked({ ...A_CALL[kind], [field]: 'x'.repeat(MAX_STANDING_FIELD + 1) }, 'Supervisor', NOW)
-      assert.ok('refused' in long && long.refused.includes(`${field} is longer than ${MAX_STANDING_FIELD}`), `${kind}.${field} long`)
-    }
+  for (const { kind, field, value, says } of REFUSED_FIELDS) {
+    const said = theItemAsked({ ...A_CALL[kind], [field]: value }, 'Supervisor', NOW)
+    assert.ok('refused' in said && said.refused.includes(says), `${kind}.${field} ${JSON.stringify(value)}`)
   }
 })
 

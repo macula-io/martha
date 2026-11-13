@@ -84,13 +84,15 @@ export interface TheOwnersRowShown {
   readonly copy: string
 }
 
+/** Whether the standing part of an answer is lines the pane can draw (martha#317). */
+const areLines = (standing: unknown): standing is readonly string[] => Array.isArray(standing) && standing.every((line) => typeof line === 'string')
+
 /** The owner's list from the launcher's answer, or null when it is not one the pane can draw. */
 export function theOwnersListIn(said: string): TheOwnersListShown | null {
   try {
     const parsed = JSON.parse(said) as Partial<TheOwnersListShown>
     const { heading, claim, focus, next, rows, standing, lines } = parsed
-    if (typeof heading !== 'string' || typeof claim !== 'string' || typeof focus !== 'string' || typeof next !== 'string') return null
-    if (!Array.isArray(standing) || standing.some((line) => typeof line !== 'string')) return null
+    if (typeof heading !== 'string' || typeof claim !== 'string' || typeof focus !== 'string' || typeof next !== 'string' || !areLines(standing)) return null
     return Array.isArray(rows) && typeof lines === 'number' ? { heading, claim, focus, next, rows, standing, lines } : null
   } catch {
     return null

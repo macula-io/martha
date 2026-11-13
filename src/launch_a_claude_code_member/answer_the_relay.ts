@@ -419,16 +419,19 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
   const reported = sessionStartOf(body as SessionStartHookInput)
   await state.place.records.load(reported.session_id)
   const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, await asTheCrewsRefresh(state, reported))
-  // What the crew hands this session is taken in with what the launch hands it (martha#317), before the record is kept:
-  // a line the record does not hold would reach the model with no gate behind it.
   const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
-  const handed = [...state.place.handed_at_start, ...(lineToStartOn?.taken_in ?? [])].reduce(
-    (session, source) => takeInTurn(session, { source }, state.place.binder),
-    started,
-  )
-  const why = await keep(state, handed)
+  const why = await keep(state, takenInAtStart(state, started, lineToStartOn))
   if (why !== undefined) return refused(why)
   return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn.line })
+}
+
+/**
+ * A starting session with every source it is handed taken in: what the launch hands it, and what the crew's start line
+ * carries (martha#317), before the record is kept. A line the record does not hold would reach the model with no gate
+ * behind it.
+ */
+function takenInAtStart(state: RelayState, started: HostSession, line: TheStartLine | null): HostSession {
+  return [...state.place.handed_at_start, ...(line?.taken_in ?? [])].reduce((session, source) => takeInTurn(session, { source }, state.place.binder), started)
 }
 
 /**
