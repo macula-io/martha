@@ -76,10 +76,10 @@ export function plantedValueCounter(value: string): { readonly scan: (chunk: str
   }
 }
 
-/** What the run says when the planted value was printed: the streams and counts, never the line. */
 /** The words a run's leak report opens with: what the runner of the recorded-host runs looks for (martha#383). */
 export const LEAK_REPORT_OPENING = 'no test output carries the environment (martha#92)'
 
+/** What the run says when the planted value was printed: the streams and counts, never the line. */
 export function environmentLeakReportOf(counts: Readonly<Record<StreamName, number>>): string {
   const where = (Object.entries(counts) as [StreamName, number][])
     .filter(([, n]) => n > 0)
