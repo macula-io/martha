@@ -12,12 +12,18 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
+import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { shellGateRowsNothingRecords } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import {
@@ -89,10 +95,34 @@ function placeOf(t: TestContext): { readonly home: string; readonly checkout: st
   return { home, checkout, rows }
 }
 
+/**
+ * The crew a member of a solo crew holds, with one standing item recorded (martha#317): what the crew hands a session
+ * at its start is a source the record takes in, so the drive starts its sessions with a crew that hands one.
+ */
+async function aCrewThatHandsAStandingItem(place: { readonly home: string; readonly checkout: string; readonly rows: string }): Promise<CrewTools> {
+  // A solo crew's table grants assign_work to the owner alone, so each of its members keeps the items (#316's answer).
+  const member = SOLO_MEMBERS[0].name
+  mkdirSync(join(place.checkout, DECLARATION_DIRECTORY))
+  writeFileSync(join(place.checkout, DECLARATION_DIRECTORY, DECLARATION_FILE), JSON.stringify(soloDeclaration('an owner')))
+  mkdirSync(join(place.home, 'beats'), { mode: 0o700 })
+  const ledger = { clock: { now: () => 0 }, stores: { rows: rowStreamsDirectory(place.rows) } }
+  const recorded = await recordAStandingItem(ledger, { kind: 'held', id: 'a-package', item: 'a pull request', reason: 'a demo', until: 'the demo is over' }, member)
+  assert.ok('told' in recorded, 'refused' in recorded ? recorded.refused : '')
+  return crewToolsOver({
+    member,
+    ledger,
+    beats: dashboardRowsIn(join(place.home, 'beats')),
+    root: place.checkout,
+    documents: { read: async (path) => readFileSync(path, 'utf8') },
+    stores: { crew: crewFilesDirectory(join(place.home, 'crew-store')) },
+  })
+}
+
 /** Drives the relay with every declared event, each in a session of its own; returns every recorded path. */
 async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[]> {
   const place = placeOf(t)
   const rows = rowStreamsDirectory(place.rows)
+  const crew = await aCrewThatHandsAStandingItem(place)
   const relay: MemberRelay = memberRelay({
     records: sessionRecordsIn(rows),
     launch: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [] },
@@ -111,6 +141,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
       markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
     }),
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) }),
+    crew,
     stopMember: () => {},
   })
 
@@ -159,6 +190,12 @@ test('the drive is not vacuous: without what the launch hands the model at start
   const handed = [PATH_OF_SOURCE.checkout_hook, PATH_OF_SOURCE.server_instructions]
   const named = shellGateRowsNothingRecords(recorded.filter((path) => !handed.includes(path))).map((gap) => gap.path)
   assert.ok(handed.every((row) => named.includes(row)), named.join(', '))
+})
+
+test('the drive is not vacuous: without the standing items the crew hands the model at start, A20 is named', async (t) => {
+  const recorded = await pathsTheLauncherRecords(t)
+  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.standing_items)).map((gap) => gap.path)
+  assert.ok(named.includes(PATH_OF_SOURCE.standing_items), named.join(', '))
 })
 
 /** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
