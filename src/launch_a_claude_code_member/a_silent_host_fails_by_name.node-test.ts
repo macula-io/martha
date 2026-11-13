@@ -33,6 +33,7 @@ import {
 } from './keep_the_relays_journal.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing, type ModelAttempt } from './wait_while_the_host_keeps_showing.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** Looks a wait may take before the test calls it a wait that never gives up, rather than asking the harness.
  * Far above the slowest case here (ten budgets of looks, 12 000), so only a wait that never ends reaches it. */
@@ -178,8 +179,8 @@ type Host = ReturnType<typeof aHostOfTheTests>
 const aCall = (tool: string, tool_use_id: string) => ({ session_id: 'session-of-the-test', call: { tool, tool_use_id } })
 
 /** The call each case makes, and the tool a red may name it by. */
-const THE_CALL = aCall('Write', 'call_00_the_test')
-const THE_TOOL = 'Write'
+const THE_CALL = aCall(WHOLE_FILE_TOOL, 'call_00_the_test')
+const THE_TOOL = WHOLE_FILE_TOOL
 
 /**
  * A journal of the tests: the launcher's own writer, in a directory the test removes, on the clock the test moves. The

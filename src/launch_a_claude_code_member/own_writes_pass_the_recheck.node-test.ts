@@ -32,6 +32,7 @@ import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_rel
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -128,7 +129,7 @@ async function wrote(place: Checkout, path: string, content: string, on_disk = c
   const file = join(place.checkout, path)
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, on_disk)
-  return place.relay.answer('tool_answered', call('Write', { file_path: file, content }))
+  return place.relay.answer('tool_answered', call(WHOLE_FILE_TOOL, { file_path: file, content }))
 }
 
 const blobOf = (place: Checkout, path: string): string => git(place.checkout, 'hash-object', '--', path)
@@ -180,7 +181,7 @@ test('an own write is kept with its eight fields: the real path, the blob and mo
     path: join(place.checkout, 'hello.txt'),
     blob: blobOf(place, 'hello.txt'),
     mode: OWN_WRITE_MODES[0],
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_Write',
     session: SESSION,
     launch: LAUNCH,
@@ -192,16 +193,16 @@ test("an Edit and a NotebookEdit are own writes of the file they name, as it is 
   const place = checkoutFor(t)
   await started(place)
   writeFileSync(join(place.checkout, 'README.md'), 'edited\n')
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_answered', call(EDIT_TOOL, { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), TAKEN_REPLY)
   writeFileSync(join(place.checkout, 'book.ipynb'), '{"cells":[]}\n')
-  assert.deepEqual(await place.relay.answer('tool_answered', call('NotebookEdit', { notebook_path: join(place.checkout, 'book.ipynb'), new_source: 'x' })), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_answered', call(NOTEBOOK_EDIT_TOOL, { notebook_path: join(place.checkout, 'book.ipynb'), new_source: 'x' })), TAKEN_REPLY)
   const kept = allOwnWrites(place.state)
   assert.ok('writes' in kept)
   assert.deepEqual(
     kept.writes.map(({ path, blob, tool }) => ({ path, blob, tool })),
     [
-      { path: join(place.checkout, 'README.md'), blob: blobOf(place, 'README.md'), tool: 'Edit' },
-      { path: join(place.checkout, 'book.ipynb'), blob: blobOf(place, 'book.ipynb'), tool: 'NotebookEdit' },
+      { path: join(place.checkout, 'README.md'), blob: blobOf(place, 'README.md'), tool: EDIT_TOOL },
+      { path: join(place.checkout, 'book.ipynb'), blob: blobOf(place, 'book.ipynb'), tool: NOTEBOOK_EDIT_TOOL },
     ],
   )
   assert.deepEqual(place.stops, [])
@@ -211,9 +212,9 @@ test('a path the member gives relative to where it started, from its home, or wi
   const place = checkoutFor(t)
   await started(place)
   writeFileSync(join(place.checkout, 'hello.txt'), 'hello\n')
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: ' hello.txt ', content: 'hello\n' })), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_answered', call(WHOLE_FILE_TOOL, { file_path: ' hello.txt ', content: 'hello\n' })), TAKEN_REPLY)
   writeFileSync(join(place.checkout, 'other.txt'), 'other\n')
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: '~/checkout/other.txt', content: 'other\n' })), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_answered', call(WHOLE_FILE_TOOL, { file_path: '~/checkout/other.txt', content: 'other\n' })), TAKEN_REPLY)
   assert.deepEqual(place.stops, [])
 })
 
@@ -242,7 +243,7 @@ test("another launch's record of the same bytes does not pass a path", async (t)
     path: join(place.checkout, 'outsider.txt'),
     blob: blobOf(place, 'outsider.txt'),
     mode: OWN_WRITE_MODES[0],
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_other',
     session: SESSION,
     launch: 'another-launch',
@@ -301,7 +302,7 @@ test('a directory named by a Write is not an own write: nothing is kept, and the
   await started(place)
   const directory = join(place.checkout, 'notes')
   mkdirSync(directory)
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Write', { file_path: directory, content: 'hello\n' })), TAKEN_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_answered', call(WHOLE_FILE_TOOL, { file_path: directory, content: 'hello\n' })), TAKEN_REPLY)
   assert.deepEqual(allOwnWrites(place.state), { writes: [], unread: [] })
   assert.deepEqual(place.stops, [])
 })

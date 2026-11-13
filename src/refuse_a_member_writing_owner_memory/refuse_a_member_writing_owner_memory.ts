@@ -96,7 +96,7 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
+import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import type { ProtectedConfigPlaces } from '../claude_code_host/protected_config_places.ts'
@@ -106,7 +106,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 
 /** The file tools a member writes a file with. */
-export const FILE_WRITING_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'] as const
+export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const
 
 /** The variable that moves the folder of every project's memory under another root. */
 export const REMOTE_MEMORY_ROOT = 'CLAUDE_CODE_REMOTE_MEMORY_DIR'
@@ -1042,7 +1042,7 @@ export function userScopeUnder(home: string): OwnerUserScope {
 export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
   const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
   const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [], user_scope: userScopeUnder(probe.home) })
-  return writesTheOwnersMemory('Write', { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine) === undefined
+  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine) === undefined
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)

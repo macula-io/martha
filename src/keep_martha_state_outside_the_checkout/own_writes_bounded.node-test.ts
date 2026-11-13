@@ -19,6 +19,7 @@ import {
   WHAT_A_SIGNED_RUN_NEEDS,
   type MarthaState,
 } from './keep_martha_state_outside_the_checkout.ts'
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const NEWLINE = '\n'
 
@@ -40,7 +41,7 @@ function ownWrite(fields: Partial<OwnWrite> = {}): OwnWrite {
     path: '/project/hello.txt',
     blob: SHA1_BLOB,
     mode: OWN_WRITE_MODES[0],
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_1',
     session: 'session-1',
     launch: 'launch-1',
@@ -66,7 +67,7 @@ function kept(state: MarthaState, write: OwnWrite): void {
 test('a complete last line whose newline was lost is kept, so a crash does not drop a write it finished (martha#157)', (t) => {
   const state = stateFor(t)
   const first = ownWrite()
-  const lost = ownWrite({ path: '/project/next.txt', blob: OTHER_SHA1_BLOB, tool: 'Edit', tool_use_id: 'toolu_2' })
+  const lost = ownWrite({ path: '/project/next.txt', blob: OTHER_SHA1_BLOB, tool: EDIT_TOOL, tool_use_id: 'toolu_2' })
   mkdirSync(ownWritesDirectory(state), { recursive: true, mode: 0o700 })
   writeFileSync(filePath(state, 'launch-1'), `${JSON.stringify(first)}${NEWLINE}${JSON.stringify(lost)}`, { mode: STATE_FILE_MODE })
   assert.deepEqual(ofLaunch(state, 'launch-1'), { writes: [first, lost] })
