@@ -18,6 +18,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS, OWNER } from '../de
 import type { CoreToolAnswer, CrewTools } from './a_crews_tools.ts'
 import { crewToolsOver } from './a_crews_tools.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -95,7 +96,10 @@ interface ACrew {
   readonly at: (moment: number) => void
 }
 
-function aCrew(t: TestContext, changes: { readonly member?: string; readonly nudges?: boolean } = {}): ACrew {
+function aCrew(
+  t: TestContext,
+  changes: { readonly member?: string; readonly nudges?: boolean; readonly processes?: HostContract['processes'] } = {},
+): ACrew {
   const home = mkdtempSync(join(tmpdir(), 'martha-320-pane-'))
   t.after(() => removeTheTree(home))
   const root = join(home, 'checkout')
@@ -121,6 +125,7 @@ function aCrew(t: TestContext, changes: { readonly member?: string; readonly nud
     root,
     documents: { read: (path: string) => readFile(path, 'utf8') },
     stores: { crew: crewFilesDirectory(crew) },
+    ...(changes.processes === undefined ? {} : { processes: changes.processes }),
   })
   const at = (moment: number): void => started.advanceClock(moment - started.host.clock.now())
   /** Keeps a row, and fails loudly when the store would not: a row a test wrote but the crew never read proves nothing. */
@@ -192,4 +197,51 @@ test('r=2 R2: a member the crew parked is drawn as parked, however busy its row 
 
   const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
   assert.deepEqual(drawn.filter((line) => line.includes(OTHER)), [], `a parked member was drawn as stalled: ${JSON.stringify(drawn)}`)
+})
+
+/** A GitHub that answers what a head read asks, and keeps every call the crew made through it. */
+function aCountedGithub(): { readonly asked: readonly string[][]; readonly processes: HostContract['processes'] } {
+  const asked: string[][] = []
+  const run = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    asked.push([...request.args])
+    if (request.args.includes('rate_limit')) {
+      const reset = Math.trunc((Date.now() + HOUR) / 1000)
+      return { exit_code: 0, stdout: JSON.stringify({ resources: { core: { remaining: 4_000, reset } } }), stderr: '' }
+    }
+    const listed = [{ number: 1, headRefOid: 'f'.repeat(40), state: 'OPEN', title: 'feat(#320): a thing', body: '' }]
+    return { exit_code: 0, stdout: JSON.stringify(listed), stderr: '' }
+  }
+  return { asked, processes: hostForTests({ run }).host.processes }
+}
+
+test('#320 B: only the receiver\'s launcher asks GitHub, and what it asks is spent through the budget', async (t) => {
+  const github = aCountedGithub()
+  const crew = aCrew(t, { processes: github.processes })
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 2 * HOUR })
+
+  await crew.tools.answer('see_the_crew', {}, 'a-session')
+  assert.ok(github.asked.length > 0, 'the receiver\'s pane asked GitHub nothing, so no head can ever move')
+  assert.ok(github.asked.every((args) => args.includes('rate_limit') || args.includes('pr')), `something other than the budget's own reads reached GitHub: ${JSON.stringify(github.asked)}`)
+})
+
+test('#320 B: a member that reads no nudges asks GitHub nothing', async (t) => {
+  const github = aCountedGithub()
+  const crew = aCrew(t, { member: MEMBER, processes: github.processes })
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 2 * HOUR })
+
+  await crew.tools.answer('see_the_crew', {}, 'a-session')
+  assert.deepEqual(github.asked, [], 'a member the table grants no work to spent the crew\'s GitHub allowance')
+})
+
+test('#320 B: a hand-off whose pull request has moved off its tip is drawn as a head on the pane', async (t) => {
+  const github = aCountedGithub()
+  const crew = aCrew(t, { processes: github.processes })
+  crew.at(NOW - 2 * HOUR)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 2 * HOUR })
+  crew.at(NOW)
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  const heads = drawn.filter((line) => line.startsWith('- head: '))
+  assert.equal(heads.length, 1, `the moved head was not drawn: ${JSON.stringify(drawn)}`)
+  assert.match(heads[0] ?? '', /#320/, 'the head drawn is not the hand-off\'s package')
 })
