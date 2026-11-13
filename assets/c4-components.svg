@@ -220,9 +220,9 @@
 <text class="t-desc" x="680" y="1384">show_dashboard_beat holds a member's row</text>
 <text class="t-desc" x="680" y="1400">and the rule the newest beat wins;</text>
 <text class="t-desc" x="680" y="1416">report_progress moves it, see_the_crew</text>
-<text class="t-desc" x="680" y="1432">lays every one out, and a_crews_tools</text>
-<text class="t-desc" x="680" y="1448">answers every tool the crew</text>
-<text class="t-desc" x="680" y="1464">registers.</text>
+<text class="t-desc" x="680" y="1432">lays every one out, see_who_is_free</text>
+<text class="t-desc" x="680" y="1448">says who can take a package, and</text>
+<text class="t-desc" x="680" y="1464">a_crews_tools answers every crew tool.</text>
 <text class="t-desc" x="680" y="1480">keep_the_ledger loads log_ledger, whose</text>
 <text class="t-desc" x="680" y="1496">streams sit in the crew's own state;</text>
 <text class="t-desc" x="680" y="1512">keep_the_crew_channel is where a message</text>
