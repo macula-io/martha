@@ -77,9 +77,9 @@ function theDeclaration(nudges: boolean): string {
       roles: [SUPERVISOR, 'builder'],
       may: { assign_work: [SUPERVISOR], approve_landing: [OWNER], resume_parked_work: [SUPERVISOR] },
     },
-    house_rules: nudges
-      ? { nudges: true, stalled_minutes: STALLED / MINUTE_MS, review_minutes: REVIEW / MINUTE_MS, person_minutes: PERSON / MINUTE_MS }
-      : { nudges: false },
+    // The windows are named whether the switch is on or off: a crew that turned nudges off and kept its windows is
+    // what tells a launcher that ignores the switch apart from one that reads it.
+    house_rules: { nudges, stalled_minutes: STALLED / MINUTE_MS, review_minutes: REVIEW / MINUTE_MS, person_minutes: PERSON / MINUTE_MS },
     channel_read_seconds: 30,
   })
 }
@@ -105,7 +105,10 @@ function aCrew(t: TestContext, changes: { readonly member?: string; readonly nud
   const crew = join(home, 'crew-store')
   mkdirSync(crew, { recursive: true })
 
+  // The crew's clock starts an afternoon earlier, so a test that writes a message or a landing at a moment does it by
+  // advancing to that moment; every test reads the pane at NOW.
   const started = hostForTests({ now: NOW - 12 * HOUR })
+  started.advanceClock(12 * HOUR)
   const rows = join(home, 'row-streams')
   mkdirSync(rows, { recursive: true, mode: 0o700 })
   const ledger = { clock: started.host.clock, stores: { rows: rowStreamsDirectory(rows) } }
