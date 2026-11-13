@@ -48,7 +48,7 @@
 // the host it reads through.
 
 import { createHash } from 'node:crypto'
-import { dirname, join, relative, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
@@ -432,15 +432,29 @@ function crewTextDirectoryIn(crewText: readonly ConfigEntry[]): string | undefin
  */
 export function readCrewText(place: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
   const start = realOrResolved(machine, place.launch_dir)
-  return (place.crew_text_files ?? []).map((file) => entryOf(machine, start, realOrResolved(machine, file)))
+  return (place.crew_text_files ?? []).map((file) => entryOf(machine, start, crewTextAt(machine, file)))
+}
+
+/**
+ * Where a crew text file stands for the approval (martha#306 r=3): the directories above it resolved, as the launch's
+ * own start is, and the file itself as the crew names it. A link at the file's own path stays a link, so the decision
+ * refuses it by name — resolving the file too would approve the file it points at, and the launch would then hand the
+ * link's path to a lookup keyed by the target, find nothing, and quietly hand Martha's shipped text instead (a link at
+ * `.crew/roles/builder.md` pointing at `docs/builder.md` did exactly that).
+ */
+function crewTextAt(machine: LaunchHost, file: string): string {
+  const absolute = resolve(file)
+  return join(realOrResolved(machine, dirname(absolute)), basename(absolute))
 }
 
 /**
  * The crew's own text files as `readCrewText` names them: the entries whose bytes a launch carries into its snapshot
- * and hands to every session it starts, rather than passing them over as config it does not load (martha#306).
+ * and hands to every session it starts, rather than passing them over as config it does not load (martha#306). It reads
+ * its paths through `crewTextAt`, the same way `readCrewText` does, so the two can never come to name a file
+ * differently.
  */
 function crewTextPathsOf(place: LaunchPlace, start: string, machine: LaunchHost): ReadonlySet<string> {
-  return new Set((place.crew_text_files ?? []).map((file) => pathFrom(start, realOrResolved(machine, file))))
+  return new Set((place.crew_text_files ?? []).map((file) => pathFrom(start, crewTextAt(machine, file))))
 }
 
 export type PreparedLaunch =

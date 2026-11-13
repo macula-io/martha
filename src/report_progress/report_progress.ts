@@ -67,6 +67,8 @@ export interface ProgressTaken {
   readonly progress: { readonly step: number; readonly of: number }
   readonly waits: Waits | null
   readonly holds: string
+  /** When this report was taken (martha#319): the one writer of the row's `reported_at`. */
+  readonly reported_at: number
   /** What the member should see, and why: never a refusal of its work. */
   readonly warnings: readonly string[]
 }
@@ -115,6 +117,7 @@ export function takeProgress(
     progress: { step, of },
     waits: wait.waits,
     holds,
+    reported_at: now,
     warnings,
   }
   return { taken, told: toldOf(taken, wait.not_recorded) }

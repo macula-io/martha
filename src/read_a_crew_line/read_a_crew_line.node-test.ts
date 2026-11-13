@@ -107,22 +107,22 @@ test('#253: every line the generated card text teaches reads, and adds its row t
   }
 })
 
-test('#253: a VERDICT adds the round it closed, and a HANDOFF the act it announced', async () => {
+test('#253: a VERDICT adds the verdict it gave, and a HANDOFF the act it announced (martha#350)', async () => {
   const host = ledgerHost()
   const verdict = readACrewLine(WELL_FORMED[1] ?? '')
   assert.ok('line' in verdict && verdict.line !== null)
   await keepTheLinesRow(host, 'Mercurius', verdict.line)
-  assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['review_round_closed'])
+  assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['verdict_given'])
 
   const handoff = readACrewLine(WELL_FORMED[0] ?? '')
   assert.ok('line' in handoff && handoff.line !== null)
   await keepTheLinesRow(host, 'Pallas', handoff.line)
-  assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['review_round_closed', 'act_announced', 'act_concluded'])
+  assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['verdict_given', 'act_announced', 'act_concluded'])
 })
 
 /** The text each row kept of a line: a VERDICT's note, or the act a HANDOFF announced. */
 const keptTextOf = (rows: Awaited<ReturnType<typeof readLedger>>): readonly string[] =>
-  rows.flatMap((row) => (row.kind === 'review_round_closed' ? [row.note] : row.kind === 'act_announced' ? [row.act.what] : []))
+  rows.flatMap((row) => (row.kind === 'verdict_given' ? [row.note] : row.kind === 'act_announced' ? [row.act.what] : []))
 
 test('#256: the row a line writes carries the whole line, so its range reads back out of the ledger', async () => {
   for (const written of WELL_FORMED) {

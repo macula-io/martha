@@ -3,7 +3,9 @@
 // Two kinds of row live here, in one append-only stream per package.
 //
 //   MILESTONES a member keeps as it works: a checkpoint reached, a review round
-//   closed, a release shipped, a fix shipped after a release.
+//   closed, a release shipped, a fix shipped after a release. And one the tool a
+//   member logs with never keeps: the verdict a VERDICT line gives, which is what
+//   the landing reads (martha#350).
 //
 //   OUTWARD ACTS: a push, a handoff, a room message, a tag. Each act gets its row
 //   BEFORE it runs (#15 finding 2, "commit before dispatch"). If the store does
@@ -31,12 +33,19 @@
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
-/** The milestones a member keeps on a package. */
+/**
+ * The milestones a member keeps on a package, and the one only a VERDICT line keeps (martha#350): the verdict that
+ * ended a review round. The tool a member logs with cannot write it: it maps its own events onto the milestones above
+ * (../keep_the_ledger) and this name is not among them, so a review round a member logs passes no head. A line does
+ * write it, and the member that sends the line is not checked (../send_a_crew_message, martha#253), so a verdict row
+ * can still be claimed: what this kind shuts is the log path, not the say path.
+ */
 export const MILESTONES = [
   'checkpoint_reached',
   'review_round_closed',
   'release_shipped',
   'fix_shipped_after_release',
+  'verdict_given',
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
 

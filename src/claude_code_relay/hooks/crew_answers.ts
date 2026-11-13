@@ -57,3 +57,39 @@ export function paneIn(said: string): ThePaneShown | null {
     return null
   }
 }
+
+/**
+ * The owner's to-do list as the pane draws it (martha#316): the launcher's `TodoPane` in
+ * ../../keep_the_owners_todo_list, which this copy cannot import. Only the focused row is revealed, and only a
+ * revealed row carries the text a copy puts on the clipboard; ./crew_answers.node-test.ts holds the two shapes together.
+ */
+export interface TheOwnersListShown {
+  readonly heading: string
+  readonly claim: string
+  readonly focus: string
+  readonly next: string
+  readonly rows: readonly TheOwnersRowShown[]
+  readonly lines: number
+}
+
+/** One row of the owner's list as the pane draws it. */
+export interface TheOwnersRowShown {
+  readonly id: string
+  readonly heading: string
+  readonly goal: string
+  readonly revealed: boolean
+  readonly acts: readonly { readonly does: string; readonly line: string }[]
+  readonly copy: string
+}
+
+/** The owner's list from the launcher's answer, or null when it is not one the pane can draw. */
+export function theOwnersListIn(said: string): TheOwnersListShown | null {
+  try {
+    const parsed = JSON.parse(said) as Partial<TheOwnersListShown>
+    const { heading, claim, focus, next, rows, lines } = parsed
+    if (typeof heading !== 'string' || typeof claim !== 'string' || typeof focus !== 'string' || typeof next !== 'string') return null
+    return Array.isArray(rows) && typeof lines === 'number' ? { heading, claim, focus, next, rows, lines } : null
+  } catch {
+    return null
+  }
+}
