@@ -39,6 +39,8 @@
 
 import {
   answeredBody,
+  checkedBody,
+  dialogBody,
   heardStart,
   RELAY_DEADLINE_MS,
   RELAY_ORIGIN,
@@ -53,18 +55,11 @@ import {
 /** The calls on the engine's `$` this module makes. */
 export interface RelayEngine {
   readonly env: { get(name: string): Promise<string | undefined> }
-  readonly http: {
-    fetch(
-      url: string,
-      init: { readonly method: string; readonly headers: Record<string, string>; readonly body: string; readonly socketPath: string },
-    ): Promise<{ readonly status: number; readonly text: string }>
-  }
+  readonly http: { fetch(url: string, init: { readonly method: string; readonly headers: Record<string, string>; readonly body: string; readonly socketPath: string }): Promise<{ readonly status: number; readonly text: string }> }
   readonly session: { id(): Promise<string> }
   readonly clock: { after(ms: number, fn: () => void): { cancel(): void } }
   readonly fs: { read(path: string): Promise<string> }
-  readonly process: {
-    run(argv: readonly string[], init?: { readonly timeoutMs?: number }): Promise<{ readonly exitCode: number }>
-  }
+  readonly process: { run(argv: readonly string[], init?: { readonly timeoutMs?: number }): Promise<{ readonly exitCode: number }> }
   readonly ui: { toast(text: string): unknown }
 }
 
@@ -95,6 +90,12 @@ export type ClassicSessionStart = Readonly<Record<string, unknown>>
 /** A SubagentStart/SubagentStop hook's input (martha#170): the host's own fields, relayed whole. */
 export type ClassicSubagent = Readonly<Record<string, unknown>>
 
+/** A dialog the host raises for the owner (martha#313): its own fields, read once by ./relay_protocol and no other way. */
+export type ClassicDialog = Readonly<Record<string, unknown>>
+
+/** The host's own check of a call, before it may ask the owner about one (martha#313): the call it names, and the rest. */
+export type ToolChecked = Readonly<Record<string, unknown>>
+
 /**
  * A prompt as the engine submits it: its text, the origin it stamped, and the
  * command and meta mark that tell the launcher typing from an expansion
@@ -103,18 +104,13 @@ export type ClassicSubagent = Readonly<Record<string, unknown>>
 export interface PromptSubmitted {
   readonly text: string
   readonly origin: Readonly<Record<string, unknown>>
-  readonly command?: unknown
-  readonly isMeta?: unknown
   readonly [field: string]: unknown
 }
 
 export type PromptAnswer = { readonly drop: string } | Readonly<Record<string, unknown>>
 
 /** A tool call as the engine raises it: the tool's name and its input fields. */
-export interface ToolCalled {
-  readonly tool: string
-  readonly [field: string]: unknown
-}
+export type ToolCalled = { readonly tool: string; readonly [field: string]: unknown }
 
 export type ToolAnswer = { readonly deny: string } | Readonly<Record<string, unknown>>
 
@@ -204,6 +200,17 @@ export async function stopThisMember($: RelayEngine, why: string): Promise<never
   }
 }
 
+
+/**
+ * A dialog the host raises for the owner (martha#313): what it says reaches the launcher, and the host's own dialog
+ * still reaches the owner. Nothing here is gated and nothing is dropped — the relay answers for a member's gates, never
+ * for the person the host is asking — so the answer is the rest of the chain, whatever the launcher said.
+ */
+async function heardDialog($: RelayEngine, hook: string, e: ClassicDialog, next: RelayNext<ClassicDialog, unknown>): Promise<unknown> {
+  await relay($, 'owner_dialog', dialogBody(await $.session.id(), hook, e), heardTaken)
+  return next(e)
+}
+
 /** The relay's hooks. */
 export const register = (on: RelayOn): void => {
   on<ClassicSessionStart, unknown>('classic.SessionStart', async ($, e, next) => {
@@ -240,6 +247,28 @@ export const register = (on: RelayOn): void => {
     const session_id = await $.session.id()
     const heard = await relay($, 'subagent_stopped', subagentBody(session_id, e), heardTaken)
     return heard.yes ? next(e) : { drop: refusal(heard.why) }
+  }).catch(async (_$, e, next) => next(e))
+
+
+  // What the host is asking the owner (martha#313): the four dialogs it raises in its own terminal. They are heard and
+  // never gated: the owner's answer is the host's, and a relay that cannot be heard must not stand between the two.
+  //
+  // The five are spelled out, not looped, for the same reason as the two above: the host's plugin validator reads this
+  // file and refuses a relay whose `on(...)` names its event by anything but a string literal.
+  on<ClassicDialog, unknown>('classic.PermissionRequest', async ($, e, next) => heardDialog($, 'classic.PermissionRequest', e, next)).catch(async (_$, e, next) => next(e))
+
+  on<ClassicDialog, unknown>('classic.Elicitation', async ($, e, next) => heardDialog($, 'classic.Elicitation', e, next)).catch(async (_$, e, next) => next(e))
+
+  on<ClassicDialog, unknown>('classic.ElicitationResult', async ($, e, next) => heardDialog($, 'classic.ElicitationResult', e, next)).catch(async (_$, e, next) => next(e))
+
+  on<ClassicDialog, unknown>('classic.Notification', async ($, e, next) => heardDialog($, 'classic.Notification', e, next)).catch(async (_$, e, next) => next(e))
+
+  // The host checks a call before it may ask the owner about it, and that check is the only place a permission's call
+  // has an id: the question itself carries none (martha#313). Its answer is the engine's own decision and is handed
+  // back untouched — a `tool.check` that answered anything else would decide a call Martha never saw.
+  on<ToolChecked, unknown>('tool.check', async ($, e, next) => {
+    await relay($, 'tool_checked', checkedBody(await $.session.id(), e), heardTaken)
+    return next(e)
   }).catch(async (_$, e, next) => next(e))
 
   on<ToolCalled, ToolAnswer>('tool.call', async ($, e, next) => {

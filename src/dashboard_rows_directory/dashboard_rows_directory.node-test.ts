@@ -11,7 +11,7 @@ import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from './dashboard_rows_directory.ts'
 
 /** A rows directory the test owns, removed when it ends. */
 function aPlace(t: TestContext): string {

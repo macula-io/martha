@@ -26,7 +26,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay } from './answer_the_relay.ts'
-import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
 

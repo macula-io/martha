@@ -36,9 +36,24 @@ export const RELAY_PATHS = {
   // agent's answer reaches us: the host delivers it into the member's turn with no tool result to place it on.
   subagent_started: '/subagent-started',
   subagent_stopped: '/subagent-stopped',
+  // What the host is asking the owner (martha#313): the dialog it put in its own terminal, and the check it runs about
+  // a call before it may ask about one. The check names the call the question is about, which the question itself
+  // carries no id for.
+  owner_dialog: '/owner-dialog',
+  tool_checked: '/tool-checked',
 } as const
 
 export type RelayEvent = keyof typeof RELAY_PATHS
+
+/** A dialog the host raised (martha#313): the hook's own name, and its input exactly as the host sent it. */
+export function dialogBody(session_id: string, hook: string, e: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  return { session_id, hook, fields: e }
+}
+
+/** A call the host checked before it may ask the owner about one (martha#313): the check, exactly as it ran it. */
+export function checkedBody(session_id: string, e: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  return { session_id, check: e }
+}
 
 /**
  * Where `martha run <name>` asks the launcher to run a shape the owner signed (martha#129). Not a hook event: the
