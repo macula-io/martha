@@ -18,7 +18,7 @@ import type { Exception } from '../../prove_the_core/no_literal_restates_a_value
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
-import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_REFRESH_ASK, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
@@ -119,5 +119,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: PARKED_PLACE, file: 'nudge_the_supervisor/nudge_the_supervisor.node-test.ts', reason: 'the dashboard row\'s state, not the place a crew keeps its park markers in' },
   { value: PARKED_PLACE, file: 'watch_waits/watch_waits.ts', reason: 'the dashboard row\'s state, read where a chain ends; not the place a crew keeps its park markers in' },
   { value: PARKED_PLACE, file: 'watch_waits/watch_waits.node-test.ts', reason: 'the dashboard row\'s state, not the place a crew keeps its park markers in' },
+  // A member trying to log the landing (martha#320). The test asks the ledger to refuse three spellings of it, and the
+  // third is also the name of the branch prefix a landing pushes from: the same word, and neither is the other.
+  { value: LAND, file: 'keep_the_ledger/keep_the_ledger.node-test.ts', reason: 'a milestone spelling the ledger must refuse, not the branch prefix a landing pushes from' },
 ]
 
