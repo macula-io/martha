@@ -237,6 +237,63 @@ test('every directory in src/ is drawn in a component box or declared left out',
   assert.deepEqual(missing, [], `in no box and not declared left out: ${missing.join(', ')}`)
 })
 
+// The Components table on the page has a row per box, and a box drawn with no row is the page short of
+// its own picture while every other check stays green (martha#299). A row answers for a box when its
+// Component cell names a directory the box stands for.
+
+/** The directories each row of the page's Components table names in its Component cell. */
+const componentTableRows = (page: string): string[][] => {
+  const section = page.slice(page.indexOf('## Components'), page.indexOf('### Left out'))
+  return section.split('\n')
+    .filter((line) => line.startsWith('| `'))
+    .map((line) => [...(line.split('|')[1] ?? '').matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? ''))
+}
+
+/** The boxes the Component diagram draws that no row of the table names, by the box's title. */
+const boxesWithNoRow = (page: string): string[] => {
+  const named = new Set(componentTableRows(page).flat())
+  return components().coverage
+    .filter((box) => !box.names.some((name) => named.has(name)))
+    .map((box) => box.name)
+}
+
+test('every component box has a row in the Components table', () => {
+  const missing = boxesWithNoRow(README)
+  assert.deepEqual(missing, [], `the Components table has no row for: ${missing.join('; ')}`)
+})
+
+// The check above passes on a page that has every row, which proves nothing about it on its own. Each
+// page below is the real one with one box's row taken away in a way the check must still see.
+// The boxes are found by a directory each stands for, and their titles are read from the drawing, so a
+// title renamed in c4_diagrams.ts is followed here rather than restated.
+const boxHolding = (directory: string): { readonly name: string; readonly names: readonly string[] } =>
+  components().coverage.find((box) => box.names.includes(directory))!
+const CREW_BOX = boxHolding('show_dashboard_beat')
+const STORE_BOX = boxHolding('crew_files_directory')
+const HANDOVER_BOX = boxHolding('write_my_handover')
+
+/** The table row whose Component cell opens with the given directory. */
+const rowOf = (directory: string): string =>
+  README.split('\n').find((line) => line.startsWith(`| \`${directory}\``))!
+
+test('a box whose row is gone, named only in the text of another row, or tabled below the Components table has no row', () => {
+  const crewRow = rowOf(CREW_BOX.names[0]!)
+  const storeName = STORE_BOX.names[0]!
+  const storeRow = rowOf(storeName)
+  const rowGone = README.replace(`${crewRow}\n`, '')
+  const handoverRow = rowOf(HANDOVER_BOX.names[0]!)
+  const namedOnlyInText = README.replace(`${storeRow}\n`, '')
+    .replace(handoverRow, handoverRow.replace(/ \|$/, ` \`${storeName}\` keeps all of it whole. |`))
+  const leftOutRow = rowOf(LEFT_OUT[0]!.name)
+  const tabledBelow = rowGone.replace(leftOutRow, `${crewRow}\n${leftOutRow}`)
+  assert.ok(!rowGone.includes(crewRow) && !namedOnlyInText.includes(storeRow) && namedOnlyInText.includes(storeName)
+    && tabledBelow.includes(crewRow),
+    'a page below was not changed the way its name says, so its answer would prove nothing')
+  assert.deepEqual(boxesWithNoRow(rowGone), [CREW_BOX.name])
+  assert.deepEqual(boxesWithNoRow(namedOnlyInText), [STORE_BOX.name])
+  assert.deepEqual(boxesWithNoRow(tabledBelow), [CREW_BOX.name])
+})
+
 test('a component box stands for directories that are in src/, and names each one it stands for', () => {
   const slices = new Set(slicesInSrc())
   for (const box of components().coverage) {
