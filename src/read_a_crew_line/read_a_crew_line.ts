@@ -3,8 +3,7 @@
 // This exists so a hand-off or a verdict that a member sends is checked as it is sent, and a broken one comes back to
 // the sender naming the field that is wrong instead of sitting unnoticed in a channel. A line that reads adds its row
 // to the package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave — a kind no member's own
-// milestone can be (martha#350). What this does not
-// do is check the range or the CI against GitHub: that is #256.
+// milestone can be (martha#350). What this does not do is check the range or the CI against GitHub: that is #256.
 //
 // The shapes are not written here: they are read from ./crew_lines.ts, the one definition the role cards are
 // generated from, so what a member is taught and what this accepts cannot drift apart.

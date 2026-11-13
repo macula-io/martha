@@ -7,8 +7,9 @@
 // The passed head is not asked for: it is the tip of the range the reviewer's VERDICT line named, kept on the
 // package's ledger as the row a line adds (../read_a_crew_line). Only that row counts, and it is the one kind a
 // member's own milestone cannot be (martha#350): a VERDICT-shaped note logged with log_a_milestone answers for
-// nothing, so a member can neither pass a head nobody reviewed nor hide a PASS a reviewer really gave. The latest
-// VERDICT decides — a FAIL after a PASS
+// nothing, so a member can neither pass a head nobody reviewed nor hide a PASS a reviewer really gave.
+//
+// The latest VERDICT decides — a FAIL after a PASS
 // leaves no PASS row, and an older PASS is never the answer. The pull request is found from GitHub, the one open pull
 // request whose head is exactly that sha (#256's design: the head the reviewer passed, not the one the branch has
 // now), and a pull request's number is never taken for its package's issue number.
