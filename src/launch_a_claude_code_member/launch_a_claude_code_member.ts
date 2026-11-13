@@ -963,7 +963,7 @@ function whenTheMemberStops(
 
 /** Why a member is stopped whose relay did not report its session's start: the backstop's deadline and reason (#104). */
 function sessionStartDeadline(launch: ClaudeCodeMemberLaunch, hostEnv: Readonly<Record<string, string | undefined>>): { readonly ms: number; readonly why: string } {
-  if (ownerCanAnswerTheHost(launch.stdio) && !hostTrustsTheFolder(hostEnv, launch.place.launch_dir)) {
+  if (ownerCanAnswerTheHost(launch.stdio) && !hostTrustsTheFolder(hostEnv, launch.place.launch_dir, launch.args)) {
     const ms = launch.trust_answer_deadline_ms ?? TRUST_ANSWER_DEADLINE_MS
     return {
       ms,
