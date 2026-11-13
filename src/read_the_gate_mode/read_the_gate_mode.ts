@@ -35,8 +35,10 @@ export const GATE_ENFORCES = 'gate_enforces'
 /** The field that names who the gate audits: members' names. */
 export const GATE_AUDITS = 'gate_audits'
 
-/** The field that names who the gate enforces for: `all`, `nobody`, or members' names. */
-/** The one old field still read, named here because ../declare_crew cannot be imported (see withoutTheNewFields). */
+/**
+ * The one old field still read for a declaration written by an earlier release (martha#321). Why it is a literal here
+ * is said where it is read, in withoutTheNewFields.
+ */
 const STRICT_GATE = 'strict_gate'
 
 /** What the gate does to a member. */

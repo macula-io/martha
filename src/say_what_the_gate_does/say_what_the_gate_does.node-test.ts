@@ -11,6 +11,8 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { sayWhatTheGateDoes, type TheGate } from './say_what_the_gate_does.ts'
@@ -37,7 +39,7 @@ const shown = (gate: TheGate): readonly string[] => {
 }
 
 test('#321: every declared member is one line: enforced, audited with its count, or off', (t) => {
-  const crew = aCrewsPlace(t, { builder: [aLine('A4', 'Bash'), aLine('A2', 'Bash')] })
+  const crew = aCrewsPlace(t, { builder: [aLine('A4', CLAUDE_CODE_SHELL_TOOL), aLine('A2', CLAUDE_CODE_SHELL_TOOL)] })
   const gate: GateSetting = { kind: 'named', enforced: ['writer'], audited: ['builder'] }
   assert.deepEqual(shown(sayWhatTheGateDoes({ members: MEMBERS, gate, crew })), [
     'builder: audited, 2 would-be refusals',
@@ -56,7 +58,7 @@ test('#321: a member audited with nothing yet to show says so, rather than stayi
 })
 
 test('#321: --member prints that member’s lines oldest first, with the path, the sender, the tool and the words', (t) => {
-  const crew = aCrewsPlace(t, { builder: [aLine('A4', 'Bash'), aLine('A2', 'Write')] })
+  const crew = aCrewsPlace(t, { builder: [aLine('A4', CLAUDE_CODE_SHELL_TOOL), aLine('A2', WHOLE_FILE_TOOL)] })
   const gate: GateSetting = { kind: 'named', enforced: [], audited: ['builder'] }
   const lines = shown(sayWhatTheGateDoes({ members: MEMBERS, gate, crew, member: 'builder' }))
   assert.equal(lines.length, 2)

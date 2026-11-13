@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
@@ -98,7 +98,7 @@ async function aSessionAForeignerReached(relay: MemberRelay): Promise<void> {
   await relay.answer('prompt_submitted', { session_id: SESSION, text: 'a ring from a stranger', origin: { kind: 'plugin' } })
 }
 
-const bash = { session_id: SESSION, call: { tool: 'Bash', command: 'id' } }
+const bash = { session_id: SESSION, call: { tool: CLAUDE_CODE_SHELL_TOOL, command: 'id' } }
 
 /** The refusal a call got, as the host reads it. */
 const deniedTo = (reply: { readonly answered: boolean }): string => {

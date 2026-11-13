@@ -819,7 +819,7 @@ test('#321: a session the owner released resumes with the shell it lost, without
   await rows.append(`${SESSION_RECORD_STREAM}${SESSION}`, { ingested: [{ path: 'A2', from_node_id: 'stranger' }] })
   await theOwnerReleases(rows, SESSION)
   assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 })
 
 test('#321: a release typed while the member runs is read before its next call', async (t) => {
@@ -827,10 +827,10 @@ test('#321: a release typed while the member runs is read before its next call',
   const { relay, rows } = answering(place)
   await relay.answer('session_started', start('startup'))
   await relay.answer('prompt_submitted', prompt('auto-continuation'))
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /Nothing executes in this session/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/))
 
   await theOwnerReleases(rows, SESSION)
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 })
 
 test('#321: after a release the stream still holds the raw record, and what came after it is appended to it', async (t) => {
@@ -842,7 +842,7 @@ test('#321: after a release the stream still holds the raw record, and what came
   assert.equal(before.length, 1, 'the session took nothing in, so there is nothing for the release to clear')
 
   await theOwnerReleases(rows, SESSION)
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
   await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
 
   const after = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
@@ -865,7 +865,7 @@ test('#321: a release stream nobody can read leaves the member held exactly as b
   await relay.answer('prompt_submitted', prompt('auto-continuation'))
   await theOwnerReleases(real, SESSION)
   assert.ok(
-    isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /Nothing executes in this session/),
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
     'a release that cannot be read released the member',
   )
 })

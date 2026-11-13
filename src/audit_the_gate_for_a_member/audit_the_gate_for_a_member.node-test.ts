@@ -11,6 +11,8 @@ import { join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -30,10 +32,10 @@ const checkout = join(launch_home, 'work')
 mkdirSync(checkout)
 writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: checkout,
   stop_dir: launch_home,
-  approved_fingerprints: [fingerprintOf(readLaunchState({ host: 'claude-code', launch_dir: checkout, stop_dir: launch_home }, thisMachine))],
+  approved_fingerprints: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: launch_home }, thisMachine))],
 }
 
 /** A crew's own folder for this test, removed after it, holding the audit folder the launcher would have made. */
@@ -55,7 +57,7 @@ type Asked = Partial<Parameters<typeof answerToolCall>[0]>
 
 /** A shell call, answered the way the host asks it: the gate and the audit are each case's own. */
 const bash = (session: Parameters<typeof answerToolCall>[0]['session'], more: Asked): ToolCallAnswer =>
-  answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine, ...more })
+  answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, ...more })
 
 test('#321: an audited member’s would-be refusal runs the call and writes one line, with the path, the sender and the words', (t) => {
   const audit = aCrewsPlace(t)
@@ -68,7 +70,7 @@ test('#321: an audited member’s would-be refusal runs the call and writes one 
   const line = lines[0]!
   assert.equal(line['path'], 'A4', 'the line does not name the path the text arrived on')
   assert.equal(line['sender'], null, 'the line claims a sender the record does not hold')
-  assert.equal(line['tool'], 'Bash')
+  assert.equal(line['tool'], CLAUDE_CODE_SHELL_TOOL)
   assert.match(String(line['refusal']), /Nothing executes in this session/)
   assert.equal(Number.isNaN(Date.parse(String(line['at']))), false, 'the line carries no moment')
 })

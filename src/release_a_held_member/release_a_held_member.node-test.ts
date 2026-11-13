@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { recordOf, SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseStreamOf, releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
@@ -141,7 +141,7 @@ test('#321: a mark that could not be kept is no release, and says so', async () 
   const rows = rowsHolding()
   const broken: RowStore = {
     read: (stream) => rows.read(stream),
-    append: async () => Promise.reject(Object.assign(new Error('full'), { code: 'ROW_NOT_DURABLE' })),
+    append: async () => Promise.reject(Object.assign(new Error('full'), { code: ROW_NOT_DURABLE })),
   }
   const release = await releaseAHeldMember(asked(broken))
   assert.equal(release.released, false)
