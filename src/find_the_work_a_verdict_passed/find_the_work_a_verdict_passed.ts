@@ -5,7 +5,13 @@
 // pushes nothing and registers no tool. The package that adds the merges calls this first.
 //
 // The passed head is not asked for: it is the tip of the range the reviewer's VERDICT line named, kept on the
-// package's ledger as the row a line adds (../read_a_crew_line). The latest VERDICT decides — a FAIL after a PASS
+// package's ledger as the row a line adds (../read_a_crew_line). Only that row counts (martha#350): the milestone a
+// member logs with log_a_milestone is never it, so a VERDICT-shaped review round a member logs answers for nothing
+// and hides nothing. The row a VERDICT line adds is the other door, and it is open by decision: a member that sends
+// the line with say_to_the_crew writes that row under its own name, its sender unchecked (../send_a_crew_message,
+// martha#253), so what the landing trusts is the name on the row, never a signature.
+//
+// The latest VERDICT decides — a FAIL after a PASS
 // leaves no PASS row, and an older PASS is never the answer. The pull request is found from GitHub, the one open pull
 // request whose head is exactly that sha (#256's design: the head the reviewer passed, not the one the branch has
 // now), and a pull request's number is never taken for its package's issue number.
@@ -102,11 +108,12 @@ function lookUpProblem(look: TheLookUp): string | undefined {
 }
 
 /**
- * The note of the latest row a VERDICT added to this package's ledger, read back or not. A row written before the
- * range was kept still counts as the latest verdict, so an older PASS is never answered after it.
+ * The note of the latest row a VERDICT added to this package's ledger, read back or not. Only a verdict's own row
+ * counts (martha#350): a review round a member logged is never the latest verdict, whatever its note begins with. A
+ * row written before the range was kept still counts as the latest verdict, so an older PASS is never answered after it.
  */
 function latestVerdictNote(rows: readonly LedgerRow[], work_package: string): string | undefined {
-  const notes = rows.flatMap((row) => (row.kind === 'review_round_closed' && startsAsAVerdictOn(row.note, work_package) ? [row.note] : []))
+  const notes = rows.flatMap((row) => (row.kind === 'verdict_given' && startsAsAVerdictOn(row.note, work_package) ? [row.note] : []))
   return notes.at(-1)
 }
 
