@@ -226,6 +226,28 @@ test('worktree_finish is refused while the worktree holds a change, or a commit 
   assert.ok(existsSync(path), 'the worktree is still there, with the work in it')
 })
 
+test('worktree_open is refused, not told, when git cannot fetch from origin (#256 r=4)', async (t) => {
+  const fixture = aCrew(t)
+  // The one stop on this path that is git's own failure rather than the arguments': nothing is made, so it refuses.
+  const denyingTheFetch = async (request: ProcessRequest): Promise<ProcessOutcome> =>
+    request.args.includes('fetch') ? { exit_code: 1, stdout: '', stderr: 'could not read from remote repository\n' } : runReal(request)
+  const { open } = toolsOf(settingsFor(fixture, fixture), MEMBER, denyingTheFetch)
+  assert.match(refusedOf(await open.answer(asked('acme/widget', SLUG))), /git fetch did not work/)
+  assert.equal(existsSync(join(fixture.worktrees, `widget-${SLUG}`)), false, 'no worktree was made')
+})
+
+test('worktree_finish is refused, not told, when git will not remove the worktree (#256 r=4)', async (t) => {
+  const fixture = aCrew(t)
+  // `git worktree remove` is the act itself: refused here, nothing was removed, so the answer refuses too.
+  const denyingTheRemove = async (request: ProcessRequest): Promise<ProcessOutcome> =>
+    request.args.includes('remove') ? { exit_code: 1, stdout: '', stderr: 'the worktree is locked\n' } : runReal(request)
+  const { open, finish } = toolsOf(settingsFor(fixture, fixture), MEMBER, denyingTheRemove)
+  await open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  assert.match(refusedOf(await finish.answer(finished('acme/widget', SLUG))), /was not removed: the worktree is locked/)
+  assert.ok(existsSync(path), 'the worktree is still there: git did not remove it')
+})
+
 test('worktree_finish refuses a worktree that is on another branch, and leaves that branch where it is (#256)', async (t) => {
   const fixture = aCrew(t)
   const { open, finish } = toolsOf(settingsFor(fixture, fixture))
