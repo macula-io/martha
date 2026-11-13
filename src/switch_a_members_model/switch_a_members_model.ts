@@ -20,6 +20,7 @@ import { join } from 'node:path'
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import type { TheOwnersModelRecord } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 
 /** Where a crew keeps its model records, under the one crew store (as a park marker is kept). */
 export const MODEL_PLACE = 'model'
@@ -50,6 +51,13 @@ export interface ModelMarker {
    * turn that is waiting on the tool. A record that is not directed is one the session has not been sent yet.
    */
   readonly directed: boolean
+  /**
+   * What this switch did to the owner's own default for new sessions, and what is left to do about it (martha#359):
+   * absent on a record written before that existed, and on one whose switch never reached the host. It holds no copy of
+   * the owner's settings file — hashes, the model's own value, and one line for the owner — because that file can hold
+   * the owner's environment and other secrets.
+   */
+  readonly settings?: TheOwnersModelRecord
 }
 
 /** What a member's model is, as far as the store will say: switched, at home, or a question it would not answer. */
@@ -92,6 +100,7 @@ function markerIn(text: string): ModelMarker | undefined {
   const { switched, model, home, package: package_name, why, since, directed } = held as Record<string, unknown>
   const fields = [model, home, package_name, why, since]
   if (typeof switched !== 'boolean' || typeof directed !== 'boolean' || !fields.every((field) => typeof field === 'string')) return undefined
+  const settings = theOwnersRecordIn((held as Record<string, unknown>)['settings'])
   return {
     switched,
     model: model as string,
@@ -100,7 +109,23 @@ function markerIn(text: string): ModelMarker | undefined {
     why: why as string,
     since: since as string,
     directed,
+    ...(settings === null ? {} : { settings }),
   }
+}
+
+/**
+ * The owner-default record a switch keeps beside its own (martha#359), or null when the field is absent or is not one:
+ * a record of the wrong shape is read as no record, and the switch it belonged to stays readable either way. What a
+ * launch could not finish is then said by the file's own hash at the next launch, never guessed from a broken field.
+ */
+function theOwnersRecordIn(held: unknown): TheOwnersModelRecord | null {
+  if (held === null || typeof held !== 'object') return null
+  const record = held as Record<string, unknown>
+  const strings = ['config_dir', 'before', 'without_model', 'owner_model', 'why']
+  if (!strings.every((field) => typeof record[field] === 'string')) return null
+  if (!['after', 'wrote'].every((field) => record[field] === null || typeof record[field] === 'string')) return null
+  if (typeof record['had_file'] !== 'boolean' || typeof record['had_model'] !== 'boolean') return null
+  return record as unknown as TheOwnersModelRecord
 }
 
 /** What a member asked of the tool: the model, the package and why, as the arguments arrived. */
@@ -198,6 +223,9 @@ export function returnAMemberHome(host: SwitchingHost, returning: { readonly mem
     why,
     since: at.toISOString(),
     directed: !marker.directed,
+    // What the last switch did to the owner's default travels with the record until a newer switch replaces it: a
+    // return is a command of its own, and one whose own record could not be kept leaves the older one to finish.
+    ...(marker.settings === undefined ? {} : { settings: marker.settings }),
   })
 }
 
@@ -216,4 +244,33 @@ function keepTheMarker(host: SwitchingHost, member: string, marker: ModelMarker)
   if ('refusal' in place) return place
   const refused = place.keep(theModelMarker(member), `${JSON.stringify(marker)}\n`)
   return refused ?? marker
+}
+
+/**
+ * The record with what this switch has done to the owner's default kept beside it (martha#359), or with that part
+ * cleared when the switch is finished. Kept before the host's command runs and again as soon as the save is seen, so a
+ * launch after a crash knows what to finish; cleared when the owner's file is back where it was.
+ */
+export function theOwnersDefaultKept(host: SwitchingHost, member: string, marker: ModelMarker, settings: TheOwnersModelRecord | null): ModelMarker | Refused {
+  const { switched, model, home, package: package_name, why, since, directed } = marker
+  const without: ModelMarker = { switched, model, home, package: package_name, why, since, directed }
+  return keepTheMarker(host, member, settings === null ? without : { ...without, settings })
+}
+
+/**
+ * A switch the launcher could not make (martha#359): the owner's default could not be guarded, so the host's command
+ * never runs and the record goes back to where the member already is. `why` is what the owner reads — in this record,
+ * and in the member's row — because a member that asked to switch and stayed where it was must not be a silent one.
+ */
+export function theSwitchRefused(host: SwitchingHost, member: string, marker: ModelMarker, why: string, at: Date): ModelMarker | Refused {
+  return keepTheMarker(host, member, {
+    switched: false,
+    model: marker.model,
+    home: marker.home,
+    package: marker.package,
+    why,
+    since: at.toISOString(),
+    directed: false,
+    ...(marker.settings === undefined ? {} : { settings: { ...marker.settings, why } }),
+  })
 }

@@ -16,6 +16,8 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -96,6 +98,11 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   declareTheModels(root, memberModel)
   const beats = dashboardRowsIn(join(home, 'row'))
+  // The owner's own settings file, which a switch now guards before the host's command runs and puts back after it
+  // (martha#359). The owner of this crew has none: the realistic owner, and the file the host makes to save a model
+  // into is one the restore removes again.
+  const config_dir = join(home, 'claude')
+  mkdirSync(config_dir, { recursive: true })
   const tools = crewToolsOver({
     member: MEMBER,
     ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, CREW_ROWS_PLACE)) } },
@@ -105,6 +112,7 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
     stores: { crew: crewFilesDirectory(crew) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
+    owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
   return { tools, crew, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += 60_000) }
 }
