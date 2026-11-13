@@ -34,8 +34,11 @@ import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
  * The programs a landing runs over the tree it is merging, and that tree's own scripts: a slice reaches the machine
  * through the host's processes and writes no file itself, so the generated files are redone by a program (martha#381)
  * and the ceilings are the check's own command (../check_a_host_directory_stays_under_its_ceiling).
+ *
+ * `NODE` stays private: a program is named by its path, and the word `node` is written by other programs and tests that
+ * owe this slice nothing, so exporting it would make every one of those copies stale at once (martha#289).
  */
-export const NODE = 'node'
+const NODE = 'node'
 export const NPM = 'npm'
 export const THE_REDO_PROGRAM = 'src/redo_the_generated_files_of_a_merge/main.ts'
 export const THE_CHECK_PROGRAM = 'src/check_a_host_directory_stays_under_its_ceiling/main.ts'

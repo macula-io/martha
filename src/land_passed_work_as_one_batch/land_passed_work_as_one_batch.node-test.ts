@@ -20,7 +20,7 @@ import { test, type TestContext } from 'node:test'
 
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
-import type { HostContract, ProcessOutcome, ProcessRequest, Row, StoredRow } from '../host_contract/host_contract.ts'
+import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { noteMilestone, readLedger } from '../log_ledger/log_ledger.ts'
@@ -29,9 +29,9 @@ import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import {
   LAND,
-  NODE,
   NPM,
   THE_CHECK_PROGRAM,
   THE_REDO_PROGRAM,
@@ -88,7 +88,7 @@ function aRepository(t: TestContext): Fixture {
   writeFileSync(join(seed, 'shared.txt'), 'one\n')
   // A landing's tree carries a package.json, and the ceilings it declares are read from the tree it merges: a fixture
   // without one is a tree no landing could hold to them.
-  writeFileSync(join(seed, 'package.json'), '{"type":"module"}\n')
+  writeFileSync(manifestPathOf(seed), '{"type":"module"}\n')
   commitIn(seed, 'the first commit')
   gitIn(seed, 'remote', 'add', 'origin', origin)
   gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
@@ -147,7 +147,7 @@ function theAnswersFor(repo: string, pulls: ReadonlyMap<string, unknown>): Map<s
 /** A host over this GitHub, at the test's own day, with the programs and scripts a landing runs answered below. */
 function aHostOver(
   run: (request: ProcessRequest) => Promise<ProcessOutcome>,
-  rows?: HostContract['stores']['rows'],
+  rows?: RowStore,
   runs?: TheRuns,
 ): HostForTests {
   return hostForTests({ run: theProcessesALandingMeets(runs, run), now: THE_DAY, ...(rows === undefined ? {} : { rows }) })
@@ -177,7 +177,7 @@ function theProcessesALandingMeets(runs: TheRuns | undefined, under: (request: P
       runs?.npm.push(request)
       return { exit_code: 0, stdout: '', stderr: '' }
     }
-    const here = request.command === NODE ? the_programs[request.args[0] ?? ''] : undefined
+    const here = request.command === NPM ? undefined : the_programs[request.args[0] ?? '']
     if (here === undefined) return under(request)
     runs?.programs.push(request)
     const ran = spawnSync(process.execPath, [here, ...request.args.slice(1)], { cwd: request.cwd, encoding: 'utf8' })
