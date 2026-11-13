@@ -3,7 +3,7 @@
 // Two passed heads that both redrew the C4 picture, or both moved a host directory's ceiling, clash in a file nobody
 // wrote by hand. Those are the paths this names, so a landing can tell such a clash from a real one: a picture is
 // whatever ../../architecture/c4_diagrams draws, and a picture added or renamed there reaches this without an edit here,
-// while its own list is pinned to that program by ../../architecture/the_pictures_a_merge_redraws.node-test.ts.
+// while its own list is pinned to that program by ./the_generated_files.node-test.ts.
 
 import { relative } from 'node:path'
 
