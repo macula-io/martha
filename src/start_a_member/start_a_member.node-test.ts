@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
   nodeIdsFor,
@@ -34,6 +34,7 @@ import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_ma
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
@@ -518,6 +519,33 @@ test("the declaration's strict gate is what the member's relay is handed, and of
 
   assert.deepEqual(await seenWith({}), [false], 'no house rules: the gate is off, as the owner decided')
   assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), [true], 'the declaration turns it on')
+})
+
+/**
+ * The start reads the crew's declaration with the models this host runs (martha#315). A declaration that holds reviews
+ * to a model the host can spell starts, and the crew the member is handed carries that rule and the vocabulary it was
+ * read against. Read with no models — what a start passing `[]` would do — the same declaration is refused and no
+ * member starts, so a vocabulary this launcher forgot is a crew that cannot start its reviewer.
+ */
+test('a declaration naming a reviewer model this host runs starts the member, and the crew carries that model (#315)', async (t) => {
+  const [review_model] = CLAUDE_CODE_MODELS
+  assert.ok(review_model !== undefined && review_model !== '', 'the recorded host names no model, so this test could hold no review to one')
+  const place = placeFor(t, {})
+  await declared(place)
+  // The declaration the crew reads, with the house rule the owner wrote: init wrote none.
+  writeFileSync(
+    join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
+    `${JSON.stringify({ ...soloDeclaration('Ada Owner'), house_rules: { [REVIEW_MODEL]: review_model } }, null, 2)}\n`,
+  )
+  const fake = fakeClaude(place)
+  const handed: MemberRelayPlace[] = []
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const crew = handed[0]?.crew
+  assert.ok(crew !== undefined, 'the member was started with no crew tools')
+  // What the started member's crew holds, asked of the crew itself rather than inferred from the line that built it.
+  const refused = await crew.refusesTheSubagent({ tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!, input: { [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch' } })
+  assert.match(refused ?? '', new RegExp(`crew reviews run on ${review_model}`), 'the crew handed to the member holds no review to the model the owner declared')
 })
 
 test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
