@@ -1,6 +1,6 @@
 // The row's shape, its naming, and the rule that settles which beat is the row (martha#254 tests 2 and 3, the rule).
 //
-// The store that writes a row is the host's (../launch_a_claude_code_member/dashboard_rows_in_state), and its own
+// The store that writes a row is the host's (../dashboard_rows_directory/dashboard_rows_directory), and its own
 // test proves a beat is written whole; what is pinned here is what a reader and a writer must agree on whichever of
 // them is looking: what a row is, what it is called, and which of two beats wins.
 
