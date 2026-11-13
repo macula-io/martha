@@ -44,6 +44,12 @@ export const ANSWER_DEADLINE_MS = 2 * STOP_GRACE_MS
 /** How often the owner's verb looks for an answer, and for a group to be gone. */
 export const ANSWER_POLL_MS = 250
 
+/**
+ * How long a launcher has, once its member's process is gone, to write its answer: its own cleanup. Past it, the verb
+ * stops waiting and records the end itself (r=1 R1), rather than waiting out the whole deadline for a member that ended.
+ */
+export const ANSWER_AFTER_EXIT_MS = 2_000
+
 /** Which launch a request is for: the member's process, and the identity the kernel gave it. */
 export interface TheLaunch {
   readonly pid: number
@@ -61,8 +67,12 @@ export interface LifecycleRequest {
   readonly launch: TheLaunch
 }
 
-/** Who ended the member: its launcher, or the owner's verb because no launcher answered. */
-export type EndedBy = 'launcher' | 'owner_verb'
+/**
+ * Who ended the member: its launcher, the owner's verb because no launcher answered, or the member itself, gone before
+ * either acted (r=1 R1: a member that exits inside the launcher's tick is stopped, not a refusal).
+ */
+export type EndedBy = 'launcher' | 'owner_verb' | 'itself'
+const ENDED_BY: readonly EndedBy[] = ['launcher', 'owner_verb', 'itself']
 
 /** What became of a request. */
 export interface LifecycleOutcome {
@@ -116,7 +126,20 @@ function isRequest(value: unknown): value is LifecycleRequest {
 function isOutcome(value: unknown): value is LifecycleOutcome {
   if (!isObject(value)) return false
   const { id, ended_by, at } = value
-  return typeof id === 'string' && typeof at === 'string' && (ended_by === 'launcher' || ended_by === 'owner_verb')
+  return typeof id === 'string' && typeof at === 'string' && ENDED_BY.includes(ended_by as EndedBy)
+}
+
+/**
+ * Answers `request` once: when the file already holds an answer to this id, that answer stands and nothing is written,
+ * so a launcher and a verb that both reach the end of one stop keep one outcome and one ledger row between them (r=1
+ * observation). Resolves to the answer that stands, and whether it was this caller's.
+ */
+function answerOnce(place: CrewPlace, member: string, request: LifecycleRequest, outcome: LifecycleOutcome): { readonly outcome: LifecycleOutcome; readonly ours: boolean } | Refused {
+  const read = theRequestOf(place, member)
+  if (read.kind === 'answered' && read.outcome.id === request.id) return { outcome: read.outcome, ours: false }
+  if (read.kind !== 'pending' || read.request.id !== request.id) return { outcome, ours: false }
+  const kept = keepTheRequest(place, member, request, outcome)
+  return kept ?? { outcome, ours: true }
 }
 
 /** Keeps a member's request, answered or not, whole. */
@@ -133,7 +156,7 @@ export function theRunningLaunchOf(launches: readonly MemberLaunch[], processes:
   return launch !== undefined && processes.identityOf(launch.pid) === launch.process_started_at ? launch : undefined
 }
 
-const sameLaunch = (one: TheLaunch, other: TheLaunch): boolean => one.pid === other.pid && one.process_started_at === other.process_started_at
+export const sameLaunch = (one: TheLaunch, other: TheLaunch): boolean => one.pid === other.pid && one.process_started_at === other.process_started_at
 
 /** A request no launcher answered by the deadline: its launcher is gone, or is not reading. */
 export const isUnanswered = (request: LifecycleRequest, now: number): boolean => now - Date.parse(request.at) > ANSWER_DEADLINE_MS
@@ -181,11 +204,8 @@ export async function stopAMember(host: StoppingHost, asking: AskingToStop): Pro
   const place = host.stores.lifecycle
   const launch = theRunningLaunchOf(host.launches(), host.processes, member)
   if (launch === undefined) return { kind: 'not_running', told: `${member} is not running, so nothing was stopped.` }
-  const current = theRequestOf(place, member)
-  if (current.kind === 'unreadable') return { kind: 'refused', told: current.refusal }
-  if (current.kind === 'pending' && sameLaunch(current.request.launch, launch) && !isUnanswered(current.request, host.clock.now())) {
-    return { kind: 'in_flight', told: `a ${current.request.act} of ${member} asked by ${current.request.by} at ${current.request.at} is in flight.` }
-  }
+  const held = whatHoldsTheStop(place, member, launch, host.clock.now())
+  if (held !== undefined) return held
   const request: LifecycleRequest = {
     id: asking.id,
     act: STOP,
@@ -196,38 +216,68 @@ export async function stopAMember(host: StoppingHost, asking: AskingToStop): Pro
   }
   const kept = keepTheRequest(place, member, request, null)
   if (kept !== undefined) return { kind: 'refused', told: kept.refusal }
-  const answered = await theLaunchersAnswer(host, place, member, request)
-  if (answered !== undefined) return { kind: 'stopped', ended_by: answered.ended_by, told: `${member} is stopped.` }
+  const heard = await theLaunchersAnswer(host, place, member, request)
+  if ('outcome' in heard) return { kind: 'stopped', ended_by: heard.outcome.ended_by, told: `${member} is stopped.` }
+  if (heard.gone) return theEndKeptHere(host, place, member, request, 'itself')
   return endTheGroupHere(host, place, member, request)
 }
 
-/** The launcher's answer to `request`, waited for until the deadline; undefined when none came. */
-async function theLaunchersAnswer(host: StoppingHost, place: CrewPlace, member: string, request: LifecycleRequest): Promise<LifecycleOutcome | undefined> {
-  const until = Date.parse(request.at) + ANSWER_DEADLINE_MS
-  while (host.clock.now() <= until) {
-    const read = theRequestOf(place, member)
-    if (read.kind === 'answered' && read.outcome.id === request.id) return read.outcome
-    await host.wait(ANSWER_POLL_MS)
-  }
-  return undefined
+/** Why a new stop may not be asked: a request nobody can read, or one for this launch still waiting for its launcher. */
+function whatHoldsTheStop(place: CrewPlace, member: string, launch: TheLaunch, now: number): Stopped | undefined {
+  const current = theRequestOf(place, member)
+  if (current.kind === 'unreadable') return { kind: 'refused', told: current.refusal }
+  if (current.kind !== 'pending' || !sameLaunch(current.request.launch, launch) || isUnanswered(current.request, now)) return undefined
+  return { kind: 'in_flight', told: `a ${current.request.act} of ${member} asked by ${current.request.by} at ${current.request.at} is in flight.` }
 }
 
-/** The recorded group ended here, since no launcher answered: asked to end, a grace, then made to. */
+const isStillTheRecorded = (host: Pick<StoppingHost, 'processes'>, launch: TheLaunch): boolean => host.processes.identityOf(launch.pid) === launch.process_started_at
+
+/**
+ * The launcher's answer to `request`, waited for until the deadline. A member whose process is gone is waited on only for
+ * ANSWER_AFTER_EXIT_MS more, its launcher's cleanup, and then reported `gone` (r=1 R1); silence past the deadline with the
+ * process still there is `silent`.
+ */
+async function theLaunchersAnswer(host: StoppingHost, place: CrewPlace, member: string, request: LifecycleRequest): Promise<{ readonly outcome: LifecycleOutcome } | { readonly gone: boolean }> {
+  const until = Date.parse(request.at) + ANSWER_DEADLINE_MS
+  let goneSince: number | undefined
+  while (host.clock.now() <= until) {
+    const read = theRequestOf(place, member)
+    if (read.kind === 'answered' && read.outcome.id === request.id) return { outcome: read.outcome }
+    if (!isStillTheRecorded(host, request.launch)) goneSince ??= host.clock.now()
+    if (goneSince !== undefined && host.clock.now() - goneSince >= ANSWER_AFTER_EXIT_MS) return { gone: true }
+    await host.wait(ANSWER_POLL_MS)
+  }
+  return { gone: false }
+}
+
+/** The recorded group ended here, since no launcher answered: asked to end, a grace, then made to. A group already gone is a member that ended. */
 async function endTheGroupHere(host: StoppingHost, place: CrewPlace, member: string, request: LifecycleRequest): Promise<Stopped> {
   const { pid, process_started_at } = request.launch
   const asked = host.processes.signalGroup(pid, process_started_at, 'SIGTERM')
-  if (!asked.signalled) return { kind: 'refused', told: `no launcher answered for ${member}, and ${asked.refusal}` }
-  const until = host.clock.now() + STOP_GRACE_MS
-  while (host.clock.now() < until && host.processes.identityOf(pid) === process_started_at) await host.wait(ANSWER_POLL_MS)
-  if (host.processes.identityOf(pid) === process_started_at) {
-    const made = host.processes.signalGroup(pid, process_started_at, 'SIGKILL')
-    if (!made.signalled) return { kind: 'refused', told: `no launcher answered for ${member}; it was asked to end, and ${made.refusal}` }
+  if (!asked.signalled) {
+    return isStillTheRecorded(host, request.launch) ? { kind: 'refused', told: `no launcher answered for ${member}, and ${asked.refusal}` } : theEndKeptHere(host, place, member, request, 'itself')
   }
-  const outcome: LifecycleOutcome = { id: request.id, ended_by: 'owner_verb', at: new Date(host.clock.now()).toISOString() }
-  const kept = keepTheRequest(place, member, request, outcome)
-  if (kept !== undefined) return { kind: 'refused', told: `${member} was ended, and ${kept.refusal}` }
-  await keepTheStop(host.stores.rows, member, request, outcome)
-  return { kind: 'stopped', ended_by: 'owner_verb', told: `${member} is stopped; no launcher answered, so Martha ended its process group itself.` }
+  const until = host.clock.now() + STOP_GRACE_MS
+  while (host.clock.now() < until && isStillTheRecorded(host, request.launch)) await host.wait(ANSWER_POLL_MS)
+  if (isStillTheRecorded(host, request.launch)) {
+    const made = host.processes.signalGroup(pid, process_started_at, 'SIGKILL')
+    if (!made.signalled && isStillTheRecorded(host, request.launch)) return { kind: 'refused', told: `no launcher answered for ${member}; it was asked to end, and ${made.refusal}` }
+  }
+  return theEndKeptHere(host, place, member, request, 'owner_verb')
+}
+
+/** What the verb tells the owner, by who ended the member. */
+const TOLD_WHEN_KEPT_HERE: Readonly<Record<Exclude<EndedBy, 'launcher'>, (member: string) => string>> = {
+  owner_verb: (member) => `${member} is stopped; no launcher answered, so Martha ended its process group itself.`,
+  itself: (member) => `${member} is stopped; it had ended before its launcher answered, so Martha recorded the stop itself.`,
+}
+
+/** The end recorded by the verb, once: the outcome under the request's id, and its ledger row unless a launcher kept it first. */
+async function theEndKeptHere(host: StoppingHost, place: CrewPlace, member: string, request: LifecycleRequest, ended_by: Exclude<EndedBy, 'launcher'>): Promise<Stopped> {
+  const answered = answerOnce(place, member, request, { id: request.id, ended_by, at: new Date(host.clock.now()).toISOString() })
+  if ('refusal' in answered) return { kind: 'refused', told: `${member} was ended, and ${answered.refusal}` }
+  if (answered.ours) await keepTheStop(host.stores.rows, member, request, answered.outcome)
+  return { kind: 'stopped', ended_by: answered.outcome.ended_by, told: answered.ours ? TOLD_WHEN_KEPT_HERE[ended_by](member) : `${member} is stopped.` }
 }
 
 // --- the launcher's watch -----------------------------------------------------------------------------------------
@@ -250,6 +300,12 @@ export interface TheHeldMember {
   tellOwner(line: string): void
 }
 
+/** The request waiting for this launch, if one is: never one left from an earlier launch of the same member. */
+function requestForThisLaunch(place: CrewPlace, held: Pick<TheHeldMember, 'member' | 'launch'>): LifecycleRequest | undefined {
+  const read = theRequestOf(place, held.member)
+  return read.kind === 'pending' && sameLaunch(read.request.launch, held.launch) ? read.request : undefined
+}
+
 /**
  * Watches `held`'s request every `tick_ms` for as long as it runs, and acts on a stop for this launch once: the group
  * asked to end, made to after the grace, and the answer and the ledger's row kept once it has ended. Returns what ends
@@ -260,12 +316,12 @@ export function watchForAStop(host: WatchingHost, held: TheHeldMember, tick_ms: 
   let grace: NodeJS.Timeout | undefined
   const tick = setInterval(() => {
     if (acting !== undefined || 'refusal' in host.stores.lifecycle) return
-    const read = theRequestOf(host.stores.lifecycle, held.member)
-    if (read.kind !== 'pending' || !sameLaunch(read.request.launch, held.launch)) return
-    acting = read.request
-    held.tellOwner(`${held.member} is being stopped, asked by ${acting.by}: ${acting.reason}`)
+    const asked = requestForThisLaunch(host.stores.lifecycle, held)
+    if (asked === undefined) return
+    acting = asked
+    held.tellOwner(`${held.member} is being stopped, asked by ${asked.by}: ${asked.reason}`)
     host.processes.signalGroup(held.launch.pid, held.launch.process_started_at, 'SIGTERM')
-    grace = setTimeout(() => held.stop(`asked by ${read.request.by}: ${read.request.reason}`), STOP_GRACE_MS)
+    grace = setTimeout(() => held.stop(`asked by ${asked.by}: ${asked.reason}`), STOP_GRACE_MS)
   }, tick_ms)
   const unwatch = (): void => {
     clearInterval(tick)
@@ -273,11 +329,16 @@ export function watchForAStop(host: WatchingHost, held: TheHeldMember, tick_ms: 
   }
   void held.stopped.then(async () => {
     unwatch()
-    if (acting === undefined || 'refusal' in host.stores.lifecycle) return
-    const outcome: LifecycleOutcome = { id: acting.id, ended_by: 'launcher', at: new Date(host.clock.now()).toISOString() }
-    const kept = keepTheRequest(host.stores.lifecycle, held.member, acting, outcome)
-    if (kept !== undefined) held.tellOwner(`${held.member} was stopped, and ${kept.refusal}`)
-    await keepTheStop(host.stores.rows, held.member, acting, outcome).catch((error: unknown) =>
+    if ('refusal' in host.stores.lifecycle) return
+    // A request for this launch that the tick had not yet read when the member ended is answered too (r=1 R1): the
+    // member is stopped, by itself, and the verb waiting on it is told so rather than left to its deadline.
+    const asked = acting ?? requestForThisLaunch(host.stores.lifecycle, held)
+    if (asked === undefined) return
+    const outcome: LifecycleOutcome = { id: asked.id, ended_by: acting === undefined ? 'itself' : 'launcher', at: new Date(host.clock.now()).toISOString() }
+    const answered = answerOnce(host.stores.lifecycle, held.member, asked, outcome)
+    if ('refusal' in answered) return held.tellOwner(`${held.member} was stopped, and ${answered.refusal}`)
+    if (!answered.ours) return
+    await keepTheStop(host.stores.rows, held.member, asked, outcome).catch((error: unknown) =>
       held.tellOwner(`${held.member} was stopped, and the ledger did not keep it: ${error instanceof Error ? error.message : String(error)}`),
     )
   })

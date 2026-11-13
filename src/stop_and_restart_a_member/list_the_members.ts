@@ -10,7 +10,7 @@ import type { MemberLaunch } from '../attribute_a_cross_session_sender/attribute
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { OFFLINE } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { CrewRow } from '../see_the_crew/see_the_crew.ts'
-import { isUnanswered, theRunningLaunchOf, type TheRequest } from './stop_and_restart_a_member.ts'
+import { isUnanswered, sameLaunch, theRunningLaunchOf, type TheRequest } from './stop_and_restart_a_member.ts'
 
 /** What `martha ls` says a member is. */
 export const LISTED_STATES = ['running', 'stopped', 'parked', OFFLINE] as const
@@ -61,7 +61,7 @@ function listed(reads: WhatTheListReads, member: Declared): ListedMember {
     state: stateOf(launch !== undefined, park.kind === 'parked', row?.state === OFFLINE),
     ...whereAndWhatOf(launch, row),
     model: modelOf(member, row),
-    note: [noteOfThePark(park), noteOfTheRequest(reads.requests[member.name], reads.now)].filter((note) => note !== '').join('; '),
+    note: [noteOfThePark(park), noteOfTheRequest(reads.requests[member.name], launch, reads.now)].filter((note) => note !== '').join('; '),
   }
 }
 
@@ -85,10 +85,14 @@ function stateOf(running: boolean, parked: boolean, quiet: boolean): ListedState
 
 const noteOfThePark = (park: ThePark): string => (park.kind === 'unreadable' ? park.refusal : '')
 
-function noteOfTheRequest(request: TheRequest | undefined, now: number): string {
+/**
+ * The note a member's request leaves: only a request for the launch running now (r=1 R2). One left from an earlier
+ * launch was never asked of the launcher holding the member today, and says nothing about it.
+ */
+function noteOfTheRequest(request: TheRequest | undefined, launch: MemberLaunch | undefined, now: number): string {
   if (request === undefined) return ''
   if (request.kind === 'unreadable') return request.refusal
-  if (request.kind !== 'pending') return ''
+  if (request.kind !== 'pending' || launch === undefined || !sameLaunch(request.request.launch, launch)) return ''
   return isUnanswered(request.request, now) ? REQUEST_PENDING_LAUNCHER_GONE : `${request.request.act} asked by ${request.request.by} at ${request.request.at}, pending`
 }
 

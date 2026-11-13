@@ -22,6 +22,7 @@ import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { REQUEST_PENDING_LAUNCHER_GONE, theListLine, theMembersListed } from './list_the_members.ts'
 import {
+  ANSWER_AFTER_EXIT_MS,
   ANSWER_DEADLINE_MS,
   LIFECYCLE_PLACE,
   LIFECYCLE_STREAM,
@@ -176,6 +177,13 @@ test('#312: a request no launcher answered by the deadline is shown as pending w
   assert.equal(past[1]!.note, REQUEST_PENDING_LAUNCHER_GONE)
 })
 
+test('#312 r=1 R2: a request left from an earlier launch puts no note on the member running now', () => {
+  const request: LifecycleRequest = { id: 'r', act: STOP, by: OWNER, reason: 'r', at: new Date(START).toISOString(), launch: { pid: 101, process_started_at: 'boot:1' } }
+  const listed = aList({ launches: [launchOf('builder', 202, 'boot:2')], running: { 202: 'boot:2' }, requests: { builder: { kind: 'pending', request } }, now: START + ANSWER_DEADLINE_MS + 1 })
+  assert.equal(listed[1]!.state, 'running')
+  assert.equal(listed[1]!.note, '')
+})
+
 // --- martha stop: the launcher answers ----------------------------------------------------------------------------
 
 /** A request kept as a verb would keep it, for a launcher to find. */
@@ -302,19 +310,29 @@ test('#312 test 3: with no launcher answering, the verb ends the recorded group 
   assert.equal((await rows.read(LIFECYCLE_STREAM)).length, 1)
 })
 
-test('#312 test 3: a group that outlives the grace is made to end, and only while it is still the same process', async () => {
+test('#312 test 3: a group that outlives the grace is made to end, and not before the grace is out', async () => {
   const place = aLifecyclePlace()
   const machine = aMachine({ 101: 'boot:1' })
   machine.ignoresSigterm()
-  const { host } = aStoppingHost(place, [launchOf('builder', 101, 'boot:1')], machine.processes)
+  const sentAt: number[] = []
+  let clock: { now(): number } | undefined
+  const { host } = aStoppingHost(place, [launchOf('builder', 101, 'boot:1')], {
+    identityOf: machine.processes.identityOf,
+    signalGroup: (pid, identity, signal) => {
+      sentAt.push(clock!.now())
+      return machine.processes.signalGroup(pid, identity, signal)
+    },
+  })
+  clock = host.clock
   await stopAMember(host, ASKING)
   assert.deepEqual(
     machine.signals.map((one) => one.signal),
     ['SIGTERM', 'SIGKILL'],
   )
+  assert.ok(sentAt[1]! - sentAt[0]! >= STOP_GRACE_MS, `the group was made to end ${sentAt[1]! - sentAt[0]!} ms after it was asked, inside the grace`)
 })
 
-test('#312 test 3: a pid handed to another process before the fallback is not signalled, and the verb says so', async () => {
+test('#312 test 3: a pid handed to another process before the fallback is not signalled; the recorded member is gone, so it is stopped', async () => {
   const place = aLifecyclePlace()
   const machine = aMachine({ 101: 'boot:1' })
   const launches = [launchOf('builder', 101, 'boot:1')]
@@ -326,9 +344,60 @@ test('#312 test 3: a pid handed to another process before the fallback is not si
     },
   })
   const stopped = await stopAMember(host, ASKING)
-  assert.equal(stopped.kind, 'refused')
-  assert.match(stopped.told, /no longer the process that was recorded, so it was not signalled/)
+  assert.deepEqual(stopped, { kind: 'stopped', ended_by: 'itself', told: 'builder is stopped; it had ended before its launcher answered, so Martha recorded the stop itself.' })
   assert.deepEqual(machine.signals, [], 'nothing was sent to the process that holds the pid now')
+})
+
+// --- the member ends before anyone acts (r=1 R1) -----------------------------------------------------------------
+
+test('#312 r=1 R1: a member gone before its launcher\'s tick is stopped by itself, without the verb waiting out its deadline', async () => {
+  const place = aLifecyclePlace()
+  const machine = aMachine({ 101: 'boot:1' })
+  const { host, rows } = aStoppingHost(place, [launchOf('builder', 101, 'boot:1')], machine.processes)
+  const verb: StoppingHost = {
+    ...host,
+    // The member ends on its own while the verb waits for the first time.
+    wait: async (ms) => {
+      machine.reuse(101, 'gone')
+      await host.wait(ms)
+    },
+  }
+  const stopped = await stopAMember(verb, ASKING)
+  assert.equal(stopped.kind === 'stopped' && stopped.ended_by, 'itself')
+  assert.ok(host.clock.now() - START < ANSWER_DEADLINE_MS, `the verb waited ${host.clock.now() - START} ms for a member that had ended`)
+  assert.ok(host.clock.now() - START >= ANSWER_AFTER_EXIT_MS, 'and gave its launcher its cleanup first')
+  assert.deepEqual(machine.signals, [], 'nothing was signalled')
+  const read = theRequestOf(place, 'builder')
+  assert.equal(read.kind === 'answered' && read.outcome.ended_by, 'itself', 'the request ends answered, so ls shows nothing pending')
+  const ledger = await rows.read(LIFECYCLE_STREAM)
+  assert.deepEqual(ledger.map((one) => (one.row as Record<string, unknown>)['ended_by']), ['itself'])
+})
+
+test('#312 r=1 R1: a launcher whose member ended before its tick answers the request for it, ended by itself, once', async () => {
+  mock.timers.enable({ apis: ['setInterval', 'setTimeout'] })
+  try {
+    const place = aLifecyclePlace()
+    const machine = aMachine({})
+    keepAPending(place, 'stop-1', OWNER, { pid: 101, process_started_at: 'boot:1' })
+    const { host, rows } = aStoppingHost(place, [], machine.processes)
+    let ended: (() => void) | undefined
+    const stopped = new Promise<void>((resolve) => (ended = resolve))
+    watchForAStop(
+      { stores: { lifecycle: place, rows }, processes: machine.processes, clock: host.clock },
+      { member: 'builder', launch: { pid: 101, process_started_at: 'boot:1' }, stop: () => {}, stopped, tellOwner: () => {} },
+      1_000,
+    )
+    ended!()
+    await stopped
+    await new Promise((resolve) => setImmediate(resolve))
+    const read = theRequestOf(place, 'builder')
+    assert.equal(read.kind === 'answered' && read.outcome.ended_by, 'itself')
+    assert.deepEqual(machine.signals, [], 'a member already gone is sent nothing')
+    const ledger = await rows.read(LIFECYCLE_STREAM)
+    assert.deepEqual(ledger.map((one) => (one.row as Record<string, unknown>)['ended_by']), ['itself'], 'one row')
+  } finally {
+    mock.timers.reset()
+  }
 })
 
 // --- two at once --------------------------------------------------------------------------------------------------
