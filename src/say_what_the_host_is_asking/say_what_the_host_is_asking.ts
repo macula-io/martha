@@ -165,10 +165,12 @@ function theCallRan(held: WhatTheHostIsAsking, call: ACallTheHostMade, at: numbe
  * A call the host answered: every dialog it raised closes, which on this host is the owner having answered it. A
  * dialog is matched to the call by the call's own id, or — for one keyed by what asked, because the host named no call
  * before it asked — by the tool, the input and the agent that asked. A menu the host named no call for is the oldest
- * one open: the host asks one menu at a time in a session.
+ * one open, and only a menu tool's answer may take it: the host asks one menu at a time in a session, and every answer
+ * reaches this function, so a call of any other tool that the host named no id for says nothing at all about the menu
+ * the owner is still looking at (r=3 R1).
  */
 function theCallAnswered(held: WhatTheHostIsAsking, call: ACallTheHostMade, at: number): WhatIsLeftToAsk {
-  const unnamed = call.id === undefined ? held.dialogs.find((dialog) => dialog.kind === 'menu') : undefined
+  const unnamed = call.id === undefined && call.tool === MENU_TOOL ? held.dialogs.find((dialog) => dialog.kind === 'menu') : undefined
   const closed = held.dialogs.filter((dialog) => (call.id !== undefined && dialog.id === call.id) || dialog.key === unnamed?.key || askedByTheCallThatAnswered(dialog, call))
   return {
     state: {

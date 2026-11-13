@@ -77,12 +77,61 @@ test('a call of another tool does not close a permission dialog it did not raise
   assert.equal(other.state.dialogs.length, 1)
 })
 
+test('a call of the same tool and another input does not close a permission keyed by what asked (r=3 M5)', () => {
+  const asked = said(NOTHING_IS_ASKED, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
+  const other = said(asked.state, { said: 'answered', call: aCall('toolu_2', { command: 'ls' }) }, AT + 1)
+  assert.deepEqual(other.keys, [], 'the owner was asked about one command, and another command is not it')
+  assert.equal(other.state.dialogs.length, 1)
+  const same = said(other.state, { said: 'answered', call: aCall('toolu_3') }, AT + 2)
+  assert.deepEqual(same.keys, asked.keys, 'the call whose input is the input that was asked about is the one that closes it')
+  assert.deepEqual(same.state.dialogs, [])
+})
+
+test('a call by another agent does not close a permission keyed by what asked (r=3 M4)', () => {
+  const asked = said(NOTHING_IS_ASKED, {
+    said: 'permission',
+    call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' }, agent: 'the-first-agent' },
+  })
+  const other = said(asked.state, { said: 'answered', call: aCall('toolu_4', undefined, CLAUDE_CODE_SHELL_TOOL, 'the-second-agent') }, AT + 1)
+  assert.deepEqual(other.keys, [], 'another agent running the same command is not the call the owner was asked about')
+  assert.equal(other.state.dialogs.length, 1)
+  const same = said(other.state, { said: 'answered', call: aCall('toolu_5', undefined, CLAUDE_CODE_SHELL_TOOL, 'the-first-agent') }, AT + 2)
+  assert.deepEqual(same.keys, asked.keys, 'the agent that asked is the agent whose answer closes it')
+  assert.deepEqual(same.state.dialogs, [])
+})
+
+test('an answered call leaves no check pending, so the next identical ask takes the next call\'s id (r=3 M8)', () => {
+  const first = said(NOTHING_IS_ASKED, { said: 'checked', call: aCall('toolu_a') })
+  const asked = said(first.state, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
+  assert.deepEqual(asked.keys, ['permission:toolu_a'], 'the ask takes the one check pending')
+  const answered = said(asked.state, { said: 'answered', call: aCall('toolu_a') }, AT + 1)
+  assert.deepEqual(answered.state.checks, [], 'the check went with the call it belonged to')
+  const again = said(answered.state, { said: 'checked', call: aCall('toolu_b') })
+  const askedAgain = said(again.state, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
+  assert.deepEqual(askedAgain.keys, ['permission:toolu_b'], 'a second identical ask takes the check still pending, never the one a call already answered')
+  const closes = said(askedAgain.state, { said: 'answered', call: aCall('toolu_b') }, AT + 2)
+  assert.deepEqual(closes.keys, ['permission:toolu_b'], 'and its own call\'s answer closes it')
+  assert.deepEqual(closes.state.dialogs, [])
+})
+
 test('a menu is the host\'s own call: open while it runs, closed when the host answers it', () => {
   const checked = said(NOTHING_IS_ASKED, { said: 'checked', call: aCall('toolu_q', { questions: [] }, MENU_TOOL) })
   const ran = said(checked.state, { said: 'ran', call: aCall('toolu_q', { questions: [] }, MENU_TOOL) })
   assert.deepEqual(ran.keys, [`menu:toolu_q`], 'the menu opens when its call runs')
   const answered = said(ran.state, { said: 'answered', call: aCall('toolu_q', { questions: [] }, MENU_TOOL) }, AT + 1)
   assert.deepEqual(answered.keys, [`menu:toolu_q`])
+  assert.deepEqual(answered.state.dialogs, [])
+})
+
+test('a call the host named no id for closes a menu only when it is the menu tool\'s own answer (r=3 R1)', () => {
+  const ran = said(NOTHING_IS_ASKED, { said: 'ran', call: aCall('toolu_q', { questions: [] }, MENU_TOOL) })
+  // Every answer reaches the close now, and a call of any other tool carries no id when the host named none: it says
+  // nothing about the menu the owner is still looking at.
+  const other = said(ran.state, { said: 'answered', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'ls' } } }, AT + 1)
+  assert.deepEqual(other.keys, [], 'a Bash call the host named no id for is not the menu\'s answer')
+  assert.equal(other.state.dialogs.length, 1)
+  const answered = said(other.state, { said: 'answered', call: { tool: MENU_TOOL, input: { questions: [] } } }, AT + 2)
+  assert.deepEqual(answered.keys, [`menu:toolu_q`], 'the menu tool\'s own answer, with no id, closes the oldest menu open')
   assert.deepEqual(answered.state.dialogs, [])
 })
 
