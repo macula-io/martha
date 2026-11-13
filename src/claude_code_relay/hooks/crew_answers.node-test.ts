@@ -9,10 +9,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { orderIn, PANE_CHROME_ROWS, paneIn, switchTheModelOnTheHost, theOwnersListIn } from './crew_answers.ts'
+import { endTheTurnOnTheHost, orderIn, PANE_CHROME_ROWS, paneIn, switchTheModelOnTheHost, theOwnersListIn } from './crew_answers.ts'
 import { theActAsked, theListForThePane, theStandingLines } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { STANDING_HEADING } from '../../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
-import { CARRY_A_TEXT, CARRY_THE_CLEAR, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
+import { CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, NO_ACT, THE_TURN_ENDED, THE_TURN_NOT_ENDED, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
 
 /** The model a switch moves a session to, in these tests: any name at all, since the slice only passes it on. */
@@ -125,4 +125,37 @@ test('the standing items under the list are the lines the launcher answers, and 
   assert.equal(read?.drawn.at(-standing.length)?.bold, true, 'the standing heading is not drawn bold')
   assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, drawn: undefined })), null, 'an answer with no lines was drawn')
   assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, drawn: [{ text: 1 }] })), null, 'a line that is not text was drawn')
+})
+
+// The end of a running turn (martha#311 design §1 and §5): a fourth order word beside the text, the clear and the
+// model, which every host's mod carries, and the outcome the mod reports back so only an end that ended is counted.
+test('#311: the end the launcher answers is the end the mod carries, with the turn it names (mutant: map it to none)', () => {
+  const order = theOrderOf({ act: CARRY_THE_END, turn_id: 'a-turn' })
+  assert.deepEqual(order, { carry: CARRY_THE_END, turn_id: 'a-turn' }, 'the launcher does not answer an end with the turn it ends')
+  assert.deepEqual(orderIn(JSON.stringify(order)), order, 'the mod reads the launcher\'s end order differently')
+})
+
+test('#311: an end that names no turn is not an order the mod carries out (mutant: drop the turn check)', () => {
+  assert.equal(orderIn(JSON.stringify({ carry: CARRY_THE_END })), null, 'an end with no turn was read as an order')
+  assert.equal(orderIn(JSON.stringify({ carry: CARRY_THE_END, turn_id: '' })), null, 'an end with an empty turn was read as an order')
+})
+
+test('#311: an end the host made is reported as ended, with the turn it ended', async () => {
+  const aborted: string[] = []
+  const reported: Readonly<Record<string, string>>[] = []
+  await endTheTurnOnTheHost(async (turn_id) => void aborted.push(turn_id), async (outcome) => void reported.push(outcome), 'a-turn')
+  assert.deepEqual(aborted, ['a-turn'], 'the host was not asked to end the turn the order named')
+  assert.deepEqual(reported, [{ turn_id: 'a-turn', end_outcome: THE_TURN_ENDED }], 'an end the host made was not reported as ended')
+})
+
+test('#311: an end the host refused is reported as refused, with its reason, never as ended (mutant: report every end as ended)', async () => {
+  const reported: Readonly<Record<string, string>>[] = []
+  await endTheTurnOnTheHost(
+    async () => {
+      throw new Error('no such turn')
+    },
+    async (outcome) => void reported.push(outcome),
+    'a-turn',
+  )
+  assert.deepEqual(reported, [{ turn_id: 'a-turn', end_outcome: THE_TURN_NOT_ENDED, end_refusal: 'Error: no such turn' }], 'a refused end was not reported as refused')
 })
