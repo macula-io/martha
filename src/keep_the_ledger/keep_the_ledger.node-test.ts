@@ -54,6 +54,15 @@ test('a milestone kept with log_a_milestone is read back by a later session of t
   assert.match(unknown.told, /Not recorded: "shipped_it" is not a milestone/, 'an event the ledger has no milestone for is told, not kept')
 })
 
+test('#320: a member cannot log the milestone a landing keeps, whatever it calls it', async (t) => {
+  const place = aCrewPlace(t)
+  for (const event of ['landed', 'package_landed', 'land']) {
+    const refused = await keepTheMilestone(place.host(1_000).host, { package: PACKAGE, member: 'Vesta', event, note: 'x' })
+    assert.match(refused.told, new RegExp(`Not recorded: "${event}" is not a milestone`), `${event} was kept, so a member can end every wait on a package with one call`)
+  }
+  assert.deepEqual(await readLedger(place.host(2_000).host, PACKAGE), [], 'the refused calls wrote a row anyway')
+})
+
 test('a member starting on a package is handed exactly the acts with no outcome, in order, and one it concludes is concluded once (test 10)', async (t) => {
   const place = aCrewPlace(t)
   const first = await announce(place.host(10).host, 'Vesta', 'push', 'main 1111..2222')
