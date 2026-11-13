@@ -9,7 +9,7 @@ import { test } from 'node:test'
 
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
-import { IDLE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { IDLE, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   CLAIM_LIMIT_PERCENT,
   NOBODY_FITS,
@@ -150,4 +150,20 @@ test('a member asked about that is not on the crew is refused by name, and nobod
   const answer = mayTakeAPackage(theCrewWith(everyoneFree()), 'Pluto', SUPERVISOR)
   assert.ok('refused' in answer)
   assert.match(answer.refused, /Pluto is not on this crew/)
+})
+
+test('an offline member whose last report finished its package is refused as offline, and flagged so (Uranus r=1)', () => {
+  // Its last report was step == of, so the busy rule would let it through: only the offline rule stands between a
+  // member whose session died just after a package and a yes.
+  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { state: 'waiting', holds: 'macula-io/martha#319', progress: { step: 5, of: 5 }, at: NOW - OFFLINE_AFTER_MS - 60_000 }) })
+  const answer = mayTakeAPackage(crew, 'Vesta', SUPERVISOR)
+
+  assert.ok(!('refused' in answer) && !answer.may, 'an offline member was offered a package because its last report was finished')
+  assert.match(answer.why, /^Vesta is offline: its row has been quiet for \d+m$/)
+  assert.deepEqual(seeWhoIsFree(crew).find((row) => row.member === 'Vesta')?.flags, [OFFLINE], 'its row is not flagged offline')
+})
+
+test('a member that needs the owner is flagged needs-you on its row (Uranus r=1)', () => {
+  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { state: 'needs-you', needs: 'a yes on the tag' }) })
+  assert.deepEqual(seeWhoIsFree(crew).find((row) => row.member === 'Vesta')?.flags, ['needs-you'], 'a row needing the owner raises no needs-you flag')
 })
