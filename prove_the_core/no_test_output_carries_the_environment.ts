@@ -77,13 +77,16 @@ export function plantedValueCounter(value: string): { readonly scan: (chunk: str
 }
 
 /** What the run says when the planted value was printed: the streams and counts, never the line. */
+/** The words a run's leak report opens with: what the runner of the recorded-host runs looks for (martha#383). */
+export const LEAK_REPORT_OPENING = 'no test output carries the environment (martha#92)'
+
 export function environmentLeakReportOf(counts: Readonly<Record<StreamName, number>>): string {
   const where = (Object.entries(counts) as [StreamName, number][])
     .filter(([, n]) => n > 0)
     .map(([stream, n]) => `${n} time(s) on ${stream}`)
     .join(', ')
   return (
-    `no test output carries the environment (martha#92): the value planted in ${PLANTED_VARIABLE} appeared ${where}. ` +
+    `${LEAK_REPORT_OPENING}: the value planted in ${PLANTED_VARIABLE} appeared ${where}. ` +
     'A test printed its environment, or let a child that prints one write into the run. ' +
     "Capture the child's output (stdio: 'pipe' and assert on it) and never put a whole environment in an assertion message."
   )

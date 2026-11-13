@@ -86,11 +86,12 @@ holds "${GUARD_FLAG}" || { echo "${NAME}: the runs' arguments lack ${GUARD_FLAG}
 # loop below holds its own invocation to that: its first run, on every call, host or none, is a planted file that prints
 # the value the output check plants in PLANTED_VARIABLE, and that run must fail with the check's own words. A loop line
 # that skipped the check would let it pass, and the runner refuses that by name before any listed run.
-PLANTED_VARIABLE="$(node --input-type=module -e "import { PLANTED_VARIABLE } from '${OUTPUT_CHECK}'; console.log(PLANTED_VARIABLE)")"
-[[ -n "${PLANTED_VARIABLE}" ]] || { echo "${NAME}: ${OUTPUT_CHECK} gave no PLANTED_VARIABLE" >&2; exit 2; }
+mapfile -t leak < <(node --input-type=module -e "import { LEAK_REPORT_OPENING, PLANTED_VARIABLE } from '${OUTPUT_CHECK}'; console.log(PLANTED_VARIABLE); console.log(LEAK_REPORT_OPENING)")
+PLANTED_VARIABLE="${leak[0]:-}"
+OUTPUT_CHECK_WORDS="${leak[1]:-}"
+[[ -n "${PLANTED_VARIABLE}" && -n "${OUTPUT_CHECK_WORDS}" ]] || { echo "${NAME}: ${OUTPUT_CHECK} gave no PLANTED_VARIABLE and LEAK_REPORT_OPENING" >&2; exit 2; }
 PLANTED_FILE="${WORK}/a_run_that_prints_the_planted_value.node-test.mjs"
 printf "import { test } from 'node:test'\ntest('prints the planted value', () => console.log(process.env['%s']))\n" "${PLANTED_VARIABLE}" > "${PLANTED_FILE}"
-OUTPUT_CHECK_WORDS="no test output carries the environment (martha#92)"
 
 count="$(jq 'length' "${RUNS}")"
 version=""
