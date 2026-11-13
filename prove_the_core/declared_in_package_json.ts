@@ -83,18 +83,42 @@ export function programsRunByScriptsOf(manifest: Manifest): string[] {
     .flatMap(([, command]) => [...command.matchAll(run)].map((match) => match[1] ?? ''))
 }
 
+/** The word that runs the next command only when the one before it passed: the test script's commands' separator. */
+export const THEN = '&&'
+/** The words that start a command with a variable unset: `env -u <name>`. */
+const UNSET = ['env', '-u'] as const
+
+/**
+ * The test script's commands, each as its words, in the order they run (martha#383): split on THEN, with each
+ * command's leading `env -u <name>` taken off and its name kept in `unsets`.
+ */
+export function testCommandsOf(manifest: Manifest): { readonly unsets: readonly string[]; readonly words: readonly string[] }[] {
+  const words = (manifest.scripts[TEST_SCRIPT] ?? '').split(/\s+/).filter((word) => word !== '')
+  const commands: string[][] = [[]]
+  for (const word of words) {
+    if (word === THEN) commands.push([])
+    else commands.at(-1)?.push(word)
+  }
+  return commands.map((command) => {
+    const unsets: string[] = []
+    while (command[0] === UNSET[0] && command[1] === UNSET[1] && command[2] !== undefined) unsets.push(command.splice(0, 3)[2] ?? '')
+    return { unsets, words: command }
+  })
+}
+
 /**
  * The folders whose code the test script runs, such as the core and the checks
  * on it: the first segment of every file or glob it names, quoted or not, the
  * runner node --test is started through included (martha#92). The word `node`
  * is the program, wherever it stands, and a leading ./ is the repository's top.
  * One that names no folder (a file or glob at the repository's top) is thrown,
- * by name, rather than skipped. Each folder is named once.
+ * by name, rather than skipped. Each folder is named once. THEN between commands
+ * and an `env -u <name>` before one name no folder (testCommandsOf).
  */
 export function codeFoldersOf(manifest: Manifest): string[] {
-  const folders = (manifest.scripts[TEST_SCRIPT] ?? '')
-    .split(/\s+/)
-    .filter((word) => word !== '' && word !== 'node' && !word.startsWith('-'))
+  const folders = testCommandsOf(manifest)
+    .flatMap((command) => command.words)
+    .filter((word) => word !== 'node' && !word.startsWith('-'))
     .map((word) => word.replace(/^(['"])(.*)\1$/, '$2').replace(/^\.\//, ''))
     .map((path) => {
       const folder = /^([^/*?[\]{}]+)\//.exec(path)?.[1]

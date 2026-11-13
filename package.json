@@ -8,7 +8,7 @@
     "node": ">=24.18.1"
   },
   "scripts": {
-    "test": "node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
+    "test": "prove_the_relay_loads/run_the_recorded_host_runs.sh && env -u MARTHA_RECORDED_HOST node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "check:posted-text": "node src/check_posted_text_carries_nothing_private/main.ts",
