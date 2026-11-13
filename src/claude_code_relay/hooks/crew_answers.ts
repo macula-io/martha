@@ -30,8 +30,34 @@ const CARRY_A_TEXT = 'submit'
 const CARRY_THE_CLEAR = 'clear'
 const CARRY_A_MODEL = 'model'
 
-/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
-export interface ThePaneShown {
+/**
+ * The two acts a model switch is made of, as the mod holds them (martha#315): the host's own command, and the report
+ * that makes the member's row say what this session runs.
+ */
+export interface TheModelSwitchHost {
+  /** Runs the host's model command with this model; a host that refuses it rejects. */
+  readonly runTheModelCommand: (model: string) => Promise<unknown>
+  /** Tells the launcher the model this session now runs on, which is the row's only writer of it. */
+  readonly noteTheModel: (model: string) => Promise<void>
+}
+
+/**
+ * Switches this session's model, and reports what it now runs on (martha#315). The row is written from that report,
+ * never from the order, so a command that failed leaves the row saying what the session really runs — a switch the host
+ * refused is not one to report. It lives here rather than in ./crew.tsx for the reason ./crew_answers.node-test.ts
+ * gives above: the host loads that module and no test can import it, so a decision kept there is a decision nothing
+ * checks (r=2, N18).
+ */
+export async function switchTheModelOnTheHost(host: TheModelSwitchHost, model: string): Promise<void> {
+  try {
+    await host.runTheModelCommand(model)
+  } catch {
+    return
+  }
+  await host.noteTheModel(model)
+}
+
+/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */export interface ThePaneShown {
   readonly header: string
   readonly lines: readonly string[]
   readonly open_at_start: boolean

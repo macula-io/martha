@@ -12,7 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
-import { orderIn, paneIn, PANE_CHROME_ROWS, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
 
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
@@ -164,17 +164,17 @@ async function carryOutTheAct($: CrewEngine, order: TheOrder): Promise<void> {
 
 /**
  * Runs the host's own model command with the model the launcher named, and tells the launcher what this session now
- * runs on (martha#315). The row is written from that report, never from the order, so a command that failed leaves the
- * row saying what the session really runs.
+ * runs on (martha#315). Both acts are the host's, so they are bound here; what a failed command means for the report is
+ * the slice's, where ./crew_answers.node-test.ts can reach it.
  */
 async function switchTheModel($: CrewEngine, model: string): Promise<void> {
-  try {
-    await $.command.run({ command: THE_MODEL_COMMAND, args: model })
-  } catch {
-    // A switch the host refused is not one to report: the row keeps the model this session still runs on.
-    return
-  }
-  await askTheLauncherQuietly($, THE_MODEL_REPORT, { model })
+  return await switchTheModelOnTheHost(
+    {
+      runTheModelCommand: (one) => $.command.run({ command: THE_MODEL_COMMAND, args: one }),
+      noteTheModel: (one) => askTheLauncherQuietly($, THE_MODEL_REPORT, { model: one }),
+    },
+    model,
+  )
 }
 
 /** Asks the launcher for one thing and says nothing when it cannot be heard: a report that failed changes no decision. */
