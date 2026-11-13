@@ -113,6 +113,14 @@ export const KNOWN_MESH_SERVER_SETTINGS: readonly string[] = MESH_TREE_RECORDING
 export const KNOWN_ENVIRONMENT_READS: Readonly<Record<string, readonly string[]>> = MESH_TREE_RECORDING.known_environment_reads
 export const RECORDED_MESH_TREES: readonly RecordedMeshTree[] = MESH_TREE_RECORDING.versions
 
+/**
+ * The settings the mesh server may be given, as the launch knows them: the reviewed ones of the recording the request
+ * carries, or the ones every launch knows when the request names no recording.
+ */
+export function knownSettingsOf(recording: MeshTreeRecording | undefined): readonly string[] {
+  return recording?.known_settings ?? KNOWN_MESH_SERVER_SETTINGS
+}
+
 /** A package's name from its key in the lock: the part after the last node_modules/. */
 const nameOfKey = (key: string): string => key.slice(key.lastIndexOf(NODE_MODULES) + NODE_MODULES.length)
 

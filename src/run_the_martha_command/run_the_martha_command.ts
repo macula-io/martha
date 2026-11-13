@@ -132,7 +132,7 @@ async function init(io: CommandIo, places: Places): Promise<number> {
 
 async function approve(io: CommandIo, places: Places): Promise<number> {
   const tellOwner = tellOwnerOn(io)
-  const outcome = await approveConfig({ ...places, terminal: io.terminal, tellOwner, now: () => new Date() })
+  const outcome = await approveConfig({ ...places, terminal: io.terminal, documents, tellOwner, now: () => new Date() })
   if (outcome.kind === 'refused') return refused(io, outcome.refusal)
   io.out(outcome.kind === 'nothing' ? NOTHING_TO_APPROVE : `Approved: fingerprint ${outcome.fingerprint}.`)
   return EXIT_DONE
