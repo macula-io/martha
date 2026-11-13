@@ -42,7 +42,7 @@ const loweredOf = (held: Record<string, number>, code: Readonly<Record<string, n
     .map(([directory, ceiling]) => ({ directory, from: ceiling, to: code[directory] ?? ceiling }))
 
 /** `text` with `hostCeilings` replaced by `next`, every other key where it was. */
-const withCeilings = (text: string, next: Record<string, number>): string => {
+export function withCeilings(text: string, next: Record<string, number>): string {
   const manifest = JSON.parse(text) as WithCeilings
   const martha = { ...(manifest.martha ?? {}), hostCeilings: next }
   return `${JSON.stringify({ ...manifest, martha }, null, 2)}\n`

@@ -31,3 +31,6 @@ export function declaredDirectoriesOf(manifest: Manifest): DeclaredDirectory[] {
 export function ceilingsOf(manifest: Manifest): Readonly<Record<string, number>> {
   return manifest.martha?.hostCeilings ?? {}
 }
+
+/** Where the ceilings stand, as package.json names them: the words a landing's commit records of a ceiling it brought. */
+export const CEILINGS_NAME = 'martha.hostCeilings'

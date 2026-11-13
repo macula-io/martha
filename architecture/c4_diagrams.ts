@@ -730,7 +730,19 @@ export function components(): Diagram {
 
 export const DIAGRAMS = [context, containers, components] as const
 
-export const ASSETS = join(import.meta.dirname, '..', 'assets')
+/** Where the pictures stand, relative to the repository. */
+const PICTURES = 'assets'
+
+export const ASSETS = join(import.meta.dirname, '..', PICTURES)
+
+/**
+ * The pictures this program draws, relative to the repository: what a landing redraws when two passed heads clash in
+ * them (martha#381). Read from the diagrams themselves, so a picture renamed here needs nothing renamed elsewhere.
+ */
+export const THE_PICTURES_THE_C4_DRAWS: readonly string[] = DIAGRAMS.map((make) => join(PICTURES, make().file))
+
+/** This program, relative to the repository: what a landing runs again over the tree it is merging. */
+export const THE_C4_DIAGRAMS_PROGRAM = 'architecture/c4_diagrams.ts'
 
 if (import.meta.main) {
   for (const make of DIAGRAMS) {

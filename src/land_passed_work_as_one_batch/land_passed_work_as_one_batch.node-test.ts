@@ -15,9 +15,14 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { THE_C4_DIAGRAMS_PROGRAM } from '../../architecture/c4_diagrams.ts'
+import { NPM } from '../../prove_the_core/declared_in_package_json.ts'
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
+import { HOST_CEILINGS_SCRIPT } from '../check_a_host_directory_stays_under_its_ceiling/check_a_host_directory_stays_under_its_ceiling.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -111,9 +116,14 @@ function at<T>(list: readonly T[], index: number): T {
   return one
 }
 
-/** GitHub as these tests give it: one answer per path it was told about, and every path it was asked. */
+/**
+ * GitHub as these tests give it: one answer per path it was told about, every path it was asked, and the scripts a
+ * landing runs answering at once — a fixture here holds no package.json to run them over. A test that reads what those
+ * runs come to wraps its own answer in front of this one (../aHostWithItsGenerators).
+ */
 function aGithub(answers: ReadonlyMap<string, unknown>): (request: ProcessRequest) => Promise<ProcessOutcome> {
   return async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (request.command === NPM) return { exit_code: 0, stdout: '', stderr: '' }
     if (request.command !== GITHUB_CLI) return runReal(request)
     const path = request.args[1] ?? ''
     const found = [...answers.entries()].find(([start]) => path.startsWith(start))
@@ -200,6 +210,100 @@ function aStoreThatRefusesTheAppendAt(refused: number): HostContract['stores']['
       (streams.get(stream) ?? []).map((row, position) => ({ position, row })),
   }
 }
+
+/** The adapter a batch's two heads grow, and the picture they redraw: what a landing may redo, and what it may not. */
+const AN_ADAPTER = 'src/an_adapter'
+const THE_PICTURE = 'assets/c4-context.svg'
+const REDRAWN = 'the picture, redrawn over the merged tree\n'
+const THE_CHECK_PROGRAM = join(import.meta.dirname, '..', 'check_a_host_directory_stays_under_its_ceiling', 'main.ts')
+
+/** `n` lines the linter counts as code, under `name`, so a planted tree's count is a number the test knows. */
+const codeLines = (name: string, n: number): string =>
+  Array.from({ length: n }, (_, at) => `export const ${name}${String(at)} = ${String(at)}\n`).join('')
+
+/** The package.json of a planted tree under these ceilings, with scripts a change outside the map made. */
+function aManifestWithScripts(scripts: Readonly<Record<string, string>>, ceilings: Readonly<Record<string, number>>): string {
+  const manifest = JSON.parse(theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings })) as Record<string, unknown>
+  return `${JSON.stringify({ ...manifest, scripts }, null, 2)}\n`
+}
+
+/** The tree a batch's heads are cut from, committed on the default branch and pushed. */
+function theBaseTreeOfABatch(fixture: Fixture, files: Readonly<Record<string, string>>): string {
+  writeIn(fixture.clone, 'eslint.config.mjs', LINTER_CONFIG)
+  for (const [file, text] of Object.entries(files)) writeIn(fixture.clone, file, text)
+  commitIn(fixture.clone, 'the tree the batch lands on')
+  gitIn(fixture.clone, 'push', '--quiet', 'origin', 'main')
+  return gitIn(fixture.clone, 'rev-parse', 'HEAD')
+}
+
+/** A branch from `from` holding one commit that writes every file of `files`, pushed; answers the commit it made. */
+function aBranchWriting(fixture: Fixture, name: string, from: string, files: Readonly<Record<string, string>>): string {
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', name, from)
+  for (const [file, text] of Object.entries(files)) writeIn(fixture.clone, file, text)
+  commitIn(fixture.clone, `the work on ${name}`)
+  gitIn(fixture.clone, 'push', '--quiet', 'origin', name)
+  return gitIn(fixture.clone, 'rev-parse', 'HEAD')
+}
+
+/** What a landing's runs came to: the npm scripts it ran, in order, and how often it redrew the picture. */
+interface TheRuns {
+  readonly npm: ProcessRequest[]
+  redraws: number
+}
+
+/**
+ * The processes a landing meets in these tests: npm runs the real ceiling check over the tree being merged, and answers a
+ * type check and a suite that pass; the picture is redrawn by the test, since the program that draws it would write the
+ * worktree's own assets rather than the clone's.
+ */
+function aHostWithItsGenerators(runs: TheRuns, under: (request: ProcessRequest) => Promise<ProcessOutcome>) {
+  return async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (request.command === NPM) {
+      runs.npm.push(request)
+      return request.args.includes(HOST_CEILINGS_SCRIPT) ? theCheckOver(request) : { exit_code: 0, stdout: '', stderr: '' }
+    }
+    if (request.command === process.execPath && request.args.includes(THE_C4_DIAGRAMS_PROGRAM)) {
+      runs.redraws += 1
+      writeFileSync(join(request.cwd, THE_PICTURE), REDRAWN)
+      return { exit_code: 0, stdout: '', stderr: '' }
+    }
+    return under(request)
+  }
+}
+
+/** The check as the landing runs it: the real program, over the tree the landing is merging. */
+function theCheckOver(request: ProcessRequest): ProcessOutcome {
+  const record = request.args.includes('--record')
+  const argv = [THE_CHECK_PROGRAM, '--repository', request.cwd, ...(record ? ['--record'] : [])]
+  const ran = spawnSync(process.execPath, argv, { cwd: request.cwd, encoding: 'utf8' })
+  return { exit_code: ran.status, stdout: ran.stdout, stderr: ran.stderr }
+}
+
+/** The two passed packages a test lands: their names, and the host the landing runs on. */
+async function theBatchOfTwo(fixture: Fixture, heads: readonly string[], runs: TheRuns) {
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const packages = heads.map((_, at) => `${fixture.repo}#${String(380 + at)}`)
+  const pulls = new Map<string, unknown>()
+  heads.forEach((head, at) => pulls.set(`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(281 + at, head)))
+  const tests = aHostOver(aHostWithItsGenerators(runs, aGithub(theAnswersFor(fixture.repo, pulls))))
+  for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
+  return { packages, tests }
+}
+
+/** The ceiling the landed tip holds for the adapter, as package.json on the origin has it. */
+function theCeilingOnTheTip(fixture: Fixture, tip: string): number | undefined {
+  const manifest = JSON.parse(inTheOrigin(fixture, 'show', `${tip}:package.json`)) as {
+    readonly martha?: { readonly hostCeilings?: Readonly<Record<string, number>> }
+  }
+  return manifest.martha?.hostCeilings?.[AN_ADAPTER]
+}
+
+/** The `count` merges a batch made on the origin, by the second parent of each, oldest first. */
+const theMergesOf = (fixture: Fixture, branch: string, count: number): readonly string[] =>
+  inTheOrigin(fixture, 'log', '--first-parent', '--format=%P', `-${String(count)}`, branch)
+    .split('\n')
+    .reverse()
+    .map((parents) => parents.trim().split(/\s+/)[1] ?? '')
 
 test('#256: three passed packages land as one batch, one --no-ff merge each, on a land branch cut from the default branch', async (t) => {
   const fixture = aRepository(t)
@@ -475,8 +579,7 @@ test('#256: a fast-forward whose row one package will not keep does not run, and
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : true, false, 'an act that was never sent was kept as succeeded')
 })
 
-test('#256: a clone that does not say who commits is refused before a branch is cut, with what to set', async (t) => {
-  const fixture = aRepository(t)
+test('#256: a clone that does not say who commits is refused before a branch is cut, with what to set', async (t) => {  const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   // A merge writes a commit, and git refuses one with no committer: the run must say so rather than cut a branch it
   // cannot merge onto.
@@ -489,4 +592,136 @@ test('#256: a clone that does not say who commits is refused before a branch is 
   assert.match(wordsOf(landed), /user\.email/, 'the answer did not name the setting to make')
   assert.doesNotMatch(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD'), new RegExp(`^${LAND}/`), 'a branch was cut for a batch that could not merge')
   assert.equal(base, gitIn(fixture.clone, 'rev-parse', 'origin/main'))
+})
+
+test('#381: two heads that both grow one adapter land together, its ceiling at the base plus both raises', async (t) => {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+  })
+  // One line both heads add: each counted it, and the merged tree holds it once, so the sum stands one above the tree
+  // and only a record run brings the ceiling down to the count.
+  const shared = `${codeLines('a', 2)}export const shared = 0\n`
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    [`${AN_ADAPTER}/one.ts`]: shared,
+    [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 4 } }),
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    [`${AN_ADAPTER}/one.ts`]: shared,
+    [`${AN_ADAPTER}/three.ts`]: codeLines('d', 2),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 5 } }),
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], redraws: 0 }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('told' in landed, `a batch that clashes only in the ceilings was refused: ${wordsOf(landed)}`)
+  const branch = theLandBranchesOnOrigin(fixture)[0] ?? ''
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${branch}`)
+  assert.deepEqual(theMergesOf(fixture, branch, 2), [ours, theirs], 'the batch is not one merge per head, in order')
+  assert.equal(
+    theCeilingOnTheTip(fixture, tip),
+    6,
+    'the tip does not hold the base plus both raises: 2 + 2 + 3 read 7, and the merged tree counts 6',
+  )
+  assert.match(
+    inTheOrigin(fixture, 'log', '-1', '--format=%B', tip),
+    /Redone-generated: package\.json martha\.hostCeilings \(measured\)/,
+    'the landing commit does not say the ceilings were redone',
+  )
+  assert.ok(landed.told.includes(packages[1] ?? ''), 'the answer did not name the package whose ceiling was redone')
+  assert.ok(runs.npm.some((ran) => ran.args.includes('typecheck')), 'a redone landing pushed without the type check')
+  assert.ok(runs.npm.some((ran) => ran.args.includes('test')), 'a redone landing pushed without the suite')
+})
+
+test('#381: two heads that clash only in the picture and the ceilings land both, the picture redrawn from the merged tree', async (t) => {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+    [THE_PICTURE]: 'the picture as the base draws it\n',
+  })
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
+    [THE_PICTURE]: 'the picture as ours draws it\n',
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    [`${AN_ADAPTER}/three.ts`]: codeLines('d', 2),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 4 } }),
+    [THE_PICTURE]: 'the picture as theirs draws it\n',
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], redraws: 0 }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('told' in landed, `a batch that clashes only in generated files was refused: ${wordsOf(landed)}`)
+  const branch = theLandBranchesOnOrigin(fixture)[0] ?? ''
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${branch}`)
+  assert.deepEqual(theMergesOf(fixture, branch, 2), [ours, theirs], 'the batch is not one merge per head, in order')
+  assert.equal(runs.redraws, 1, 'the picture was not redrawn once over the merged tree')
+  assert.equal(inTheOrigin(fixture, 'show', `${tip}:${THE_PICTURE}`), REDRAWN.trim(), 'the tip holds a picture the landing did not draw')
+  assert.equal(theCeilingOnTheTip(fixture, tip), 5, 'the tip does not hold the count the merged tree measures: 2 + 1 + 2')
+  assert.match(
+    inTheOrigin(fixture, 'log', '-1', '--format=%B', tip),
+    /Redone-generated: assets\/c4-context\.svg \(picture\); package\.json martha\.hostCeilings \(measured\)/,
+    'the landing commit does not say what it redid',
+  )
+  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after a redone landing')
+  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a redone landing kept its land branch in the clone')
+})
+
+test('#381: a clash that also touches a source file stops the batch, naming the path it will not settle', async (t) => {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+    [THE_PICTURE]: 'the picture as the base draws it\n',
+  })
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    [`${AN_ADAPTER}/one.ts`]: `${codeLines('a', 2)}export const ours = 1\n`,
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
+    [THE_PICTURE]: 'the picture as ours draws it\n',
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    [`${AN_ADAPTER}/one.ts`]: `${codeLines('a', 2)}export const theirs = 1\n`,
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
+    [THE_PICTURE]: 'the picture as theirs draws it\n',
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], redraws: 0 }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.match(wordsOf(landed), /stopped at/, 'a clash in a source file was settled by the landing')
+  assert.ok(wordsOf(landed).includes(`${AN_ADAPTER}/one.ts`), `the answer did not name the path a builder has to settle: ${wordsOf(landed)}`)
+  assert.equal(runs.redraws, 0, 'the picture was redrawn for a clash the landing refuses')
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that could not settle its clash was pushed anyway')
+  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left mid-merge after the batch stopped')
+})
+
+test('#381: a package.json that differs outside the ceilings is not a generated file: the batch stops and names it', async (t) => {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+  })
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    'package.json': aManifestWithScripts({ ours: 'echo ours' }, { [AN_ADAPTER]: 2 }),
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    'package.json': aManifestWithScripts({ theirs: 'echo theirs' }, { [AN_ADAPTER]: 3 }),
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], redraws: 0 }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.match(wordsOf(landed), /stopped at/, 'a clash outside the ceilings was settled by the landing')
+  assert.match(wordsOf(landed), /package\.json differs outside/, `the answer did not say what the clash was: ${wordsOf(landed)}`)
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that could not settle its clash was pushed anyway')
 })
