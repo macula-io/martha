@@ -266,16 +266,15 @@ test('every component box has a row in the Components table', () => {
 // page below is the real one with one box's row taken away in a way the check must still see.
 const CREW_BOX = 'show_dashboard_beat, keep_the_ledger'
 const STORE_BOX = 'crew_files_directory'
-const rowOf = (title: string): string => {
-  const cell = `| ${title.split(', ').map((name) => `\`${name}\``).join(', ')} |`
-  return README.split('\n').find((line) => line.startsWith(cell))!
-}
+/** The table row whose Component cell opens with the box title's first directory. */
+const rowOf = (title: string): string =>
+  README.split('\n').find((line) => line.startsWith(`| \`${title.split(', ')[0]}\``))!
 
 test('a box whose row is gone, named only in the text of another row, or tabled below the Components table has no row', () => {
   const crewRow = rowOf(CREW_BOX)
   const storeRow = rowOf(STORE_BOX)
   const rowGone = README.replace(`${crewRow}\n`, '')
-  const handoverRow = rowOf('write_my_handover, park_and_wake_a_member, wake_a_member')
+  const handoverRow = rowOf('write_my_handover')
   const namedOnlyInText = README.replace(`${storeRow}\n`, '')
     .replace(handoverRow, handoverRow.replace(/ \|$/, ` \`${STORE_BOX}\` keeps all of it whole. |`))
   const tabledBelow = rowGone.replace('| `record_mesh_answers` |', `${crewRow}\n| \`record_mesh_answers\` |`)
