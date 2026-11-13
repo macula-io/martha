@@ -7,7 +7,7 @@
 // writer records it — so a session that dies leaves a row that says so within one interval instead of a row
 // claiming work it is not doing.
 
-import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type DashboardRow, type HostFacts, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
 /** One member's row as a reader is shown it. */
@@ -17,7 +17,7 @@ export interface CrewRow {
   readonly state: ShownState
   readonly holds: string
   readonly task: string
-  readonly progress: { readonly step: number; readonly of: number }
+  readonly progress: Progress
   readonly waits: Waits | null
   readonly needs: string
   readonly host: HostFacts
@@ -149,14 +149,26 @@ export interface ThePaneAnswered {
   readonly redraw_ms: number
 }
 
-/** The whole pane answer, from the crew as this slice sees it: what it draws, and how the host is asked to draw it. */
-export function thePaneAnsweredBy(seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts }, opens_at_start: boolean, redraw_ms: number): ThePaneAnswered {
-  const lines = seen.rows.map(thePaneLine)
+/**
+ * The whole pane answer, from the crew as this slice sees it: what it draws, and how the host is asked to draw it.
+ *
+ * `block` is a part another slice composed and this one knows nothing about (martha#320's nudges): its lines are drawn
+ * under the members' rows, in the order the slice wrote them, and the rows the pane asks for count them. This slice
+ * composes no part of its own, so a crew with no nudges draws exactly the pane it drew before.
+ */
+export function thePaneAnsweredBy(
+  seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts },
+  opens_at_start: boolean,
+  redraw_ms: number,
+  block: readonly string[] = [],
+): ThePaneAnswered {
+  const members = seen.rows.map(thePaneLine)
+  const lines = [...(members.length === 0 ? [NO_MEMBER_HAS_REPORTED] : members), ...block]
   return {
     header: thePaneHeader(seen.counts),
-    lines: lines.length === 0 ? [NO_MEMBER_HAS_REPORTED] : lines,
+    lines,
     open_at_start: opens_at_start,
-    rows: theRowsThePaneAsksFor(seen.rows),
+    rows: theRowsThePaneAsksFor(seen.rows) + block.length,
     redraw_ms,
   }
 }

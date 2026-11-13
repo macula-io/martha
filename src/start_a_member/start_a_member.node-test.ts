@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
   nodeIdsFor,
@@ -30,10 +30,12 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { reviewModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_ORIGIN, RELAY_PATHS, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
@@ -42,7 +44,6 @@ import { launchRecordsDirectory } from '../linux_process_identity/launch_records
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
-import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stopTheCrew } from '../run_the_martha_command/list_stop_and_restart_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
@@ -525,6 +526,39 @@ test("the declaration's strict gate is what the member's relay is handed, and of
 
   assert.deepEqual(await seenWith({}), [false], 'no house rules: the gate is off, as the owner decided')
   assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), [true], 'the declaration turns it on')
+})
+
+/**
+ * The start reads the crew's declaration with the models this host runs (martha#315). A declaration that holds reviews
+ * to a model the host can spell starts, and the crew the member is handed carries that rule and the vocabulary it was
+ * read against. Read with no models — what a start passing `[]` would do — the same declaration is refused and no
+ * member starts, so a vocabulary this launcher forgot is a crew that cannot start its reviewer.
+ */
+test('a declaration naming a reviewer model this host runs starts the member, and the crew carries that model (#315)', async (t) => {
+  const [review_model] = CLAUDE_CODE_MODELS
+  assert.ok(review_model !== undefined && review_model !== '', 'the recorded host names no model, so this test could hold no review to one')
+  const place = placeFor(t, {})
+  await declared(place)
+  // The declaration the crew reads, with the house rule the owner wrote: init wrote none.
+  writeFileSync(
+    join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
+    `${JSON.stringify({ ...soloDeclaration('Ada Owner'), house_rules: { [REVIEW_MODEL]: review_model } }, null, 2)}\n`,
+  )
+  const fake = fakeClaude(place)
+  const handed: MemberRelayPlace[] = []
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const crew = handed[0]?.crew
+  assert.ok(crew !== undefined, 'the member was started with no crew tools')
+  // What the started member's crew holds, asked of the crew itself rather than inferred from the line that built it:
+  // the rule's own answer for the same call, compared exactly, so this pins the reviewer model and no copy of the
+  // rule's wording.
+  const review = { tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!, input: { [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch' } }
+  assert.equal(
+    await crew.refusesTheSubagent(review),
+    reviewModelRefusal(review, { spawn: CLAUDE_CODE_SUBAGENT_SPAWN, review_model }),
+    'the crew handed to the member holds no review to the model the owner declared',
+  )
 })
 
 test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
