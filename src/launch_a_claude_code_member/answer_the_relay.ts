@@ -627,6 +627,16 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (settings !== undefined) return denied(settings)
   const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
   if (memory !== undefined) return denied(memory)
+  return await theVerdictOn(state, session, call, agent_id)
+}
+
+/**
+ * The verdict on one tool call: the gate's own answer (../answer_a_tool_call), then the crew's reviewer-model rule
+ * beside it and never inside it (martha#315), and then the call is allowed. The signed-run receipt is taken only for a
+ * call that will run.
+ */
+async function theVerdictOn(state: RelayState, session: HostSession, call: { readonly tool: string; readonly input: Body }, agent_id: string | undefined): Promise<RelayReply> {
+  const { place } = state
   const verdict = answerToolCall({
     tool: call.tool,
     session,
@@ -639,6 +649,8 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
     ...(place.strict_gate === undefined ? {} : { strict_gate: place.strict_gate }),
   })
   if (verdict !== undefined) return denied(verdict.deny)
+  const offTheReviewModel = await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })
+  if (offTheReviewModel !== undefined) return denied(offTheReviewModel)
   place.signed_runs?.callAllowed(call.tool, call.input)
   return answered(ALLOW)
 }
