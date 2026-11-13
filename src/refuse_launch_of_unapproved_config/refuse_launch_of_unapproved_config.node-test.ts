@@ -801,3 +801,26 @@ test('#306: a directory where a crew text should be is refused, naming it', (t) 
   assert.ok(decision.refusal.includes(CONVENTIONS.split(sep).join('/')), decision.refusal)
   assert.match(decision.refusal, /is a directory/)
 })
+
+/**
+ * A link where a crew text should be is the crew's link, never the file it points at (martha#306 r=3): an entry named
+ * after the target would be approved under a name the crew never wrote, and the launch, which names the link, would
+ * find no bytes under it and hand Martha's shipped text instead. So it is an entry of its own, and refused by name.
+ */
+test('#306 r=3: a crew text that is a symlink is an entry of its own, and the launch is refused naming it', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, join('docs', 'CONVENTIONS.md'), 'Read the register first.\n')
+  mkdirSync(join(place.checkout, DECLARATION_DIRECTORY), { recursive: true })
+  symlinkSync(join('..', 'docs', 'CONVENTIONS.md'), join(place.checkout, CONVENTIONS))
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const { state, decision } = decideCrew(crew)
+
+  const entry = state.entries.find((one) => one.path === CONVENTIONS.split(sep).join('/'))
+  assert.ok(entry !== undefined, 'a crew text the crew wrote as a link is no entry of the approval at all: the target is named in its place')
+  assert.equal(entry.kind, 'symlink', `the link is approved as ${entry.kind}, under the name the crew wrote`)
+  assert.equal(decision.allow, false, 'a crew text that is a symlink was approved')
+  if (decision.allow) return
+  assert.ok(decision.refusal.includes(CONVENTIONS.split(sep).join('/')), decision.refusal)
+  assert.match(decision.refusal, /is a symlink/)
+})

@@ -6,11 +6,11 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, watch, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, watch, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative, sep } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -686,4 +686,60 @@ test('#306: after the owner approves the changed conventions, the next member is
   const handed = await theCrewTextHandedAt(socket_path, 'startup', 'session-306-reapproved')
   assert.ok(handed.includes(CONVENTIONS_EDITED.trim()), 'the member is not handed the text the owner approved')
   assert.ok(!handed.includes(CONVENTIONS_AS_WRITTEN.trim()), 'the member is handed the text the owner replaced')
+})
+
+/** The path a refusal spells for a file of the place: relative to the project, with `/` on every system. */
+const asTheOwnerReadsIt = (path: string): string => path.split(sep).join('/')
+
+/**
+ * Replaces a file of the place with a link to another file of it, and commits the link: what an owner's git carries
+ * when they keep one text in two places by pointing at it rather than copying it.
+ */
+function linkedInsteadOfWritten(place: Place, path: string, target: string): void {
+  rmSync(join(place.root, path))
+  symlinkSync(relative(dirname(join(place.root, path)), join(place.root, target)), join(place.root, path))
+  git(place.root, 'add', '--all')
+  git(place.root, 'commit', '-q', '-m', `link ${path}`)
+}
+
+/**
+ * A link where a crew text should be is refused by name, and nothing runs (martha#306 r=3, the r=2 review's finding).
+ * The gate read a link's target and approved it, while the launch looked the link's own path up among the bytes it
+ * carried, found none, and handed Martha's shipped text with no word to the owner. A link has no bytes the crew
+ * approved, so the start says so and stops before the host is asked.
+ */
+test('#306 r=3: a role text the crew wrote as a link refuses the start, naming the path and saying it is a symlink', async (t) => {
+  const roleText = join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')
+  const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', 'builder.md')]: OWN_ROLE_TEXT })
+  linkedInsteadOfWritten(place, roleText, join('docs', 'builder.md'))
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, lines))
+  assert.equal(started.started, false, 'a role text that is a symlink did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(roleText)), `the refusal does not name the linked text: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.deepEqual(lines, [refusal], 'the refusal is shown to the owner once')
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+/**
+ * The same for the conventions file the declaration names, and in particular not the refusal the r=2 fix gave: the
+ * link's target was carried while the compose looked the link's path up, so the answer said the declaration named a
+ * file that was not there — a wrong reason for the right outcome, sending the owner to write a file that was there.
+ */
+test('#306 r=3: a conventions file the crew wrote as a link refuses the start by name, and not as a file that is missing', async (t) => {
+  const conventions = join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)
+  const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN })
+  linkedInsteadOfWritten(place, conventions, join('docs', CREW_CONVENTIONS))
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a conventions file that is a symlink did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(conventions)), `the refusal does not name the linked conventions file: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.ok(!refusal.includes('no such file'), `the refusal says the file is missing, and it is there as a link: ${refusal}`)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
 })
