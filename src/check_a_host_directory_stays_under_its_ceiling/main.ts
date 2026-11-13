@@ -4,17 +4,21 @@
 // Every directory package.json declares under martha.hostAdapters or
 // martha.hostGlue carries a ceiling in martha.hostCeilings: how many lines of
 // code it may hold. A directory over its ceiling is a decision that hid where no
-// core check reads it, and this fails it by name (martha#322).
+// core check reads it, and this fails it by name (martha#322). A ceiling above
+// its directory's count fails too: it is room for that decision to grow back
+// unseen, so the change that shrinks a directory brings its ceiling down with
+// --record (martha#341).
 //
 // --measure prints each declared directory's count and judges nothing: what a
-// member reads when a directory shrank and a ceiling could come down, or when a
-// new directory is declared and its first ceiling has to be chosen by hand.
+// member reads when a new directory is declared and its first ceiling has to be
+// chosen by hand.
 // --record brings an existing ceiling down to its count, and never raises one and
 // never invents one, which is why it is the only way the map is written.
 //
-// Exit 0 every directory under its ceiling, 1 a directory over it, a declared
-// directory with no ceiling, or a ceiling no list declares a directory for, 2 the
-// check could not be made. It never passes because it could not look.
+// Exit 0 every directory at its ceiling, 1 a directory over it, a ceiling above
+// its directory, a declared directory with no ceiling, or a ceiling no list
+// declares a directory for, 2 the check could not be made. It never passes
+// because it could not look.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 
@@ -68,7 +72,7 @@ const judge = (judged: Judged): number => {
     console.error(`${NAME}: ${judged.findings.length} finding(s)`)
     return 1
   }
-  console.log(`${NAME}: ${judged.declared.length} host director(ies) under their ceilings`)
+  console.log(`${NAME}: ${judged.declared.length} host director(ies) at their ceilings`)
   return 0
 }
 
