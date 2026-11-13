@@ -252,11 +252,13 @@ jobs:
   # directory package.json declares under martha.hostAdapters or
   # martha.hostGlue carries a ceiling in martha.hostCeilings: how many lines of
   # code it may hold, counting the files the linter reads as code and the lines
-  # the compiler reads as code. The caps are named once, in package.json, and the
-  # tests under src/check_a_host_directory_stays_under_its_ceiling/ prove the
-  # check bites (one line over, no ceiling, a `.json` that does not count, code
-  # in a dot directory that does), so this job runs the live judge over the tree
-  # and nothing else.
+  # the compiler reads as code. A ceiling above its directory's count fails as
+  # well (martha#341), so a shrink is recorded with --record in the change that
+  # made it. The caps are named once, in package.json, and the tests under
+  # src/check_a_host_directory_stays_under_its_ceiling/ prove the check bites (one
+  # line over, one line under, no ceiling, a `.json` that does not count, code in
+  # a dot directory that does), so this job runs the live judge over the tree and
+  # nothing else.
   ceilings:
     name: host directories under their ceilings
     runs-on: ubuntu-latest
