@@ -19,12 +19,16 @@
 // batch landed or stopped, so the clone a workspace keeps on its default branch does not leave it. Every run of git carries
 // marthasOwnGitArgs (../run_marthas_own_git) and goes through the contract's processes.run, and the repository and
 // default branch are read from the clone's own origin (../read_the_origin_a_clone_has), never from an argument.
+//
+// A package the Supervisor holds stops both acts before anything runs (martha#364, ../hold_a_package_back_from_a_batch):
+// the batch before its fetch, and the fast-forward before its push is announced.
 
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import {
   findTheWorkTheseVerdictsPassed,
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
+import { A_HOLD_REFUSES, noneOfTheseIsHeld } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type LedgerRow, type Outcome } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
@@ -55,6 +59,10 @@ export const FAST_FORWARD_AFTER_THE_OWNERS_YES = 'fast_forward_after_the_owners_
 
 /** The prefix every integration branch's name carries; the refs under it are how a day's landings are counted. */
 export const LAND = 'land'
+
+/** What a refusal says was not done: the batch merged nothing, the fast-forward pushed nothing. */
+const NOTHING_LANDED = 'nothing was landed'
+const NOTHING_PUSHED = 'nothing was pushed'
 
 /** The ref an origin's default branch has in the clone, before it is asked for the branch's own name. */
 const THE_ORIGIN_PREFIX = 'origin/'
@@ -120,9 +128,8 @@ interface Announcement {
  * passed, and one push. Answers with the range for `verify_range`, or why nothing was landed.
  */
 export async function landPassedWorkAsOneBatch(host: LandingHost, member: string, batch: TheBatch): Promise<Landing> {
-  if (batch.packages.length === 0) return no('a batch names no package to land.')
-  const fetched = await git(host, batch.path, ['fetch', '--quiet', '--prune', 'origin'])
-  if (fetched.exit_code !== 0) return no(`git fetch did not work in ${batch.path}: ${saidBy(fetched)}.`)
+  const started = await theBatchMayStart(host, batch)
+  if ('refused' in started) return started
   const origin = await readTheOriginACloneHas(host, batch.path)
   if ('refused' in origin) return origin
   const clean = await theCloneHoldsNoChange(host, batch.path)
@@ -148,6 +155,8 @@ export async function landPassedWorkAsOneBatch(host: LandingHost, member: string
  */
 export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: string, forward: TheFastForward): Promise<Landing> {
   if (forward.packages.length === 0) return no('the fast-forward names no package it lands.')
+  const held = await noneOfTheseIsHeld(host, forward.packages, NOTHING_PUSHED)
+  if ('refused' in held) return held
   const what = `the default branch of ${forward.path} fast-forwarded to ${forward.tip}`
   const sent = await pushForEveryPackage(host, member, forward.packages, what, () => fastForward(host, forward))
   if ('refused' in sent) return sent
@@ -193,13 +202,23 @@ export async function landingsOf(host: LedgerHost, packages: readonly string[]):
 const theLandingsIn = (package_name: string, rows: readonly LedgerRow[]): readonly LandedPackage[] =>
   rows.filter((row) => row.kind === 'package_landed').map((row) => ({ package: package_name, at: row.at }))
 
+/** A batch starts when it names a package, none of its packages is held, and the clone fetches. */
+async function theBatchMayStart(host: LandingHost, batch: TheBatch): Promise<Step<true>> {
+  if (batch.packages.length === 0) return no('a batch names no package to land.')
+  const held = await noneOfTheseIsHeld(host, batch.packages, NOTHING_LANDED)
+  if ('refused' in held) return held
+  const fetched = await git(host, batch.path, ['fetch', '--quiet', '--prune', 'origin'])
+  if (fetched.exit_code !== 0) return no(`git fetch did not work in ${batch.path}: ${saidBy(fetched)}.`)
+  return { ok: true }
+}
+
 /** What `land_batch` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const LAND_BATCH_DESCRIPTION =
-  'Lands a batch of packages whose reviews passed, as one integration branch: one --no-ff merge per package at the head its reviewer passed, then the branch pushed. Answers with the range to check before the owner says yes.'
+  `Lands a batch of packages whose reviews passed, as one integration branch: one --no-ff merge per package at the head its reviewer passed, then the branch pushed. Answers with the range to check before the owner says yes. ${A_HOLD_REFUSES}`
 
 /** What `fast_forward_after_the_owners_yes` says it is for (martha#256). */
 export const FAST_FORWARD_DESCRIPTION =
-  'Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the range was checked.'
+  `Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the range was checked. ${A_HOLD_REFUSES}`
 
 /** The batch a call of `land_batch` names, or why it names none. */
 export function theBatchACallNames(args: Readonly<Record<string, unknown>>): Step<TheBatch> {

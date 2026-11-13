@@ -24,5 +24,10 @@
     "file": "src/launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts",
     "cases": 1,
     "proves": "a permission prompt reaches the owner's row and clears once the owner answers it (martha#363)"
+  },
+  {
+    "file": "src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts",
+    "cases": 2,
+    "proves": "a member's switch in this host leaves the owner's own default alone (martha#359)"
   }
 ]

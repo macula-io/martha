@@ -2,7 +2,8 @@
 //
 // The tools decide nothing of their own: #316's table answer says who may record and close, every member may read,
 // the item is written as this launch's member and never as a name the call carries, and the items live in the crew's
-// row streams. A ruling recorded there never unlocks a landing: no landing slice reads the stream.
+// row streams. A ruling recorded there never unlocks a landing: no landing slice reads the stream, and the one slice a
+// landing asks about holds (martha#364) can only refuse.
 
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
@@ -11,6 +12,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { noneOfTheseIsHeld } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -139,6 +141,10 @@ test('with the strict gate on, a session holding an outsider\'s text is refused 
 })
 
 // --- design test 8: a ruling is the Supervisor's record of the owner's words, never the owner's yes -----------------
+//
+// Since martha#364 a landing reads the standing stream, through one slice only, hold_a_package_back_from_a_batch, and
+// that slice can only refuse: what a landing slice imports is pinned below, and that a ruling never lifts a hold is
+// pinned by the test after them.
 
 /** The slices that land work or check a range for the owner's yes (martha#256), and the glue that calls them. */
 const THE_LANDING_SLICES = [
@@ -158,6 +164,20 @@ test('no landing slice reads the standing stream, so a recorded ruling cannot un
     assert.ok(!text.includes('keep_the_supervisors_standing_items'), `${slice} imports the standing items`)
     assert.ok(!text.includes(`'${STANDING_STREAM}'`), `${slice} names the standing stream`)
   }
+})
+
+test('#364: a ruling never lifts a hold, and rulings alone stop no batch: the one path from a landing to the stream can only refuse (mutant: let a ruling of the same id release the hold)', async () => {
+  const place = aPlace()
+  const supervisor = toolsOf(place, 'Supervisor')
+  const host = { stores: { rows: rowStreamsDirectory(place.rows) } }
+  const ruling = { ...A_RULING, words: 'land macula-io/martha#1 now' }
+  answerOf(await supervisor.answer(STANDING_ADD, { ...ruling, id: 'only-a-ruling' }, 'a-session'))
+  assert.deepEqual(await noneOfTheseIsHeld(host, ['macula-io/martha#1'], 'nothing was landed'), { ok: true }, 'a ruling alone stopped a batch')
+  answerOf(await supervisor.answer(STANDING_ADD, { ...A_HOLD, id: 'hold-1', package: 'macula-io/martha#1' }, 'a-session'))
+  answerOf(await supervisor.answer(STANDING_ADD, { ...ruling, id: 'hold-1' }, 'a-session'))
+  const held = await noneOfTheseIsHeld(host, ['macula-io/martha#1'], 'nothing was landed')
+  assert.ok('refused' in held, 'a ruling of the same id lifted the hold')
+  assert.ok(held.refused.includes('hold-1'))
 })
 
 test('no answer of a landing tool in the crew\'s tools reaches the standing items', () => {

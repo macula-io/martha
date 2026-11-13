@@ -35,8 +35,10 @@ import { ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 import { STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { THE_MODEL_KEY } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
+import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -103,6 +105,20 @@ const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared un
 
 /** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */
 const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narrows on by literal; the crew\'s park place is named the same word and is not this'
+/**
+ * Why a test names git's `config` subcommand by literal (martha#315, martha#359): it makes a throwaway repository and
+ * sets its identity, and the constant of that name is the file a git directory keeps its settings in, which the test
+ * neither reads nor writes.
+ */
+const THE_GIT_SUBCOMMAND = 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in'
+
+/**
+ * Why `model` is written by literal beside the settings key of the same spelling (martha#359): the key a restore may
+ * touch in the owner's settings file is one word, and these files mean other fields by it — the word an order carries
+ * a model under, and the name of the place a crew keeps its model records in. Reword the settings key and each of these
+ * matches nothing, and the gate says so by name.
+ */
+const THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE = 'a word of its own that the settings key of the owner\'s file is spelled the same as'
 
 /**
  * Why the gate's reading holds the old field's name by literal (martha#321): ../declare_crew imports that module,
@@ -114,7 +130,6 @@ const THE_OLD_GATE_FIELD = 'the declaration\'s own old gate field, read to keep 
 
 /** Why the host contract spells the standing items' source by literal (martha#317): a union member is a type. */
 const A_MEMBER_OF_THE_SOURCE_UNION = 'a member of the TurnSource union, which TypeScript holds by literal; the constant the crew\'s tools name it by is that same member'
-
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
@@ -136,6 +151,7 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: READ_THE_RECEIPTS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: PARK_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: WAKE_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: WAIT_FOR_CI, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: RESTART_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: REFRESH_THIS_SESSION, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   // The Supervisor's who-is-free tool (martha#319): the same reason, one more tool the mod answers by a literal.
@@ -223,9 +239,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: TOOL_CHECK, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
-  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: THE_GIT_SUBCOMMAND },
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts', reason: THE_GIT_SUBCOMMAND },
   // The same git subcommand, in the permission-prompt run's throwaway repository (martha#363).
-  { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: THE_GIT_SUBCOMMAND },
   // The word `model` in the model-switch work (martha#315), in five files that each mean a field of their own by it.
   { value: CLAUDE_CODE_SHELL_TOOL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: 'a call to a tool that spawns no subagent, named as the host names its shell: what the test needs is a real tool the rule must not hold' },
   { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
@@ -237,5 +254,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: THE_ROWS_MODEL_FIELD },
+  // The same spelling for the key a restore may touch in the owner's settings file (martha#359), in two files that mean
+  // something else by it.
+  { value: THE_MODEL_KEY, file: 'refresh_a_member/the_refresh_flow.ts', reason: `the word an order carries a model under, which this file holds as CARRY_A_MODEL; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
+  { value: THE_MODEL_KEY, file: 'switch_a_members_model/switch_a_members_model.ts', reason: `the name of the place a crew keeps its model records in, which this file holds as MODEL_PLACE; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
+  { value: THE_MODEL_KEY, file: 'a_crews_tools/a_switch_leaves_the_owners_default_alone.node-test.ts', reason: THE_ROWS_MODEL_FIELD },
 ]
 

@@ -28,12 +28,13 @@
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
+import { dirname } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
-import type { HandoverStampStore } from '../host_contract/host_contract.ts'
+import type { HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -69,6 +70,9 @@ import {
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -228,6 +232,18 @@ function theCrewsStores(state: MarthaState, root: string): { readonly crew: Crew
 }
 
 /**
+ * Where the owner's own default for new sessions lives, and where the one lock that guards it is kept (martha#359): from
+ * the host's own answer about which settings file it reads, made once in ../claude_code_host (martha#65, martha#75), so
+ * a config directory the host refuses is refused here by that same line rather than by a second opinion.
+ */
+function ownersDefaultPlaceOf(request: MemberStartRequest): OwnersDefaultPlace | Refused {
+  const settings = userSettingsPath(request.inherited)
+  return 'refusal' in settings
+    ? settings
+    : { config_dir: dirname(settings.path), file: settings.path, store: ownersSettingsIn(settings.path, request.state.state_root) }
+}
+
+/**
  * Where a stop or a restart of this crew's members is asked (martha#312): the crew's lifecycle requests, the launcher's
  * records as the binder reads them, and the ledger. The owner's verbs and a member's restart tool ask through it alike.
  */
@@ -247,6 +263,16 @@ function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: 
   return 'refusal' in crew ? {} : { lifecycle: stoppingHostOn({ launcher: request.places, crew: crew.path }) }
 }
 
+/**
+ * Where the owner's default lives, after finishing any switch a killed launch left unfinished (martha#359, step 7): the
+ * owner's file must be right before any new session reads it, and the line that needs the owner goes to the terminal.
+ */
+async function finishAnySwitchBeforeTheHostStarts(request: MemberStartRequest, crewStores: ReturnType<typeof theCrewsStores>): Promise<OwnersDefaultPlace | Refused> {
+  const owners = ownersDefaultPlaceOf(request)
+  for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard) })) request.tellOwner(told)
+  return owners
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -260,6 +286,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   }
   const { snapshot_root, ...places } = request.places
   const crewStores = theCrewsStores(request.state, request.root)
+  const owners = await finishAnySwitchBeforeTheHostStarts(request, crewStores)
   // One raising for this launch, and one channel carrier over it: the carrier hears every turn the host takes in, so
   // a message counts as taken in only when the host raised it back (martha#253).
   const turns = turnsRaised()
@@ -299,6 +326,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
+        owners_settings: owners, // the owner's own settings file, and the lock that guards it (martha#359)
         ...theRestartPlaceOf(request),
       }),
     signed_runs: signedRunsOf(

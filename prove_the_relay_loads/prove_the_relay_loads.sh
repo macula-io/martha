@@ -20,6 +20,10 @@
 # (martha#132); every rule the launch writes is one this host matches (martha#226); a member's model switch runs in this
 # host (martha#315); a permission prompt this host draws reaches the owner's row and clears once answered (martha#363).
 #
+# And that switch leaves the owner's own default for new sessions alone (martha#359): the file the host really wrote is
+# the one Martha puts back, which the mechanism's own tests could agree with a mistake about. These cases read the same
+# binary, so they run here or nowhere.
+#
 # Exit: 0 the recorded host loads the relay and a launch leaves it as it was, 1 it does not (or a check did not bite),
 # 2 the host could not be set up.
 set -euo pipefail
