@@ -803,8 +803,7 @@ function theMembersTelling(launch: ClaudeCodeMemberLaunch): TheMembersTelling {
   const beats = dashboardRowsIn(launch.places.dashboard)
   return {
     theRow: (line) => {
-      const held = beats.read(launch.member_name)
-      if (held !== null) beats.keep({ ...held, needs: line, at: Date.now() })
+      beats.change(launch.member_name, (held) => (held === null ? null : { ...held, needs: line, at: Date.now() }))
     },
     theMember: (line) =>
       appendToTheChannel(

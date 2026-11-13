@@ -7,19 +7,31 @@
 //
 // WHAT IS DECIDED ON, and nothing else (Mercurius's ruling on martha#390, comment 6862772905):
 //
-//   - the origin kind the host stamped, `task-notification`, and inside its envelope two fixed fields: `<status>`, which
-//     must be the host's `failed`, and `<tool-use-id>`, which must be an Agent call this launcher allowed on the crew's
-//     reviewer model;
+//   - the origin kind the host stamped on the turn, and inside its envelope two fixed fields: the status element, which
+//     must be the host's own word for a failed agent, and the tool-use element, which must be an Agent call this
+//     launcher allowed on the crew's reviewer model;
 //   - the MODEL is that call's `resolvedModel`, as the host answered the call — never a name read out of the host's
 //     prose, which is why the module below has no pattern for a status code, for "limit", or for any other word;
-//   - the REASON is the envelope's `<summary>`, repeated verbatim. Martha adds no reading of its own to it.
+//   - the REASON is the envelope's summary element, repeated verbatim. Martha adds no reading of its own to it.
 //
-// The envelope is the HOST'S, and it is pinned: recorded_failed_review.json holds the text one run produced at a named
-// host version, and `theEnvelopeIsStillTheOneRecorded` fails by name when the recording this tree reads has moved to
-// another version, because a renamed element would otherwise read as "the host reported no failure". Recording it again
-// is the fix, and the check says so.
+// WHICH NAMES those elements have is not this slice's to say: a host renames them, and a name typed here would go stale
+// silently. The report the host writes is cut from the recorded host binary (../claude_code_host/
+// the_hosts_failed_agents_report.ts) and handed in, the way the review-model rule is handed the host's spawn description
+// (../run_reviews_on_the_review_model). This slice reads no disk and knows no host: it decides on what it is given.
 
-import { readFileSync } from 'node:fs'
+/** The envelope one host writes when an agent it started fails: its own names for the turn, its fields and its failure. */
+export interface TheReportTheHostWrites {
+  /** The notification's own name, which the host stamps as the turn's origin kind as well as writing it as an element. */
+  readonly notification: string
+  /** The element the agent's status is reported in. */
+  readonly status: string
+  /** The element the Agent call is named in: the id this launcher kept when it allowed the call. */
+  readonly tool_use: string
+  /** The element the host's own words for the stop are carried in. */
+  readonly summary: string
+  /** The status that says the agent failed: anything else is a report this slice does not read. */
+  readonly failed: string
+}
 
 /** One review the host reported as failed: the model the call resolved to, and the host's own words for the stop. */
 export interface TheFailedReview {
@@ -27,7 +39,7 @@ export interface TheFailedReview {
   readonly tool_use_id: string
   /** The model the host said the call resolved to, from its answer for the call. */
   readonly model: string
-  /** The host's `<summary>`, exactly as it wrote it. */
+  /** The host's own words for the stop, exactly as it wrote them. */
   readonly reason: string
 }
 
@@ -62,71 +74,48 @@ export function reviewSpawnsRemembered(): TheReviewSpawns {
   }
 }
 
-/** The envelope this tree carries, as it was recorded: the host's own text, and the version that wrote it. */
-interface RecordedFailedReview {
-  readonly host_version: string
+/** What the launcher reads a turn of the host's with: the turn's own kind, the crew's reviewer model, and the report. */
+export interface HowTheTurnIsRead {
+  /** The origin kind the engine stamped on the turn, as the host contract hands it over. */
   readonly origin_kind: string
-  readonly text: string
-}
-
-/** The recording, read once. A recording this tree cannot read is a fault of the tree, not of a member's turn. */
-export const THE_FAILED_REVIEW_RECORDING: RecordedFailedReview = JSON.parse(
-  readFileSync(new URL('./recorded_failed_review.json', import.meta.url), 'utf8'),
-) as RecordedFailedReview
-
-/** The host's own element names in the envelope. Fixed fields, which is why they are read and the prose is not. */
-export const THE_HOSTS_STATUS = 'status'
-export const THE_HOSTS_TOOL_USE = 'tool-use-id'
-export const THE_HOSTS_SUMMARY = 'summary'
-
-/** The one status that says the agent failed: anything else is a report this slice does not read. */
-export const THE_HOSTS_FAILED = 'failed'
-
-/** The id of the Agent call the recording's envelope names: the review that failed in the run recorded. */
-export const THE_RECORDED_CALLS_ID = theElementIn(THE_FAILED_REVIEW_RECORDING.text, THE_HOSTS_TOOL_USE) ?? ''
-
-/**
- * Why this tree's envelope is not the one the recorded host writes, or undefined when it is. Two things move: the host
- * version the tree records, which says the envelope was never re-read for it, and an element or a status the recording
- * no longer holds, which says the host renamed one. Either way a review's failure could read as no failure at all.
- */
-export function theEnvelopeIsStillTheOneRecorded(host_version: string): string | undefined {
-  const { text } = THE_FAILED_REVIEW_RECORDING
-  const recorded_on = THE_FAILED_REVIEW_RECORDING.host_version
-  if (host_version !== recorded_on) {
-    return `the host's failed-review envelope was recorded on ${recorded_on} and this tree reads ${host_version}: record it again (recorded_failed_review.json, beside this check) before a review that fails is read as one that did not`
-  }
-  for (const element of [THE_HOSTS_STATUS, THE_HOSTS_TOOL_USE, THE_HOSTS_SUMMARY]) {
-    if (theElementIn(text, element) === undefined) {
-      return `the recorded envelope holds no <${element}>: the host renamed an element, and a review that fails would read as one that did not`
-    }
-  }
-  if (theElementIn(text, THE_HOSTS_STATUS) !== THE_HOSTS_FAILED) {
-    return `the recorded envelope's status is not ${THE_HOSTS_FAILED}: this slice reads the host's own word for a failed agent, and it is not the one recorded`
-  }
-  return undefined
+  /** The crew's reviewer model, as the declaration names it: what an allowed review's call named. */
+  readonly review_model: string
+  /** The envelope the host writes when an agent fails, as this host's own names say it. */
+  readonly report: TheReportTheHostWrites
 }
 
 /**
  * The review the host reports failed in `text`, or undefined when the turn is not its failed envelope for one of this
- * launcher's reviews. `origin_kind` is the engine's own stamp on the turn, `review_model` the crew's reviewer model as
- * the declaration names it, and the model in the answer is the one the allowed call resolved to, never one read here.
+ * launcher's reviews. The model is the one the allowed call resolved to, never one read here.
  */
-export function theFailedReviewIn(spawns: TheReviewSpawns, text: string, origin_kind: string, review_model: string): TheFailedReview | undefined {
-  const failure = theFailuresReport(text, origin_kind)
+export function theFailedReviewIn(spawns: TheReviewSpawns, text: string, reading: HowTheTurnIsRead): TheFailedReview | undefined {
+  const failure = theFailureReported(text, reading)
   if (failure === undefined) return undefined
   const spawn = spawns.theSpawn(failure.tool_use_id)
-  if (spawn === undefined || spawn.allowed_model !== review_model || spawn.resolved_model === undefined) return undefined
+  if (spawn === undefined || spawn.allowed_model !== reading.review_model || spawn.resolved_model === undefined) return undefined
   return { tool_use_id: failure.tool_use_id, model: spawn.resolved_model, reason: failure.reason }
 }
 
 /** What the host's envelope says failed: the call it names and its own words, or undefined when the turn is not one. */
-function theFailuresReport(text: string, origin_kind: string): { readonly tool_use_id: string; readonly reason: string } | undefined {
-  if (origin_kind !== THE_FAILED_REVIEW_RECORDING.origin_kind) return undefined
-  if (theElementIn(text, THE_HOSTS_STATUS) !== THE_HOSTS_FAILED) return undefined
-  const tool_use_id = theElementIn(text, THE_HOSTS_TOOL_USE) ?? ''
-  const reason = theElementIn(text, THE_HOSTS_SUMMARY) ?? ''
+function theFailureReported(text: string, { origin_kind, report }: HowTheTurnIsRead): { readonly tool_use_id: string; readonly reason: string } | undefined {
+  if (origin_kind !== report.notification) return undefined
+  if (theElementIn(text, report.status) !== report.failed) return undefined
+  const tool_use_id = theElementIn(text, report.tool_use) ?? ''
+  const reason = theElementIn(text, report.summary) ?? ''
   return tool_use_id === '' || reason === '' ? undefined : { tool_use_id, reason }
+}
+
+/**
+ * Why a turn does not read as the host's report at all, or undefined when it does, so the launch can say that the report
+ * it is pinned to is not the one this host writes rather than silently naming nothing (martha#390).
+ */
+export function whatTheEnvelopeNoLongerHolds(text: string, report: TheReportTheHostWrites): string | undefined {
+  for (const element of [report.status, report.tool_use, report.summary]) {
+    if (theElementIn(text, element) === undefined) {
+      return `it holds no <${element}>: the host renamed an element, and a review that fails would read as one that did not`
+    }
+  }
+  return theElementIn(text, report.status) === report.failed ? undefined : `its status is not ${report.failed}: this slice reads the host's own word for a failed agent, and it is not the one this host writes`
 }
 
 /** The sender a line Martha itself writes into the crew's channel carries (martha#390): never a member's own name. */
@@ -136,7 +125,7 @@ export const THE_CREWS_OWN_NAME = 'martha'
 export const theLineAboutIt = (failed: TheFailedReview): string => `review on ${failed.model}: ${failed.reason}`
 
 /** What one element of the host's envelope holds, or undefined when the text holds no such element. */
-function theElementIn(text: string, element: string): string | undefined {
+export function theElementIn(text: string, element: string): string | undefined {
   const opened = text.indexOf(`<${element}>`)
   if (opened === -1) return undefined
   const closed = text.indexOf(`</${element}>`, opened)

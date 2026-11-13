@@ -42,6 +42,7 @@ import {
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { reviewSpawnsRemembered, theFailedReviewIn, theLineAboutIt, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
@@ -742,7 +743,7 @@ async function nameTheReviewTheHostReportsFailed(state: RelayState, text: string
   if (crew === undefined || telling === undefined) return
   const review_model = await crew.theReviewModel()
   if (review_model === null) return
-  const failed = theFailedReviewIn(state.reviews, text, origin_kind, review_model)
+  const failed = theFailedReviewIn(state.reviews, text, { origin_kind, review_model, report: THE_HOSTS_FAILED_REVIEW })
   if (failed === undefined) return
   const line = theLineAboutIt(failed)
   telling.theRow(line)

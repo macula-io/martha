@@ -130,5 +130,40 @@
   ],
   "file_permission_rules": {
     "matcher": "let g=s.toolName===\"Write\"||s.toolName===\"NotebookEdit\"||s.toolName===\"MultiEdit\"?\"Edit\":s.toolName===\"Glob\"?\"Read\":void 0;"
+  },
+  "failed_agents_report": {
+    "notification": "task-notification",
+    "elements": [
+      {
+        "field": "taskId",
+        "element": "task-id"
+      },
+      {
+        "field": "toolUseId",
+        "element": "tool-use-id"
+      },
+      {
+        "field": "taskType",
+        "element": "task-type"
+      },
+      {
+        "field": "outputFile",
+        "element": "output-file"
+      },
+      {
+        "field": "status",
+        "element": "status"
+      },
+      {
+        "field": "summary",
+        "element": "summary"
+      }
+    ],
+    "task_statuses": [
+      "working",
+      "completed",
+      "failed",
+      "cancelled"
+    ]
   }
 }

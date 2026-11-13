@@ -28,6 +28,7 @@ import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules
 import { markdownTheHostLoadsIn } from '../claude_code_host/markdown_the_host_loads.ts'
 import { protectedConfigPlacesIn } from '../claude_code_host/protected_config_places.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { failedAgentsReportIn } from '../claude_code_host/the_hosts_failed_agents_report.ts'
 import { CARRIED, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
@@ -44,6 +45,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'markdown the host loads', read: (text) => markdownTheHostLoadsIn(text, managedFolderFunctionIn(text)) },
   { part: 'protected config places', read: protectedConfigPlacesIn },
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
+  { part: "a failed agent's report", read: (text) => ({ failed_agents_report: failedAgentsReportIn(text) }) },
 ]
 
 /** The function that builds the hook set, and each function an exit of it calls (martha#122). */

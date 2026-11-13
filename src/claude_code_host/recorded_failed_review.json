@@ -1,6 +1,5 @@
 {
   "_why": "The host's own envelope for a review whose agent failed (martha#390), recorded from Claude Code at the version below on 2026-11-13: a member spawned an Agent on the crew's reviewer model, the stand-in model refused that model with the API's 429 rate_limit_error, and the host submitted this turn to the member's session. A host that renames an element fails the drift check by name rather than reading as no failure.",
   "host_version": "2.1.323",
-  "origin_kind": "task-notification",
   "text": "<task-notification>\n<task-id>afad1959430f3ba35</task-id>\n<tool-use-id>toolu_standin_1</tool-use-id>\n<output-file>/tmp/claude-1000/-tmp-j390-XxfsLz-project/a41daf64-dcfb-4d2f-a9b8-0d7c498fe366/tasks/afad1959430f3ba35.output</output-file>\n<status>failed</status>\n<summary>Agent \"review the patch\" failed: Agent terminated early due to an API error: API Error: Request rejected (429) \u00b7 Your account has reached its usage limit for opus. Please wait or upgrade. (error type rate_limit, HTTP 429, model sent to the API: claude-opus-5-5)</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n</task-notification>"
 }
