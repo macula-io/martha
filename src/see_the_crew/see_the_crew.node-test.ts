@@ -88,7 +88,7 @@ test('the pane is answered as words: its header, and one line per member, so the
   const lines = seen.rows.map(thePaneLine)
   assert.equal(lines[0], 'Vesta: idle ·  0/1', 'a member that never beat is one line, and nothing else')
   assert.equal(lines[1], 'Uranus: working · Build the crew store 2/5 · macula-io/martha#254 · waits on Supervisor for a verdict', 'who, how far, what it holds, and what holds it up')
-  assert.equal(NO_MEMBER_HAS_REPORTED, 'No member of this crew has reported yet.', 'the empty pane says so in the same words it always has')
+  assert.deepEqual(thePaneAnsweredBy(seeTheCrew({ members: [] }, {}, NOW), false, 1_000).lines, [NO_MEMBER_HAS_REPORTED], 'the empty pane says so, in the words the slice owns')
 })
 
 test('the pane opens by itself only when the declaration switched the dashboard on (test 8)', () => {
