@@ -804,11 +804,15 @@ records both ways in, the variable and the flag (`outside_a_terminal`, held
 as `{ variables, flags }`), but refuses nothing for either: a member always
 has a terminal, so neither way in can fire for one, and a live probe on
 2.1.319 in print mode, with a project hook as the witness that the exit
-fired, saw the relay's hooks still run. A
-member's file tool call that names the owner's user settings file is denied,
-the path resolved as the host resolves it (trimmed, a leading `~` against its
-home); reads are denied too, which keeps nothing secret, since a shell can
-still read the file. A shell write is caught by the launcher itself: it reads
+fired, saw the relay's hooks still run. Both ways in are read by the trust
+reader too, from the same recording: a host whose variable is set in the
+member's environment, or whose argument is among the owner's own, is taken
+as trusting no record, so the member keeps the long session-start deadline
+instead of being stopped while the owner answers a question the host will
+not ask. A member's file tool call that names the owner's user settings file
+is denied, the path resolved as the host resolves it (trimmed, a leading `~`
+against its home); reads are denied too, which keeps nothing secret, since a
+shell can still read the file. A shell write is caught by the launcher itself: it reads
 those files again every `HOOK_SETTINGS_CHECK_MS` for the member's whole life,
 apart from any hook, as well as after every call, and stops the member when a
 switch appears. What is left: up to `HOOK_SETTINGS_CHECK_MS` of a member with
