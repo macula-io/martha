@@ -24,9 +24,10 @@ import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { WhatTheHostSaid } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
-import { OWNER_DIALOGS_FIELD, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, OWNER_DIALOGS_FIELD, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theKeyOfAPermission, whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
-import { crewToolsOver } from './a_crews_tools.ts'
+import { THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-tools-dialogs-'))
 after(() => removeTheTree(home))
@@ -59,6 +60,8 @@ const THE_DIALOGS_KEY = theKeyOfAPermission('', CLAUDE_CODE_SHELL_TOOL, {}, 'too
 /** One member on disk: its row's store, the session's tools and its launcher's screen, over one clock. */
 interface AMemberOnDisk {
   readonly clock: { at: number }
+  /** The session's own tools, so a test can drive a writer that is not a report (martha#380 r=2). */
+  readonly tools: CrewTools
   /** The member reports a step, a clock later than anything written before it. */
   theMemberReports(step: number): Promise<void>
   /** One thing the host said, heard by the member's launcher. */
@@ -98,6 +101,7 @@ function aMemberOnDisk(t: { after(fn: () => void): void }): AMemberOnDisk {
   }
   return {
     clock,
+    tools,
     async theMemberReports(step: number): Promise<void> {
       clock.at += 1_000
       const said = await tools.answer('report_progress', { task: 'build', step, of: 3 }, SESSION)
@@ -149,4 +153,45 @@ test('#380 P2: a beat in the same millisecond leaves the dialog that opens in it
   member.theHostSaid({ said: 'permission', call: A_CALL }, reported.at)
   assert.deepEqual(member.theDialogs(), [THE_DIALOGS_KEY], 'a beat taken at the dialog\'s own time refused it, and the owner is never asked')
   assert.equal(whatTheOwnerIsShown(member.theRow()).state, 'needs-you')
+})
+
+test('#380 r=2: a heartbeat keeps the dialog the launcher opened', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const member = aMemberOnDisk(t)
+  await member.theMemberReports(0)
+
+  member.clock.at += 1_000
+  member.theHostSaid({ said: 'permission', call: A_CALL }, member.clock.at)
+  member.clock.at += 1_000
+  const stop = member.tools.startBeating()
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  stop()
+  assert.equal(member.theRow().at, member.clock.at, 'the heartbeat landed')
+  assert.deepEqual(member.theDialogs(), [THE_DIALOGS_KEY], 'the heartbeat wrote the tools\' own copy of the row, and dropped the dialog the launcher opened after it')
+})
+
+test('#380 r=2: a model report keeps the dialog the launcher opened', async (t) => {
+  const member = aMemberOnDisk(t)
+  await member.theMemberReports(0)
+
+  member.clock.at += 1_000
+  member.theHostSaid({ said: 'permission', call: A_CALL }, member.clock.at)
+  member.clock.at += 1_000
+  const noted = await member.tools.answer(THE_MODEL_REPORT_ASK, { model: 'opus' }, SESSION)
+  assert.ok('answer' in noted, `the model report was refused: ${'refused' in noted ? noted.refused : ''}`)
+  assert.equal(member.theRow().host.model, 'opus', 'the model report landed')
+  assert.deepEqual(member.theDialogs(), [THE_DIALOGS_KEY], 'the model report wrote the tools\' own copy of the row, and dropped the dialog the launcher opened after it')
+})
+
+test('#380 r=2: what a session says about itself keeps the dialog the launcher opened', async (t) => {
+  const member = aMemberOnDisk(t)
+  await member.theMemberReports(0)
+
+  member.clock.at += 1_000
+  member.theHostSaid({ said: 'permission', call: A_CALL }, member.clock.at)
+  member.clock.at += 1_000
+  const answered = await member.tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: 10 }, cost: { usd: 0.1 } }, turn_id: 't-1', answer: '' }, SESSION)
+  assert.ok('answer' in answered, `the refresh question was refused: ${'refused' in answered ? answered.refused : ''}`)
+  assert.equal(member.theRow().host.contextPercent, 10, 'what the session said about itself landed')
+  assert.deepEqual(member.theDialogs(), [THE_DIALOGS_KEY], 'the refresh question wrote the tools\' own copy of the row, and dropped the dialog the launcher opened after it')
 })

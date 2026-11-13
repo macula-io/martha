@@ -4,13 +4,15 @@
 // asking anyone. The row is one per member of the declaration, never one per session, so a refresh takes the row
 // over instead of adding a second one for the same member.
 //
-// A beat is a whole row, not a change, and the store writes every field every time, so a reader never merges fields
-// and never sees half a row: the store that keeps them is the host's (`DashboardStore`, implemented by the launcher
-// in ../dashboard_rows_directory/dashboard_rows_directory), because a slice of the core reads no disk.
+// A row is kept whole, so a reader never sees half of one: the store that keeps them is the host's (`DashboardStore`,
+// implemented by the launcher in ../dashboard_rows_directory/dashboard_rows_directory), because a slice of the core
+// reads no disk. What the store takes is a CHANGE, never a row: it reads the row it holds, hands that to the caller,
+// and writes what the caller answers, so two writers of one row never overwrite each other's fields with a copy each
+// of them read earlier (martha#380).
 //
-// The newest `at` wins, and the WRITER settles it (r=1, O1): a beat taken earlier and landing later is dropped whole
-// when it is offered, not blended into the row a newer beat got there. `beatAfter` is that rule, and the store asks it
-// before it writes anything.
+// The newest `at` wins, and `beatAfter` is that rule. It sits with the writer that owns the row's `at`
+// (../a_crews_tools), not in the store: a beat taken earlier and landing later is dropped whole there, before it is
+// offered. A dialog the host opens is not a beat, so the rule never refuses one.
 //
 // The row is never removed. A member that stops beating reads `offline` once OFFLINE_AFTER_MS has passed, which is
 // the reader's word about a row that has gone quiet, not a state anyone writes.
