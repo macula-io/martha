@@ -73,8 +73,8 @@ export const MAX_COMMAND = 500
 /** The longest one-line field (a title, a goal, who waits, what a command does), in characters. */
 export const MAX_LINE = 200
 
-/** A row's id: a package ref or a short slug, never a path. */
-const SAFE_ID = /^[A-Za-z0-9._-]{1,80}$/
+/** An id a row is named by, here and in the Supervisor's standing items (martha#317): a package ref or a short slug, never a path. */
+export const SAFE_ID = /^[A-Za-z0-9._-]{1,80}$/
 const OWNER_REPO = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/
 const TAG = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/
 
