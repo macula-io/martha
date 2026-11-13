@@ -504,7 +504,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'A short id for the act: a package ref or a slug of letters, digits, ".", "_" or "-"' },
+        id: { type: 'string', description: 'A slug naming the act, such as martha-317 (a package ref is refused): letters, digits, ".", "_" or "-"' },
         title: { type: 'string', description: 'What the owner is asked to do, in one line' },
         goal: { type: 'string', description: 'The end goal the act serves, in one line' },
         waiting_on: { type: 'string', description: 'Who waits on it, so the owner knows who to tell when it is done' },
