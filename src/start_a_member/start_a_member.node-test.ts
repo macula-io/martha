@@ -16,8 +16,8 @@ import { test, type TestContext } from 'node:test'
 
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
-import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { declareSoloCrew, SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
   nodeIdsFor,
   openState,
@@ -618,12 +618,21 @@ const CONVENTIONS_AS_WRITTEN = 'Read the register before you write anything.\n'
 const CONVENTIONS_EDITED = 'Read the register, then the issue.\n'
 /** A role text of the crew's own, which Martha does not ship: what proves the section carries the crew's bytes. */
 const OWN_ROLE_TEXT = 'Our builder text, which Martha does not ship.\n'
+/** A mode text of the crew's own, which Martha does not ship either (martha#306 r=4). */
+const OWN_MODE_TEXT = 'Our solo text, which Martha does not ship.\n'
+
+/** A crew as an owner declares it: its declaration, and a conventions file it names. */
+function aCrewDeclaringItsConventions(): Readonly<Record<string, string>> {
+  return {
+    [join(DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
+    [join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN,
+  }
+}
 
 /** A crew as an owner declares it with texts of its own: a builder's role text, and a conventions file it names. */
 function aCrewWithItsOwnTexts(): Readonly<Record<string, string>> {
   return {
-    [join(DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
-    [join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN,
+    ...aCrewDeclaringItsConventions(),
     [join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT,
   }
 }
@@ -741,5 +750,69 @@ test('#306 r=3: a conventions file the crew wrote as a link refuses the start by
   assert.ok(refusal.includes(asTheOwnerReadsIt(conventions)), `the refusal does not name the linked conventions file: ${refusal}`)
   assert.match(refusal, /is a symlink/, refusal)
   assert.ok(!refusal.includes('no such file'), `the refusal says the file is missing, and it is there as a link: ${refusal}`)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+/**
+ * Makes a directory of the place a link to another directory of it, and commits the link: an owner who keeps one
+ * directory in two places by pointing at it (martha#306 r=4).
+ */
+function directoryLinkedTo(place: Place, path: string, target: string): void {
+  removeTheTree(join(place.root, path))
+  symlinkSync(relative(dirname(join(place.root, path)), join(place.root, target)), join(place.root, path))
+  git(place.root, 'add', '--all')
+  git(place.root, 'commit', '-q', '-m', `link ${path}`)
+}
+
+/**
+ * A crew text whose directory is a link refuses the start, by name (martha#306 r=4, the r=3 review's finding). The gate
+ * used to resolve the directories above a crew text, so the approval and the carried bytes were named after the
+ * directory the link points at while the compose looked the text up under the path the crew wrote: it missed, answered
+ * "absent", and the member was handed Martha's shipped text with no word to the owner. A link is a name the gate
+ * cannot pin down, so it is refused — the text itself, and every directory above it.
+ */
+test('#306 r=4: a role text reached through a linked roles directory refuses the start, naming the link', async (t) => {
+  const roles = join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY)
+  const place = placeFor(t, { ...aCrewDeclaringItsConventions(), [join('docs', ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT })
+  directoryLinkedTo(place, roles, join('docs', ROLE_TEXTS_DIRECTORY))
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a role text reached through a linked directory did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(roles)), `the refusal does not name the linked directory: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+test('#306 r=4: a mode text reached through a linked modes directory refuses the start, naming the link', async (t) => {
+  const modes = join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY)
+  const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', MODE_TEXTS_DIRECTORY, `${SOLO_MODE}.md`)]: OWN_MODE_TEXT })
+  directoryLinkedTo(place, modes, join('docs', MODE_TEXTS_DIRECTORY))
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a mode text reached through a linked directory did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(modes)), `the refusal does not name the linked directory: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+test('#306 r=4: a crew directory that is a link refuses the start, naming the link', async (t) => {
+  // Every text of the crew, and its declaration, stand behind a link one level above them all.
+  const place = placeFor(t, {
+    [join('crew-files', DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
+    [join('crew-files', CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN,
+    [join('crew-files', ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT,
+  })
+  directoryLinkedTo(place, DECLARATION_DIRECTORY, 'crew-files')
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a crew directory that is a link did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(DECLARATION_DIRECTORY)), `the refusal does not name the linked crew directory: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
   assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
 })

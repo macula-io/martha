@@ -824,3 +824,49 @@ test('#306 r=3: a crew text that is a symlink is an entry of its own, and the la
   assert.ok(decision.refusal.includes(CONVENTIONS.split(sep).join('/')), decision.refusal)
   assert.match(decision.refusal, /is a symlink/)
 })
+
+/**
+ * A link above a crew text is refused as the text itself is (martha#306 r=4): nothing below the project root is
+ * resolved, so what the approval records is the link, named where the crew put it. Following it would approve a file
+ * under a name the crew never wrote, and the compose looks the text up under the name the crew did write: it would
+ * miss, answer "absent", and hand Martha's shipped text with no word to the owner.
+ */
+test('#306 r=4: a crew text reached through a linked directory is refused, naming the link', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, join('docs', 'CONVENTIONS.md'), 'Read the register first.\n')
+  symlinkSync('docs', join(place.checkout, DECLARATION_DIRECTORY))
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const { state, decision } = decideCrew(crew)
+
+  const entry = state.entries.find((one) => one.path === DECLARATION_DIRECTORY.split(sep).join('/'))
+  assert.ok(entry !== undefined, 'the linked directory above the crew text is no entry of the approval at all')
+  assert.equal(entry.kind, 'symlink', `the link is recorded as ${entry.kind}, under the name the crew wrote`)
+  assert.equal(decision.allow, false, 'a crew text reached through a linked directory was approved')
+  if (decision.allow) return
+  assert.ok(decision.refusal.includes(DECLARATION_DIRECTORY), decision.refusal)
+  assert.match(decision.refusal, /is a symlink/)
+})
+
+/**
+ * The other half of the same rule (martha#306 r=4): a crew text is carried under the path the crew wrote, which is the
+ * path the compose looks it up by. Two names for one file is the bug this round and the two before it kept finding.
+ */
+test('#306 r=4: the crew text is carried under the name the crew wrote, and no other', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, CONVENTIONS, 'Read the register first.\n')
+  commitAll(place.checkout, 'a crew with conventions')
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const snapshot_root = join(place.home, 'snapshots')
+  const prepared = prepareLaunch({ ...crew, snapshot_root, approved_fingerprints: [fingerprintOf(readLaunchState(crew, thisMachine))] }, thisMachine)
+
+  assert.equal(prepared.allow, true, prepared.allow ? '' : prepared.refusal)
+  if (!prepared.allow) return
+  const named = CONVENTIONS.split(sep).join('/')
+  assert.deepEqual(
+    Object.keys(prepared.carried_files).filter((path) => path.endsWith('.md')),
+    [named],
+    'the crew text the launch carries is keyed by a path the compose never looks up',
+  )
+})
