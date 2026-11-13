@@ -57,7 +57,7 @@ import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { JournalAnswer, RelayJournal } from './keep_the_relays_journal.ts'
-import type { SessionRecords } from './session_records_in_rows.ts'
+import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */

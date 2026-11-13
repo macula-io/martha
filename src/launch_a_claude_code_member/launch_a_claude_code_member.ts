@@ -150,7 +150,7 @@ import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
 import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
-import { sessionRecordsIn } from './session_records_in_rows.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 
 /** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))

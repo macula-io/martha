@@ -31,7 +31,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { sessionRecordsIn } from './session_records_in_rows.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({

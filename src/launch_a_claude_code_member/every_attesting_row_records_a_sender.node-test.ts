@@ -38,7 +38,7 @@ import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } fro
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { sessionRecordsIn } from './session_records_in_rows.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 
 // Synthetic node ids and pids, never a real one: this repository is public.
 const MEMBER = 'a'.repeat(64)
