@@ -21,7 +21,8 @@
 //     owner's user settings, the approved --settings copy, and the managed file
 //     and drop-in folder, whose place the recorder also takes from the host;
 //   - an exit that fires only when the host runs with no terminal (2.1.319:
-//     CLAUDE_CODE_IGNORE_PERSISTED_TRUST set in print mode) is recorded and
+//     CLAUDE_CODE_IGNORE_PERSISTED_TRUST set in print mode; 2.1.323: that
+//     variable or the --ignore-persisted-trust argument) is recorded and
 //     refused nothing: a member always has a terminal, and the relay's hooks
 //     ran on that exit in a live probe (`outside_a_terminal`);
 //   - a launch is refused while safe mode is on: its variable in the
@@ -58,6 +59,12 @@ export interface SafeMode {
   readonly flags: readonly string[]
 }
 
+/** How the exit for a host with no terminal narrows the hook set: a variable of its environment, or an argument of its command line. */
+export interface OutsideATerminal {
+  readonly variables: readonly string[]
+  readonly flags: readonly string[]
+}
+
 /** The keys that turn Martha's relay off, by where the host honours them, and safe mode. */
 export interface HookSwitches {
   /** Honoured from managed settings: what the policy settings are tested for, and what every source is. */
@@ -67,14 +74,14 @@ export interface HookSwitches {
   /** Safe mode, which keeps managed hooks only. */
   readonly safe_mode: SafeMode
   /**
-   * Variables that narrow the hook set only when the host runs with no
-   * terminal: it then keeps the user, --settings and policy hooks. A member
-   * always has one (martha start refuses without it, and passes no -p), and a
-   * live probe on 2.1.319 showed the relay's hooks run on this exit anyway
-   * (martha#122 r=3), so nothing is refused for them; they are recorded so a
-   * host that changes the exit fails the recording.
+   * The variable and the argument that narrow the hook set only when the host
+   * runs with no terminal: it then keeps the user, --settings and policy
+   * hooks. A member always has one (martha start refuses without it, and
+   * passes no -p), and a live probe on 2.1.319 showed the relay's hooks run on
+   * this exit anyway (martha#122 r=3), so nothing is refused for them; they
+   * are recorded so a host that changes the exit fails the recording.
    */
-  readonly outside_a_terminal: readonly string[]
+  readonly outside_a_terminal: OutsideATerminal
 }
 
 /** Where the host reads managed settings on Linux: a folder, the file in it, and a drop-in folder in it. */
@@ -100,8 +107,11 @@ const TESTED_TRUE = /^([\w$]+)\??\.([\w$]+)===!0$/
 const CALLED = /^([\w$]+)\((?:"[^"]*")?\)$/
 
 // The functions an exit may call, by shape. Safe mode: a variable of the
-// host's environment, or a flag of its command line.
-const SAFE_MODE_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(process\.env\.([A-Z0-9_]+)\)\|\|[\w$]+\("(--[a-z-]+)"\)\}$/
+// host's environment, or a flag of its command line. 2.1.323 appends a
+// constant false (`||!1`), which is false whatever the rest says, so the
+// expression means what 2.1.322's did; a constant true, which would switch
+// safe mode on for everyone, is no shape here.
+const SAFE_MODE_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(process\.env\.([A-Z0-9_]+)\)\|\|[\w$]+\("(--[a-z-]+)"\)(?:\|\|!1)?\}$/
 // A key of the policy settings: true, or a list naming what was asked for.
 const POLICY_KEY_SHAPE =
   /^function ([\w$]+)\(([\w$]+)\)\{let ([\w$]+)=[\w$]+\("policySettings"\)\?\.([\w$]+);if\(\3===!0\)return!0;if\(Array\.isArray\(\3\)\)return \3\.includes\(\2\);return!1\}$/
@@ -109,7 +119,18 @@ const POLICY_KEY_SHAPE =
 // variable of its environment is set.
 const BOTH_SHAPE = /^function ([\w$]+)\(\)\{return ([\w$]+)\(\)&&([\w$]+)\(\)\}$/
 const NO_TERMINAL_SHAPE = /^function ([\w$]+)\(\)\{return![\w$]+\(\)\.host\.launchOptions\.isInteractive\(\)\}$/
-const VARIABLE_SET_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)\}$/
+// The second of them, and what 2.1.323 added to it: the variable of its
+// environment is set, or an argument of its command line is (a switch of its
+// own, 2.1.323). A recording holds the argument as the flag it stands for,
+// so every way into the exit can be read without the minifier's names.
+const VARIABLE_SET_SHAPE = /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)(?:\|\|process\.argv\.includes\("(--[a-z][a-z0-9-]*)"\))?\}$/
+// The same function in a host's own text, where 2.1.323 names that argument
+// through a constant; the recorder writes that constant as the flag it is
+// defined as, so this shape takes the flag written whole as well. A recording
+// rebuilt into a host text holds the flag itself, and `VARIABLE_SET_SHAPE` is
+// what both a recording and a reader then hold.
+const VARIABLE_OR_ARGUMENT_SHAPE =
+  /^function ([\w$]+)\(\)\{return [\w$]+\(\(\)=>[\w$]+\.([A-Z0-9_]+)\)(?:\|\|process\.argv\.includes\((?:"(--[a-z][a-z0-9-]*)"|[\w$]+)\))?\}$/
 
 const CLOSER: Readonly<Record<string, string>> = { '{': '}', '(': ')', '[': ']' }
 
@@ -221,15 +242,17 @@ function testedBy(part: string): Tested {
 }
 
 /** What a function an exit calls switches hooks by. */
-type ExitCall = { readonly name: string; readonly safe_mode?: SafeMode; readonly policy_key?: string; readonly outside_a_terminal?: string }
+type ExitCall = { readonly name: string; readonly safe_mode?: SafeMode; readonly policy_key?: string; readonly outside_a_terminal?: OutsideATerminal }
 
-/** The variable an exit of both shapes tests, its parts found among `calls`; undefined for no known shape. */
+/** The variable and argument an exit of both shapes tests, its parts found among `calls`; undefined for no known shape. */
 function noTerminalExitOf(definition: string, calls: readonly string[]): ExitCall | undefined {
   const [, name, first, second] = BOTH_SHAPE.exec(definition) ?? []
   if (name === undefined) return undefined
   const noTerminal = calls.some((call) => NO_TERMINAL_SHAPE.exec(call)?.[1] === first)
-  const variable = calls.map((call) => VARIABLE_SET_SHAPE.exec(call)).find((match) => match?.[1] === second)?.[2]
-  return noTerminal && variable !== undefined ? { name, outside_a_terminal: variable } : undefined
+  const variable = calls.map((call) => VARIABLE_SET_SHAPE.exec(call)).find((match) => match?.[1] === second)
+  if (!noTerminal || variable?.[2] === undefined) return undefined
+  const flags = variable[3] === undefined ? [] : [variable[3]]
+  return { name, outside_a_terminal: { variables: [variable[2]], flags } }
 }
 
 /** What a function an exit calls switches hooks by, from its definition and the parts it calls; undefined for no known shape. */
@@ -263,9 +286,35 @@ function noTerminalExitIn(text: string, call: string): string[] | undefined {
   const both = onlyShaped(text, call, (definition) => BOTH_SHAPE.exec(definition)?.[1] === call)
   const [, , first, second] = BOTH_SHAPE.exec(both ?? '') ?? []
   if (both === undefined || first === undefined || second === undefined) return undefined
-  const parts = [onlyShaped(text, first, (definition) => NO_TERMINAL_SHAPE.test(definition)), onlyShaped(text, second, (definition) => VARIABLE_SET_SHAPE.test(definition))]
-  const found = parts.filter((part) => part !== undefined)
-  return found.length === parts.length ? [both, ...found] : undefined
+  const noTerminal = onlyShaped(text, first, (definition) => NO_TERMINAL_SHAPE.test(definition))
+  const variable = onlyShaped(text, second, (definition) => VARIABLE_OR_ARGUMENT_SHAPE.test(definition))
+  if (noTerminal === undefined || variable === undefined) return undefined
+  return [both, noTerminal, withTheArgumentWrittenAsItsFlag(text, variable)]
+}
+
+/** A constant an argv test names, in a definition cut from a host's text. */
+const ARGUMENT_CONSTANT = /process\.argv\.includes\(([\w$]+)\)/
+
+/** The flag string a host's text defines a constant as; refuses none, or two that differ. */
+function flagTheHostDefines(text: string, name: string): string {
+  const found = text.matchAll(new RegExp(`(?<![\\w$])${escaped(name)}\\s*=\\s*"(--[a-z][a-z0-9-]*)"`, 'g'))
+  const defined = [...new Set([...found].flatMap((match) => match[1] ?? []))]
+  const [flag] = defined
+  if (flag === undefined || defined.length !== 1) {
+    throw new Error(`An exit of the hook-set function tests process.argv.includes(${name}), and the host text defines ${name} as ${String(defined.length)} command-line arguments, not one, so which switch it stands for cannot be told.`)
+  }
+  return flag
+}
+
+/**
+ * A definition cut from a host's text with an argv test's constant written as
+ * the flag string the host defines that constant as, so a recording names the
+ * switch rather than a name the minifier picks, and a reader needs no host
+ * text to tell what it is (`VARIABLE_SET_SHAPE`); a definition without such a
+ * test is returned as it was cut.
+ */
+function withTheArgumentWrittenAsItsFlag(text: string, definition: string): string {
+  return definition.replace(ARGUMENT_CONSTANT, (_test, name: string) => `process.argv.includes(${JSON.stringify(flagTheHostDefines(text, name))})`)
 }
 
 /**
@@ -307,11 +356,11 @@ export function hookSwitchesSourceIn(text: string): string {
 
 const sortedUnique = (keys: Iterable<string>): string[] => [...new Set(keys)].sort()
 
-/** What the functions the exits call switch on: keys of the policy settings, safe mode, and variables read only with no terminal. */
+/** What the functions the exits call switch on: keys of the policy settings, safe mode, and what is read only with no terminal. */
 function switchedByCalls(
   tested: readonly Tested[],
   calls: readonly string[],
-): { readonly policy_keys: string[]; readonly safe_mode: SafeMode; readonly outside_a_terminal: string[] } {
+): { readonly policy_keys: string[]; readonly safe_mode: SafeMode; readonly outside_a_terminal: OutsideATerminal } {
   const known = calls.map((call) => exitCallOf(call, calls))
   const found = callsOf(tested).map((call) => known.find((candidate) => candidate?.name === call) ?? call)
   const unknown = found.find((call) => typeof call === 'string')
@@ -323,7 +372,10 @@ function switchedByCalls(
       variables: sortedUnique(shaped.flatMap((call) => call.safe_mode?.variables ?? [])),
       flags: sortedUnique(shaped.flatMap((call) => call.safe_mode?.flags ?? [])),
     },
-    outside_a_terminal: sortedUnique(shaped.flatMap((call) => (call.outside_a_terminal === undefined ? [] : [call.outside_a_terminal]))),
+    outside_a_terminal: {
+      variables: sortedUnique(shaped.flatMap((call) => call.outside_a_terminal?.variables ?? [])),
+      flags: sortedUnique(shaped.flatMap((call) => call.outside_a_terminal?.flags ?? [])),
+    },
   }
 }
 

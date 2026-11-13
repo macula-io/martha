@@ -490,3 +490,63 @@ jobs:
           npm run --silent check:base-tests -- --base "$base" --head "$head" --repository "$repo"
       - name: every test the base passed is still at the tip
         run: npm run --silent check:base-tests -- --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # No literal restates a value the tree defines (martha#289, the rule decided
+  # 2026-11-05: no literal restating a value the code already defines, tests
+  # included). The gate judges the lines the change ADDS — net, against the merge
+  # base, so a branch that has merged main is not blamed for main's own lines —
+  # and, over the whole tree, every literal equal to a value the change defines or
+  # revalues: a constant added today makes every old copy of its value stale at
+  # once, and a revalued one leaves every literal holding the old value behind.
+  #
+  # The self-test plants one case per rule and requires each to be named. The
+  # planted repository below proves the range GitHub passes reaches the
+  # comparison, so the live step is not the only evidence: a literal planted in a
+  # second commit must turn the check red, by file and by constant name.
+  #
+  # The whole-tree count is printed as a report and never gates: the cleanup of
+  # the copies already on main is its own package, cut by slice, and the gate
+  # turns whole-tree when that count reaches zero.
+  restated-values:
+    name: no literal restates a defined value
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: the check bites, one planted case per rule
+        run: npm run --silent check:restated-values -- --self-test
+      - name: the check bites on a literal a commit adds, through the range GitHub passes
+        # Exit 1 (refused) is required, not any non-zero: exit 2 is "could not
+        # look", which must never read as a bite either.
+        run: |
+          repo="${{ runner.temp }}/restated-value-self-test"
+          mkdir -p "$repo/src/planted"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email planted@example.invalid
+          git -C "$repo" config user.name planted
+          printf "export const PLANTED = 'a-planted-value'\n" > "$repo/src/planted/a.ts"
+          git -C "$repo" add -A
+          git -C "$repo" commit -q -m base
+          base="$(git -C "$repo" rev-parse HEAD)"
+          printf "const name = 'a-planted-value'\n" > "$repo/src/planted/b.ts"
+          git -C "$repo" add -A
+          git -C "$repo" commit -q -m tip
+          head="$(git -C "$repo" rev-parse HEAD)"
+          status=0
+          npm run --silent check:restated-values -- --range "$base..$head" --root "$repo" \
+            > "$repo/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
+          grep -q "planted/b.ts:1: 'a-planted-value' restates planted/a.ts PLANTED" "$repo/verdict.txt"
+      - name: no literal restates a defined value, in the range or a value it defines
+        run: npm run --silent check:restated-values -- --range "$BASE_SHA..$HEAD_SHA"
+      - name: what the whole tree still holds, as a report
+        run: npm run --silent check:restated-values -- --report

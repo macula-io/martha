@@ -46,8 +46,9 @@ test('the recorded host turns hooks off by disableAllHooks from any settings fil
     managed: ['allowManagedHooksOnly', 'disableAllHooks', 'strictPluginOnlyCustomization'],
     every_source: ['disableAllHooks'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
-    // 2.1.319's exit for a host with no terminal (below), recorded on the 2.1.319 re-record (martha#139).
-    outside_a_terminal: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'],
+    // The variable 2.1.319 added to the exit for a host with no terminal, and the flag 2.1.323 added beside it: both
+    // recorded, and both refused nothing, since a member always has a terminal (martha#139).
+    outside_a_terminal: { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: ['--ignore-persisted-trust'] },
   })
   assert.deepEqual(hookSwitchesOf(RECORDED_HOST.hooks_switches, RECORDED_HOST.hooks_switch_calls), CLAUDE_CODE_HOOK_SWITCHES)
 })
@@ -72,7 +73,7 @@ test("the recorder cuts 2.1.319's exit for a host with no terminal and a variabl
   const calls = hookExitCallsIn(HOST_TEXT_319, HOOK_SET_FUNCTION_319)
   assert.deepEqual(calls, [...EXIT_CALLS, BOTH_FUNCTION, NO_TERMINAL_FUNCTION, VARIABLE_SET_FUNCTION])
   const switches = hookSwitchesOf(HOOK_SET_FUNCTION_319, calls)
-  assert.deepEqual(switches.outside_a_terminal, ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'])
+  assert.deepEqual(switches.outside_a_terminal, { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: [] })
   // It is no switch a settings file or the launcher's environment turns on for a member: a member always has a terminal.
   assert.deepEqual(switches.safe_mode, { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] })
   assert.deepEqual(switches.every_source, ['disableAllHooks'])
@@ -89,6 +90,82 @@ test('an exit joined by && fails the recording when either part is of no known s
   // The recorded calls are read again at every launch: an interactive part among them must not pass either.
   const interactiveCalls = [...EXIT_CALLS, BOTH_FUNCTION, 'function ye(){return t().host.launchOptions.isInteractive()}', VARIABLE_SET_FUNCTION]
   assert.throws(() => hookSwitchesOf(HOOK_SET_FUNCTION_319, interactiveCalls), /a\$e\(\)/)
+})
+
+// 2.1.323 moved two shapes and no settings key (the host drift run of 2026-11-12): safe mode gained a trailing
+// constant false, and the exit for a host with no terminal gained an argument beside its variable. Its own text, cut
+// whole, so the reader is proven on the shapes the host members run holds.
+const HOOK_SET_FUNCTION_323 =
+  'function r(){let o=ye("policySettings");if(o?.disableAllHooks===!0)return{};if(o?.allowManagedHooksOnly===!0||po())return o?.hooks??{};' +
+  'if(kd("hooks"))return o?.hooks??{};let t=Pr();if(t.disableAllHooks===!0){if(!QNr())return o?.hooks??{};return l()}if(DBe())return l();return c(t.hooks??{})}'
+/** Safe mode in 2.1.323: 2.1.322's expression with `||!1` appended, which is false whatever the rest says. */
+const SAFE_MODE_FUNCTION_323 = 'function po(){return Pe(process.env.CLAUDE_CODE_SAFE_MODE)||i("--safe-mode")||!1}'
+const STRICT_FUNCTION_323 = 'function kd(o){let t=ye("policySettings")?.strictPluginOnlyCustomization;if(t===!0)return!0;if(Array.isArray(t))return t.includes(o);return!1}'
+/** 2.1.323's way out for a host with no terminal: no terminal, and a variable or an argument that says the same. */
+const BOTH_FUNCTION_323 = 'function DBe(){return ge()&&RUo()}'
+const NO_TERMINAL_FUNCTION_323 = 'function ge(){return!n().host.launchOptions.isInteractive()}'
+const ARGUMENT = '--ignore-persisted-trust'
+/** It names that argument through a constant of its own, which the recorder writes as the flag it stands for. */
+const ARGUMENT_CONSTANT = 'D9s'
+const ARGUMENT_CONSTANT_DEFINITION = `${ARGUMENT_CONSTANT}="${ARGUMENT}"`
+const VARIABLE_OR_ARGUMENT_FUNCTION_323 = `function RUo(){return Y5e(()=>i.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)||process.argv.includes(${ARGUMENT_CONSTANT})}`
+const VARIABLE_AND_ARGUMENT_RECORDED = `function RUo(){return Y5e(()=>i.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)||process.argv.includes("${ARGUMENT}")}`
+const HOST_TEXT_323 =
+  `var x=1;${HOOK_SET_FUNCTION_323}${SAFE_MODE_FUNCTION_323}function kd(e){return e.restricted?[]:e.paths}${STRICT_FUNCTION_323}` +
+  `var y=2,${ARGUMENT_CONSTANT_DEFINITION},z=3;${BOTH_FUNCTION_323}${NO_TERMINAL_FUNCTION_323}${VARIABLE_OR_ARGUMENT_FUNCTION_323}`
+
+test("2.1.323's shapes are read: safe mode's trailing constant, and the argument the no-terminal exit adds", () => {
+  const calls = hookExitCallsIn(HOST_TEXT_323, HOOK_SET_FUNCTION_323)
+  // The argument is recorded as the flag it stands for, not as the name the minifier gave it, so the recording
+  // names the switch and stays readable once every minified name changes.
+  assert.deepEqual(calls, [SAFE_MODE_FUNCTION_323, STRICT_FUNCTION_323, BOTH_FUNCTION_323, NO_TERMINAL_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED])
+  const switches = hookSwitchesOf(HOOK_SET_FUNCTION_323, calls)
+  assert.deepEqual(switches.outside_a_terminal, { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: [ARGUMENT] })
+  assert.deepEqual(switches.safe_mode, { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] })
+  assert.deepEqual(switches.every_source, ['disableAllHooks'])
+  assert.deepEqual(switches.managed, ['allowManagedHooksOnly', 'disableAllHooks', 'strictPluginOnlyCustomization'])
+})
+
+test('a host rebuilt from a recording reads back as the host it stands for, the flag written whole', () => {
+  // The recorder's own check builds a host out of the recorded functions and reads it again. A recording carries the
+  // flag itself rather than the constant, so the shape that cuts a host's text has to take both forms: without that,
+  // a recording of 2.1.323 could not be read back, and the check would fail as "unreadable: hook switches".
+  const fromTheRecording = HOST_TEXT_323.replace(VARIABLE_OR_ARGUMENT_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED)
+  const calls = hookExitCallsIn(fromTheRecording, HOOK_SET_FUNCTION_323)
+  assert.deepEqual(calls, [SAFE_MODE_FUNCTION_323, STRICT_FUNCTION_323, BOTH_FUNCTION_323, NO_TERMINAL_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED])
+  assert.deepEqual(hookSwitchesOf(HOOK_SET_FUNCTION_323, calls).outside_a_terminal, { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: [ARGUMENT] })
+})
+
+test("2.1.323's added shapes fail the recording when they are of no shape this module knows, each named", () => {
+  // A constant the host defines as no one flag, or as two that differ: the switch cannot be told.
+  assert.throws(() => hookExitCallsIn(HOST_TEXT_323.replace(ARGUMENT_CONSTANT_DEFINITION, ''), HOOK_SET_FUNCTION_323), /D9s/)
+  assert.throws(() => hookExitCallsIn(`${HOST_TEXT_323},${ARGUMENT_CONSTANT}="--another-flag"`, HOOK_SET_FUNCTION_323), /D9s/)
+  // The constant is never left in the reading: a recording that names it says nothing about which switch it is.
+  const raw = [SAFE_MODE_FUNCTION_323, STRICT_FUNCTION_323, BOTH_FUNCTION_323, NO_TERMINAL_FUNCTION_323, VARIABLE_OR_ARGUMENT_FUNCTION_323]
+  assert.throws(() => hookSwitchesOf(HOOK_SET_FUNCTION_323, raw), /DBe\(\)/)
+  // A further alternative on that exit, or a constant true appended to safe mode, is a new way to drop hooks. The
+  // reading names the exit it could not read, not the part inside it: what cannot be told is what that exit switches on.
+  const extended = [...raw.slice(0, -1), VARIABLE_AND_ARGUMENT_RECORDED.replace('}', '||q()}')]
+  assert.throws(() => hookSwitchesOf(HOOK_SET_FUNCTION_323, extended), /DBe\(\)/)
+  const alwaysOn = HOST_TEXT_323.replace(SAFE_MODE_FUNCTION_323, SAFE_MODE_FUNCTION_323.replace('||!1', '||!0'))
+  assert.throws(() => hookExitCallsIn(alwaysOn, HOOK_SET_FUNCTION_323), /po\(\)/)
+})
+
+test('a longer name that ends in the constant is not its definition, so the flag recorded is the host’s own (Pluto P1)', () => {
+  // A minifier reuses short names, so another constant can end in this one (`aD9s`). Read as its definition, the
+  // recorder would take the other name's flag and write it in silence: the recorded flag must stay the host's own.
+  const anotherNameEndingInIt = `${HOST_TEXT_323}var a${ARGUMENT_CONSTANT}="--another-flag";`
+  const calls = hookExitCallsIn(anotherNameEndingInIt, HOOK_SET_FUNCTION_323)
+  assert.deepEqual(calls, [SAFE_MODE_FUNCTION_323, STRICT_FUNCTION_323, BOTH_FUNCTION_323, NO_TERMINAL_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED])
+  assert.deepEqual(hookSwitchesOf(HOOK_SET_FUNCTION_323, calls).outside_a_terminal, { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: [ARGUMENT] })
+})
+
+test('a constant defined as a string that is no command-line argument fails the recording, naming it (Pluto P6)', () => {
+  // Every other string is not the switch either. The recorder must name the constant it could not resolve, rather
+  // than write the string and leave the reader to refuse the recording later.
+  const noFlag = HOST_TEXT_323.replace(ARGUMENT_CONSTANT_DEFINITION, `${ARGUMENT_CONSTANT}="not-a-flag"`)
+  assert.notEqual(noFlag, HOST_TEXT_323, 'the planted definition replaced nothing')
+  assert.throws(() => hookExitCallsIn(noFlag, HOOK_SET_FUNCTION_323), new RegExp(ARGUMENT_CONSTANT))
 })
 
 test('an exit of the hook set that calls a function of no known shape fails the recording, naming the call', () => {
@@ -125,7 +202,7 @@ test('a recorded function that reads a new key turns that key into a switch, wit
     managed: ['allowManagedHooksOnly', 'disableAllHooks', 'noHooksAtAll', 'strictPluginOnlyCustomization'],
     every_source: ['disableAllHooks', 'noHooksAtAll'],
     safe_mode: { variables: ['CLAUDE_CODE_SAFE_MODE'], flags: ['--safe-mode'] },
-    outside_a_terminal: [],
+    outside_a_terminal: { variables: [], flags: [] },
   })
   assert.throws(() => hookSwitchesOf('function r(){let o=Se("policySettings");return a(o.hooks??{})}', []), /no settings key/)
   assert.throws(() => hookSwitchesOf('function r(){let t=br();if(t.noHooks===!0)return{};return a(t.hooks??{})}', []), /reads no policy settings/)
