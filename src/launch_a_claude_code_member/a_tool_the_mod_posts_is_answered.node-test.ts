@@ -5,6 +5,8 @@
 // does, and reads what came back: the slice's own words for a tool it registers, and a refusal naming any name it
 // does not.
 
+import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
@@ -46,7 +48,7 @@ function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout:
     version: 1,
     owner: 'the-owner',
     members: [{ name: MEMBER, role: 'builder' }],
-    mode: { name: 'solo', roles: ['builder'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [RESTART_MEMBER]: [OWNER] } },
     channel_read_seconds: 30,
   }))
   const rows = join(home, 'crews', 'a-key', 'rows')
@@ -107,6 +109,21 @@ test('a tool call posted by the mod is answered by the core\'s slice, and the ro
   const row = dashboardRowsIn(place.dashboard).read(MEMBER)
   assert.equal(row?.task, 'Build the crew store', 'the row the answer reports is on disk')
   assert.equal(row?.session, SESSION, 'and it names the session the call came from')
+})
+
+test('#380: a beat landing behind the row held is dropped whole, and the row keeps what the newer beat said', async (t) => {
+  const place = aCrewPlace(t)
+  let now = 1_000
+  const crew = toolsIn(place, () => now)
+
+  assert.ok('answer' in (await crew.answer('report_progress', { task: 'the newer report', step: 2, of: 3 }, SESSION)))
+  now = 900
+  assert.ok('answer' in (await crew.answer('report_progress', { task: 'a beat landing late', step: 1, of: 3 }, SESSION)))
+
+  const row = dashboardRowsIn(place.dashboard).read(MEMBER)
+  assert.equal(row?.task, 'the newer report', 'a beat landing late took back the row the newer beat put there')
+  assert.equal(row?.progress.step, 2, 'and the figures the newer beat had')
+  assert.equal(row?.at, 1_000, 'and the row\'s own beat')
 })
 
 test('the heartbeat of a member that has reported nothing says idle, never working (test 7, r=1 R2)', (t) => {

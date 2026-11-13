@@ -224,7 +224,7 @@ and the refresh flow are the second half of this work package, so today a wake
 finds a handover only where the host wrote one — a file you put in
 `handovers/` yourself is not one, because nothing stamped it.
 
-## Seeing who runs, and stopping a member
+## Seeing who runs, stopping and restarting a member
 
 From any terminal in the checkout, `martha ls` shows one line per member of the
 crew, in the order the declaration names them: whether it is running, stopped,
@@ -253,6 +253,25 @@ it. If that terminal's Martha is gone and the member outlived it, `martha stop`
 waits twenty seconds for an answer and then ends the member itself, but only
 while the process it recorded is still the one at that pid; a pid since handed
 to another process is never signalled, and the line says so.
+
+`martha restart builder` ends that member's session the same way and starts it
+again in the terminal that held it, on the same prompt `martha wake` uses: the
+newest handover it wrote. `martha restart builder --fresh` starts it with no
+handover. The member is started through the same checks as `martha start`, so a
+checkout whose config changed since you approved it is refused there: the member
+stays ended, and both terminals say to run `martha approve`. If it was in the
+middle of a turn, that turn is lost, and the line says so, so the work can be
+sent again. Restarting a member that is not running does nothing and points you
+at `martha wake`. If no terminal's Martha answers within two minutes and the
+member is still running, nothing was ended: only the terminal holding a member
+may start it again. If it was ended and its terminal has not said it started
+again, `martha ls` shows whether it is back.
+
+A member whose role the declaration grants `restart_member` can restart another
+from inside the crew with the `restart_a_member` tool and a reason. It may not
+restart itself, and it may not restart the same member twice inside thirty
+minutes; your own `martha restart` has no such limit. `martha init` grants
+`restart_member` to you alone.
 
 ## If you want the strict shell gate
 

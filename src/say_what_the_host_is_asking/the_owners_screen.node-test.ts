@@ -7,12 +7,18 @@
 // terminal rings nothing.
 
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { theBellsFor } from '../ring_the_owner/ring_the_owner.ts'
 import { IDLE, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
+import { MENU_TOOL } from './say_what_the_host_is_asking.ts'
 import { theOwnersScreen, type AnOwnersScreen } from './the_owners_screen.ts'
 
 /** A store that keeps one member's row in memory, and can be told to refuse what it is given. */
@@ -22,10 +28,12 @@ function aStore(held: DashboardRow | null = null, refusing = false): DashboardSt
   return {
     kept,
     read: () => row,
-    keep: (beat) => {
+    change: (_member, change) => {
       if (refusing) return { kept: false, why: 'the store refused it' }
-      row = beat
-      kept.push(beat)
+      const next = change(row)
+      if (next === null) return { kept: false, why: 'the change kept nothing' }
+      row = next
+      kept.push(next)
       return { kept: true }
     },
     all: () => (row === null ? {} : { [row.member]: row }),
@@ -136,4 +144,30 @@ test('a turn\'s start drops a dialog an earlier turn left open, and the row read
   const row = store.read('Vesta')
   assert.ok(row !== null)
   assert.deepEqual(whatTheOwnerIsShown(row), { state: 'working', needs: 'my own words' })
+})
+
+/** The store the launcher writes into, where it lives on disk: one answer closing two dialogs is a refusal this pins. */
+const aPlaceOnDisk = (): string => {
+  const home = mkdtempSync(join(tmpdir(), 'martha-380-one-answer-'))
+  after(() => removeTheTree(home))
+  return home
+}
+
+/** The one call a menu and the permission under it are both keyed by. */
+const THE_ONE_CALL = { id: 'toolu_7', tool: MENU_TOOL, input: {} }
+
+test('#380 P1: one answer closing two dialogs closes both, and the row holds neither', () => {
+  const store = dashboardRowsIn(aPlaceOnDisk())
+  assert.ok(store.change('Vesta', () => aReportedRow()).kept, 'the member has reported')
+  const screen = theOwnersScreen(aScreen(store, []))
+
+  // The host posts the menu, checks the call, and asks about it: a menu and a permission, one call id. The ask is a
+  // millisecond later, so that both dialogs are open before the answer — the loss pinned here is the answer's own.
+  screen.heard('a-session', { said: 'ran', call: THE_ONE_CALL }, 20)
+  screen.heard('a-session', { said: 'checked', call: THE_ONE_CALL }, 20)
+  screen.heard('a-session', { said: 'permission', call: THE_ONE_CALL }, 21)
+  assert.equal(store.read('Vesta')?.dialogs?.length, 2, 'the menu and the permission are both on the row')
+
+  screen.heard('a-session', { said: 'answered', call: THE_ONE_CALL }, 22)
+  assert.equal(store.read('Vesta')?.dialogs, undefined, 'the answer closed one dialog and the row kept the other, from one answer')
 })

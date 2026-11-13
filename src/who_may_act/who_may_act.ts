@@ -20,13 +20,15 @@
 // a file in the crew's state directory, a shell running as the same OS user can
 // rewrite it — the roster anchor weakness, unchanged here and named in the doc.
 
+import { RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+
 /** The actions the crew lets only the supervisor take, in business words. */
 export const SUPERVISOR_ONLY_ACTIONS = [
   'assign_work',
   'read_crew_roster',
   'verify_range',
   'open_crew_room',
-  'restart_member',
+  RESTART_MEMBER,
   'take_asks',
   'complete_todo',
 ] as const

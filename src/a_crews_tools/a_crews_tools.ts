@@ -9,6 +9,8 @@
 // BEAT_INTERVAL_MS so a pane can tell a working member from a session that has died. The heartbeat runs here, in the
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
+import { randomUUID } from 'node:crypto'
+
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -66,8 +68,10 @@ import {
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
+import { restartByTool } from '../stop_and_restart_a_member/restart_a_member.ts'
+import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { WHO_IS_FREE, WHO_IS_FREE_DESCRIPTION, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
-import { BEAT_INTERVAL_MS, OWNER_DIALOGS_FIELD, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, beatAfter, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   homeModelOf,
   modelPlace,
@@ -123,6 +127,9 @@ export const PARK_A_MEMBER = 'park_a_member'
 /** The name a member wakes another with (martha#343): the other half of the park, as a tool of its own. */
 export const WAKE_A_MEMBER = 'wake_a_member'
 
+/** The name the Supervisor restarts a stalled member with (martha#312): one act, asked of that member's own launcher. */
+export const RESTART_A_MEMBER = 'restart_a_member'
+
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
  * refreshed session is recorded with: the SessionStart source value keeps its own name, `CREW_REFRESH`, because a
@@ -154,6 +161,7 @@ export const CREW_TOOL_NAMES = [
   READ_THE_RECEIPTS,
   PARK_A_MEMBER,
   WAKE_A_MEMBER,
+  RESTART_A_MEMBER,
   SWITCH_YOUR_MODEL,
   RETURN_TO_YOUR_OWN_MODEL,
   WRITE_MY_HANDOVER_TOOL,
@@ -206,6 +214,11 @@ export interface CrewToolPlaces {
    * those five by name rather than pretending to act.
    */
   readonly processes?: HostContract['processes']
+  /**
+   * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
+   * the ledger. A launch given none refuses `restart_a_member` by name.
+   */
+  readonly lifecycle?: StoppingHost
   /** The crew's declaration, whose workspace places the two worktree tools read (martha#256). */
   readonly settings?: CrewSettings
   /**
@@ -330,6 +343,10 @@ export const PARK_A_MEMBER_DESCRIPTION =
 /** What `wake_a_member` says it is for: the other half, and what a wake does with the marker it finds. */
 export const WAKE_A_MEMBER_DESCRIPTION =
   'Bring a member out of a park, so it is refreshed between tasks again. The marker is written, not removed, so the reason stays readable. A member may always wake itself; waking another needs the declaration\'s table, and a refusal names the act that would have allowed it. Leave `member` out to wake yourself.'
+
+/** What `restart_a_member` says it is for: what a restart does to the member, and what refuses one. */
+export const RESTART_A_MEMBER_DESCRIPTION =
+  'Restart a stalled member: its session is ended and started again on its own terminal, from its newest handover, or with none when `fresh` is set. A turn it was in is lost; the answer says when it ended mid-turn, so you send that work again. Only a role the declaration grants restart_member may, never for itself, and one member is not restarted twice by a tool inside the refresh storm window. A member that is not running is started with martha wake, not this.'
 
 /** What `switch_your_model` says it is for: one package, one model the declaration names, and when it happens. */
 export const SWITCH_YOUR_MODEL_DESCRIPTION =
@@ -457,6 +474,19 @@ export const CREW_TOOLS: readonly CrewTool[] = [
         member: { type: 'string', description: 'Whose park to clear; leave it out for your own' },
       },
       required: ['reason'],
+    },
+  },
+  {
+    name: RESTART_A_MEMBER,
+    description: RESTART_A_MEMBER_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        member: { type: 'string', description: 'Whom to restart: a member of this crew other than you' },
+        reason: { type: 'string', description: 'Why, in one line: the member\'s terminal and the ledger keep it' },
+        fresh: { type: 'boolean', description: 'Start it with no handover; leave it out to resume from its newest one' },
+      },
+      required: ['member', 'reason'],
     },
   },
   {
@@ -666,7 +696,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startBeating(): () => void {
       const timer = setInterval(() => {
         try {
-          writeRow(places, state, rowNow(places, state))
+          // A heartbeat says nothing of its own: it is the row as this session last left it, at this moment's beat.
+          writeRow(places, state, (row) => row)
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }
@@ -868,6 +899,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LOG_A_MILESTONE]: async (args) => ({ answer: (await keepTheMilestone(places.ledger, { ...workerOf(args), event: args['event'], note: args['note'] })).told }),
     [PARK_A_MEMBER]: async (args) => moveThePark(places, args, parkAMember),
     [WAKE_A_MEMBER]: async (args) => moveThePark(places, args, unparkAMember),
+    [RESTART_A_MEMBER]: async (args) => restartOf(places, args),
     [SWITCH_YOUR_MODEL]: (args) => switchTheModel(places, args),
     [RETURN_TO_YOUR_OWN_MODEL]: (args) => returnTheModel(places, args),
     write_my_handover: async (args) => theHandoverTheMemberWrote(places, state, args),
@@ -969,45 +1001,51 @@ async function aWorktreeTool(
 }
 
 /**
- * The row as this session last left it: what a report moves and the heartbeat rewrites. The model is this session's
- * own (martha#315): the one the launch gave it, and then the one a confirmed switch put it on, never the one a
- * heartbeat guessed.
+ * Changes the member's row by this session's own fields, applied to the row the store holds at the door: the model is
+ * this session's (martha#315), the state, task and figures are the member's, and everything else — the dialogs the
+ * launcher wrote, above all — is the row's, never a copy this session read earlier (martha#363, martha#380).
+ *
+ * The beat rule lives here, with the one writer that owns the row's `at`: a change whose beat is not newer than the row
+ * held is dropped whole, so a beat landing late never takes back a newer row (r=1, O1). A dialog is not a beat, so this
+ * rule can never refuse one.
  */
-function rowNow(places: CrewToolPlaces, state: SessionState): DashboardRow {
-  const stored = places.beats.read(places.member)
-  const kept = state.held ?? stored
+function writeRow(places: CrewToolPlaces, state: SessionState, change: (row: DashboardRow) => DashboardRow): void {
   const nothing_said = theRowWithNothingSaid()
-  const host = { ...nothing_said.host, ...(kept?.host ?? {}), model: state.row_model }
-  // The dialogs are the launcher's word, written into the same row from its own process (martha#313): this session's
-  // copy never says them, so a report neither drops one the owner has not answered nor brings back one that closed
-  // (martha#363).
-  const { [OWNER_DIALOGS_FIELD]: _held, ...own } = kept ?? {}
-  const dialogs = stored?.[OWNER_DIALOGS_FIELD]
-  return { ...nothing_said, ...own, ...(dialogs === undefined ? {} : { [OWNER_DIALOGS_FIELD]: dialogs }), member: places.member, session: state.session, at: places.ledger.clock.now(), host }
-}
-
-/** Keeps the row, in this process and on disk. */
-function writeRow(places: CrewToolPlaces, state: SessionState, row: DashboardRow): void {
-  state.held = row
-  places.beats.keep(row)
+  let changed: DashboardRow | null = null
+  places.beats.change(places.member, (held) => {
+    const row: DashboardRow = {
+      ...nothing_said,
+      ...(held ?? {}),
+      member: places.member,
+      session: state.session,
+      at: places.ledger.clock.now(),
+      host: { ...nothing_said.host, ...(held?.host ?? {}), model: state.row_model },
+    }
+    changed = change(row)
+    return beatAfter(held, changed)
+  })
+  // The row this session last had, whether the store kept it or dropped a beat that was not newer: it is what this
+  // session's own report is written over, as it was before (martha#255).
+  if (changed !== null) state.held = changed
 }
 
 /** `report_progress`: the report's own rules move the row, and the member is told what landed. */
 async function reportProgress(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
   const declared = await crewOrRefusal(places)
   if ('refused' in declared) return declared
-  const before = rowNow(places, state)
+  // What a report carries over — the waits and what it holds — is this session's own, read from the row it last had;
+  // the report itself is applied to the row the store holds at the door (martha#380).
+  const before = state.held ?? places.beats.read(places.member) ?? theRowWithNothingSaid()
   const report = takeProgress(args, declared.crew, { waits: before.waits, holds: before.holds }, places.ledger.clock.now())
-  writeRow(places, state, {
-    ...before,
-    at: places.ledger.clock.now(),
+  writeRow(places, state, (row) => ({
+    ...row,
     state: report.taken.state,
     task: report.taken.task,
     progress: report.taken.progress,
     waits: report.taken.waits,
     holds: report.taken.holds,
     reported_at: report.taken.reported_at,
-  })
+  }))
   const home = await returnedForAnotherPackage(places, report.taken.holds)
   return { answer: home === null ? report.told : `${report.told} ${home}` }
 }
@@ -1036,6 +1074,21 @@ async function moveThePark(
   const told = `${said.parked ? 'parked' : 'not parked'}: ${member} — ${said.reason}`
   const home = await theParkReturnsIt(places, act === parkAMember, said.parked)
   return { answer: home === null ? told : `${told} ${home}` }
+}
+
+/**
+ * `restart_a_member` (martha#312): the caller is this launch's member, never a name read out of the call, and the
+ * slice decides who may, when, and whom. The call waits for the member's launcher to answer.
+ */
+async function restartOf(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  if (places.lifecycle === undefined) return { refused: `this launch was given no place to ask a restart in, so ${RESTART_A_MEMBER} cannot run here.` }
+  const reason = textOf(args['reason'])
+  if (reason === '') return { refused: 'a restart says why in one line, and this one says nothing' }
+  const asking = { member: textOf(args['member']), by: places.member, reason, id: randomUUID(), fresh: args['fresh'] === true, declaration: theDeclarationOf(declared.settings) }
+  const said = await restartByTool(places.lifecycle, asking)
+  return said.kind === 'restarted' ? { answer: said.told } : { refused: said.told }
 }
 
 /**
@@ -1171,14 +1224,12 @@ function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: stri
  * keeps the newest beat and refuses one that is not newer, so two writes in the same millisecond would lose the second.
  */
 function keepWhatTheSessionSaid(places: CrewToolPlaces, state: SessionState, question: TheSessionsQuestion, act: TheAct): void {
-  const before = rowNow(places, state)
-  writeRow(places, state, {
-    ...before,
+  writeRow(places, state, (row) => ({
+    ...row,
     session: question.session_id,
-    at: places.ledger.clock.now(),
-    host: { ...before.host, contextPercent: question.percent, costUsd: question.cost_usd },
+    host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd },
     ...(act.refresh === undefined ? {} : { refresh: act.refresh }),
-  })
+  }))
 }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
@@ -1365,7 +1416,7 @@ function theModelReported(places: CrewToolPlaces, state: SessionState, args: Rea
   const model = textOf(args['model'])
   if (model === '') return { refused: 'a session reporting its model names it, and this one named none' }
   state.row_model = model
-  writeRow(places, state, rowNow(places, state))
+  writeRow(places, state, (row) => row)
   return { answer: `Noted: this row says ${model}.` }
 }
 

@@ -2,8 +2,10 @@
 //
 // This exists so a beat is one whole row and never half of one. The file is written under a staging name beside it,
 // every byte counted, then renamed into place, so a reader handed the file mid-write reads the row before it or the
-// row after it and never a torn mix. A beat older than the one the file already holds is dropped whole before
-// anything is written, which is the rule the core states (`beatAfter`): the writer settles it, not the reader.
+// row after it and never a torn mix. A write is a CHANGE and not a row: the store reads the row it holds, hands it to
+// the caller, and writes what the caller answers, so two writers of one row never overwrite each other's fields with a
+// copy they read first (martha#380). The rule that settles a stale beat stays with the writer that owns the row's `at`
+// (../a_crews_tools), not here.
 //
 // It is host glue because it reads and writes a disk, and the core reads no disk. The row's shape, its fields and the
 // newest-at rule stay in ../show_dashboard_beat, so a reader and this writer cannot disagree about what a row is.
@@ -14,7 +16,6 @@ import { dirname, join } from 'node:path'
 import { getuid } from 'node:process'
 
 import {
-  beatAfter,
   isDashboardRow,
   memberOfRowFileName,
   rowFileNameOf,
@@ -35,19 +36,20 @@ const ONE_ROW = 'dashboard row'
 export function dashboardRowsIn(directory: string): DashboardStore {
   return {
     read: (member) => readBeat(join(directory, rowFileNameOf(member))),
-    keep: (row) => keepBeat(directory, row),
+    change: (member, change) => changeBeat(directory, member, change),
     all: () => allBeatsIn(directory),
   }
 }
 
-/** Keeps `row` as the member's row: the newest beat wins, and the file is written whole. */
-function keepBeat(directory: string, row: DashboardRow): { readonly kept: boolean; readonly why?: string } {
-  const path = join(directory, rowFileNameOf(row.member))
-  const held = readBeat(path)
-  const next = beatAfter(held, row)
-  if (next === null) {
-    return { kept: false, why: `a beat taken at ${held?.at ?? 0} is already here, and this one was taken at ${row.at}` }
-  }
+/** Keeps what `change` answers for the member's row, read at the door: the file is written whole. */
+function changeBeat(
+  directory: string,
+  member: string,
+  change: (held: DashboardRow | null) => DashboardRow | null,
+): { readonly kept: boolean; readonly why?: string } {
+  const path = join(directory, rowFileNameOf(member))
+  const next = change(readBeat(path))
+  if (next === null) return { kept: false, why: `the change to ${member}'s row answered nothing, so nothing was kept` }
   return keepWhole(path, `${JSON.stringify(next, null, 2)}\n`)
 }
 

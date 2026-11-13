@@ -71,9 +71,11 @@ function aStore(): DashboardStore & { readonly kept: DashboardRow[] } {
   return {
     kept,
     read: () => row,
-    keep: (beat) => {
-      row = beat
-      kept.push(beat)
+    change: (_member, change) => {
+      const next = change(row)
+      if (next === null) return { kept: false, why: 'the change kept nothing' }
+      row = next
+      kept.push(next)
       return { kept: true }
     },
     all: () => (row === null ? {} : { [row.member]: row }),

@@ -169,7 +169,7 @@ test('#312: a running member whose row went quiet reads offline; a declared mode
 })
 
 test('#312: a request no launcher answered by the deadline is shown as pending with its launcher gone', () => {
-  const request: LifecycleRequest = { id: 'r', act: STOP, by: OWNER, reason: 'r', at: new Date(START).toISOString(), launch: { pid: 101, process_started_at: 'boot:1' } }
+  const request: LifecycleRequest = { id: 'r', act: STOP, fresh: false, by: OWNER, reason: 'r', at: new Date(START).toISOString(), launch: { pid: 101, process_started_at: 'boot:1' } }
   const pending: TheRequest = { kind: 'pending', request }
   const within = aList({ launches: [launchOf('builder', 101, 'boot:1')], running: { 101: 'boot:1' }, requests: { builder: pending }, now: START + ANSWER_DEADLINE_MS })
   assert.equal(within[1]!.note, `${STOP} asked by ${OWNER} at ${request.at}, pending`)
@@ -178,7 +178,7 @@ test('#312: a request no launcher answered by the deadline is shown as pending w
 })
 
 test('#312 r=1 R2: a request left from an earlier launch puts no note on the member running now', () => {
-  const request: LifecycleRequest = { id: 'r', act: STOP, by: OWNER, reason: 'r', at: new Date(START).toISOString(), launch: { pid: 101, process_started_at: 'boot:1' } }
+  const request: LifecycleRequest = { id: 'r', act: STOP, fresh: false, by: OWNER, reason: 'r', at: new Date(START).toISOString(), launch: { pid: 101, process_started_at: 'boot:1' } }
   const listed = aList({ launches: [launchOf('builder', 202, 'boot:2')], running: { 202: 'boot:2' }, requests: { builder: { kind: 'pending', request } }, now: START + ANSWER_DEADLINE_MS + 1 })
   assert.equal(listed[1]!.state, 'running')
   assert.equal(listed[1]!.note, '')
@@ -188,7 +188,7 @@ test('#312 r=1 R2: a request left from an earlier launch puts no note on the mem
 
 /** A request kept as a verb would keep it, for a launcher to find. */
 function keepAPending(place: CrewPlace, id: string, by: string, launch: { pid: number; process_started_at: string }): void {
-  const request = { id, act: STOP, by, reason: 'stalled', at: new Date(START).toISOString(), launch }
+  const request = { id, act: STOP, fresh: false, by, reason: 'stalled', at: new Date(START).toISOString(), launch }
   assert.equal(place.keep('builder.json', JSON.stringify({ request, outcome: null })), undefined)
 }
 
