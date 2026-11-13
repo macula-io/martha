@@ -4,8 +4,10 @@
 // The relay posts each dialog the host raises and each check it runs about a call; the launcher reads them with
 // ../hear_the_hosts_dialogs and hands them to the owner's screen. What is pinned here is the seam between the two: the
 // body the host sends is the one the screen hears, a check is kept so the permission about the same call is keyed by
-// it, a dialog this launcher cannot read moves nothing, and a prompt the launcher refused raises no turn of its own —
-// a refusal is not a turn, so it cannot clear a dialog the owner has not answered.
+// it, the call's own answer closes what it raised, a dialog this launcher cannot read moves nothing, and a prompt the
+// launcher refused raises no turn of its own — a refusal is not a turn, so it cannot clear a dialog the owner has not
+// answered. The events are fed in the order the host really sends them (probed on 2.1.323): a call is posted, checked
+// and asked about in that order, and the row stays "needs you" until the call is answered.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -150,22 +152,30 @@ test('#313: a permission the host posts moves the member\'s row to needs you, an
   assert.equal(wrote.length, 1, 'the bell is the row\'s change, rung once')
 })
 
-test('#313: a check is taken in before the ask, and the permission about that call is keyed by the check\'s own id', async (t) => {
+test('#313: the host posts the call, checks it, asks, and the call\'s answer closes the dialog, in that order (r=2 R1)', async (t) => {
   const places = placesOf(t)
   const store = aStore()
   const relay = relayFor(places, store, [])
   await startedSession(relay, 'session-a')
+  const call = { tool: CLAUDE_CODE_SHELL_TOOL, tool_use_id: 'toolu_probe_1', command: 'touch made.txt' }
+
+  // The order the host really sends on 2.1.323, measured with prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs:
+  // tool.call, then tool.check, then the PermissionRequest, the owner's answer, and the call's own answer after it ran.
+  await relay.answer('tool_called', { session_id: 'session-a', call })
+  assert.equal(store.read(MEMBER)?.dialogs, undefined, 'a call the host posted has raised nothing: the owner is not asked yet')
 
   const checked = await relay.answer('tool_checked', checkedBody('session-a', { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'touch made.txt' }, tool_use_id: 'toolu_probe_1', approver: 'the owner' }))
   assert.deepEqual(theBodyOf(checked), { taken: 1 })
   await relay.answer('owner_dialog', permission(CLAUDE_CODE_SHELL_TOOL, { command: 'touch made.txt' }))
   assert.equal(store.read(MEMBER)?.dialogs?.[0]?.key, 'permission:toolu_probe_1', 'the permission is keyed by the id the check taught the launcher')
-  // The call runs under the id the check taught the launcher, which closes the dialog the permission opened.
-  await relay.answer('tool_called', { session_id: 'session-a', call: { tool: CLAUDE_CODE_SHELL_TOOL, tool_use_id: 'toolu_probe_1', command: 'touch made.txt' } })
+  assert.deepEqual(whatTheOwnerIsShown(theRowOn(store)), { state: 'needs-you', needs: 'permission for Bash' })
+
+  // The owner allowed it, and the call answered under the id the check taught the launcher: that answer is the close.
+  await relay.answer('tool_answered', { session_id: 'session-a', call, answer: { stdout: '', stderr: '', interrupted: false } })
 
   const row = store.read(MEMBER)
   assert.ok(row !== null)
-  assert.equal(row.dialogs, undefined, 'the call that ran closed the dialog the check named')
+  assert.equal(row.dialogs, undefined, 'the call\'s answer closed the dialog the check named')
   assert.deepEqual(whatTheOwnerIsShown(row), { state: IDLE, needs: '' })
 })
 

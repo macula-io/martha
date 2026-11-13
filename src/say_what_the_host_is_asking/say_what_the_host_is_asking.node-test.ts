@@ -1,9 +1,10 @@
 // What the host says about the owner's screen, and which of its events opens and closes a dialog (martha#313).
 //
 // What is pinned here is the pairing, not the row: the row is ../tell_the_owner_a_session_waits's and the bell is
-// ../ring_the_owner's. A permission is keyed by the call the host checked before it asked; the call that runs closes
-// exactly its own dialog; a menu is the host's own call, open while it runs; an elicitation with no id closes on the
-// oldest one its server has open; and a turn's start drops whatever a dialog left behind.
+// ../ring_the_owner's. A permission is keyed by the call the host checked before it asked; the call's own answer, and
+// nothing the host says earlier, closes exactly the dialogs that call raised; a menu is the host's own call, open from
+// its posting until its answer; an elicitation with no id closes on the oldest one its server has open; and a turn's
+// start drops whatever a dialog left behind.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -38,40 +39,40 @@ const aCall = (id: string, input: unknown = { command: 'rm -rf build' }, tool = 
   ...(agent === undefined ? {} : { agent }),
 })
 
-test('a permission is keyed by the call the host checked before it asked, and the call that runs closes that one', () => {
+test('a permission is keyed by the call the host checked before it asked, and the call\'s answer closes that one', () => {
   const checked = said(NOTHING_IS_ASKED, { said: 'checked', call: aCall('toolu_1') })
   const asked = said(checked.state, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
   assert.deepEqual(asked.keys, ['permission:toolu_1'], 'the dialog carries the id of the call the host checked')
   assert.deepEqual(asked.state.checks.map((check) => check.id), ['toolu_1'])
-  const ran = said(asked.state, { said: 'ran', call: aCall('toolu_1') }, AT + 1)
-  assert.deepEqual(ran.keys, ['permission:toolu_1'], 'the call runs, and the dialog it asked about closes')
-  assert.deepEqual(ran.state.dialogs, [])
+  const answered = said(asked.state, { said: 'answered', call: aCall('toolu_1') }, AT + 1)
+  assert.deepEqual(answered.keys, ['permission:toolu_1'], 'the call is answered, and the dialog it asked about closes')
+  assert.deepEqual(answered.state.dialogs, [])
 })
 
-test('two identical calls in flight are two dialogs, and the one that runs closes only its own (Pluto\'s point 3)', () => {
+test('two identical calls in flight are two dialogs, and the one answered closes only its own (Pluto\'s point 3)', () => {
   const one = said(NOTHING_IS_ASKED, { said: 'checked', call: aCall('toolu_a') })
   const two = said(one.state, { said: 'checked', call: aCall('toolu_b') })
   const askedOne = said(two.state, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
   const askedTwo = said(askedOne.state, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
   assert.deepEqual(askedTwo.keys, ['permission:toolu_b'], 'the second ask is its own dialog, not the first one again')
   assert.equal(askedTwo.state.dialogs.length, 2)
-  const ran = said(askedTwo.state, { said: 'ran', call: aCall('toolu_a') }, AT + 1)
-  assert.deepEqual(ran.keys, ['permission:toolu_a'])
-  assert.deepEqual(ran.state.dialogs.map((dialog) => dialog.key), ['permission:toolu_b'], 'the other call is still being asked about')
+  const answered = said(askedTwo.state, { said: 'answered', call: aCall('toolu_a') }, AT + 1)
+  assert.deepEqual(answered.keys, ['permission:toolu_a'])
+  assert.deepEqual(answered.state.dialogs.map((dialog) => dialog.key), ['permission:toolu_b'], 'the other call is still being asked about')
 })
 
-test('a host that checked no call leaves the dialog keyed by what asked, and the call that runs still closes it', () => {
+test('a host that checked no call leaves the dialog keyed by what asked, and the call that answers still closes it', () => {
   const asked = said(NOTHING_IS_ASKED, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
   assert.equal(asked.keys.length, 1)
   assert.ok(asked.keys[0]?.startsWith('permission:'), 'the fallback key is what asked')
-  const ran = said(asked.state, { said: 'ran', call: aCall('toolu_1') }, AT + 1)
-  assert.deepEqual(ran.keys, asked.keys, 'the call that ran is the one the owner allowed')
-  assert.deepEqual(ran.state.dialogs, [])
+  const answered = said(asked.state, { said: 'answered', call: aCall('toolu_1') }, AT + 1)
+  assert.deepEqual(answered.keys, asked.keys, 'the call that answered is the one the owner allowed')
+  assert.deepEqual(answered.state.dialogs, [])
 })
 
 test('a call of another tool does not close a permission dialog it did not raise', () => {
   const asked = said(NOTHING_IS_ASKED, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
-  const other = said(asked.state, { said: 'ran', call: aCall('toolu_9', { file_path: '/tmp/x' }, 'Read') }, AT + 1)
+  const other = said(asked.state, { said: 'answered', call: aCall('toolu_9', { file_path: '/tmp/x' }, 'Read') }, AT + 1)
   assert.deepEqual(other.keys, [])
   assert.equal(other.state.dialogs.length, 1)
 })
@@ -85,11 +86,14 @@ test('a menu is the host\'s own call: open while it runs, closed when the host a
   assert.deepEqual(answered.state.dialogs, [])
 })
 
-test('a permission the owner allowed closes before the tool runs, and never on the call\'s answer (Pluto\'s point 2)', () => {
+test('a call the host posts closes nothing, because on this host it is posted before the owner is asked (r=2 R1)', () => {
   const checked = said(NOTHING_IS_ASKED, { said: 'checked', call: aCall('toolu_1') })
   const asked = said(checked.state, { said: 'permission', call: { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } } })
-  const answeredAlone = said(asked.state, { said: 'answered', call: aCall('toolu_1') }, AT + 1)
-  assert.deepEqual(answeredAlone.keys, ['permission:toolu_1'], 'an answer with no run in between still closes it, so nothing sticks')
+  // The host's real order is tool.call, then tool.check, then PermissionRequest: a posted call that closed a dialog
+  // would close it before it existed, and the dialog an owner then sees would never be closed by it.
+  const posted = said(asked.state, { said: 'ran', call: aCall('toolu_1') }, AT + 1)
+  assert.deepEqual(posted.keys, [], 'a call posted says nothing about the dialog it raises')
+  assert.equal(posted.state.dialogs.length, 1)
 })
 
 test('an elicitation named by its id closes on that id, and one named by nothing closes the oldest its server has open', () => {

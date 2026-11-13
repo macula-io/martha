@@ -54,7 +54,6 @@ import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
-import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { theCallIn, TOOL_CHECK, whatTheHostSaidOf } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -696,7 +695,10 @@ function theDenialOfACall(
   })?.deny
 }
 
-/** The dialog a call raised, closed because the call is about to run (martha#313): the owner is no longer asked. */
+/**
+ * The screen told that a call is about to run (martha#313). The host posts this before it checks the call and before it
+ * asks the owner, so it opens the host's own menu and closes nothing: the close is the call's answer.
+ */
 function closeTheDialogTheCallRan(state: RelayState, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
   state.place.screen?.heard(session.id, { said: 'ran', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
@@ -709,7 +711,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
   const answering = noteAnAgentsAnswer(state, body)
-  closeTheMenuTheCallAnswered(place, session, body, call)
+  closeTheDialogsTheCallAnswered(place, session, body, call)
   // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
   const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
   const unvouched = recheckBeforeRecording(place, session, call)
@@ -723,11 +725,16 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
 }
 
 /**
- * The host's own menu, closed because its call was answered (martha#313): the menu it opened is answered by that
- * call's own answer, and by nothing else. Every other call leaves the screen alone here.
+ * Every dialog a call raised, closed because that call was answered (martha#313): the permission the owner allowed
+ * and the menu they picked from are both answered by the call's own answer, and by nothing before it.
+ *
+ * This is the close the row relies on, because it is the only event the host offers after the owner has answered. The
+ * host posts the call (`tool_called`) before it checks it and before it asks (`tool_checked`, `owner_dialog`), and
+ * nothing more until the call is answered. So a dialog an owner allowed stays on the row while the call runs: for a
+ * long command that is the run's own length. That is the one limit this design accepts, and the row is otherwise the
+ * truth.
  */
-function closeTheMenuTheCallAnswered(place: MemberRelayPlace, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
-  if (call.tool !== MENU_TOOL) return
+function closeTheDialogsTheCallAnswered(place: MemberRelayPlace, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
   place.screen?.heard(session.id, { said: 'answered', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
 

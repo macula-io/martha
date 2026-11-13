@@ -182,6 +182,27 @@ test('the relay sends the engine fields unchanged: the start whole, the origin w
   )
 })
 
+test('the relay posts the call before the check, and the check before the ask, so a call\'s answer is the row\'s only close (r=2 R1, R2)', async () => {
+  const fake = fakeEngine(sayYes)
+  const hooks = hooksOfTheRelay()
+  const check = { tool: CALL.tool, input: { command: CALL.command }, tool_use_id: CALL.tool_use_id }
+  const ask = { hook_event_name: 'PermissionRequest', session_id: SESSION, tool_name: CALL.tool, tool_input: { command: CALL.command } }
+  // What the host does inside tool.call on 2.1.323: it posts the call, checks it, asks the owner about it, and only
+  // then runs it. The row's close is the answer at the end, because nothing the host posts earlier comes after the
+  // owner's answer — and the posting comes before the ask, so a row that closed on it would close before it opened.
+  const theHostInsideItsCall = async (): Promise<unknown> => {
+    await hooks.get('tool.check')?.hook(fake.$, check, next(check).fn)
+    await hooks.get('classic.PermissionRequest')?.hook(fake.$, ask, next(ask).fn)
+    return RESULT
+  }
+  assert.deepEqual(await hooks.get('tool.call')?.hook(fake.$, CALL, theHostInsideItsCall), RESULT)
+  assert.deepEqual(
+    fake.posted.map(({ url }) => url.slice(RELAY_ORIGIN.length)),
+    [RELAY_PATHS.tool_called, RELAY_PATHS.tool_checked, RELAY_PATHS.owner_dialog, RELAY_PATHS.tool_answered],
+    'the order the owner\'s row relies on: the call, then its check, then the ask, then the call\'s answer',
+  )
+})
+
 test('an answer too big to send is left out of the tool_answered body, and the call records A13 rather than a body the launcher stops the member over (martha#129)', async () => {
   const huge = { text: 'x'.repeat(LARGEST_RELAYED_ANSWER) }
   const fake = fakeEngine(sayYes)

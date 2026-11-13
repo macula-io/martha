@@ -5,18 +5,22 @@
 // stripped and cut, and what the row says while one is open. This slice owns the other half — which of the host's
 // events opens a dialog, which closes it, and which call a permission belongs to.
 //
-// THREE RULES, each learned from what the host does rather than from what it promises (probed on 2.1.323, see
-// ~/.claude/sessions/vesta-313/logs/probe-ordering-allow.log):
+// THREE RULES, each learned from what the host does rather than from what it promises. The order they rest on is
+// measured on 2.1.323 by prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs (which any machine with the host can
+// run again), and the relay's half of it is checked by ../claude_code_relay/claude_code_relay.node-test.ts, so a relay
+// that posted its events in another order fails there by name:
 //
 //   - A PERMISSION IS KEYED BY THE CALL'S OWN ID. The engine's `tool.check` names the call (`tool_use_id`) about a
 //     tenth of a second before it asks the owner, and the relay posts it. So a permission request is matched to the
 //     check still pending for the same tool and input, and its dialog is keyed by that id. Two identical calls in
 //     flight are then two dialogs, and each closes on its own.
-//   - A DIALOG CLOSES WHEN THE CALL IT ASKED ABOUT RUNS. The check's own decision comes back BEFORE the owner is
-//     asked (`decision: "ask"`), so it cannot be the close; and the host posts nothing at all when the owner says no
-//     (probed: no PermissionDenied, no PostToolUse, no batch). What is left is the call itself: a call that runs is
-//     one the owner allowed, and `tool.call` is posted before it runs. A dialog whose call never runs therefore
-//     clears when the turn starts — the one limit this design accepts, and the row says the truth until then.
+//   - A DIALOG CLOSES WHEN ITS CALL IS ANSWERED. The host posts the call FIRST, before it checks it and before it
+//     asks (`tool.call`, then `tool.check`, then `PermissionRequest`, all within a tenth of a second); it says nothing
+//     while the owner decides; and after they answer, the next thing it says is the call's own answer, once the call
+//     has run. So neither the call's posting nor the check's decision can be the close — the answer is. What that
+//     costs is named: while an allowed call runs, the row still says "needs you", so a long command reads as the
+//     run's own length. A dialog whose call is never answered (the owner said no, or the turn was cut) clears when
+//     the next turn starts, and the row says the truth until then.
 //   - A REFUSAL IS NOBODY'S EVENT. The host fires `PermissionDenied` only for its own auto-mode classifier, which opens
 //     no dialog, so nothing here reads it.
 //
@@ -145,37 +149,27 @@ function thePermissionAsks(held: WhatTheHostIsAsking, call: ACallTheHostMade, at
   return opened(held, raised, at)
 }
 
-/** A call the host is about to run: every dialog that call raised is closed, and the menu it is opens. */
+/**
+ * A call the host posted, a tenth of a second before it checks it: the menu it is opens, and nothing closes, because
+ * on this host the call is posted before the owner has been asked anything (`theCallAnswered` is the close).
+ */
 function theCallRan(held: WhatTheHostIsAsking, call: ACallTheHostMade, at: number): WhatIsLeftToAsk {
-  const closed = held.dialogs.filter((dialog) => raisedByTheCallThatRan(dialog, call))
-  const checks = held.checks.filter((pending) => pending.id !== call.id)
-  const left: WhatTheHostIsAsking = {
-    checks,
-    dialogs: held.dialogs.filter((dialog) => !closed.includes(dialog)),
-  }
-  const events: OwnerDialogEvent[] = closed.map((dialog) => ({ change: 'closed', at, key: dialog.key }))
-  // The host's own menu is a call like any other: it is open from the moment the call runs until the host answers it,
-  // and the launcher already hears both (martha#313, the design's table).
-  if (call.tool !== MENU_TOOL) return { state: left, events }
-  const menu = opened(left, { kind: 'menu', ...(call.id === undefined ? {} : { uses: call.id }) }, at)
-  return { state: menu.state, events: [...events, ...menu.events] }
+  // The host's own menu is a call like any other: it is open from the moment the call is posted until the host
+  // answers it, and the launcher already hears both (martha#313, the design's table).
+  if (call.tool !== MENU_TOOL) return { state: held, events: [] }
+  const menu = opened(held, { kind: 'menu', ...(call.id === undefined ? {} : { uses: call.id }) }, at)
+  return { state: menu.state, events: menu.events }
 }
 
 /**
- * Whether this dialog was raised by the call that is about to run: the call's own id, or — for a dialog keyed by what
- * asked, because the host named no call before it asked — the tool, the input and the agent that asked.
+ * A call the host answered: every dialog it raised closes, which on this host is the owner having answered it. A
+ * dialog is matched to the call by the call's own id, or — for one keyed by what asked, because the host named no call
+ * before it asked — by the tool, the input and the agent that asked. A menu the host named no call for is the oldest
+ * one open: the host asks one menu at a time in a session.
  */
-function raisedByTheCallThatRan(dialog: AnAskThatIsOpen, call: ACallTheHostMade): boolean {
-  if (call.id !== undefined && dialog.id === call.id) return true
-  if (dialog.kind !== 'permission' || dialog.id !== undefined) return false
-  return dialog.tool === call.tool && dialog.digest === theDigestOf(call.input) && (dialog.agent === '' || dialog.agent === (call.agent ?? ''))
-}
-
-/** A call the host answered: the menu it was closes, and nothing else can still be open on it. */
 function theCallAnswered(held: WhatTheHostIsAsking, call: ACallTheHostMade, at: number): WhatIsLeftToAsk {
-  // A menu the host named no call for is the oldest one open: the host asks one menu at a time in a session.
   const unnamed = call.id === undefined ? held.dialogs.find((dialog) => dialog.kind === 'menu') : undefined
-  const closed = held.dialogs.filter((dialog) => (call.id !== undefined && dialog.id === call.id) || dialog.key === unnamed?.key)
+  const closed = held.dialogs.filter((dialog) => (call.id !== undefined && dialog.id === call.id) || dialog.key === unnamed?.key || askedByTheCallThatAnswered(dialog, call))
   return {
     state: {
       checks: held.checks.filter((pending) => pending.id !== call.id),
@@ -183,6 +177,15 @@ function theCallAnswered(held: WhatTheHostIsAsking, call: ACallTheHostMade, at: 
     },
     events: closed.map((dialog) => ({ change: 'closed', at, key: dialog.key })),
   }
+}
+
+/**
+ * Whether this dialog was keyed by what asked rather than by a call's id, and the call that answered is the one that
+ * asked: the tool, the digest of its input and the agent, compared the way the dialog was keyed.
+ */
+function askedByTheCallThatAnswered(dialog: AnAskThatIsOpen, call: ACallTheHostMade): boolean {
+  if (dialog.kind !== 'permission' || dialog.id !== undefined) return false
+  return dialog.tool === call.tool && dialog.digest === theDigestOf(call.input) && (dialog.agent === '' || dialog.agent === (call.agent ?? ''))
 }
 
 /** An elicitation: keyed by its id, or by its server and question when the host named none. */

@@ -70,14 +70,14 @@ test('a dialog leaves the member\'s own report alone, and the row reads needs yo
   assert.equal(wrote[0], theBellsFor(aReportedRow(), row, { bell: true, notify: false }, true))
 })
 
-test('the call that runs clears the row back to exactly what the member said, and rings nothing (test 1, test 6)', () => {
+test('the call\'s answer clears the row back to exactly what the member said, and rings nothing (test 1, test 6)', () => {
   const store = aStore(aReportedRow())
   const wrote: string[] = []
   const screen = theOwnersScreen(aScreen(store, wrote))
   screen.heard('a-session', { said: 'checked', call: { id: 'toolu_1', ...A_PERMISSION } }, 20)
   screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 21)
   wrote.length = 0
-  screen.heard('a-session', { said: 'ran', call: { id: 'toolu_1', ...A_PERMISSION } }, 22)
+  screen.heard('a-session', { said: 'answered', call: { id: 'toolu_1', ...A_PERMISSION } }, 22)
   const row = store.read('Vesta')
   assert.ok(row !== null)
   assert.equal(row.dialogs, undefined, 'no dialogs are left on the row at all')
