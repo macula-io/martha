@@ -12,6 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, type TheOrder } from './crew_answers.ts'
 
 /**
  * The server name the host gives this plugin's tools: `mcp__<server>__<tool>`. It is the plugin's own name, and each
@@ -116,21 +117,6 @@ async function startReadingTheChannel($: CrewEngine): Promise<void> {
   await reading.readWhileIdle()
 }
 
-/** The order a session is given (martha#255): submit this text, clear the session, or nothing at all. */
-type TheOrder = { readonly carry: 'submit'; readonly text: string } | { readonly carry: 'clear' } | { readonly carry: 'none' }
-
-/** The order the launcher's answer carries, or null when it is not one this mod knows. */
-function orderIn(said: string): TheOrder | null {
-  try {
-    const parsed = JSON.parse(said) as { readonly carry?: unknown; readonly text?: unknown }
-    if (parsed.carry === 'clear' || parsed.carry === 'none') return { carry: parsed.carry }
-    if (parsed.carry === 'submit' && typeof parsed.text === 'string' && parsed.text !== '') return { carry: 'submit', text: parsed.text }
-    return null
-  } catch {
-    return null
-  }
-}
-
 /**
  * Asks the launcher what this session should do now, and does it (martha#255). What the session knows goes with the
  * question — its context, the turn that just ended and the answer it ended with — and the launcher decides; this does
@@ -208,15 +194,6 @@ interface FromTheLauncher {
   readonly tools: readonly CrewTool[]
 }
 
-/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
-interface ThePaneShown {
-  readonly header: string
-  readonly lines: readonly string[]
-  readonly open_at_start: boolean
-  readonly rows: number
-  readonly redraw_ms: number | null
-}
-
 /** Asks the launcher for the tools to register, which it alone names and describes. */
 async function toolsFromTheLauncher($: CrewEngine): Promise<FromTheLauncher> {
   const heard = await hearTheLauncher($, 'the_crews_tools', {})
@@ -250,21 +227,6 @@ async function openThePane($: CrewEngine): Promise<void> {
   const shown = 'said' in heard ? paneIn(heard.said) : null
   await $.ui.open({ id: PANE, title: 'Crew', rows: shown === null ? PANE_CHROME_ROWS : shown.rows })
   if (shown !== null) startRedrawing($, shown.redraw_ms)
-}
-
-/** The pane's own chrome, for an answer that does not say how many rows it wants (martha#254). */
-const PANE_CHROME_ROWS = 3
-
-/** What the pane draws, from the answer the launcher gives, or null when the answer is not one it can draw. */
-function paneIn(said: string): ThePaneShown | null {
-  try {
-    const parsed = JSON.parse(said) as Partial<ThePaneShown>
-    if (typeof parsed.header !== 'string' || !Array.isArray(parsed.lines)) return null
-    const { header, lines, rows, redraw_ms } = parsed
-    return { header, lines, open_at_start: parsed.open_at_start === true, rows: rows ?? PANE_CHROME_ROWS, redraw_ms: redraw_ms ?? null }
-  } catch {
-    return null
-  }
 }
 
 /**

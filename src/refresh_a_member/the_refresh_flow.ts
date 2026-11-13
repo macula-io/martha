@@ -471,13 +471,39 @@ async function settingsOrNull(places: TheRefreshPlaces): Promise<CrewSettings | 
 }
 
 /**
+ * The word an order carries a text under (martha#255): the one the mod answers by submitting it as a prompt.
+ *
+ * The mod holds no import of the core — the host installs it as a copy of its own folder — so its copy of this word is
+ * declared an exception in src/check_no_literal_restates_a_value/exceptions.ts, and a reworded order makes that entry
+ * stale and the gate red by name (r=2 R1).
+ */
+export const CARRY_A_TEXT = 'submit'
+
+/** The word an order carries the clear under (martha#255): the one the mod answers by clearing the session. */
+export const CARRY_THE_CLEAR = 'clear'
+
+/**
  * The order the mod carries out (martha#255): the one thing it is told to do, and the text for the one that needs
  * it. It is answered in place of the act, so the mod reads three words and decides nothing.
+ *
+ * The third word, `'none'`, is spelled out here rather than held as a constant: see `theOrderOf`.
  */
-export type TheOrder = { readonly carry: 'submit'; readonly text: string } | { readonly carry: 'clear' } | { readonly carry: 'none' }
+export type TheOrder =
+  | { readonly carry: typeof CARRY_A_TEXT; readonly text: string }
+  | { readonly carry: typeof CARRY_THE_CLEAR }
+  | { readonly carry: 'none' }
 
-/** The act as the order the mod runs: a prompt is a text to submit, a clear is the clear, and nothing is nothing. */
+/**
+ * The act as the order the mod runs: a prompt is a text to submit, a clear is the clear, and nothing is nothing.
+ *
+ * `'none'` is the one word here with no constant of its own (r=2 R1). A constant makes every literal equal to its
+ * value stale at once, and `'none'` is the gate's own word for a path nothing gates and a room nothing holds: 88 of
+ * them in 15 files, nearly all meaning something else. It needs no copy held either, because the mod already reads an
+ * order it cannot make out as no act at all — the same thing `'none'` says — so a reworded `'none'` cannot make the mod
+ * do anything but nothing. ./crew_answers.node-test.ts holds both halves of that: the launcher's own `'none'` does
+ * nothing, and neither does an order the mod cannot read.
+ */
 export function theOrderOf(act: TheAct): TheOrder {
-  if (act.act === 'prompt') return { carry: 'submit', text: act.text }
-  return act.act === 'clear' ? { carry: 'clear' } : { carry: 'none' }
+  if (act.act === 'prompt') return { carry: CARRY_A_TEXT, text: act.text }
+  return act.act === 'clear' ? { carry: CARRY_THE_CLEAR } : { carry: 'none' }
 }
