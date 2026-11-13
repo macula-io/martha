@@ -9,9 +9,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { theStandInModel, type ModelRequest, type ScriptedTurn } from './drive_the_recorded_host.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** A model request that offers the model tools: the kind that is counted, and answered by the script. */
-const OFFERS_TOOLS = { model: 'the-stand-in', tools: [{ name: 'Write' }], messages: [] }
+const OFFERS_TOOLS = { model: 'the-stand-in', tools: [{ name: WHOLE_FILE_TOOL }], messages: [] }
 
 /** A request the host's own side makes — a title, a summary: it offers no tools, so it is answered and not counted. */
 const OFFERS_NONE = { model: 'the-stand-in', messages: [] }

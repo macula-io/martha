@@ -10,18 +10,36 @@
 
 import { join, resolve } from 'node:path'
 
-/** Each file-writing tool, by the argument of its call that names the file. */
+import type { DefinesItsValues } from '../host_contract/defines_its_values.ts'
+
+/**
+ * Each file-writing tool, by the argument of its call that names the file. Marked, so a literal anywhere that
+ * equals one of its keys or values is a restatement (martha#289); the constants below hold the same names one by
+ * one, for a call site that wants one tool or one argument.
+ */
 export const CLAUDE_CODE_FILE_WRITING_TOOLS: Readonly<Record<string, string>> = Object.freeze({
   Write: 'file_path',
   Edit: 'file_path',
   NotebookEdit: 'notebook_path',
-})
+}) satisfies DefinesItsValues
 
 /** The tool that writes a whole file from its call: what is on disk after it must be the call's content. */
 export const WHOLE_FILE_TOOL = 'Write'
 
 /** The argument of a WHOLE_FILE_TOOL call that holds the whole file. */
 export const WHOLE_FILE_CONTENT = 'content'
+
+/** The tool that replaces text in one file. */
+export const EDIT_TOOL = 'Edit'
+
+/** The tool that changes one cell of a notebook file. */
+export const NOTEBOOK_EDIT_TOOL = 'NotebookEdit'
+
+/** The argument of a WHOLE_FILE_TOOL or EDIT_TOOL call that names the file. */
+export const FILE_PATH_ARGUMENT = 'file_path'
+
+/** The argument of a NOTEBOOK_EDIT_TOOL call that names the notebook. */
+export const NOTEBOOK_PATH_ARGUMENT = 'notebook_path'
 
 /** The argument naming the file a call of `tool` writes, or undefined when `tool` writes no one file. */
 export const fileArgumentOf = (tool: string): string | undefined =>

@@ -12,6 +12,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
 import { skipWithoutTheSandbox } from './sandbox_under_test.ts'
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const [REGULAR] = OWN_WRITE_MODES
 const unavailable = skipWithoutTheSandbox()
@@ -45,7 +46,7 @@ const ownWriteOf = (checkout: string, path: string, launch: string) => ({
   path: join(checkout, path),
   blob: blobOf(checkout, path),
   mode: REGULAR,
-  tool: 'Write',
+  tool: WHOLE_FILE_TOOL,
   tool_use_id: `toolu_${path}`,
   session: 's',
   launch,
@@ -127,7 +128,7 @@ test('a file neither base nor own write runs nothing, and is named; written thro
     path: join(p.checkout, 'planted.txt'),
     blob: blobOf(p.checkout, 'planted.txt'),
     mode: REGULAR,
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_01',
     session: 's',
     launch: 'l',
@@ -169,7 +170,7 @@ test('an own write git changes as it adds it still passes: the blob judged is th
   const raw = createHash('sha1').update(`blob ${Buffer.byteLength(windows)}\0`).update(windows).digest('hex')
   const kept = blobOf(p.checkout, 'windows.txt')
   assert.notEqual(kept, raw)
-  assert.equal(ownWritesKeptForTheHistory(p.state).append({ path: join(p.checkout, 'windows.txt'), blob: kept, mode: REGULAR, tool: 'Write', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
+  assert.equal(ownWritesKeptForTheHistory(p.state).append({ path: join(p.checkout, 'windows.txt'), blob: kept, mode: REGULAR, tool: WHOLE_FILE_TOOL, tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
   const ended = await runASignedShape(p.run)
   assert.ok(typeof ended !== 'string', String(ended))
   assert.equal(ended.status, 0, said(ended))
@@ -205,7 +206,7 @@ test("a checkout that would make git hash its own file as another's is refused, 
 test('an own write of another checkout does not vouch for a file at the same path here', { skip: unavailable }, async (t) => {
   const p = place(t)
   writeFileSync(join(p.checkout, 'planted.txt'), MARKER)
-  const elsewhere = { path: join(p.top, 'elsewhere', 'planted.txt'), blob: blobOf(p.checkout, 'planted.txt'), mode: REGULAR, tool: 'Write', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() } as const
+  const elsewhere = { path: join(p.top, 'elsewhere', 'planted.txt'), blob: blobOf(p.checkout, 'planted.txt'), mode: REGULAR, tool: WHOLE_FILE_TOOL, tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() } as const
   assert.equal(ownWritesKeptForTheHistory(p.state).append(elsewhere), undefined)
   assert.match(String(await runASignedShape(p.run)), /nothing ran: planted\.txt/)
 })
@@ -214,7 +215,7 @@ test('a test script redefined in the checkout runs nothing, even written by the 
   const p = place(t)
   const manifest = JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: `echo ${MARKER}` } })
   writeFileSync(join(p.checkout, MANIFEST), manifest)
-  assert.equal(ownWritesKeptForTheHistory(p.state).append({ path: join(p.checkout, MANIFEST), blob: blobOf(p.checkout, MANIFEST), mode: REGULAR, tool: 'Edit', tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
+  assert.equal(ownWritesKeptForTheHistory(p.state).append({ path: join(p.checkout, MANIFEST), blob: blobOf(p.checkout, MANIFEST), mode: REGULAR, tool: EDIT_TOOL, tool_use_id: 't', session: 's', launch: 'l', recorded_at: new Date().toISOString() }), undefined)
   const ended = await runASignedShape(p.run)
   assert.equal(typeof ended, 'string')
   assert.match(String(ended), new RegExp(MANIFEST.replace('.', '\\.')))
