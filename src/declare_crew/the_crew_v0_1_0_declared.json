@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "owner": "Owner",
+  "members": [
+    {
+      "name": "builder",
+      "role": "builder"
+    },
+    {
+      "name": "reviewer",
+      "role": "reviewer"
+    }
+  ],
+  "mode": {
+    "name": "solo",
+    "roles": [
+      "builder",
+      "reviewer"
+    ],
+    "may": {
+      "assign_work": [
+        "owner"
+      ],
+      "approve_landing": [
+        "owner"
+      ],
+      "resume_parked_work": [
+        "owner"
+      ]
+    }
+  }
+}
