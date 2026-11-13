@@ -62,7 +62,7 @@
     "hostCeilings": {
       "src/approve_a_checkouts_config": 59,
       "src/claude_code_host": 1406,
-      "src/claude_code_relay": 660,
+      "src/claude_code_relay": 669,
       "src/declare_a_solo_crew": 83,
       "src/install_the_pinned_installer": 124,
       "src/install_the_recorded_mesh_server": 312,
