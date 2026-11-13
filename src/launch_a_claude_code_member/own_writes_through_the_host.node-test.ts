@@ -13,6 +13,7 @@ import { hostForTests, type HostForTests } from '../host_contract/host_for_tests
 import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { OWN_WRITE_MODES, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { ownWriteOfCall, rememberOwnWriteOfCall, type CallThatRan } from './remember_own_write_of_a_call.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const HOME = '/the-owners-home'
 const TOP = `${HOME}/checkout`
@@ -110,7 +111,7 @@ function launchKeeping(kept: OwnWrite[]): ApprovedLaunch {
 
 /** A Write of the file at `path`, as Claude Code's file tools name it. */
 const writeOf = (path: string, content: string): CallThatRan => ({
-  tool: 'Write',
+  tool: WHOLE_FILE_TOOL,
   input: { file_path: path, content, tool_use_id: 'toolu_Write' },
   session: SESSION,
   home: HOME,
@@ -128,7 +129,7 @@ test('a Write of a file under the checkout is kept, read only through the host: 
     path: WRITTEN,
     blob: BLOB,
     mode: REGULAR,
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_Write',
     session: SESSION,
     launch: LAUNCH,

@@ -11,6 +11,7 @@ import {
   type Ingestion,
   type Policy,
 } from './refuse_execution_after_ungated_text.ts'
+import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const crewmate = 'a'.repeat(64)
@@ -41,7 +42,7 @@ const EXECUTING_TOOLS = [
   'edit',
   'patch',
   'MultiEdit',
-  'NotebookEdit',
+  NOTEBOOK_EDIT_TOOL,
   'Agent',
   'Task',
   'SendMessage',
@@ -86,7 +87,7 @@ test('every executing tool is refused after an outsider turn, by any name it goe
 test('a tool name nobody has ever seen executes: the list is an allow-list, not a deny-list', () => {
   assert.equal(isShellTool('NeverSeenTool'), true)
   assert.equal(isShellTool('bash'), true)
-  assert.equal(isShellTool('Write'), true)
+  assert.equal(isShellTool(WHOLE_FILE_TOOL), true)
 })
 
 test('reading and searching stay allowed: the member reads the text, it just may not act on it', () => {

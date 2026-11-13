@@ -52,6 +52,7 @@ import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS = ['opus', 'fable']
@@ -458,7 +459,7 @@ function ownWriteOf(launch: string, index: number): OwnWrite {
     path: `/project/written-${index}.txt`,
     blob: 'ce013625030ba8dba906f756967f9e9ca394464a',
     mode: OWN_WRITE_MODES[0],
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: `toolu_${index}`,
     session: 'session-1',
     launch,
