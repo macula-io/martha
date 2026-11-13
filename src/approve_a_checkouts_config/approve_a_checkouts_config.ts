@@ -24,6 +24,9 @@
 // when the config is already approved, or when the gate would refuse the config whatever the owner said (a
 // symlink, config outside any checkout): that refusal is shown instead.
 
+import { crewTextFilesToApprove } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
+import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
@@ -59,6 +62,8 @@ export interface ApproveRequest {
   readonly home: string
   readonly state: MarthaState
   readonly terminal: OwnersTerminal
+  /** Reads the crew's declaration, so its own texts are approved with the config (martha#306); given none, the host config alone. */
+  readonly documents?: DocumentStore
   tellOwner(line: string): void
   now(): Date
 }
@@ -75,6 +80,16 @@ const QUESTION = `Type ${YES} to approve this config for every member of this cr
 const lineOf = (entry: ConfigEntry): string =>
   `  ${entry.path}  ${entry.kind}${entry.kind === 'file' ? `  sha256 ${entry.sha256}` : ''}`
 
+/**
+ * The crew's own text files, when it declares a crew here (martha#306): a member started here is handed its role's
+ * text, the mode's text and the crew's conventions, so the owner approves those bytes with everything else.
+ */
+async function crewTextFilesHere(request: ApproveRequest): Promise<{ readonly crew_text_files?: readonly string[] }> {
+  if (request.documents === undefined) return {}
+  const files = await crewTextFilesToApprove(request.documents, request.root, CLAUDE_CODE_MODELS)
+  return files.length === 0 ? {} : { crew_text_files: files }
+}
+
 /** What the owner is shown before they are asked. */
 function showConfig(request: ApproveRequest, launch: LaunchState, fingerprint: string): void {
   request.tellOwner('A member started here would start code from:')
@@ -86,7 +101,8 @@ function showConfig(request: ApproveRequest, launch: LaunchState, fingerprint: s
 /** Shows the owner the config a member would start from, and keeps their yes to it. */
 export async function approveConfig(request: ApproveRequest): Promise<ApproveOutcome> {
   if (!request.terminal.is_terminal) return { kind: 'refused', refusal: NOT_A_TERMINAL }
-  const launch = readLaunchState({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }, thisMachine)
+  const place = { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, ...(await crewTextFilesHere(request)) }
+  const launch = readLaunchState(place, thisMachine)
   if (launch.entries.every((entry) => entry.kind === 'absent')) return { kind: 'nothing' }
 
   const fingerprint = fingerprintOf(launch)

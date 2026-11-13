@@ -6,18 +6,18 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, utimesSync, watch, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, watch, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative, sep } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, STRICT_GATE } from '../declare_crew/declare_crew.ts'
-import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { declareSoloCrew, SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
   nodeIdsFor,
   openState,
@@ -30,11 +30,13 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { reviewModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
-import { RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
+import { RELAY_ORIGIN, RELAY_PATHS, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
@@ -42,7 +44,6 @@ import { launchRecordsDirectory } from '../linux_process_identity/launch_records
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
-import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stopTheCrew } from '../run_the_martha_command/list_stop_and_restart_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
@@ -99,7 +100,10 @@ function placeFor(t: TestContext, files: Readonly<Record<string, string>>): Plac
   mkdirSync(root)
   git(root, 'init', '-q', '.')
   writeFileSync(join(root, 'README.md'), 'a project\n')
-  for (const [path, text] of Object.entries(files)) writeFileSync(join(root, path), text)
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true })
+    writeFileSync(join(root, path), text)
+  }
   git(root, 'add', '--all')
   git(root, 'commit', '-q', '-m', 'start')
   const state = openState(join(home, 'state'), root)
@@ -289,7 +293,7 @@ test('start on a config the owner has not approved starts nothing, naming martha
 test('init, approve and start bring a member up on the approved config, recorded under the node id init made', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   assert.equal(approved.kind, 'approved')
   const fake = fakeClaude(place)
   const lines: string[] = []
@@ -310,7 +314,7 @@ test('init, approve and start bring a member up on the approved config, recorded
 test('a place ends the member it started before it removes the home, while a child of it is still writing there (#272)', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const writer = aHostWritingIn(place)
   const lines: string[] = []
   const started = await startedOn(place, requestFor(place, writer.command, BUILDER!.name, lines))
@@ -464,7 +468,7 @@ const ownWritesPlace = (state: MarthaState): string => join(state.directory, OWN
 test('the launch a member is started as keeps its own writes: a write under that launch id is kept and read back (martha#162 r=2)', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   assert.equal(approved.kind, 'approved')
   const kept = readApprovals(place.state)
   assert.ok('approvals' in kept)
@@ -480,7 +484,7 @@ test('the launch a member is started as keeps its own writes: a write under that
 test('starting a member on an approval prunes the own writes of launches past the newest kept (martha#162 r=2)', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   assert.equal(approved.kind, 'approved')
   // One launch more than Martha keeps, each older than the one before, so the first two are the ones to go.
   mkdirSync(ownWritesPlace(place.state), { recursive: true, mode: 0o700 })
@@ -511,7 +515,7 @@ test("the declaration's strict gate is what the member's relay is handed, and of
       join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
       `${JSON.stringify({ ...soloDeclaration('Ada Owner'), house_rules }, null, 2)}\n`,
     )
-    const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+    const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
     assert.equal(approved.kind, 'approved')
     const fake = fakeClaude(place)
     const handed: MemberRelayPlace[] = []
@@ -522,6 +526,39 @@ test("the declaration's strict gate is what the member's relay is handed, and of
 
   assert.deepEqual(await seenWith({}), [false], 'no house rules: the gate is off, as the owner decided')
   assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), [true], 'the declaration turns it on')
+})
+
+/**
+ * The start reads the crew's declaration with the models this host runs (martha#315). A declaration that holds reviews
+ * to a model the host can spell starts, and the crew the member is handed carries that rule and the vocabulary it was
+ * read against. Read with no models — what a start passing `[]` would do — the same declaration is refused and no
+ * member starts, so a vocabulary this launcher forgot is a crew that cannot start its reviewer.
+ */
+test('a declaration naming a reviewer model this host runs starts the member, and the crew carries that model (#315)', async (t) => {
+  const [review_model] = CLAUDE_CODE_MODELS
+  assert.ok(review_model !== undefined && review_model !== '', 'the recorded host names no model, so this test could hold no review to one')
+  const place = placeFor(t, {})
+  await declared(place)
+  // The declaration the crew reads, with the house rule the owner wrote: init wrote none.
+  writeFileSync(
+    join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
+    `${JSON.stringify({ ...soloDeclaration('Ada Owner'), house_rules: { [REVIEW_MODEL]: review_model } }, null, 2)}\n`,
+  )
+  const fake = fakeClaude(place)
+  const handed: MemberRelayPlace[] = []
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const crew = handed[0]?.crew
+  assert.ok(crew !== undefined, 'the member was started with no crew tools')
+  // What the started member's crew holds, asked of the crew itself rather than inferred from the line that built it:
+  // the rule's own answer for the same call, compared exactly, so this pins the reviewer model and no copy of the
+  // rule's wording.
+  const review = { tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!, input: { [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch' } }
+  assert.equal(
+    await crew.refusesTheSubagent(review),
+    reviewModelRefusal(review, { spawn: CLAUDE_CODE_SUBAGENT_SPAWN, review_model }),
+    'the crew handed to the member holds no review to the model the owner declared',
+  )
 })
 
 test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
@@ -615,10 +652,217 @@ test('a member started from the crew answers the crew\'s tools over its relay (m
   }
 })
 
+// --- the crew text a started member is handed (martha#306) ---------------------
+
+const CREW_CONVENTIONS = 'CONVENTIONS.md'
+const CONVENTIONS_AS_WRITTEN = 'Read the register before you write anything.\n'
+const CONVENTIONS_EDITED = 'Read the register, then the issue.\n'
+/** A role text of the crew's own, which Martha does not ship: what proves the section carries the crew's bytes. */
+const OWN_ROLE_TEXT = 'Our builder text, which Martha does not ship.\n'
+/** A mode text of the crew's own, which Martha does not ship either (martha#306 r=4). */
+const OWN_MODE_TEXT = 'Our solo text, which Martha does not ship.\n'
+
+/** A crew as an owner declares it: its declaration, and a conventions file it names. */
+function aCrewDeclaringItsConventions(): Readonly<Record<string, string>> {
+  return {
+    [join(DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
+    [join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN,
+  }
+}
+
+/** A crew as an owner declares it with texts of its own: a builder's role text, and a conventions file it names. */
+function aCrewWithItsOwnTexts(): Readonly<Record<string, string>> {
+  return {
+    ...aCrewDeclaringItsConventions(),
+    [join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT,
+  }
+}
+
+const itsOwnerApproves = (place: Place) =>
+  approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
+
+/** The crew text one session's start is handed, read off the relay's answer the way the mod reads it. */
+async function theCrewTextHandedAt(socket_path: string, source: string, session_id: string): Promise<string> {
+  const heard = await postOverSocket(socket_path, RELAY_PATHS.session_started, { session_id, source })
+  assert.equal(heard.status, 200, heard.text)
+  const answer = JSON.parse(heard.text) as { handed?: string; refused?: string }
+  assert.ok(answer.handed !== undefined, `the session's start was handed nothing: ${heard.text}`)
+  return answer.handed
+}
+
+/**
+ * The whole chain, as the owner runs it: the declaration, the approval, `martha start`, and the start the host reports.
+ * Nothing here hands the relay a crew text by hand — what it answers with is what the launcher composed from the bytes
+ * the owner approved, which is the only thing that proves a started member is handed its crew's text at all.
+ */
+test('#306: a member Martha starts is handed its crew\'s own text at its session start, and a write during the launch changes nothing its next start is handed', async (t) => {
+  const place = placeFor(t, aCrewWithItsOwnTexts())
+  assert.equal((await itsOwnerApproves(place)).kind, 'approved')
+  const fake = fakeClaude(place)
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+
+  const socket_path = await launchedSocket(place.relay_root, t)
+  const first = await theCrewTextHandedAt(socket_path, 'startup', 'session-306')
+  assert.match(first, /## You are builder/, first.slice(0, 600))
+  assert.ok(first.includes(OWN_ROLE_TEXT), `the crew's own role text is not handed: ${first.slice(0, 600)}`)
+  assert.ok(first.includes(CONVENTIONS_AS_WRITTEN.trim()), `the conventions the crew declared are not handed: ${first}`)
+
+  // Design test 6: a write to the conventions file while the member runs. Its launch composed the section once, from
+  // the bytes the approval carried, so the launch's own next start is handed what it was handed before.
+  writeFileSync(join(place.root, DECLARATION_DIRECTORY, CREW_CONVENTIONS), 'You may write anything you like.\n')
+  const later = await theCrewTextHandedAt(socket_path, 'clear', 'session-306-after-a-clear')
+  assert.equal(later, first, 'a write during the launch reached the launch\'s own next session start')
+})
+
+/**
+ * Design test 5's second half, byte for byte: the edit refuses the next start as stale, `martha approve` lets it
+ * through, and the member started after that is handed the new text and not the one it replaced.
+ */
+test('#306: after the owner approves the changed conventions, the next member is handed the new text and not the old one', async (t) => {
+  const place = placeFor(t, aCrewWithItsOwnTexts())
+  assert.equal((await itsOwnerApproves(place)).kind, 'approved')
+  writeFileSync(join(place.root, DECLARATION_DIRECTORY, CREW_CONVENTIONS), CONVENTIONS_EDITED)
+
+  const fake = fakeClaude(place)
+  const refused = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(refused.started, false, 'a changed conventions file did not refuse the start')
+  assert.ok((refused.started ? '' : refused.refusal).includes('martha approve'), refused.started ? '' : refused.refusal)
+
+  assert.equal((await itsOwnerApproves(place)).kind, 'approved')
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const socket_path = await launchedSocket(place.relay_root, t)
+  const handed = await theCrewTextHandedAt(socket_path, 'startup', 'session-306-reapproved')
+  assert.ok(handed.includes(CONVENTIONS_EDITED.trim()), 'the member is not handed the text the owner approved')
+  assert.ok(!handed.includes(CONVENTIONS_AS_WRITTEN.trim()), 'the member is handed the text the owner replaced')
+})
+
+/** The path a refusal spells for a file of the place: relative to the project, with `/` on every system. */
+const asTheOwnerReadsIt = (path: string): string => path.split(sep).join('/')
+
+/**
+ * Replaces a file of the place with a link to another file of it, and commits the link: what an owner's git carries
+ * when they keep one text in two places by pointing at it rather than copying it.
+ */
+function linkedInsteadOfWritten(place: Place, path: string, target: string): void {
+  rmSync(join(place.root, path))
+  symlinkSync(relative(dirname(join(place.root, path)), join(place.root, target)), join(place.root, path))
+  git(place.root, 'add', '--all')
+  git(place.root, 'commit', '-q', '-m', `link ${path}`)
+}
+
+/**
+ * A link where a crew text should be is refused by name, and nothing runs (martha#306 r=3, the r=2 review's finding).
+ * The gate read a link's target and approved it, while the launch looked the link's own path up among the bytes it
+ * carried, found none, and handed Martha's shipped text with no word to the owner. A link has no bytes the crew
+ * approved, so the start says so and stops before the host is asked.
+ */
+test('#306 r=3: a role text the crew wrote as a link refuses the start, naming the path and saying it is a symlink', async (t) => {
+  const roleText = join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')
+  const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', 'builder.md')]: OWN_ROLE_TEXT })
+  linkedInsteadOfWritten(place, roleText, join('docs', 'builder.md'))
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, lines))
+  assert.equal(started.started, false, 'a role text that is a symlink did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(roleText)), `the refusal does not name the linked text: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.deepEqual(lines, [refusal], 'the refusal is shown to the owner once')
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+/**
+ * The same for the conventions file the declaration names, and in particular not the refusal the r=2 fix gave: the
+ * link's target was carried while the compose looked the link's path up, so the answer said the declaration named a
+ * file that was not there — a wrong reason for the right outcome, sending the owner to write a file that was there.
+ */
+test('#306 r=3: a conventions file the crew wrote as a link refuses the start by name, and not as a file that is missing', async (t) => {
+  const conventions = join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)
+  const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN })
+  linkedInsteadOfWritten(place, conventions, join('docs', CREW_CONVENTIONS))
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a conventions file that is a symlink did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(conventions)), `the refusal does not name the linked conventions file: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.ok(!refusal.includes('no such file'), `the refusal says the file is missing, and it is there as a link: ${refusal}`)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+/**
+ * Makes a directory of the place a link to another directory of it, and commits the link: an owner who keeps one
+ * directory in two places by pointing at it (martha#306 r=4).
+ */
+function directoryLinkedTo(place: Place, path: string, target: string): void {
+  removeTheTree(join(place.root, path))
+  symlinkSync(relative(dirname(join(place.root, path)), join(place.root, target)), join(place.root, path))
+  git(place.root, 'add', '--all')
+  git(place.root, 'commit', '-q', '-m', `link ${path}`)
+}
+
+/**
+ * A crew text whose directory is a link refuses the start, by name (martha#306 r=4, the r=3 review's finding). The gate
+ * used to resolve the directories above a crew text, so the approval and the carried bytes were named after the
+ * directory the link points at while the compose looked the text up under the path the crew wrote: it missed, answered
+ * "absent", and the member was handed Martha's shipped text with no word to the owner. A link is a name the gate
+ * cannot pin down, so it is refused — the text itself, and every directory above it.
+ */
+test('#306 r=4: a role text reached through a linked roles directory refuses the start, naming the link', async (t) => {
+  const roles = join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY)
+  const place = placeFor(t, { ...aCrewDeclaringItsConventions(), [join('docs', ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT })
+  directoryLinkedTo(place, roles, join('docs', ROLE_TEXTS_DIRECTORY))
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a role text reached through a linked directory did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(roles)), `the refusal does not name the linked directory: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+test('#306 r=4: a mode text reached through a linked modes directory refuses the start, naming the link', async (t) => {
+  const modes = join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY)
+  const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', MODE_TEXTS_DIRECTORY, `${SOLO_MODE}.md`)]: OWN_MODE_TEXT })
+  directoryLinkedTo(place, modes, join('docs', MODE_TEXTS_DIRECTORY))
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a mode text reached through a linked directory did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(modes)), `the refusal does not name the linked directory: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
+test('#306 r=4: a crew directory that is a link refuses the start, naming the link', async (t) => {
+  // Every text of the crew, and its declaration, stand behind a link one level above them all.
+  const place = placeFor(t, {
+    [join('crew-files', DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
+    [join('crew-files', CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN,
+    [join('crew-files', ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT,
+  })
+  directoryLinkedTo(place, DECLARATION_DIRECTORY, 'crew-files')
+  const fake = fakeClaude(place)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(started.started, false, 'a crew directory that is a link did not refuse the start')
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(asTheOwnerReadsIt(DECLARATION_DIRECTORY)), `the refusal does not name the linked crew directory: ${refusal}`)
+  assert.match(refusal, /is a symlink/, refusal)
+  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+})
+
 test('#312: a member Martha started is stopped by its own launcher when the owner asks, not by the verb', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  // The crew's own texts are approved with the config (martha#306), so this approval covers them as every other here does.
+  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const fake = fakeClaude(place)
   const lines: string[] = []
   const request = requestFor(place, fake.command, BUILDER!.name, lines)

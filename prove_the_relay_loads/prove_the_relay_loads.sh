@@ -24,6 +24,9 @@
 # own model command answers "Set model to ...", the row then says that model, and a review off the crew's reviewer model
 # is refused with the model named. Those two cases need this binary too, so they run here or nowhere (r=2, 3a).
 #
+# And a permission prompt this host really draws for a member Martha launched reaches the owner's row and clears once
+# the owner answers it at the terminal (martha#363, design test 12 of martha#313). It needs this binary too.
+#
 # Exit: 0 the recorded host loads the relay and a launch leaves it as it was, 1 it does not (or a check did not bite),
 # 2 the host could not be set up.
 set -euo pipefail
@@ -39,6 +42,7 @@ HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
 OWN_WRITES_TESTS="${REPO}/src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts"
 RULES_TESTS="${REPO}/src/refuse_a_member_writing_owner_memory/the_rules_the_host_matches.node-test.ts"
 SWITCH_TESTS="${REPO}/src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts"
+PROMPT_TESTS="${REPO}/src/launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts"
 HOST_TYPES_FILE="tsconfig.json"
 HOST_WRITES_WITHIN_S=60
 VARIABLE_CONSTANT="RELAY_SOCKET_VARIABLE"
@@ -143,3 +147,17 @@ grep -q "^ℹ pass ${switch_cases}$" "${WORK}/switch.txt" && grep -q '^ℹ skipp
   || { echo "prove_the_relay_loads: the model-switch cases did not all run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/switch.txt" >&2; exit 1; }
 
 echo "prove_the_relay_loads: with Claude Code ${version}, a member switches its model in this host and a review off the reviewer model is refused"
+
+# A permission prompt this host draws reaches the owner's row and clears once answered (martha#363, design test 12 of
+# martha#313): the seam between the dialog order prove_the_order_of_the_dialogs.mjs measures and the row the relay test
+# moves. The ordinary gate skips it for want of this binary, so a run that skipped it proves nothing and is a failure.
+prompt_cases="$(grep -c '^test(' "${PROMPT_TESTS}")"
+if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${PROMPT_TESTS}" > "${WORK}/prompt.txt" 2>&1; then
+  echo "prove_the_relay_loads: with Claude Code ${version}, a permission prompt did not reach the owner's row, did not clear once answered, or a case failed:" >&2
+  cat "${WORK}/prompt.txt" >&2
+  exit 1
+fi
+grep -q "^ℹ pass ${prompt_cases}$" "${WORK}/prompt.txt" && grep -q '^ℹ skipped 0$' "${WORK}/prompt.txt" \
+  || { echo "prove_the_relay_loads: the permission-prompt case did not run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/prompt.txt" >&2; exit 1; }
+
+echo "prove_the_relay_loads: with Claude Code ${version}, a permission prompt reaches the owner's row and clears once the owner answers it"

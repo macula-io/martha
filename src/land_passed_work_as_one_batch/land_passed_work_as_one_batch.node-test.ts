@@ -21,13 +21,16 @@ import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { readLedger } from '../log_ledger/log_ledger.ts'
+import { noteMilestone, readLedger } from '../log_ledger/log_ledger.ts'
+import { reviewWaitsIn } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import {
   LAND,
   fastForwardAfterTheOwnersYes,
+  landingsOf,
   landPassedWorkAsOneBatch,
   theBatchACallNames,
   theFastForwardACallNames,
@@ -210,6 +213,11 @@ test('#256: three passed packages land as one batch, one --no-ff merge each, on 
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: passed.packages })
   assert.ok('told' in landed, `a batch of three passed packages was refused: ${wordsOf(landed)}`)
+  // The batch's own push is no landing: it pushes the integration branch, and the owner has not said yes (martha#320).
+  for (const work_package of passed.packages) {
+    const rows = await readLedger(tests.host, work_package)
+    assert.deepEqual(rows.filter((row) => row.kind === 'package_landed'), [], `the batch wrote a landing for ${work_package}, which the default branch does not hold`)
+  }
   const branches = theLandBranchesOnOrigin(fixture)
   assert.equal(branches.length, 1, `the batch was not pushed as one ${LAND}/ branch: ${branches.join(', ')}`)
   const branch = branches[0] ?? ''
@@ -389,6 +397,65 @@ test('#256: the fast-forward puts the passed tip on the default branch, and its 
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : false, true, 'the push was kept as failed')
 })
 
+test('#320: a package that reached the default branch is noted as landed, and read back as landed', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const landed_package = `${fixture.repo}#320`
+  const tip = aBranchWithOneCommit(fixture, 'landed', base, 'work.txt', 'the work\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  await aPassedVerdict(tests, landed_package, base, tip)
+
+  assert.deepEqual(await landingsOf(tests.host, [landed_package]), [], 'a package that has not landed holds no landing row')
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] })
+  assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
+
+  const rows = await readLedger(tests.host, landed_package)
+  const landings = rows.filter((row) => row.kind === 'package_landed')
+  assert.equal(landings.length, 1, 'the landing was not noted once in the ledger')
+  assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip}`, 'the note holds the range that landed, as the two shas')
+  const read_back = await landingsOf(tests.host, [landed_package])
+  assert.deepEqual(read_back, [{ package: landed_package, at: landings[0]?.kind === 'package_landed' ? landings[0].at : -1 }], 'the package did not read back as landed, with the moment its own row carries')
+})
+
+test('#320 r=3: a package that landed twice is read at each landing, so a hand-off after the first one still ends', async (t) => {
+  // A package lands, is fixed, and lands again at a new head, so its ledger holds two landing rows — the row the
+  // fast-forward writes, written here at three moments. Keeping only the first would leave every hand-off made after
+  // it standing for ever, and its reviewer nudged for a verdict that had already been given.
+  const fixture = aRepository(t)
+  const first_package = `${fixture.repo}#320`
+  const second_package = `${fixture.repo}#321`
+  const HOUR = 60 * 60 * 1_000
+  const tests = aHostOver(async (): Promise<ProcessOutcome> => ({ exit_code: 1, stdout: '', stderr: '' }))
+  const landed = async (work_package: string, range: string): Promise<void> => {
+    await noteMilestone(tests.host, { package: work_package, member: MEMBER, milestone: 'package_landed', note: range })
+  }
+
+  await landed(first_package, `${'a'.repeat(7)}..${'b'.repeat(7)}`)
+  tests.advanceClock(HOUR)
+  await landed(second_package, `${'a'.repeat(7)}..${'c'.repeat(7)}`)
+  const first_time_second_landed = THE_DAY + HOUR
+  const handed = THE_DAY + 2 * HOUR
+  tests.advanceClock(HOUR)
+  tests.advanceClock(HOUR)
+  await landed(second_package, `${'c'.repeat(7)}..${'d'.repeat(7)}`)
+  const second_time_second_landed = THE_DAY + 3 * HOUR
+
+  const landings = await landingsOf(tests.host, [first_package, second_package])
+  assert.deepEqual(
+    landings,
+    [
+      { package: first_package, at: THE_DAY },
+      { package: second_package, at: first_time_second_landed },
+      { package: second_package, at: second_time_second_landed },
+    ],
+    'every landing a ledger keeps is read, each with its own moment',
+  )
+
+  const banded = `${'a'.repeat(40)}..${'b'.repeat(40)}`
+  const hand_off = { from: 'Vesta', to: ['Mars'], text: `HANDOFF ${second_package} ${banded} r=1 ci=none:paths`, sent_at: handed }
+  assert.deepEqual(reviewWaitsIn([hand_off], landings, [SUPERVISOR]), [], 'the landing after the hand-off ended it, though the package had landed before')
+})
+
 test('#256: the fast-forward is refused when the default branch moved after the range was checked', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
@@ -411,6 +478,7 @@ test('#256: the fast-forward is refused when the default branch moved after the 
   const concluded = rows.filter((row) => row.kind === 'act_concluded')
   assert.equal(concluded.length, 1, 'the refused push was not kept in the ledger')
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : true, false, 'a refused push was kept as succeeded')
+  assert.deepEqual(rows.filter((row) => row.kind === 'package_landed'), [], 'a fast-forward that was refused wrote a landing')
 })
 
 test('#256: a push git refuses is answered with what git said, and kept in the ledger as failed', async (t) => {

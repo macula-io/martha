@@ -73,6 +73,7 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   git_history: 'B5',
   web: 'B6',
   subagent: 'B7',
+  standing_items: 'A20',
 }
 
 /** A session, with the record the gate reads and whether that record could be read. */
@@ -158,6 +159,7 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A8', // a handover is inherited through the record, not taken in (rule 4)
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
+  'A19', // the crew text the launcher hands at a session's start is the owner's approved bytes, not a sender's words (martha#306)
   // a row no text reaches the model on is never taken in: it says why in its control (B1, B8, A16)
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'no-text-reaches-the-model').map((path) => path.id),
   // an answer read as the member's own is never taken in either: the rule says every leaf

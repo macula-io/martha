@@ -39,7 +39,7 @@ import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { unplacedToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from './answer_the_relay.ts'
+import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from './answer_the_relay.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
@@ -225,6 +225,7 @@ function answering(
   strict_gate?: boolean,
   crew?: CrewTools,
   wordless_answers?: Omit<WhatTheLaunchSupplies, 'input'>,
+  crew_text?: string,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
@@ -249,6 +250,7 @@ function answering(
     ...(strict_gate === undefined ? {} : { strict_gate }),
     ...(crew === undefined ? {} : { crew }),
     ...(wordless_answers === undefined ? {} : { wordless_answers }),
+    ...(crew_text === undefined ? {} : { crew_text }),
     stopMember: (why) => void stops.push(why),
   })
   return { relay, stops, rows }
@@ -270,6 +272,24 @@ const OWNER_TYPED = `${PATH_OF_SOURCE.owner_typed}:${OWNER_AT_THE_TERMINAL}`
 const call = (tool: string, more: Record<string, unknown> = {}, session_id = SESSION) => ({ session_id, call: { tool, ...more } })
 
 const TAKEN_REPLY: RelayReply = { answered: true, body: { taken: 1 } }
+
+// The crew text a launch composes once and hands at every start (martha#306): the smallest thing that reads as one.
+const CREW_TEXT = '## You are builder, the crew\'s builder\n\nThis crew works solo, and its owner is Ada Owner.'
+
+test('#306: the crew text is handed at a session\'s start, and again at the start of a session after a clear', async (t) => {
+  const place = placeFor(t)
+  const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, undefined, undefined, CREW_TEXT)
+  assert.deepEqual(await relay.answer('session_started', start('startup')), { answered: true, body: { taken: 1, handed: CREW_TEXT } })
+  // A clear starts a session of its own, and that start is handed the crew text again: crew-code told a member to
+  // read its card only at a fresh start, and a resumed member then worked with no crew text at all.
+  assert.deepEqual(await relay.answer('session_started', start('clear', 'after-the-clear')), { answered: true, body: { taken: 1, handed: CREW_TEXT } })
+})
+
+test('#306: with an acts line to hand too, the crew text goes first and the line follows it', () => {
+  assert.equal(handedAtThisStart(CREW_TEXT, 'HANDOFF macula-io/martha#306 a..b r=1'), `${CREW_TEXT}\n\nHANDOFF macula-io/martha#306 a..b r=1`)
+  assert.equal(handedAtThisStart(CREW_TEXT, null), CREW_TEXT)
+  assert.equal(handedAtThisStart(undefined, null), '', 'a launch handing neither hands nothing, so the start is simply taken')
+})
 
 /** The package a member's predecessor held, as its own row names it (martha#254 test 10). */
 const PACKAGE = 'macula-io/martha#254'

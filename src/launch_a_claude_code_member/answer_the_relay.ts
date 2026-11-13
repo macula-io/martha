@@ -52,7 +52,7 @@ import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_laun
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
-import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { theCallIn, TOOL_CHECK, whatTheHostSaidOf } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -113,6 +113,12 @@ export interface MemberRelayPlace {
   readonly signed_runs?: SignedRuns
   /** The crew's tools, answered by the slices behind them (martha#254); a launch with none answers no tool. */
   readonly crew?: CrewTools
+  /**
+   * The crew text this launch hands every session it starts (martha#306): who the member is, the crew's practice,
+   * its role and mode texts, the lines it sends and the crew's conventions, composed once at the launch from the
+   * bytes the owner approved. Empty or absent, a session is handed only the acts line, as it was before this existed.
+   */
+  readonly crew_text?: string
   /**
    * What this launch supplied a mesh answer, and which answer may be read as the member's own (martha#251). Absent,
    * no MCP answer is read that way and every one records on B2, as it did before this existed: a caller that cannot
@@ -456,14 +462,36 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
   const reported = sessionStartOf(body as SessionStartHookInput)
   await state.place.records.load(reported.session_id)
   const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, await asTheCrewsRefresh(state, reported))
-  const handed = state.place.handed_at_start.reduce(
-    (session, source) => takeInTurn(session, { source }, state.place.binder),
-    started,
-  )
-  const why = await keep(state, handed)
-  if (why !== undefined) return refused(why)
   const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
-  return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn })
+  const why = await keep(state, takenInAtStart(state, started, lineToStartOn))
+  if (why !== undefined) return refused(why)
+  return answerTheStart(state.place.crew_text, lineToStartOn)
+}
+
+/** The start's answer: taken, or taken with the crew text and the crew's start line handed to the session. */
+function answerTheStart(crewText: string | undefined, line: TheStartLine | null): RelayReply {
+  const toHand = handedAtThisStart(crewText, line?.line ?? null)
+  return answered(toHand === '' ? TAKEN : { taken: 1, handed: toHand })
+}
+
+/**
+ * A starting session with every source it is handed taken in: what the launch hands it, and what the crew's start line
+ * carries (martha#317), before the record is kept. A line the record does not hold would reach the model with no gate
+ * behind it.
+ */
+function takenInAtStart(state: RelayState, started: HostSession, line: TheStartLine | null): HostSession {
+  return [...state.place.handed_at_start, ...(line?.taken_in ?? [])].reduce((session, source) => takeInTurn(session, { source }, state.place.binder), started)
+}
+
+/**
+ * What this session takes in as it starts: the crew text, and then the line naming the acts it holds that were sent
+ * with no outcome recorded (martha#254 test 10). One string, because the relay's answer carries one `handed` line and
+ * the host puts it into the session before its first prompt; empty when there is neither, and then the start is
+ * simply taken. A resumed, cleared or compacted session fires the host's start again and is handed both again, which
+ * is the gap crew-code had: it told a member to read its card only at a fresh start (martha#306).
+ */
+export function handedAtThisStart(crewText: string | undefined, theLine: string | null): string {
+  return [crewText === undefined ? '' : crewText.trim(), theLine === null ? '' : theLine.trim()].filter((part) => part !== '').join('\n\n')
 }
 
 /**
@@ -513,7 +541,7 @@ async function takeInARefreshedSession(state: RelayState, session_id: string): P
  * instead of hoping it asks. Null when the member holds no package, nothing of it is waiting, or the ledger cannot be
  * read — a start the ledger could not be read for is still a start, and the member can ask with what_was_sent.
  */
-async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<string | null> {
+async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<TheStartLine | null> {
   if (crew === undefined) return null
   try {
     return await crew.theLineToHandAtStart()
