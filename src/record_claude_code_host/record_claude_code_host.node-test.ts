@@ -107,6 +107,20 @@ const RULE_PARTS: Readonly<Record<string, string>> = {
   file_permission_rules: `if(s.ruleContent!==void 0){${RECORDED_HOST.file_permission_rules.matcher}if(g!==void 0)return{valid:!0,warning:\`\${yn(s)} is not matched by file permission checks\`}}`,
 }
 
+
+/**
+ * The two lists the host keeps about the dialogs it raises (martha#313), in the shapes it spells them: the notification
+ * types as one array of its own words, and the hook events a module hears as the array the host maps to its
+ * `classic.<event>` names, through the one alias it holds it in.
+ */
+const DIALOG_PARTS: Readonly<Record<string, string>> = {
+  notification_types: `var aListOfTheHostsNotifications=[${RECORDED_HOST.notification_types.map((notification_type) => `"${notification_type}"`).join(',')}],kept=1`,
+  classic_hook_events: [
+    `var aListOfTheHostsEvents=[${RECORDED_HOST.classic_hook_events.map((event) => `"${event}"`).join(',')}],theAlias=aListOfTheHostsEvents`,
+    'var theModuleEvents=theAlias.map((e)=>`classic.${e}`)',
+  ].join(';'),
+}
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
   prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback,
@@ -121,6 +135,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...MARKDOWN_PARTS,
   ...PLACE_PARTS,
   ...RULE_PARTS,
+  ...DIALOG_PARTS,
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
@@ -267,4 +282,47 @@ test('a host that matches a file tool\'s rules another way fails the check namin
   const run = check(hostHolding(t, { ...RECORDED_PARTS, file_permission_rules: RULE_PARTS.file_permission_rules?.replace(RECORDED_HOST.file_permission_rules.matcher, planted) ?? '' }), RECORDED_HOST.host_version)
   assert.equal(run.status, 1, run.stdout)
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_permission_rules\n`)
+})
+
+// The two lists the dialogs are heard from are compared like every other part (martha#313, Pluto's correction): a host
+// that adds a hook event a module hears, or a notification type, fails the check by that field rather than being read
+// as a host this build knows.
+test('a host that adds a hook event a module hears, or a notification type, fails the check naming the field (martha#313)', (t) => {
+  for (const [field, planted] of [
+    ['classic_hook_events', DIALOG_PARTS.classic_hook_events?.replace('"PreToolUse"', '"PreToolUsed"')],
+    ['notification_types', DIALOG_PARTS.notification_types?.replace('"idle_prompt"', '"idle_prompt","a_later_host_added_this"')],
+  ] as const) {
+    assert.notEqual(planted, DIALOG_PARTS[field], `the planted ${field} differs`)
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, [field]: planted ?? '' }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, field)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${field}\n`)
+  }
+})
+
+test('a host whose two lists cannot be found cannot be read, naming each part (martha#313)', (t) => {
+  for (const [part, missing] of [
+    ['hook events a module hears', { classic_hook_events: 'var unrelated=1' }],
+    ['notification types', { notification_types: 'var unrelated=1' }],
+  ] as const) {
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, ...missing }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, part)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: ${part}\n`)
+  }
+})
+
+// A host that maps a second list of hook events — the full one under another name, or a shorter one with the same
+// prefix — cannot be told which list the module events come from, so it is refused by the part (martha#313, Pluto's
+// correction; the bundle really does hold shorter arrays beside the full one).
+test('a host that maps a second list of hook events cannot be read, naming the part (martha#313)', (t) => {
+  const first = DIALOG_PARTS.classic_hook_events ?? ''
+  assert.ok(first.includes('theAlias.map('), 'the recorded part maps its list')
+  for (const second of [
+    first.replaceAll('aListOfTheHostsEvents', 'anotherListOfTheHostsEvents').replaceAll('theAlias', 'anotherAlias'),
+    first.replace(/\[[^\]]*\]/, '["PreToolUse","PostToolUse"]').replaceAll('aListOfTheHostsEvents', 'aShorterList').replaceAll('theAlias', 'aShorterAlias'),
+  ]) {
+    assert.notEqual(second, first, 'the planted second list is another list')
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, classic_hook_events: `${first};${second}` }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, second.slice(0, 80))
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: hook events a module hears\n`)
+  }
 })
