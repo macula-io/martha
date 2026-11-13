@@ -8,9 +8,9 @@
 // The host runs in a home made for the run, under a pseudo-terminal `script` owns, so `martha start` sees a
 // terminal. The home holds the host's own record of a first run already done (onboarding, the stand-in's key
 // answered, the checkout trusted), so no first-run question shows. The run types one thing: the owner's turn,
-// once `martha start` says the member is up, since `martha start` passes the host no prompt. Nothing answers a
-// question by keystroke: a run whose stand-in hears no request while the host shows nothing new fails, with the last
-// screen drawn before it.
+// once `martha start` says the member is up, since `martha start` passes the host no prompt. A run answers a dialog by
+// keystroke only when it is handed hands at the terminal (`atTheTerminal`, martha#363): otherwise a run whose stand-in
+// hears no request while the host shows nothing new fails, with the last screen drawn before it.
 //
 // A model request is one that offers tools: the host's side requests (a title, a summary) offer none, are
 // answered with text and are not counted.
@@ -90,6 +90,23 @@ export type ScriptedTurn =
 /** The model's turns: answer request `number`, after doing what the run needs done first. */
 export type ModelScript = (request: ModelRequest) => ScriptedTurn | Promise<ScriptedTurn>
 
+/**
+ * The host's own id for the tool call the stand-in offers in answer to request `number`: a run that asks what the host
+ * did with that call (the dialog it raised, martha#363) names it from here rather than spelling it a second time.
+ */
+export const standInCallId = (number: number): string => `toolu_standin_${number}`
+
+/**
+ * The owner's hands at the terminal of a run (martha#363): what it shows, the keys typed into it, and a wait spent the
+ * way every wait of the run is spent, so a host still drawing is never cut off and one that has gone quiet is named.
+ */
+export interface TheOwnersHands {
+  readonly shown: () => string
+  readonly heard: readonly ModelRequest[]
+  readonly type: (keys: string) => void
+  readonly until: (what: string, holds: () => boolean) => Promise<void>
+}
+
 export interface RecordedHostRun {
   /** The recorded host's binary: the CI job's MARTHA_RECORDED_HOST. */
   readonly claude: string
@@ -112,6 +129,11 @@ export interface RecordedHostRun {
   readonly completesWhen?: (requests: readonly ModelRequest[]) => boolean
   /** How long the host may show nothing new before the run gives up on it; a host that is working is never cut off. */
   readonly silence_ms: number
+  /**
+   * What the owner does at the terminal once their turn is typed (martha#363): answering a dialog the host draws, for
+   * one. The run waits for it before it waits for `requests`, and a run given none types nothing more.
+   */
+  readonly atTheTerminal?: (hands: TheOwnersHands) => Promise<void>
 }
 
 export interface RecordedHostRan {
@@ -233,7 +255,7 @@ function streamOf(turn: ScriptedTurn, model: unknown, number: number): string {
   const block =
     'tool' in turn
       ? [
-          { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: `toolu_standin_${number}`, name: turn.tool, input: {} } },
+          { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: standInCallId(number), name: turn.tool, input: {} } },
           { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(turn.input) } },
         ]
       : [
@@ -441,6 +463,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
       terminal.stdin.write(run.owner_turn)
       await new Promise((resolve) => setTimeout(resolve, 500))
       terminal.stdin.write('\r')
+      await run.atTheTerminal?.({ shown: () => shown, heard, type: (keys) => void terminal.stdin.write(keys), until })
     }
     await until(`model request ${run.requests}`, () => heard.length >= run.requests || run.completesWhen?.(heard) === true || exit_code !== undefined)
     if (exit_code === undefined) {
