@@ -27,6 +27,8 @@ import { modelPlace, theModelMarker, theModelOf, type TheModel } from '../switch
 import {
   CREW_TOOL_NAMES,
   crewToolsOver,
+  PARK_A_MEMBER,
+  THE_TOOLS_ASK,
   RETURN_TO_YOUR_OWN_MODEL,
   SWITCH_YOUR_MODEL,
   THE_MODEL_REPORT_ASK,
@@ -159,7 +161,7 @@ test('#315: a member that parks is brought home on the next turn\'s order (mutan
   await switched(crew.tools)
   // The end of that turn: the order goes out, so the session really is on the other model when it parks.
   await theOrderTheModGets(crew)
-  const parked = await crew.tools.answer('park_a_member', { reason: 'the package is at a safe point' }, 'a-session')
+  const parked = await crew.tools.answer(PARK_A_MEMBER, { reason: 'the package is at a safe point' }, 'a-session')
   assert.ok('answer' in parked, `the park was refused: ${'refused' in parked ? parked.refused : ''}`)
   assert.match(parked.answer, new RegExp(`Back to ${OWN_MODEL}`), 'the park did not tell the member it comes home')
   assert.equal(theRecordOf(crew.crew).kind, 'home', 'a parking member kept the switch')
@@ -241,7 +243,7 @@ test('#315: both model tools are among the crew\'s tools, and each is the single
   for (const tool of [SWITCH_YOUR_MODEL, RETURN_TO_YOUR_OWN_MODEL]) {
     assert.ok((CREW_TOOL_NAMES as readonly string[]).includes(tool), `${tool} is not one of the crew's tools`)
   }
-  const asked = await crew.tools.answer('the_crews_tools', {}, 'a-session')
+  const asked = await crew.tools.answer(THE_TOOLS_ASK, {}, 'a-session')
   assert.ok('answer' in asked, 'the launcher answered the tools ask with no tools')
   const registered = JSON.parse(asked.answer) as readonly { name: string; inputSchema: { required?: readonly string[] } }[]
   // One tool, one act (martha#343): the switch takes the model it moves to, the return takes none, so neither can be

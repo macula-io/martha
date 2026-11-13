@@ -18,6 +18,7 @@ import type { Exception } from '../../prove_the_core/no_literal_restates_a_value
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
@@ -28,6 +29,7 @@ import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_mes
 import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -70,6 +72,19 @@ const THE_CLEAR_IN_THE_MOD = 'the word an order carries the clear under, which t
  * spelling by coincidence in exactly the sense this list is for.
  */
 const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started event it records, for a session that began with /clear: recorded data, not the order a launcher answers'
+
+/**
+ * Why `model` is written by literal in five files that are not about the order (martha#315): each names a field of
+ * something else, and the order's carry word is a different word that happens to be spelled the same. The host's Agent
+ * schema names its own argument; the request body the stand-in host reads carries the model under its own key.
+ */
+const THE_HOSTS_OWN_MODEL_FIELD = 'the host\'s own name for the argument that carries a model, in the Agent schema it declares and in the request body it sends: recorded host data, not the word an order carries a model under'
+
+/** Why `model` is written by literal for the dashboard (martha#315): it is the row's own field, read and written by it. */
+const THE_ROWS_MODEL_FIELD = 'the row\'s own field for the model a session runs on, which the dashboard reads back and writes'
+
+/** Why `model` is written by literal for the declaration (martha#315): it is the key a member's own model is declared under. */
+const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'
 
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
@@ -124,5 +139,19 @@ export const EXCEPTIONS: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
+  // git directory keeps its configuration in, which this test neither reads nor writes.
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
+  // The word `model` in the model-switch work (martha#315), in five files that each mean a field of their own by it.
+  { value: CLAUDE_CODE_SHELL_TOOL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: 'a call to a tool that spawns no subagent, named as the host names its shell: what the test needs is a real tool the rule must not hold' },
+  { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
+  { value: CARRY_A_MODEL, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the argument the two model tools take and read back, as their own schemas declare it; the order\'s carry word is a different word spelled the same' },
+  { value: PARKED_PLACE, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the word a park\'s answer says a member is now in, in the line the member is told; the constant of that name is the place a crew keeps a park marker in' },
+  { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'declare_crew/declare_crew.ts', reason: THE_DECLARATIONS_MODEL_KEY },
+  { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: THE_ROWS_MODEL_FIELD },
 ]
 

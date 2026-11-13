@@ -17,6 +17,9 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
@@ -33,7 +36,7 @@ const THE_PACKAGE = 'macula-io/martha#315'
 /** The model the member is launched on, and the crew's reviewer model: two the host runs, so a switch is allowed. */
 const LAUNCHED_ON = 'sonnet'
 const THE_REVIEWER_MODEL = 'opus'
-const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: ['Write', 'Edit', 'Bash'] } })
+const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, 'Edit', CLAUDE_CODE_SHELL_TOOL] } })
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
 
@@ -78,7 +81,7 @@ function approvedProjectWithModels(t: TestContext): Project {
 
 /** Gives the crew's declaration its models: the builder's own, and the one every review runs on. */
 function declareTheModels(checkout: string): void {
-  const declaration = join(checkout, '.crew', 'crew.json')
+  const declaration = join(checkout, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const held = JSON.parse(readFileSync(declaration, 'utf8')) as {
     members: { name: string; model?: string }[]
     house_rules?: Record<string, unknown>

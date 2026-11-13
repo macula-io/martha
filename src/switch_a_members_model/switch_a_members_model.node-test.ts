@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrew, OWNER, REVIEW_MODEL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
@@ -48,7 +49,7 @@ async function aDeclaredCrewOfModels(): Promise<ADeclaredCrew> {
   crewsSoFar += 1
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
-  const crew = join(home, 'crew')
+  const crew = join(home, 'the-crew-files')
   const declaration = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   mkdirSync(join(root, DECLARATION_DIRECTORY), { recursive: true })
   mkdirSync(crew, { recursive: true })
@@ -60,7 +61,7 @@ async function aDeclaredCrewOfModels(): Promise<ADeclaredCrew> {
       { name: 'reviewer', role: 'reviewer' },
     ],
     mode: {
-      name: 'solo',
+      name: SOLO_MODE,
       roles: ['builder', 'reviewer'],
       may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
     },
