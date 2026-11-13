@@ -82,7 +82,7 @@ const isAReceiver = (member: string, receivers: readonly string[]): boolean => r
 export const ANSWERING_VERBS = ['VERDICT', 'LAND'] as const
 
 /**
- * Whether a HANDOFF reached someone whose verdict it waits for (macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-sponsors#300): the Supervisor reviews no package,
+ * Whether a HANDOFF reached someone whose verdict it waits for (macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-sponsors#300): the Supervisor reviews no package,
  * so a line addressed only to the receivers of nudges is a copy of a hand-off that went to a reviewer elsewhere, and a
  * copy outlives the verdict it copied. A send naming anyone else starts the wait, whatever it was also copied to; a send
  * naming nobody starts none, since no verdict was ever going to come back.
@@ -196,7 +196,7 @@ function ownerNudges(input: NudgeInput): Nudge[] {
 const isTheOwner = (name: string, input: NudgeInput): boolean => same(name, OWNER) || same(name, input.owner)
 
 /**
- * One member, one line (macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-sponsors#492): a member that waits on a person past the window has usually stopped
+ * One member, one line (macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-io/macula-sponsors#492): a member that waits on a person past the window has usually stopped
  * reporting too, so the same wait was drawn twice — "last progress 8/9" beside "waits on Supervisor". The line that
  * names the wait is the one kept; a stalled line only says the row has not moved.
  */
