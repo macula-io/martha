@@ -18,18 +18,20 @@ import type { Exception } from '../../prove_the_core/no_literal_restates_a_value
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
-import { THE_REFRESH_ASK, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import { PARK_A_MEMBER, REFRESH_THIS_SESSION, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
+import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 
 /**
@@ -50,6 +52,13 @@ const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host 
  * in the tree stale at once, and a member's tool call is not worth that.
  */
 const THE_ARGUMENT_OF_A_WRITE = 'the host\'s own name for the argument that holds a whole file, which lives in the host glue a slice may not import'
+
+/**
+ * Why the mod writes `model` twice by literal (martha#315): it is the word an order carries a model under, which the
+ * launcher holds as a constant a hooks module cannot import, and it is also the name of the host command the mod runs to
+ * switch a session's model — the same spelling twice, and only the first is the launcher's word.
+ */
+const THE_MODEL_IN_THE_MOD = 'the word an order carries a model under, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs to switch a session, which the host names'
 
 /**
  * Why the mod writes `clear` twice by literal (martha#255 r=2): it is the word an order carries the clear under, which
@@ -74,6 +83,19 @@ const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started 
  * events holds their names, and this entry is what keeps the two spellings one name.
  */
 const THE_HOST_NAMES_ITS_HOOKS = 'the host\'s plugin validator refuses an on(...) whose event is not a string literal, and a hooks module imports only its own files'
+
+/**
+ * Why `model` is written by literal in five files that are not about the order (martha#315): each names a field of
+ * something else, and the order's carry word is a different word that happens to be spelled the same. The host's Agent
+ * schema names its own argument; the request body the stand-in host reads carries the model under its own key.
+ */
+const THE_HOSTS_OWN_MODEL_FIELD = 'the host\'s own name for the argument that carries a model, in the Agent schema it declares and in the request body it sends: recorded host data, not the word an order carries a model under'
+
+/** Why `model` is written by literal for the dashboard (martha#315): it is the row's own field, read and written by it. */
+const THE_ROWS_MODEL_FIELD = 'the row\'s own field for the model a session runs on, which the dashboard reads back and writes'
+
+/** Why `model` is written by literal for the declaration (martha#315): it is the key a member's own model is declared under. */
+const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'
 
 /** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */
 const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narrows on by literal; the crew\'s park place is named the same word and is not this'
@@ -119,6 +141,12 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the clear under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod submits a prompt under; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_CLEAR_IN_THE_MOD },
+  // The model order's word and the model switch's own tool names (martha#315): the same reason as the entries above.
+  { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a model under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_MODEL_IN_THE_MOD },
+  { value: SWITCH_YOUR_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: RETURN_TO_YOUR_OWN_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: THE_MODEL_REPORT_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher once a model switch resolved; ${THE_RELAY_CANNOT_IMPORT}` },
   // The same spelling in recorded host data (martha#255 r=2): three tests replay what the host recorded, and its word
   // for a session that began with /clear is its own.
   { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
@@ -142,5 +170,19 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: ELICITATION_RESULT, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
   { value: NOTIFICATION, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
   { value: TOOL_CHECK, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
+  // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
+  // git directory keeps its configuration in, which this test neither reads nor writes.
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
+  // The word `model` in the model-switch work (martha#315), in five files that each mean a field of their own by it.
+  { value: CLAUDE_CODE_SHELL_TOOL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: 'a call to a tool that spawns no subagent, named as the host names its shell: what the test needs is a real tool the rule must not hold' },
+  { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
+  { value: CARRY_A_MODEL, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the argument the two model tools take and read back, as their own schemas declare it; the order\'s carry word is a different word spelled the same' },
+  { value: PARKED_PLACE, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the word a park\'s answer says a member is now in, in the line the member is told; the constant of that name is the place a crew keeps a park marker in' },
+  { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'declare_crew/declare_crew.ts', reason: THE_DECLARATIONS_MODEL_KEY },
+  { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: THE_ROWS_MODEL_FIELD },
 ]
 

@@ -37,6 +37,7 @@ import type { CrewStore, DocumentStore } from '../host_contract/host_contract.ts
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import {
   CREW_ROW_PLACE,
   crewRowsDirectory,
@@ -144,7 +145,7 @@ export interface MemberStartRequest {
 /** The declaration, or why there is none to start from. */
 async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | string> {
   try {
-    return await declareCrew(request.documents, request.root)
+    return await declareCrew(request.documents, request.root, CLAUDE_CODE_MODELS)
   } catch (error) {
     if (!(error instanceof DeclarationRefused)) throw error
     const fix = error.field === null && error.message.endsWith('is missing') ? ' Run martha init to declare a crew here.' : ''
@@ -265,6 +266,9 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         // workspace places: nothing that acts runs inside the member's session (martha#256).
         processes: thisMachine.processes,
         settings: ready.settings,
+        models: CLAUDE_CODE_MODELS,
+        launched_on: ready.model ?? '',
+        spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
       }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

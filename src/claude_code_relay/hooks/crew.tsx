@@ -12,7 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
-import { orderIn, paneIn, PANE_CHROME_ROWS, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
 
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
@@ -66,6 +66,15 @@ const THE_CHANNEL_READ = 'channel_read_seconds'
 
 /** What the mod asks the launcher for: what this session should do now, if a refresh is due (martha#255). */
 const THE_REFRESH_QUESTION = 'the_refresh_of_this_session'
+
+/** What the mod says once a model switch resolved, so the row says the model this session really runs (martha#315). */
+const THE_MODEL_REPORT = 'note_the_model_the_session_runs'
+
+/**
+ * The host's own command that switches this session's model (martha#315), run once the turn has ended. It is spelled
+ * out as the host's command name, the way `clear` is above: a hooks module imports only its own files.
+ */
+const THE_MODEL_COMMAND = 'model'
 
 /** What the mod asks the launcher for: the owner's to-do list, as the pane draws it (martha#316). */
 const THE_OWNERS_TODO = 'the_owners_todo'
@@ -139,12 +148,34 @@ async function whatTheSessionSays($: CrewEngine, e: unknown): Promise<Readonly<R
   return { usage: await $.session.usage().catch(() => undefined), turn_id: textIn(e, 'turnId'), answer: textIn(e, 'answer') }
 }
 
-/** The one order the launcher gave: a text submitted, or the clear run out of the turn's own hook. */
+/** The one order the launcher gave: a text submitted, the clear, or the model this session is to run on. */
 async function carryOutTheAct($: CrewEngine, order: TheOrder): Promise<void> {
   if (order.carry === 'submit') return await $.prompt.submit({ text: order.text })
+  if (order.carry === 'model') await switchTheModel($, order.model)
   if (order.carry !== 'clear') return
   // Out of the turn's hook: /clear cannot run inside a hook the turn waits on.
   $.clock.after(CLEAR_DELAY_MS, () => void $.command.run({ command: 'clear' }).catch(() => undefined))
+}
+
+/**
+ * Runs the host's own model command with the model the launcher named, and tells the launcher what this session now
+ * runs on (martha#315). Both acts are the host's, so they are bound here; what a failed command means for the report is
+ * the slice's, where ./crew_answers.node-test.ts can reach it.
+ */
+async function switchTheModel($: CrewEngine, model: string): Promise<void> {
+  return await switchTheModelOnTheHost(
+    {
+      runTheModelCommand: (one) => $.command.run({ command: THE_MODEL_COMMAND, args: one }),
+      noteTheModel: (one) => askTheLauncherQuietly($, THE_MODEL_REPORT, { model: one }),
+    },
+    model,
+  )
+}
+
+/** Asks the launcher for one thing and says nothing when it cannot be heard: a report that failed changes no decision. */
+async function askTheLauncherQuietly($: CrewEngine, tool: string, args: Readonly<Record<string, unknown>>): Promise<void> {
+  const heard = await hearTheLauncher($, tool, args)
+  if (!('said' in heard)) $.ui.toast(`Martha did not note this session's model: ${heard.why}`)
 }
 
 /** How long after the turn the clear is run: out of the hook, so the host is not holding a turn while it clears. */
@@ -312,6 +343,8 @@ const answerWriteMyHandover = ($: CrewEngine, e: Record<string, unknown>): Promi
 const answerRefreshThisSession = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'refresh_this_session')
 const answerParkAMember = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'park_a_member')
 const answerWakeAMember = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wake_a_member')
+const answerSwitchYourModel = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'switch_your_model')
+const answerReturnToYourOwnModel = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'return_to_your_own_model')
 const answerVerifyRange = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'verify_range')
 const answerLandBatch = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'land_batch')
 const answerFastForward = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'fast_forward_after_the_owners_yes')
@@ -360,6 +393,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__refresh_this_session' }, answerRefreshThisSession)
   on('tool.call', { tool: 'mcp__martha__park_a_member' }, answerParkAMember)
   on('tool.call', { tool: 'mcp__martha__wake_a_member' }, answerWakeAMember)
+  on('tool.call', { tool: 'mcp__martha__switch_your_model' }, answerSwitchYourModel)
+  on('tool.call', { tool: 'mcp__martha__return_to_your_own_model' }, answerReturnToYourOwnModel)
   on('tool.call', { tool: 'mcp__martha__verify_range' }, answerVerifyRange)
   on('tool.call', { tool: 'mcp__martha__land_batch' }, answerLandBatch)
   on('tool.call', { tool: 'mcp__martha__fast_forward_after_the_owners_yes' }, answerFastForward)

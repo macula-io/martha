@@ -20,6 +20,10 @@
 # Then every rule the launch writes is one this host's file permission checks match, and the same run names an inert
 # twin of one (martha#226): the question the launch now asks before it starts a member, put to this host's own binary.
 #
+# And a member's model switch is run in this host, not only against a stand-in (martha#315, design test 8): the host's
+# own model command answers "Set model to ...", the row then says that model, and a review off the crew's reviewer model
+# is refused with the model named. Those two cases need this binary too, so they run here or nowhere (r=2, 3a).
+#
 # Exit: 0 the recorded host loads the relay and a launch leaves it as it was, 1 it does not (or a check did not bite),
 # 2 the host could not be set up.
 set -euo pipefail
@@ -34,6 +38,7 @@ LAUNCH_TEST="a launch leaves the installed relay folder as it was"
 HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
 OWN_WRITES_TESTS="${REPO}/src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts"
 RULES_TESTS="${REPO}/src/refuse_a_member_writing_owner_memory/the_rules_the_host_matches.node-test.ts"
+SWITCH_TESTS="${REPO}/src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts"
 HOST_TYPES_FILE="tsconfig.json"
 HOST_WRITES_WITHIN_S=60
 VARIABLE_CONSTANT="RELAY_SOCKET_VARIABLE"
@@ -124,3 +129,17 @@ grep -q '^ℹ pass 1$' "${WORK}/rules.txt" && grep -q '^ℹ skipped 0$' "${WORK}
   || { echo "prove_the_relay_loads: the rule case did not run exactly once:" >&2; cat "${WORK}/rules.txt" >&2; exit 1; }
 
 echo "prove_the_relay_loads: with Claude Code ${version}, the host matches every rule the launch writes, and names an inert twin of one"
+
+# A member's model switch is run in this host (martha#315, design test 8): the whole way round — the tool, the record,
+# the order, and the host's own model command — and a review off the crew's reviewer model refused by name. The ordinary
+# gate skips both tests for want of this binary, so a run that skipped them proves nothing and is a failure here.
+switch_cases="$(grep -c '^test(' "${SWITCH_TESTS}")"
+if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${SWITCH_TESTS}" > "${WORK}/switch.txt" 2>&1; then
+  echo "prove_the_relay_loads: with Claude Code ${version}, a member's model switch did not reach this host, a review off the reviewer model ran, or a case failed:" >&2
+  cat "${WORK}/switch.txt" >&2
+  exit 1
+fi
+grep -q "^ℹ pass ${switch_cases}$" "${WORK}/switch.txt" && grep -q '^ℹ skipped 0$' "${WORK}/switch.txt" \
+  || { echo "prove_the_relay_loads: the model-switch cases did not all run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/switch.txt" >&2; exit 1; }
+
+echo "prove_the_relay_loads: with Claude Code ${version}, a member switches its model in this host and a review off the reviewer model is refused"

@@ -27,6 +27,9 @@ import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY
 import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
 
+/** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
+const HOST_MODELS = ['opus', 'fable']
+
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-refresh-tool-'))
 after(() => removeTheTree(homeOfAll))
 
@@ -87,7 +90,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   mkdirSync(join(home, CREW_ROWS_PLACE), { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   if (options.refresh_between_tasks === true || options.supervisor === true) switchOnInTheDeclaration(root, options)
   const records = aSessionStore()

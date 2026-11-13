@@ -9,10 +9,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { orderIn, PANE_CHROME_ROWS, paneIn, theOwnersListIn } from './crew_answers.ts'
+import { orderIn, PANE_CHROME_ROWS, paneIn, switchTheModelOnTheHost, theOwnersListIn } from './crew_answers.ts'
 import { theActAsked, theListForThePane } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
+
+/** The model a switch moves a session to, in these tests: any name at all, since the slice only passes it on. */
+const THE_OTHER_MODEL = 'a-model-the-launcher-named'
 
 /** The launcher's answer to a session's question, as the launcher hands it over: the order, as text. */
 const answered = (act: TheAct): string => JSON.stringify(theOrderOf(act))
@@ -60,6 +63,46 @@ test('an answer that does not say how many rows is drawn in the pane\'s own chro
 test('an answer that is not a pane at all is not drawn (martha#255 r=2 R2)', () => {
   assert.equal(paneIn('not an answer'), null, 'text the mod cannot parse is a read that failed, not an empty crew')
   assert.equal(paneIn(JSON.stringify({ lines: [] })), null, 'an answer with no header is not one the mod can draw')
+})
+
+// The row's model is written from the mod's report, and only from a command the host resolved (martha#315): a switch the
+// host refused is not one to report, or the row says a model the session does not run and the owner reads a switch that
+// never happened. r=2 N18: with the `return` gone from the catch, every test was still green.
+test('#315 r2: a model command the host refused is not reported, so the row keeps the model this session still runs (mutant: the report sent after a failed command)', async () => {
+  const ran: string[] = []
+  const told: string[] = []
+  await switchTheModelOnTheHost(
+    {
+      runTheModelCommand: async (model) => {
+        ran.push(model)
+        throw new Error('the host refused the model command')
+      },
+      noteTheModel: async (model) => {
+        told.push(model)
+      },
+    },
+    THE_OTHER_MODEL,
+  )
+  assert.deepEqual(ran, [THE_OTHER_MODEL], 'the host command was not run with the model the launcher named')
+  assert.deepEqual(told, [], 'a model the host refused was reported, so the row says a switch that never happened')
+})
+
+test('#315: a model command the host resolved is reported once, with the model it was given', async () => {
+  const ran: string[] = []
+  const told: string[] = []
+  await switchTheModelOnTheHost(
+    {
+      runTheModelCommand: async (model) => {
+        ran.push(model)
+      },
+      noteTheModel: async (model) => {
+        told.push(model)
+      },
+    },
+    THE_OTHER_MODEL,
+  )
+  assert.deepEqual(ran, [THE_OTHER_MODEL], 'the host command was not run with the model the launcher named')
+  assert.deepEqual(told, [THE_OTHER_MODEL], 'the report of a switch the host made did not name that switch')
 })
 
 test('the owner\'s list the launcher answers is the list the pane draws, its copy only on the revealed row (martha#316)', () => {

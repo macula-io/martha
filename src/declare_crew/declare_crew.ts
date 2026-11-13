@@ -156,14 +156,18 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
  * Read the crew's declaration under `root` once, through the host's document
  * store, and return its settings. `root` is the project's absolute path, as the
  * composer knows it.
+ *
+ * `models` is the vocabulary the host runs, as its adapter records it (martha#315): a `review_model` must be one of
+ * these, because the host publishes no other name it would accept for a subagent's model, and a crew that named one
+ * Martha cannot spell would hold every review to a model nothing ever matches.
  */
-export async function declareCrew(documents: DocumentStore, root: string): Promise<CrewSettings> {
+export async function declareCrew(documents: DocumentStore, root: string, models: readonly string[]): Promise<CrewSettings> {
   const crew = join(root, DECLARATION_DIRECTORY)
   const declaration = join(crew, DECLARATION_FILE)
   if (!isAbsolute(root)) throw new DeclarationRefused(declaration, null, 'is not under an absolute project root')
   const text = await readDeclaration(documents, declaration)
   const parsed = parseDeclaration(declaration, text)
-  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }))
+  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, models))
 }
 
 async function readDeclaration(documents: DocumentStore, declaration: string): Promise<string> {
@@ -202,7 +206,7 @@ class Refuse {
   }
 }
 
-function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>): CrewSettings {
+function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, models: readonly string[]): CrewSettings {
   if (!isObject(value)) return refuse.at(null, 'is not a JSON object')
   refuse.unknownKeys(value, TOP_LEVEL_KEYS, '')
   if (value['version'] !== DECLARATION_VERSION) refuse.at('version', `is not ${DECLARATION_VERSION}`)
@@ -213,7 +217,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     owner: value['owner'].trim(),
     members: membersOf(refuse, value['members'], mode.roles),
     mode,
-    house_rules: houseRulesOf(refuse, value['house_rules']),
+    house_rules: houseRulesOf(refuse, value['house_rules'], models),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
   }
 }
@@ -284,21 +288,34 @@ function memberNameOf(refuse: Refuse, name: unknown, at: string, seen: Set<strin
   return name
 }
 
-function houseRulesOf(refuse: Refuse, value: unknown): HouseRules {
+function houseRulesOf(refuse: Refuse, value: unknown, models: readonly string[]): HouseRules {
   if (value === undefined) return houseRulesFrom({})
   if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
-  refuseSwitches(refuse, value)
+  refuseSwitches(refuse, value, models)
   refusePlaces(refuse, value)
   return houseRulesFrom(value)
 }
 
-function refuseSwitches(refuse: Refuse, value: Json): void {
+function refuseSwitches(refuse: Refuse, value: Json, models: readonly string[]): void {
   for (const name of HOUSE_RULE_SWITCHES) {
     if (value[name] !== undefined && typeof value[name] !== 'boolean') refuse.at(`house_rules.${name}`, 'is not true or false')
   }
-  const model = value[REVIEW_MODEL]
-  if (model !== undefined && !isText(model)) refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
+  refuseTheReviewModel(refuse, value[REVIEW_MODEL], models)
+}
+
+/**
+ * The reviewer model, read against the models the host runs (martha#315): a name the host cannot spell is refused here,
+ * where the owner sees which model it does run, rather than left as a rule nothing could ever match.
+ */
+function refuseTheReviewModel(refuse: Refuse, model: unknown, models: readonly string[]): void {
+  if (model === undefined) return
+  if (!isText(model)) return refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
+  if (models.includes(model.trim())) return
+  refuse.at(
+    `house_rules.${REVIEW_MODEL}`,
+    `is not a model this host runs (it runs ${models.length === 0 ? 'none Martha can name' : models.join(', ')}), so a review could never be held to it`,
+  )
 }
 
 /**

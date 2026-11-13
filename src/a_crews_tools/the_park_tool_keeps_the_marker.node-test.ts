@@ -23,6 +23,9 @@ import { parkedPlace, theParkMarker, theParkOf } from '../park_and_wake_a_member
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { THE_TOOLS_ASK, PARK_A_MEMBER, WAKE_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
+/** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
+const HOST_MODELS = ['opus', 'fable']
+
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-park-tool-'))
 after(() => removeTheTree(homeOfAll))
 
@@ -44,7 +47,7 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
   mkdirSync(root, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   const tools = crewToolsOver({
     member,

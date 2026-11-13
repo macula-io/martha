@@ -661,7 +661,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const unvouched = await vouchFor(state, session)
   if (unvouched !== undefined) return denied(unvouched)
   const agent_id = noteTheAgentsCall(state, session, body)
-  const denial = theDenialOfACall(state, session, call, agent_id)
+  const denial = await theDenialOfACall(state, session, call, agent_id)
   if (denial !== undefined) return denied(denial)
   place.signed_runs?.callAllowed(call.tool, call.input)
   // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
@@ -670,19 +670,19 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   return answered(ALLOW)
 }
 
-/** Why this call is refused before it runs, or undefined when nothing does: the owner's settings, their memory, the gate. */
-function theDenialOfACall(
+/** Why this call is refused before it runs, or undefined when nothing does: the owner's settings, their memory, the gate, the crew's reviewer-model rule. */
+async function theDenialOfACall(
   state: RelayState,
   session: HostSession,
   call: { readonly tool: string; readonly input: Body },
   agent_id: string | undefined,
-): string | undefined {
+): Promise<string | undefined> {
   const { place } = state
   const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
   if (settings !== undefined) return settings
   const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
   if (memory !== undefined) return memory
-  return answerToolCall({
+  const verdict = answerToolCall({
     tool: call.tool,
     session,
     policy: place.policy,
@@ -693,6 +693,10 @@ function theDenialOfACall(
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.strict_gate === undefined ? {} : { strict_gate: place.strict_gate }),
   })?.deny
+  if (verdict !== undefined) return verdict
+  // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
+  // may not make is refused after the gate has allowed it, and never in place of the gate's own answer.
+  return place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })
 }
 
 /**
