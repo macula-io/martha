@@ -17,7 +17,7 @@ import { theRangeACallNames, VERIFY_RANGE, verifyRange } from '../check_a_range_
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, OWNER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -110,7 +110,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     paths: { root, crew: join(root, DECLARATION_DIRECTORY), declaration: join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
     owner: 'Ann',
     members: [{ name: MEMBER, role: 'builder', model: null }],
-    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], offer_owner_asks: [OWNER] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
     house_rules: {
       owner_items: false,
       workspace_layout: true,

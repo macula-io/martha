@@ -5,6 +5,8 @@
 // `launcherPlacesOf`, as a real launch does, and drive the channel, the carrier and the receipts through those places:
 // A says something to B from the worktree, B is handed it in the clone, and A reads that B took it in.
 
+import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -22,8 +24,6 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { launcherPlacesOf } from './start_a_member.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import { OWNER } from '../declare_crew/declare_crew.ts'
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 
@@ -33,7 +33,7 @@ const DECLARATION = JSON.stringify({
   version: 1,
   owner: 'Ann',
   members: MEMBERS.map((name) => ({ name, role: name === 'Builder' ? 'builder' : 'reviewer' })),
-  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], offer_owner_asks: [OWNER] } },
+  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
   channel_read_seconds: 30,
 })
 

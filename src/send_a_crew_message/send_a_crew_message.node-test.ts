@@ -4,6 +4,8 @@
 // roster answered with the roster and nothing written, and — when the member holds a package — the send announced
 // and concluded in that package's ledger, so a member refreshed mid-send finds an act it never saw confirmed.
 
+import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { mkdtempSync } from 'node:fs'
@@ -21,8 +23,6 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import { OWNER } from '../declare_crew/declare_crew.ts'
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -139,12 +139,12 @@ const DECLARATION = {
     { name: 'Builder', role: 'builder' },
     { name: 'Reviewer', role: 'reviewer' },
   ],
-  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], offer_owner_asks: [OWNER] } },
+  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
   channel_read_seconds: 30,
 }
 
 /** A dashboard store that holds no row: the member has reported nothing, so it holds no package. */
-const NO_BEATS: DashboardStore = { read: () => null, keep: () => ({ kept: false, why: 'a test holds no rows' }), all: () => ({}) }
+const NO_BEATS: DashboardStore = { read: () => null, change: () => ({ kept: false, why: 'a test holds no rows' }), all: () => ({}) }
 
 /** The crew's tools over a declaration of two members and a channel of the test's own. */
 function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typeof crewToolsOver> {

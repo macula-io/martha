@@ -12,6 +12,7 @@
 // on origin too; and that the deletion of that branch is an outward act kept in the package's ledger before it
 // runs, so a successor knows whether it was sent (martha#25).
 
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -19,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { OFFER_OWNER_ASKS, OWNER, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { type CrewSettings, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
@@ -82,7 +83,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   paths: { root: fixture.clone, crew: join(fixture.clone, '.crew'), declaration: join(fixture.clone, '.crew', 'crew.json'), conventions: null },
   owner: 'Ann',
   members: [{ name: MEMBER, role: 'builder', model: null }],
-  mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER] } },
+  mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
   house_rules: {
     owner_items: false,
     workspace_layout: true,

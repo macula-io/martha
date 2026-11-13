@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { test } from 'node:test'
 
 import {
@@ -10,7 +12,6 @@ import {
   type SupervisorOnlyAction,
 } from './who_may_act.ts'
 import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
-import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const supervisor_node = 'a'.repeat(64)
@@ -85,7 +86,7 @@ test('a session the harness cannot identify is nobody, whatever it calls itself'
 // --- the list is complete and closed ------------------------------------------
 
 test('the tools with no caller check at all are on the list', () => {
-  for (const action of ['restart_member', 'complete_todo']) {
+  for (const action of [RESTART_MEMBER, 'complete_todo']) {
     assert.equal((SUPERVISOR_ONLY_ACTIONS as readonly string[]).includes(action), true, action)
   }
 })
@@ -97,7 +98,7 @@ test('taking the owner\'s asks is not on the list: the declaration\'s table deci
 test('the list is exactly the six supervisor-only tools the crew has today', () => {
   assert.deepEqual(
     [...SUPERVISOR_ONLY_ACTIONS].sort(),
-    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', 'restart_member', VERIFY_RANGE],
+    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', RESTART_MEMBER, VERIFY_RANGE],
   )
 })
 
@@ -106,7 +107,7 @@ test('an action this rule has never heard of fails closed', () => {
 })
 
 test('a host that adds an eighth supervisor-only tool is named by the list check', () => {
-  const host_declares = ['assign_work', 'restart_member', 'delete_everything']
+  const host_declares = ['assign_work', RESTART_MEMBER, 'delete_everything']
   assert.deepEqual(unknownSupervisorOnlyTools(host_declares), ['delete_everything'])
   assert.deepEqual(unknownSupervisorOnlyTools([...SUPERVISOR_ONLY_ACTIONS]), [])
 })

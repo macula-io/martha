@@ -277,6 +277,11 @@ jobs:
   # recording, never typed here), runs its own loader on the relay, and plants #104's line in a copy to prove it bites.
   # Then a launch with that host on an owner's terminal must leave the installed relay folder as it was (martha#117),
   # after a check that the host does write into a writable one.
+  #
+  # Every other run is a test case that drives the recorded host, and skips everywhere but here (martha#385). The script
+  # runs what prove_the_relay_loads/recorded_host_runs.json lists and holds each to its listed case count; the check
+  # step first holds that list to the cases the test files carry, so a case nothing runs fails here by name. The suite
+  # in the gate job runs the same check, so a PR that adds a case without listing it is red there too.
   relay:
     name: the relay loads in the recorded host
     runs-on: ubuntu-latest
@@ -286,6 +291,8 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci
+      - name: every recorded-host case is listed and counted
+        run: npm run --silent check:recorded-host-runs
       - run: prove_the_relay_loads/prove_the_relay_loads.sh "${{ runner.temp }}/relay-loads"
 
   # The host drift check can fail (martha#139): the recorder's --check passes on a host that says what the recording

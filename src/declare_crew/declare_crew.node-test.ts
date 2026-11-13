@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -16,6 +17,7 @@ import {
   HOUSE_RULE_SWITCHES,
   NUDGES,
   OWNER,
+  RESTART_MEMBER,
   STRICT_GATE,
   declareCrew,
   type CrewSettings,
@@ -352,6 +354,33 @@ test('#253: a crew that does not say how often its sessions read the channel is 
 
 test('#253: the interval a crew declares is the one its settings carry', async () => {
   assert.equal((await declare({ ...solo, channel_read_seconds: 7 }).settings).channel_read_seconds, 7)
+})
+
+// --- a crew declared before restart_member (martha#312 r=1 R1) ----------------------------------------------------
+
+/** The declaration v0.1.0's `martha init` wrote, as its own soloDeclaration emitted it: three acts, none of them restart. */
+const DECLARED_BY_V0_1_0: unknown = JSON.parse(readFileSync(new URL('./the_crew_v0_1_0_declared.json', import.meta.url), 'utf8'))
+
+/**
+ * v0.1.0's table with the one field main has required of it since #253, so this test measures only what #312 adds: the
+ * file as v0.1.0 wrote it is refused for `channel_read_seconds` alone, a break of its own (martha#374).
+ */
+const V0_1_0_WITH_WHAT_253_REQUIRES = { ...(DECLARED_BY_V0_1_0 as object), channel_read_seconds: 1 }
+
+test('#312: a crew v0.1.0 declared is refused for nothing #312 added, and restart_member, which it never named, is the owner\'s alone', async () => {
+  await assert.rejects(declare(DECLARED_BY_V0_1_0).settings, (error: unknown) => error instanceof DeclarationRefused && error.field === 'channel_read_seconds')
+  const settings = await declare(V0_1_0_WITH_WHAT_253_REQUIRES).settings
+  assert.deepEqual(settings.mode.may[RESTART_MEMBER], [OWNER])
+})
+
+test('#312: a table that names restart_member and names nobody is still refused', async () => {
+  const named = V0_1_0_WITH_WHAT_253_REQUIRES as unknown as { mode: { may: Record<string, unknown> } }
+  const empty = { ...named, mode: { ...named.mode, may: { ...named.mode.may, [RESTART_MEMBER]: [] } } }
+  await assert.rejects(declare(empty).settings, (error: unknown) => {
+    assert.ok(error instanceof DeclarationRefused)
+    assert.equal(error.field, `mode.may.${RESTART_MEMBER}`)
+    return true
+  })
 })
 
 // --- 7. the windows a crew that reads nudges names (martha#320) ---------------

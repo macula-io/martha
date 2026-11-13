@@ -26,13 +26,15 @@
 // ../queue_the_owners_asks). A list that named it here would claim a gate this
 // rule never asks.
 
+import { RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+
 /** The actions the crew lets only the supervisor take, in business words. */
 export const SUPERVISOR_ONLY_ACTIONS = [
   'assign_work',
   'read_crew_roster',
   'verify_range',
   'open_crew_room',
-  'restart_member',
+  RESTART_MEMBER,
   'complete_todo',
 ] as const
 
