@@ -5,13 +5,14 @@
 // itself and the tree test below never counts it.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
 import { DEFAULT_CONFIG_DIR } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 import { describe, judgeTheRuns, MARKER, type RecordedHostRun, type TestFile } from './check_every_recorded_host_test_is_run.ts'
 import { readTheRuns, readTheTestFiles, runsFrom } from './read_the_runs_and_the_tests.ts'
@@ -105,7 +106,7 @@ test('the recorded host is refused before any host starts when TMPDIR sits under
   t.after(() => {
     if (before === undefined) delete process.env['TMPDIR']
     else process.env['TMPDIR'] = before
-    rmSync(outside, { recursive: true, force: true })
+    removeTheTree(outside)
   })
   process.env['TMPDIR'] = inside
   assert.throws(() => recordedHost(), (error: Error) => error.message === whyNoRunUnder(inside))
