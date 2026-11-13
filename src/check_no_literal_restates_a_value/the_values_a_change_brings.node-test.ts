@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
+import { GONE } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 const CHECK = join(import.meta.dirname, 'main.ts')
@@ -65,7 +66,7 @@ test('a revalued constant names the copy the value it left behind sits in, on a 
   const { status, findings } = judge(root, base, head)
 
   assert.equal(status, 1)
-  assert.deepEqual(findings, ["a_user/a_user.ts:1: 'the-old-value' restates a_tool/a_tool.ts TOOL"])
+  assert.deepEqual(findings, [`a_user/a_user.ts:1: 'the-old-value' restates a_tool/a_tool.ts TOOL ${GONE}`])
 })
 
 test('a constant the change adds names every old copy of its value, on a line the change never touches', (t) => {
