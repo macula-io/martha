@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 2060" role="img" aria-label="Martha components">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 2108" role="img" aria-label="Martha components">
 <title>Martha components</title>
 <style>
 .t-name { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; }
@@ -48,7 +48,7 @@
 }
 </style>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
-<rect class="bg" x="0" y="0" width="1000" height="2060"/>
+<rect class="bg" x="0" y="0" width="1000" height="2108"/>
 <rect class="b-sys" x="32" y="70" width="300" height="132" rx="10"/>
 <text class="t-code" x="48" y="98">run_the_martha_command</text>
 <text class="t-type" x="48" y="116">[the acts]</text>
@@ -172,7 +172,7 @@
 <text class="t-desc" x="364" y="994">and the member's tools; refuse_a_member_</text>
 <text class="t-desc" x="364" y="1010">writing_owner_memory keeps a member's</text>
 <text class="t-desc" x="364" y="1026">writes out of the owner's memory</text>
-<rect class="b-cmp" x="664" y="874" width="300" height="262" rx="10"/>
+<rect class="b-cmp" x="664" y="874" width="300" height="310" rx="10"/>
 <text class="t-code" x="680" y="902">check_nothing_private_gets_in,</text>
 <text class="t-code" x="680" y="920">check_every_link_resolves</text>
 <text class="t-type" x="680" y="938">[this repository's own checks]</text>
@@ -186,92 +186,95 @@
 <text class="t-desc" x="680" y="1074">broken; check_the_logos_are_valid_svg</text>
 <text class="t-desc" x="680" y="1090">holds every logo to well-formed XML;</text>
 <text class="t-desc" x="680" y="1106">check_no_test_the_base_passed_goes_</text>
-<text class="t-desc" x="680" y="1122">missing names a dropped test; each bites</text>
-<rect class="b-cmp" x="32" y="1152" width="300" height="148" rx="10"/>
-<text class="t-code" x="48" y="1180">install_the_pinned_installer</text>
-<text class="t-type" x="48" y="1198">[the installer this release pins]</text>
-<text class="t-desc" x="48" y="1222">martha install: reads the pin from the</text>
-<text class="t-desc" x="48" y="1238">running release, fetches exactly that</text>
-<text class="t-desc" x="48" y="1254">installer version through run_the_nodes_</text>
-<text class="t-desc" x="48" y="1270">own_npm_alone, refuses other bytes, and</text>
-<text class="t-desc" x="48" y="1286">runs it with the words unchanged</text>
-<rect class="b-cmp" x="348" y="1152" width="300" height="164" rx="10"/>
-<text class="t-code" x="364" y="1180">run_the_nodes_own_npm_alone</text>
-<text class="t-type" x="364" y="1198">[npm, and nothing of the machine's]</text>
-<text class="t-desc" x="364" y="1222">The npm beside this node, run with</text>
-<text class="t-desc" x="364" y="1238">empty user and global config, one named</text>
-<text class="t-desc" x="364" y="1254">registry, --ignore-scripts and an</text>
-<text class="t-desc" x="364" y="1270">environment built from HOME and PATH</text>
-<text class="t-desc" x="364" y="1286">alone: the mesh server and the installer,</text>
-<text class="t-desc" x="364" y="1302">one isolation</text>
-<rect class="b-cmp" x="664" y="1152" width="300" height="310" rx="10"/>
-<text class="t-code" x="680" y="1180">show_dashboard_beat,</text>
-<text class="t-code" x="680" y="1198">keep_the_ledger</text>
-<text class="t-type" x="680" y="1216">[the crew's rows and its ledger]</text>
-<text class="t-desc" x="680" y="1240">show_dashboard_beat holds a member's row</text>
-<text class="t-desc" x="680" y="1256">and the rule the newest beat wins;</text>
-<text class="t-desc" x="680" y="1272">report_progress moves it, see_the_crew</text>
-<text class="t-desc" x="680" y="1288">lays every one out, and a_crews_tools</text>
-<text class="t-desc" x="680" y="1304">answers every tool the crew</text>
-<text class="t-desc" x="680" y="1320">registers.</text>
-<text class="t-desc" x="680" y="1336">keep_the_ledger loads log_ledger, whose</text>
-<text class="t-desc" x="680" y="1352">streams sit in the crew's own state;</text>
-<text class="t-desc" x="680" y="1368">keep_the_crew_channel is where a message</text>
-<text class="t-desc" x="680" y="1384">lives, send_a_crew_message writes one, and</text>
-<text class="t-desc" x="680" y="1400">show_what_a_message_became reads back</text>
-<text class="t-desc" x="680" y="1416">what became of it; read_a_crew_line reads</text>
-<text class="t-desc" x="680" y="1432">the HANDOFF and VERDICT lines, and find_</text>
-<text class="t-desc" x="680" y="1448">the_work_a_verdict_passed the head passed</text>
-<rect class="b-cmp" x="32" y="1478" width="300" height="148" rx="10"/>
-<text class="t-code" x="48" y="1506">write_my_handover</text>
-<text class="t-type" x="48" y="1524">[the host writes a handover]</text>
-<text class="t-desc" x="48" y="1548">A member's handover is written by the</text>
-<text class="t-desc" x="48" y="1564">host, at the path the host chose, and</text>
-<text class="t-desc" x="48" y="1580">stamped: one file per member per day</text>
-<text class="t-desc" x="48" y="1596">in the crew's own store, so a file the</text>
-<text class="t-desc" x="48" y="1612">member wrote itself is not a handover</text>
-<rect class="b-cmp" x="348" y="1478" width="300" height="196" rx="10"/>
-<text class="t-code" x="364" y="1506">park_and_wake_a_member</text>
-<text class="t-type" x="364" y="1524">[a park that outlives a session]</text>
-<text class="t-desc" x="364" y="1548">A member's park is a marker in the</text>
-<text class="t-desc" x="364" y="1564">crew's store, so a clear, a restart or a</text>
-<text class="t-desc" x="364" y="1580">refresh cannot lose it; who may park</text>
-<text class="t-desc" x="364" y="1596">another member is the declaration's</text>
-<text class="t-desc" x="364" y="1612">table, not who_may_act (martha#255 r=3).</text>
-<text class="t-desc" x="364" y="1628">wake_a_member is martha wake: the park</text>
-<text class="t-desc" x="364" y="1644">cleared and the member started on its</text>
-<text class="t-desc" x="364" y="1660">newest handover (part 2)</text>
-<rect class="b-cmp" x="664" y="1478" width="300" height="148" rx="10"/>
-<text class="t-code" x="680" y="1506">crew_files_directory</text>
-<text class="t-type" x="680" y="1524">[the crew's store, on this machine]</text>
-<text class="t-desc" x="680" y="1548">The host contract's crew store as files</text>
-<text class="t-desc" x="680" y="1564">in one directory: a place per name, a</text>
-<text class="t-desc" x="680" y="1580">file kept whole under a staging name</text>
-<text class="t-desc" x="680" y="1596">and 0600, and nothing read that is not</text>
-<text class="t-desc" x="680" y="1612">this user's alone (martha#254, #255)</text>
-<rect class="bound" x="16" y="40" width="968" height="1658" rx="12"/>
+<text class="t-desc" x="680" y="1122">missing names a dropped test; each bites.</text>
+<text class="t-desc" x="680" y="1138">check_a_host_directory_stays_under_</text>
+<text class="t-desc" x="680" y="1154">its_ceiling fails a host directory</text>
+<text class="t-desc" x="680" y="1170">one code line over its ceiling, by name</text>
+<rect class="b-cmp" x="32" y="1200" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="1228">install_the_pinned_installer</text>
+<text class="t-type" x="48" y="1246">[the installer this release pins]</text>
+<text class="t-desc" x="48" y="1270">martha install: reads the pin from the</text>
+<text class="t-desc" x="48" y="1286">running release, fetches exactly that</text>
+<text class="t-desc" x="48" y="1302">installer version through run_the_nodes_</text>
+<text class="t-desc" x="48" y="1318">own_npm_alone, refuses other bytes, and</text>
+<text class="t-desc" x="48" y="1334">runs it with the words unchanged</text>
+<rect class="b-cmp" x="348" y="1200" width="300" height="164" rx="10"/>
+<text class="t-code" x="364" y="1228">run_the_nodes_own_npm_alone</text>
+<text class="t-type" x="364" y="1246">[npm, and nothing of the machine's]</text>
+<text class="t-desc" x="364" y="1270">The npm beside this node, run with</text>
+<text class="t-desc" x="364" y="1286">empty user and global config, one named</text>
+<text class="t-desc" x="364" y="1302">registry, --ignore-scripts and an</text>
+<text class="t-desc" x="364" y="1318">environment built from HOME and PATH</text>
+<text class="t-desc" x="364" y="1334">alone: the mesh server and the installer,</text>
+<text class="t-desc" x="364" y="1350">one isolation</text>
+<rect class="b-cmp" x="664" y="1200" width="300" height="310" rx="10"/>
+<text class="t-code" x="680" y="1228">show_dashboard_beat,</text>
+<text class="t-code" x="680" y="1246">keep_the_ledger</text>
+<text class="t-type" x="680" y="1264">[the crew's rows and its ledger]</text>
+<text class="t-desc" x="680" y="1288">show_dashboard_beat holds a member's row</text>
+<text class="t-desc" x="680" y="1304">and the rule the newest beat wins;</text>
+<text class="t-desc" x="680" y="1320">report_progress moves it, see_the_crew</text>
+<text class="t-desc" x="680" y="1336">lays every one out, and a_crews_tools</text>
+<text class="t-desc" x="680" y="1352">answers every tool the crew</text>
+<text class="t-desc" x="680" y="1368">registers.</text>
+<text class="t-desc" x="680" y="1384">keep_the_ledger loads log_ledger, whose</text>
+<text class="t-desc" x="680" y="1400">streams sit in the crew's own state;</text>
+<text class="t-desc" x="680" y="1416">keep_the_crew_channel is where a message</text>
+<text class="t-desc" x="680" y="1432">lives, send_a_crew_message writes one, and</text>
+<text class="t-desc" x="680" y="1448">show_what_a_message_became reads back</text>
+<text class="t-desc" x="680" y="1464">what became of it; read_a_crew_line reads</text>
+<text class="t-desc" x="680" y="1480">the HANDOFF and VERDICT lines, and find_</text>
+<text class="t-desc" x="680" y="1496">the_work_a_verdict_passed the head passed</text>
+<rect class="b-cmp" x="32" y="1526" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="1554">write_my_handover</text>
+<text class="t-type" x="48" y="1572">[the host writes a handover]</text>
+<text class="t-desc" x="48" y="1596">A member's handover is written by the</text>
+<text class="t-desc" x="48" y="1612">host, at the path the host chose, and</text>
+<text class="t-desc" x="48" y="1628">stamped: one file per member per day</text>
+<text class="t-desc" x="48" y="1644">in the crew's own store, so a file the</text>
+<text class="t-desc" x="48" y="1660">member wrote itself is not a handover</text>
+<rect class="b-cmp" x="348" y="1526" width="300" height="196" rx="10"/>
+<text class="t-code" x="364" y="1554">park_and_wake_a_member</text>
+<text class="t-type" x="364" y="1572">[a park that outlives a session]</text>
+<text class="t-desc" x="364" y="1596">A member's park is a marker in the</text>
+<text class="t-desc" x="364" y="1612">crew's store, so a clear, a restart or a</text>
+<text class="t-desc" x="364" y="1628">refresh cannot lose it; who may park</text>
+<text class="t-desc" x="364" y="1644">another member is the declaration's</text>
+<text class="t-desc" x="364" y="1660">table, not who_may_act (martha#255 r=3).</text>
+<text class="t-desc" x="364" y="1676">wake_a_member is martha wake: the park</text>
+<text class="t-desc" x="364" y="1692">cleared and the member started on its</text>
+<text class="t-desc" x="364" y="1708">newest handover (part 2)</text>
+<rect class="b-cmp" x="664" y="1526" width="300" height="148" rx="10"/>
+<text class="t-code" x="680" y="1554">crew_files_directory</text>
+<text class="t-type" x="680" y="1572">[the crew's store, on this machine]</text>
+<text class="t-desc" x="680" y="1596">The host contract's crew store as files</text>
+<text class="t-desc" x="680" y="1612">in one directory: a place per name, a</text>
+<text class="t-desc" x="680" y="1628">file kept whole under a staging name</text>
+<text class="t-desc" x="680" y="1644">and 0600, and nothing read that is not</text>
+<text class="t-desc" x="680" y="1660">this user's alone (martha#254, #255)</text>
+<rect class="bound" x="16" y="40" width="968" height="1706" rx="12"/>
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>
-<text class="t-desc" x="24" y="1738">Every box is a directory in src/: the name is the capability, and its test sits beside it. These 7 directories are drawn nowhere on purpose:</text>
-<text class="t-desc" x="24" y="1756">check_a_range_before_the_owner_says_yes: the range check, verify_range (martha#256); a member's session cannot call it yet, because the launcher</text>
-<text class="t-desc" x="24" y="1774">registers no such tool, though it registers the crew's own (martha#253).</text>
-<text class="t-desc" x="24" y="1792">land_passed_work_as_one_batch: the batch landing and the fast-forward the owner's yes unlocks (martha#256); a member's session cannot call them yet,</text>
-<text class="t-desc" x="24" y="1810">because the launcher registers no such tool, though it registers the crew's own (martha#253).</text>
-<text class="t-desc" x="24" y="1828">open_and_finish_a_worktree: the two worktree tools, worktree_open and worktree_finish (martha#256); a member's session cannot call them yet, because the</text>
-<text class="t-desc" x="24" y="1846">launcher registers no worktree tool, though it registers the crew's own (martha#253).</text>
-<text class="t-desc" x="24" y="1864">read_the_origin_a_clone_has: what a clone's origin says, org/name and the default branch (martha#256); read by the three slices beside it, and by nothing that</text>
-<text class="t-desc" x="24" y="1882">runs yet.</text>
-<text class="t-desc" x="24" y="1900">probe_launch_hosts: a script run by hand, npm run probe:launch, to probe a host; the command never loads it.</text>
-<text class="t-desc" x="24" y="1918">record_mesh_answers: a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote,</text>
-<text class="t-desc" x="24" y="1936">and never runs it.</text>
-<text class="t-desc" x="24" y="1954">record_claude_code_host: a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it.</text>
-<text class="t-desc" x="24" y="1972">The crew ledger is drawn in the crew's own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it</text>
-<text class="t-desc" x="24" y="1990">recorded; the room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
-<rect class="b-sys" x="24" y="2030" width="22" height="14" rx="3"/>
-<text class="t-leg" x="54" y="2042">Martha</text>
-<rect class="b-cmp" x="103.168" y="2030" width="22" height="14" rx="3"/>
-<text class="t-leg" x="133.168" y="2042">Container or component</text>
-<rect class="b-dat" x="277.93999999999994" y="2030" width="22" height="14" rx="3"/>
-<text class="t-leg" x="307.93999999999994" y="2042">Data, in the project</text>
-<rect class="bound" x="424.5719999999999" y="2030" width="22" height="14" rx="3"/>
-<text class="t-leg" x="454.5719999999999" y="2042">Boundary</text>
+<text class="t-desc" x="24" y="1786">Every box is a directory in src/: the name is the capability, and its test sits beside it. These 7 directories are drawn nowhere on purpose:</text>
+<text class="t-desc" x="24" y="1804">check_a_range_before_the_owner_says_yes: the range check, verify_range (martha#256); a member's session cannot call it yet, because the launcher</text>
+<text class="t-desc" x="24" y="1822">registers no such tool, though it registers the crew's own (martha#253).</text>
+<text class="t-desc" x="24" y="1840">land_passed_work_as_one_batch: the batch landing and the fast-forward the owner's yes unlocks (martha#256); a member's session cannot call them yet,</text>
+<text class="t-desc" x="24" y="1858">because the launcher registers no such tool, though it registers the crew's own (martha#253).</text>
+<text class="t-desc" x="24" y="1876">open_and_finish_a_worktree: the two worktree tools, worktree_open and worktree_finish (martha#256); a member's session cannot call them yet, because the</text>
+<text class="t-desc" x="24" y="1894">launcher registers no worktree tool, though it registers the crew's own (martha#253).</text>
+<text class="t-desc" x="24" y="1912">read_the_origin_a_clone_has: what a clone's origin says, org/name and the default branch (martha#256); read by the three slices beside it, and by nothing that</text>
+<text class="t-desc" x="24" y="1930">runs yet.</text>
+<text class="t-desc" x="24" y="1948">probe_launch_hosts: a script run by hand, npm run probe:launch, to probe a host; the command never loads it.</text>
+<text class="t-desc" x="24" y="1966">record_mesh_answers: a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote,</text>
+<text class="t-desc" x="24" y="1984">and never runs it.</text>
+<text class="t-desc" x="24" y="2002">record_claude_code_host: a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it.</text>
+<text class="t-desc" x="24" y="2020">The crew ledger is drawn in the crew's own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it</text>
+<text class="t-desc" x="24" y="2038">recorded; the room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
+<rect class="b-sys" x="24" y="2078" width="22" height="14" rx="3"/>
+<text class="t-leg" x="54" y="2090">Martha</text>
+<rect class="b-cmp" x="103.168" y="2078" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.168" y="2090">Container or component</text>
+<rect class="b-dat" x="277.93999999999994" y="2078" width="22" height="14" rx="3"/>
+<text class="t-leg" x="307.93999999999994" y="2090">Data, in the project</text>
+<rect class="bound" x="424.5719999999999" y="2078" width="22" height="14" rx="3"/>
+<text class="t-leg" x="454.5719999999999" y="2090">Boundary</text>
 </svg>
