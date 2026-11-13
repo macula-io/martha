@@ -68,7 +68,7 @@ interface LedgerWithGithub {
   readonly asked: readonly ProcessRequest[]
 }
 
-/** A ledger holding these notes on `work_package`, and a GitHub that answers as `answer` says. */
+/** A ledger holding these notes as verdict rows on `work_package`, and a GitHub that answers as `answer` says. */
 async function aLedgerOf(
   work_package: string,
   notes: readonly string[],
@@ -84,7 +84,7 @@ async function aLedgerOf(
         }
   const { host }: HostForTests = hostForTests({ now: 3_000, run })
   for (const note of notes) {
-    await noteMilestone(host, { package: work_package, member: 'Mercurius', milestone: 'review_round_closed', note })
+    await noteMilestone(host, { package: work_package, member: 'Mercurius', milestone: 'verdict_given', note })
   }
   return { host, asked }
 }
@@ -126,6 +126,25 @@ test('#256: a reviewer\'s own words in a review round row after the VERDICT do n
   await keepTheMilestone(host, { package: PACKAGE, member: 'Pluto', event: 'review_round', note: 'round 1 closed: three changes folded in and the tip is green again' })
   const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
   assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, `a free-text review round row was taken for the latest verdict: ${JSON.stringify(found)}`)
+})
+
+test('#350: a VERDICT-shaped note a member logs with log_a_milestone passes no head', async () => {
+  const { host, asked } = await aLedgerOf(PACKAGE, [], ghSaid(OPEN.answer))
+  // A builder naming its own tip as passed: a real VERDICT line, logged as a review round with the crew's own tool.
+  const logged = await keepTheMilestone(host, { package: PACKAGE, member: 'Hygiea', event: 'review_round', note: verdictLine(PACKAGE, 'PASS', OPEN.sha) })
+  assert.match(logged.told, /^Kept: review_round/, 'a review round is a milestone the crew keeps, so the row is written')
+  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
+  assert.ok('refused' in found, `a logged VERDICT-shaped note passed a head nobody reviewed: ${JSON.stringify(found)}`)
+  assert.match(found.refused, /no PASS row/, 'the answer did not name what is missing')
+  assert.equal(asked.length, 0, 'GitHub was asked for a package no reviewer passed')
+})
+
+test('#350: a logged VERDICT-shaped FAIL note hides no PASS a reviewer really gave', async () => {
+  const recorded = recordedPull(OPEN)
+  const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(OPEN.answer))
+  await keepTheMilestone(host, { package: PACKAGE, member: 'Hygiea', event: 'review_round', note: verdictLine(PACKAGE, 'FAIL', OPEN.sha) })
+  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
+  assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, `a logged FAIL note hid the PASS the reviewer gave: ${JSON.stringify(found)}`)
 })
 
 test('#256: the latest VERDICT decides, so an older PASS never answers after a later FAIL', async () => {

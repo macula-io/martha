@@ -2,7 +2,8 @@
 //
 // This exists so a hand-off or a verdict that a member sends is checked as it is sent, and a broken one comes back to
 // the sender naming the field that is wrong instead of sitting unnoticed in a channel. A line that reads adds its row
-// to the package's ledger: a HANDOFF as an outward act, a VERDICT as the review round it closes. What this does not
+// to the package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave — a kind no member's own
+// milestone can be (martha#350). What this does not
 // do is check the range or the CI against GitHub: that is #256.
 //
 // The shapes are not written here: they are read from ./crew_lines.ts, the one definition the role cards are
@@ -110,10 +111,10 @@ function checkValue(verb: string, name: string, value: ValueName, text: string):
   return shape.matches.test(text) ? undefined : `${verb}: ${name} is not ${shape.what}; read ${JSON.stringify(text)}.`
 }
 
-/** Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the round it closes. */
+/** Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave. */
 export async function keepTheLinesRow(host: LedgerHost, member: string, line: CrewLineRead): Promise<void> {
   if (line.verb === 'VERDICT') {
-    await noteMilestone(host, { package: line.package, member, milestone: 'review_round_closed', note: saidOf(line) })
+    await noteMilestone(host, { package: line.package, member, milestone: 'verdict_given', note: saidOf(line) })
     return
   }
   // The line is one a member sent on the crew channel: the act it announces is that line, and its conclusion is the
