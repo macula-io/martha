@@ -56,9 +56,10 @@ export const SWEEP_INTERVAL_MS = 45_000
  * What a one-line field refuses: the Unicode classes, not a hand-kept list. Cc, the C0 and C1 controls and DEL, which
  * break a line or repaint a row; Cf, the format characters (bidi overrides and isolates, zero-width characters, the
  * word joiner, the soft hyphen, the BOM, the tag characters), which run the bytes one way and the row another or hide
- * them from the eye; Zl and Zp, which break a line as a newline does.
+ * them from the eye; Zl and Zp, which break a line as a newline does; and Default_Ignorable_Code_Point, which adds
+ * the invisible characters outside Cf (the combining grapheme joiner, the variation selectors, the Hangul fillers).
  */
-export const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
+export const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u
 
 /** The prefixes of the secrets a command may not hold: a row names a variable, never its value. */
 export const TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_', 'glpat-', 'xoxb-', 'xoxp-', 'sk-ant-', 'AKIA', 'npm_', 'hf_'] as const
@@ -211,16 +212,16 @@ const theGrantOf = (declaration: TheDeclaration): readonly string[] => declarati
 /**
  * Whether `member` may put an act on the owner's list or take one off, read from the declaration's table and never
  * from the mode's name (Uranus's ruling on martha#316): its role is granted `assign_work`, or the table grants
- * that act to the owner and to no role at all — a crew in which nobody but the owner assigns work, whose members act
- * as the owner's own sessions. A team table naming the owner and a role lets only that role keep the list.
+ * that act to the owner and nothing else — a crew in which nobody but the owner assigns work, whose members act
+ * as the owner's own sessions. A team table naming the owner and a role lets only that role keep the list, even when
+ * no member holds that role yet.
  */
 export function mayKeepTheOwnersList(declaration: TheDeclaration, member: string): boolean {
   const granted = theGrantOf(declaration)
   const role = declaration.members.find((one) => one.name === member)?.role
   if (role === undefined) return false
   if (granted.includes(role)) return true
-  const roles = new Set(declaration.members.map((one) => one.role))
-  return granted.includes(OWNER) && !granted.some((one) => roles.has(one))
+  return granted.includes(OWNER) && granted.every((one) => one === OWNER)
 }
 
 /** Why a member may not keep the list, naming who may. */
@@ -230,10 +231,14 @@ export function whoMayKeepTheList(declaration: TheDeclaration, member: string): 
 
 // --- the stream -----------------------------------------------------------------
 
-/** A row as the stream holds it, read back: the row, or null when it is no row of this list. */
+/**
+ * A row as the stream holds it, read back: the row, or null when it is no row of this list. `added_by` is drawn in
+ * the row's heading, so it holds to a one-line field's rules like every other field a row shows.
+ */
 function askedIn(row: Row): OwnerTodoRow | null {
-  if (row['kind'] !== ACT_ASKED_OF_OWNER || typeof row['added_by'] !== 'string' || typeof row['since'] !== 'number') return null
-  const asked = theActAsked(row, row['added_by'], row['since'])
+  if (row['kind'] !== ACT_ASKED_OF_OWNER || typeof row['since'] !== 'number') return null
+  if (lineRefusal('added_by', row['added_by'], false) !== undefined) return null
+  const asked = theActAsked(row, row['added_by'] as string, row['since'])
   return 'refused' in asked ? null : asked
 }
 
