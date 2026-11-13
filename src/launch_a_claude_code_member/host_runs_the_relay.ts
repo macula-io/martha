@@ -97,13 +97,33 @@ export const HOST_TRUST_RECORD_FILE = '.claude.json'
  * owner passes to it — read as the exact token the host tests, so a longer
  * argument is not it. Both names come from the recording (martha#332 r=3).
  */
+/**
+ * The folder the host keeps `.claude.json` in: the one `CLAUDE_CONFIG_DIR` names, else the home folder (martha#104).
+ */
+export function theHostsConfigDirectory(env: Readonly<Record<string, string | undefined>>): string {
+  return env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir()
+}
+
+/**
+ * The folder the host keeps its settings files in — `settings.json`, which its `/model` command saves the owner's
+ * default into (martha#359): the one `CLAUDE_CONFIG_DIR` names, else `.claude` under the home folder. It is not
+ * `theHostsConfigDirectory`: a host with no `CLAUDE_CONFIG_DIR` keeps `.claude.json` in the home folder and its
+ * settings one level down, and both spellings come from the recording rather than from a guess.
+ */
+export function theHostsSettingsDirectory(env: Readonly<Record<string, string | undefined>>): string {
+  return env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? homedir(), CONFIG_UNDER_THE_HOME)
+}
+
+/** The folder the host's settings live in, under a home folder that names no config of its own. */
+const CONFIG_UNDER_THE_HOME = '.claude'
+
 export function hostTrustsTheFolder(
   env: Readonly<Record<string, string | undefined>>,
   folder: string,
   ownersArguments: readonly string[],
 ): boolean {
   if (toldToIgnoreItsRecord(env, ownersArguments)) return false
-  const configDir = env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir()
+  const configDir = theHostsConfigDirectory(env)
   if (!isAbsolute(configDir)) return false
   try {
     const projects = projectsIn(JSON.parse(readFileSync(join(configDir, HOST_TRUST_RECORD_FILE), 'utf8')))

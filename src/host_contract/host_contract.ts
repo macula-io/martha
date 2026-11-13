@@ -282,6 +282,41 @@ export interface TheCrewFilesStores {
 }
 
 
+/**
+ * The owner's own settings file — `<config dir>/settings.json` — and the one lock that guards it (martha#359).
+ *
+ * It is the file the host's own `/model` command saves the switched model into as the owner's default for new sessions,
+ * so it is the owner's, not a crew's, and it is reached through the contract like every other file: a slice decides what
+ * to do with it, and the host glue on one machine is what reads and writes it.
+ */
+export interface TheOwnersSettingsStore {
+  /** Its bytes and mode as it is now, that the owner has no file at all, or why it cannot be trusted to be put back. */
+  read(): TheOwnersSettingsRead
+  /** These bytes back, whole, in this mode: a temporary name in the same directory, fsynced, renamed into place. */
+  writeBack(bytes: Uint8Array, mode: number): Refused | undefined
+  /** The file removed, for a switch that made one where the owner had none. */
+  remove(): Refused | undefined
+  /**
+   * The one lock for this owner's config directory: taken, or refused when another switch holds it past the bound. It is
+   * named by the directory's real path, so two crews of one owner contend for it, and a holder that has died is broken
+   * by the next taker.
+   */
+  takeTheLock(): Promise<ASwitchLock | Refused>
+}
+
+/** The owner's settings file as it was found: one file read whole, no file at all, or why it cannot be trusted. */
+export type TheOwnersSettingsRead =
+  | { readonly kind: 'file'; readonly bytes: Uint8Array; readonly mode: number }
+  | { readonly kind: 'missing' }
+  | Refused
+
+/** A lock taken, and the way to give it back: removed when it is still this taker's own. */
+export interface ASwitchLock {
+  readonly file: string
+  release(): void
+}
+
+
 /** A process to run: the command, its arguments and the directory it runs in. */
 export interface ProcessRequest {
   readonly command: string

@@ -27,6 +27,7 @@
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
+import { join } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
@@ -62,7 +63,12 @@ import {
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { theHostsSettingsDirectory } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { modelPlace, theModelOf, theOwnersDefaultKept } from '../switch_a_members_model/switch_a_members_model.ts'
+import { OWNERS_SETTINGS_FILE } from '../put_the_owners_model_back/the_owners_settings_file.ts'
+import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { finishAnUnfinishedSwitch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -219,6 +225,45 @@ function theCrewsStores(state: MarthaState, root: string): { readonly crew: Crew
   return { crew: crewFilesDirectory(crew.path), stamps: handoverStampsIn(crew.path) }
 }
 
+
+/**
+ * Where the owner's own default for new sessions lives, and where the one lock that guards it is kept (martha#359),
+ * read from the environment the host itself reads: the same config folder its trust record is in (martha#304).
+ */
+function ownersDefaultPlaceOf(request: MemberStartRequest): OwnersDefaultPlace {
+  const config_dir = theHostsSettingsDirectory(request.inherited)
+  const settings_file = join(config_dir, OWNERS_SETTINGS_FILE)
+  return { config_dir, file: settings_file, store: ownersSettingsIn(settings_file, config_dir, request.state.state_root) }
+}
+
+/**
+ * Finishes whatever a killed launch left unfinished about the owner's default (martha#359, step 7): a switch that was
+ * recorded and never put back is put back here, by the hash the record kept, or the owner is told why it was not. The
+ * record says what became of it either way, so nothing is left claiming work that was done.
+ */
+async function finishWhatAKilledLaunchLeft(request: MemberStartRequest, crew: CrewStore): Promise<readonly string[]> {
+  const host = { stores: { crew } }
+  const place = modelPlace(host)
+  if ('refusal' in place) return []
+  const current = theModelOf(place, request.member)
+  if (current.kind === 'unreadable') return []
+  const marker = current.kind === 'switched' ? current.marker : current.last_marker
+  if (marker === null || marker.settings === undefined) return []
+  const after = await finishAnUnfinishedSwitch(ownersDefaultPlaceOf(request), marker.settings)
+  theOwnersDefaultKept(host, request.member, marker, after.record)
+  if (after.why === '') return []
+  keepTheOwnerNeedInTheRow(request, after.why)
+  return [after.why]
+}
+
+/** The line that needs the owner, in the member's own row, so the dashboard says it rather than only the terminal. */
+function keepTheOwnerNeedInTheRow(request: MemberStartRequest, why: string): void {
+  const beats = dashboardRowsIn(request.places.dashboard)
+  const held = beats.read(request.member)
+  if (held === null) return
+  beats.keep({ ...held, at: Date.now(), needs: why })
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -232,6 +277,9 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   }
   const { snapshot_root, ...places } = request.places
   const crewStores = theCrewsStores(request.state, request.root)
+  // A switch a killed launch left unfinished is finished here, before this member's host starts: the owner's file must
+  // be right before any new session reads it (martha#359, step 7).
+  for (const told of await finishWhatAKilledLaunchLeft(request, crewStores.crew)) request.tellOwner(told)
   // One raising for this launch, and one channel carrier over it: the carrier hears every turn the host takes in, so
   // a message counts as taken in only when the host raised it back (martha#253).
   const turns = turnsRaised()
@@ -271,6 +319,9 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
+        // The owner's own settings file and the lock that guards it (martha#359): a switch to this member is only made
+        // when what the host does to the owner's default can be undone.
+        owners_settings: ownersDefaultPlaceOf(request),
       }),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

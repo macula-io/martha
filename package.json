@@ -38,6 +38,7 @@
     "hostGlue": [
       "src/crew_files_directory",
       "src/linux_process_identity",
+      "src/owners_settings_directory",
       "src/row_streams_directory"
     ],
     "hostAdapters": [
@@ -80,7 +81,8 @@
       "src/dashboard_rows_directory": 103,
       "src/hear_the_hosts_dialogs": 40,
       "src/linux_process_identity": 274,
-      "src/row_streams_directory": 159
+      "src/row_streams_directory": 159,
+      "src/owners_settings_directory": 173
     },
     "packageImports": {
       "typescript": "prove_the_core",
