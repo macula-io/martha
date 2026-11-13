@@ -1,8 +1,8 @@
 // On the recorded host, a member switches its model, and a review off the crew's reviewer model is refused (#315).
 //
 // The real `martha` command, the real Claude Code at the recorded version, the real relay, mod and launcher; only the
-// model is a stand-in (./drive_the_recorded_host.ts). The relay CI job installs the recorded host and names it in
-// MARTHA_RECORDED_HOST; without it these tests are skipped.
+// model is a stand-in (./drive_the_recorded_host.ts). Each case skips on RECORDED_HOST_SKIP:
+// ci.yml's relay job runs them with the recorded host, as prove_the_relay_loads/recorded_host_runs.json lists.
 //
 // What only this test can prove: `command.run({command, args})` had never been run with arguments anywhere in the tree
 // — the refresh clear uses it without any — so the switch's whole mechanism rests on the host's own model command
@@ -14,21 +14,18 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
-import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, RECORDED_HOST_VARIABLE, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
+import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
-
-const recordedHost = process.env[RECORDED_HOST_VARIABLE]
-const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -67,7 +64,7 @@ function approvedProjectWithModels(t: TestContext): Project {
   git(checkout, 'config', 'user.email', GIT_EMAIL)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
-  const place = { claude: recordedHost ?? '', home, checkout }
+  const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
   const declared = marthaOnATerminal(place, ['init'])
   assert.equal(declared.exit_code, 0, plainTextOf(declared.shown))
@@ -144,11 +141,11 @@ async function whatTheRunSaw(run: () => Promise<RecordedHostRan>): Promise<Pick<
  */
 const SWITCH_SILENCE_MS = 20_000
 
-test('a member switches its model with the tool, and the row says so once the host resolved the command', { skip }, async (t) => {
+test('a member switches its model with the tool, and the row says so once the host resolved the command', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProjectWithModels(t)
   const seen = await whatTheRunSaw(() =>
     driveTheRecordedHost({
-      claude: recordedHost ?? '',
+      claude: recordedHost(),
       ...project,
       member: MEMBER,
       owner_turn: OWNER_TURN,
@@ -174,10 +171,10 @@ test('a member switches its model with the tool, and the row says so once the ho
   assert.equal(record.directed, true, 'the switch was never directed at the session')
 })
 
-test('on the recorded host a review off the crew\'s reviewer model is refused, and the refusal says the model to use', { skip }, async (t) => {
+test('on the recorded host a review off the crew\'s reviewer model is refused, and the refusal says the model to use', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProjectWithModels(t)
   const ran = await driveTheRecordedHost({
-    claude: recordedHost ?? '',
+    claude: recordedHost(),
     ...project,
     member: MEMBER,
     owner_turn: OWNER_TURN,

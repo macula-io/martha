@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
+import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { removeTheTree } from './relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -54,7 +55,7 @@ import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
 import * as relayCopy from './relay_copy.ts'
 import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, type RelayJournal } from './keep_the_relays_journal.ts'
-import { HOST_EXIT_COMMAND, HOST_TERMINAL, RECORDED_HOST_VARIABLE } from './drive_the_recorded_host.ts'
+import { HOST_EXIT_COMMAND, HOST_TERMINAL } from './drive_the_recorded_host.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -2983,10 +2984,9 @@ for (const [what, make] of [
 // its generated types into the folder --plugin-dir names on an interactive start,
 // only the files that are missing, and keeps what is there; no stand-in does, so
 // only the host can show a launch leaves the installed relay folder as it was.
-// The relay CI job installs the recorded version and names it here; the job checks
-// first that this host does write into a writable folder, so a pass here is not
+// The case skips on RECORDED_HOST_SKIP; ci.yml's relay job runs it with the recorded
+// version, as prove_the_relay_loads/recorded_host_runs.json lists, and checks first that this host does write into a writable folder, so a pass here is not
 // a host that writes nothing.
-const recordedHost = process.env[RECORDED_HOST_VARIABLE]
 
 /** Every file under `directory`, by its path inside it, with the SHA-256 of its bytes. */
 function treeOf(directory: string): Record<string, string> {
@@ -3001,9 +3001,9 @@ function treeOf(directory: string): Record<string, string> {
 
 test(
   "with the recorded host on the owner's terminal, a launch leaves the installed relay folder as it was (martha#117)",
-  { skip: recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets` },
+  { skip: RECORDED_HOST_SKIP },
   async (t) => {
-    const host = recordedHost ?? ''
+    const host = recordedHost()
     // No mesh server: the real host would start one.
     const place = placeFor(t, JSON.stringify({ mcpServers: {} }))
     // What an owner's first run records: onboarding done and the checkout trusted. No account and no key.
