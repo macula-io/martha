@@ -6,10 +6,11 @@
 // that gates a change.
 
 import { manifestOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { ceilingsOf } from '../../prove_the_core/the_host_ceilings.ts'
 import { theLinterLints } from '../../prove_the_core/the_linter_lints_it.ts'
 import { codeLinesOfDirectory } from './a_host_directorys_code_lines.ts'
 import { findingsOf, type Finding } from './check_a_host_directory_stays_under_its_ceiling.ts'
-import { ceilingsOf, declaredDirectoriesOf, type DeclaredDirectory } from './declared_host_directories.ts'
+import { declaredDirectoriesOf, type DeclaredDirectory } from './declared_host_directories.ts'
 
 /** A tree, measured, and what it fails on. */
 export interface Judged {

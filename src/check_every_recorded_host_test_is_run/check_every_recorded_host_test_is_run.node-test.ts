@@ -5,11 +5,18 @@
 // itself and the tree test below never counts it.
 
 import assert from 'node:assert/strict'
-import { join } from 'node:path'
+import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, sep } from 'node:path'
+import process from 'node:process'
 import { test } from 'node:test'
+
+import { DEFAULT_CONFIG_DIR } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 import { describe, judgeTheRuns, MARKER, type RecordedHostRun, type TestFile } from './check_every_recorded_host_test_is_run.ts'
 import { readTheRuns, readTheTestFiles, runsFrom } from './read_the_runs_and_the_tests.ts'
+import { recordedHost, whyNoRunUnder } from './recorded_host_skip.ts'
 
 const REPOSITORY = join(import.meta.dirname, '..', '..')
 
@@ -79,4 +86,31 @@ test('a list that is not a list of runs cannot be read, rather than reading as n
 test('every test case that drives the recorded host is one the relay job runs, and is counted there', () => {
   const findings = judgeTheRuns(readTheRuns(REPOSITORY), readTheTestFiles(REPOSITORY)).map(describe)
   assert.deepEqual(findings, [], findings.join('\n'))
+})
+
+// --- a run under a folder the host asks about (martha#383) --------------------------------------------------------
+
+test('a checkout folder with the host config segment is refused, naming the folder and TMPDIR; a look-alike is not', () => {
+  const folder = join(sep, 'home', 'someone', DEFAULT_CONFIG_DIR, 'sessions', 'tmp')
+  const why = whyNoRunUnder(folder) ?? ''
+  assert.ok(why.includes(folder), why)
+  assert.match(why, /Set TMPDIR to a folder outside/)
+  assert.equal(whyNoRunUnder(join(sep, 'tmp', `${DEFAULT_CONFIG_DIR}-not`, `not${DEFAULT_CONFIG_DIR}`)), undefined)
+})
+
+test('the recorded host is refused before any host starts when TMPDIR sits under the host config segment', (t) => {
+  // The folder is made under whatever TMPDIR this run has, then under a DEFAULT_CONFIG_DIR segment of its own, so the
+  // refusal holds on every machine. Whether a folder without the segment may run is proved on a built path above,
+  // never on this machine's TMPDIR, which may itself sit under the segment (martha#383 r=1).
+  const made = realpathSync(mkdtempSync(join(tmpdir(), 'martha-383-')))
+  const inside = join(made, DEFAULT_CONFIG_DIR, 'tmp')
+  mkdirSync(inside, { recursive: true })
+  const before = process.env['TMPDIR']
+  t.after(() => {
+    if (before === undefined) delete process.env['TMPDIR']
+    else process.env['TMPDIR'] = before
+    removeTheTree(made)
+  })
+  process.env['TMPDIR'] = inside
+  assert.throws(() => recordedHost(), (error: Error) => error.message === whyNoRunUnder(inside))
 })
