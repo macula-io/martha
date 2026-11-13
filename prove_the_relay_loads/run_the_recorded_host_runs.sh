@@ -81,6 +81,11 @@ holds '--test-timeout=[1-9]*' || { echo "${NAME}: the runs' arguments lack --tes
 holds "${FORCE_EXIT_FLAG}" || { echo "${NAME}: the runs' arguments lack ${FORCE_EXIT_FLAG}; a file holding a handle open would never exit (martha#56)" >&2; exit 1; }
 holds "${GUARD_FLAG}" || { echo "${NAME}: the runs' arguments lack ${GUARD_FLAG}; a file leaving something running would pass silently (martha#56)" >&2; exit 1; }
 
+# Every run goes through the output check, so its output is held to the suite's two rules (martha#92, martha#325).
+RUN_COMMAND=(node "${OUTPUT_CHECK}" node "${RUN_ARGS[@]}")
+[[ "${RUN_COMMAND[0]}" == node && "${RUN_COMMAND[1]}" == "${OUTPUT_CHECK}" && "${RUN_COMMAND[2]}" == node ]] \
+  || { echo "${NAME}: the runs do not go through ${OUTPUT_CHECK}; a planted secret or a cut run would pass (martha#92, martha#325)" >&2; exit 1; }
+
 count="$(jq 'length' "${RUNS}")"
 if [[ -z "${!HOST_VARIABLE:-}" ]]; then
   echo "${NAME}: ${count} recorded-host run(s) not run here; ci.yml's relay job runs them"
@@ -98,7 +103,7 @@ while IFS= read -r run; do
   narrowed=()
   [[ -n "${pattern}" ]] && narrowed=(--test-name-pattern="${pattern}")
   log="${WORK}/run_$(basename "${file}").txt"
-  if ! node "${OUTPUT_CHECK}" node "${RUN_ARGS[@]}" "${narrowed[@]}" "${file}" > "${log}" 2>&1; then
+  if ! "${RUN_COMMAND[@]}" "${narrowed[@]}" "${file}" > "${log}" 2>&1; then
     echo "${NAME}: with Claude Code ${version}, a case of ${file} failed:" >&2
     cat "${log}" >&2
     echo "${NAME}: a recorded-host run failed, so the rest of the suite did not run" >&2

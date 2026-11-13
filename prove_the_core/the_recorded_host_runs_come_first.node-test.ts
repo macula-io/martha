@@ -25,6 +25,9 @@ function shapeProblemsOf(manifest: Manifest): string[] {
     ...(runs_the_runner(commands[0]?.words ?? []) && commands.length > 1
       ? []
       : [`the test script's first command is not ${RECORDED_HOST_RUNNER}, so the recorded-host files would run inside the parallel run`]),
+    ...(runs_the_runner(commands[0]?.words ?? []) && (commands[0]?.unsets.length ?? 0) > 0
+      ? [`the test script's first command unsets ${commands[0]?.unsets.join(', ') ?? ''}, so the recorded-host runs would never meet the host`]
+      : []),
     ...(parallel?.unsets.includes(RECORDED_HOST_VARIABLE) === true
       ? []
       : [`the test script's parallel run does not unset ${RECORDED_HOST_VARIABLE}, so the recorded-host cases would run twice, once under the suite's contention`]),
@@ -51,6 +54,12 @@ test('a parallel run that leaves the host set is named', () => {
   const [problem, ...rest] = shapeProblemsOf(scripted(`${RECORDED_HOST_RUNNER} && ${PARALLEL}`))
   assert.deepEqual(rest, [])
   assert.match(problem ?? '', new RegExp(`does not unset ${RECORDED_HOST_VARIABLE}`))
+})
+
+test('a runner started with the host unset is named (martha#383 r=1)', () => {
+  const [problem, ...rest] = shapeProblemsOf(scripted(`env -u ${RECORDED_HOST_VARIABLE} ${RECORDED_HOST_RUNNER} && env -u ${RECORDED_HOST_VARIABLE} ${PARALLEL}`))
+  assert.deepEqual(rest, [])
+  assert.match(problem ?? '', new RegExp(`first command unsets ${RECORDED_HOST_VARIABLE}, so the recorded-host runs would never meet the host`))
 })
 
 test('the runner after the parallel run is named', () => {

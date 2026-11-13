@@ -99,17 +99,18 @@ test('a checkout folder with the host config segment is refused, naming the fold
 })
 
 test('the recorded host is refused before any host starts when TMPDIR sits under the host config segment', (t) => {
-  const outside = realpathSync(mkdtempSync(join(tmpdir(), 'martha-383-')))
-  const inside = join(outside, DEFAULT_CONFIG_DIR, 'tmp')
+  // The folder is made under whatever TMPDIR this run has, then under a DEFAULT_CONFIG_DIR segment of its own, so the
+  // refusal holds on every machine. Whether a folder without the segment may run is proved on a built path above,
+  // never on this machine's TMPDIR, which may itself sit under the segment (martha#383 r=1).
+  const made = realpathSync(mkdtempSync(join(tmpdir(), 'martha-383-')))
+  const inside = join(made, DEFAULT_CONFIG_DIR, 'tmp')
   mkdirSync(inside, { recursive: true })
   const before = process.env['TMPDIR']
   t.after(() => {
     if (before === undefined) delete process.env['TMPDIR']
     else process.env['TMPDIR'] = before
-    removeTheTree(outside)
+    removeTheTree(made)
   })
   process.env['TMPDIR'] = inside
   assert.throws(() => recordedHost(), (error: Error) => error.message === whyNoRunUnder(inside))
-  process.env['TMPDIR'] = outside
-  assert.doesNotThrow(() => recordedHost())
 })
