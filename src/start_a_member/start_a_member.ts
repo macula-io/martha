@@ -293,7 +293,7 @@ function watchForAStopOf(request: MemberStartRequest, started: Extract<MemberSta
   const process_started_at = thisMachine.processes.identityOf(started.pid)
   if (process_started_at === null) return
   watchForAStop(
-    { stores: { lifecycle: theCrewStore(request.state, request.root).place(LIFECYCLE_PLACE), rows: channel.stores.rows }, processes: thisMachine.processes, clock: channel.clock },
+    { stores: { lifecycle: theCrewsStores(request.state, request.root).crew.place(LIFECYCLE_PLACE), rows: channel.stores.rows }, processes: thisMachine.processes, clock: channel.clock },
     { member: request.member, launch: { pid: started.pid, process_started_at }, stop: started.stop, stopped: started.stopped, tellOwner: (line) => request.tellOwner(line) },
     HOOK_SETTINGS_CHECK_MS,
   )

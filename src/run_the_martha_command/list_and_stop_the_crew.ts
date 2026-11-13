@@ -10,7 +10,7 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { readingOnly, type CrewPlace, type Refused } from '../host_contract/host_contract.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { parkedPlace, theParkOf, type ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
