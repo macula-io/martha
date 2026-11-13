@@ -169,8 +169,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   // The end order's word and the two outcomes the mod reports back (martha#311): the same reason as the entries above.
   { value: CARRY_THE_END, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the end of a running turn under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_THE_END, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod ends the running turn under; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: THE_TURN_ENDED, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the outcome this mod reports when the host ended the turn; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: THE_TURN_NOT_ENDED, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the outcome this mod reports when the host refused to end the turn; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_TURN_ENDED, file: 'claude_code_relay/hooks/crew_turn_end.ts', reason: `the outcome this mod reports when the host ended the turn; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_TURN_NOT_ENDED, file: 'claude_code_relay/hooks/crew_turn_end.ts', reason: `the outcome this mod reports when the host refused to end the turn; ${THE_RELAY_CANNOT_IMPORT}` },
   // A coincidence of names (martha#312): the declaration's own field, as v0.1.0's file lacks it, is not the launcher's ask.
   { value: THE_CHANNEL_READ_ASK, file: 'declare_crew/declare_crew.node-test.ts', reason: 'the declaration field a crew file names, which the launcher\'s ask happens to share' },
   // The crew file's own top-level keys (martha#311 touched their line): a field a file names, not the launcher's ask or a progress wait.

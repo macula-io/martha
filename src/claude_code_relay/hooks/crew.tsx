@@ -13,7 +13,8 @@ import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
-import { endTheTurnOnTheHost, orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
+import { theEnd } from './crew_turn_end.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
@@ -161,7 +162,7 @@ async function carryOutTheAct($: CrewEngine, order: TheOrder): Promise<void> {
   if (order.carry === 'submit') return await $.prompt.submit({ text: order.text })
   if (order.carry === 'model') await switchTheModel($, order.model)
   // The end of the running turn (martha#311): the host's abort, then the same question again with what became of it.
-  if (order.carry === 'end_the_turn') return await endTheTurnOnTheHost((turnId) => $.turn.abort({ turnId }), (outcome) => takeTheAct($, { turnId: order.turn_id }, outcome), order.turn_id)
+  if (order.carry === 'end_the_turn') return await theEnd.ordered(order.turn_id, { abort: (turnId) => $.turn.abort({ turnId }), report: async (outcome) => void $.clock.after(0, () => void takeTheAct($, { turnId: order.turn_id }, outcome)) })
   if (order.carry !== 'clear') return
   // Out of the turn's hook: /clear cannot run inside a hook the turn waits on.
   $.clock.after(CLEAR_DELAY_MS, () => void $.command.run({ command: 'clear' }).catch(() => undefined))
@@ -436,6 +437,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // is the one shape the host's own guidance names for submitting while the session idles.
   on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
     theTurnBeat($).aTurnEnded(agentIdIn(e))
+    if (agentIdIn(e) === undefined) theEnd.theTurnEnded()
     await theChannelReading($).aTurnEnded(agentIdIn(e))
     await takeTheAct($, e)
     return next(e)

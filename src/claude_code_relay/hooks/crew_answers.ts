@@ -32,22 +32,6 @@ const CARRY_THE_CLEAR = 'clear'
 const CARRY_A_MODEL = 'model'
 const CARRY_THE_END = 'end_the_turn'
 
-/** The words an ordered end's outcome is reported under (martha#311), declared in the same exceptions as the orders. */
-const THE_TURN_ENDED = 'turn_ended'
-const THE_TURN_NOT_ENDED = 'turn_not_ended'
-
-/**
- * Ends the turn the order names with the host's own abort, and reports what became of it with `report` (martha#311
- * design §5): ended, or refused with the host's reason. The launcher counts only an end that ended, so a rejection is
- * reported as such and never as an end.
- */
-export async function endTheTurnOnTheHost(abort: (turn_id: string) => Promise<unknown>, report: (outcome: Readonly<Record<string, string>>) => Promise<void>, turn_id: string): Promise<void> {
-  const outcome = await abort(turn_id).then(
-    () => ({ end_outcome: THE_TURN_ENDED }),
-    (error: unknown) => ({ end_outcome: THE_TURN_NOT_ENDED, end_refusal: String(error) }),
-  )
-  await report({ turn_id, ...outcome })
-}
 
 /**
  * The two acts a model switch is made of, as the mod holds them (martha#315): the host's own command, and the report

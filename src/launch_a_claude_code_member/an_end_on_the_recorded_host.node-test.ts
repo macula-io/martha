@@ -35,11 +35,12 @@ const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: 
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
 /**
- * A turn that cannot end by itself inside the run: a process that waits far longer than the beats it takes to end it.
- * Not a bare `sleep`, which the host refuses to run in the foreground and answers at once, so the turn never waits.
+ * A long tool: a process still running when the second beat orders the end, and done well inside the shell tool's own
+ * limit. Not a bare `sleep`, which the host refuses to run in the foreground and answers at once, so the turn never
+ * waits. The turn would go on after it; only an end carried in that tool's after-hook stops it there.
  */
-const THE_LONG_WAIT = 'node -e "setTimeout(() => {}, 900000)"'
-/** The shell tool's own limit for that call: past the run, so only the end can stop the wait. */
+const THE_LONG_TOOL = 'node -e "setTimeout(() => {}, 150000)"'
+/** The shell tool's own limit for that call, above the wait, so the tool finishes by itself. */
 const THE_SHELL_LIMIT_MS = 600_000
 /** The message that waits in the crew channel for the member to be idle. */
 const THE_WAITING_MESSAGE = 'A message that waited in the crew channel while the long turn ran.'
@@ -110,7 +111,7 @@ const whatTheModelSaw = (request: ModelRequest): string => JSON.stringify(reques
 /** The requests after the long turn's own, which are the turns that ran once it was ended. */
 const afterTheLongTurn = (requests: readonly ModelRequest[]): readonly ModelRequest[] => requests.filter((request) => request.number > 2)
 
-test('a running turn the launcher ends is ended by the host, and the handover queued behind it runs', { skip: RECORDED_HOST_SKIP }, async (t) => {
+test('an end ordered while a long tool runs is carried after that tool\'s report: the member is not stopped, and the handover runs next', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProjectWithTheLeastCeiling(t)
   const streams = theCrewsStreams(project)
   const run = async () =>
@@ -127,32 +128,25 @@ test('a running turn the launcher ends is ended by the host, and the handover qu
         if (number === 1) return { tool: `mcp__martha__${REFRESH_THIS_SESSION}`, input: { reason: 'the test moves this member off its context' } }
         if (number !== 2) return END
         await appendToTheChannel(streams, { from: 'the-owner', to: [MEMBER], text: THE_WAITING_MESSAGE, sent_at: Date.now() })
-        return { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: THE_LONG_WAIT, description: 'a turn that does not end by itself', timeout: THE_SHELL_LIMIT_MS } }
+        return { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: THE_LONG_TOOL, description: 'a tool still running when the end is ordered', timeout: THE_SHELL_LIMIT_MS } }
       },
     })
-  let requests: readonly ModelRequest[]
-  let shown: string
-  try {
-    const ran = await run()
-    requests = ran.requests
-    shown = ran.shown
-    t.diagnostic(`the run ended by itself: exit ${ran.exit_code}, ${ran.requests.length} requests, numbers ${ran.requests.map((request) => request.number).join(',')}`)
-  } catch (error) {
-    const seen = whatTheLaunchSaw(error)
-    if (seen === undefined) throw error
-    t.diagnostic(`the run stopped waiting: ${String(error).split('\n')[0]}`)
-    requests = seen.requests
-    shown = seen.shown
-  }
+  const ran = await run().catch((error: unknown) => {
+    throw new Error(`the run did not end as a member does: ${String(error).split('\n')[0]}`, { cause: whatTheLaunchSaw(error) })
+  })
+  const { requests, shown } = ran
+  // A member the after-tool gate stopped ends on SIGKILL; one that was handed over ends on the owner's /exit.
+  assert.equal(ran.exit_code, 0, `the member did not end as the owner ended it, so something stopped it:\n${plainTextOf(shown).slice(-3000)}`)
   const after = afterTheLongTurn(requests)
   const handover = after.find((request) => whatTheModelSaw(request).includes(THE_HANDOVER_ASK))?.number
   const message = after.find((request) => whatTheModelSaw(request).includes(THE_WAITING_MESSAGE))?.number
   // The ordering is recorded, not asserted: the design asks which runs first, and the answer is the host's.
   t.diagnostic(`after the end: the handover ran in request ${handover ?? 'none'}, the waiting message in ${message ?? 'none'}`)
   t.diagnostic(`the flow after the run: ${JSON.stringify(theFlowOf(theCrewsRefreshes(project), MEMBER))}`)
-  // The wait outlasts the whole run, so a handover that ran after it is one the end released; and the flow counted
-  // the end, which only an outcome of `ended` from the mod's call to the host's abort does.
-  assert.ok(handover !== undefined, `the handover queued behind the long turn never ran once the turn was ended:\n${plainTextOf(shown).slice(-3000)}`)
+  // The end was carried inside the long tool's after-hook: the turn the tool ran in asked the model nothing more, so
+  // the very next request is the handover. And the flow counted the end, which only an outcome of `ended` does.
+  assert.equal(after[0]?.number, handover, `the long turn went on after its tool, or the handover never ran:\n${plainTextOf(shown).slice(-3000)}`)
+  assert.ok(handover !== undefined, 'the handover queued behind the long tool never ran')
   const flow = theFlowOf(theCrewsRefreshes(project), MEMBER)
   assert.ok(flow !== undefined && !('refusal' in flow), 'the member has no refresh flow to read')
   assert.equal(flow.forced?.ends, 1, `the flow did not count one end the host made: ${JSON.stringify(flow)}`)
