@@ -178,6 +178,21 @@ test('#253: a say_to_the_crew to a name the declaration does not hold is answere
   assert.match(answered.refused, /Builder, Reviewer/)
 })
 
+/** A word as a regular expression reads it: every tool name here is a plain one, and this keeps it that way. */
+const asAWord = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The function the mod's hook for one tool names, or null when the mod registers no such hook. */
+function theHooksAnswerOf(mod: string, tool: string): string | null {
+  const hook = new RegExp(`on\\('tool\\.call', \\{ tool: 'mcp__${asAWord(THE_PLUGINS_NAME)}__${asAWord(tool)}' \\}, (\\w+)\\)`).exec(mod)
+  return hook === null ? null : (hook[1] ?? null)
+}
+
+/** The tool name one of the mod's answer functions forwards to the launcher, or null when it forwards none. */
+function theForwardedToolOf(mod: string, answer: string): string | null {
+  const forwarded = new RegExp(`const ${asAWord(answer)} = \\(\\$: CrewEngine, e: Record<string, unknown>\\): Promise<unknown> => answerFromTheLauncher\\(\\$, e, '([^']+)'\\)`).exec(mod)
+  return forwarded === null ? null : (forwarded[1] ?? null)
+}
+
 test('#253: every tool the launcher names has a hook in the mod that answers it', () => {
   // The mod registers a hook per tool by a literal name: a tool added to the launcher's list without a hook here is
   // registered in the session and never answered, and only a live run would notice. This reads the mod's own text,
@@ -186,6 +201,24 @@ test('#253: every tool the launcher names has a hook in the mod that answers it'
   const mod = readFileSync(new URL('../claude_code_relay/hooks/crew.tsx', import.meta.url), 'utf8')
   const missing = CREW_TOOL_NAMES.filter((name) => !mod.includes(`'mcp__${THE_PLUGINS_NAME}__${name}'`))
   assert.deepEqual(missing, [], `the mod registers no hook for these tools, so their calls go unanswered: ${missing.join(', ')}`)
+})
+
+test('#343: every hook forwards the tool it was called for, so a wake cannot be answered as a park', () => {
+  // The two park tools are named alike and do opposite things, so the mod has two near-identical forwarders a
+  // reviewer cannot tell apart by reading one line. A hook that forwards another tool's name, or a registration that
+  // names the other tool's answer, turns a member's wake into a park without any test noticing (martha#343 r=1, P1
+  // and P2). This pairs the two literals the call rests on, for every tool: the hook's registration, the function it
+  // names, and the name that function forwards. Driving `register()` would be stronger, and a hooks module cannot be
+  // imported here: it is `.tsx`, and node refuses the extension without a transform step.
+  const mod = readFileSync(new URL('../claude_code_relay/hooks/crew.tsx', import.meta.url), 'utf8')
+  const misdirected = CREW_TOOL_NAMES.flatMap((tool) => {
+    const answer = theHooksAnswerOf(mod, tool)
+    if (answer === null) return [] // the test above fails on it, by name
+    const forwarded = theForwardedToolOf(mod, answer)
+    if (forwarded === null) return [`the hook for ${tool} is ${answer}, which forwards no tool to the launcher`]
+    return forwarded === tool ? [] : [`the hook for ${tool} is ${answer}, which forwards ${forwarded}`]
+  })
+  assert.deepEqual(misdirected, [], `these calls reach the launcher as another tool, so a member's act becomes a different one: ${misdirected.join('; ')}`)
 })
 
 test('#253: a hand-off whose line does not read is answered with the field, before anything is sent', async () => {
