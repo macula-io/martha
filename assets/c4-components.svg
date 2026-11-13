@@ -261,16 +261,21 @@
 <text class="t-desc" x="48" y="2030">opens and finishes one;</text>
 <text class="t-desc" x="48" y="2046">read_the_origin_a_clone_has</text>
 <text class="t-desc" x="48" y="2062">says what a clone is of</text>
-<rect class="b-cmp" x="348" y="1766" width="300" height="180" rx="10"/>
-<text class="t-code" x="364" y="1794">keep_the_owners_todo_list</text>
-<text class="t-type" x="364" y="1812">[what waits on the owner]</text>
-<text class="t-desc" x="364" y="1836">The owner's to-do list (martha#316):</text>
-<text class="t-desc" x="364" y="1852">the acts only the owner can do, each</text>
-<text class="t-desc" x="364" y="1868">command shown in full under what it</text>
-<text class="t-desc" x="364" y="1884">does. A member the table lets assign</text>
-<text class="t-desc" x="364" y="1900">work adds one; its own check or the</text>
-<text class="t-desc" x="364" y="1916">member takes it off. The pane and</text>
-<text class="t-desc" x="364" y="1932">martha todo show it</text>
+<rect class="b-cmp" x="348" y="1766" width="300" height="262" rx="10"/>
+<text class="t-code" x="364" y="1794">keep_the_owners_todo_list,</text>
+<text class="t-code" x="364" y="1812">queue_the_owners_asks</text>
+<text class="t-type" x="364" y="1830">[what waits on the owner]</text>
+<text class="t-desc" x="364" y="1854">The owner's to-do list (martha#316):</text>
+<text class="t-desc" x="364" y="1870">the acts only the owner can do, each</text>
+<text class="t-desc" x="364" y="1886">command shown in full under what it</text>
+<text class="t-desc" x="364" y="1902">does. A member the table lets assign</text>
+<text class="t-desc" x="364" y="1918">work adds one; its own check or the</text>
+<text class="t-desc" x="364" y="1934">member takes it off. The pane and</text>
+<text class="t-desc" x="364" y="1950">martha todo show it. queue_the_owners_</text>
+<text class="t-desc" x="364" y="1966">asks is the ask queue (martha#313):</text>
+<text class="t-desc" x="364" y="1982">a routine ask waits instead of a menu,</text>
+<text class="t-desc" x="364" y="1998">and the session the table names hands</text>
+<text class="t-desc" x="364" y="2014">the whole batch over as one menu</text>
 <rect class="b-cmp" x="32" y="2092" width="300" height="230" rx="10"/>
 <text class="t-code" x="48" y="2120">write_my_handover,</text>
 <text class="t-code" x="48" y="2138">refresh_a_member</text>

@@ -352,6 +352,10 @@ const answerWorktreeOpen = ($: CrewEngine, e: Record<string, unknown>): Promise<
 const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_finish')
 const answerOwnerTodoAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_add')
 const answerOwnerTodoDone = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_done')
+const answerQueueAsk = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'queue_ask')
+const answerListAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'list_asks')
+const answerTakeAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'take_asks')
+const answerSettleAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'settle_asks')
 
 /** The pane as the host draws it: the crew's rows, then the owner's list (martha#316). */
 async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
@@ -402,6 +406,10 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__worktree_finish' }, answerWorktreeFinish)
   on('tool.call', { tool: 'mcp__martha__owner_todo_add' }, answerOwnerTodoAdd)
   on('tool.call', { tool: 'mcp__martha__owner_todo_done' }, answerOwnerTodoDone)
+  on('tool.call', { tool: 'mcp__martha__queue_ask' }, answerQueueAsk)
+  on('tool.call', { tool: 'mcp__martha__list_asks' }, answerListAsks)
+  on('tool.call', { tool: 'mcp__martha__take_asks' }, answerTakeAsks)
+  on('tool.call', { tool: 'mcp__martha__settle_asks' }, answerSettleAsks)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)

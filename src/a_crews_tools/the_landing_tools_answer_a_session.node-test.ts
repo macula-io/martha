@@ -110,7 +110,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     paths: { root, crew: join(root, DECLARATION_DIRECTORY), declaration: join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
     owner: 'Ann',
     members: [{ name: MEMBER, role: 'builder', model: null }],
-    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], offer_owner_asks: [OWNER] } },
     house_rules: {
       owner_items: false,
       workspace_layout: true,

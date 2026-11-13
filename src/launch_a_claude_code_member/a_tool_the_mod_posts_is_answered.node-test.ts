@@ -32,6 +32,8 @@ import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { OWNER } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'
@@ -46,7 +48,7 @@ function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout:
     version: 1,
     owner: 'the-owner',
     members: [{ name: MEMBER, role: 'builder' }],
-    mode: { name: 'solo', roles: ['builder'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], offer_owner_asks: [OWNER] } },
     channel_read_seconds: 30,
   }))
   const rows = join(home, 'crews', 'a-key', 'rows')
