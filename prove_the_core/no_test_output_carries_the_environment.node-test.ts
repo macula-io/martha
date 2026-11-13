@@ -11,9 +11,13 @@ import { manifestOf, PACKAGES } from './declared_in_package_json.ts'
 import { TEST_SCRIPT, testRunFlagsOf } from './every_test_run_ends.ts'
 import {
   environmentLeakReportOf,
+  FAILING_TESTS_HEADING,
   PLANTED_VARIABLE,
   plantedValue,
   plantedValueCounter,
+  RUN_SUMMARY_LABELS,
+  RUN_SUMMARY_MARK,
+  runEndCounter,
   RUNNER,
 } from './no_test_output_carries_the_environment.ts'
 
@@ -63,6 +67,13 @@ async function throughTheRunner(t: TestContext, command: readonly string[]): Pro
   return { code, output }
 }
 
+/** The summary node --test ends a complete run with, each count 1, built from the runner's own labels. */
+const aRunSummary = RUN_SUMMARY_LABELS.map((label) => `${RUN_SUMMARY_MARK} ${label} 1\n`).join('')
+/** A node -e program that writes `text` on stdout and exits with `code`. */
+const writesThenExits = (text: string, code: number): string[] => [process.execPath, '-e', `process.stdout.write(${JSON.stringify(text)}); process.exit(${code})`]
+/** What the runner says when the command's output did not end with the summary. */
+const CUT_RUN_REPORT = /a run ends with its summary \(martha#325\): the command's output did not end with node --test's summary/
+
 /** node --test with the test script's own flags, on the planted `file`. */
 const nodeTestOn = (file: string): string[] => [process.execPath, '--test', ...testRunFlagsOf(manifestOf(repository)), plantedPath(file)]
 
@@ -90,9 +101,70 @@ test('a test file that captures what its child prints passes the run', async (t)
   assert.doesNotMatch(run.output, /martha#92/)
 })
 
-test("the runner ends with the command's own exit code when nothing was planted in the output", async (t) => {
-  const run = await throughTheRunner(t, [process.execPath, '-e', 'process.stdout.write("ok"); process.exit(3)'])
-  assert.deepEqual(run, { code: 3, output: 'ok' })
+test("the runner ends with the command's own exit code when nothing was planted and the output ends with the summary", async (t) => {
+  const run = await throughTheRunner(t, writesThenExits(`ok\n${aRunSummary}`, 3))
+  assert.deepEqual(run, { code: 3, output: `ok\n${aRunSummary}` })
+})
+
+test('a command that exits 0 without printing the summary fails the run, naming the check', async (t) => {
+  const run = await throughTheRunner(t, writesThenExits('✔ the first of many tests\n', 0))
+  assert.equal(run.code, 1, run.output)
+  assert.match(run.output, CUT_RUN_REPORT)
+  assert.match(run.output, /exited 0/)
+})
+
+test('a summary line a test printed mid-run does not stand for the summary', async (t) => {
+  const run = await throughTheRunner(t, writesThenExits(`${aRunSummary}✔ a test after the printed summary\n`, 0))
+  assert.equal(run.code, 1, run.output)
+  assert.match(run.output, CUT_RUN_REPORT)
+})
+
+test('a run that failed keeps its own exit code and still names the missing summary', async (t) => {
+  const run = await throughTheRunner(t, writesThenExits('✖ a test\n', 4))
+  assert.equal(run.code, 4, run.output)
+  assert.match(run.output, CUT_RUN_REPORT)
+  assert.match(run.output, /exited 4/)
+})
+
+test('a run cut by a signal fails, naming the check', async (t) => {
+  const run = await throughTheRunner(t, [process.execPath, '-e', 'process.stdout.write("✔ one\\n"); process.kill(process.pid, "SIGTERM")'])
+  assert.equal(run.code, 1, run.output)
+  assert.match(run.output, CUT_RUN_REPORT)
+  assert.match(run.output, /ended by SIGTERM/)
+})
+
+test("the failing tests node --test lists after its summary leave the summary the run's end", async (t) => {
+  const failures = `\n${FAILING_TESTS_HEADING}\n\ntest at a.ts:1:1\n✖ a\n  Error: boom\n`
+  const run = await throughTheRunner(t, writesThenExits(`✖ a\n${aRunSummary}${failures}`, 1))
+  assert.equal(run.code, 1, run.output)
+  assert.doesNotMatch(run.output, /martha#325/)
+})
+
+test('a real node --test run on a failing file keeps its own report and is not called cut', async (t) => {
+  const run = await throughTheRunner(t, nodeTestOn('a_test_file_that_fails.ts'))
+  assert.equal(run.code, 1, run.output)
+  assert.match(run.output, new RegExp(`${RUN_SUMMARY_MARK} fail 1`))
+  assert.doesNotMatch(run.output, /martha#325/)
+})
+
+test('the summary is found at the end of stdout wherever the stream splits it, colours and blank lines included', () => {
+  const ends = (chunks: readonly string[]): boolean => {
+    const counter = runEndCounter()
+    for (const chunk of chunks) counter.scan(chunk)
+    return counter.endsWithTheSummary()
+  }
+  const text = `✔ a\n${aRunSummary}\n\n`
+  assert.equal(ends([text]), true)
+  assert.equal(ends([...text]), true, 'one character at a time')
+  assert.equal(ends([`✔ a\n${aRunSummary.trimEnd()}`]), true, 'no newline after the last line')
+  assert.equal(ends([aRunSummary.replaceAll(RUN_SUMMARY_MARK, `\u001b[34m${RUN_SUMMARY_MARK}`).replaceAll('\n', '\u001b[39m\n')]), true, 'coloured')
+  assert.equal(ends([aRunSummary.replaceAll('\n', '\r\n')]), true, 'CRLF')
+  assert.equal(ends(['']), false, 'nothing printed')
+  assert.equal(ends([aRunSummary.split('\n').slice(1).join('\n')]), false, 'the first line missing')
+  assert.equal(ends([aRunSummary.split('\n').slice(0, -2).join('\n')]), false, 'the last line missing')
+  assert.equal(ends([`${aRunSummary}more\n`]), false, 'output after it')
+  assert.equal(ends([aRunSummary.replace(' 1', ' many')]), false, 'a count that is not a number')
+  assert.equal(ends([`${aRunSummary}\n${FAILING_TESTS_HEADING}\n✖ a\n`]), true, 'the failing tests after it')
 })
 
 test('a character the command writes in two pieces reaches the output whole', async (t) => {
@@ -102,8 +174,8 @@ test('a character the command writes in two pieces reaches the output whole', as
     'process.stdout.write(tick.subarray(0, 1))',
     'setTimeout(() => process.stdout.write(tick.subarray(1)), 50)',
   ].join('; ')
-  const run = await throughTheRunner(t, [process.execPath, '-e', writer])
-  assert.deepEqual(run, { code: 0, output: '✔' })
+  const run = await throughTheRunner(t, [process.execPath, '-e', `${writer}; setTimeout(() => process.stdout.write(${JSON.stringify(`\n${aRunSummary}`)}), 100)`])
+  assert.deepEqual(run, { code: 0, output: `✔\n${aRunSummary}` })
 })
 
 test('the planted value is counted wherever the stream splits it, and a fresh one is planted each run', () => {

@@ -13,10 +13,20 @@
 //
 // The report names the stream and how often, never the line: the line is the
 // environment.
+//
+// A run ends with its summary (martha#325). This exists so a run that was cut
+// short never reads as a pass: one cut by a tool's time limit has been seen to
+// end 0 with half the tests printed and no summary. The runner keeps the last
+// lines of stdout and fails the run, by name, unless they are node --test's own
+// summary (RUN_SUMMARY_LABELS, in order), followed by nothing but blank lines or
+// the failing tests node lists after it. The summary must be the END, not merely
+// present: a test's own console.log reaches the run's stdout as it is, so a
+// summary-shaped line can appear anywhere before it.
 
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import process from 'node:process'
+import { stripVTControlCharacters } from 'node:util'
 
 /** The module npm test runs node --test through, as the test script names it. */
 export const RUNNER = './prove_the_core/no_test_output_carries_the_environment.ts'
@@ -61,10 +71,66 @@ export function environmentLeakReportOf(counts: Readonly<Record<StreamName, numb
   )
 }
 
+/** The mark node --test's reporter starts each summary line with (Node 26.10). */
+export const RUN_SUMMARY_MARK = 'ℹ'
+/** The lines node --test ends a complete run with, in order, each `<mark> <label> <number>`. */
+export const RUN_SUMMARY_LABELS = ['tests', 'suites', 'pass', 'fail', 'cancelled', 'skipped', 'todo', 'duration_ms'] as const
+/** The line node --test starts the list of failing tests with, after the summary. */
+export const FAILING_TESTS_HEADING = '✖ failing tests:'
+
+const isSummaryLine = (line: string, label: string): boolean => {
+  const [mark, named, count, ...rest] = line.split(' ')
+  return mark === RUN_SUMMARY_MARK && named === label && rest.length === 0 && count !== undefined && /^\d+(\.\d+)?$/.test(count)
+}
+
+/** Whether `lines` are the summary, every label in order and nothing else. */
+const isTheSummary = (lines: readonly string[]): boolean =>
+  lines.length === RUN_SUMMARY_LABELS.length && RUN_SUMMARY_LABELS.every((label, i) => isSummaryLine(lines[i] ?? '', label))
+
+/**
+ * Follows a stream that arrives in chunks and says whether it ended with the
+ * summary: the last RUN_SUMMARY_LABELS.length lines that are not blank, and not
+ * part of the failing tests listed after the summary, are the summary in order.
+ */
+export function runEndCounter(): { readonly scan: (chunk: string) => void; readonly endsWithTheSummary: () => boolean } {
+  let partial = ''
+  let lastLines: string[] = []
+  let listingFailures = false
+  const take = (raw: string) => {
+    const line = stripVTControlCharacters(raw).trim()
+    if (line === '' || listingFailures) return
+    if (isTheSummary(lastLines) && line === FAILING_TESTS_HEADING) listingFailures = true
+    else lastLines = [...lastLines, line].slice(-RUN_SUMMARY_LABELS.length)
+  }
+  return {
+    scan: (chunk) => {
+      const lines = (partial + chunk).split('\n')
+      partial = lines.pop() ?? ''
+      for (const line of lines) take(line)
+    },
+    endsWithTheSummary: () => {
+      take(partial)
+      partial = ''
+      return listingFailures || isTheSummary(lastLines)
+    },
+  }
+}
+
+/** What the run says when the command's output did not end with the summary, and how the command ended. */
+export function cutRunReportOf(ended: { readonly code: number | null; readonly signal: NodeJS.Signals | null }): string {
+  const how = ended.signal === null ? `exited ${ended.code}` : `ended by ${ended.signal}`
+  return (
+    "a run ends with its summary (martha#325): the command's output did not end with node --test's summary " +
+    `(${RUN_SUMMARY_LABELS.map((label) => `${RUN_SUMMARY_MARK} ${label}`).join(', ')}), so the run was cut short or never ran, ` +
+    `and the command ${how}: its exit code says nothing about the tests that did not run. Run the suite again in the foreground and read its summary.`
+  )
+}
+
 /**
  * Runs `command` with the planted value in its environment, its output passed
  * through as it comes, and resolves to the exit code the run should end with:
- * the command's own, or 1 when the planted value appeared in its output.
+ * the command's own, or 1 when the planted value appeared in its output, or
+ * when its stdout did not end with the summary and its own code was 0.
  */
 export async function runWithAPlantedSecret(command: readonly string[], env: NodeJS.ProcessEnv): Promise<number> {
   const [program, ...args] = command
@@ -72,6 +138,7 @@ export async function runWithAPlantedSecret(command: readonly string[], env: Nod
   const value = plantedValue()
   const child = spawn(program, args, { env: { ...env, [PLANTED_VARIABLE]: value }, stdio: ['inherit', 'pipe', 'pipe'] })
   const counters = { stdout: plantedValueCounter(value), stderr: plantedValueCounter(value) }
+  const runEnd = runEndCounter()
   // Decoded per stream, not per chunk: a character split across two chunks
   // reaches the output whole, and the reporter's marks stay readable.
   child.stdout.setEncoding('utf8')
@@ -81,13 +148,19 @@ export async function runWithAPlantedSecret(command: readonly string[], env: Nod
     process[stream].write(text)
   }
   child.stdout.on('data', passThrough('stdout'))
+  child.stdout.on('data', runEnd.scan)
   child.stderr.on('data', passThrough('stderr'))
   const forward = (signal: NodeJS.Signals) => () => void child.kill(signal)
   process.on('SIGINT', forward('SIGINT'))
   process.on('SIGTERM', forward('SIGTERM'))
-  const ended = await new Promise<number>((resolve) => child.on('close', (code) => resolve(code ?? 1)))
+  const ended = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+    child.on('close', (code, signal) => resolve({ code, signal })),
+  )
+  const complete = runEnd.endsWithTheSummary()
+  if (!complete) process.stderr.write(`\n${cutRunReportOf(ended)}\n`)
   const counts = { stdout: counters.stdout.count(), stderr: counters.stderr.count() }
-  if (counts.stdout + counts.stderr === 0) return ended
+  const own = ended.code ?? 1
+  if (counts.stdout + counts.stderr === 0) return complete || own !== 0 ? own : 1
   process.stderr.write(`\n${environmentLeakReportOf(counts)}\n`)
   return 1
 }
