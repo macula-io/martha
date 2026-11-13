@@ -25,7 +25,7 @@ import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.t
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import { PARK_A_MEMBER, REFRESH_THIS_SESSION, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
+import { PARK_A_MEMBER, REFRESH_THIS_SESSION, STANDING_ITEMS_SOURCE, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -70,6 +70,9 @@ const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started 
 /** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */
 const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narrows on by literal; the crew\'s park place is named the same word and is not this'
 
+/** Why the host contract spells the standing items' source by literal (martha#317): a union member is a type. */
+const A_MEMBER_OF_THE_SOURCE_UNION = 'a member of the TurnSource union, which TypeScript holds by literal; the constant the crew\'s tools name it by is that same member'
+
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
@@ -103,6 +106,7 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: STANDING_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: STANDING_CLOSE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: STANDING, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: STANDING_ITEMS_SOURCE, file: 'host_contract/host_contract.ts', reason: A_MEMBER_OF_THE_SOURCE_UNION },
   // The socket the mod talks to its launcher over (martha#254): the name is read by the host from this very file, and
   // the host refuses a hooks module that gives `$.env.get` anything but a literal, an imported constant included
   // (#104) — so the copy of the name has to sit here, and this line is the one that says it is the same name.

@@ -104,17 +104,17 @@ async function aCrewThatHandsAStandingItem(place: { readonly home: string; reado
   const member = SOLO_MEMBERS[0].name
   mkdirSync(join(place.checkout, DECLARATION_DIRECTORY))
   writeFileSync(join(place.checkout, DECLARATION_DIRECTORY, DECLARATION_FILE), JSON.stringify(soloDeclaration('an owner')))
-  mkdirSync(join(place.home, 'dashboard'), { mode: 0o700 })
+  mkdirSync(join(place.home, 'beats'), { mode: 0o700 })
   const ledger = { clock: { now: () => 0 }, stores: { rows: rowStreamsDirectory(place.rows) } }
   const recorded = await recordAStandingItem(ledger, { kind: 'held', id: 'a-package', item: 'a pull request', reason: 'a demo', until: 'the demo is over' }, member)
   assert.ok('told' in recorded, 'refused' in recorded ? recorded.refused : '')
   return crewToolsOver({
     member,
     ledger,
-    beats: dashboardRowsIn(join(place.home, 'dashboard')),
+    beats: dashboardRowsIn(join(place.home, 'beats')),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.home, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(place.home, 'crew-store')) },
   })
 }
 

@@ -32,15 +32,15 @@ import { removeTheTree } from './relay_copy.ts'
 
 const NOW = Date.UTC(2026, 10, 13, 9, 0, 0)
 
-/** A team whose table lets the owner and the Supervisor assign work, and a builder who may not. */
+/** A team whose table lets the owner and the lead assign work, and a builder who may not. */
 const A_TEAM = {
   version: DECLARATION_VERSION,
   owner: 'an owner',
   members: [
-    { name: 'Supervisor', role: 'supervisor' },
+    { name: 'Supervisor', role: 'lead' },
     { name: 'Pallas', role: 'builder' },
   ],
-  mode: { name: 'team', roles: ['supervisor', 'builder'], may: Object.fromEntries(ACTS.map((act) => [act, [OWNER, 'supervisor']])) },
+  mode: { name: 'team', roles: ['lead', 'builder'], may: Object.fromEntries(ACTS.map((act) => [act, [OWNER, 'lead']])) },
   channel_read_seconds: 30,
 }
 
@@ -52,9 +52,9 @@ function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout:
   mkdirSync(join(checkout, DECLARATION_DIRECTORY), { recursive: true })
   writeFileSync(join(checkout, DECLARATION_DIRECTORY, DECLARATION_FILE), JSON.stringify(A_TEAM))
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
-  const rows = join(home, 'rows')
+  const rows = join(home, 'streams')
   mkdirSync(rows, { mode: 0o700 })
-  mkdirSync(join(home, 'dashboard'), { mode: 0o700 })
+  mkdirSync(join(home, 'beats'), { mode: 0o700 })
   return { home, checkout, rows }
 }
 
@@ -63,10 +63,10 @@ function aLaunchOf(place: ReturnType<typeof aCrewPlace>, member: string): CrewTo
   return crewToolsOver({
     member,
     ledger: { clock: { now: () => NOW }, stores: { rows: rowStreamsDirectory(place.rows) } },
-    beats: dashboardRowsIn(join(place.home, 'dashboard')),
+    beats: dashboardRowsIn(join(place.home, 'beats')),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.home, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(place.home, 'crew-store')) },
   })
 }
 
@@ -82,7 +82,7 @@ async function aSessionStarts(place: ReturnType<typeof aCrewPlace>, crew: CrewTo
     binder: bindNothing,
     handed_at_start: [],
     hookSettings: hookSettingsWatch({
-      user: join(place.home, '.claude', 'settings.json'),
+      user: join(place.home, 'no-user-settings'),
       home: place.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') },
@@ -95,7 +95,7 @@ async function aSessionStarts(place: ReturnType<typeof aCrewPlace>, crew: CrewTo
       home: place.home,
       launch_dir: place.checkout,
       settings_files: [],
-      user_scope: { markdown_kinds: RECORDED_HOST.markdown_kinds, output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER, reported_output_styles_dir: join(place.home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER) },
+      user_scope: { markdown_kinds: RECORDED_HOST.markdown_kinds, output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER, reported_output_styles_dir: join(place.home, 'config', CLAUDE_CODE_OUTPUT_STYLES_FOLDER) },
     }),
     crew,
     stopMember: () => {},

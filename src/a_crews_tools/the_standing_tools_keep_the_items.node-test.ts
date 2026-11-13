@@ -35,15 +35,15 @@ after(() => removeTheTree(homeOfAll))
 
 const NOW = Date.UTC(2026, 10, 20, 9, 0, 0)
 
-/** A team whose table lets only the owner and the Supervisor assign work. */
+/** A team whose table lets only the owner and the lead assign work. */
 const A_TEAM = {
   version: DECLARATION_VERSION,
   owner: 'an owner',
   members: [
-    { name: 'Supervisor', role: 'supervisor' },
+    { name: 'Supervisor', role: 'lead' },
     { name: 'Pallas', role: 'builder' },
   ],
-  mode: { name: 'team', roles: ['supervisor', 'builder'], may: Object.fromEntries(ACTS.map((act) => [act, [OWNER, 'supervisor']])) },
+  mode: { name: 'team', roles: ['lead', 'builder'], may: Object.fromEntries(ACTS.map((act) => [act, [OWNER, 'lead']])) },
   channel_read_seconds: 30,
 }
 
@@ -101,8 +101,8 @@ test('the three tools are registered under their own names, each with a schema',
 test('a member the table does not let assign work may not record or close, and the stream is unchanged', async () => {
   const place = aPlace()
   const added = await toolsOf(place, 'Pallas').answer(STANDING_ADD, A_HOLD, 'a-session')
-  assert.ok('refused' in added, 'a builder recorded a hold though its table lets only the owner and the Supervisor assign work')
-  assert.match(added.refused, /may not record or close standing items: this crew's table lets owner, supervisor assign work/)
+  assert.ok('refused' in added, 'a builder recorded a hold though its table lets only the owner and the lead assign work')
+  assert.match(added.refused, /may not record or close standing items: this crew's table lets owner, lead assign work/)
   answerOf(await toolsOf(place, 'Supervisor').answer(STANDING_ADD, A_HOLD, 'a-session'))
   const closed = await toolsOf(place, 'Pallas').answer(STANDING_CLOSE, { id: A_HOLD.id, evidence: 'the demo is over' }, 'a-session')
   assert.ok('refused' in closed, 'a builder closed the Supervisor\'s hold')
