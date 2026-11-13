@@ -110,23 +110,6 @@ test('an ask with no text is refused, so nothing empty reaches a menu', async ()
   assert.deepEqual(await waitingIn(host), [])
 })
 
-test('an ask that removes a branch keeps every tip the yes covers, the clone\'s and origin\'s, so one yes removes both (mutant: the tips not kept on the row)', async () => {
-  const host = aHost()
-  const removes = { branch: 'vesta/313-old', local_tip: '72081ee', origin_tip: 'e8c127a' }
-  const told = TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch vesta/313-old?' }, BUILDER, removes))
-  assert.equal(
-    told,
-    'Queued for the owner; 1 ask waiting. It removes vesta/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a. Do not open a menu for it; carry on.',
-    'the answer names both tips, so the member reads what the owner will be told',
-  )
-  const [row] = await host.host.stores.rows.read(OWNER_ASKS_STREAM)
-  assert.deepEqual(row?.row['removes'], removes, 'both tips are on the row: the yes covers what the ask recorded, and nothing else')
-
-  // A copy that is not there is said to be not there, never left out: an ask that named one copy cost the owner a second ask.
-  const one = TOLD(await queueAnAsk(host.host, { ask: 'Delete the pushed branch?' }, BUILDER, { branch: 'vesta/313-pushed', local_tip: null, origin_tip: 'e8c127a' }))
-  assert.match(one, /It removes vesta\/313-pushed, and the ask records both tips the yes covers: no copy of its own, origin at e8c127a\./)
-})
-
 test('list_asks shows what waits and takes nothing', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))

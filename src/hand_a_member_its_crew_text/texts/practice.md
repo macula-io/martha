@@ -8,4 +8,4 @@ A systemic bug becomes an issue. When a problem comes from how we work rather th
 
 Append to a same-day brief. A same-day brief is appended to, never overwritten, so the morning's work is still there after a refresh.
 
-An ask that removes a branch names every tip the deletion removes. Queue it with its repo and branch: the ask records the clone's tip and origin's, so one yes covers both and a branch that moved between the two does not cost the owner a second ask.
+An ask that removes a branch names every tip the deletion removes: the clone's tip and origin's, when the two differ, so one yes covers both and a branch that moved between them does not cost the owner a second ask.

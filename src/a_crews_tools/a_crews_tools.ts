@@ -9,8 +9,6 @@
 // BEAT_INTERVAL_MS so a pane can tell a working member from a session that has died. The heartbeat runs here, in the
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
-import { join } from 'node:path'
-
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import {
   LIST_ASKS,
@@ -26,7 +24,6 @@ import {
   queueAnAsk,
   settleTheAsks,
   takeTheAsks,
-  type ABranchItRemoves,
   type TheOwnersMenus,
 } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -50,10 +47,8 @@ import {
   openAWorktree,
   type WorktreeAnswer,
   type WorktreesRequest,
-  REPO,
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
@@ -616,11 +611,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: QUEUE_ASK_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: {
-        ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' },
-        repo: { type: 'string', description: 'When the ask would delete a branch: its repository, as owner/name' },
-        branch: { type: 'string', description: 'When the ask would delete a branch: the branch, so both tips the yes covers are recorded' },
-      },
+      properties: { ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' } },
       required: ['ask'],
     },
   },
@@ -951,7 +942,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD]: (args) => keepTheOwnersList(places, () => addAnAct(places.ledger, args, places.member)),
     [OWNER_TODO_DONE]: (args) => keepTheOwnersList(places, () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member })),
-    [QUEUE_ASK]: (args) => queueTheAsk(places, args),
+    [QUEUE_ASK]: async (args) => asAnAnswer(await queueAnAsk(places.ledger, args, places.member)),
     [LIST_ASKS]: async () => asAnAnswer(await listTheAsks(places.ledger)),
     [TAKE_ASKS]: () => theTakeOfTheAsks(places, state),
     [SETTLE_ASKS]: (args) => theSettlingOfTheAsks(places, state, args),
@@ -959,56 +950,6 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING_CLOSE]: (args) => keepTheStandingItems(places, () => closeAStandingItem(places.ledger, args, places.member)),
     [STANDING]: async () => ({ answer: theStandingList(await theItemsThatStand(places), todayOf(places.ledger.clock.now())).join('\n') }),
   }
-}
-
-/**
- * `queue_ask`, with the branch the ask would remove when it names one (martha#313). The tips are read here, in the
- * launcher, and kept on the row by the queue: an ask that names one copy of a branch and not the other costs the owner
- * a second ask, because the yes covers only what the ask recorded.
- */
-async function queueTheAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
-  const removes = await theBranchItRemoves(places, args)
-  if (removes !== undefined && 'refused' in removes) return removes
-  return asAnAnswer(await queueAnAsk(places.ledger, args, places.member, removes))
-}
-
-/**
- * The branch an ask would remove and the tip each copy of it stands at, or nothing when the ask names no branch; or why
- * the tips cannot be read. A branch named without its repository, or a place without the processes or the clones place
- * to read them in, is refused by name rather than recorded half-read.
- */
-async function theBranchItRemoves(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<ABranchItRemoves | { readonly refused: string } | undefined> {
-  const named = theRemovalACallNames(args)
-  if (named === undefined || 'refused' in named) return named
-  const clones = places.settings?.house_rules.clones
-  if (places.processes === undefined || clones === undefined || clones === null) {
-    return { refused: 'this launch holds no processes or names no clones place, so the tips of the branch this ask removes cannot be read' }
-  }
-  const clone = join(clones, named.repo)
-  const local_tip = await tipIn(places.processes, clone, `refs/heads/${named.branch}`)
-  const origin_tip = await tipIn(places.processes, clone, `refs/remotes/origin/${named.branch}`)
-  if (local_tip === null && origin_tip === null) {
-    return { refused: `neither ${clone} nor origin holds ${named.branch}, so there is no deletion for the owner to answer` }
-  }
-  return { branch: named.branch, local_tip, origin_tip }
-}
-
-/** The repository and branch a call names as the one its ask would remove, or nothing when it names neither, or why half will not do. */
-function theRemovalACallNames(args: Readonly<Record<string, unknown>>): { readonly repo: string; readonly branch: string } | { readonly refused: string } | undefined {
-  const repo = args['repo']
-  const branch = args['branch']
-  if (repo === undefined && branch === undefined) return undefined
-  if (typeof repo !== 'string' || typeof branch !== 'string' || !REPO.test(repo) || branch.trim() === '') {
-    return { refused: 'an ask that removes a branch names both repo (as owner/name) and branch together: they say which copy the yes removes' }
-  }
-  return { repo, branch }
-}
-
-/** The commit `ref` names in `clone`, or null when it names none: a ref git will not resolve is a copy that is not there. */
-async function tipIn(processes: HostContract['processes'], clone: string, ref: string): Promise<string | null> {
-  const outcome = await processes.run({ command: 'git', args: marthasOwnGitArgs(['rev-parse', '--verify', '--quiet', ref]), cwd: clone })
-  const tip = outcome.stdout.trim()
-  return outcome.exit_code === 0 && tip !== '' ? tip : null
 }
 
 /**

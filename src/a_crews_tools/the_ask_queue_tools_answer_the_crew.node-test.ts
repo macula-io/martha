@@ -11,10 +11,8 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import { hostForTests } from '../host_contract/host_for_tests.ts'
-import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, NUDGES, OFFER_OWNER_ASKS, OWNER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS, OWNER } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -96,51 +94,6 @@ test('the session the table does not name is refused, and the one it names takes
   lead.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   assert.equal(TOLD(await lead.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), `Batch ${String(batch)} settled: 1 the owner ticked, 0 back in the queue.`)
   assert.equal(TOLD(await lead.answer(LIST_ASKS, {}, 'session-lead')), 'No asks are waiting for the owner.')
-})
-
-test('an ask that removes a branch is queued with both tips read here, and one that names half of it is refused (martha#313)', async () => {
-  const theClones = join(home, 'the-clones')
-  mkdirSync(theClones)
-  // The clone is one commit ahead of origin, which is the case that cost the owner a second ask: git answers each ref.
-  const tips: Readonly<Record<string, string>> = {
-    'refs/heads/vesta/313-old': '72081ee',
-    'refs/remotes/origin/vesta/313-old': 'e8c127a',
-  }
-  const run = async (request: ProcessRequest): Promise<ProcessOutcome> => {
-    const tip = tips[request.args[request.args.length - 1] ?? '']
-    return tip === undefined ? { exit_code: 1, stdout: '', stderr: 'fatal: not a valid object name' } : { exit_code: 0, stdout: `${tip}\n`, stderr: '' }
-  }
-  const host = hostForTests({ run }).host
-  const settings: CrewSettings = {
-    paths: { root, crew: join(root, DECLARATION_DIRECTORY), declaration: join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
-    owner: 'Ann',
-    members: [{ name: LEAD, role: SUPERVISOR, model: null }, { name: BUILDER, role: 'builder', model: null }],
-    mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: [OWNER], resume_parked_work: [SUPERVISOR], [OFFER_OWNER_ASKS]: [SUPERVISOR] } },
-    house_rules: { owner_items: false, workspace_layout: true, member_work: false, practice: false, strict_gate: false, dashboard: false, owner_bell: false, refresh_between_tasks: false, [NUDGES]: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, [CLONES]: theClones, [WORKTREES]: join(home, 'the-worktrees') },
-    channel_read_seconds: 30,
-  }
-  const place = crewToolsOver({
-    member: BUILDER,
-    ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, 'rows-for-branches')) } },
-    beats: dashboardRowsIn(join(home, 'row')),
-    root,
-    documents,
-    stores: { crew: crewFilesDirectory(join(home, 'the-crew-store')) },
-    processes: host.processes,
-    settings,
-  })
-  mkdirSync(join(home, 'rows-for-branches'), { mode: STREAM_DIRECTORY_MODE })
-  clock.at = 6_000
-  const told = TOLD(await place.answer(QUEUE_ASK, { ask: 'Delete the merged branch vesta/313-old?', repo: 'macula-io/martha', branch: 'vesta/313-old' }, 'session-builder'))
-  assert.match(told, /It removes vesta\/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a\./)
-  const kept = await place.answer(LIST_ASKS, {}, 'session-builder')
-  assert.match(TOLD(kept), /\(from Builder1\): Delete the merged branch vesta\/313-old\?/)
-
-  assert.match(
-    REFUSED(await place.answer(QUEUE_ASK, { ask: 'Delete a branch?', branch: 'vesta/313-old' }, 'session-builder')),
-    /an ask that removes a branch names both repo/,
-    'half a deletion is refused, never recorded half-read',
-  )
 })
 
 test('a place handed no menu record keeps its own over the crew clock, so a menu its host closed still settles', async () => {
