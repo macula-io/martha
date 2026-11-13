@@ -14,11 +14,11 @@ const NOW = 1_762_900_000_000
 
 test('a report lands step and of clamped into the bound it names, and a task cut to its limit (test 4)', () => {
   const too_far = takeProgress({ task: 'Build the crew store', step: 9, of: 4 }, CREW, NO_WAIT_BEFORE, NOW)
-  assert.deepEqual(too_far.taken.progress, { step: 4, of: 4 }, 'a step past the total is kept at the total')
+  assert.deepEqual(too_far.taken.progress, { step: 4, of: 4, at: NOW }, 'a step past the total is kept at the total, stamped with when it was reported (martha#320)')
   assert.match(too_far.told, /between 0 and 4/, 'the member is told what happened to its step')
 
   const below = takeProgress({ task: 'Build the crew store', step: -3, of: 0 }, CREW, NO_WAIT_BEFORE, NOW)
-  assert.deepEqual(below.taken.progress, { step: 0, of: 1 }, 'a total below one is one, and a step below zero is zero')
+  assert.deepEqual(below.taken.progress, { step: 0, of: 1, at: NOW }, 'a total below one is one, and a step below zero is zero')
 
   const long = 'a task that goes on and on and on, past the number of characters a task is kept to, and then further still'
   const cut = takeProgress({ task: long, step: 1, of: 2 }, CREW, NO_WAIT_BEFORE, NOW)

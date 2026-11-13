@@ -73,8 +73,8 @@ export const MAX_COMMAND = 500
 /** The longest one-line field (a title, a goal, who waits, what a command does), in characters. */
 export const MAX_LINE = 200
 
-/** A row's id: a short slug, never a path and never a package ref (its "/" and "#" are refused). */
-const SAFE_ID = /^[A-Za-z0-9._-]{1,80}$/
+/** An id a row is named by, here and in the Supervisor's standing items (martha#317): a short slug, never a path and never a package ref (its "/" and "#" are refused). */
+export const SAFE_ID = /^[A-Za-z0-9._-]{1,80}$/
 
 /** Why an id is refused, said the same by the tool that puts an act on the list and the one that takes it off. */
 export const AN_ID_IS_A_SLUG = 'id is a slug such as martha-317, never a package ref (its "/" and "#" are refused): letters, digits, ".", "_" or "-", at most 80 of them'

@@ -11,6 +11,7 @@ import { test } from 'node:test'
 
 import { orderIn, PANE_CHROME_ROWS, paneIn, switchTheModelOnTheHost, theOwnersListIn } from './crew_answers.ts'
 import { theActAsked, theListForThePane } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { STANDING_HEADING } from '../../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
 
@@ -108,7 +109,14 @@ test('#315: a model command the host resolved is reported once, with the model i
 test('the owner\'s list the launcher answers is the list the pane draws, its copy only on the revealed row (martha#316)', () => {
   const row = theActAsked({ id: 'an-act', title: 'Do a thing', commands: [{ command: 'make release', does: 'cuts the release' }] }, 'Pallas', 0)
   assert.ok(!('refused' in row), 'the test could not build its row')
-  const launchers = theListForThePane([row], '', 0)
+  const launchers = { ...theListForThePane([row], '', 0), standing: [] }
   assert.deepEqual(theOwnersListIn(JSON.stringify(launchers)), launchers, 'the pane reads the launcher\'s own list answer differently')
   assert.equal(theOwnersListIn('{"heading":"x"}'), null, 'the pane drew an answer that is not a list')
+})
+
+test('the standing items under the list are the lines the launcher answers, and an answer with none to read is not drawn (martha#317)', () => {
+  const launchers = { ...theListForThePane([], '', 0), standing: [STANDING_HEADING, '- HELD martha-353: PR 353. Why: a demo. Until: the demo is over.'] }
+  assert.deepEqual(theOwnersListIn(JSON.stringify(launchers))?.standing, launchers.standing)
+  assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, standing: undefined })), null, 'an answer with no standing lines was drawn')
+  assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, standing: [1] })), null, 'a standing line that is not text was drawn')
 })
