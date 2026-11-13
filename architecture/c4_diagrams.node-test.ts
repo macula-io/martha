@@ -237,6 +237,56 @@ test('every directory in src/ is drawn in a component box or declared left out',
   assert.deepEqual(missing, [], `in no box and not declared left out: ${missing.join(', ')}`)
 })
 
+// The Components table on the page has a row per box, and a box drawn with no row is the page short of
+// its own picture while every other check stays green (martha#299). A row answers for a box when its
+// Component cell names a directory the box stands for.
+
+/** The directories each row of the page's Components table names in its Component cell. */
+const componentTableRows = (page: string): string[][] => {
+  const section = page.slice(page.indexOf('## Components'), page.indexOf('### Left out'))
+  return section.split('\n')
+    .filter((line) => line.startsWith('| `'))
+    .map((line) => [...(line.split('|')[1] ?? '').matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? ''))
+}
+
+/** The boxes the Component diagram draws that no row of the table names, by the box's title. */
+const boxesWithNoRow = (page: string): string[] => {
+  const named = new Set(componentTableRows(page).flat())
+  return components().coverage
+    .filter((box) => !box.names.some((name) => named.has(name)))
+    .map((box) => box.name)
+}
+
+test('every component box has a row in the Components table', () => {
+  const missing = boxesWithNoRow(README)
+  assert.deepEqual(missing, [], `the Components table has no row for: ${missing.join('; ')}`)
+})
+
+// The check above passes on a page that has every row, which proves nothing about it on its own. Each
+// page below is the real one with one box's row taken away in a way the check must still see.
+const CREW_BOX = 'show_dashboard_beat, keep_the_ledger'
+const STORE_BOX = 'crew_files_directory'
+const rowOf = (title: string): string => {
+  const cell = `| ${title.split(', ').map((name) => `\`${name}\``).join(', ')} |`
+  return README.split('\n').find((line) => line.startsWith(cell))!
+}
+
+test('a box whose row is gone, named only in the text of another row, or tabled below the Components table has no row', () => {
+  const crewRow = rowOf(CREW_BOX)
+  const storeRow = rowOf(STORE_BOX)
+  const rowGone = README.replace(`${crewRow}\n`, '')
+  const handoverRow = rowOf('write_my_handover, park_and_wake_a_member, wake_a_member')
+  const namedOnlyInText = README.replace(`${storeRow}\n`, '')
+    .replace(handoverRow, handoverRow.replace(/ \|$/, ` \`${STORE_BOX}\` keeps all of it whole. |`))
+  const tabledBelow = rowGone.replace('| `record_mesh_answers` |', `${crewRow}\n| \`record_mesh_answers\` |`)
+  assert.ok(!rowGone.includes(crewRow) && !namedOnlyInText.includes(storeRow) && namedOnlyInText.includes(STORE_BOX)
+    && tabledBelow.includes(crewRow),
+    'a page below was not changed the way its name says, so its answer would prove nothing')
+  assert.deepEqual(boxesWithNoRow(rowGone), [CREW_BOX])
+  assert.deepEqual(boxesWithNoRow(namedOnlyInText), [STORE_BOX])
+  assert.deepEqual(boxesWithNoRow(tabledBelow), [CREW_BOX])
+})
+
 test('a component box stands for directories that are in src/, and names each one it stands for', () => {
   const slices = new Set(slicesInSrc())
   for (const box of components().coverage) {
