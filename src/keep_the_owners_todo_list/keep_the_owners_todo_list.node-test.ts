@@ -82,7 +82,7 @@ test('#316 test 1: a command with a trailing space is refused by name', () => {
 })
 
 test('#316 test 1: a command with no does is refused by name', () => {
-  assert.match(refusalOf(theActAsked(anAct({ commands: [{ command: 'git push' }] }), 'Pallas', NOW)), /^commands\[0\]\.does is missing/)
+  assert.match(refusalOf(theActAsked(anAct({ commands: [{ command: 'git push' }] }), 'Pallas', NOW)), /^commands\[0\]\.does is missing: say in one line what the command does/)
 })
 
 test('#316 test 1: a check of no known kind is refused by name', () => {

@@ -145,6 +145,7 @@ test('#316: the sweep runs once per SWEEP_INTERVAL_MS, and takes off the act its
   const stop = tools.startSweeping()
   try {
     mock.timers.tick(SWEEP_INTERVAL_MS - 1)
+    await settle()
     assert.equal(runs.length, 0, 'the sweep ran before its interval')
     mock.timers.tick(1)
     await waitFor(() => runs.length === 1)
@@ -156,11 +157,22 @@ test('#316: the sweep runs once per SWEEP_INTERVAL_MS, and takes off the act its
   assert.equal((await theStream(place)).filter((stored) => stored.row['kind'] === ACT_ASKED_OF_OWNER).length, 1, 'the sweep wrote a second act')
 })
 
-/** Waits, on real time, until `holds` answers true; fails after a bounded number of turns. */
+/** How many turns of the event loop a wait gives the sweep: far more than a sweep over one row takes. */
+const TURNS = 100
+
+/** One turn of the event loop, on real time: a sweep's reads and its process each finish in some. */
+const aTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+/** Lets everything the sweep started finish, so a run that was going to happen has happened. */
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < TURNS; turn++) await aTurn()
+}
+
+/** Waits until `holds` answers true; fails after TURNS turns. */
 async function waitFor(holds: () => boolean | Promise<boolean>): Promise<void> {
-  for (let turn = 0; turn < 200; turn++) {
+  for (let turn = 0; turn < TURNS; turn++) {
     if (await holds()) return
-    await new Promise((resolve) => setImmediate(resolve))
+    await aTurn()
   }
   assert.fail('what the sweep was to do did not happen')
 }
