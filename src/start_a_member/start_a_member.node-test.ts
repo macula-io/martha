@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
   nodeIdsFor,
@@ -34,7 +34,7 @@ import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_ma
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
-import { RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { RELAY_ORIGIN, RELAY_PATHS, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
 import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
@@ -92,7 +92,10 @@ function placeFor(t: TestContext, files: Readonly<Record<string, string>>): Plac
   mkdirSync(root)
   git(root, 'init', '-q', '.')
   writeFileSync(join(root, 'README.md'), 'a project\n')
-  for (const [path, text] of Object.entries(files)) writeFileSync(join(root, path), text)
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true })
+    writeFileSync(join(root, path), text)
+  }
   git(root, 'add', '--all')
   git(root, 'commit', '-q', '-m', 'start')
   const state = openState(join(home, 'state'), root)
@@ -606,4 +609,81 @@ test('a member started from the crew answers the crew\'s tools over its relay (m
     assert.notEqual(words, NO_ACTING_PLACE, `${tool} is answered by its slice in a launch Martha started, not refused as a place that cannot act`)
     assert.notEqual(words.trim(), '', `${tool} says something`)
   }
+})
+
+// --- the crew text a started member is handed (martha#306) ---------------------
+
+const CREW_CONVENTIONS = 'CONVENTIONS.md'
+const CONVENTIONS_AS_WRITTEN = 'Read the register before you write anything.\n'
+const CONVENTIONS_EDITED = 'Read the register, then the issue.\n'
+/** A role text of the crew's own, which Martha does not ship: what proves the section carries the crew's bytes. */
+const OWN_ROLE_TEXT = 'Our builder text, which Martha does not ship.\n'
+
+/** A crew as an owner declares it with texts of its own: a builder's role text, and a conventions file it names. */
+function aCrewWithItsOwnTexts(): Readonly<Record<string, string>> {
+  return {
+    [join(DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
+    [join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN,
+    [join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT,
+  }
+}
+
+const itsOwnerApproves = (place: Place) =>
+  approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
+
+/** The crew text one session's start is handed, read off the relay's answer the way the mod reads it. */
+async function theCrewTextHandedAt(socket_path: string, source: string, session_id: string): Promise<string> {
+  const heard = await postOverSocket(socket_path, RELAY_PATHS.session_started, { session_id, source })
+  assert.equal(heard.status, 200, heard.text)
+  const answer = JSON.parse(heard.text) as { handed?: string; refused?: string }
+  assert.ok(answer.handed !== undefined, `the session's start was handed nothing: ${heard.text}`)
+  return answer.handed
+}
+
+/**
+ * The whole chain, as the owner runs it: the declaration, the approval, `martha start`, and the start the host reports.
+ * Nothing here hands the relay a crew text by hand — what it answers with is what the launcher composed from the bytes
+ * the owner approved, which is the only thing that proves a started member is handed its crew's text at all.
+ */
+test('#306: a member Martha starts is handed its crew\'s own text at its session start, and a write during the launch changes nothing its next start is handed', async (t) => {
+  const place = placeFor(t, aCrewWithItsOwnTexts())
+  assert.equal((await itsOwnerApproves(place)).kind, 'approved')
+  const fake = fakeClaude(place)
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+
+  const socket_path = await launchedSocket(place.relay_root, t)
+  const first = await theCrewTextHandedAt(socket_path, 'startup', 'session-306')
+  assert.match(first, /## You are builder/, first.slice(0, 600))
+  assert.ok(first.includes(OWN_ROLE_TEXT), `the crew's own role text is not handed: ${first.slice(0, 600)}`)
+  assert.ok(first.includes(CONVENTIONS_AS_WRITTEN.trim()), `the conventions the crew declared are not handed: ${first}`)
+
+  // Design test 6: a write to the conventions file while the member runs. Its launch composed the section once, from
+  // the bytes the approval carried, so the launch's own next start is handed what it was handed before.
+  writeFileSync(join(place.root, DECLARATION_DIRECTORY, CREW_CONVENTIONS), 'You may write anything you like.\n')
+  const later = await theCrewTextHandedAt(socket_path, 'clear', 'session-306-after-a-clear')
+  assert.equal(later, first, 'a write during the launch reached the launch\'s own next session start')
+})
+
+/**
+ * Design test 5's second half, byte for byte: the edit refuses the next start as stale, `martha approve` lets it
+ * through, and the member started after that is handed the new text and not the one it replaced.
+ */
+test('#306: after the owner approves the changed conventions, the next member is handed the new text and not the old one', async (t) => {
+  const place = placeFor(t, aCrewWithItsOwnTexts())
+  assert.equal((await itsOwnerApproves(place)).kind, 'approved')
+  writeFileSync(join(place.root, DECLARATION_DIRECTORY, CREW_CONVENTIONS), CONVENTIONS_EDITED)
+
+  const fake = fakeClaude(place)
+  const refused = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.equal(refused.started, false, 'a changed conventions file did not refuse the start')
+  assert.ok((refused.started ? '' : refused.refusal).includes('martha approve'), refused.started ? '' : refused.refusal)
+
+  assert.equal((await itsOwnerApproves(place)).kind, 'approved')
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const socket_path = await launchedSocket(place.relay_root, t)
+  const handed = await theCrewTextHandedAt(socket_path, 'startup', 'session-306-reapproved')
+  assert.ok(handed.includes(CONVENTIONS_EDITED.trim()), 'the member is not handed the text the owner approved')
+  assert.ok(!handed.includes(CONVENTIONS_AS_WRITTEN.trim()), 'the member is handed the text the owner replaced')
 })

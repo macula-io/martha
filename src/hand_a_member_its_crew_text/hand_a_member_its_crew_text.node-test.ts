@@ -10,13 +10,16 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import {
   CrewTextRefused,
   crewTextFilesOf,
+  crewTextFilesToApprove,
+  crewTextToHand,
   handAMemberItsCrewText,
   PRACTICE_TEXT,
   SHIPPED_TEXTS,
@@ -154,9 +157,18 @@ test('#306: a section over the ceiling refuses at the constant\'s edge, naming t
   // The conventions text takes the section to exactly the ceiling, and then one character past it.
   const fits = textAt(join(CREW, 'CONVENTIONS.md'), padded(THE_SECTION_CEILING - base - '## Conventions\n\n\n\n'.length))
   assert.equal(handAMemberItsCrewText(textsOf({ conventions: fits })).length, THE_SECTION_CEILING, 'a section exactly at the ceiling was not taken whole')
+  const roleText = join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'builder.md')
+  const over = textAt(fits.file, `${fits.text}x`)
   assert.throws(
-    () => handAMemberItsCrewText(textsOf({ conventions: textAt(fits.file, `${fits.text}x`) })),
-    (error: unknown) => error instanceof CrewTextRefused && error.file === fits.file && error.message.includes(String(THE_SECTION_CEILING + 1)) && /over Martha's limit/.test(error.message),
+    () => handAMemberItsCrewText(textsOf({ conventions: over })),
+    (error: unknown) =>
+      error instanceof CrewTextRefused &&
+      error.file === fits.file &&
+      error.message.includes(String(THE_SECTION_CEILING + 1)) &&
+      /over Martha's limit/.test(error.message) &&
+      // Every file is named with its size, so the owner can find the one that grew: the longest may not be it.
+      error.message.includes(`${fits.file} is ${over.text.length}`) &&
+      error.message.includes(`${roleText} is ${shipped(join(ROLE_TEXTS_DIRECTORY, 'builder.md')).length}`),
   )
 })
 
@@ -195,4 +207,60 @@ test('#306: Martha\'s own texts compose for every role it ships, in both modes, 
     const section = handAMemberItsCrewText({ ...texts, practice: textAt(join(SHIPPED_TEXTS, PRACTICE_TEXT), shipped(PRACTICE_TEXT)) })
     assert.doesNotMatch(section, /\{\{/, `the ${member} text in ${mode} leaves a placeholder: ${section.slice(section.indexOf('## Your role'))}`)
   }
+})
+
+test('#306: the crew\'s own text is the bytes the launch carried, and a file on disk that it did not carry is never read', () => {
+  const settings = settingsOf({ conventions: 'CONVENTIONS.md' })
+  const carried = {
+    [join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')]: Buffer.from('The role text the owner approved.\n'),
+    [join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, `${SOLO_MODE}.md`)]: Buffer.from('The mode text the owner approved.\n'),
+    [join(DECLARATION_DIRECTORY, 'CONVENTIONS.md')]: Buffer.from('Read the register first.\n'),
+  }
+  const handed = crewTextToHand(settings, 'builder', carried, thisMachine.stores.files)
+
+  assert.ok('text' in handed, 'refusal' in handed ? handed.refusal : '')
+  if (!('text' in handed)) return
+  assert.ok(handed.text.includes('The role text the owner approved.'), 'the role text handed is not the one the launch carried')
+  assert.ok(handed.text.includes('The mode text the owner approved.'))
+  assert.ok(handed.text.includes('Read the register first.'), 'the conventions the crew declared are not handed')
+})
+
+test('#306: a crew text the launch did not carry is never read off the disk, even when the disk would answer', () => {
+  const written = 'Written after the approval.\n'
+  // A disk that answers every crew path with a text no approval saw: the reader is never asked, because the crew's own
+  // texts are answered from the carried bytes alone (design test 6, a write during the launch).
+  const disk = {
+    kindOf: (path: string): { readonly kind: 'file'; readonly ownerExecutes: boolean } => (void path, { kind: 'file' as const, ownerExecutes: false }),
+    bytesOf: (path: string): Uint8Array => (path.startsWith(SHIPPED_TEXTS) ? thisMachine.stores.files.bytesOf(path) : Buffer.from(written)),
+  }
+  const handed = crewTextToHand(settingsOf(), 'builder', {}, disk)
+
+  assert.ok('text' in handed, 'refusal' in handed ? handed.refusal : '')
+  if (!('text' in handed)) return
+  assert.doesNotMatch(handed.text, /Written after the approval/, 'a crew text the launch did not carry was read off the disk')
+  // What it does hand is what the approval saw: the role text absent, so Martha's own stands in.
+  assert.ok(handed.text.includes('You build and test one work package at a time'), handed.text.slice(0, 400))
+})
+
+test('#306: a shipped text that is a directory is refused, naming it, rather than read as absent', () => {
+  const aDirectory = { kindOf: () => ({ kind: 'directory' as const }), bytesOf: () => new Uint8Array() }
+  const handed = crewTextToHand(settingsOf(), 'builder', {}, aDirectory)
+
+  assert.ok('refusal' in handed, 'a directory where a shipped text should be was read as absent')
+  if (!('refusal' in handed)) return
+  assert.ok(handed.refusal.includes(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'builder.md')), handed.refusal)
+  assert.match(handed.refusal, /is a directory/)
+})
+
+test('#306: a project with no declaration approves no crew text, and a declaration that is refused is told to the owner', async () => {
+  const nothing = { read: async (): Promise<string> => { throw Object.assign(new Error('no such file'), { code: 'ENOENT' }) } }
+  assert.deepEqual(await crewTextFilesToApprove(nothing, ROOT), [], 'a project with no crew declared was asked for crew texts')
+
+  const declaration = join(ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const refused = { read: async (): Promise<string> => JSON.stringify({ version: 1, owner: 'Raf' }) }
+  await assert.rejects(
+    crewTextFilesToApprove(refused, ROOT),
+    (error: unknown) => error instanceof DeclarationRefused && error.message.startsWith(`${declaration}: `),
+    'a declaration that is there and is refused was approved as a project with no crew text',
+  )
 })

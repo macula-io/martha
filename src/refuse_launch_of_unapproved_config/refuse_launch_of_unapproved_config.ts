@@ -404,13 +404,25 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
 /** The config and the work tree, as the gate reads them. */
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
+  const crewText = readCrewText(place, machine)
+  // One refusal, whichever half of the state refuses first: the checkout's tree, or a crew text that is a directory.
+  const refusal = read.kind === 'refused' ? read.refusal : crewTextDirectoryIn(crewText)
   return {
-    entries: [...readLaunchConfig(place, machine), ...readCrewText(place, machine)],
+    entries: [...readLaunchConfig(place, machine), ...crewText],
     tree: read.kind === 'tree' ? read.tree : null,
-    ...(read.kind === 'refused' ? { refusal: read.refusal } : {}),
+    ...(refusal === undefined ? {} : { refusal }),
     ...(read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}),
     ...(read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}),
   }
+}
+
+/**
+ * The crew text path that is a directory, or undefined when every one of them is a file or absent: a directory here
+ * cannot be approved as a text, and reading it as absent would quietly hand the shipped text instead (martha#306).
+ */
+function crewTextDirectoryIn(crewText: readonly ConfigEntry[]): string | undefined {
+  const found = crewText.find((entry) => entry.kind === 'directory')
+  return found === undefined ? undefined : `${REFUSED}: ${found.path} is a directory, and a crew text is one file. Write the text there, or remove the directory.`
 }
 
 /**
@@ -421,6 +433,14 @@ export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approve
 export function readCrewText(place: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
   const start = realOrResolved(machine, place.launch_dir)
   return (place.crew_text_files ?? []).map((file) => entryOf(machine, start, realOrResolved(machine, file)))
+}
+
+/**
+ * The crew's own text files as `readCrewText` names them: the entries whose bytes a launch carries into its snapshot
+ * and hands to every session it starts, rather than passing them over as config it does not load (martha#306).
+ */
+function crewTextPathsOf(place: LaunchPlace, start: string, machine: LaunchHost): ReadonlySet<string> {
+  return new Set((place.crew_text_files ?? []).map((file) => pathFrom(start, realOrResolved(machine, file))))
 }
 
 export type PreparedLaunch =
@@ -474,7 +494,8 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
   const snapshot_dir = snapshot.path
 
   const carrying: Carrying = { carried: [launch.project_config_off], carried_files: {}, not_carried: [] }
-  const changed = carryApproved(state.entries, { launch, start, snapshot, machine }, carrying)
+  const crewText = crewTextPathsOf(place, start, machine)
+  const changed = carryApproved(state.entries, { launch, start, snapshot, machine, crewText }, carrying)
   if (changed !== undefined) {
     snapshot.remove()
     return { allow: false, refusal: `${REFUSED}: ${changed} changed while it was being approved. Start again.` }
@@ -513,25 +534,34 @@ interface CopyPlace {
   readonly start: string
   readonly snapshot: ReturnType<LaunchHost['stores']['scratch']['make']>
   readonly machine: LaunchHost
+  /** The crew's own text files, as the entries name them: carried for their bytes, with no switch of their own. */
+  readonly crewText: ReadonlySet<string>
 }
 
 /**
  * Copy each carried entry into the snapshot, in order, and note the rest. Stops
  * at the first file whose bytes no longer hash as approved and returns its path.
+ *
+ * The crew's own text files are carried the same way (martha#306): they start no
+ * code, so they carry no switch, but they are handed to every session this
+ * launch starts, so their bytes have to be the bytes the approval read and
+ * hashed, and they are never reported to the owner as "not loaded".
  */
 function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carrying: Carrying): string | undefined {
-  const { launch, start, snapshot, machine } = place
+  const { launch, start, snapshot, machine, crewText } = place
   for (const entry of entries) {
     if (entry.kind === 'absent') continue
-    const carry = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
-    if (carry === undefined || entry.kind !== 'file') {
+    const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
+    const ownText = crewText.has(entry.path)
+    if (entry.kind !== 'file' || (switchesFor === undefined && !ownText)) {
       noteNotCarried(carrying.not_carried, entry.path)
       continue
     }
 
     const content = machine.stores.files.bytesOf(join(start, entry.path))
     if (createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
-    carrying.carried.push(carry(snapshot.write(entry.path, content)))
+    const copied = snapshot.write(entry.path, content)
+    if (switchesFor !== undefined) carrying.carried.push(switchesFor(copied))
     carrying.carried_files[entry.path] = content
   }
   return undefined

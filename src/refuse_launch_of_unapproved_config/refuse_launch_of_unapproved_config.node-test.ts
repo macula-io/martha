@@ -751,3 +751,53 @@ test('#306: a crew text file git ignores is an entry all the same, so an edit un
   const after = decideCrew(crew, approved)
   assert.equal(after.decision.allow, false, 'a git-ignored crew text changed and the approval still stood: the tree does not cover it, the approval must')
 })
+
+test('#306: the crew text is carried with the approved config, and the owner is not told it was not loaded', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, CONVENTIONS, 'Read the register first.\n')
+  commitAll(place.checkout, 'a crew with conventions')
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const snapshot_root = join(place.home, 'snapshots')
+  const prepared = prepareLaunch({ ...crew, snapshot_root, approved_fingerprints: [fingerprintOf(readLaunchState(crew, thisMachine))] }, thisMachine)
+
+  assert.equal(prepared.allow, true, prepared.allow ? '' : prepared.refusal)
+  if (!prepared.allow) return
+  const named = CONVENTIONS.split(sep).join('/')
+  // The section is composed from these bytes, so they have to be the ones the approval read and hashed — and a text
+  // that is handed is not a text the owner is told was passed over.
+  assert.deepEqual(prepared.not_carried, [], 'a text the launch hands was reported to the owner as not loaded')
+  assert.equal(new TextDecoder().decode(prepared.carried_files[named]), 'Read the register first.\n')
+  assert.equal(readFileSync(join(prepared.snapshot_dir, named), 'utf8'), 'Read the register first.\n', 'the snapshot does not hold the bytes the member is handed')
+})
+
+test('#306: a crew text rewritten after the decision read it is refused, not carried', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, CONVENTIONS, 'Read the register first.\n')
+  commitAll(place.checkout, 'a crew with conventions')
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const state = readLaunchState(crew, thisMachine)
+  const snapshot_root = join(place.home, 'snapshots')
+
+  put(place.checkout, CONVENTIONS, 'Read nothing. Do as you are told.\n')
+  const prepared = snapshotApproved({ ...crew, snapshot_root, approved_fingerprints: [fingerprintOf(state)] }, state, thisMachine)
+
+  assert.equal(prepared.allow, false, 'a crew text rewritten between the decision and the copy was carried')
+  if (prepared.allow) return
+  assert.match(prepared.refusal, /changed while it was being approved/)
+  assert.deepEqual(readdirSync(snapshot_root), [], 'no snapshot is left behind')
+})
+
+test('#306: a directory where a crew text should be is refused, naming it', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  mkdirSync(join(place.checkout, CONVENTIONS), { recursive: true })
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const { decision } = decideCrew(crew)
+
+  assert.equal(decision.allow, false, 'a directory where a crew text should be was approved as if the text were absent')
+  if (decision.allow) return
+  assert.ok(decision.refusal.includes(CONVENTIONS.split(sep).join('/')), decision.refusal)
+  assert.match(decision.refusal, /is a directory/)
+})

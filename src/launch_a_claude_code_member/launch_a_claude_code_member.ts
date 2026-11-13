@@ -128,7 +128,7 @@ import {
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
-import { crewTextFromTheTree } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -531,10 +531,10 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   const prepared = prepareLaunch(launch.place, thisMachine)
   if (!prepared.allow) return prepared.refusal
   const removeSnapshot = (): void => rmSync(prepared.snapshot_dir, { recursive: true, force: true })
-  // The crew text, composed once here from the tree the approval has just proved (martha#306): the bytes that go into
-  // every session this launch starts are the approved bytes, read never live, so no member's own write reaches another
-  // member's prompt.
-  const crew = crewTextFromTheTree(launch.crew_settings, launch.member_name, thisMachine.stores.files)
+  // The crew text, composed once here from the bytes `prepareLaunch` has just carried and hashed against the owner's
+  // approval (martha#306): the crew's own texts are answered from those bytes alone and never read live, so a write by
+  // any member reaches no member's prompt.
+  const crew = crewTextToHand(launch.crew_settings, launch.member_name, prepared.carried_files, thisMachine.stores.files)
   if ('refusal' in crew) {
     removeSnapshot()
     return `${NOT_STARTED}: ${crew.refusal}, so ${launch.member_name} is handed no crew text`

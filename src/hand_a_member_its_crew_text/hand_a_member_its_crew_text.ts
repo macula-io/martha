@@ -18,10 +18,10 @@
 // placeholder the composer does not know is refused naming it, and a section over the ceiling is refused naming the
 // file and the size.
 
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
-import { crewTextFilesOf, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
+import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
@@ -83,15 +83,22 @@ export type TheCrewTextToHand = { readonly text: string } | { readonly refusal: 
 export const NO_CREW_TEXT: TheCrewTextToHand = { text: '' }
 
 /**
- * The text one member is handed, read through the files the launcher was given and composed once, or why it is not
- * handed. A refusal names the file to write, the placeholder nobody fills, or the size; it is a refusal rather than a
- * default, so a member never works on text that is not the crew's. A launch that names no crew is handed the empty
- * text, which is the one answer this slice gives without reading anything.
+ * The text one member is handed, composed once from the bytes the launch carried, or why it is not handed. The crew's
+ * own texts are answered from `carried` alone — the bytes the approval read and hashed — so a file rewritten after the
+ * approval reaches no session; Martha's shipped texts are read through `files`. A refusal names the file to write, the
+ * placeholder nobody fills, or the size; it is a refusal rather than a default, so a member never works on text that is
+ * not the crew's. A launch that names no crew is handed the empty text, which is the one answer this slice gives
+ * without reading anything.
  */
-export function crewTextFromTheTree(settings: CrewSettings | undefined, member: string, files: Pick<FileTree, 'kindOf' | 'bytesOf'>): TheCrewTextToHand {
+export function crewTextToHand(
+  settings: CrewSettings | undefined,
+  member: string,
+  carried: Readonly<Record<string, Uint8Array>>,
+  files: Pick<FileTree, 'kindOf' | 'bytesOf'>,
+): TheCrewTextToHand {
   if (settings === undefined) return NO_CREW_TEXT
   try {
-    return { text: handAMemberItsCrewText(theTextsAMemberReads(settings, member, textIn(files))) }
+    return { text: handAMemberItsCrewText(theTextsAMemberReads(settings, member, textsIn(settings.paths.root, carried, files))) }
   } catch (error) {
     if (error instanceof CrewTextRefused) return { refusal: error.message }
     throw error
@@ -99,25 +106,48 @@ export function crewTextFromTheTree(settings: CrewSettings | undefined, member: 
 }
 
 /**
+ * The texts a member reads, by where they stand. A path the launch carried is answered from those bytes, which is
+ * every crew text the approval found; a shipped path is read from the package; and anything else is a crew file the
+ * approval found absent, which is answered as absent so the shipped text stands in, as the design says it does.
+ */
+function textsIn(root: string, carried: Readonly<Record<string, Uint8Array>>, files: Pick<FileTree, 'kindOf' | 'bytesOf'>): ReadAText {
+  const shipped = textIn(files)
+  return (path) => {
+    const belowRoot = relative(root, path).split(sep).join('/')
+    if (Object.hasOwn(carried, belowRoot)) return Buffer.from(carried[belowRoot]!).toString('utf8')
+    return path.startsWith(SHIPPED_TEXTS) ? shipped(path) : null
+  }
+}
+
+/**
  * A text file as it is on the machine, or null when it is not there. A file that is there and cannot be read as text
  * is refused rather than answered with null: falling back to a shipped text would hand a member text the crew did not
- * write, and falling back to no conventions would hand it less than the crew declared.
+ * write, and falling back to no conventions would hand it less than the crew declared. A directory where a text should
+ * be is refused too, naming it: it is not a file, and reading it as absent would quietly hand the shipped text instead.
  */
 function textIn(files: Pick<FileTree, 'kindOf' | 'bytesOf'>): ReadAText {
   return (path) => {
     const kind = files.kindOf(path)
-    if (kind.kind === 'absent' || kind.kind === 'directory') return null
-    if (kind.kind !== 'file') throw new CrewTextRefused(path, `is ${kind.kind === 'symlink' ? 'a link' : 'not a plain file'}, so the text it holds cannot be read as the crew's own`)
+    if (kind.kind === 'absent') return null
+    if (kind.kind !== 'file') {
+      const what = kind.kind === 'symlink' ? 'a link' : kind.kind === 'directory' ? 'a directory, and a text is a file' : 'not a plain file'
+      throw new CrewTextRefused(path, `is ${what}, so the text it holds cannot be read as the crew's own`)
+    }
     return Buffer.from(files.bytesOf(path)).toString('utf8')
   }
 }
 
-/** The crew's own text files for a project, or none when it declares no crew there that can be read. */
+/**
+ * The crew's own text files for a project, or none when there is no crew declared there. A declaration that is there
+ * and is refused is not answered as none: its refusal names the file and the field, and the owner is told that rather
+ * than being shown an approval that quietly holds no crew text (martha#306, r=2).
+ */
 export async function crewTextFilesToApprove(documents: DocumentStore, root: string): Promise<readonly string[]> {
   try {
     return crewTextFilesOf(await declareCrew(documents, root))
-  } catch {
-    return []
+  } catch (error) {
+    if (error instanceof DeclarationRefused && error.field === null && error.message.endsWith('is missing')) return []
+    throw error
   }
 }
 
@@ -259,5 +289,8 @@ function assertUnderTheCeiling(size: number, texts: TheTextsAMemberReads): void 
   if (size <= THE_SECTION_CEILING) return
   const held = [texts.practice, texts.role_text, texts.mode_text, texts.conventions].filter((text): text is ATextAndItsFile => text !== null)
   const longest = held.reduce<ATextAndItsFile | null>((a, b) => (a === null || b.text.length > a.text.length ? b : a), null)
-  throw new CrewTextRefused(longest?.file ?? DECLARATION_DIRECTORY, `the crew text this member is handed is ${size} characters, over Martha's limit of ${THE_SECTION_CEILING}`)
+  // Every file is named with its size, not only the longest: the file that grew need not be the longest one, and a
+  // refusal that named the wrong file would send the owner to trim text that was always that size.
+  const sizes = held.map((text) => `${text.file} is ${text.text.length}`).join(', ')
+  throw new CrewTextRefused(longest?.file ?? DECLARATION_DIRECTORY, `the crew text this member is handed is ${size} characters, over Martha's limit of ${THE_SECTION_CEILING}: ${sizes}`)
 }
