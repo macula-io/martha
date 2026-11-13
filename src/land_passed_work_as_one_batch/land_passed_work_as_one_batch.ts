@@ -125,20 +125,22 @@ export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: st
   const what = `the default branch of ${forward.path} fast-forwarded to ${forward.tip}`
   const sent = await pushForEveryPackage(host, member, forward.packages, what, () => fastForward(host, forward))
   if ('refused' in sent) return sent
-  // The packages are on the default branch: that is the fact a review wait ends on (martha#320), so each package's
-  // ledger is told, by the act that landed it. A ledger that will not take the row does not undo the landing, and the
-  // answer says so rather than throwing after the branch has moved.
-  const not_told = await noteTheLanding(host, member, forward.packages)
+  // The packages are on the default branch: that is the fact a package's waits end on (martha#320), so each package's
+  // ledger is told, by the act that landed it, with the range that landed. Nothing is written before the push is sent or
+  // when its outcome is not kept — a push left awaiting is one the member checks, and the wait stays open until then.
+  // The integration branch's own push is no landing: the default branch has not moved and the owner has not said yes.
+  const not_told = await noteTheLanding(host, member, forward)
   const told = `${sent.sent}; ${forward.packages.join(', ')} are on it.`
   return { told: not_told === undefined ? told : `${told} The ledger was not told they landed (${not_told}), so a review wait on them ends only when someone reads the branch.` }
 }
 
-/** Records that each package landed; answers why one could not be recorded, or undefined when they all were. */
-async function noteTheLanding(host: LandingHost, member: string, packages: readonly string[]): Promise<string | undefined> {
+/** Records that each package landed, with the range that landed; answers why one could not be recorded, or undefined when
+ * they all were. One package the store will not take is named and does not stop the rest. */
+async function noteTheLanding(host: LandingHost, member: string, forward: TheFastForward): Promise<string | undefined> {
   let first_not_kept: string | undefined
-  for (const package_name of packages) {
+  for (const package_name of forward.packages) {
     try {
-      await noteMilestone(host, { package: package_name, member, milestone: 'landed', note: 'the default branch holds it' })
+      await noteMilestone(host, { package: package_name, member, milestone: 'package_landed', note: `${forward.base}..${forward.tip}` })
     } catch (error) {
       first_not_kept ??= detailOf(error)
     }
@@ -147,15 +149,16 @@ async function noteTheLanding(host: LandingHost, member: string, packages: reado
 }
 
 /**
- * The packages, of those asked about, whose ledger says they landed (martha#320): the fact a review wait ends on. A
- * package whose ledger holds no such row is not landed, which is not the same as a ledger that could not be read — a
- * read that fails rejects, so a caller cannot take an unreadable ledger for a package that never landed.
+ * The packages, of those asked about, whose ledger says they landed (martha#320): the fact a package's waits end on. A
+ * package whose ledger holds no such row is not landed — a package dropped without landing keeps its waits — which is not
+ * the same as a ledger that could not be read: a read that fails rejects, so a caller cannot take an unreadable ledger for
+ * a package that never landed.
  */
 export async function landedPackagesOf(host: LedgerHost, packages: readonly string[]): Promise<ReadonlySet<string>> {
   const landed = new Set<string>()
   for (const package_name of packages) {
     const rows = await readLedger(host, package_name)
-    if (rows.some((row) => row.kind === 'landed')) landed.add(package_name)
+    if (rows.some((row) => row.kind === 'package_landed')) landed.add(package_name)
   }
   return landed
 }
