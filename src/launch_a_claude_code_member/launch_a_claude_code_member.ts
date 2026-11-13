@@ -113,7 +113,7 @@ import { launchRecordsDirectory } from '../linux_process_identity/launch_records
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, refusalOfInstalledMeshServers } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { KNOWN_MESH_SERVER_SETTINGS, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
@@ -127,6 +127,8 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -191,6 +193,12 @@ export interface ClaudeCodeMemberLaunch {
    * `martha start`. Absent means on, so a launcher built by a caller that has not heard of the setting keeps the guard.
    */
   readonly strict_gate?: boolean
+  /**
+   * The crew's declaration, from which the text every session is handed is composed (martha#306): the practice when
+   * the crew switched it on, this member's role text, the mode's text, the lines it sends and the crew's conventions.
+   * Absent, no crew text is handed and the launch is as it was before this existed.
+   */
+  readonly crew_settings?: CrewSettings
   /**
    * Whether this member's bells ring when its host asks the owner something (`house_rules.owner_bell`, less the owner's
    * own mute of this member, martha#313), read once by `martha start`. Absent means none ring, as every switch in the
@@ -506,6 +514,8 @@ interface ReadyLaunch {
   readonly settingsEnv: Readonly<Record<string, string>>
   /** The settings files the host reads, watched for a key that turns Martha's relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
+  /** The crew text every session this launch starts is handed (martha#306), or empty when the crew declares none. */
+  readonly crew_text: string
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -530,6 +540,15 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   const prepared = prepareLaunch(launch.place, thisMachine)
   if (!prepared.allow) return prepared.refusal
   const removeSnapshot = (): void => rmSync(prepared.snapshot_dir, { recursive: true, force: true })
+  // The crew text, composed once here from the bytes `prepareLaunch` has just carried and hashed against the owner's
+  // approval (martha#306): the crew's own texts are answered from those bytes alone and never read live, so a write by
+  // any member reaches no member's prompt.
+  const crew = crewTextToHand(launch.crew_settings, launch.member_name, prepared.carried_files, thisMachine.stores.files)
+  if ('refusal' in crew) {
+    removeSnapshot()
+    return `${NOT_STARTED}: ${crew.refusal}, so ${launch.member_name} is handed no crew text`
+  }
+  const crew_text = crew.text
   const unproved = meshServerUnproved(prepared.carried_files[CLAUDE_SERVERS])
   if (unproved !== undefined) {
     removeSnapshot()
@@ -546,14 +565,14 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     hostEnv,
     prepared.carried_files[CLAUDE_SETTINGS],
     prepared.snapshot_dir,
-    launch.mesh_trees?.known_settings ?? KNOWN_MESH_SERVER_SETTINGS,
+    knownSettingsOf(launch.mesh_trees),
   )
   if ('refusal' in fromSettings) {
     removeSnapshot()
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings }
+  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
 }
 
 /**
@@ -805,6 +824,8 @@ async function servedRelay(
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
     ...crewOf(launch, sessions),
+    // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
+    crew_text: ready.crew_text,
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
     ...thePlacesOfItsOwn(launch),
@@ -884,7 +905,13 @@ async function startedMember(
   }
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
-    recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
+    recordMemberLaunch(launchRecords, linuxProcessIdentities, {
+      member_name: launch.member_name,
+      node_id: launch.node_id,
+      pid,
+      checkout: launch.place.launch_dir,
+      started_at: new Date().toISOString(),
+    })
   // The member is held until its callback says yes, so its place in the launch
   // directory's record is written inside the same hold: a launcher killed in
   // between then leaves a record that already names its member (#124).

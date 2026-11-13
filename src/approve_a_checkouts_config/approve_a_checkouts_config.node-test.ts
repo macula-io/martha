@@ -13,6 +13,8 @@ import { test, type TestContext } from 'node:test'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { openState, readApprovals, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
+import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { approveConfig, NOT_A_TERMINAL, type OwnersTerminal } from './approve_a_checkouts_config.ts'
@@ -132,4 +134,25 @@ test('approving a config already approved keeps no second line', async (t) => {
   const kept = readApprovals(place.state)
   assert.ok('approvals' in kept)
   assert.equal(kept.approvals.length, 1)
+})
+
+/**
+ * `martha approve` reads the crew's declaration with the models this host runs, as `martha start` does (martha#306
+ * r=6). A crew whose `house_rules.review_model` names one of them is approved, and its own texts are approved with the
+ * config; read with no vocabulary the same declaration is refused, and nothing is kept. The two readings must never
+ * disagree: approve fingerprints the crew's text files from the declaration it read, and start reads them again with
+ * the host's own list, so a list that differed would approve a crew that start then refuses.
+ */
+test('#306 r=6: approve reads the crew declaration with the models the host runs, so a crew naming its reviewer model is approved', async (t) => {
+  const place = placeFor(t, { '.mcp.json': SERVERS })
+  const declared = { ...soloDeclaration('Ada Owner'), house_rules: { review_model: CLAUDE_CODE_MODELS[0]! } }
+  const documents = { read: async () => JSON.stringify(declared) }
+  const terminal = terminalAnswering('yes')
+
+  const outcome = await approveConfig({ ...approving(place, terminal, []), documents })
+  assert.equal(outcome.kind, 'approved', outcome.kind === 'refused' ? outcome.refusal : `approve answered ${outcome.kind}`)
+  assert.equal(terminal.asked.length, 1, 'the owner is asked once, so the declaration was read and the config shown')
+  const kept = readApprovals(place.state)
+  assert.ok('approvals' in kept)
+  assert.equal(kept.approvals.length, 1, 'the owner\'s yes is kept')
 })

@@ -130,6 +130,12 @@ export type Control =
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
   | { readonly kind: 'no-words-to-admit'; readonly why: string }
   | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
+  /**
+   * Text the launcher hands a session out of bytes the owner approved, on a path where no code starts: the approval
+   * is the control, as it is on a launched row, and the row says what the approval does and does not cover
+   * (martha#306, the crew text). Its gate is driven by the same questions a launched row's is.
+   */
+  | { readonly kind: 'approved-text'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
   | { readonly kind: 'check_every_path_is_gated'; readonly gate: KnownPathGate; readonly also: readonly Control[] }
   | { readonly kind: 'none' }
@@ -315,6 +321,18 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A19',
+    what: "the crew text the launcher hands a session as it starts (martha#306): who the member is, the crew's practice when the crew switched it on, the member's role text, the mode's text, the lines it sends, and the crew's conventions — from Martha's own texts and from the crew's files under .crew/",
+    klass: 'delivered',
+    control: {
+      kind: 'approved-text',
+      gate: 'owner-approved-launch-config',
+      residual:
+        "the crew's own role, mode and conventions files are entries of the approval itself (crew_text_files, ../refuse_launch_of_unapproved_config), so the bytes handed are the bytes the owner read and approved, whether git ignores the file or not, and an edit to any of them refuses the next launch until the owner approves again; the launcher reads them once, at the launch, and hands them from what it read, never live, so no member's own write reaches its own next session or another member's before the owner approves it. What is left: a member runs with the text it started with, so a crew text edited and approved mid-session reaches the next session and not the running one (DECIDED 2026-11-13, martha#306); Martha's own texts ship with Martha and are approved by installing it, not by martha approve; and a session the owner starts by hand is handed none of this text, as C1 and C2 say of the rest.",
+    },
+    attestation: 'none',
+  },
+  {
+    id: 'A20',
     what: "the Supervisor's standing items a starting session is handed (martha#317): what it holds back, who owes what, and the rulings it recorded as the owner's words, read from the crew's own `standing` stream and handed only to a member the table lets assign work. A ruling there is the Supervisor's record of the owner's words, never the owner's yes, and no gate reads the stream as an approval. Not closed: a process of the same OS user can append to the stream (martha#1 decision 2's residual), which is why the line is taken in rather than exempt",
     klass: 'delivered',
     control: { kind: 'shell-gate' },

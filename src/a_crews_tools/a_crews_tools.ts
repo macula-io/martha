@@ -55,7 +55,7 @@ import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
 import { WHO_IS_FREE, WHO_IS_FREE_DESCRIPTION, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
-import { BEAT_INTERVAL_MS, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, OWNER_DIALOGS_FIELD, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   homeModelOf,
   modelPlace,
@@ -535,7 +535,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'A short id for the act: a package ref or a slug of letters, digits, ".", "_" or "-"' },
+        id: { type: 'string', description: 'A slug naming the act, such as martha-317 (a package ref is refused): letters, digits, ".", "_" or "-"' },
         title: { type: 'string', description: 'What the owner is asked to do, in one line' },
         goal: { type: 'string', description: 'The end goal the act serves, in one line' },
         waiting_on: { type: 'string', description: 'Who waits on it, so the owner knows who to tell when it is done' },
@@ -949,10 +949,16 @@ async function aWorktreeTool(
  * heartbeat guessed.
  */
 function rowNow(places: CrewToolPlaces, state: SessionState): DashboardRow {
-  const kept = state.held ?? places.beats.read(places.member)
+  const stored = places.beats.read(places.member)
+  const kept = state.held ?? stored
   const nothing_said = theRowWithNothingSaid()
   const host = { ...nothing_said.host, ...(kept?.host ?? {}), model: state.row_model }
-  return { ...nothing_said, ...(kept ?? {}), member: places.member, session: state.session, at: places.ledger.clock.now(), host }
+  // The dialogs are the launcher's word, written into the same row from its own process (martha#313): this session's
+  // copy never says them, so a report neither drops one the owner has not answered nor brings back one that closed
+  // (martha#363).
+  const { [OWNER_DIALOGS_FIELD]: _held, ...own } = kept ?? {}
+  const dialogs = stored?.[OWNER_DIALOGS_FIELD]
+  return { ...nothing_said, ...own, ...(dialogs === undefined ? {} : { [OWNER_DIALOGS_FIELD]: dialogs }), member: places.member, session: state.session, at: places.ledger.clock.now(), host }
 }
 
 /** Keeps the row, in this process and on disk. */

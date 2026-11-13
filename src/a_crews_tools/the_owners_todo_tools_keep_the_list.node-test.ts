@@ -17,6 +17,7 @@ import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import {
   ACT_ASKED_OF_OWNER,
+  AN_ID_IS_A_SLUG,
   OWNER_TODO_ADD,
   OWNER_TODO_DONE,
   OWNER_TODO_STREAM,
@@ -29,7 +30,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { recordIngestion, refuseExecutionAfterUngatedText, startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
-import { CREW_TOOL_NAMES, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { CREW_TOOL_NAMES, crewToolsOver, type CrewTool, type CrewTools } from './a_crews_tools.ts'
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-owners-todo-tools-'))
 after(() => removeTheTree(homeOfAll))
@@ -82,7 +83,7 @@ function toolsOf(place: APlace, member: string, run?: (request: ProcessRequest) 
     root: place.root,
     documents: place.documents,
     stores: { crew: crewFilesDirectory(join(place.rows, '..', 'crew-store')) },
-    ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null } }),
+    ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null, signalGroup: () => ({ signalled: false, refusal: 'the to-do tools signal no process' }) } }),
   })
 }
 
@@ -195,3 +196,47 @@ async function waitFor(holds: () => boolean | Promise<boolean>): Promise<void> {
   }
   assert.fail('what the sweep was to do did not happen')
 }
+
+/** A package ref in the shape the crew writes its packages, built from parts so this file names no repository. */
+const aPackageRef = (owner: string, repo: string, number: number): string => `${owner}/${repo}#${number}`
+
+/** What a tool's schema says an act's `id` is, which is the text a member follows when it names one. */
+function whatTheIdIs(tool: CrewTool): string {
+  const properties = tool.inputSchema['properties'] as Readonly<Record<string, { readonly description?: string }>> | undefined
+  const described = properties?.['id']?.description
+  assert.ok(described !== undefined, `the ${tool.name} tool says nowhere what an id is`)
+  return described
+}
+
+/**
+ * #372: the id the to-do tool asks for is the id its slice takes.
+ *
+ * Mutant 1: the tool's schema offers a package ref as an id again, the words the check refuses contradicting it.
+ * Mutant 2: SAFE_ID admits "/" and "#", so the ref the crew writes is kept as a slug.
+ * Mutant 3: the refusal stops naming the slug form, so a member told no is not told what to send instead.
+ * Mutant 4: the refusal stops saying a package ref is what it refuses, so the member is left to guess why.
+ *
+ * The refusal is compared to the constant both tools say it in AND read for its words: a constant read back only
+ * against itself passes whatever someone writes into it.
+ */
+test('#372: the to-do tool says the act id is a slug, takes the example it shows, and refuses a package ref by name', async () => {
+  const tools = toolsOf(aPlace(soloDeclaration('an owner')), 'builder')
+  const theAddTool = tools.tools.find((tool) => tool.name === OWNER_TODO_ADD)
+  assert.ok(theAddTool !== undefined, `the crew hands no ${OWNER_TODO_ADD} tool`)
+  const said = whatTheIdIs(theAddTool)
+  assert.match(said, /\bslug\b/, `the add tool's id is not said to be a slug: ${said}`)
+  assert.doesNotMatch(said, /package ref or/i, `the add tool still offers a package ref as an id: ${said}`)
+  const shown = /such as ([A-Za-z0-9._-]+)/.exec(said)?.[1]
+  assert.ok(shown !== undefined, `the add tool names no example form for the slice to honour: ${said}`)
+  const taken = await tools.answer(OWNER_TODO_ADD, { ...AN_ACT, id: shown }, 'a-session')
+  assert.ok('answer' in taken, `the example the add tool shows, ${shown}, is refused: ${'refused' in taken ? taken.refused : ''}`)
+  const refused = await tools.answer(OWNER_TODO_ADD, { ...AN_ACT, id: aPackageRef('some-owner', 'some-repo', 317) }, 'a-session')
+  assert.ok('refused' in refused, 'the add tool kept a package ref as an act\'s id, though the crew writes its packages so')
+  assert.equal(refused.refused, AN_ID_IS_A_SLUG, 'the add tool refuses an id in words of its own, unlike the slice\'s')
+  assert.match(refused.refused, /^id is a slug/, `the refusal does not say an id is a slug: ${refused.refused}`)
+  assert.match(refused.refused, /never a package ref/, `the refusal does not say a package ref is what it refuses: ${refused.refused}`)
+  assert.match(refused.refused, new RegExp(`such as ${shown}`), `the refusal shows no example, or one unlike the tool's: ${refused.refused}`)
+  const closed = await tools.answer(OWNER_TODO_DONE, { id: aPackageRef('some-owner', 'some-repo', 317) }, 'a-session')
+  assert.ok('refused' in closed, 'the done tool took a package ref as an act\'s id')
+  assert.equal(closed.refused, AN_ID_IS_A_SLUG, 'the done tool refuses an id in words of its own, unlike the add tool')
+})

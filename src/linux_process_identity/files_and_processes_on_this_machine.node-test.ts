@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -10,7 +12,9 @@ import {
   filesOnThisMachine as files,
   runNowOnThisMachine as runNow,
   scratchOnThisMachine as scratch,
+  signalAGroupOnThisMachine as signalGroup,
 } from './files_and_processes_on_this_machine.ts'
+import { linuxProcessIdentities } from './process_identity_from_proc.ts'
 
 function place(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-machine-'))
@@ -151,4 +155,23 @@ test('the environment drops every variable with a named prefix, then sets what i
     environment: { drop_prefixes: [`${inherited}_`], set: { MARTHA_TEST_SET: 'set' } },
   })
   assert.equal(outcome.stdout.trim(), 'unset set')
+})
+
+// --- signalling a group (martha#312) ------------------------------------------------
+
+const onLinux = linuxProcessIdentities.identityOf(process.pid) !== null
+
+test('#312: a group is signalled only while its leader is the process recorded, and the check is in the same call', { skip: !onLinux }, async (t) => {
+  const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
+  t.after(() => void (child.exitCode === null && child.signalCode === null && child.kill('SIGKILL')))
+  await once(child, 'spawn')
+  const pid = child.pid!
+  const identity = linuxProcessIdentities.identityOf(pid)!
+  const refused = signalGroup(pid, `${identity}-another`, 'SIGTERM')
+  assert.deepEqual(refused, { signalled: false, refusal: `process ${pid} is no longer the process that was recorded, so it was not signalled.` })
+  assert.equal(linuxProcessIdentities.identityOf(pid), identity, 'the process a wrong identity names is left running')
+  const ended = once(child, 'exit')
+  assert.deepEqual(signalGroup(pid, identity, 'SIGTERM'), { signalled: true })
+  assert.deepEqual(await ended, [null, 'SIGTERM'])
+  assert.equal(signalGroup(pid, identity, 'SIGKILL').signalled, false, 'a group that is gone is not signalled again')
 })

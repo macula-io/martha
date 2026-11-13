@@ -18,7 +18,7 @@
 
 import type { Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
-import { CONTROL, SAFE_ID, type TodoAnswer, type TodoHost } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { AN_ID_IS_A_SLUG, CONTROL, SAFE_ID, type TodoAnswer, type TodoHost } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 
 /** The stream the standing items live in, in the crew's row streams. */
 export const STANDING_STREAM = 'standing'
@@ -104,7 +104,7 @@ function fieldRefusal(field: string, value: unknown): string | undefined {
 
 /** Why an id is refused, or undefined when it names an item. */
 const idRefusal = (id: unknown): string | undefined =>
-  typeof id === 'string' && SAFE_ID.test(id) ? undefined : 'id is a slug such as martha-317, never a package ref (its "/" and "#" are refused): letters, digits, ".", "_" or "-", at most 80 of them'
+  typeof id === 'string' && SAFE_ID.test(id) ? undefined : AN_ID_IS_A_SLUG
 
 /** The kind a call names, or undefined when it names none of the three. */
 const kindIn = (raw: unknown): StandingKind | undefined => STANDING_KINDS.find((kind) => kind === raw)

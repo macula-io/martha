@@ -27,6 +27,7 @@ import type {
   KeyedRow,
   KeyedRowStore,
   ProcessOutcome,
+  Processes,
   ProcessRequest,
   ProcessRequestNow,
   Row,
@@ -59,6 +60,8 @@ export interface HostForTestsOptions {
   readonly rows?: HostContract['stores']['rows']
   /** Which process holds a pid; asked afresh every time. */
   readonly identityOf?: (pid: number) => string | null
+  /** Signals a process group for the test; with none, every signal is refused and nothing is sent. */
+  readonly signalGroup?: Processes['signalGroup']
   /** How the host this test stands for names a called tool; with none, Claude Code's form, so no test fails open by forgetting it. */
   readonly toolNames?: ToolNames
 }
@@ -207,5 +210,7 @@ function processesFor(options: HostForTestsOptions): HostContract['processes'] {
     },
     runNow: (request) => (options.runNow ?? ((r: ProcessRequestNow) => notGiven('process runner', r.command)))(request),
     identityOf: (pid) => options.identityOf?.(pid) ?? null,
+    signalGroup: (pid, identity, signal) =>
+      options.signalGroup === undefined ? { signalled: false, refusal: `no signaller was given to this test host: ${signal} to ${pid} (${identity})` } : options.signalGroup(pid, identity, signal),
   }
 }

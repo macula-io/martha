@@ -192,7 +192,7 @@ test('the drive is not vacuous: without what the launch hands the model at start
   assert.ok(handed.every((row) => named.includes(row)), named.join(', '))
 })
 
-test('the drive is not vacuous: without the standing items the crew hands the model at start, A19 is named', async (t) => {
+test('the drive is not vacuous: without the standing items the crew hands the model at start, A20 is named', async (t) => {
   const recorded = await pathsTheLauncherRecords(t)
   const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.standing_items)).map((gap) => gap.path)
   assert.ok(named.includes(PATH_OF_SOURCE.standing_items), named.join(', '))

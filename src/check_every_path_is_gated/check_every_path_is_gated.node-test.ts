@@ -58,7 +58,7 @@ const coverageOf = (
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 19 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 20 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
@@ -184,7 +184,9 @@ test('a gate that answers only the roster question is caught: one question right
 
 // --- code the host starts by itself (issue #16) --------------------------------
 
-const LAUNCHED = INBOUND_PATHS.filter((path) => path.klass === 'launched').map((path) => path.id)
+// The rows the launch gate stands on: code the host starts by itself, and the text handed from bytes the owner
+// approved (martha#306). A gate that fails a question fails every one of them.
+const LAUNCHED = INBOUND_PATHS.filter((path) => path.klass === 'launched' || path.control.kind === 'approved-text').map((path) => path.id)
 
 const withLaunchGates = (gate: LaunchGate) =>
   coverageOf(INBOUND_PATHS, gateRefuses, undefined, { 'owner-approved-launch-config': gate })

@@ -33,9 +33,11 @@ import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
 import type { HandoverStampStore } from '../host_contract/host_contract.ts'
-import type { CrewStore, DocumentStore } from '../host_contract/host_contract.ts'
+import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
+import { LIFECYCLE_PLACE, watchForAStop } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import {
@@ -55,6 +57,7 @@ import {
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import {
   CLAUDE_CODE,
+  HOOK_SETTINGS_CHECK_MS,
   launchClaudeCodeMember,
   NOT_STARTED,
   type LauncherPlaces,
@@ -168,7 +171,9 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   if ('refusal' in ids) return `${NOT_STARTED}: ${ids.refusal}`
   const kept = readApprovals(request.state)
   if ('refusal' in kept) return `${NOT_STARTED}: ${kept.refusal}`
-  const inUse = theApprovalInUse({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }, kept.approvals, thisMachine)
+  // The crew's own text files are read as entries of the approval (martha#306), so the approval in use is asked about
+  // the same files the launch will read.
+  const inUse = theApprovalInUse({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, crew_text_files: crewTextFilesOf(settings) }, kept.approvals, thisMachine)
   // What the owner reads when the checkout holds a config nobody approved: the entries, and the command that fixes it.
   if ('needs_approval' in inUse) {
     return `${NOT_STARTED}: this checkout holds config that starts code by itself (${inUse.needs_approval.join(', ')}), and you have not approved it as it is now. Run martha approve, read what it shows, and answer yes.`
@@ -234,12 +239,13 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   // a message counts as taken in only when the host raised it back (martha#253).
   const turns = turnsRaised()
   const channel = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } }
-  return launchClaudeCodeMember({
+  const started = await launchClaudeCodeMember({
     member_name: request.member,
     node_id: ready.node_id,
-    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, ...approvedPlace(request, ready.approval) },
+    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, crew_text_files: crewTextFilesOf(ready.settings), ...approvedPlace(request, ready.approval) },
     policy: { may_send_executable_text: [] },
     strict_gate: ready.strict_gate,
+    crew_settings: ready.settings,
     owner_bell: ready.settings.house_rules[OWNER_BELL],
     places,
     command: request.command,
@@ -279,4 +285,20 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
       CLAUDE_CODE_BASH_RESULT_SHAPES,
     ),
   })
+  if (started.started) watchForAStopOf(request, started, channel)
+  return started
+}
+
+/**
+ * The launcher's watch for a stop asked of this member (martha#312), on the launcher's own tick, for as long as it runs.
+ * A member already gone by the time its identity is read has nothing to watch.
+ */
+function watchForAStopOf(request: MemberStartRequest, started: Extract<MemberStarted, { started: true }>, channel: { readonly clock: { now(): number }; readonly stores: { readonly rows: RowStore } }): void {
+  const process_started_at = thisMachine.processes.identityOf(started.pid)
+  if (process_started_at === null) return
+  watchForAStop(
+    { stores: { lifecycle: theCrewsStores(request.state, request.root).crew.place(LIFECYCLE_PLACE), rows: channel.stores.rows }, processes: thisMachine.processes, clock: channel.clock },
+    { member: request.member, launch: { pid: started.pid, process_started_at }, stop: started.stop, stopped: started.stopped, tellOwner: (line) => request.tellOwner(line) },
+    HOOK_SETTINGS_CHECK_MS,
+  )
 }

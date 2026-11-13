@@ -2,8 +2,8 @@
 //
 // One session records a hold and a ruling with the crew's own tool. A fresh launch of the same member — what a
 // refresh, a restart or a clear leaves — starts a session through the launcher's own answer to its start, and is handed
-// both, with the session's record holding the inbound path the line came on (A19), so the shell gate stands behind
-// what it was handed. A member the table does not let assign work is handed none of them, and its record holds no A19.
+// both, with the session's record holding the inbound path the line came on (A20), so the shell gate stands behind
+// what it was handed. A member the table does not let assign work is handed none of them, and its record holds no A20.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -116,7 +116,7 @@ async function theFirstSessionRecords(place: ReturnType<typeof aCrewPlace>): Pro
   assert.ok('answer' in ruling, 'refused' in ruling ? ruling.refused : '')
 }
 
-test('across a refresh, the next Supervisor session is handed what the last one recorded, and takes it in on A19', async (t) => {
+test('across a refresh, the next Supervisor session is handed what the last one recorded, and takes it in on A20', async (t) => {
   const place = aCrewPlace(t)
   await theFirstSessionRecords(place)
 
@@ -127,7 +127,7 @@ test('across a refresh, the next Supervisor session is handed what the last one 
   assert.ok(started.paths.includes(PATH_OF_SOURCE.standing_items), `the record holds ${started.paths.join(', ')}`)
 })
 
-test('a member whose role the table does not let assign work is handed none of them, and takes nothing in on A19 (mutant: hand to every role)', async (t) => {
+test('a member whose role the table does not let assign work is handed none of them, and takes nothing in on A20 (mutant: hand to every role)', async (t) => {
   const place = aCrewPlace(t)
   await theFirstSessionRecords(place)
 
@@ -137,7 +137,7 @@ test('a member whose role the table does not let assign work is handed none of t
   assert.ok(!started.paths.includes(PATH_OF_SOURCE.standing_items), `the record holds ${started.paths.join(', ')}`)
 })
 
-test('a Supervisor session with nothing standing is handed no standing items, and takes nothing in on A19', async (t) => {
+test('a Supervisor session with nothing standing is handed no standing items, and takes nothing in on A20', async (t) => {
   const place = aCrewPlace(t)
   const started = await aSessionStarts(place, aLaunchOf(place, 'Supervisor'), 'a-quiet-start')
   assert.equal(started.handed, '')
