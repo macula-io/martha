@@ -41,6 +41,7 @@ import {
   theFastForwardACallNames,
 } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import {
+  REPO,
   WORKTREE_FINISH,
   WORKTREE_FINISH_DESCRIPTION,
   WORKTREE_OPEN,
@@ -66,6 +67,15 @@ import {
 } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
+import { headNudges } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import {
+  GITHUB_BUDGET_PLACE,
+  theHeadsOfTheWaits,
+  type AHead,
+  type TheGithubSpender,
+} from '../spend_the_github_budget/spend_the_github_budget.ts'
+import { WAIT_FOR_CI, WAIT_FOR_CI_DESCRIPTION, A_COMMIT, theAnswerOf, waitForCi, type TheCiWait } from '../wait_for_ci/wait_for_ci.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -196,6 +206,7 @@ export const CREW_TOOL_NAMES = [
   STANDING_ADD,
   STANDING_CLOSE,
   STANDING,
+  WAIT_FOR_CI,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -705,6 +716,18 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: STANDING_DESCRIPTION,
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: WAIT_FOR_CI,
+    description: WAIT_FOR_CI_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string', description: 'The repository, owner/name' },
+        sha: { type: 'string', description: 'The commit whose runs count: the tip you were handed' },
+      },
+      required: ['repo', 'sha'],
+    },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -981,6 +1004,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING_ADD]: (args) => keepTheStandingItems(places, () => recordAStandingItem(places.ledger, args, places.member)),
     [STANDING_CLOSE]: (args) => keepTheStandingItems(places, () => closeAStandingItem(places.ledger, args, places.member)),
     [STANDING]: async () => ({ answer: theStandingList(await theItemsThatStand(places), todayOf(places.ledger.clock.now())).join('\n') }),
+    [WAIT_FOR_CI]: (args) => theCiWait(places, args),
   }
 }
 
@@ -1067,6 +1091,37 @@ async function fastForwardOntoTheApprovedTip(places: CrewToolPlaces, args: Reado
   if ('refused' in asked) return { refused: asked.refused }
   if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
   return asAnAnswer(await fastForwardAfterTheOwnersYes(actingHost({ ...places, processes: places.processes }), places.member, asked.ok))
+}
+
+/**
+ * The crew's GitHub budget, as a tool spends from it (martha#320, package B): the crew's own place for the record, the
+ * ledger's clock, and `gh` run in the checkout every other acting tool runs it in.
+ */
+function theGithubSpenderOf(places: CrewToolPlaces & { readonly processes: HostContract['processes'] }): TheGithubSpender {
+  const processes = places.processes
+  return {
+    place: places.stores.crew.place(GITHUB_BUDGET_PLACE),
+    clock: places.ledger.clock,
+    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root }),
+  }
+}
+
+/** `wait_for_ci`: the CI on one sha, read through the crew's one GitHub budget (martha#320, package B). */
+async function theCiWait(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const asked = theCiWaitACallNames(args)
+  if ('refused' in asked) return { refused: asked.refused }
+  if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
+  const outcome = await waitForCi(theGithubSpenderOf({ ...places, processes: places.processes }), asked.ok)
+  return { answer: theAnswerOf(outcome, asked.ok.sha) }
+}
+
+/** The wait a call names, or why it names none: a repository as owner/name, and a commit of forty hex digits. */
+function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { readonly ok: TheCiWait } | { readonly refused: string } {
+  const repo = textOf(args['repo'])
+  const sha = textOf(args['sha'])
+  if (!REPO.test(repo)) return { refused: `a CI wait names its repository as owner/name; read ${JSON.stringify(repo)}.` }
+  if (!A_COMMIT.test(sha)) return { refused: `a CI wait names the commit whose runs count, as forty hex digits; read ${JSON.stringify(sha)}.` }
+  return { ok: { repo, sha } }
 }
 
 /**
@@ -1217,7 +1272,19 @@ async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
   const waits = reviewWaitsIn(messages, await landingsOf(places.ledger, packagesNamed(messages)), receivers)
   const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
-  return theNudgesPartLines(nudgesOf(input, deadlockNudges(input)), settings)
+  const heads = await theHeadsOfTheWaiters(places, waits)
+  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads)]), settings)
+}
+
+/**
+ * The heads the crew's waiting packages stand at, read through the crew's GitHub budget (martha#320, package B), or
+ * none when this launch holds no processes to ask with. A read GitHub cannot answer leaves the head it last showed, so
+ * the flag a failed read cannot clear is the one that was true.
+ */
+async function theHeadsOfTheWaiters(places: CrewToolPlaces, waits: readonly { readonly package: string }[]): Promise<Readonly<Record<string, AHead>>> {
+  if (places.processes === undefined || waits.length === 0) return {}
+  const heads = await theHeadsOfTheWaits(theGithubSpenderOf({ ...places, processes: places.processes }), waits.map((wait) => wait.package))
+  return 'refusal' in heads ? {} : heads
 }
 
 /** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
