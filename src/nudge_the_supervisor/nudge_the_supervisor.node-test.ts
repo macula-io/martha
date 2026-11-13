@@ -6,8 +6,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import { OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import {
   BUSY,
   clockOf,
@@ -29,6 +30,9 @@ const PERSON = 30 * MINUTE_MS
 const WINDOWS = { stalled_ms: STALLED, review_ms: REVIEW, person_ms: PERSON }
 const CREW = { owner: 'Ann', members: [{ name: 'Vesta' }, { name: 'Mars' }, { name: 'Supervisor' }] }
 const RECEIVERS = ['Supervisor']
+/** The channel's word for the whole crew, and the dashboard's word for a parked member: both spelled by the slices. */
+const THE_WHOLE_CREW = 'crew'
+const PARKED_STATE: State = 'parked'
 
 /** One member's row, busy and reported a while ago unless the test says otherwise. */
 function row(member: string, changes: Partial<DashboardRow> = {}): DashboardRow {
@@ -53,7 +57,7 @@ function input(rows: readonly DashboardRow[], changes: Partial<NudgeInput> = {})
 }
 
 /** A message of the crew's channel. */
-const sent = (from: string, to: readonly string[] | 'crew', text: string, at: number): SentMessage => ({ from, to, text, sent_at: at })
+const sent = (from: string, to: readonly string[] | typeof THE_WHOLE_CREW, text: string, at: number): SentMessage => ({ from, to, text, sent_at: at })
 
 /** A hand-off line, as a member writes one. */
 const handoff = (package_name: string, round = 1): string => `HANDOFF ${package_name} ${'a'.repeat(40)}..${'b'.repeat(40)} r=${round} ci=none:paths`
@@ -75,7 +79,7 @@ test('a waiting row stalls too, and a row that is neither working nor waiting is
   const waiting = row('Vesta', { state: 'waiting', waits: { on: 'ci', for: '', since: NOW - 1_000 }, progress: { step: 1, of: 4, at: NOW - STALLED } })
   assert.deepEqual(nudgesOf(input([waiting])).map((one) => one.kind), ['stalled'], 'a waiting row that has not moved is a stall')
 
-  for (const state of ['idle', 'reviewing', 'needs-you', 'parked'] as const) {
+  for (const state of [IDLE, 'reviewing', 'needs-you', PARKED_STATE] as const) {
     const quietRow = row('Vesta', { state, progress: { step: 1, of: 4, at: NOW - STALLED } })
     assert.deepEqual(nudgesOf(input([quietRow])), [], `${state} is not a stall`)
   }
@@ -98,9 +102,9 @@ test('a wait on a person is a nudge at the window, and a CI run is no person', (
 })
 
 test('a wait on the owner is the owner\'s nudge, and it keeps what the member said for the pane only', () => {
-  const onOwner = row('Vesta', { state: 'waiting', waits: { on: 'Ann', for: 'a menu: land or hold', since: NOW - PERSON } })
+  const onOwner = row('Vesta', { state: 'waiting', waits: { on: OWNER, for: 'a menu: land or hold', since: NOW - PERSON } })
   const nudges = nudgesOf(input([onOwner]))
-  assert.deepEqual(nudges.map((one) => one.kind), ['owner'], 'a wait on the owner is the owner\'s to answer')
+  assert.deepEqual(nudges.map((one) => one.kind), [OWNER], 'a wait on the owner is the owner\'s to answer')
   assert.equal(nudges[0]?.said, 'a menu: land or hold', 'what the member said is kept for the pane')
   assert.equal(theNudgeLine(nudges[0]!, CREW)?.includes('land or hold'), false, 'and never reaches a line')
 })
@@ -108,7 +112,7 @@ test('a wait on the owner is the owner\'s nudge, and it keeps what the member sa
 // --- 2. parked and quiet rows are never stalled, and never a blocker ---------
 
 test('a parked member is never stalled, by its row or by the marker the crew keeps beside it', () => {
-  const byState = row('Vesta', { state: 'parked', progress: { step: 1, of: 4, at: NOW - STALLED } })
+  const byState = row('Vesta', { state: PARKED_STATE, progress: { step: 1, of: 4, at: NOW - STALLED } })
   assert.deepEqual(nudgesOf(input([byState])), [], 'a parked row is not expected to move')
 
   const byMarker = row('Vesta', { state: 'working', progress: { step: 1, of: 4, at: NOW - STALLED } })
@@ -129,7 +133,7 @@ test('a HANDOFF to a reviewer opens a wait, and a copy addressed only to the rec
   const copy = [sent('Vesta', RECEIVERS, handoff('macula-io/martha#320'), NOW - REVIEW)]
   assert.deepEqual(reviewWaitsIn(copy, new Set(), RECEIVERS), [], 'a copy addressed only to the receivers is no wait: no verdict was coming back')
 
-  const toCrew = [sent('Vesta', 'crew', handoff('macula-io/martha#320'), NOW - REVIEW)]
+  const toCrew = [sent('Vesta', THE_WHOLE_CREW, handoff('macula-io/martha#320'), NOW - REVIEW)]
   assert.equal(reviewWaitsIn(toCrew, new Set(), RECEIVERS).length, 1, 'a hand-off to the whole crew reached a reviewer')
 })
 
@@ -165,16 +169,16 @@ test('a landing ends a wait, and a newer HANDOFF starts a new one from its own m
 // --- 6. who receives a nudge ------------------------------------------------
 
 test('nudges go to whoever the table grants assign_work: the owner in a solo crew, the role\'s members in a team', () => {
-  const solo = { owner: 'Ann', members: [{ name: 'Builder', role: 'builder' }], mode: { may: { assign_work: ['owner'] } } }
+  const solo = { owner: 'Ann', members: [{ name: 'Builder', role: 'builder' }], mode: { may: { assign_work: [OWNER] } } }
   assert.deepEqual(theNudgesGoTo(solo), ['Ann'], 'a solo crew reads its nudges in the owner\'s own place')
 
   const team = {
     owner: 'Ann',
     members: [
-      { name: 'Lead', role: 'supervisor' },
+      { name: 'Lead', role: SUPERVISOR },
       { name: 'Builder', role: 'builder' },
     ],
-    mode: { may: { assign_work: ['supervisor'] } },
+    mode: { may: { assign_work: [SUPERVISOR] } },
   }
   assert.deepEqual(theNudgesGoTo(team), ['Lead'], 'a team crew puts them in the supervisor\'s place, and nobody else\'s')
 })
@@ -239,7 +243,7 @@ test('the states this rule expects to move on their own are the pane\'s two busy
 })
 
 test('a parked member\'s wait on a person is no nudge either: it is not expected to move', () => {
-  const parkedWithAWait = row('Vesta', { state: 'parked', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON * 2 } })
+  const parkedWithAWait = row('Vesta', { state: PARKED_STATE, waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON * 2 } })
   assert.deepEqual(nudgesOf(input([parkedWithAWait])), [], 'a parked member is told nobody is waiting on it')
 
   const unparked = row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON * 2 } })
