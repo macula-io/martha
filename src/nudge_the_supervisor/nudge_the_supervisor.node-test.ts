@@ -237,3 +237,11 @@ test('a row written before progress carried its moment counts from its own beat'
 test('the states this rule expects to move on their own are the pane\'s two busy ones', () => {
   assert.deepEqual([...BUSY], ['working', 'waiting'])
 })
+
+test('a parked member\'s wait on a person is no nudge either: it is not expected to move', () => {
+  const parkedWithAWait = row('Vesta', { state: 'parked', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON * 2 } })
+  assert.deepEqual(nudgesOf(input([parkedWithAWait])), [], 'a parked member is told nobody is waiting on it')
+
+  const unparked = row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON * 2 } })
+  assert.deepEqual(nudgesOf(input([unparked])).map((one) => one.kind), ['person'], 'the same wait outside a park is the one that is told')
+})
