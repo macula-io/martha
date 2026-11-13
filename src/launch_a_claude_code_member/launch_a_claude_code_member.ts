@@ -884,7 +884,13 @@ async function startedMember(
   }
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
-    recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
+    recordMemberLaunch(launchRecords, linuxProcessIdentities, {
+      member_name: launch.member_name,
+      node_id: launch.node_id,
+      pid,
+      checkout: launch.place.launch_dir,
+      started_at: new Date().toISOString(),
+    })
   // The member is held until its callback says yes, so its place in the launch
   // directory's record is written inside the same hold: a launcher killed in
   // between then leaves a record that already names its member (#124).

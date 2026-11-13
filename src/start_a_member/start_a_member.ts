@@ -33,7 +33,8 @@ import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
 import type { HandoverStampStore } from '../host_contract/host_contract.ts'
-import type { CrewStore, DocumentStore } from '../host_contract/host_contract.ts'
+import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
+import { LIFECYCLE_PLACE, watchForAStop } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -55,6 +56,7 @@ import {
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import {
   CLAUDE_CODE,
+  HOOK_SETTINGS_CHECK_MS,
   launchClaudeCodeMember,
   NOT_STARTED,
   type LauncherPlaces,
@@ -234,7 +236,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   // a message counts as taken in only when the host raised it back (martha#253).
   const turns = turnsRaised()
   const channel = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } }
-  return launchClaudeCodeMember({
+  const started = await launchClaudeCodeMember({
     member_name: request.member,
     node_id: ready.node_id,
     place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, ...approvedPlace(request, ready.approval) },
@@ -279,4 +281,20 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
       CLAUDE_CODE_BASH_RESULT_SHAPES,
     ),
   })
+  if (started.started) watchForAStopOf(request, started, channel)
+  return started
+}
+
+/**
+ * The launcher's watch for a stop asked of this member (martha#312), on the launcher's own tick, for as long as it runs.
+ * A member already gone by the time its identity is read has nothing to watch.
+ */
+function watchForAStopOf(request: MemberStartRequest, started: Extract<MemberStarted, { started: true }>, channel: { readonly clock: { now(): number }; readonly stores: { readonly rows: RowStore } }): void {
+  const process_started_at = thisMachine.processes.identityOf(started.pid)
+  if (process_started_at === null) return
+  watchForAStop(
+    { stores: { lifecycle: theCrewsStores(request.state, request.root).crew.place(LIFECYCLE_PLACE), rows: channel.stores.rows }, processes: thisMachine.processes, clock: channel.clock },
+    { member: request.member, launch: { pid: started.pid, process_started_at }, stop: started.stop, stopped: started.stopped, tellOwner: (line) => request.tellOwner(line) },
+    HOOK_SETTINGS_CHECK_MS,
+  )
 }

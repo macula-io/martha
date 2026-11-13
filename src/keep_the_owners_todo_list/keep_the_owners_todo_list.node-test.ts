@@ -166,7 +166,7 @@ test('#316: the add answers with the row\'s id and nothing of its text', async (
 function aSweepingHost(outcome: ProcessOutcome): { readonly host: SweepingHost; readonly runs: ProcessRequest[] } {
   const runs: ProcessRequest[] = []
   const host = aHost()
-  return { host: { ...host, processes: { run: async (request) => (runs.push(request), outcome), runNow: () => outcome, identityOf: () => null } }, runs }
+  return { host: { ...host, processes: { run: async (request) => (runs.push(request), outcome), runNow: () => outcome, identityOf: () => null, signalGroup: () => ({ signalled: false, refusal: 'a sweep signals no process' }) } }, runs }
 }
 
 const MERGED: ProcessOutcome = { exit_code: 0, stdout: 'true\n', stderr: '' }
