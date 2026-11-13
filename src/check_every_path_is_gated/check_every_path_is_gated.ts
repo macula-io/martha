@@ -29,7 +29,8 @@
 
 import { join } from 'node:path'
 
-import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { MAX_ASK, type AnAsk } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
@@ -149,9 +150,10 @@ export function gapsInGateCoverage(
   argument_gates: Readonly<Record<string, ArgumentGate>> = ARGUMENT_GATES,
   path_gates: Readonly<Record<string, PathGate>> = {},
   config_stand_in?: (probe: ConfigPathProbe) => PathProbe,
+  ask_gates: Readonly<Record<string, AskGate>> = ASK_GATES,
 ): readonly Gap[] {
   const gaps: Gap[] = []
-  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates }
+  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates }
 
   for (const path of paths) {
     const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
@@ -167,6 +169,7 @@ interface Gates {
   readonly launch: Readonly<Record<string, LaunchGate>>
   readonly argument: Readonly<Record<string, ArgumentGate>>
   readonly path: Readonly<Record<string, PathGate>>
+  readonly ask: Readonly<Record<string, AskGate>>
 }
 
 /**
@@ -180,6 +183,17 @@ function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gat
 
   if (control.kind === 'none') return 'declared as having no control'
 
+  return gapOfAClaimedControl(path, control, gateRefuses, gates, standIn)
+}
+
+/** Why the control a row claims does not stand on it, or undefined when it does. */
+function gapOfAClaimedControl(
+  path: InboundPath,
+  control: Control,
+  gateRefuses: (path: string) => boolean,
+  gates: Gates,
+  standIn?: (probe: ConfigPathProbe) => PathProbe,
+): string | undefined {
   if (path.klass === 'launched' && control.kind !== 'launch-gate') {
     return `is code the host starts by itself, and ${control.kind} does not stand in front of that`
   }
@@ -190,9 +204,17 @@ function gapOfRow(path: InboundPath, gateRefuses: (path: string) => boolean, gat
 
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
+  if (control.kind === 'ask-gate') return askRowGap(path, control.gate, gates.ask)
+
   if (control.kind === 'check_every_path_is_gated') return gatedPathRowGap(path, control, gateRefuses, gates, standIn)
 
   return claimedControlGap(path, control, gateRefuses, gates.delivery)
+}
+
+/** Why a row claiming an ask gate is a gap: the gate nobody built, one that answers a question wrong, or a row that is not delivered text. */
+function askRowGap(path: InboundPath, name: string, ask_gates: Readonly<Record<string, AskGate>>): string | undefined {
+  if (path.klass !== 'delivered') return 'names an ask gate on a path that does not put text into a turn'
+  return askGateGap(name, ask_gates[name])
 }
 
 /**
@@ -622,6 +644,45 @@ function deliveryGateGap(name: string, gate: DeliveryGate | undefined): string |
   }
 
   return undefined
+}
+
+/** What decides whether an ask may be handed to the session that offers it: the queue's own rule (martha#313). */
+export type AskGate = (offered: { readonly ask: AnAsk; readonly members: readonly string[] }) => boolean
+
+/** One ask a gate is asked about, whether it must be admitted, and the members the launcher started. */
+export interface AskProbe {
+  readonly admits: boolean
+  readonly what: string
+  readonly ask: AnAsk
+  readonly members: readonly string[]
+}
+
+/** The members these probes are asked against: two synthetic names, since this repository is public. */
+const ASKERS = ['Terra', 'Ponto'] as const
+
+/** An ask as the queue writes one, with what the probe changes about it. */
+const anAsk = (changed: Partial<AnAsk> = {}): AnAsk => ({ id: 1, question: 'Delete the merged branch vesta/313-old?', asked_by: ASKERS[0], since: 1_000, ...changed })
+
+/**
+ * The questions every ask gate is asked, one per way an ask can be unfit to hand over: an ask the queue wrote is
+ * admitted, and one whose asker the launcher never started, one whose text carries a hidden character, one longer than
+ * the queue's cap and one with no text are each refused. A gate that refuses everything, or admits everything, fails on
+ * the first two.
+ */
+export const ASK_PROBES: readonly AskProbe[] = [
+  { admits: true, what: 'an ask from a member this crew started, in the queue\'s own words', ask: anAsk(), members: ASKERS },
+  { admits: false, what: 'an ask whose asker is not a member this crew started', ask: anAsk({ asked_by: 'a name the ask\'s own text chose' }), members: ASKERS },
+  { admits: false, what: 'an ask whose text carries a control or hidden character', ask: anAsk({ question: 'Delete \u0007 the branch?' }), members: ASKERS },
+  { admits: false, what: 'an ask longer than the cap the queue keeps', ask: anAsk({ question: 'a'.repeat(MAX_ASK + 1) }), members: ASKERS },
+  { admits: false, what: 'an ask with no text', ask: anAsk({ question: '' }), members: ASKERS },
+]
+
+/** Why a row naming an ask gate is a gap: the gate nobody built, or one that answers a question wrong. */
+function askGateGap(name: string, gate: AskGate | undefined): string | undefined {
+  if (gate === undefined) return `names an ask gate nobody has built: ${name}`
+  const failed = ASK_PROBES.find((probe) => gate({ ask: probe.ask, members: probe.members }) !== probe.admits)
+  if (failed === undefined) return undefined
+  return failed.admits ? `the ask gate ${name} refuses ${failed.what}` : `the ask gate ${name} admits ${failed.what}`
 }
 
 /**

@@ -35,6 +35,7 @@ import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_
 import { ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 
 /**
@@ -142,6 +143,11 @@ export const EXCEPTIONS: readonly Exception[] = [
   // the list under a name held by literal for the reason the refresh ask is.
   { value: OWNER_TODO_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: OWNER_TODO_DONE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  // The owner's ask queue (martha#313): the mod answers its four tools by literal, for the same reason.
+  { value: QUEUE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: LIST_ASKS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: TAKE_ASKS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: SETTLE_ASKS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: THE_OWNERS_TODO_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   // The Supervisor's standing items (martha#317): three more tools the mod answers by a literal, for the same reason.
   { value: STANDING_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },

@@ -17,8 +17,9 @@
 // declaration looks right. What a release's init did not write is another matter,
 // and each such field reads as the value init writes today: a house rule the
 // declaration does not name is off, a table that names no act grants it to the
-// owner alone, and a declaration that names no channel_read_seconds reads that
-// value too (martha#374), so a file an earlier release wrote still declares.
+// owner alone (whoTheTableGrants), and a declaration that names no
+// channel_read_seconds reads that value too (martha#374), so a file an earlier
+// release wrote still declares.
 
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
@@ -30,6 +31,12 @@ export const DECLARATION_FILE = 'crew.json'
 
 /** The one declaration version this slice reads. */
 export const DECLARATION_VERSION = 1
+
+/**
+ * The act that lets a member take the owner's queued asks and settle a batch of them (martha#313): one act for both
+ * tools, so a crew cannot let a session take asks it may not settle.
+ */
+export const OFFER_OWNER_ASKS = 'offer_owner_asks'
 
 /**
  * How often a session reads the crew's channel for a message it has not taken in (martha#253), for a declaration that
@@ -46,7 +53,7 @@ export const CHANNEL_READ_SECONDS_WHEN_UNNAMED = 30
 export const RESTART_MEMBER = 'restart_member'
 
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work', RESTART_MEMBER] as const
+export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER] as const
 export type Act = (typeof ACTS)[number]
 
 /**
@@ -300,20 +307,34 @@ function mayOf(refuse: Refuse, value: unknown, roles: readonly string[]): Record
   if (!isObject(value)) return refuse.at('mode.may', `is not ${shapeOf(ACTS)}`)
   refuse.unknownKeys(value, ACTS, 'mode.may.')
   const allowed = [OWNER, ...roles]
-  const whoMay = (act: Act): string[] => {
-    // A table written before the act existed (v0.1.0's `martha init` wrote three) reads it as the owner's alone, which
-    // is what init grants it now; a table that names the act and names nobody is still refused (martha#312 r=1 R1).
-    if (act === RESTART_MEMBER && !(act in value)) return [OWNER]
-    const who = value[act]
-    if (!Array.isArray(who) || who.length === 0) return refuse.at(`mode.may.${act}`, 'names nobody')
-    who.forEach((name: unknown, i) => {
-      if (typeof name !== 'string' || !allowed.includes(name)) {
-        refuse.at(`mode.may.${act}[${i}]`, `is not the owner or a role of this mode (${allowed.join(', ')})`)
-      }
-    })
-    return who as string[]
-  }
-  return Object.fromEntries(ACTS.map(act => [act, whoMay(act)])) as Record<Act, string[]>
+  return Object.fromEntries(ACTS.map(act => [act, whoMayOf(refuse, value[act], act, allowed)])) as Record<Act, string[]>
+}
+
+/**
+ * Who a mode's table grants one act to, read from what its `may` holds for that act.
+ *
+ * An act the table does not name at all is the owner's alone (martha#313, martha#312). One rule for every act, so the
+ * acts cannot drift apart, and the one reading that still lets a crew file written before an act existed declare after
+ * an upgrade: `martha init` in v0.1.0 wrote no offer_owner_asks, and a refusal here would leave every verb refusing
+ * until the owner edited the file by hand. The owner's own sessions are what the act then reaches, which is what a solo
+ * crew has.
+ *
+ * An act that is there and names nobody reads as nobody here, and is refused where the declaration is read; so is a
+ * grant that names something that is not the owner or a role of this mode.
+ */
+export function whoTheTableGrants(entry: unknown): readonly string[] {
+  return entry === undefined ? [OWNER] : Array.isArray(entry) ? (entry as readonly string[]) : []
+}
+
+function whoMayOf(refuse: Refuse, entry: unknown, act: Act, allowed: readonly string[]): string[] {
+  const who = [...whoTheTableGrants(entry)]
+  if (who.length === 0) return refuse.at(`mode.may.${act}`, 'names nobody')
+  who.forEach((name: unknown, i) => {
+    if (typeof name !== 'string' || !allowed.includes(name)) {
+      refuse.at(`mode.may.${act}[${i}]`, `is not the owner or a role of this mode (${allowed.join(', ')})`)
+    }
+  })
+  return who
 }
 
 function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Member[] {

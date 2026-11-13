@@ -69,6 +69,7 @@ function aCrewClearingFrom(predecessor: string | null): CrewTools {
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,
     refusesTheSubagent: async () => undefined,
+    noteTheCallsAnswer: () => {},
   }
 }
 

@@ -214,7 +214,6 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, mode: { ...team.mode, roles: [] } }, 'mode.roles'],
     [{ ...team, mode: { ...team.mode, roles: ['builder', 'builder'] } }, 'mode.roles[1]'],
     [{ ...team, mode: { ...team.mode, roles: [OWNER] } }, 'mode.roles[0]'],
-    [{ ...team, mode: { ...team.mode, may: without('assign_work', team.mode.may) } }, 'mode.may.assign_work'],
     [{ ...team, mode: { ...team.mode, may: { ...team.mode.may, assign_work: [] } } }, 'mode.may.assign_work'],
     [{ ...team, mode: { ...team.mode, may: { ...team.mode.may, assign_work: ['nobody'] } } }, 'mode.may.assign_work[0]'],
     [{ ...team, conventions: '/etc/conventions.md' }, 'conventions'],
@@ -227,6 +226,21 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, extra: 1 }, 'extra'],
   ]
   for (const [declaration, field] of cases) await refusedWith(declaration, field)
+})
+
+test('every act a table does not name is the owner\'s alone, so a crew file written before the act existed still declares (martha#313, martha#312; mutant: the rule narrowed to one act)', async () => {
+  // v0.1.0's `martha init` wrote tables with no offer_owner_asks in them, and a file written before a later act
+  // (restart_member, #312) names none of that one either. It is one rule for every act, not a case per act: absent
+  // reads as the owner alone. Pinning every act here is what stops the rule being narrowed back to a single one.
+  for (const act of ACTS) {
+    const settings = await declare({ ...solo, mode: { ...solo.mode, may: without(act, solo.mode.may) } }).settings
+    assert.deepEqual(settings.mode.may, allActsTo([OWNER]), `${act} absent is the owner's alone, and every other act is read as named`)
+  }
+
+  // The rule is for an act that is absent. An act that is there and names nobody is still refused, as before.
+  for (const act of ACTS) {
+    await refusedWith({ ...solo, mode: { ...solo.mode, may: { ...solo.mode.may, [act]: [] } } }, `mode.may.${act}`)
+  }
 })
 
 // --- folded in from review r=3 ----------------------------------------------
