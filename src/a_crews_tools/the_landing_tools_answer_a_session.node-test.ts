@@ -16,9 +16,11 @@ import { test, type TestContext } from 'node:test'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, OWNER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -63,8 +65,8 @@ function aPlaceOf(t: TestContext, run: (request: ProcessRequest) => Promise<Proc
   const root = mkdtempSync(join(tmpdir(), 'martha-256-tools-'))
   t.after(() => removeTheTree(root))
   const checkout = join(root, 'checkout')
-  const clones = join(root, 'clones')
-  const worktrees = join(root, 'worktrees')
+  const clones = join(root, CLONES)
+  const worktrees = join(root, WORKTREES)
   mkdirSync(checkout, { recursive: true })
   mkdirSync(clones, { recursive: true })
   mkdirSync(worktrees)
@@ -72,11 +74,11 @@ function aPlaceOf(t: TestContext, run: (request: ProcessRequest) => Promise<Proc
   const settings = settingsUnder(checkout, { clones, worktrees })
   const crew = crewToolsOver({
     member: MEMBER,
-    ledger: { clock: host.clock, stores: { rows: rowStreamsDirectory(join(root, 'rows')) } },
-    beats: dashboardRowsIn(join(root, 'dashboard')),
+    ledger: { clock: host.clock, stores: { rows: rowStreamsDirectory(join(root, CREW_ROWS_PLACE)) } },
+    beats: dashboardRowsIn(join(root, DASHBOARD)),
     root: checkout,
     documents: { read: async () => '{}' },
-    stores: { crew: crewFilesDirectory(join(root, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(root, 'crew-files')) },
     processes: host.processes,
     settings,
   })
@@ -86,10 +88,10 @@ function aPlaceOf(t: TestContext, run: (request: ProcessRequest) => Promise<Proc
 /** The crew a member acts in: one builder, the owner approving landings, and the two places a worktree needs. */
 function settingsUnder(root: string, places: { readonly clones: string | null; readonly worktrees: string | null }): CrewSettings {
   return {
-    paths: { root, crew: join(root, '.crew'), declaration: join(root, '.crew', 'crew.json'), conventions: null },
+    paths: { root, crew: join(root, DECLARATION_DIRECTORY), declaration: join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
     owner: 'Ann',
     members: [{ name: MEMBER, role: 'builder', model: null }],
-    mode: { name: 'solo', roles: ['builder'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER] } },
     house_rules: {
       owner_items: false,
       workspace_layout: true,

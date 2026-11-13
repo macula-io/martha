@@ -16,4 +16,13 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 
-export const EXCEPTIONS: readonly Exception[] = []
+export const EXCEPTIONS: readonly Exception[] = [
+  // The five landing tools' hooks (martha#256). A hooks module runs with no Node and may import only its own files,
+  // so the slice's own constant is not reachable here, and the host's plugin validator refuses a tool named by
+  // anything but a literal. Each of these words is the slice's name and cannot be imported from this file.
+  { value: 'verify_range', file: 'claude_code_relay/hooks/crew.tsx', reason: 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal' },
+  { value: 'land_batch', file: 'claude_code_relay/hooks/crew.tsx', reason: 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal' },
+  { value: 'fast_forward_after_the_owners_yes', file: 'claude_code_relay/hooks/crew.tsx', reason: 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal' },
+  { value: 'worktree_open', file: 'claude_code_relay/hooks/crew.tsx', reason: 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal' },
+  { value: 'worktree_finish', file: 'claude_code_relay/hooks/crew.tsx', reason: 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal' },
+]
