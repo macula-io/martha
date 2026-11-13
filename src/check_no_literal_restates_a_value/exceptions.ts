@@ -15,7 +15,6 @@
 // Keyed by value and file, so a file that drives git thirty times is one entry.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
@@ -71,7 +70,6 @@ export const EXCEPTIONS: readonly Exception[] = [
   // would be the same copy the rule exists to catch, in the very file that excuses it.
   { value: THE_REFRESH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: WRITE_MY_HANDOVER_TOOL, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of a tool this mod answers and registers; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: CREW_REFRESH, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of the other tool this mod answers and registers; ${THE_RELAY_CANNOT_IMPORT}` },
   // The five landing tools' hooks (martha#256): a hooks module runs with no Node and may import only its own files,
   // so the slice's own constant is not reachable there, and the host's plugin validator refuses a tool named by
   // anything but a literal. Each entry names the constant rather than another copy of its value.
