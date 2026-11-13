@@ -185,11 +185,17 @@ test('every row that claims the shell gate is reached by what the Claude Code la
   assert.deepEqual(shellGateRowsNothingRecords(await pathsTheLauncherRecords(t)), [])
 })
 
-test('the drive is not vacuous: without what the launch and the crew hand the model at start, A7, A11 and A19 are named', async (t) => {
+test('the drive is not vacuous: without what the launch hands the model at start, A7 and A11 are named', async (t) => {
   const recorded = await pathsTheLauncherRecords(t)
-  const handed = [PATH_OF_SOURCE.checkout_hook, PATH_OF_SOURCE.server_instructions, PATH_OF_SOURCE.standing_items]
+  const handed = [PATH_OF_SOURCE.checkout_hook, PATH_OF_SOURCE.server_instructions]
   const named = shellGateRowsNothingRecords(recorded.filter((path) => !handed.includes(path))).map((gap) => gap.path)
   assert.ok(handed.every((row) => named.includes(row)), named.join(', '))
+})
+
+test('the drive is not vacuous: without the standing items the crew hands the model at start, A19 is named', async (t) => {
+  const recorded = await pathsTheLauncherRecords(t)
+  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.standing_items)).map((gap) => gap.path)
+  assert.ok(named.includes(PATH_OF_SOURCE.standing_items), named.join(', '))
 })
 
 /** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
