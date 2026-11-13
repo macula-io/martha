@@ -73,8 +73,11 @@ export const MAX_COMMAND = 500
 /** The longest one-line field (a title, a goal, who waits, what a command does), in characters. */
 export const MAX_LINE = 200
 
-/** A row's id: a package ref or a short slug, never a path. */
+/** A row's id: a short slug, never a path and never a package ref (its "/" and "#" are refused). */
 const SAFE_ID = /^[A-Za-z0-9._-]{1,80}$/
+
+/** Why an id is refused, said the same by the tool that puts an act on the list and the one that takes it off. */
+export const AN_ID_IS_A_SLUG = 'id is a slug such as martha-317, never a package ref (its "/" and "#" are refused): letters, digits, ".", "_" or "-", at most 80 of them'
 const OWNER_REPO = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/
 const TAG = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/
 
@@ -187,7 +190,7 @@ const FIELDS: readonly { readonly name: 'title' | 'goal' | 'waiting_on'; readonl
 /** The row a call asks for, `added_by` and `since` its launch's and its clock's, or why it is refused by name. */
 export function theActAsked(args: Readonly<Record<string, unknown>>, added_by: string, since: number): OwnerTodoRow | { readonly refused: string } {
   const id = args['id']
-  if (typeof id !== 'string' || !SAFE_ID.test(id)) return { refused: 'id is letters, digits, ".", "_" or "-", at most 80 of them' }
+  if (typeof id !== 'string' || !SAFE_ID.test(id)) return { refused: AN_ID_IS_A_SLUG }
   const field = FIELDS.map((one) => lineRefusal(one.name, args[one.name], one.optional)).find((said) => said !== undefined)
   if (field !== undefined) return { refused: field }
   const commands = commandsIn(args['commands'])
@@ -280,7 +283,7 @@ export async function addAnAct(host: TodoHost, args: Readonly<Record<string, unk
 
 /** Takes the act `id` off the owner's list, saying who ended it. */
 export async function closeAnAct(host: TodoHost, id: unknown, done: DoneBy): Promise<TodoAnswer> {
-  if (typeof id !== 'string' || !SAFE_ID.test(id)) return { refused: 'id is letters, digits, ".", "_" or "-", at most 80 of them' }
+  if (typeof id !== 'string' || !SAFE_ID.test(id)) return { refused: AN_ID_IS_A_SLUG }
   const stored = await host.stores.rows.read(OWNER_TODO_STREAM)
   if (!theOpenRows(stored).some((row) => row.id === id)) return { refused: `${id} is not on the owner's list` }
   return appendAtLength(host, { kind: ACT_DONE_BY_OWNER, id, at: host.clock.now(), ...done }, stored.length, `${id} is off the owner's list`)
