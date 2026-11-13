@@ -8,7 +8,7 @@
     "node": ">=24.18.1"
   },
   "scripts": {
-    "test": "node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
+    "test": "prove_the_relay_loads/run_the_recorded_host_runs.sh && env -u MARTHA_RECORDED_HOST node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "check:posted-text": "node src/check_posted_text_carries_nothing_private/main.ts",
@@ -22,6 +22,7 @@
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
     "lint": "eslint . --max-warnings=0",
+    "redo:generated": "node src/redo_the_generated_files_of_a_merge/main.ts",
     "record:ring-results": "node src/record_ring_results/record_ring_results.ts",
     "record:mesh-answers": "node src/record_mesh_answers/record_mesh_answers.ts",
     "watch:shell": "./watch_a_live_launch/watch_a_member_keep_its_shell.sh",
@@ -65,13 +66,13 @@
     "hostCeilings": {
       "src/approve_a_checkouts_config": 69,
       "src/claude_code_host": 1478,
-      "src/claude_code_relay": 716,
+      "src/claude_code_relay": 724,
       "src/declare_a_solo_crew": 84,
       "src/install_the_pinned_installer": 124,
       "src/install_the_recorded_mesh_server": 312,
       "src/keep_martha_state_outside_the_checkout": 419,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 2809,
+      "src/launch_a_claude_code_member": 2810,
       "src/refuse_a_member_writing_owner_memory": 1081,
       "src/run_an_owner_signed_command": 562,
       "src/run_the_martha_command": 457,

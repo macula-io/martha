@@ -28,7 +28,26 @@ import {
 import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type LedgerRow, type Outcome } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
-import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+
+/**
+ * The programs a landing runs over the tree it is merging, and that tree's own scripts: a slice reaches the machine
+ * through the host's processes and writes no file itself, so the generated files are redone by a program (martha#381)
+ * and the ceilings are the check's own command (../check_a_host_directory_stays_under_its_ceiling).
+ *
+ * Each program's path is the one package.json runs it by — `redo:generated` and `check:host-ceilings` — and the landing
+ * test holds the three together, so a program that moves cannot leave a constant pointing where nothing is.
+ *
+ * `NODE` stays private: a program is named by its path, and the word `node` is written by other programs and tests that
+ * owe this slice nothing, so exporting it would make every one of those copies stale at once (martha#289). `npm` is
+ * held once for the whole tree, in ../take_in_a_tool_result, beside the other commands a slice runs.
+ */
+const NODE = 'node'
+export const THE_REDO_PROGRAM = 'src/redo_the_generated_files_of_a_merge/main.ts'
+export const THE_CHECK_PROGRAM = 'src/check_a_host_directory_stays_under_its_ceiling/main.ts'
+
+/** The script package.json runs the redo program by; ../check_a_host_directory_stays_under_its_ceiling names the other. */
+export const THE_REDO_SCRIPT = 'redo:generated'
 
 /** The two tools this slice registers: the batch, and the fast-forward the owner's yes unlocks. */
 export const LAND_BATCH = 'land_batch'
@@ -271,18 +290,103 @@ async function landingsOn(host: LandingHost, path: string, date: string): Promis
  */
 async function mergeEveryHeadAndPush(host: LandingHost, member: string, cut: TheCutBatch): Promise<Landing> {
   const merged = await mergeEveryHead(host, cut.batch.path, cut.work)
-  return 'refused' in merged ? merged : pushTheBatch(host, member, cut)
+  if ('refused' in merged) return merged
+  const passed = await theGateBeforeThePush(host, cut.batch.path, merged.ok)
+  if ('refused' in passed) return passed
+  return pushTheBatch(host, member, cut, merged.ok)
 }
 
-/** Merges every passed head `--no-ff`, in the batch's order; the first that will not merge stops the batch there. */
-async function mergeEveryHead(host: LandingHost, path: string, work: readonly LandedWork[]): Promise<Step<true>> {
+/** A merge the landing redid for: which pull request it was, and what was redone. */
+interface RedoneByTheLanding {
+  readonly package: string
+  readonly pr: number
+  readonly what: readonly string[]
+}
+
+/**
+ * Merges every passed head `--no-ff`, in the batch's order; the first that will not merge stops the batch there. A clash
+ * only in generated files is redone and the batch goes on (../the_generated_files_a_landing_redoes); every merge, redone
+ * or not, is then held to the ceilings it brought, because a clash the landing did not redo is still one the tree fails.
+ */
+async function mergeEveryHead(host: LandingHost, path: string, work: readonly LandedWork[]): Promise<Step<readonly RedoneByTheLanding[]>> {
+  const redone: RedoneByTheLanding[] = []
   for (const [at, one] of work.entries()) {
-    const merged = await git(host, path, ['merge', '--no-ff', '--no-edit', '-m', theMergeMessage(one), one.head])
-    if (merged.exit_code === 0) continue
-    await git(host, path, ['merge', '--abort'])
-    const untried = work.slice(at + 1).map((next) => next.package)
-    const rest = untried.length === 0 ? '' : ` Untried: ${untried.join(', ')}.`
-    return no(`stopped at ${one.package} (PR ${String(one.pr)}): ${saidBy(merged)}.${rest}`)
+    const settled = await mergeOneHead(host, path, one)
+    if ('refused' in settled) return theBatchStopsAt(one, settled.refused, work.slice(at + 1))
+    const holds = await theCeilingsHold(host, path)
+    if ('refused' in holds) return theBatchStopsAt(one, holds.refused, work.slice(at + 1))
+    if (settled.ok.length > 0) redone.push({ package: one.package, pr: one.pr, what: settled.ok })
+  }
+  return { ok: redone }
+}
+
+/** Where a batch stopped: the pull request it stopped at, why, and the packages it never tried. */
+function theBatchStopsAt(one: LandedWork, why: string, untried: readonly LandedWork[]): Refusal {
+  const rest = untried.length === 0 ? '' : ` Untried: ${untried.map((next) => next.package).join(', ')}.`
+  return no(`stopped at ${one.package} (PR ${String(one.pr)}): ${why}.${rest}`)
+}
+
+/** One head merged `--no-ff`: what the landing redid if it clashed only in generated files, or why it stopped. */
+async function mergeOneHead(host: LandingHost, path: string, one: LandedWork): Promise<Step<readonly string[]>> {
+  const merged = await git(host, path, ['merge', '--no-ff', '--no-edit', '-m', theMergeMessage(one), one.head])
+  if (merged.exit_code === 0) return { ok: [] }
+  const redone = await redoTheClash(host, path, one)
+  if ('refused' in redone) await git(host, path, ['merge', '--abort'])
+  return redone
+}
+
+/**
+ * The redone merge: the generated files are redone on the merged tree by the program that owns them, the ceilings are
+ * recorded to what that tree measures, and the merge is committed saying what was redone. A path the program does not
+ * redo is a clash a builder settles, and its own words stop the batch by name.
+ */
+async function redoTheClash(host: LandingHost, path: string, one: LandedWork): Promise<Step<readonly string[]>> {
+  const redone = await host.processes.run({ command: NODE, args: [THE_REDO_PROGRAM, '--repository', path], cwd: path })
+  if (redone.exit_code !== 0) return no(whatItSaid(THE_REDO_PROGRAM, redone))
+  const recorded = await theCeilingsRecorded(host, path)
+  if ('refused' in recorded) return recorded
+  const added = await git(host, path, ['add', '--all'])
+  if (added.exit_code !== 0) return no(`the redone merge would not be staged: ${saidBy(added)}`)
+  const said = `Redone-generated: ${redone.stdout.trim()}`
+  const committed = await git(host, path, ['commit', '--quiet', '-m', theMergeMessage(one), '-m', said])
+  if (committed.exit_code !== 0) return no(`the merge was redone and would not commit: ${saidBy(committed)}`)
+  return { ok: redone.stdout.trim().split('; ') }
+}
+
+/** The ceilings brought down to the merged tree's counts: the map's only writer, and it never raises one. */
+async function theCeilingsRecorded(host: LandingHost, path: string): Promise<Step<true>> {
+  const ran = await host.processes.run({ command: NODE, args: [THE_CHECK_PROGRAM, '--record'], cwd: path })
+  if (ran.exit_code !== 0) return no(`the ceilings would not be recorded: ${whatItSaid(THE_CHECK_PROGRAM, ran)}`)
+  return { ok: true }
+}
+
+/** Every merge is held to its ceilings, redone or not: a directory over its ceiling is where a decision hid. */
+async function theCeilingsHold(host: LandingHost, path: string): Promise<Step<true>> {
+  const ran = await host.processes.run({ command: NODE, args: [THE_CHECK_PROGRAM], cwd: path })
+  if (ran.exit_code === 0) return { ok: true }
+  return no(`the merged tree does not hold its ceilings: ${whatItSaid(THE_CHECK_PROGRAM, ran)}`)
+}
+
+/**
+ * What a landing runs over a tree it redid something in, before it pushes: npm's arguments, and what a failure calls it.
+ * The two scripts are named here rather than read from the manifest, because a slice may not read disk: what keeps them
+ * honest is that CI runs the same two words on every push, so a manifest that renamed one goes red where it is read.
+ */
+const THE_RUNS_BEFORE_A_PUSH: readonly { readonly args: readonly string[]; readonly name: string }[] = [
+  { args: ['run', '--silent', 'typecheck'], name: 'the type check' },
+  { args: ['test'], name: 'the suite' },
+]
+
+/**
+ * A landing that redid something pushes nothing until the tree it made passes the type check and the suite: the merge
+ * that resolved a generated file is one no reviewer read, so it is held to what a builder's change is held to.
+ */
+async function theGateBeforeThePush(host: LandingHost, path: string, redone: readonly RedoneByTheLanding[]): Promise<Step<true>> {
+  if (redone.length === 0) return { ok: true }
+  const named = redone.map((one) => `${one.package} (PR ${String(one.pr)})`).join(', ')
+  for (const run of THE_RUNS_BEFORE_A_PUSH) {
+    const ran = await host.processes.run({ command: NPM, args: run.args, cwd: path })
+    if (ran.exit_code !== 0) return no(`the tree the landing redid for ${named} does not pass ${run.name}: ${whatItSaid(run.name, ran)}. Nothing was pushed`)
   }
   return { ok: true }
 }
@@ -316,14 +420,18 @@ function withTheCloneBack(landing: Landing, back: Step<true>): Landing {
 }
 
 /** Pushes the integration branch, announced in every package's ledger before it runs. */
-async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch): Promise<Landing> {
+async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch, redone: readonly RedoneByTheLanding[]): Promise<Landing> {
   const tip = await gitSaid(host, cut.batch.path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`${cut.branch} holds no commit git will name.`)
   const landed = cut.work.map((one) => `${one.package} (PR ${String(one.pr)})`).join(', ')
   const what = `the batch ${cut.branch} of ${landed}`
   const sent = await pushForEveryPackage(host, member, cut.batch.packages, what, () => pushTheBranch(host, cut.batch.path, cut.branch, tip))
   if ('refused' in sent) return sent
-  return { told: `${sent.sent}. The range the owner says yes to is ${cut.base}..${tip}, over ${landed}.` }
+  const redone_said =
+    redone.length === 0
+      ? ''
+      : ` Generated files were redone for ${redone.map((one) => `${one.package} (PR ${String(one.pr)}): ${one.what.join(', ')}`).join('; ')}.`
+  return { told: `${sent.sent}. The range the owner says yes to is ${cut.base}..${tip}, over ${landed}.${redone_said}` }
 }
 
 /** Pushes one branch to the origin's same name; throws what git said when it will not. */
@@ -440,7 +548,11 @@ async function gitSaid(host: Pick<HostContract, 'processes'>, cwd: string, args:
 }
 
 /** What git said it could not do, as one line: its own words, or the status it ended with when it said none. */
-function saidBy(outcome: ProcessOutcome): string {
+const saidBy = (outcome: ProcessOutcome): string => whatItSaid(GIT, outcome)
+
+/** What a program said it could not do, as one line: its own words, or the status it ended with when it said none. */
+function whatItSaid(program: string, outcome: ProcessOutcome): string {
   const words = outcome.stderr.trim() === '' ? outcome.stdout.trim() : outcome.stderr.trim()
-  return words === '' ? `git ended with ${String(outcome.exit_code)}` : (words.split('\n')[0] ?? words)
+  const first = words.split('\n')[0] ?? ''
+  return first === '' ? `${program} ended with ${String(outcome.exit_code)}` : first
 }

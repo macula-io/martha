@@ -1,4 +1,4 @@
-// The host directories package.json declares, and the ceiling each one carries.
+// The host directories package.json declares.
 //
 // Two lists name where a host's code lives: `martha.hostAdapters` (one directory
 // per coding tool's adapter) and `martha.hostGlue` (the code that reaches the
@@ -25,9 +25,4 @@ export interface DeclaredDirectory {
 /** Every host directory, in the order its list declares it: the adapters, then the glue. */
 export function declaredDirectoriesOf(manifest: Manifest): DeclaredDirectory[] {
   return HOST_LISTS.flatMap((list) => (manifest.martha?.[list] ?? []).map((directory) => ({ list, directory })))
-}
-
-/** The ceiling each declared directory carries, as package.json holds it. */
-export function ceilingsOf(manifest: Manifest): Readonly<Record<string, number>> {
-  return manifest.martha?.hostCeilings ?? {}
 }
