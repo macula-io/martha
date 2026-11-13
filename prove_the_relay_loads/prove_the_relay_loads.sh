@@ -24,6 +24,10 @@
 # own model command answers "Set model to ...", the row then says that model, and a review off the crew's reviewer model
 # is refused with the model named. Those two cases need this binary too, so they run here or nowhere (r=2, 3a).
 #
+# And that switch leaves the owner's own default for new sessions alone (martha#359): the file the host really wrote is
+# the one Martha puts back, which the mechanism's own tests could agree with a mistake about. These cases read the same
+# binary, so they run here or nowhere.
+#
 # Exit: 0 the recorded host loads the relay and a launch leaves it as it was, 1 it does not (or a check did not bite),
 # 2 the host could not be set up.
 set -euo pipefail
@@ -39,6 +43,7 @@ HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
 OWN_WRITES_TESTS="${REPO}/src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts"
 RULES_TESTS="${REPO}/src/refuse_a_member_writing_owner_memory/the_rules_the_host_matches.node-test.ts"
 SWITCH_TESTS="${REPO}/src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts"
+SWITCH_DEFAULT_TESTS="${REPO}/src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts"
 HOST_TYPES_FILE="tsconfig.json"
 HOST_WRITES_WITHIN_S=60
 VARIABLE_CONSTANT="RELAY_SOCKET_VARIABLE"
@@ -143,3 +148,16 @@ grep -q "^ℹ pass ${switch_cases}$" "${WORK}/switch.txt" && grep -q '^ℹ skipp
   || { echo "prove_the_relay_loads: the model-switch cases did not all run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/switch.txt" >&2; exit 1; }
 
 echo "prove_the_relay_loads: with Claude Code ${version}, a member switches its model in this host and a review off the reviewer model is refused"
+
+# That switch leaves the owner's own default for new sessions alone (martha#359): the host's own save is the file Martha
+# puts back. Like the cases above these need this binary, so a run that skipped them proves nothing and fails here.
+switch_default_cases="$(grep -c '^test(' "${SWITCH_DEFAULT_TESTS}")"
+if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${SWITCH_DEFAULT_TESTS}" > "${WORK}/switch_default.txt" 2>&1; then
+  echo "prove_the_relay_loads: with Claude Code ${version}, a member's switch moved the owner's default, the file put back was not the host's own save, or a case failed:" >&2
+  cat "${WORK}/switch_default.txt" >&2
+  exit 1
+fi
+grep -q "^ℹ pass ${switch_default_cases}$" "${WORK}/switch_default.txt" && grep -q '^ℹ skipped 0$' "${WORK}/switch_default.txt" \
+  || { echo "prove_the_relay_loads: the owner's-default cases did not all run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/switch_default.txt" >&2; exit 1; }
+
+echo "prove_the_relay_loads: with Claude Code ${version}, a member's switch in this host leaves the owner's own default alone"
