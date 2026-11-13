@@ -71,6 +71,8 @@ test('#311: the second end is due a full ceiling after the first ended, never on
   const firstAt = ASKED_AT + CEILING_MS
   const ended = theFlowEnded(aFlow(), firstAt)
   assert.equal(anEndIsDue(aBeat({ flow: ended, now: firstAt + MINUTE_MS })).kind, 'none', 'the second end came on the next beat')
+  // At the whole limit the window does not hold it back, so only the spacing does.
+  assert.equal(anEndIsDue(aBeat({ flow: ended, now: firstAt + MINUTE_MS, percent: CONTEXT_FULL_PERCENT })).kind, 'none', 'at the whole limit the second end came on the next beat')
   assert.equal(anEndIsDue(aBeat({ flow: ended, now: firstAt + CEILING_MS - 1 })).kind, 'none', 'the second end came before a full ceiling')
   assert.deepEqual(anEndIsDue(aBeat({ flow: ended, now: firstAt + CEILING_MS })), { kind: 'end', why: `its handover waited ${HANDOVER_CEILING_MINUTES_WHEN_UNNAMED} minutes behind a running turn`, n: 2 })
 })
