@@ -19,6 +19,7 @@
 import type { Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { AN_ID_IS_A_SLUG, CONTROL, SAFE_ID, type TodoAnswer, type TodoHost } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 
 /** The stream the standing items live in, in the crew's row streams. */
 export const STANDING_STREAM = 'standing'
@@ -43,6 +44,19 @@ export const FIELDS_OF_KIND: Readonly<Record<StandingKind, readonly string[]>> =
   decided: ['rule', 'date', 'words'],
 }
 
+/**
+ * The field a hold names the package it holds in, as a batch names it (owner/repo#n). It is optional: a hold on
+ * something that is no package (a tag, a fleet roll) leaves it out. A batch that lands a held package is refused
+ * (martha#364, ../hold_a_package_back_from_a_batch).
+ */
+const PACKAGE = 'package'
+
+/** The package a hold holds, when it names one; undefined for a hold that names none and for the other kinds. */
+export const theHeldPackageOf = (item: StandingItem): string | undefined => (item.kind === 'held' ? item.fields[PACKAGE] : undefined)
+
+/** Whether two packages are the same one: GitHub reads owner/repo in any case, and the number has no case to differ in. */
+export const theSamePackage = (one: string, other: string): boolean => one.toLowerCase() === other.toLowerCase()
+
 /** The tools: record an item, close one, and list what stands. */
 export const STANDING_ADD = 'standing_add'
 export const STANDING_CLOSE = 'standing_close'
@@ -56,7 +70,7 @@ export const ITEMS_HANDED_AT_START = 20
 
 /** What `standing_add` says it is for. */
 export const STANDING_ADD_DESCRIPTION =
-  'Record one of the Supervisor\'s standing items, so the next Supervisor session is handed it after a refresh: held (item, reason, until: a YYYY-MM-DD day first, or the condition that ends the hold), awaiting (owes: who owes it, what: what they owe; the id is a slug naming the package, such as martha-317) or decided (rule, date: YYYY-MM-DD, words: the owner\'s own). Recording the same kind and id again replaces it, which is how a hold\'s day moves. A ruling is your record of the owner\'s words, never the owner\'s yes.'
+  `Record one of the Supervisor's standing items, so the next Supervisor session is handed it after a refresh: held (item, reason, until: a YYYY-MM-DD day first, or the condition that ends the hold; ${PACKAGE}: the package it holds, owner/repo#n, so a batch that lands it is refused), awaiting (owes: who owes it, what: what they owe; the id is a slug naming the package, such as martha-317) or decided (rule, date: YYYY-MM-DD, words: the owner's own). Recording the same kind and id again replaces it, which is how a hold's day moves; a hold's ${PACKAGE} must then be named again, the same. A ruling is your record of the owner's words, never the owner's yes.`
 
 /** What `standing_close` says it is for. */
 export const STANDING_CLOSE_DESCRIPTION =
@@ -106,6 +120,18 @@ function fieldRefusal(field: string, value: unknown): string | undefined {
 const idRefusal = (id: unknown): string | undefined =>
   typeof id === 'string' && SAFE_ID.test(id) ? undefined : AN_ID_IS_A_SLUG
 
+/** Why a hold's package is refused, or undefined when it names none or names one as a batch would. */
+function packageRefusal(kind: StandingKind, value: unknown): string | undefined {
+  if (kind !== 'held' || value === undefined || value === '') return undefined
+  const refused = fieldRefusal(PACKAGE, value)
+  if (refused !== undefined) return refused
+  return WORK_PACKAGE.test(value as string) ? undefined : `${PACKAGE} is not owner/repo#n, as a batch names a package`
+}
+
+/** The package a hold names, as its one extra field, or nothing for a hold that names none and for the other kinds. */
+const theHeldPackage = (kind: StandingKind, args: Readonly<Record<string, unknown>>): Readonly<Record<string, string>> =>
+  kind === 'held' && typeof args[PACKAGE] === 'string' && args[PACKAGE] !== '' ? { [PACKAGE]: args[PACKAGE] } : {}
+
 /** The kind a call names, or undefined when it names none of the three. */
 const kindIn = (raw: unknown): StandingKind | undefined => STANDING_KINDS.find((kind) => kind === raw)
 
@@ -116,11 +142,11 @@ export function theItemAsked(args: Readonly<Record<string, unknown>>, recorded_b
   const id = idRefusal(args['id'])
   if (id !== undefined) return { refused: id }
   const names = FIELDS_OF_KIND[kind]
-  const refused = names.map((name) => fieldRefusal(name, args[name])).find((said) => said !== undefined)
+  const refused = names.map((name) => fieldRefusal(name, args[name])).find((said) => said !== undefined) ?? packageRefusal(kind, args[PACKAGE])
   if (refused !== undefined) return { refused: `a ${kind} item: ${refused}` }
   if (kind === 'decided' && !isADay(args['date'] as string)) return { refused: 'a decided item: date is not a day: YYYY-MM-DD, one the calendar has' }
   const fields = Object.fromEntries(names.map((name) => [name, args[name] as string]))
-  return { kind, id: args['id'] as string, fields, recorded_by, since }
+  return { kind, id: args['id'] as string, fields: { ...fields, ...theHeldPackage(kind, args) }, recorded_by, since }
 }
 
 // --- the stream -----------------------------------------------------------------
@@ -173,8 +199,23 @@ export async function recordAStandingItem(host: TodoHost, args: Readonly<Record<
   const item = theItemAsked(args, recorded_by, host.clock.now())
   if ('refused' in item) return item
   const stored = await host.stores.rows.read(STANDING_STREAM)
+  const drops = aHeldRecordDropsItsPackage(theStandingItems(stored), item)
+  if (drops !== undefined) return { refused: drops }
   const row = { kind: ROW_OF_KIND[item.kind], id: item.id, ...item.fields, recorded_by, since: item.since }
   return appendAtLength(host, row, stored.length, `${item.kind} ${item.id} is recorded`)
+}
+
+/**
+ * Why recording `asked` would drop or change the package an open hold of the same id holds, or undefined when it keeps
+ * it. Recording again replaces the hold, so a day moved without the package would leave a hold that still reads HELD
+ * while a batch lands its package (martha#364). A hold that named none may be given one.
+ */
+export function aHeldRecordDropsItsPackage(open: readonly StandingItem[], asked: StandingItem): string | undefined {
+  if (asked.kind !== 'held') return undefined
+  const held = open.find((item) => item.kind === 'held' && item.id === asked.id)?.fields[PACKAGE]
+  const named = asked.fields[PACKAGE]
+  if (held === undefined || (named !== undefined && theSamePackage(held, named))) return undefined
+  return `${asked.id} is held on ${held}: name the same package to move its day, or close it first (${STANDING_CLOSE}, with its evidence). Nothing was written`
 }
 
 /** The one item an id (and, when named, a kind) closes, or why there is not exactly one. */
@@ -227,7 +268,7 @@ export function isDue(item: StandingItem, today: string): boolean {
 
 /** The line each kind is drawn as, besides the DUE mark a hold may carry. */
 const LINE_OF_KIND: Readonly<Record<StandingKind, (item: StandingItem) => string>> = {
-  held: (item) => `HELD ${item.id}: ${item.fields['item']}. Why: ${item.fields['reason']}. Until: ${item.fields['until']}`,
+  held: (item) => `HELD ${item.id}${item.fields[PACKAGE] === undefined ? '' : ` (${item.fields[PACKAGE]})`}: ${item.fields['item']}. Why: ${item.fields['reason']}. Until: ${item.fields['until']}`,
   awaiting: (item) => `AWAITING ${item.id}: ${item.fields['owes']} owes ${item.fields['what']}, since ${todayOf(item.since)}`,
   decided: (item) => `DECIDED, recorded by ${item.recorded_by}: ${item.fields['date']} "${item.fields['words']}" (${item.id}): ${item.fields['rule']}`,
 }
