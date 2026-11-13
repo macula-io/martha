@@ -125,7 +125,7 @@ test('a test file beside the sources does not count', async (t) => {
   assert.deepEqual(await findingsIn(root), [])
 })
 
-test('recording brings a ceiling down, and never raises one nor invents one', async (t) => {
+test('recording brings a ceiling down, and never raises one nor invents one', () => {
   const text = plantedPackageJson({
     adapters: ['src/shrunk', 'src/grew', 'src/newcomer'],
     ceilings: { 'src/shrunk': 30, 'src/grew': 5 },

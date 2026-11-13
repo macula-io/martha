@@ -1,19 +1,30 @@
-// What a ceiling fails on: a directory over it, a directory with none, or a
-// ceiling nobody declares a directory for.
+// What a ceiling fails on: a directory over it, a ceiling above its directory, a
+// directory with none, or a ceiling nobody declares a directory for.
 //
 // The judgement is pure: it reads the declarations, the ceilings and the counts,
 // and says what is wrong, in the words a member reads on a red run. A directory
-// over its ceiling is the decision that hid; a directory the lists declare with
+// over its ceiling is the decision that hid; a ceiling above its directory is
+// room for that decision to grow back unseen, so it fails until a record run
+// brings it down in the change that shrank the directory (martha#341); a
+// directory the lists declare with
 // no ceiling is the hole this check exists to close, so it fails by name rather
 // than passing quietly; a ceiling left behind for a directory no list names is a
 // number nobody holds anything to, and says the map and the lists have drifted.
 
 import type { DeclaredDirectory, HostList } from './declared_host_directories.ts'
+import { standsAbove } from './record_the_ceilings.ts'
 
 /** One thing the check has to say, with the list the directory came from. */
 export type Finding =
   | {
       readonly kind: 'over'
+      readonly list: HostList
+      readonly directory: string
+      readonly code: number
+      readonly ceiling: number
+    }
+  | {
+      readonly kind: 'headroom'
       readonly list: HostList
       readonly directory: string
       readonly code: number
@@ -37,6 +48,13 @@ const LIST_NAME: Readonly<Record<HostList, string>> = {
   hostGlue: 'martha.hostGlue',
 }
 
+/** What a directory's count says against its ceiling: over it, below it, or nothing. */
+const againstItsCeiling = (entry: DeclaredDirectory, counted: number, ceiling: number): Finding | undefined => {
+  if (counted > ceiling) return { kind: 'over', ...entry, code: counted, ceiling }
+  if (standsAbove(ceiling, counted)) return { kind: 'headroom', ...entry, code: counted, ceiling }
+  return undefined
+}
+
 /** Everything wrong with the counts, in the order the lists declare their directories. */
 export function findingsOf(
   directories: readonly DeclaredDirectory[],
@@ -51,8 +69,8 @@ export function findingsOf(
       found.push({ kind: 'no_ceiling', list, directory })
       continue
     }
-    const counted = code[directory] ?? 0
-    if (counted > ceiling) found.push({ kind: 'over', list, directory, code: counted, ceiling })
+    const finding = againstItsCeiling({ list, directory }, code[directory] ?? 0, ceiling)
+    if (finding !== undefined) found.push(finding)
   }
   for (const directory of Object.keys(ceilings)) {
     if (!declared.has(directory)) found.push({ kind: 'stale_ceiling', directory })
@@ -67,6 +85,12 @@ export function describe(finding: Finding): string {
       return (
         `${finding.directory}: ${finding.code} lines of code, ceiling ${finding.ceiling} (martha.hostCeilings)\n` +
         `  ${ADVICE[finding.list]}`
+      )
+    case 'headroom':
+      return (
+        `${finding.directory}: ${finding.code} lines of code, ceiling ${finding.ceiling} (martha.hostCeilings): ` +
+        `${finding.ceiling - finding.code} line(s) of room to grow back unseen\n` +
+        `  lower it in the change that shrank it: ${RECORD_COMMAND}`
       )
     case 'no_ceiling':
       return `${LIST_NAME[finding.list]} names ${finding.directory}, which has no ceiling in martha.hostCeilings`
