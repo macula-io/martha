@@ -9,7 +9,7 @@
 // removed again inside one branch does no harm, and a branch that has merged the
 // default branch must not be blamed for the lines the default branch brought.
 //
-// A marked record (./defines_its_values.ts) counts each entry as defined by the
+// A marked record (../host_contract/defines_its_values.ts) counts each entry as defined by the
 // change when the record carried no marker at the merge base, so marking a record
 // judges every one of its values over the whole tree though the change adds only
 // the marker's line; otherwise an entry counts when its own line is added.

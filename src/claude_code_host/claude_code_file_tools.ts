@@ -10,7 +10,7 @@
 
 import { join, resolve } from 'node:path'
 
-import type { DefinesItsValues } from '../check_no_literal_restates_a_value/defines_its_values.ts'
+import type { DefinesItsValues } from '../host_contract/defines_its_values.ts'
 
 /**
  * Each file-writing tool, by the argument of its call that names the file. Marked, so a literal anywhere that

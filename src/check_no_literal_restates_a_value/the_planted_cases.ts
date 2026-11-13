@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, THE_MARKER } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { verdictOf } from './judge_a_change.ts'
 import { CORE } from './the_core_the_check_reads.ts'
 
@@ -154,7 +155,7 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
 
 /** git with an identity and no signing, which a throwaway repository has no config for. */
 const gitIn = (root: string, ...args: readonly string[]): string =>
-  execFileSync('git', ['-C', root, '-c', 'user.name=planted', '-c', 'user.email=planted@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
+  execFileSync('git', ['-C', root, ...marthasOwnGitArgs(['-c', 'user.name=planted', '-c', 'user.email=planted@example.invalid', '-c', 'commit.gpgsign=false', ...args])], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim()

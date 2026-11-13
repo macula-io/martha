@@ -24,7 +24,9 @@
 //     cannot escape the check by a second name.
 //
 // A type only: it costs nothing at run time, and the type checker keeps the record
-// a record of strings.
+// a record of strings. It lives in host_contract, beside core_source.ts, because a
+// host adapter marks its records with it, and an adapter may import neither a
+// program nor a test: the check's own slice holds its program.
 
 /** A record whose string keys and string values are values the tree shares: the restated-values check reads each as a constant. */
 export type DefinesItsValues = Readonly<Record<string, string>>

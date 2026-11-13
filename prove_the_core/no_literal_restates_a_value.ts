@@ -11,7 +11,7 @@
 // value a literal could restate.
 //
 // A record counts too, only when its definition is marked `satisfies DefinesItsValues`
-// (src/check_no_literal_restates_a_value/defines_its_values.ts): each of its string
+// (src/host_contract/defines_its_values.ts): each of its string
 // keys is a value named `RECORD.key (key)`, and each string value one named
 // `RECORD.key`. A marked record the check cannot read entry by entry, or a marker
 // anywhere but on such a record, is an error naming it (markersNotHeld).

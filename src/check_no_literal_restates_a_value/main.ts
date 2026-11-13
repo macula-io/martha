@@ -7,7 +7,7 @@
 // every literal equal to a value it defines, revalues or takes away, over the whole
 // tree. How a range is read is ./judge_a_change.ts; this file only prints it.
 //
-// A record marked `satisfies DefinesItsValues` (./defines_its_values.ts) the check
+// A record marked `satisfies DefinesItsValues` (../host_contract/defines_its_values.ts) the check
 // cannot read entry by entry, or a marker anywhere else, is a finding in every
 // mode: the marker's claim holds over the whole tree, not only where a change
 // touches it.
