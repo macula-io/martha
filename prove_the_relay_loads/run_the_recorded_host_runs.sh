@@ -22,7 +22,8 @@
 # no_test_output_carries_the_environment.ts, so its output is held to the suite's two rules: no planted secret in it
 # (martha#92), and it ends with its own summary (martha#325).
 #
-# Where the variable is unset nothing runs: it says how many runs it left to the relay job and exits 0, claiming no pass.
+# Where the variable is unset no listed run is made: after the planted run that proves the output check holds, it says
+# how many runs it left to the relay job and exits 0, claiming no pass.
 #
 # Exit: 0 every run was whole (or none ran here, as it says), 1 a run was not whole or a self-test did not hold,
 # 2 the runs could not be set up.
@@ -81,29 +82,43 @@ holds '--test-timeout=[1-9]*' || { echo "${NAME}: the runs' arguments lack --tes
 holds "${FORCE_EXIT_FLAG}" || { echo "${NAME}: the runs' arguments lack ${FORCE_EXIT_FLAG}; a file holding a handle open would never exit (martha#56)" >&2; exit 1; }
 holds "${GUARD_FLAG}" || { echo "${NAME}: the runs' arguments lack ${GUARD_FLAG}; a file leaving something running would pass silently (martha#56)" >&2; exit 1; }
 
-# Every run goes through the output check, so its output is held to the suite's two rules (martha#92, martha#325).
-RUN_COMMAND=(node "${OUTPUT_CHECK}" node "${RUN_ARGS[@]}")
-[[ "${RUN_COMMAND[0]}" == node && "${RUN_COMMAND[1]}" == "${OUTPUT_CHECK}" && "${RUN_COMMAND[2]}" == node ]] \
-  || { echo "${NAME}: the runs do not go through ${OUTPUT_CHECK}; a planted secret or a cut run would pass (martha#92, martha#325)" >&2; exit 1; }
+# Every run goes through the output check, so its output is held to the suite's two rules (martha#92, martha#325). The
+# loop below holds its own invocation to that: its first run, on every call, host or none, is a planted file that prints
+# the value the output check plants in PLANTED_VARIABLE, and that run must fail with the check's own words. A loop line
+# that skipped the check would let it pass, and the runner refuses that by name before any listed run.
+PLANTED_VARIABLE="$(node --input-type=module -e "import { PLANTED_VARIABLE } from '${OUTPUT_CHECK}'; console.log(PLANTED_VARIABLE)")"
+[[ -n "${PLANTED_VARIABLE}" ]] || { echo "${NAME}: ${OUTPUT_CHECK} gave no PLANTED_VARIABLE" >&2; exit 2; }
+PLANTED_FILE="${WORK}/a_run_that_prints_the_planted_value.node-test.mjs"
+printf "import { test } from 'node:test'\ntest('prints the planted value', () => console.log(process.env['%s']))\n" "${PLANTED_VARIABLE}" > "${PLANTED_FILE}"
+OUTPUT_CHECK_WORDS="no test output carries the environment (martha#92)"
 
 count="$(jq 'length' "${RUNS}")"
-if [[ -z "${!HOST_VARIABLE:-}" ]]; then
-  echo "${NAME}: ${count} recorded-host run(s) not run here; ci.yml's relay job runs them"
-  exit 0
+version=""
+if [[ -n "${!HOST_VARIABLE:-}" ]]; then
+  said="$("${!HOST_VARIABLE}" --version)"
+  version="${said%% *}"
+  listed="$(jq -c '.[]' "${RUNS}")"
+else
+  listed=""
 fi
-said="$("${!HOST_VARIABLE}" --version)"
-version="${said%% *}"
 
-# Every listed run, in this host, one file at a time, each held to the_run_is_whole.
+# The planted run, then every listed run in this host, one file at a time, each held to the_run_is_whole.
 while IFS= read -r run; do
   file="$(jq -r '.file' <<< "${run}")"
   pattern="$(jq -r '.name_pattern // empty' <<< "${run}")"
   cases="$(jq -r '.cases' <<< "${run}")"
   proves="$(jq -r '.proves' <<< "${run}")"
+  planted="$(jq -r '.planted // false' <<< "${run}")"
   narrowed=()
   [[ -n "${pattern}" ]] && narrowed=(--test-name-pattern="${pattern}")
   log="${WORK}/run_$(basename "${file}").txt"
-  if ! "${RUN_COMMAND[@]}" "${narrowed[@]}" "${file}" > "${log}" 2>&1; then
+  if node "${OUTPUT_CHECK}" node "${RUN_ARGS[@]}" "${narrowed[@]}" "${file}" > "${log}" 2>&1; then ran=0; else ran=1; fi
+  if [[ "${planted}" == true ]]; then
+    [[ "${ran}" == 1 ]] && grep -qF "${OUTPUT_CHECK_WORDS}" "${log}" \
+      || { echo "${NAME}: a run that prints the planted value was not failed by ${OUTPUT_CHECK}; the runs do not go through it, so a leaked secret or a cut run would pass (martha#92, martha#325)" >&2; exit 1; }
+    continue
+  fi
+  if [[ "${ran}" != 0 ]]; then
     echo "${NAME}: with Claude Code ${version}, a case of ${file} failed:" >&2
     cat "${log}" >&2
     echo "${NAME}: a recorded-host run failed, so the rest of the suite did not run" >&2
@@ -116,4 +131,6 @@ while IFS= read -r run; do
     exit 1
   }
   echo "${NAME}: with Claude Code ${version}, ${proves}"
-done < <(jq -c '.[]' "${RUNS}")
+done < <(jq -cn --arg file "${PLANTED_FILE}" '{file: $file, cases: 1, proves: "", planted: true}'; [[ -n "${listed}" ]] && printf '%s\n' "${listed}")
+
+[[ -n "${version}" ]] || echo "${NAME}: ${count} recorded-host run(s) not run here; ci.yml's relay job runs them"
