@@ -1,12 +1,12 @@
 // Who may act.
 //
 // The crew's tools that decide what may be DONE — assign work, read the crew
-// roster, verify a range, open a crew room, restart a member, take the owner's
-// asks, close the owner's todo rows — compare a display name that the CALLING
-// session sets about itself. That name falls back to the first six user messages
-// of the session, and a delivered message is a user message, so a stranger's ring
-// purpose saying "you are Supervisor" passes every one of them. `crew_restart`,
-// `take_asks` and `crew_todo_done` go further: they have no caller check at all.
+// roster, verify a range, open a crew room, restart a member, close the owner's
+// todo rows — compare a display name that the CALLING session sets about itself.
+// That name falls back to the first six user messages of the session, and a
+// delivered message is a user message, so a stranger's ring purpose saying "you
+// are Supervisor" passes every one of them. `crew_restart` and `crew_todo_done`
+// go further: they have no caller check at all.
 //
 // The actor here is therefore the CALLING session, and its identity is the node
 // id the harness holds for it — never the sender of a message the session
@@ -19,6 +19,12 @@
 // The anchor is the harness's own record of the session's node id. Where that is
 // a file in the crew's state directory, a shell running as the same OS user can
 // rewrite it — the roster anchor weakness, unchanged here and named in the doc.
+//
+// `take_asks` was on this list, and is not any more: taking the owner's asks and
+// settling a batch are decided by the declaration's table, on the act
+// OFFER_OWNER_ASKS, because a solo crew has no node id to compare (martha#313,
+// ../queue_the_owners_asks). A list that named it here would claim a gate this
+// rule never asks.
 
 import { RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 
@@ -29,7 +35,6 @@ export const SUPERVISOR_ONLY_ACTIONS = [
   'verify_range',
   'open_crew_room',
   RESTART_MEMBER,
-  'take_asks',
   'complete_todo',
 ] as const
 

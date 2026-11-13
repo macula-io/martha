@@ -268,16 +268,21 @@
 <text class="t-desc" x="48" y="2142">opens and finishes one;</text>
 <text class="t-desc" x="48" y="2158">read_the_origin_a_clone_has</text>
 <text class="t-desc" x="48" y="2174">says what a clone is of</text>
-<rect class="b-cmp" x="348" y="1878" width="300" height="180" rx="10"/>
-<text class="t-code" x="364" y="1906">keep_the_owners_todo_list</text>
-<text class="t-type" x="364" y="1924">[what waits on the owner]</text>
-<text class="t-desc" x="364" y="1948">The owner's to-do list (martha#316):</text>
-<text class="t-desc" x="364" y="1964">the acts only the owner can do, each</text>
-<text class="t-desc" x="364" y="1980">command shown in full under what it</text>
-<text class="t-desc" x="364" y="1996">does. A member the table lets assign</text>
-<text class="t-desc" x="364" y="2012">work adds one; its own check or the</text>
-<text class="t-desc" x="364" y="2028">member takes it off. The pane and</text>
-<text class="t-desc" x="364" y="2044">martha todo show it</text>
+<rect class="b-cmp" x="348" y="1878" width="300" height="262" rx="10"/>
+<text class="t-code" x="364" y="1906">keep_the_owners_todo_list,</text>
+<text class="t-code" x="364" y="1924">queue_the_owners_asks</text>
+<text class="t-type" x="364" y="1942">[what waits on the owner]</text>
+<text class="t-desc" x="364" y="1966">The owner's to-do list (martha#316):</text>
+<text class="t-desc" x="364" y="1982">the acts only the owner can do, each</text>
+<text class="t-desc" x="364" y="1998">command shown in full under what it</text>
+<text class="t-desc" x="364" y="2014">does. A member the table lets assign</text>
+<text class="t-desc" x="364" y="2030">work adds one; its own check or the</text>
+<text class="t-desc" x="364" y="2046">member takes it off. The pane and</text>
+<text class="t-desc" x="364" y="2062">martha todo show it. queue_the_owners_</text>
+<text class="t-desc" x="364" y="2078">asks is the ask queue (martha#313):</text>
+<text class="t-desc" x="364" y="2094">a routine ask waits instead of a menu,</text>
+<text class="t-desc" x="364" y="2110">and the session the table names hands</text>
+<text class="t-desc" x="364" y="2126">the whole batch over as one menu</text>
 <rect class="b-cmp" x="664" y="1878" width="300" height="198" rx="10"/>
 <text class="t-code" x="680" y="1906">keep_the_supervisors_</text>
 <text class="t-code" x="680" y="1924">standing_items</text>

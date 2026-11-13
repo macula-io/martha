@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
@@ -46,7 +46,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
       { name: 'builder', role: 'builder', model: null },
       { name: 'reviewer', role: 'reviewer', model: null },
     ],
-    mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [RESTART_MEMBER]: [OWNER] } },
+    mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
     house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, clones: null, worktrees: null },
     channel_read_seconds: 30,
   }
@@ -90,13 +90,13 @@ test('#306: the section carries who the member is, its practice, its role, its m
   assert.doesNotMatch(section, /\{\{/, 'a placeholder was left in the section, reading as a rule')
 })
 
-test('#306: the practice is in the section only when the crew switched it on, and then it is Martha\'s five rules, numbered', () => {
+test('#306: the practice is in the section only when the crew switched it on, and then it is Martha\'s six rules, numbered', () => {
   const off = handAMemberItsCrewText(textsOf({ practice: null }))
   assert.doesNotMatch(off, /## Crew practice/, 'the practice reached a crew that did not switch it on')
   const on = handAMemberItsCrewText(textsOf())
   const practice = on.slice(on.indexOf('## Crew practice'), on.indexOf('## Your role'))
   assert.match(practice, /\(1\) Reviews go by direct message\./, 'the first rule is not numbered as the crew numbers its rules')
-  assert.equal((practice.match(/^\(\d+\) /gm) ?? []).length, 5, 'the practice is not the five rules')
+  assert.equal((practice.match(/^\(\d+\) /gm) ?? []).length, 6, 'the practice is not the six rules')
 })
 
 test('#306: the practice the composer hands is the declaration\'s switch, and Martha\'s own text when it is on', () => {
