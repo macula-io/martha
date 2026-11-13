@@ -62,8 +62,16 @@ interface Places {
   readonly branch: string
 }
 
-type Refusal = { readonly refusal: string }
-const refused = (why: string): Refusal => ({ refusal: why })
+/**
+ * What the two tools answer: what was done, or why nothing was (martha#256 r=3). The split is the one every acting
+ * slice keeps, and it has to survive the seam: a refusal decided here and handed on as a string would reach the
+ * member as a success, so a member (and anything that counts refusals) could not tell "removed" from "not removed,
+ * because it still holds 3 unpushed commits".
+ */
+export type WorktreeAnswer = { readonly told: string } | { readonly refused: string }
+/** The refusal on its own: what an inner step answers when it names why nothing is done. */
+type Refused = { readonly refused: string }
+const no = (why: string): Refused => ({ refused: why })
 
 /** What `worktree_open` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const WORKTREE_OPEN_DESCRIPTION = 'Makes a worktree for one package of a repository, on a new branch of your own, and answers where it is.'
@@ -73,17 +81,17 @@ export const WORKTREE_FINISH_DESCRIPTION =
   'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has.'
 
 /** The places one call works in, or why the crew and the arguments name none. */
-function placesOf(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Places | Refusal {
+function placesOf(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Places | Refused {
   const { clones, worktrees } = request.settings.house_rules
-  if (clones === null || worktrees === null) return refused(NO_LAYOUT)
+  if (clones === null || worktrees === null) return no(NO_LAYOUT)
   const repo = args['repo']
   const slug = args['slug']
-  if (typeof repo !== 'string' || !REPO.test(repo)) return refused(`${JSON.stringify(repo)} is not a repository, as org/name.`)
+  if (typeof repo !== 'string' || !REPO.test(repo)) return no(`${JSON.stringify(repo)} is not a repository, as org/name.`)
   if (typeof slug !== 'string' || !SLUG.test(slug)) {
-    return refused(`${JSON.stringify(slug)} is not a slug: lowercase letters, digits and hyphens, up to 64 of them.`)
+    return no(`${JSON.stringify(slug)} is not a slug: lowercase letters, digits and hyphens, up to 64 of them.`)
   }
   if (!request.settings.members.some((member) => member.name === request.member)) {
-    return refused(`${request.member} is not a member of this crew.`)
+    return no(`${request.member} is not a member of this crew.`)
   }
   return { clone: join(clones, repo), path: join(worktrees, `${repo.slice(repo.indexOf('/') + 1)}-${slug}`), branch: `${request.member}/${slug}` }
 }
@@ -109,68 +117,68 @@ function saidBy(outcome: ProcessOutcome): string {
 const defaultBranchIn = (host: WorktreesRequest['host'], clone: string): Promise<string | undefined> =>
   gitSaid(host, clone, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
 
-export async function openAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
+export async function openAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<WorktreeAnswer> {
   const places = placesOf(request, args)
-  if ('refusal' in places) return places.refusal
+  if ('refused' in places) return places
   const { host } = request
   const fetched = await git(host, places.clone, ['fetch', '--quiet', 'origin'])
-  if (fetched.exit_code !== 0) return `git fetch did not work in ${places.clone}: ${saidBy(fetched)}.`
+  if (fetched.exit_code !== 0) return no(`git fetch did not work in ${places.clone}: ${saidBy(fetched)}.`)
   const from = await defaultBranchIn(host, places.clone)
-  if (from === undefined) return `${places.clone} cannot say which branch its origin's default is: run git remote set-head origin -a there, then try again.`
+  if (from === undefined) return no(`${places.clone} cannot say which branch its origin's default is: run git remote set-head origin -a there, then try again.`)
   const added = await git(host, places.clone, ['worktree', 'add', '--quiet', '-b', places.branch, places.path, from])
-  if (added.exit_code !== 0) return `${places.path} was not made: ${saidBy(added)}.`
+  if (added.exit_code !== 0) return no(`${places.path} was not made: ${saidBy(added)}.`)
   const base = await gitSaid(host, places.path, ['rev-parse', 'HEAD'])
-  return `opened ${places.path} on ${places.branch}, from ${from} at ${base ?? 'a commit git did not name'}`
+  return { told: `opened ${places.path} on ${places.branch}, from ${from} at ${base ?? 'a commit git did not name'}` }
 }
 
-export async function finishAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<string> {
+export async function finishAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<WorktreeAnswer> {
   const places = placesOf(request, args)
-  if ('refusal' in places) return places.refusal
+  if ('refused' in places) return places
   const package_name = packageOf(args)
-  if ('refusal' in package_name) return package_name.refusal
+  if ('refused' in package_name) return package_name
   const { host } = request
   const branch = await branchAt(host, places)
-  if ('refusal' in branch) return branch.refusal
+  if ('refused' in branch) return branch
   const held = await workNoOtherCopyHas(host, places)
-  if (held !== undefined) return held.refusal
+  if (held !== undefined) return held
   return removeTheWorktree(host, places, branch.name, { package: package_name.name, member: request.member })
 }
 
 /** The package a finish keeps its act's row under, or why the argument names none: an act is filed against one. */
-function packageOf(args: Readonly<Record<string, unknown>>): { readonly name: string } | Refusal {
+function packageOf(args: Readonly<Record<string, unknown>>): { readonly name: string } | Refused {
   const package_name = args['package']
   if (typeof package_name !== 'string' || !WORK_PACKAGE.test(package_name)) {
-    return refused(`${JSON.stringify(package_name)} is not a work package, as owner/repo#n.`)
+    return no(`${JSON.stringify(package_name)} is not a work package, as owner/repo#n.`)
   }
   return { name: package_name }
 }
 
 /** The branch the worktree at `places.path` really has: the one Martha's own naming gives, or why it is not that. */
-async function branchAt(host: WorktreesRequest['host'], places: Places): Promise<{ readonly name: string } | Refusal> {
+async function branchAt(host: WorktreesRequest['host'], places: Places): Promise<{ readonly name: string } | Refused> {
   const name = await gitSaid(host, places.path, ['symbolic-ref', '--short', 'HEAD'])
-  if (name === undefined) return refused(`there is no worktree at ${places.path}.`)
-  if (name !== places.branch) return refused(`${places.path} is on ${name}, not ${places.branch}: Martha removes only the worktree its own naming made.`)
+  if (name === undefined) return no(`there is no worktree at ${places.path}.`)
+  if (name !== places.branch) return no(`${places.path} is on ${name}, not ${places.branch}: Martha removes only the worktree its own naming made.`)
   return { name }
 }
 
 /** Why the worktree's work must not be removed yet, or undefined when no other copy of it exists. */
-async function workNoOtherCopyHas(host: WorktreesRequest['host'], places: Places): Promise<Refusal | undefined> {
+async function workNoOtherCopyHas(host: WorktreesRequest['host'], places: Places): Promise<Refused | undefined> {
   const changes = await gitSaid(host, places.path, ['status', '--porcelain'])
-  if (changes === undefined) return refused(`${places.path} could not be read: git would not say what it holds.`)
-  if (changes !== '') return refused(`${places.path} has uncommitted changes (${changes.split('\n')[0] ?? ''}): commit them or remove them, then try again.`)
+  if (changes === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
+  if (changes !== '') return no(`${places.path} has uncommitted changes (${changes.split('\n')[0] ?? ''}): commit them or remove them, then try again.`)
   const count = await gitSaid(host, places.path, ['rev-list', '--count', 'HEAD', '--not', '--remotes'])
-  if (count === undefined) return refused(`${places.path} could not be read: git would not say what it holds.`)
-  if (count !== '0') return refused(`${places.path} holds ${count} commit(s) on no remote branch: push ${places.branch}, then try again.`)
+  if (count === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
+  if (count !== '0') return no(`${places.path} holds ${count} commit(s) on no remote branch: push ${places.branch}, then try again.`)
   return undefined
 }
 
-async function removeTheWorktree(host: WorktreesRequest['host'], places: Places, branch: string, work: TheAct): Promise<string> {
+async function removeTheWorktree(host: WorktreesRequest['host'], places: Places, branch: string, work: TheAct): Promise<WorktreeAnswer> {
   const tip = await gitSaid(host, places.path, ['rev-parse', 'HEAD'])
   const removed = await git(host, places.clone, ['worktree', 'remove', places.path])
-  if (removed.exit_code !== 0) return `${places.path} was not removed: ${saidBy(removed)}.`
+  if (removed.exit_code !== 0) return no(`${places.path} was not removed: ${saidBy(removed)}.`)
   const local = await git(host, places.clone, ['branch', '-D', branch])
   const branchWord = local.exit_code === 0 ? `removed ${branch}` : `left ${branch} (${saidBy(local)})`
-  return `removed ${places.path} and ${branchWord}${await originWord(host, places.clone, tip, branch, work)}`
+  return { told: `removed ${places.path} and ${branchWord}${await originWord(host, places.clone, tip, branch, work)}` }
 }
 
 /** What became of the branch on origin: removed when the default branch already holds its tip, otherwise left. */

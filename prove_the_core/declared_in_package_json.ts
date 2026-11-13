@@ -28,9 +28,19 @@ export interface Manifest {
   }
 }
 
+/**
+ * Where a repository's manifest is: the path a check reads, or writes, without naming the file itself (martha#256
+ * r=3). The name stays private to the module that reads the manifest, so a check gets the path where the manifest is
+ * read rather than reaching into an unrelated slice for a name, and no new exported constant asks the tree's other
+ * literals to import it.
+ */
+export const manifestPathOf = (repository: string): string => join(repository, MANIFEST)
+
+const MANIFEST = 'package.json'
+
 /** The repository's package.json. */
 export const manifestOf = (repository: string): Manifest =>
-  JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as Manifest
+  JSON.parse(readFileSync(manifestPathOf(repository), 'utf8')) as Manifest
 
 /** Text as a regular expression matches it literally. */
 export const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
