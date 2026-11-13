@@ -27,6 +27,7 @@ import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.
 import {
   LAND,
   fastForwardAfterTheOwnersYes,
+  landedPackagesOf,
   landPassedWorkAsOneBatch,
   theBatchACallNames,
   theFastForwardACallNames,
@@ -388,6 +389,23 @@ test('#256: the fast-forward puts the passed tip on the default branch, and its 
   assert.equal(concluded.length, 1, 'the push was not concluded once in the ledger')
   assert.deepEqual(announced[0]?.kind === 'act_announced' ? announced[0].act.kind : '', 'push', 'the act was not kept as a push')
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : false, true, 'the push was kept as failed')
+})
+
+test('#320: a package that reached the default branch is noted as landed, and read back as landed', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const landed_package = `${fixture.repo}#320`
+  const tip = aBranchWithOneCommit(fixture, 'landed', base, 'work.txt', 'the work\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  await aPassedVerdict(tests, landed_package, base, tip)
+
+  assert.deepEqual([...(await landedPackagesOf(tests.host, [landed_package]))], [], 'a package that has not landed holds no landing row')
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] })
+  assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
+
+  const rows = await readLedger(tests.host, landed_package)
+  assert.equal(rows.filter((row) => row.kind === 'landed').length, 1, 'the landing was not noted once in the ledger')
+  assert.deepEqual([...(await landedPackagesOf(tests.host, [landed_package]))], [landed_package], 'the package did not read back as landed')
 })
 
 test('#256: the fast-forward is refused when the default branch moved after the range was checked', async (t) => {

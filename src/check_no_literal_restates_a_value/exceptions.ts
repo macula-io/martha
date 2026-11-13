@@ -111,5 +111,9 @@ export const EXCEPTIONS: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  // The dashboard row's own word for a parked member (martha#320). It shares its spelling with PARKED_PLACE, the name of
+  // the place a crew keeps its park markers in, and it is not that name.
+  { value: 'parked', file: 'nudge_the_supervisor/nudge_the_supervisor.ts', reason: 'the dashboard row\'s state, not the place a crew keeps its park markers in' },
+  { value: 'parked', file: 'watch_waits/watch_waits.ts', reason: 'the same dashboard state, read where a chain ends; not the place a crew keeps its park markers in' },
 ]
 

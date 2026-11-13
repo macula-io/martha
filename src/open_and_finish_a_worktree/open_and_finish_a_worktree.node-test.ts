@@ -91,6 +91,10 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     // Off unless the declaration names it true, as every switch is (martha#254 added the crew's dashboard).
     dashboard: false,
   refresh_between_tasks: false,
+    nudges: false,
+    stalled_minutes: null,
+    review_minutes: null,
+    person_minutes: null,
     review_model: null,
     clones: places.clones,
     worktrees: places.worktrees,
