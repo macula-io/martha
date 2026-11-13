@@ -84,6 +84,14 @@ export interface AGuardedSwitch {
   readonly record: TheOwnersModelRecord
   readonly snapshot: TheOwnersSettingsSnapshot
   readonly lock: ASwitchLock
+  /** The model the host is asked to save: the one model whose save this switch waits for, and later has to undo. */
+  readonly asked: string
+  /**
+   * The record an earlier switch left open, when this switch was built on it (martha#359 r=2). Its presence says the
+   * file's `model` is still the member's and not the owner's, so this switch puts the owner's model back by the
+   * recovery's write rather than restoring a file whose model was never the owner's.
+   */
+  readonly unfinished?: TheOwnersModelRecord
 }
 
 /** What becomes of the owner's default: the record left for a later launch (null when the switch is finished), and the
@@ -96,20 +104,36 @@ export interface TheOwnersDefaultAfter {
 /**
  * Steps 1 and 2 of a switch: the one lock for the owner's config directory, and the file as it is before the command
  * runs. A refusal is a switch not made — the owner's default is never moved by a switch that could not be put back.
+ *
+ * A record an earlier switch left open is settled first, under this same lock and by the recovery's own rules
+ * (martha#359 r=2): while it is open the file's `model` is the member's, so a snapshot taken before settling it would
+ * make the member's model the owner's, and the restore would write it back as the owner's own bytes.
  */
-export async function guardTheOwnersDefault(place: OwnersDefaultPlace): Promise<AGuardedSwitch | Refused> {
+export async function guardTheOwnersDefault(place: OwnersDefaultPlace, asked: string, open?: TheOwnersModelRecord): Promise<AGuardedSwitch | Refused> {
   const lock = await place.store.takeTheLock()
   if ('refusal' in lock) return lock
+  const carried = open === undefined ? undefined : theRecovery(place, open).record ?? undefined
   const snapshot = snapshotOf(place.store.read())
   if ('refusal' in snapshot) {
     lock.release()
     return snapshot
   }
-  return { lock, snapshot, record: theRecordFor(place, snapshot, '') }
+  return {
+    lock,
+    snapshot,
+    asked,
+    record: theRecordFor(place, snapshot, carried?.why ?? '', carried),
+    ...(carried === undefined ? {} : { unfinished: carried }),
+  }
 }
 
-/** The record a snapshot makes: everything a launch after a crash needs to finish the switch, and no copy of the file. */
-function theRecordFor(place: OwnersDefaultPlace, snapshot: TheOwnersSettingsSnapshot, why: string): TheOwnersModelRecord {
+/**
+ * The record a snapshot makes: everything a launch after a crash needs to finish the switch, and no copy of the file.
+ * When it is built over a record an earlier switch left open, the owner's model is that record's, not the file's: the
+ * file's `model` is the member's until something puts the owner's back, and its `why` is carried with it so the line
+ * that needs the owner outlives this switch until the owner's default really is the owner's again.
+ */
+function theRecordFor(place: OwnersDefaultPlace, snapshot: TheOwnersSettingsSnapshot, why: string, carried?: TheOwnersModelRecord): TheOwnersModelRecord {
   const { had_model, owner_model } = theModelIn(snapshot.exists ? snapshot.parsed : {})
   return {
     config_dir: place.config_dir,
@@ -117,24 +141,27 @@ function theRecordFor(place: OwnersDefaultPlace, snapshot: TheOwnersSettingsSnap
     after: null,
     without_model: snapshot.without_model,
     had_file: snapshot.exists,
-    had_model,
-    owner_model,
+    had_model: carried?.had_model ?? had_model,
+    owner_model: carried?.owner_model ?? owner_model,
     wrote: null,
     why,
   }
 }
 
-/** What the file showed of the host's save: whether it moved at all, the record to keep now, and what needs the owner. */
-export interface TheSaveSeen {
-  readonly moved: boolean
-  readonly record: TheOwnersModelRecord
-  readonly why: string
-}
+/**
+ * What the file showed of the host's save: whether it moved at all, the record to keep — null once there is nothing
+ * left to put back — and what needs the owner, in one line.
+ */
+export type TheSaveSeen =
+  | { readonly moved: true; readonly record: TheOwnersModelRecord; readonly why: string }
+  | { readonly moved: false; readonly record: TheOwnersModelRecord | null; readonly why: string }
 
 /**
  * Step 4: waits, bounded, for the file to show the host's save. The record comes back with `after` and `wrote` set the
- * moment the file moves, so the caller keeps it BEFORE the restore: a crash between the two is finishable by hash at
- * the next launch. A file that never moves is not a success — it is a switch whose save may land later.
+ * moment the file moves, and the caller keeps it with the restore it then decides on — not before it. A crash before
+ * that answer leaves the record the order kept, whose `after` is null: the next launch finishes it by `without_model`,
+ * which says the same thing for a file where only the model moved. A file that never moves is not a success either —
+ * it is a switch whose save may land later.
  */
 export async function theSaveInTheFile(place: OwnersDefaultPlace, guarded: AGuardedSwitch): Promise<TheSaveSeen> {
   for (let looked = 0; looked < THE_SAVE_WAIT_MS / THE_SAVE_STEP_MS; looked += 1) {
@@ -142,7 +169,7 @@ export async function theSaveInTheFile(place: OwnersDefaultPlace, guarded: AGuar
     if (seen !== null) return seen
     await new Promise((resolved) => setTimeout(resolved, THE_SAVE_STEP_MS))
   }
-  return theSaveThatNeverShowed(place, guarded.record)
+  return theSaveThatNeverShowed(place, guarded)
 }
 
 /**
@@ -157,10 +184,28 @@ export function theSaveSeenNow(place: OwnersDefaultPlace, guarded: AGuardedSwitc
   return { moved: true, record: theRecordSaved(guarded.record, now), why: '' }
 }
 
-/** The record a switch keeps when the file never showed its save: the next launch finishes it by the hash it holds. */
-export function theSaveThatNeverShowed(place: OwnersDefaultPlace, record: TheOwnersModelRecord): TheSaveSeen {
+/**
+ * The record a switch keeps when the file never showed its save: the next launch finishes it by the hash it holds.
+ * Nothing is kept when a save could not have changed anything — the model this switch ordered is the model the owner
+ * already has, and nothing else in the file moved — because there is nothing to put back (martha#359 r=2): a switch
+ * asking for the owner's own model ends here, and so does one built on a recovery that has just put that model back.
+ */
+export function theSaveThatNeverShowed(place: OwnersDefaultPlace, guarded: AGuardedSwitch): TheSaveSeen {
+  if (nothingToPutBack(place, guarded)) return { moved: false, record: null, why: '' }
   const why = `${place.file} showed no save of the switched model within ${THE_SAVE_WAIT_MS} ms, so the owner's default may be the member's model: the next launch finishes this switch`
-  return { moved: false, record: { ...record, why }, why }
+  return { moved: false, record: { ...guarded.record, why }, why }
+}
+
+/** Whether a save could have changed nothing at all: it asked for the owner's model, and the file already says it. */
+const nothingToPutBack = (place: OwnersDefaultPlace, guarded: AGuardedSwitch): boolean =>
+  guarded.asked !== '' && guarded.asked === guarded.record.owner_model && theOwnerModelStandsIn(place, guarded.record)
+
+/** Whether the owner's file already says the owner's model, with everything in it but the model unchanged. */
+function theOwnerModelStandsIn(place: OwnersDefaultPlace, record: TheOwnersModelRecord): boolean {
+  const now = snapshotOf(place.store.read())
+  if ('refusal' in now || now.without_model !== record.without_model) return false
+  const { had_model, owner_model } = theModelIn(now.exists ? now.parsed : {})
+  return had_model === record.had_model && owner_model === record.owner_model
 }
 
 /** The record with the save in it: the bytes the host wrote, and the model value the file gained. */
@@ -185,6 +230,10 @@ export function putTheOwnersModelBack(place: OwnersDefaultPlace, guarded: AGuard
   const { had_model, owner_model } = theModelIn(now.exists ? now.parsed : {})
   if (had_model === record.had_model && owner_model === record.owner_model) return { record: null, why: '' }
   if (record.wrote !== null && owner_model !== record.wrote) return refusedAfter(record, replacedAfterTheSwitch(place))
+  // Built over a record an earlier switch left open, the file's `model` was the member's before this switch, so its
+  // bytes are not the owner's to restore: the owner's model is put back by the recovery's own write, which touches
+  // `model` alone and leaves the owner's other keys as this switch found them (martha#359 r=2).
+  if (guarded.unfinished !== undefined) return writeTheRecoveredModel(place, record, now)
   return theOwnerModelBack(place, guarded, record)
 }
 

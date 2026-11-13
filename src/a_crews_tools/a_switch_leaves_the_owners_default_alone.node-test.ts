@@ -11,8 +11,8 @@
 // ../launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts.
 
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,15 +31,21 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { modelPlace, theModelOf, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import {
   finishAnUnfinishedSwitch,
+  finishTheOwnersDefaultAtLaunch,
   guardTheOwnersDefault,
+  putTheOwnersModelBack,
   THE_SAVE_WAIT_MS,
   theSaveInTheFile,
+  theSaveThatNeverShowed,
   type AGuardedSwitch,
   type OwnersDefaultPlace,
+  type TheOwnersModelRecord,
   type TheSaveSeen,
 } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { CARRY_A_MODEL, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
-import { SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { theOwnersDefaultKept } from '../switch_a_members_model/switch_a_members_model.ts'
+import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 /** The models a crew names: this member's own, and the one every review runs on. */
 const HOST_MODELS = ['sonnet', 'fable']
@@ -67,6 +73,7 @@ interface ACrewMade {
   readonly settings_file: string
   /** What the owner's settings file held before the switch, null for an owner who never wrote one. */
   readonly owners_settings: Record<string, unknown> | null
+  readonly beats: DashboardStore
   readonly theRow: () => Record<string, unknown> | null
   readonly aTurnLater: () => void
 }
@@ -105,7 +112,7 @@ async function aCrew(owners: Record<string, unknown> | null = OWNERS_SETTINGS): 
     launched_on: OWN_MODEL,
     owners_settings: owners_place,
   })
-  return { tools, crew, owners: owners_place, settings_file, owners_settings: owners, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += 60_000) }
+  return { tools, crew, owners: owners_place, settings_file, owners_settings: owners, beats, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += 60_000) }
 }
 
 /** Gives the crew's declaration its models: this member's own, and the one every review runs on. */
@@ -151,10 +158,18 @@ async function ordered(crew: ACrewMade): Promise<Record<string, unknown>> {
 const theHostSaved = (crew: ACrewMade, model: string = THE_REVIEWER_MODEL): void =>
   writeFileSync(crew.settings_file, `${JSON.stringify({ ...(crew.owners_settings ?? {}), model }, null, 2)}\n`)
 
+/**
+ * The host's save over the file as it stands: the keys the owner has there now, and the model it was told to save. It is
+ * how a host saves a second time in one session — the file it read carries whatever the owner wrote since — so a test
+ * about a second switch over an unfinished one needs this save, not the one above that starts from the owner's first.
+ */
+const theHostSavedOverTheFile = (crew: ACrewMade, model: string): void =>
+  writeFileSync(crew.settings_file, `${JSON.stringify({ ...(JSON.parse(readFileSync(crew.settings_file, 'utf8')) as Record<string, unknown>), model }, null, 2)}\n`)
+
 /** The model this session runs on, reported by the mod once the host's command resolved: what the launcher answered. */
-async function reported(crew: ACrewMade): Promise<string> {
+async function reported(crew: ACrewMade, model: string = THE_REVIEWER_MODEL): Promise<string> {
   crew.aTurnLater()
-  const answered = await crew.tools.answer(THE_MODEL_REPORT_ASK, { model: THE_REVIEWER_MODEL }, 'a-session')
+  const answered = await crew.tools.answer(THE_MODEL_REPORT_ASK, { model }, 'a-session')
   assert.ok('answer' in answered, `the launcher refused the model report: ${'refused' in answered ? answered.refused : ''}`)
   return answered.answer
 }
@@ -169,6 +184,24 @@ async function aSwitchedMember(crew: ACrewMade): Promise<void> {
   await ordered(crew)
   theHostSaved(crew)
   await reported(crew)
+}
+
+/** The owner's own edit in the window: the model the host saved, and a key of theirs changed beside it. */
+const THE_OWNERS_EDIT = `${JSON.stringify({ env: { MARTHA_TEST: '2' }, model: THE_REVIEWER_MODEL }, null, 2)}\n`
+
+/**
+ * The return home, and the host's own save of it: the member comes back to its own model, the order carries that model
+ * to the host, and the host writes it into the owner's file the way it writes any save.
+ */
+async function returnedHome(crew: ACrewMade): Promise<Record<string, unknown>> {
+  const answered = await crew.tools.answer(RETURN_TO_YOUR_OWN_MODEL, { reason: 'the review is done' }, 'a-session')
+  assert.ok('answer' in answered, `the test could not return the member home: ${'refused' in answered ? answered.refused : ''}`)
+  const order = await ordered(crew)
+  assert.equal(order['carry'], CARRY_A_MODEL, `the return was not a model order, so no host saved anything: ${JSON.stringify(order)}`)
+  assert.equal(order['model'], OWN_MODEL, 'the return did not ask the host for the member\'s own model')
+  theHostSavedOverTheFile(crew, OWN_MODEL)
+  await reported(crew, OWN_MODEL)
+  return order
 }
 
 test('a switch puts the owner\'s own bytes back, and the record of what it did to them is cleared (mutant: the restore removed)', async () => {
@@ -208,12 +241,40 @@ test('a save that never shows keeps the record, and says so in the row and in th
   theOwnersBytesStand(crew)
 })
 
+test('a return home over a switch whose restore was refused puts the owner\'s own model back, not the member\'s (mutant: an open record replaced by a fresh snapshot)', async () => {
+  const crew = await aCrew()
+  await switched(crew.tools)
+  await ordered(crew)
+  theHostSaved(crew)
+  // The owner edits a key of their own after the host's save and before the report: the restore is refused, and the
+  // member's model stands in the owner's file until something puts the owner's own back.
+  writeFileSync(crew.settings_file, THE_OWNERS_EDIT)
+  assert.match(await reported(crew), /something other than the model changed/, 'the restore was not refused, so this case never reached the unfinished record it is about')
+  await returnedHome(crew)
+  const now = JSON.parse(readFileSync(crew.settings_file, 'utf8')) as { model?: string; env?: Record<string, unknown> }
+  assert.equal(now.model, OWN_MODEL, 'the owner\'s default was left on the member\'s model by the return home')
+  assert.equal(now.env?.['MARTHA_TEST'], '2', 'the owner\'s own edit was written over')
+  assert.equal(theRecordOf(crew.crew)?.settings, undefined, 'a record of the owner\'s default outlived the return that put it back')
+})
+
+test('a return home over a switch whose save landed after the wait puts the owner\'s own model back (mutant: an open record replaced by a fresh snapshot)', async () => {
+  const crew = await aCrew()
+  await switched(crew.tools)
+  await ordered(crew)
+  assert.match(await reported(crew), /showed no save/, 'the wait saw a save, so this case never reached the unfinished record it is about')
+  // The host's save lands after the answer, where the wait cannot see it: the record is the only witness it happened.
+  theHostSaved(crew)
+  await returnedHome(crew)
+  assert.equal(readFileSync(crew.settings_file, 'utf8'), OWNERS_BYTES, 'the owner\'s settings file did not end as the owner wrote it')
+  assert.equal(theRecordOf(crew.crew)?.settings, undefined, 'a record of the owner\'s default outlived the return that put it back')
+})
+
 test('a file that changed in more than its model is never written over: nothing is put back, and both the row and the answer say why (mutant: the compare-and-swap removed)', async () => {
   const crew = await aCrew()
   await switched(crew.tools)
   await ordered(crew)
   // The owner edits their own settings while the switch is in flight: their model, and a key of their own.
-  const theOwnersEdit = `${JSON.stringify({ env: { MARTHA_TEST: '2' }, model: THE_REVIEWER_MODEL }, null, 2)}\n`
+  const theOwnersEdit = THE_OWNERS_EDIT
   writeFileSync(crew.settings_file, theOwnersEdit)
   const told = await reported(crew)
   const why = `something other than the model changed in ${crew.settings_file} during the switch, so nothing was written back and the owner's default may be the member's model`
@@ -242,7 +303,7 @@ test('a switch is refused, and nothing recorded as switched, when the owner\'s s
 
 test('a second switch waits for the one holding the owner\'s file, and is no order until it is given back (mutant: no lock)', async () => {
   const crew = await aCrew()
-  const guard = await guardTheOwnersDefault(crew.owners)
+  const guard = await guardTheOwnersDefault(crew.owners, THE_REVIEWER_MODEL)
   assert.ok(!('refusal' in guard), `the test could not take the lock: ${'refusal' in guard ? guard.refusal : ''}`)
   try {
     await switched(crew.tools)
@@ -275,13 +336,14 @@ test('a recovery writes nothing when the owner changed the file after the crash:
 })
 
 /** A switch taken and saved, with the process about to die: the guard is held, and the record says what the file gained. */
-async function aCrashedSwitch(crew: ACrewMade): Promise<{ readonly held: AGuardedSwitch; readonly seen: TheSaveSeen }> {
+async function aCrashedSwitch(crew: ACrewMade): Promise<{ readonly held: AGuardedSwitch; readonly seen: Extract<TheSaveSeen, { moved: true }> }> {
   await switched(crew.tools)
-  const guard = await guardTheOwnersDefault(crew.owners)
+  const guard = await guardTheOwnersDefault(crew.owners, THE_REVIEWER_MODEL)
   assert.ok(!('refusal' in guard), `the test could not guard the owner's settings file: ${'refusal' in guard ? guard.refusal : ''}`)
   theHostSaved(crew)
   const seen = await theSaveInTheFile(crew.owners, guard)
   assert.equal(seen.why, '', `the file did not show the save: ${seen.why}`)
+  if (!seen.moved) assert.fail('the file showed the save and the record of it was not kept')
   return { held: guard, seen }
 }
 
@@ -359,3 +421,127 @@ const A_FILE_WAITS_MS = 30_000
 
 /** How often the test looks for another process's step. */
 const A_STEP_MS = 20
+
+// The checks no case above reaches, each pinned by the case only it can save (martha#359 r=2, Uranus's U1 to U8): a
+// recovery from a record whose save never showed, at both timings; the two checks a restore makes before it writes; the
+// config directory a record was kept for; a lock whose holder has died; the mode of the owner's own file, which can hold
+// their environment; and the line a launch owes the owner when it cannot finish what a switch left open.
+
+/** A third model, which this crew declares nowhere: the owner's file is theirs, and it may hold a model no crew names. */
+const A_THIRD_MODEL = 'haiku'
+
+/**
+ * A record whose save the wait never saw, the way a switch leaves one: `after` is null, the wait timed out, and the
+ * record holds what the next launch must match to finish it. The host's save is written after the wait, where it really
+ * can land, so the file says the member's model while the record has no hash of it.
+ */
+async function aRecordTheWaitNeverSaw(crew: ACrewMade): Promise<TheOwnersModelRecord> {
+  const guard = await guardTheOwnersDefault(crew.owners, THE_REVIEWER_MODEL)
+  assert.ok(!('refusal' in guard), `the test could not guard the owner's settings file: ${'refusal' in guard ? guard.refusal : ''}`)
+  guard.lock.release()
+  const seen = theSaveThatNeverShowed(crew.owners, guard)
+  assert.equal(seen.moved, false, 'the file showed a save the test never wrote')
+  assert.ok(seen.record !== null, 'a switch whose save may still land kept no record for the next launch')
+  theHostSaved(crew)
+  return seen.record
+}
+
+test('a recovery from a record whose save never showed puts the owner\'s model back, matching everything but the model (mutant: the recovery from an unseen save always refused)', async () => {
+  const crew = await aCrew()
+  const record = await aRecordTheWaitNeverSaw(crew)
+  assert.equal(record.after, null, 'the record the test built says a save was seen when the wait never saw one')
+  const finished = await finishAnUnfinishedSwitch(crew.owners, record)
+  assert.equal(finished.why, '', `the recovery would not finish a switch the file still matches: ${finished.why}`)
+  assert.equal(finished.record, null, 'a finished switch left a record behind for the next launch')
+  assert.deepEqual(JSON.parse(readFileSync(crew.settings_file, 'utf8')) as unknown, OWNERS_SETTINGS, 'the recovery did not put the owner\'s model back')
+})
+
+test('a recovery from a record whose save never showed writes nothing when the owner changed something else, and names the file (mutant: the recovery from an unseen save ignores what else moved)', async () => {
+  const crew = await aCrew()
+  const record = await aRecordTheWaitNeverSaw(crew)
+  writeFileSync(crew.settings_file, THE_OWNERS_EDIT)
+  const finished = await finishAnUnfinishedSwitch(crew.owners, record)
+  const why = `something other than the model changed in ${crew.settings_file} during the switch, so nothing was written back and the owner's default may be the member's model`
+  assert.equal(finished.why, why, 'the recovery did not say why it left the owner\'s file alone')
+  assert.equal(readFileSync(crew.settings_file, 'utf8'), THE_OWNERS_EDIT, 'the recovery wrote over a change the owner made')
+})
+
+test('a restore writes nothing when the model was replaced again after the host\'s save, and says the model was changed again (mutant: the check that the file still holds what the switch wrote removed)', async () => {
+  const crew = await aCrew()
+  await switched(crew.tools)
+  const guard = await guardTheOwnersDefault(crew.owners, THE_REVIEWER_MODEL)
+  assert.ok(!('refusal' in guard), `the test could not guard the owner's settings file: ${'refusal' in guard ? guard.refusal : ''}`)
+  theHostSaved(crew)
+  const seen = await theSaveInTheFile(crew.owners, guard)
+  if (!seen.moved) assert.fail('the file did not show the save the test wrote')
+  // The model alone changes again before the restore: the file still holds nothing but the owner's own keys, so only the
+  // value the switch saw can tell this from the host's save.
+  const replaced = `${JSON.stringify({ env: { MARTHA_TEST: '1' }, model: A_THIRD_MODEL }, null, 2)}\n`
+  writeFileSync(crew.settings_file, replaced)
+  const after = putTheOwnersModelBack(crew.owners, guard, seen.record)
+  guard.lock.release()
+  assert.equal(after.why, `the model in ${crew.settings_file} was changed again before the switch could be put back, so nothing was written back and the owner's default may be the member's model`, 'the restore did not name the model that was changed again')
+  assert.equal(readFileSync(crew.settings_file, 'utf8'), replaced, 'the restore wrote over a model something else had just set')
+})
+
+test('a record kept for another config directory is put back nowhere, and the reason names both (mutant: the config-directory check removed)', async () => {
+  const crew = await aCrew()
+  const record = await aRecordTheWaitNeverSaw(crew)
+  const before = readFileSync(crew.settings_file, 'utf8')
+  const elsewhere = { ...record, config_dir: join(homeOfAll, 'another-config') }
+  const finished = await finishAnUnfinishedSwitch(crew.owners, elsewhere)
+  assert.equal(
+    finished.why,
+    `a switch was left unfinished on ${elsewhere.config_dir}'s settings, and this launch reads ${crew.owners.config_dir}, so nothing was put back: ${crew.settings_file} is not the file that switch wrote`,
+    'the recovery did not refuse a record kept for another config directory',
+  )
+  assert.equal(readFileSync(crew.settings_file, 'utf8'), before, 'a recovery wrote into a file it was not the record for')
+})
+
+test('a lock whose holder has died is broken by the next switch, so a crash does not refuse every switch after it (mutant: a lock nobody holds never broken)', async () => {
+  const crew = await aCrew()
+  const taken = await guardTheOwnersDefault(crew.owners, THE_REVIEWER_MODEL)
+  assert.ok(!('refusal' in taken), `the test could not take the lock: ${'refusal' in taken ? taken.refusal : ''}`)
+  const lock_file = taken.lock.file
+  taken.lock.release()
+  // The lock a killed switch leaves behind: a nonce, and the pid of a process that had already ended.
+  const ended = spawnSync(process.execPath, ['-e', ''], { encoding: 'utf8' })
+  assert.equal(ended.status, 0, 'the test could not make a process and let it end')
+  writeFileSync(lock_file, `a-switch-that-died\n${String(ended.pid)}\n${new Date(0).toISOString()}\n`)
+  const again = await guardTheOwnersDefault(crew.owners, THE_REVIEWER_MODEL)
+  assert.ok(!('refusal' in again), `the switch after a crash was refused because the dead switch's lock was left behind: ${'refusal' in again ? again.refusal : ''}`)
+  if (!('refusal' in again)) again.lock.release()
+})
+
+test('the owner\'s file keeps its own mode through a restore and through a recovery, because it can hold their secrets (mutant: the mode not kept)', async () => {
+  const crew = await aCrew()
+  chmodSync(crew.settings_file, 0o600)
+  await aSwitchedMember(crew)
+  assert.equal(statSync(crew.settings_file).mode & 0o777, 0o600, 'the restore widened the mode of the owner\'s own settings file')
+  const record = await aRecordTheWaitNeverSaw(crew)
+  const finished = await finishAnUnfinishedSwitch(crew.owners, record)
+  assert.equal(finished.why, '', `the recovery did not finish the switch: ${finished.why}`)
+  assert.equal(statSync(crew.settings_file).mode & 0o777, 0o600, 'the recovery widened the mode of the owner\'s own settings file')
+})
+
+test('a record a launch cannot finish puts its line in the member\'s own row, not only in the terminal (mutant: the row left out)', async () => {
+  const crew = await aCrew()
+  await switched(crew.tools)
+  // A report first, because a launch's line has a row to go into only for a member that has one: the launch is asked
+  // about a member that was running and had left a record behind, and no guard is held, so nothing here is put back.
+  await reported(crew)
+  const marker = theRecordOf(crew.crew)
+  assert.ok(marker !== null, 'the test could not read the record of the member\'s switch')
+  const record = await aRecordTheWaitNeverSaw(crew)
+  theOwnersDefaultKept({ stores: { crew: crewFilesDirectory(crew.crew) } }, MEMBER, marker, record)
+  // The owner's own change since, so the launch cannot finish the record by either hash it holds.
+  writeFileSync(crew.settings_file, THE_OWNERS_EDIT)
+  const said = await finishTheOwnersDefaultAtLaunch({
+    member: MEMBER,
+    host: { stores: { crew: crewFilesDirectory(crew.crew) } },
+    owners: crew.owners,
+    beats: crew.beats,
+  })
+  assert.equal(said.length, 1, `the launch finished the record it should have left to the owner: ${JSON.stringify(said)}`)
+  assert.equal(crew.theRow()?.['needs'], said[0], 'the row does not say what needs the owner about the record the launch could not finish')
+})

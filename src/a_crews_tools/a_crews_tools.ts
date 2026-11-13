@@ -1224,12 +1224,17 @@ async function theModelOrder(places: CrewToolPlaces, state: SessionState): Promi
  * The order, with the owner's default guarded first (martha#359): the lock taken and the file snapshotted before the
  * order goes out, and the record kept beside the model record before the host runs anything. A guard that cannot be
  * taken refuses the switch — the record goes back to where the member is, and the owner reads why in its row.
+ *
+ * A record an earlier switch left open goes to the guard with it (r=2): this switch is then built on the owner's own
+ * model rather than on the member's, which is what the file says while that record is open.
  */
 async function guardedOrder(places: CrewToolPlaces, state: SessionState, marker: ModelMarker): Promise<TheOrder | null> {
   const owners = places.owners_settings
   if (owners === undefined) return refuseTheSwitch(places, state, marker, noOwnersSettings(places))
   if ('refusal' in owners) return refuseTheSwitch(places, state, marker, owners.refusal)
-  const guard = await guardTheOwnersDefault(owners)
+  // The model the host is asked to save: the one save this switch waits for, and the one it may have to undo.
+  const model = marker.switched ? marker.model : marker.home
+  const guard = await guardTheOwnersDefault(owners, model, marker.settings)
   if ('refusal' in guard) return refuseTheSwitch(places, state, marker, guard.refusal)
   const kept = theOwnersDefaultKept(places, places.member, marker, guard.record)
   if ('refusal' in kept) {
@@ -1242,7 +1247,6 @@ async function guardedOrder(places: CrewToolPlaces, state: SessionState, marker:
     return null
   }
   state.guarded = guard
-  const model = marker.switched ? marker.model : marker.home
   return { carry: CARRY_A_MODEL, model }
 }
 
@@ -1309,7 +1313,7 @@ async function closeTheGuardNoOneReported(places: CrewToolPlaces, state: Session
   const owners = places.owners_settings
   if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: '' }
   try {
-    const told = theOwnersDefaultAnswered(places, owners, guard, theSaveSeenNow(owners, guard) ?? theSaveThatNeverShowed(owners, guard.record))
+    const told = theOwnersDefaultAnswered(places, owners, guard, theSaveSeenNow(owners, guard) ?? theSaveThatNeverShowed(owners, guard))
     state.owner_needs = told
     return told
   } finally {
