@@ -5,7 +5,7 @@
 // an act on the list; it leaves the list when that member says the owner did it, or when the act's own check answers
 // that it is done. The owner reads the list in the crew's pane, or with `martha todo` in a terminal.
 //
-// The list is an append-only stream in the crew's row streams (`<crew>/rows`, martha#254 R1), not a file per row.
+// The list is an append-only stream in the crew's row streams (martha#254 R1), not a file per row.
 // Asking an act of the owner is one row, its end is another, and the open list is the fold of the two. Nothing is
 // ever removed, so a removal can never fail quietly and leave a row on the owner's list, and the history of what the
 // owner was asked, and when it ended, stays. Every write names the length it read, so two writers never lose a row.

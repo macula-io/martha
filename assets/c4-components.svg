@@ -249,6 +249,16 @@
 <text class="t-desc" x="48" y="1886">opens and finishes one;</text>
 <text class="t-desc" x="48" y="1902">read_the_origin_a_clone_has</text>
 <text class="t-desc" x="48" y="1918">says what a clone is of</text>
+<rect class="b-cmp" x="348" y="1622" width="300" height="180" rx="10"/>
+<text class="t-code" x="364" y="1650">keep_the_owners_todo_list</text>
+<text class="t-type" x="364" y="1668">[what waits on the owner]</text>
+<text class="t-desc" x="364" y="1692">The owner's to-do list (martha#316):</text>
+<text class="t-desc" x="364" y="1708">the acts only the owner can do, each</text>
+<text class="t-desc" x="364" y="1724">command shown in full under what it</text>
+<text class="t-desc" x="364" y="1740">does. A member the table lets assign</text>
+<text class="t-desc" x="364" y="1756">work adds one; its own check or the</text>
+<text class="t-desc" x="364" y="1772">member takes it off. The pane and</text>
+<text class="t-desc" x="364" y="1788">martha todo show it</text>
 <rect class="b-cmp" x="32" y="1948" width="300" height="230" rx="10"/>
 <text class="t-code" x="48" y="1976">write_my_handover,</text>
 <text class="t-code" x="48" y="1994">refresh_a_member</text>
