@@ -90,13 +90,13 @@ test('#306: the section carries who the member is, its practice, its role, its m
   assert.doesNotMatch(section, /\{\{/, 'a placeholder was left in the section, reading as a rule')
 })
 
-test('#306: the practice is in the section only when the crew switched it on, and then it is Martha\'s five rules, numbered', () => {
+test('#306: the practice is in the section only when the crew switched it on, and then it is Martha\'s six rules, numbered', () => {
   const off = handAMemberItsCrewText(textsOf({ practice: null }))
   assert.doesNotMatch(off, /## Crew practice/, 'the practice reached a crew that did not switch it on')
   const on = handAMemberItsCrewText(textsOf())
   const practice = on.slice(on.indexOf('## Crew practice'), on.indexOf('## Your role'))
   assert.match(practice, /\(1\) Reviews go by direct message\./, 'the first rule is not numbered as the crew numbers its rules')
-  assert.equal((practice.match(/^\(\d+\) /gm) ?? []).length, 5, 'the practice is not the five rules')
+  assert.equal((practice.match(/^\(\d+\) /gm) ?? []).length, 6, 'the practice is not the six rules')
 })
 
 test('#306: the practice the composer hands is the declaration\'s switch, and Martha\'s own text when it is on', () => {

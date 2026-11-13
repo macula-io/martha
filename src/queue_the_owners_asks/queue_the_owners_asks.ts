@@ -75,8 +75,9 @@ export const THE_WINDOW = `${String(ASK_CLAIM_MS / MINUTE_MS)} minutes`
 /** What `queue_ask` says it is for: one routine ask, queued, and never a menu of its own. */
 export const QUEUE_ASK_DESCRIPTION =
   'Queue a routine yes/no ask for the owner instead of opening a menu for it. The session that offers asks hands them over ' +
-  "in one menu. Never queue part of a change: a change's asks go in one menu. The answer is queued, how many wait, and to " +
-  'carry on.'
+  "in one menu. Never queue part of a change: a change's asks go in one menu. An ask that would delete a branch names " +
+  'repo and branch too, so the ask records every tip the yes removes and the owner is not asked twice. The answer is ' +
+  'queued, how many wait, and to carry on.'
 
 /** What `list_asks` says it is for: it only looks. */
 export const LIST_ASKS_DESCRIPTION = 'List the asks waiting for the owner, oldest first. It only looks: nothing is taken and nothing is offered.'
@@ -254,16 +255,44 @@ const theLineOf = (ask: AnAsk): string => `- ${String(ask.id)} (from ${ask.asked
 /**
  * `queue_ask`: the ask kept against the member the launcher started, never a name the call chose. The answer says how
  * many wait and tells the member to carry on, because opening a menu for it is what the queue exists to avoid.
+ *
+ * `removes` is the branch an ask would delete and the tip each copy of it stands at, read by the launcher; the row keeps
+ * both, because a yes to a branch deletion that named one copy deleted that one and left the other (the owner's second
+ * ask, 2026-11-13). The clone's tip and origin's are often the same, and when they are not, both are on the row and both
+ * are named in the answer, so the one menu the ask reaches offers every tip the deletion removes.
  */
-export async function queueAnAsk(host: LedgerHost, args: Readonly<Record<string, unknown>>, asked_by: string): Promise<AskAnswer> {
+export async function queueAnAsk(
+  host: LedgerHost,
+  args: Readonly<Record<string, unknown>>,
+  asked_by: string,
+  removes?: ABranchItRemoves,
+): Promise<AskAnswer> {
   const refused = questionRefusal(args['ask'])
   if (refused !== undefined) return { refused }
   const stored = await host.stores.rows.read(OWNER_ASKS_STREAM)
-  const row = { kind: ASK_QUEUED, question: theQuestion(args['ask'] as string), asked_by, since: host.clock.now() }
+  const row = { kind: ASK_QUEUED, question: theQuestion(args['ask'] as string), asked_by, since: host.clock.now(), ...(removes === undefined ? {} : { removes }) }
   const kept = await appendAtLength(host, row, stored.length, '')
   if ('refused' in kept) return kept
   const waiting = theQueueIn(await host.stores.rows.read(OWNER_ASKS_STREAM), host.clock.now()).waiting.length
-  return { told: `Queued for the owner; ${String(waiting)} ${waiting === 1 ? 'ask' : 'asks'} waiting. Do not open a menu for it; carry on.` }
+  const both = removes === undefined ? '' : ` ${theTipsItRemoves(removes)}`
+  return { told: `Queued for the owner; ${String(waiting)} ${waiting === 1 ? 'ask' : 'asks'} waiting.${both} Do not open a menu for it; carry on.` }
+}
+
+/**
+ * The branch an ask would remove, and the tip each copy of it stands at as the launcher read them: the clone's own
+ * branch, and origin's. Either may be absent, which says no copy holds it.
+ */
+export interface ABranchItRemoves {
+  readonly branch: string
+  readonly local_tip: string | null
+  readonly origin_tip: string | null
+}
+
+/** What an ask that removes a branch says of the tips it removes: one line naming every copy, so one yes covers all. */
+export function theTipsItRemoves({ branch, local_tip, origin_tip }: ABranchItRemoves): string {
+  const local = local_tip === null ? 'no copy of its own' : `this clone at ${local_tip}`
+  const origin = origin_tip === null ? 'no copy on origin' : `origin at ${origin_tip}`
+  return `It removes ${branch}, and the ask records both tips the yes covers: ${local}, ${origin}.`
 }
 
 /** `list_asks`: every ask waiting, oldest first, and nothing taken. */
