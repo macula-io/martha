@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   fingerprintOf,
@@ -23,7 +24,7 @@ import {
 } from './refuse_launch_of_unapproved_config.ts'
 
 /** The file a checkout uses to start a tool server: config that starts code by itself. */
-const [SERVERS] = LAUNCH_FILES_OF_HOST['claude-code']
+const [SERVERS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]
 
 /** A place to start in, as this machine holds it, and the owner's home it stops at. */
 interface Place {
@@ -43,7 +44,7 @@ function aCheckout(t: TestContext): Place {
   git(checkout, 'init', '-q', '.')
   writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
   git(checkout, 'add', '--all')
-  git(checkout, 'commit', '-q', '-m', 'start')
+  git(checkout, 'commit', '-q', '-m', 'the settings a member starts with')
   return { home, checkout }
 }
 
@@ -52,10 +53,10 @@ function configIn({ checkout }: Place, name: string, content: string): void {
   mkdirSync(dirname(join(checkout, name)), { recursive: true })
   writeFileSync(join(checkout, name), content)
   git(checkout, 'add', '--all')
-  git(checkout, 'commit', '-q', '-m', 'config')
+  git(checkout, 'commit', '-q', '-m', 'a tool server it starts')
 }
 
-const placeIn = ({ home, checkout }: Place): LaunchPlace => ({ host: 'claude-code', launch_dir: checkout, stop_dir: home })
+const placeIn = ({ home, checkout }: Place): LaunchPlace => ({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home })
 
 /** The approval a start on this checkout's own config would be given, once the owner says yes to it. */
 function theApprovalOf(place: Place): { readonly tree: string | null; readonly fingerprint: string } {

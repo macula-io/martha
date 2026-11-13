@@ -21,7 +21,7 @@ import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
-import { THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_REFRESH_ASK, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 
 /**
@@ -42,6 +42,22 @@ const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host 
  * in the tree stale at once, and a member's tool call is not worth that.
  */
 const THE_ARGUMENT_OF_A_WRITE = 'the host\'s own name for the argument that holds a whole file, which lives in the host glue a slice may not import'
+
+/**
+ * Why the mod's command to clear a session is named by literal (martha#255 r=2):
+ * `clear` there is the host's own command name, which the host chooses, not the
+ * word an order carries — the same spelling, a different thing, and no constant of
+ * ours may stand for it.
+ */
+const THE_HOSTS_CLEAR_COMMAND = 'the name of the host command this mod runs to clear a session, which the host names and no constant of ours does'
+
+/**
+ * Why three launch and refresh tests write `clear` as a literal (martha#255 r=2):
+ * it is the word the host records in a `session_started` event whose session began
+ * with `/clear` — recorded data, not the order a launcher answers, and the same
+ * spelling by coincidence in exactly the sense this list is for.
+ */
+const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started event it records, for a session that began with /clear: recorded data, not the order a launcher answers'
 
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
@@ -64,5 +80,18 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the host reads this name from the hooks module and refuses anything but a literal in $.env.get, an imported constant included (#104)' },
   { value: WHOLE_FILE_CONTENT, file: 'a_crews_tools/a_crews_tools.ts', reason: `the one argument the handover tool takes; ${THE_ARGUMENT_OF_A_WRITE}` },
   { value: WHOLE_FILE_CONTENT, file: 'write_my_handover/write_my_handover.ts', reason: `the one argument this tool reads; ${THE_ARGUMENT_OF_A_WRITE}` },
+  // The order's two decision words (martha#255 r=2 R1): the launcher names them as constants, so the mod's own copy of
+  // each — it reads the answer and runs it, and a hooks module cannot import the constant — is held here. Reword either
+  // on the launcher's side and this entry matches no literal in the mod, and the gate says so by name.
+  { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a text under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the clear under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod submits a prompt under; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod runs the clear under; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: `the host command this mod clears a session with; ${THE_HOSTS_CLEAR_COMMAND}` },
+  // The same spelling in recorded host data (martha#255 r=2): three tests replay what the host recorded, and its word
+  // for a session that began with /clear is its own.
+  { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
+  { value: CARRY_THE_CLEAR, file: 'launch_a_claude_code_member/a_refresh_is_not_wiped_by_the_clear.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
+  { value: CARRY_THE_CLEAR, file: 'launch_a_claude_code_member/launch_a_claude_code_member.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
 ]
 

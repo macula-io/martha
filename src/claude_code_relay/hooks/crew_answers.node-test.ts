@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { orderIn, PANE_CHROME_ROWS, paneIn } from './crew_answers.ts'
-import { NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
+import { CARRY_A_TEXT, CARRY_THE_CLEAR, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
 
 /** The launcher's answer to a session's question, as the launcher hands it over: the order, as text. */
@@ -22,11 +22,11 @@ const aPaneAnswer = (): string =>
 
 test('the prompt the launcher answers is the text the mod submits (martha#255 r=2 R1)', () => {
   const read = orderIn(answered({ act: 'prompt', text: 'read my handover' }))
-  assert.deepEqual(read, { carry: 'submit', text: 'read my handover' }, `the mod reads the launcher's own answer: ${answered({ act: 'prompt', text: 'read my handover' })}`)
+  assert.deepEqual(read, { carry: CARRY_A_TEXT, text: 'read my handover' }, `the mod reads the launcher's own answer: ${answered({ act: 'prompt', text: 'read my handover' })}`)
 })
 
 test('the clear the launcher answers is the clear the mod runs (martha#255 r=2 R1)', () => {
-  assert.deepEqual(orderIn(answered({ act: 'clear' })), { carry: 'clear' }, 'the mod runs the clear the launcher answered')
+  assert.deepEqual(orderIn(answered({ act: CARRY_THE_CLEAR })), { carry: CARRY_THE_CLEAR }, 'the mod runs the clear the launcher answered')
 })
 
 test('nothing to do, and an order the mod cannot make out, both do nothing (martha#255 r=2 R1)', () => {
@@ -34,7 +34,7 @@ test('nothing to do, and an order the mod cannot make out, both do nothing (mart
   // The mod does nothing with either shape: `takeTheAct` returns on `none` and on null alike. A reworded third word
   // therefore cannot make the mod do anything but nothing, which is why it needs no copy held.
   assert.equal(orderIn(JSON.stringify({ carry: 'not-a-word-this-mod-knows' })), null, 'an order the mod cannot make out is refused, never guessed at')
-  assert.equal(orderIn(JSON.stringify({ carry: 'submit' })), null, 'a submit with no text is not an order the mod can run')
+  assert.equal(orderIn(JSON.stringify({ carry: CARRY_A_TEXT })), null, 'a submit with no text is not an order the mod can run')
 })
 
 test("the pane's chrome is the launcher's count, not a second one (martha#255 r=2 R2)", () => {

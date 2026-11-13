@@ -52,7 +52,7 @@ export const THE_REFRESH_ASK = 'the_refresh_of_this_session'
  * `refresh` is the flow's phase for the member's row, written by the launcher in the same row write that carries the
  * context the session just reported — one write, because a second one in the same millisecond is refused as older.
  */
-export type TheAct = { readonly act: 'none'; readonly refresh?: TheRowPhase } | { readonly act: 'prompt'; readonly text: string; readonly refresh?: TheRowPhase } | { readonly act: 'clear'; readonly refresh?: TheRowPhase }
+export type TheAct = { readonly act: 'none'; readonly refresh?: TheRowPhase } | { readonly act: 'prompt'; readonly text: string; readonly refresh?: TheRowPhase } | { readonly act: typeof CARRY_THE_CLEAR; readonly refresh?: TheRowPhase }
 
 /** What the member's row says about the flow: its phase, and why, in the owner's words. */
 export interface TheRowPhase {
@@ -266,7 +266,7 @@ function clearTheSession(
   const cleared = theFlowClearing({ ...flow, refreshed_at: [...flow.refreshed_at, now] }, question.session_id, missing, now)
   keepTheFlow(place, places.member, cleared)
   return {
-    act: 'clear',
+    act: CARRY_THE_CLEAR,
     refresh: {
       phase: 'clearing',
       reason: missing.length === 0 ? 'its handover was written; clearing' : `clearing; its handover was missing ${missing.join('; ')}`,
@@ -505,5 +505,5 @@ export type TheOrder =
  */
 export function theOrderOf(act: TheAct): TheOrder {
   if (act.act === 'prompt') return { carry: CARRY_A_TEXT, text: act.text }
-  return act.act === 'clear' ? { carry: CARRY_THE_CLEAR } : { carry: 'none' }
+  return act.act === CARRY_THE_CLEAR ? { carry: CARRY_THE_CLEAR } : { carry: 'none' }
 }
