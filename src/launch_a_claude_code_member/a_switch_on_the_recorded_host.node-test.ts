@@ -163,8 +163,9 @@ test('a member switches its model with the tool, and the row says so once the ho
   // The tool answered the member, and the answer says when the switch happens.
   assert.match(whatTheModelSaw(seen, 1), new RegExp(`Switching to ${THE_REVIEWER_MODEL} for ${THE_PACKAGE}`), whatTheModelSaw(seen, 1).slice(-2000))
   // The host itself says it switched: this is `command.run({command, args})` running on the pinned host, which nothing
-  // in the tree had ever done. The host adds that the model is now saved as this owner's default for new sessions,
-  // which is the host's business, not the crew's: the row below is what a member's own session runs on.
+  // in the tree had ever done. Its answer also says the model was "saved as your default for new sessions", which is
+  // the owner's own setting moving under a member's switch — observed here, and filed as martha#359 rather than
+  // asserted either way: what this test holds is the session, and the row below is the model that session runs on.
   assert.match(drawnWithoutGaps(seen.shown), /SetmodeltoOpus/i, `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
   // The row says the model this session runs on, and only a command that resolved writes that.
   assert.equal(theRowOf(project).host.model, THE_REVIEWER_MODEL, 'the row does not say the model the member switched to, so the host command did not resolve')
