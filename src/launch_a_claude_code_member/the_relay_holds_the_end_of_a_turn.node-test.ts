@@ -13,7 +13,8 @@ import { test, type TestContext } from 'node:test'
 
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
@@ -136,17 +137,17 @@ async function aStartedRelay(t: TestContext, ends: TheEndsHold | undefined) {
   return { places, relay, allowed, stops }
 }
 
-const A_COMMAND = call('Bash', { command: 'ls' })
+const A_COMMAND = call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })
 
 test('#311 placement ruling: while an end is held, a call naming the owner\'s settings is refused in #122\'s own words, not the hold\'s (mutant: ask the hold first)', async (t) => {
   const plain = await aStartedRelay(t, holdingTheEnds())
-  const touching = call('Write', { file_path: ownersSettingsOf(plain.places), content: '{}' })
+  const touching = call(WHOLE_FILE_TOOL, { file_path: ownersSettingsOf(plain.places), content: '{}' })
   const unheld = await plain.relay.answer('tool_called', touching)
   assert.ok(unheld.answered && 'deny' in unheld.body && unheld.body.deny !== A_TOOL_WHILE_THE_END_IS_HELD, 'the owner\'s settings file was not refused by #122 to begin with')
   const ends = holdingTheEnds()
   const held = await aStartedRelay(t, ends)
   ends.hold(SESSION, THE_TURN)
-  const touchingHeld = call('Write', { file_path: ownersSettingsOf(held.places), content: '{}' })
+  const touchingHeld = call(WHOLE_FILE_TOOL, { file_path: ownersSettingsOf(held.places), content: '{}' })
   const answer = await held.relay.answer('tool_called', touchingHeld)
   assert.deepEqual(answer, { answered: true, body: { deny: unheld.body.deny.replaceAll(plain.places.home, held.places.home) } }, 'a held end answered for a call #122 refuses')
 })
