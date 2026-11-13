@@ -26,6 +26,7 @@ import {
   queueAnAsk,
   settleTheAsks,
   takeTheAsks,
+  theBranch,
   type TheOwnersMenus,
 } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theBranchItRemoves } from '../read_the_tips_a_removal_covers/read_the_tips_a_removal_covers.ts'
@@ -995,7 +996,10 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
  * owner a second ask, because the yes covered only what the ask recorded.
  */
 async function queueTheAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
-  const removes = await theBranchItRemoves({ processes: places.processes, clones: places.settings?.house_rules.clones }, args)
+  const removes = await theBranchItRemoves(
+    { processes: places.processes, clones: places.settings?.house_rules.clones, keepsTheBranch: theBranch },
+    args,
+  )
   if (removes !== undefined && 'refused' in removes) return removes
   return asAnAnswer(await queueAnAsk(places.ledger, args, places.member, removes))
 }

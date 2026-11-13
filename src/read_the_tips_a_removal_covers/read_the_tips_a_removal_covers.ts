@@ -52,33 +52,51 @@ export const WHY_THE_TIPS_CANNOT_BE_READ =
 export const theNeitherCopySays = (clone: string, branch: string): string =>
   `neither ${clone} nor origin holds ${branch}, so there is no deletion for the owner to answer`
 
-/** What a removal needs to be read: the host's processes, and the clones root the crew's declaration names. A place may hold neither. */
+/**
+ * Why a branch the queue would change is refused (martha#391 r=1). Git accepts a name carrying a direction override or a
+ * zero-width character, and a name longer than an ask may be; the queue's own text rule would strip or cut it, so the
+ * owner would answer yes to a name whose tips were never read. Refused here instead, before git is asked anything.
+ */
+export const WHY_THE_BRANCH_WOULD_BE_CHANGED =
+  "the branch this ask removes is not one the queue keeps as it stands: a name carrying a control or hidden character, or one longer than an ask may be, would reach the owner as a different branch. Name the branch as git names it"
+
+/**
+ * What a removal needs to be read: the host's processes, the clones root the crew's declaration names, and the rule the
+ * queue holds a branch to. A place may hold no processes and no clones place; it may hold no rule of its own, because
+ * the rule is the queue's and is read from that one definition (../queue_the_owners_asks's theBranch).
+ */
 export interface ThePlaceTheTipsAreRead {
   readonly processes?: HostContract['processes'] | undefined
   readonly clones?: string | null | undefined
+  readonly keepsTheBranch: (text: string) => string
 }
 
-/** The repository and branch a call names as the removal its ask covers, or nothing when it names neither, or why half will not do. */
-function theRemovalACallNames(args: Readonly<Record<string, unknown>>): { readonly repo: string; readonly branch: string } | { readonly refused: string } | undefined {
+/** The repository and branch a call names as the removal its ask covers, or nothing when it names neither, or why it will not do. */
+function theRemovalACallNames(
+  places: ThePlaceTheTipsAreRead,
+  args: Readonly<Record<string, unknown>>,
+): { readonly repo: string; readonly branch: string } | { readonly refused: string } | undefined {
   const repo = args['repo']
   const branch = args['branch']
   if (repo === undefined && branch === undefined) return undefined
   if (typeof repo !== 'string' || typeof branch !== 'string' || !REPO.test(repo) || branch.trim() === '') {
     return { refused: WHY_HALF_A_REMOVAL }
   }
+  if (places.keepsTheBranch(branch) !== branch) return { refused: WHY_THE_BRANCH_WOULD_BE_CHANGED }
   return { repo, branch }
 }
 
 /**
  * The branch an ask would remove and the tip each copy of it stands at, or nothing when the ask names no branch; or why
- * the tips cannot be read. Half a removal, a repository that is not owner/name, and a place with no processes or no
- * clones place are refused before git is asked anything, so nothing is recorded half-read.
+ * the tips cannot be read. Half a removal, a repository that is not owner/name, a branch the queue would change, and a
+ * place with no processes or no clones place are refused before git is asked anything, so nothing is recorded half-read
+ * and no tip is ever read for a name the owner would not read.
  */
 export async function theBranchItRemoves(
   places: ThePlaceTheTipsAreRead,
   args: Readonly<Record<string, unknown>>,
 ): Promise<ABranchItRemoves | { readonly refused: string } | undefined> {
-  const named = theRemovalACallNames(args)
+  const named = theRemovalACallNames(places, args)
   if (named === undefined || 'refused' in named) return named
   const { processes, clones } = places
   if (processes === undefined || clones === undefined || clones === null) return { refused: WHY_THE_TIPS_CANNOT_BE_READ }

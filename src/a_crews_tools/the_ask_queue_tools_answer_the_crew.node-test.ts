@@ -36,7 +36,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ProcessOutcome, ProcessRequest, Processes } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { LIST_ASKS, MAX_ASK, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
@@ -223,6 +223,24 @@ test('an ask that removes a branch records both tips, read in the clone it names
   assert.match(TOLD(await place.answer(LIST_ASKS, {}, 'session-lead')), new RegExp(`- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? It removes ${THE_BRANCH}`), 'list_asks names both tips')
   const lead = aPlaceOver('rows-for-branches', { member: LEAD, processes: aGitOnlyInTheClone(THE_TWO_COPIES), settings: theSettingsWith(THE_CLONES) })
   assert.match(TOLD(await lead.answer(TAKE_ASKS, {}, 'session-lead')), /It removes vesta\/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a\./, 'take_asks, which the menu is built from, names both tips')
+})
+
+test('a branch the queue would change never reaches a menu, and no tip is read for it (martha#391 r=1)', async () => {
+  const asked: string[] = []
+  const place = aPlaceOver('rows-for-changed-branch', { processes: aGitOnlyInTheClone(THE_TWO_COPIES, asked), settings: theSettingsWith(THE_CLONES) })
+  const RIGHT_TO_LEFT = '\u202e'
+  assert.match(
+    REFUSED(await place.answer(QUEUE_ASK, { ask: 'Delete the merged branch?', repo: THE_REPO, branch: `vesta/feat${RIGHT_TO_LEFT}x` }, 'session-builder')),
+    /^the branch this ask removes is not one the queue keeps as it stands/,
+    'a direction override git accepts is refused before git is asked, never shown cut to the owner',
+  )
+  assert.match(
+    REFUSED(await place.answer(QUEUE_ASK, { ask: 'Delete the merged branch?', repo: THE_REPO, branch: 'v'.repeat(MAX_ASK + 26) }, 'session-builder')),
+    /^the branch this ask removes is not one the queue keeps as it stands/,
+    'a name past the cap is refused, never cut under tips read for the longer name',
+  )
+  assert.deepEqual(asked, [], 'nothing was read for either: the refusal comes before git is asked anything')
+  assert.equal(TOLD(await place.answer(LIST_ASKS, {}, 'session-lead')), 'No asks are waiting for the owner.', 'neither ask was queued')
 })
 
 test('a removal this launch cannot read is refused by name, and nothing is queued (martha#391)', async () => {
