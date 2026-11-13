@@ -23,6 +23,7 @@ import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_i
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
 import { PARK_A_MEMBER } from './a_crews_tools.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -67,14 +68,14 @@ function theDeclaration(nudges: boolean): string {
     version: 1,
     owner: OWNER_NAME,
     members: [
-      { name: RECEIVER, role: 'supervisor' },
+      { name: RECEIVER, role: SUPERVISOR },
       { name: MEMBER, role: 'builder' },
       { name: OTHER, role: 'builder' },
     ],
     mode: {
       name: 'team',
-      roles: ['supervisor', 'builder'],
-      may: { assign_work: ['supervisor'], approve_landing: [OWNER], resume_parked_work: ['supervisor'] },
+      roles: [SUPERVISOR, 'builder'],
+      may: { assign_work: [SUPERVISOR], approve_landing: [OWNER], resume_parked_work: [SUPERVISOR] },
     },
     house_rules: nudges
       ? { nudges: true, stalled_minutes: STALLED / MINUTE_MS, review_minutes: REVIEW / MINUTE_MS, person_minutes: PERSON / MINUTE_MS }
