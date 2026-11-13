@@ -15,6 +15,7 @@
 // clears, and resumes into the same size — the loop that started dozens of sessions in minutes with no work done.
 
 import type { CrewPlace, CrewStore, HandoverStamp, Refused } from '../host_contract/host_contract.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 
 /** Where a crew keeps its flows, under the one crew store. */
@@ -38,6 +39,16 @@ export const STORM_THRESHOLD = 2
 
 /** How long a flow may sit in one phase before it is abandoned, once, with the reason on the row. */
 export const FLOW_WINDOW_MS = 30 * 60_000
+
+/**
+ * The share of its limit at which a member's running turn is ended at once, whatever the crew's ceiling says
+ * (martha#311): a member past its whole limit is handed over now. A constant like HANDOVER_LIMIT_PERCENT, never a
+ * setting.
+ */
+export const CONTEXT_FULL_PERCENT = 100
+
+/** How many ends that ended one flow may spend before it is abandoned (martha#311, the owner's gate, question 3). */
+export const FORCED_ENDS = 2
 
 /** What started a flow: the limit always, a finished task when the crew switched it on, or someone asking. */
 export type RefreshTrigger = 'at_the_limit' | 'after_a_task' | 'asked'
@@ -83,6 +94,32 @@ export interface ARefresh {
    * decline, so a member that keeps declining at the limit is not a line per ask (design r=2's "told once").
    */
   readonly told: boolean
+  /**
+   * The ends of a running turn this flow has spent (martha#311): how many ended, and when the last one did. Absent
+   * until the first end ends; a refused end spends nothing.
+   */
+  readonly forced?: { readonly ends: number; readonly last_at: number }
+  /**
+   * An end that was announced and whose outcome has not arrived yet (martha#311 design 3d): the turn it ends, when it
+   * was announced, and the ledger row it was announced at, or null when the member held no package. While it is here no
+   * question judges the stall and no second end is due.
+   */
+  readonly ending?: AnEndPending
+  /**
+   * The turn this flow was abandoned on after its ends were spent (martha#311): no new flow starts while that same turn
+   * runs. A question that carries another turn is free of it.
+   */
+  readonly gave_up_on?: string
+}
+
+/** An end of the running turn, announced and not yet concluded. */
+export interface AnEndPending {
+  readonly turn_id: string
+  readonly announced: number
+  /** What the end was announced as: why, and which end it is. */
+  readonly what: string
+  /** The ledger row it was announced at, and the package whose ledger holds it: null when the member held none. */
+  readonly ledger_row: { readonly package: string; readonly at: number } | null
 }
 
 /** The file one member's flow is kept in: one per member, so two flows never disagree. */
@@ -128,7 +165,27 @@ const FLOW_FIELDS: readonly ((flow: Record<string, unknown>) => boolean)[] = [
   (flow) => typeof flow['clear_from'] === 'string',
   (flow) => Array.isArray(flow['refreshed_at']),
   (flow) => typeof flow['told'] === 'boolean',
+  (flow) => flow['forced'] === undefined || hasNumbers(flow['forced'], ['ends', 'last_at']),
+  (flow) => flow['ending'] === undefined || isAnEndPending(flow['ending']),
+  (flow) => flow['gave_up_on'] === undefined || typeof flow['gave_up_on'] === 'string',
 ]
+
+/** Whether `value` is an object whose every named field is a number. */
+function hasNumbers(value: unknown, fields: readonly string[]): boolean {
+  return typeof value === 'object' && value !== null && fields.every((field) => typeof (value as Record<string, unknown>)[field] === 'number')
+}
+
+/** Whether `value` is a pending end as this launcher writes one: a turn, a time, what it was, and a row or null. */
+function isAnEndPending(value: unknown): boolean {
+  if (!hasNumbers(value, ['announced'])) return false
+  const pending = value as Record<string, unknown>
+  return typeof pending['turn_id'] === 'string' && typeof pending['what'] === 'string' && isALedgerRow(pending['ledger_row'])
+}
+
+/** Whether `value` is the ledger row a pending end was announced at, or null for a member that held no package. */
+function isALedgerRow(value: unknown): boolean {
+  return value === null || (hasNumbers(value, ['at']) && typeof (value as Record<string, unknown>)['package'] === 'string')
+}
 
 /** True when `value` is a flow this launcher wrote, every field of it. */
 function isARefresh(value: unknown): value is ARefresh {
@@ -382,6 +439,105 @@ export function theResumePrompt(resuming: { readonly member: string; readonly fi
 /** Whether a flow has sat in its phase past the window: a prompt that never ran, or a member that never answered. */
 export function aFlowStalled(flow: ARefresh, now: number): boolean {
   return now - flow.at >= FLOW_WINDOW_MS
+}
+
+/**
+ * What a beat reads to decide whether the member's running turn is ended so its handover can run (martha#311): the
+ * turn, the flow, the owner dialogs open on the member's row, the context, and the crew's ceiling.
+ */
+export interface TheRunningTurn {
+  /** The running main turn, as the mod kept it from that turn's start: '' when the question did not come from a beat. */
+  readonly turn_id: string
+  readonly flow: ARefresh
+  /** How many dialogs the row holds open for the owner: never the row's working state, which a dialog does not move. */
+  readonly dialogs_open: number
+  readonly percent: number
+  readonly now: number
+  readonly ceiling_ms: number
+}
+
+/** Whether the running turn is ended now: no, end it (the nth end), or give the flow up because its ends are spent. */
+export type AnEnd = { readonly kind: 'none' } | { readonly kind: 'end'; readonly why: string; readonly n: number } | { readonly kind: 'give_up'; readonly why: string }
+
+const NO_END: AnEnd = { kind: 'none' }
+
+/**
+ * Whether a beat ends the running turn (martha#311 design §2). Only a `handing_over` flow's turn, never while an end
+ * awaits its outcome, never while the owner has a dialog open; then past the ceiling since the flow's ask or its last
+ * end that ended, or at once at CONTEXT_FULL_PERCENT; a second end a full ceiling after the first; and the time these
+ * hold once more with FORCED_ENDS spent, the flow is given up.
+ */
+export function anEndIsDue(turn: TheRunningTurn): AnEnd {
+  if (heldFromAnEnd(turn)) return NO_END
+  const why = whyTheTurnIsEnded(turn)
+  if (why === undefined) return NO_END
+  const forced = turn.flow.forced
+  if (forced !== undefined && turn.now - forced.last_at < turn.ceiling_ms) return NO_END
+  const ends = forced?.ends ?? 0
+  return ends >= FORCED_ENDS ? { kind: 'give_up', why } : { kind: 'end', why, n: ends + 1 }
+}
+
+/** The holds no reason answers over: no running turn, a flow not waiting on one, an end in flight, or the owner asked. */
+function heldFromAnEnd(turn: TheRunningTurn): boolean {
+  return turn.turn_id === '' || turn.flow.phase !== 'handing_over' || turn.flow.ending !== undefined || turn.dialogs_open > 0
+}
+
+/** Why the turn is ended, in the owner's words, or undefined while neither the context nor the ceiling says so. */
+function whyTheTurnIsEnded(turn: TheRunningTurn): string | undefined {
+  if (turn.percent >= CONTEXT_FULL_PERCENT) return `its context is at ${turn.percent}% of its limit`
+  const waited = turn.now - turn.flow.at
+  if (waited >= turn.ceiling_ms) return `its handover waited ${Math.round(waited / MINUTE_MS)} minutes behind a running turn`
+  return undefined
+}
+
+/** The reason a flow whose ends are spent is abandoned with, as the row says it. */
+export function theEndsSpentReason(why: string): string {
+  return `the handover never ran after ${FORCED_ENDS} forced ends (${why})`
+}
+
+/** What one end is announced as, in the ledger and on the row: why, and which of the ends it is. */
+export function theEndAnnounced(end: { readonly why: string; readonly n: number }): string {
+  return `${end.why}: end ${end.n} of ${FORCED_ENDS}`
+}
+
+/** The line the Supervisor hears for each end that ended: one per end, never one per beat. */
+export function theEndLine(ended: { readonly member: string; readonly what: string }): string {
+  return `${ended.member}'s running turn was ended so its handover can run (${ended.what}).`
+}
+
+/** The line the Supervisor hears once when a flow is given up after its ends are spent. */
+export function theGiveUpLine(given_up: { readonly member: string; readonly why: string }): string {
+  return `${given_up.member} could not be handed over: ${theEndsSpentReason(given_up.why)}. No new refresh starts on that turn.`
+}
+
+/** The flow once an end is announced: the pending end held in it until its outcome arrives (design 3d). */
+export function theFlowEnding(flow: ARefresh, pending: AnEndPending): ARefresh {
+  return { ...flow, ending: pending }
+}
+
+/** The flow once an end ended: one end spent, and the stall window restarted at the end (design 3b). */
+export function theFlowEnded(flow: ARefresh, at: number): ARefresh {
+  const { ending: _ended, ...rest } = flow
+  return { ...rest, at, forced: { ends: (flow.forced?.ends ?? 0) + 1, last_at: at } }
+}
+
+/** The flow once an end was refused, outlived, or its session replaced: the pending end gone, nothing spent or moved. */
+export function theFlowNotEnded(flow: ARefresh): ARefresh {
+  const { ending: _refused, ...rest } = flow
+  return rest
+}
+
+/** The flow given up after its ends are spent, remembering the turn no new flow may start on. */
+export function theFlowGivenUp(flow: ARefresh, why: string, turn_id: string, at: number): ARefresh {
+  return { ...theFlowNotEnded(theFlowAbandoned(flow, theEndsSpentReason(why), at)), gave_up_on: turn_id }
+}
+
+/**
+ * Whether a pending end no longer holds (design 3d): a new session has started, so no end is in flight across it, or
+ * the end is older than one ceiling and is taken as refused. Its ledger act is left open for the successor either way.
+ */
+export function anEndOutlived(pending: AnEndPending, at: { readonly now: number; readonly ceiling_ms: number; readonly at_start: boolean }): boolean {
+  return at.at_start || at.now - pending.announced >= at.ceiling_ms
 }
 
 /** Whether this refresh is one too many inside the window: a storm, parked rather than refused. */

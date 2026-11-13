@@ -8,17 +8,19 @@
 // restarted carries on rather than starting again. Its phase is written onto the member's row as well, because the
 // owner watches the dashboard and should not have to ask whether a refresh is in flight.
 
-import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareCrew, MINUTE_MS, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
-import type { LedgerHost } from '../log_ledger/log_ledger.ts'
+import { announceAct, concludeAct, REFRESH_FORCED, type LedgerHost, type Outcome } from '../log_ledger/log_ledger.ts'
 import { parkAMember, parkedPlace, theNewestHandover, theParkOf, type AHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
-import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { OWNER_DIALOGS_FIELD, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 import {
   aDeclineIsAllowed,
+  anEndIsDue,
+  anEndOutlived,
   LIVE_PHASES,
   aFlowStalled,
   aFlowStarting,
@@ -31,6 +33,13 @@ import {
   theFlowDeclined,
   theFlowOf,
   theFlowSentBack,
+  theEndAnnounced,
+  theEndLine,
+  theFlowEnded,
+  theFlowEnding,
+  theFlowGivenUp,
+  theFlowNotEnded,
+  theGiveUpLine,
   theHandoverPrompt,
   theAskedLine,
   theLimitLine,
@@ -39,6 +48,7 @@ import {
   theStormLine,
   whatBecameOfTheHandover,
   type ARefresh,
+  type AnEndPending,
   type Due,
   type HandoverVerdict,
   type RefreshTrigger,
@@ -52,7 +62,11 @@ export const THE_REFRESH_ASK = 'the_refresh_of_this_session'
  * `refresh` is the flow's phase for the member's row, written by the launcher in the same row write that carries the
  * context the session just reported — one write, because a second one in the same millisecond is refused as older.
  */
-export type TheAct = { readonly act: 'none'; readonly refresh?: TheRowPhase } | { readonly act: 'prompt'; readonly text: string; readonly refresh?: TheRowPhase } | { readonly act: typeof CARRY_THE_CLEAR; readonly refresh?: TheRowPhase }
+export type TheAct =
+  | { readonly act: 'none'; readonly refresh?: TheRowPhase }
+  | { readonly act: 'prompt'; readonly text: string; readonly refresh?: TheRowPhase }
+  | { readonly act: typeof CARRY_THE_CLEAR; readonly refresh?: TheRowPhase }
+  | { readonly act: typeof CARRY_THE_END; readonly turn_id: string; readonly refresh?: TheRowPhase }
 
 /** What the member's row says about the flow: its phase, and why, in the owner's words. */
 export interface TheRowPhase {
@@ -74,7 +88,17 @@ export interface TheSessionsQuestion {
   readonly answer: string
   /** Whether this is the session's first question. */
   readonly at_start: boolean
+  /**
+   * Whether the question comes from the mod's beat while the main turn runs (martha#311), rather than from a turn's end
+   * or a session's start. `turn_id` is then the running turn's, kept by the mod from that turn's start.
+   */
+  readonly turn_running: boolean
+  /** The outcome of the end this session was ordered, when the question reports one (martha#311 design §5). */
+  readonly end_outcome?: TheEndsOutcome
 }
+
+/** What became of an ordered end: the host ended the turn, or refused to, with its reason. */
+export type TheEndsOutcome = { readonly ended: true } | { readonly ended: false; readonly why: string }
 
 /** Everything this flow is decided over: the crew's store, the member's row, and the declaration. */
 export interface TheRefreshPlaces {
@@ -117,6 +141,7 @@ export async function theRefreshAct(places: TheRefreshPlaces, question: TheSessi
   if (flow !== undefined && LIVE_PHASES.includes(flow.phase)) {
     return await carryOn(places, opened.place, flow, question, opened.settings, now)
   }
+  if (heldByTheTurnItGaveUpOn(flow, question)) return NO_ACT
   const due = theDueOf(places, question, opened, beganAt)
   if (!due.due) return NO_ACT
   return startTheFlow(places, opened.place, due, question, flow, beganAt, now)
@@ -194,9 +219,121 @@ async function carryOn(
   settings: CrewSettings,
   now: number,
 ): Promise<TheAct> {
-  const stalled = aFlowStalled(flow, now)
-  if (flow.phase === 'clearing') return await carryTheClear(places, place, flow, question, settings, now, stalled)
-  return await carryTheHandover(places, place, flow, question, settings, now, stalled)
+  if (flow.phase === 'clearing') return await carryTheClear(places, place, flow, question, settings, now, aFlowStalled(flow, now))
+  const current = withAnOutlivedEndDropped(places, place, flow, question, settings, now)
+  if (question.end_outcome !== undefined) return await concludeTheEnd(places, place, current, { ...question, end_outcome: question.end_outcome }, settings, now)
+  return await carryTheHandover(places, place, current, question, settings, now)
+}
+
+/** The flow that was given up on this very turn holds a new one back until another turn runs (martha#311). */
+function heldByTheTurnItGaveUpOn(flow: ARefresh | undefined, question: TheSessionsQuestion): boolean {
+  return flow?.gave_up_on !== undefined && flow.gave_up_on !== '' && flow.gave_up_on === question.turn_id
+}
+
+/** The crew's ceiling in milliseconds: how long a handover waits behind a running turn (martha#311). */
+const ceilingOf = (settings: CrewSettings): number => settings.handover_ceiling_minutes * MINUTE_MS
+
+/**
+ * The flow with a pending end dropped when it no longer holds (design 3d): a new session started, or the end is older
+ * than one ceiling and is taken as refused. Its ledger act stays open, so the successor checks it.
+ */
+function withAnOutlivedEndDropped(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): ARefresh {
+  if (flow.ending === undefined || !anEndOutlived(flow.ending, { now, ceiling_ms: ceilingOf(settings), at_start: question.at_start })) return flow
+  const dropped = theFlowNotEnded(flow)
+  keepTheFlow(place, places.member, dropped)
+  return dropped
+}
+
+/**
+ * The outcome of an end the mod carried out (design §5): concluded in the ledger with what the host said, and counted
+ * only when the turn really ended. An ended end restarts the stall window (3b) and sends the Supervisor one line; a
+ * refused one spends nothing, moves nothing and tells nobody. An outcome for an end this flow does not wait on is no act.
+ */
+async function concludeTheEnd(
+  places: TheRefreshPlaces,
+  place: CrewPlace,
+  flow: ARefresh,
+  question: TheSessionsQuestion & { readonly end_outcome: TheEndsOutcome },
+  settings: CrewSettings,
+  now: number,
+): Promise<TheAct> {
+  const pending = flow.ending
+  if (pending === undefined || pending.turn_id !== question.turn_id) return NO_ACT
+  const outcome = question.end_outcome
+  await concludeTheEndsAct(places, pending, outcome.ended ? { succeeded: true, detail: THE_TURN_ENDED } : { succeeded: false, detail: outcome.why })
+  if (!outcome.ended) {
+    keepTheFlow(place, places.member, theFlowNotEnded(flow))
+    return NO_ACT
+  }
+  keepTheFlow(place, places.member, theFlowEnded(flow, now))
+  sayToTheSupervisor(places, settings, theEndLine({ member: places.member, what: pending.what }))
+  return { act: 'none', refresh: { phase: 'handing_over', reason: `its running turn was ended so its handover can run (${pending.what})` } }
+}
+
+/** Concludes the end's ledger act, when one was announced; an outcome the store will not keep leaves the act open. */
+async function concludeTheEndsAct(places: TheRefreshPlaces, pending: AnEndPending, outcome: Outcome): Promise<void> {
+  if (pending.ledger_row === null) return
+  const work = { package: pending.ledger_row.package, member: places.member }
+  await concludeAct(places.ledger, { ...work, announced_at: pending.ledger_row.at, outcome }).catch(() => undefined)
+}
+
+/**
+ * A beat while the handover waits behind the running turn (design §2): nothing, the end of that turn, or the flow given
+ * up when its ends are spent. The beat never judges the stall (3c).
+ */
+async function theEndOfTheRunningTurn(
+  places: TheRefreshPlaces,
+  place: CrewPlace,
+  flow: ARefresh,
+  question: TheSessionsQuestion,
+  settings: CrewSettings,
+  now: number,
+): Promise<TheAct> {
+  const end = anEndIsDue({ turn_id: question.turn_id, flow, dialogs_open: dialogsOpen(places), percent: question.percent, now, ceiling_ms: ceilingOf(settings) })
+  if (end.kind === 'none') return NO_ACT
+  if (end.kind === 'give_up') return giveUp(places, place, flow, { why: end.why, turn_id: question.turn_id }, settings, now)
+  return await announceTheEnd(places, place, flow, { turn_id: question.turn_id, what: theEndAnnounced(end) }, now)
+}
+
+/** How many dialogs the member's row holds open for the owner: the host's word, never the row's working state. */
+function dialogsOpen(places: TheRefreshPlaces): number {
+  return places.beats.read(places.member)?.[OWNER_DIALOGS_FIELD]?.length ?? 0
+}
+
+/** The flow given up once its ends are spent: the Supervisor told once, and no new flow on the same turn. */
+function giveUp(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, spent: { readonly why: string; readonly turn_id: string }, settings: CrewSettings, now: number): TheAct {
+  const told = tellTheSupervisor(places, place, flow, settings, theGiveUpLine({ member: places.member, why: spent.why }))
+  const given = theFlowGivenUp(told, spent.why, spent.turn_id, now)
+  keepTheFlow(place, places.member, given)
+  return { act: 'none', refresh: { phase: 'abandoned', reason: given.reason } }
+}
+
+/**
+ * The end, announced before it is ordered (design §5): its ledger row first, in the package the member holds, then the
+ * pending end in the flow, then the order. A store that will not keep the row gives no order, and the next beat tries
+ * again; a flow that cannot be kept concludes the row as not sent.
+ */
+async function announceTheEnd(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, end: { readonly turn_id: string; readonly what: string }, now: number): Promise<TheAct> {
+  const ledger_row = await announceTheEndsAct(places, end.what)
+  if (ledger_row === undefined) return NO_ACT
+  const pending: AnEndPending = { turn_id: end.turn_id, announced: now, what: end.what, ledger_row }
+  const refused = keepTheFlow(place, places.member, theFlowEnding(flow, pending))
+  if (refused !== undefined) {
+    await concludeTheEndsAct(places, pending, { succeeded: false, detail: `the flow could not be kept, so the turn was not ended: ${refused.refusal}` })
+    return NO_ACT
+  }
+  return { act: CARRY_THE_END, turn_id: end.turn_id, refresh: { phase: 'handing_over', reason: `ending its running turn so its handover can run (${end.what})` } }
+}
+
+/** The end's ledger row: null when the member holds no package, undefined when the store would not keep it. */
+async function announceTheEndsAct(places: TheRefreshPlaces, what: string): Promise<AnEndPending['ledger_row'] | undefined> {
+  const held = places.beats.read(places.member)?.holds ?? ''
+  if (held === '') return null
+  try {
+    return { package: held, at: await announceAct(places.ledger, { package: held, member: places.member, act: { kind: REFRESH_FORCED, what } }) }
+  } catch {
+    return undefined
+  }
 }
 
 /** A flow whose clear was told: the successor's first question resumes it, and a clear that never made one is abandoned. */
@@ -215,7 +352,11 @@ async function carryTheClear(
   return NO_ACT
 }
 
-/** A flow that is handing over: the member's answer to the ask, judged, and the one act it earns. */
+/**
+ * A flow that is handing over: the member's answer to the ask, judged first (design 3a), so the window never throws a
+ * written handover away; then the beat's end of the running turn; and only at a turn's end or a start, with no end
+ * pending, the stall window (3c, 3d).
+ */
 async function carryTheHandover(
   places: TheRefreshPlaces,
   place: CrewPlace,
@@ -223,12 +364,17 @@ async function carryTheHandover(
   question: TheSessionsQuestion,
   settings: CrewSettings,
   now: number,
-  stalled: boolean,
 ): Promise<TheAct> {
-  if (stalled) return abandon(places, place, flow, 'no answer to the handover ask', now, settings)
   const answer = question.answer
   if (answer.includes(CREW_REFRESH_DECLINED)) return declined(places, place, flow, answer, settings, now)
-  if (!answer.includes(CREW_HANDOVER_WRITTEN)) return NO_ACT
+  if (answer.includes(CREW_HANDOVER_WRITTEN)) return theWrittenHandover(places, place, flow, question, settings, now)
+  if (question.turn_running) return await theEndOfTheRunningTurn(places, place, flow, question, settings, now)
+  if (flow.ending === undefined && aFlowStalled(flow, now)) return abandon(places, place, flow, 'no answer to the handover ask', now, settings)
+  return NO_ACT
+}
+
+/** A handover the member says it wrote: accepted and cleared, sent back once, or abandoned. */
+function theWrittenHandover(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): TheAct {
   const judged = theJudgementOf(places, flow)
   if (judged.kind === 'sent_back') return sentBack(places, place, flow, judged.missing, now)
   if (judged.kind === 'not_written') return sentBackOnceOrAbandoned(places, place, flow, judged.why, now, settings)
@@ -492,6 +638,17 @@ export const CARRY_THE_CLEAR = 'clear'
 export const CARRY_A_MODEL = 'model'
 
 /**
+ * The word an order carries the end of the running turn under (martha#311): the one the mod answers by asking the host
+ * to end the turn the order names, then asking again with the outcome. The core decides when; every host's mod must
+ * carry this word, and the mod's copy is declared in src/check_no_literal_restates_a_value/exceptions.ts.
+ */
+export const CARRY_THE_END = 'end_the_turn'
+
+/** The words the mod reports an ordered end's outcome under (martha#311): the host ended the turn, or refused to. */
+export const THE_TURN_ENDED = 'turn_ended'
+export const THE_TURN_NOT_ENDED = 'turn_not_ended'
+
+/**
  * The order the mod carries out (martha#255): the one thing it is told to do, and the text for the one that needs
  * it. It is answered in place of the act, so the mod reads three words and decides nothing.
  *
@@ -501,6 +658,7 @@ export type TheOrder =
   | { readonly carry: typeof CARRY_A_TEXT; readonly text: string }
   | { readonly carry: typeof CARRY_THE_CLEAR }
   | { readonly carry: typeof CARRY_A_MODEL; readonly model: string }
+  | { readonly carry: typeof CARRY_THE_END; readonly turn_id: string }
   | { readonly carry: 'none' }
 
 /**
@@ -515,5 +673,6 @@ export type TheOrder =
  */
 export function theOrderOf(act: TheAct): TheOrder {
   if (act.act === 'prompt') return { carry: CARRY_A_TEXT, text: act.text }
+  if (act.act === CARRY_THE_END) return { carry: CARRY_THE_END, turn_id: act.turn_id }
   return act.act === CARRY_THE_CLEAR ? { carry: CARRY_THE_CLEAR } : { carry: 'none' }
 }

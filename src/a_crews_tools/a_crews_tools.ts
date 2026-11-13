@@ -67,7 +67,7 @@ import {
 import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
-import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
+import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, THE_TURN_ENDED, THE_TURN_NOT_ENDED, type TheAct, type TheEndsOutcome, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theHandoverAToolWrote, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import {
@@ -114,6 +114,7 @@ import {
   mayKeepTheOwnersList,
   sweepTheList,
   theListForThePane,
+  theStandingLines,
   theOpenRows,
   whoMayKeepTheList,
   type TodoAnswer,
@@ -794,7 +795,7 @@ async function theOwnersTodoAsk(places: CrewToolPlaces, args: Readonly<Record<st
   const items = await theItemsThatStand(places)
   // The standing items under the list (martha#317): a heading and one line each, or nothing when none stands.
   const standing = items.length === 0 ? [] : [STANDING_HEADING, ...theStandingList(items, todayOf(now))]
-  return { answer: JSON.stringify({ ...pane, standing, lines: pane.lines + standing.length }) }
+  return { answer: JSON.stringify({ ...pane, standing, drawn: [...pane.drawn, ...theStandingLines(standing)], lines: pane.lines + standing.length }) }
 }
 
 /**
@@ -867,7 +868,8 @@ async function theSessionsAct(
   // goes out as the flow wrote it; a model record still waiting to be directed keeps its `directed: false` and is
   // directed on the next turn's question, one turn later and never lost.
   const ordered = theOrderOf(act)
-  if (ordered.carry !== 'none') return { answer: JSON.stringify(ordered) }
+  // A beat asks while the turn runs (martha#311), and a model switch cannot run inside a turn: it waits for the turn's end.
+  if (ordered.carry !== 'none' || question.turn_running) return { answer: JSON.stringify(ordered) }
   const switching = await theModelOrder(places)
   return { answer: JSON.stringify(switching ?? ordered) }
 }
@@ -1289,7 +1291,23 @@ function aCostOf(usage: AHostsUsage | undefined): number | null {
 /** What each field of the question must be, and what is said when it is not: read in order, the first miss refused. */
 const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => string | undefined)[] = [
   (args) => (typeof args['turn_id'] === 'string' && typeof args['answer'] === 'string' ? undefined : 'the refresh question carries no turn, or no answer for one'),
+  // The beat's mark (martha#311): 1 while the main turn runs, and nothing else; a mod sending another value is not one
+  // this launcher reads, and a beat read as a turn's end would judge the stall the beat must not.
+  (args) => (args['turn_running'] === undefined || args['turn_running'] === 1 ? undefined : 'the refresh question marks a running turn with something other than 1'),
+  (args) => (theEndsOutcomeIn(args) === null ? 'the refresh question reports an end of the turn this launcher cannot read' : undefined),
 ]
+
+/**
+ * The outcome of an ordered end the question reports (martha#311): undefined when it reports none, null when what it
+ * reports is not an outcome this launcher reads — a refusal must carry the host's reason.
+ */
+function theEndsOutcomeIn(args: Readonly<Record<string, unknown>>): TheEndsOutcome | undefined | null {
+  const said = args['end_outcome']
+  if (said === undefined) return undefined
+  if (said === THE_TURN_ENDED) return { ended: true }
+  const why = args['end_refusal']
+  return said === THE_TURN_NOT_ENDED && typeof why === 'string' && why !== '' ? { ended: false, why } : null
+}
 
 /** The question the refresh flow is answered on, read strictly: a shape this launcher does not know is refused. */
 function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
@@ -1299,7 +1317,9 @@ function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: stri
   const turn_id = args['turn_id'] as string
   // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
   // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
-  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '' }
+  const end_outcome = theEndsOutcomeIn(args) ?? undefined
+  const asked = { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
+  return end_outcome === undefined ? asked : { ...asked, end_outcome }
 }
 
 /**

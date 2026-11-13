@@ -47,6 +47,19 @@ export const OFFER_OWNER_ASKS = 'offer_owner_asks'
 export const CHANNEL_READ_SECONDS_WHEN_UNNAMED = 30
 
 /**
+ * How long, in minutes, a handover waits behind a member's running turn before that turn is ended so the handover can
+ * run (martha#311), for a declaration that does not say: the draft crew's ten.
+ */
+export const HANDOVER_CEILING_MINUTES_WHEN_UNNAMED = 10
+
+/**
+ * The range a declared ceiling must fall in (martha#311): below it every running turn would be ended at once, and above
+ * it the end would never come inside one session.
+ */
+export const HANDOVER_CEILING_MINUTES_LEAST = 1
+export const HANDOVER_CEILING_MINUTES_MOST = 60
+
+/**
  * The act that lets a role's members end another member's session and start it again (martha#312): ending a session
  * mid-turn is a stronger act than unparking one, so it is granted on its own.
  */
@@ -171,6 +184,12 @@ export interface CrewSettings {
    * earlier release carries messages without its owner editing the file.
    */
   readonly channel_read_seconds: number
+  /**
+   * How long a handover may wait behind a running turn before that turn is ended (martha#311): whole minutes, from
+   * HANDOVER_CEILING_MINUTES_LEAST to HANDOVER_CEILING_MINUTES_MOST, and HANDOVER_CEILING_MINUTES_WHEN_UNNAMED when the
+   * declaration names none.
+   */
+  readonly handover_ceiling_minutes: number
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -186,7 +205,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds'] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes'] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model'] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -271,6 +290,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     mode,
     house_rules: houseRulesOf(refuse, value['house_rules'], models),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
+    handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
   }
 }
 
@@ -282,6 +302,18 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
 function channelReadSecondsOf(refuse: Refuse, value: unknown): number {
   if (value === undefined) return CHANNEL_READ_SECONDS_WHEN_UNNAMED
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return refuse.at('channel_read_seconds', 'is not a whole number of seconds, at least 1')
+  return value
+}
+
+/**
+ * How long a handover waits behind a running turn (martha#311): a whole number of minutes inside the range, or the
+ * draft's ten when the declaration names none. A value someone wrote outside the range is refused by name, never read as
+ * the default: 0 would end every running turn at once.
+ */
+function handoverCeilingOf(refuse: Refuse, value: unknown): number {
+  if (value === undefined) return HANDOVER_CEILING_MINUTES_WHEN_UNNAMED
+  const inRange = typeof value === 'number' && Number.isInteger(value) && value >= HANDOVER_CEILING_MINUTES_LEAST && value <= HANDOVER_CEILING_MINUTES_MOST
+  if (!inRange) return refuse.at('handover_ceiling_minutes', `is not a whole number of minutes from ${HANDOVER_CEILING_MINUTES_LEAST} to ${HANDOVER_CEILING_MINUTES_MOST}`)
   return value
 }
 
