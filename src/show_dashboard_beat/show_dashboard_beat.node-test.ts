@@ -63,6 +63,13 @@ test('the refresh field belongs to the row, and what it holds is checked like ev
   assert.equal(isDashboardRow({ ...beat('Vesta', 1), refresh: { phase: 'parking' } }), false, 'a phase with no reason is not a row')
 })
 
+test('a report\'s time belongs to the row only as a position, and a row written before it was kept still reads (martha#319)', () => {
+  assert.equal(isDashboardRow(beat('Vesta', 1, { reported_at: 1 })), true, 'a row with a report time reads as one')
+  assert.equal(isDashboardRow(beat('Vesta', 1)), true, 'a row written before a report kept the time reads as one')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), reported_at: 'a while ago' }), false, 'a report time that is not a position is a row')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), reported_at: -1 }), false, 'a report time before the epoch is a row')
+})
+
 test('the beat interval and its offline threshold are named once, and the threshold is a whole multiple of it (test 3, the constants)', () => {
   assert.ok(OFFLINE_AFTER_MS > BEAT_INTERVAL_MS, 'a row must miss more than one beat to read offline')
   assert.equal(OFFLINE_AFTER_MS % BEAT_INTERVAL_MS, 0, 'the threshold counts beats')

@@ -21,7 +21,8 @@ import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { noteMilestone, readLedger } from '../log_ledger/log_ledger.ts'
+import { readLedger } from '../log_ledger/log_ledger.ts'
+import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import {
@@ -138,13 +139,11 @@ function aHostOver(run: (request: ProcessRequest) => Promise<ProcessOutcome>, ro
 }
 
 /** A package's PASS row, as the crew's own line writes one. */
-const aPassedVerdict = (tests: HostForTests, work_package: string, base: string, head: string): Promise<void> =>
-  noteMilestone(tests.host, {
-    package: work_package,
-    member: 'Mercurius',
-    milestone: 'review_round_closed',
-    note: `VERDICT ${work_package} PASS ${base}..${head} r=2 ci=1 req=0`,
-  })
+const aPassedVerdict = async (tests: HostForTests, work_package: string, base: string, head: string): Promise<void> => {
+  const reading = readACrewLine(`VERDICT ${work_package} PASS ${base}..${head} r=2 ci=1 req=0`)
+  if (!('line' in reading) || reading.line === null) throw new Error(`the crew's own PASS line was not read: ${JSON.stringify(reading)}`)
+  await keepTheLinesRow(tests.host, 'Mercurius', reading.line)
+}
 
 /** Passed packages named by this test: the packages, their heads, and GitHub's answer for each head. */
 interface Passed {

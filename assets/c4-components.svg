@@ -220,9 +220,9 @@
 <text class="t-desc" x="680" y="1384">show_dashboard_beat holds a member's row</text>
 <text class="t-desc" x="680" y="1400">and the rule the newest beat wins;</text>
 <text class="t-desc" x="680" y="1416">report_progress moves it, see_the_crew</text>
-<text class="t-desc" x="680" y="1432">lays every one out, and a_crews_tools</text>
-<text class="t-desc" x="680" y="1448">answers every tool the crew</text>
-<text class="t-desc" x="680" y="1464">registers.</text>
+<text class="t-desc" x="680" y="1432">lays every one out, see_who_is_free</text>
+<text class="t-desc" x="680" y="1448">says who can take a package, and</text>
+<text class="t-desc" x="680" y="1464">a_crews_tools answers every crew tool.</text>
 <text class="t-desc" x="680" y="1480">keep_the_ledger loads log_ledger, whose</text>
 <text class="t-desc" x="680" y="1496">streams sit in the crew's own state;</text>
 <text class="t-desc" x="680" y="1512">keep_the_crew_channel is where a message</text>
@@ -251,6 +251,16 @@
 <text class="t-desc" x="48" y="1918">opens and finishes one;</text>
 <text class="t-desc" x="48" y="1934">read_the_origin_a_clone_has</text>
 <text class="t-desc" x="48" y="1950">says what a clone is of</text>
+<rect class="b-cmp" x="348" y="1654" width="300" height="180" rx="10"/>
+<text class="t-code" x="364" y="1682">keep_the_owners_todo_list</text>
+<text class="t-type" x="364" y="1700">[what waits on the owner]</text>
+<text class="t-desc" x="364" y="1724">The owner's to-do list (martha#316):</text>
+<text class="t-desc" x="364" y="1740">the acts only the owner can do, each</text>
+<text class="t-desc" x="364" y="1756">command shown in full under what it</text>
+<text class="t-desc" x="364" y="1772">does. A member the table lets assign</text>
+<text class="t-desc" x="364" y="1788">work adds one; its own check or the</text>
+<text class="t-desc" x="364" y="1804">member takes it off. The pane and</text>
+<text class="t-desc" x="364" y="1820">martha todo show it</text>
 <rect class="b-cmp" x="32" y="1980" width="300" height="230" rx="10"/>
 <text class="t-code" x="48" y="2008">write_my_handover,</text>
 <text class="t-code" x="48" y="2026">refresh_a_member</text>

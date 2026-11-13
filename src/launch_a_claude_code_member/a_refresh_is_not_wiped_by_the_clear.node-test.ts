@@ -63,6 +63,7 @@ function aCrewClearingFrom(predecessor: string | null): CrewTools {
     tools: [],
     answer: async () => ({ answer: '' }),
     startBeating: () => () => {},
+    startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
     thePredecessorOf: async (session_id) => (session_id === SUCCESSOR ? predecessor : null),
   }
