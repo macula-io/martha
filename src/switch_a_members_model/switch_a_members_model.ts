@@ -130,9 +130,14 @@ export function homeModelOf(settings: CrewSettings, member: string): string {
 
 /**
  * The switch a call asks for, or why it asks for none: a model the declaration names for this member, a package as
- * the ledger names one, and a reason in one line.
+ * the ledger names one, and a reason in one line. A member the declaration gives no model of its own is refused before
+ * anything else (martha#315 r=2): its return would be to the host's own default, which Martha cannot name, so a switch
+ * for such a member could never be undone and the session would stay on the other model for every package after it.
  */
 export function theSwitchACallAsks(args: ASwitchAsked, settings: CrewSettings, member: string): ADeclaredSwitch | string {
+  if (homeModelOf(settings, member) === '') {
+    return `${member} declares no model of its own in this crew, so a switch could never be undone: declare ${member}'s model in the declaration first, and no switch was made.`
+  }
   const why = textOf(args.why)
   if (why === '') return 'a model switch says why in one line, and this one says nothing'
   const model = textOf(args.model)

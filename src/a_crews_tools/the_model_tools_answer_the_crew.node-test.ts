@@ -30,6 +30,7 @@ import {
   PARK_A_MEMBER,
   THE_TOOLS_ASK,
   RETURN_TO_YOUR_OWN_MODEL,
+  REFRESH_THIS_SESSION,
   SWITCH_YOUR_MODEL,
   THE_MODEL_REPORT_ASK,
   type CrewTools,
@@ -65,16 +66,22 @@ interface ACrew {
 const questionOf = (turn_id: string): Record<string, unknown> => ({ usage: { context: { percent: 5 }, cost: { usd: 0.1 } }, turn_id, answer: '' })
 
 /** Gives the crew's declaration what the tool reads: this member's own model, and the crew's reviewer model. */
-function declareTheModels(root: string): void {
+function declareTheModels(root: string, memberModel: string | null): void {
   const declaration = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const held = JSON.parse(readFileSync(declaration, 'utf8')) as { members: { name: string; model?: string }[]; house_rules?: Record<string, unknown> }
-  for (const member of held.members) if (member.name === MEMBER) member.model = OWN_MODEL
+  for (const member of held.members) {
+    if (member.name !== MEMBER) continue
+    // A member the declaration gives no model of its own runs on the host's default (martha#315 r=2), which is the one
+    // state a switch could never come back from.
+    if (memberModel === null) delete member.model
+    else member.model = memberModel
+  }
   held.house_rules = { ...(held.house_rules ?? {}), [REVIEW_MODEL]: THE_REVIEWER_MODEL }
   writeFileSync(declaration, `${JSON.stringify(held, null, 2)}\n`)
 }
 
 let crewsSoFar = 0
-async function aCrewOfTools(): Promise<ACrew> {
+async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACrew> {
   crewsSoFar += 1
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
@@ -87,7 +94,7 @@ async function aCrewOfTools(): Promise<ACrew> {
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
   const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
-  declareTheModels(root)
+  declareTheModels(root, memberModel)
   const beats = dashboardRowsIn(join(home, 'row'))
   const tools = crewToolsOver({
     member: MEMBER,
@@ -212,6 +219,40 @@ test('#315: a return before the switch was told to the host comes home, and orde
   assert.doesNotMatch(returned.answer, /on its own model already/, 'a member with a recorded switch was told that no switch is recorded')
   assert.equal(theRecordOf(crew.crew).kind, 'home', 'a member that came back before its switch went out kept the switch, so the end of the turn moves it to the model it refused')
   assert.notEqual((await theOrderTheModGets(crew)).carry, CARRY_A_MODEL, 'a session that never moved was ordered onto the model it is already on')
+})
+
+// The turn that carries two orders (martha#315 r=2): a switch is recorded, and a refresh falls due in the same turn. The
+// flow keeps the handover prompt it decided on as its own state, so answering the turn with the model order in its place
+// leaves a flow in handing_over that nobody was told to hand over, and every later turn is answered `none`.
+test('#315 r2: a refresh due in the turn a switch is made goes out, and the switch is directed on the next turn (mutant: the model order sent in the refresh act\'s place)', async () => {
+  const crew = await aCrewOfTools()
+  await switched(crew.tools)
+  const asked = await crew.tools.answer(REFRESH_THIS_SESSION, { reason: 'the package is at a safe point' }, 'a-session')
+  assert.ok('answer' in asked, `the refresh was refused: ${'refused' in asked ? asked.refused : ''}`)
+
+  // This turn's one order is the flow's own: the prompt it has already committed to.
+  const first = await theOrderTheModGets(crew)
+  assert.equal(first.carry, 'submit', 'the handover prompt the refresh flow committed to was replaced by the model order, so the member was never told to hand over')
+  assert.match(String(first.text), /handover/i, 'the order sent in the refresh act\'s place is not the handover prompt')
+
+  // And the switch was not dropped: it kept `directed: false`, so the next turn's question carries it, once.
+  const held = theRecordOf(crew.crew)
+  assert.equal(held.kind === 'switched' ? held.marker.directed : null, false, 'the switch was marked directed while its order was held back, so it is never sent')
+  assert.deepEqual(await theOrderTheModGets(crew), { carry: CARRY_A_MODEL, model: THE_REVIEWER_MODEL }, 'the switch held back for the refresh act was never directed')
+  assert.notEqual((await theOrderTheModGets(crew)).carry, CARRY_A_MODEL, 'the same switch was directed twice')
+})
+
+// A switch that could never be undone (martha#315 r=2): the member declares no model of its own, so its return would be
+// to the host's own default, which Martha cannot name. The session would stay on the other model for every package
+// after this one, and the row would say nothing about it.
+test('#315 r2: a switch for a member that declares no model of its own is refused by name, and nothing is recorded (mutant: the home-model refusal removed)', async () => {
+  const crew = await aCrewOfTools(null)
+  const answered = await crew.tools.answer(SWITCH_YOUR_MODEL, { model: THE_REVIEWER_MODEL, package: THE_PACKAGE, reason: THE_REASON }, 'a-session')
+  assert.ok('refused' in answered, 'a member that declares no model of its own was switched to one it could never come back from')
+  assert.match(answered.refused, new RegExp(`${MEMBER} declares no model`), 'the refusal does not name the member that declares no model')
+  assert.match(answered.refused, new RegExp(`declare ${MEMBER}'s model`), 'the refusal does not say what to do about it')
+  assert.deepEqual(theRecordOf(crew.crew), { kind: 'home', last_marker: null }, 'a refused switch left a record behind')
+  assert.notEqual((await theOrderTheModGets(crew)).carry, CARRY_A_MODEL, 'the host was ordered onto a model the member could never be brought back from')
 })
 
 test('#315: the row says a switched model only once the mod reports the host resolved it (mutant: the row written from the order)', async () => {

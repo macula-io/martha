@@ -680,8 +680,15 @@ async function theSessionsAct(
   if (typeof question === 'string') return { refused: question }
   const act: TheAct = await theRefreshAct(refreshPlacesOf(places, state), question)
   keepWhatTheSessionSaid(places, state, question, act)
-  const switching = await theModelOrder(places, state)
-  return { answer: JSON.stringify(switching ?? theOrderOf(act)) }
+  // One order a turn, and none of them dropped (martha#315 r=2): the flow keeps the act it answers with as its own
+  // state — the handover prompt's flow is written in handing_over and the ask that started it is taken up here — so a
+  // model order sent in its place is a prompt the member never gets, and every later turn is answered `none`. The act
+  // goes out as the flow wrote it; a model record still waiting to be directed keeps its `directed: false` and is
+  // directed on the next turn's question, one turn later and never lost.
+  const ordered = theOrderOf(act)
+  if (ordered.carry !== 'none') return { answer: JSON.stringify(ordered) }
+  const switching = await theModelOrder(places)
+  return { answer: JSON.stringify(switching ?? ordered) }
 }
 
 /**
@@ -1111,12 +1118,12 @@ async function returnTheModel(places: CrewToolPlaces, args: Readonly<Record<stri
 
 /**
  * What a switch tells the member: the model, the package, and every way it comes back — so the member never has to ask
- * when the switch ends. A home the declaration names is named; one it does not is the host's own default.
+ * when the switch ends. The home is always one the declaration names (martha#315 r=2 refuses a switch for a member
+ * that declares none), so it is named here as the member will read it.
  */
 function whatASwitchTells(asked: { readonly model: string; readonly package: string }, home: string): string {
-  const back = home === '' ? "the host's own default model" : home
   return (
-    `Switching to ${asked.model} for ${asked.package} at the end of this turn; back to ${back} when you park, ` +
+    `Switching to ${asked.model} for ${asked.package} at the end of this turn; back to ${home} when you park, ` +
     `report progress on another package, or call ${RETURN_TO_YOUR_OWN_MODEL}.`
   )
 }
@@ -1126,7 +1133,7 @@ async function returnedHome(places: CrewToolPlaces, marker: ModelMarker, why: st
   const returned = returnAMemberHome(places, { member: places.member, marker, why, at: new Date(places.ledger.clock.now()) })
   if ('refusal' in returned) return `Not recorded: ${returned.refusal}.`
   const notKept = await keepTheModelCheckpoint(places, marker.package, `back from ${marker.model}: ${why}`)
-  return `Back to ${marker.home === '' ? "the host's own default model" : marker.home} at the end of this turn: ${why}.${notKept}`
+  return `Back to ${marker.home} at the end of this turn: ${why}.${notKept}`
 }
 
 /** The return a park or a return tool makes of it, or null when this member is not switched. */
@@ -1168,11 +1175,12 @@ async function keepTheModelCheckpoint(places: CrewToolPlaces, package_name: stri
 /**
  * The order that makes a recorded switch real, or null when there is nothing to direct (martha#315): one exact shape,
  * `{carry: 'model', model}`, which the mod answers with the host's own model command once the turn has ended. The
- * record is marked directed before the order goes back, so the same switch is not handed over twice; a return to a
- * home the declaration does not name is the host's own default, which Martha cannot spell, so it says so and runs no
- * command.
+ * record is marked directed before the order goes back, so the same switch is not handed over twice.
+ *
+ * Every model in a record is one the declaration names, because a switch is refused for a member that declares none
+ * (r=2), so there is no model here that cannot be spelled as the host's command argument.
  */
-async function theModelOrder(places: CrewToolPlaces, state: SessionState): Promise<TheOrder | null> {
+async function theModelOrder(places: CrewToolPlaces): Promise<TheOrder | null> {
   const place = modelPlace(places)
   if ('refusal' in place) return null
   const current = theModelOf(place, places.member)
@@ -1180,11 +1188,6 @@ async function theModelOrder(places: CrewToolPlaces, state: SessionState): Promi
   const marker = current.kind === 'switched' ? current.marker : current.last_marker
   if (marker === null || marker.directed) return null
   const model = marker.switched ? marker.model : marker.home
-  if (model === '') {
-    state.row_model = ''
-    writeRow(places, state, rowNow(places, state))
-    return null
-  }
   return 'refusal' in theSwitchDirected(places, places.member, marker) ? null : { carry: CARRY_A_MODEL, model }
 }
 
