@@ -151,6 +151,23 @@ test("2.1.323's added shapes fail the recording when they are of no shape this m
   assert.throws(() => hookExitCallsIn(alwaysOn, HOOK_SET_FUNCTION_323), /po\(\)/)
 })
 
+test('a longer name that ends in the constant is not its definition, so the flag recorded is the host’s own (Pluto P1)', () => {
+  // A minifier reuses short names, so another constant can end in this one (`aD9s`). Read as its definition, the
+  // recorder would take the other name's flag and write it in silence: the recorded flag must stay the host's own.
+  const anotherNameEndingInIt = `${HOST_TEXT_323}var a${ARGUMENT_CONSTANT}="--another-flag";`
+  const calls = hookExitCallsIn(anotherNameEndingInIt, HOOK_SET_FUNCTION_323)
+  assert.deepEqual(calls, [SAFE_MODE_FUNCTION_323, STRICT_FUNCTION_323, BOTH_FUNCTION_323, NO_TERMINAL_FUNCTION_323, VARIABLE_AND_ARGUMENT_RECORDED])
+  assert.deepEqual(hookSwitchesOf(HOOK_SET_FUNCTION_323, calls).outside_a_terminal, { variables: ['CLAUDE_CODE_IGNORE_PERSISTED_TRUST'], flags: [ARGUMENT] })
+})
+
+test('a constant defined as a string that is no command-line argument fails the recording, naming it (Pluto P6)', () => {
+  // Every other string is not the switch either. The recorder must name the constant it could not resolve, rather
+  // than write the string and leave the reader to refuse the recording later.
+  const noFlag = HOST_TEXT_323.replace(ARGUMENT_CONSTANT_DEFINITION, `${ARGUMENT_CONSTANT}="not-a-flag"`)
+  assert.notEqual(noFlag, HOST_TEXT_323, 'the planted definition replaced nothing')
+  assert.throws(() => hookExitCallsIn(noFlag, HOOK_SET_FUNCTION_323), new RegExp(ARGUMENT_CONSTANT))
+})
+
 test('an exit of the hook set that calls a function of no known shape fails the recording, naming the call', () => {
   // 2.1.319 adds such an exit; a recording must not pass it in silence.
   const added = HOOK_SET_FUNCTION.replace('if(ad("hooks"))', 'if(a$e())return o?.hooks??{};if(ad("hooks"))')
