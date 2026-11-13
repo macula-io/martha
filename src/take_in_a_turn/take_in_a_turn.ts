@@ -73,6 +73,7 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   git_history: 'B5',
   web: 'B6',
   subagent: 'B7',
+  standing_items: 'A19',
 }
 
 /** A session, with the record the gate reads and whether that record could be read. */

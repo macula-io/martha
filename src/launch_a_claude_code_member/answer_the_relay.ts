@@ -52,7 +52,7 @@ import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_laun
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
-import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
@@ -419,14 +419,16 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
   const reported = sessionStartOf(body as SessionStartHookInput)
   await state.place.records.load(reported.session_id)
   const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, await asTheCrewsRefresh(state, reported))
-  const handed = state.place.handed_at_start.reduce(
+  // What the crew hands this session is taken in with what the launch hands it (martha#317), before the record is kept:
+  // a line the record does not hold would reach the model with no gate behind it.
+  const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
+  const handed = [...state.place.handed_at_start, ...(lineToStartOn?.taken_in ?? [])].reduce(
     (session, source) => takeInTurn(session, { source }, state.place.binder),
     started,
   )
   const why = await keep(state, handed)
   if (why !== undefined) return refused(why)
-  const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
-  return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn })
+  return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn.line })
 }
 
 /**
@@ -476,7 +478,7 @@ async function takeInARefreshedSession(state: RelayState, session_id: string): P
  * instead of hoping it asks. Null when the member holds no package, nothing of it is waiting, or the ledger cannot be
  * read — a start the ledger could not be read for is still a start, and the member can ask with what_was_sent.
  */
-async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<string | null> {
+async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<TheStartLine | null> {
   if (crew === undefined) return null
   try {
     return await crew.theLineToHandAtStart()

@@ -200,7 +200,7 @@ test('a hold whose end is a condition with no day, or a day the calendar lacks, 
 
 test('a due hold reads DUE in its line, and a ruling says who recorded it', () => {
   const [line] = theStandingList([aHold('2026-11-13')], TODAY)
-  assert.ok(line?.includes(`(${DUE})`), line)
+  assert.ok(line?.includes(`(${DUE})`), String(line))
   const ruling: StandingItem = { kind: 'decided', id: 'martha-319', fields: { rule: 'two packages', date: '2026-11-13', words: 'do them all' }, recorded_by: 'Supervisor', since: NOW }
   assert.equal(theStandingList([ruling], TODAY)[0], '- DECIDED, recorded by Supervisor: 2026-11-13 "do them all" (martha-319): two packages.')
   assert.deepEqual(theStandingList([], TODAY), [NOTHING_STANDS])
