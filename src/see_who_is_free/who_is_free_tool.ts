@@ -13,14 +13,11 @@ import { mayTakeAPackage, seeWhoIsFree, theAnswerToMayTake } from './see_who_is_
 /** The name the tool is registered under. */
 export const WHO_IS_FREE = 'who_is_free'
 
-/** The act a member's role must be allowed to ask who is free: choosing who takes work is assigning it. */
-export const THE_ACT_IT_NEEDS = 'assign_work'
-
 /** What the tool says it is for. */
 export const WHO_IS_FREE_DESCRIPTION =
   `Before you give a member a package: every member's model, state, context, what it holds, its step, how old its last report and its last beat are, and what stands in its way. ` +
   `Name a member to ask one question: may it take a package now? A no says why and names the members that fit instead, the same provider first. ` +
-  `Only a role the declaration allows ${THE_ACT_IT_NEEDS} may ask.`
+  `Only a role the declaration allows assign_work may ask.`
 
 /** What the tool is handed: the declaration, who asks, the rows, how to read a park, the time, and whom it asks about. */
 export interface WhoIsFreeAsked {
@@ -48,10 +45,10 @@ export function whoIsFreeOver(asked: WhoIsFreeAsked): { readonly answer: string 
   return 'refused' in answer ? answer : { answer: theAnswerToMayTake(answer) }
 }
 
-/** Why `asker` may not ask who is free, or null when its declared role is allowed the act. */
+/** Why `asker` may not ask who is free, or null when its declared role is allowed to assign work: choosing who takes work is assigning it. */
 function whyTheAskerMayNot(settings: Pick<CrewSettings, 'members' | 'mode'>, asker: string): string | null {
-  const granted = settings.mode.may[THE_ACT_IT_NEEDS] ?? []
+  const granted = settings.mode.may.assign_work
   const role = settings.members.find((member) => member.name === asker)?.role
   if (role !== undefined && granted.includes(role)) return null
-  return `${asker} may not ask who is free: the declaration allows ${THE_ACT_IT_NEEDS} to ${granted.join(', ') || 'nobody'}, and ${asker}'s role is ${role ?? 'none on this crew'}.`
+  return `${asker} may not ask who is free: the declaration allows assign_work to ${granted.join(', ') || 'nobody'}, and ${asker}'s role is ${role ?? 'none on this crew'}.`
 }

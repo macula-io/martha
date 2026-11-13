@@ -16,7 +16,9 @@ import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_i
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { FreeRow } from '../see_who_is_free/see_who_is_free.ts'
-import { THE_ACT_IT_NEEDS, WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
+import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { PARK_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-who-is-free-'))
@@ -33,11 +35,11 @@ const team = {
   version: DECLARATION_VERSION,
   owner: 'Ann',
   members: [
-    { name: LEAD, role: 'supervisor', model: 'model-a' },
+    { name: LEAD, role: SUPERVISOR, model: 'model-a' },
     { name: BUILDER, role: 'builder', model: 'model-b' },
     { name: REVIEWER, role: 'reviewer' },
   ],
-  mode: { name: 'team', roles: ['supervisor', 'builder', 'reviewer'], may: { ...Object.fromEntries(ACTS.map((act) => [act, ['supervisor']])), approve_landing: [OWNER] } },
+  mode: { name: 'team', roles: [SUPERVISOR, 'builder', 'reviewer'], may: { ...Object.fromEntries(ACTS.map((act) => [act, [SUPERVISOR]])), approve_landing: [OWNER] } },
   channel_read_seconds: 30,
 }
 const declaration = JSON.stringify(team)
@@ -54,11 +56,11 @@ const clock = { at: 1_000 }
 function theToolsOf(member: string): CrewTools {
   return crewToolsOver({
     member,
-    ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } },
+    ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, CREW_ROWS_PLACE)) } },
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(join(home, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(home, 'the-crew-store')) },
   })
 }
 
@@ -70,7 +72,7 @@ const answerOf = (said: { readonly answer: string } | { readonly refused: string
 test('a member whose role is not allowed assign_work is refused, and the refusal names the act', async () => {
   const said = await theToolsOf(BUILDER).answer(WHO_IS_FREE, {}, 'session-builder')
   assert.ok('refused' in said, 'a builder does not choose who takes work')
-  assert.match(said.refused, new RegExp(`${BUILDER} may not ask who is free: the declaration allows ${THE_ACT_IT_NEEDS} to supervisor`))
+  assert.match(said.refused, new RegExp(`${BUILDER} may not ask who is free: the declaration allows assign_work to ${SUPERVISOR}`))
 })
 
 test('the Supervisor reads a report as the time it last reported, and a park from the marker the member kept', async () => {

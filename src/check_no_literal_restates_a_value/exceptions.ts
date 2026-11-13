@@ -26,6 +26,7 @@ import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { PARK_A_MEMBER, REFRESH_THIS_SESSION, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
+import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -86,6 +87,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: PARK_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: WAKE_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: REFRESH_THIS_SESSION, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  // The Supervisor's who-is-free tool (martha#319): the same reason, one more tool the mod answers by a literal.
+  { value: WHO_IS_FREE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   // The socket the mod talks to its launcher over (martha#254): the name is read by the host from this very file, and
   // the host refuses a hooks module that gives `$.env.get` anything but a literal, an imported constant included
   // (#104) — so the copy of the name has to sit here, and this line is the one that says it is the same name.

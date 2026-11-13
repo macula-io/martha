@@ -9,13 +9,12 @@ import { test } from 'node:test'
 
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
-import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { IDLE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   CLAIM_LIMIT_PERCENT,
   NOBODY_FITS,
   NOT_RUNNING,
   PARK_UNREADABLE_FLAG,
-  PARKED_FLAG,
   PROGRESS_STALE_AFTER_MS,
   mayTakeAPackage,
   seeWhoIsFree,
@@ -33,7 +32,7 @@ function freeBeat(member: string, changes: Partial<DashboardRow> = {}): Dashboar
     member,
     session: `session-${member}`,
     at: NOW - 1_000,
-    state: 'idle',
+    state: IDLE,
     holds: '',
     task: '',
     progress: { step: 0, of: 1 },
@@ -66,7 +65,7 @@ test('test 1: a parked member is refused by its marker, though its row reads idl
   assert.ok(!('refused' in answer) && !answer.may, 'a parked member may not take a package, whatever its row says')
   assert.match(answer.why, new RegExp(`Vesta is parked: ${PARKED.kind === 'parked' ? PARKED.marker.reason : ''}`), 'the refusal says it is parked, and why')
   assert.deepEqual(answer.instead, ['Uranus', 'Terra', 'Ceres'], 'and names the members that fit, never the asker')
-  assert.deepEqual(seeWhoIsFree(crew).find((row) => row.member === 'Vesta')?.flags, [PARKED_FLAG], 'the row is flagged parked')
+  assert.deepEqual(seeWhoIsFree(crew).find((row) => row.member === 'Vesta')?.flags, [PARKED.kind], 'the row is flagged parked, in the park\'s own word')
 })
 
 test('test 1: a park marker Martha cannot read is a no, not a guess that the member is free', () => {

@@ -33,9 +33,6 @@ export const PROGRESS_STALE_AFTER_MS = 30 * 60_000
 /** What a declared member that has never started reads as: not idle, because nothing of it runs. */
 export const NOT_RUNNING = 'not running'
 
-/** The flag a member's park marker raises, read from the marker and never from the row. */
-export const PARKED_FLAG = 'parked'
-
 /** The flag a park marker Martha cannot read raises: nobody can say whether the member is parked. */
 export const PARK_UNREADABLE_FLAG = 'park unreadable'
 
@@ -100,7 +97,8 @@ function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null): read
   return flags.filter((flag): flag is string => flag !== null)
 }
 
-const parkFlagOf = (park: ThePark): string | null => (park.kind === 'parked' ? PARKED_FLAG : park.kind === 'unreadable' ? PARK_UNREADABLE_FLAG : null)
+/** The flag a park raises: a parked member is flagged with the park's own word, read from the marker, never the row. */
+const parkFlagOf = (park: ThePark): string | null => (park.kind === 'not_parked' ? null : park.kind === 'unreadable' ? PARK_UNREADABLE_FLAG : park.kind)
 
 const atTheLimit = (row: CrewRow): boolean => row.host.contextPercent !== null && row.host.contextPercent >= CLAIM_LIMIT_PERCENT
 
