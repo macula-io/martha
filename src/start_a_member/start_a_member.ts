@@ -21,9 +21,10 @@
 // The member's policy lets no node id hand it executable text: for the first release the owner relays every
 // hand-off between members (martha#51 ruling), and a turn the owner types is host-attested as theirs.
 //
-// The strict shell gate is off unless the declaration names it (`house_rules.strict_gate`, martha#259): a member is a
-// trusted helper by default, and the owner's safety is review plus a yes on every push. The switch is read here once,
-// from the declaration, and handed to the launcher; no later slice reads a setting for it.
+// What the shell gate does to a member is off unless the declaration names it (`gate_enforces`, `gate_audits`, and the
+// old `strict_gate` for one upgrade; martha#321, #259): a member is a trusted helper by default, and the owner's safety
+// is review plus a yes on every push. The declaration is read here once, by ../read_the_gate_mode, and the launcher
+// asks it for this member's mode; no later slice reads a setting for it.
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
@@ -39,7 +40,8 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { readingOnly } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import { DeclarationRefused, declareCrew, OWNER_BELL, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
+import { DeclarationRefused, declareCrew, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
@@ -106,15 +108,15 @@ function closedRelayRoot(relay_root: string): string | undefined {
 export function launcherPlacesOf(state: MarthaState, relay_root: string, root: string): MemberPlaces | { readonly refusal: string } {
   const rows = crewRowsDirectory(state.state_root, root)
   if ('refusal' in rows) return rows
-  const dashboard = crewSubdirectory(state.state_root, root, CREW_ROW_PLACE)
-  if ('refusal' in dashboard) return dashboard
-  const made = STATE_PLACES.map((name) => stateSubdirectory(state, name))
+  // The crew's own folders a launch keeps — the dashboard's row, and the gate's audit folder (martha#321) — then the
+  // places this checkout keeps in Martha's state.
+  const made = [crewSubdirectory(state.state_root, root, CREW_ROW_PLACE), crewSubdirectory(state.state_root, root, GATE_AUDIT_PLACE), ...STATE_PLACES.map((name) => stateSubdirectory(state, name))]
   const refused = made.find((place) => 'refusal' in place)
   if (refused !== undefined && 'refusal' in refused) return refused
-  const [launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
+  const [dashboard, gate_audit, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows.path, dashboard: dashboard.path, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
+  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
 }
 
 export interface MemberStartRequest {
@@ -161,7 +163,7 @@ async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | s
 
 
 /** Everything a start needs before the launcher is asked, or why it may not start. */
-async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly strict_gate: boolean; readonly settings: CrewSettings } | string> {
+async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly settings: CrewSettings } | string> {
   if (!request.is_terminal) return NOT_A_TERMINAL
   const unpassed = unpassedOwnerArgument(request.args)
   if (unpassed !== undefined) return `${NOT_STARTED}: ${unpassed}`
@@ -181,7 +183,7 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   if ('needs_approval' in inUse) {
     return `${NOT_STARTED}: this checkout holds config that starts code by itself (${inUse.needs_approval.join(', ')}), and you have not approved it as it is now. Run martha approve, read what it shows, and answer yes.`
   }
-  return { node_id: ids.ids[member.name]!, model: member.model, approval: inUse.approval, strict_gate: settings.house_rules[STRICT_GATE], settings }
+  return { node_id: ids.ids[member.name]!, model: member.model, approval: inUse.approval, settings }
 }
 
 /**
@@ -267,7 +269,6 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     node_id: ready.node_id,
     place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, crew_text_files: crewTextFilesOf(ready.settings), ...approvedPlace(request, ready.approval) },
     policy: { may_send_executable_text: [] },
-    strict_gate: ready.strict_gate,
     crew_settings: ready.settings,
     owner_bell: ready.settings.house_rules[OWNER_BELL],
     places,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   markHolds,
   markOf,
@@ -15,7 +15,7 @@ import {
 const strangers = (count: number): Ingestion[] =>
   Array.from({ length: count }, (_, i) => ({ path: 'A2', from_node_id: `stranger-${i}` }))
 
-const owner = 'the-owner-at-the-terminal'
+const owner = OWNER_AT_THE_TERMINAL
 
 test('#321: a release clears exactly the prefix its mark names, and leaves what came after', () => {
   const raw = strangers(3)

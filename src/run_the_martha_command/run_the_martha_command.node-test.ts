@@ -17,7 +17,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
-import { EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
+import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
 import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
@@ -30,6 +30,11 @@ import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
+import { crewKeyOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
+import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -115,6 +120,59 @@ test('martha start with no member named shows how it is used', (t) => {
   const run = martha(placeFor(t), 'start')
   assert.equal(run.status, EXIT_USAGE)
   assert.ok(run.said.includes(USAGE), run.said)
+})
+
+// --- the owner's release and the gate (martha#321) -------------------------------
+
+/** A member's dashboard row, holding the session it is live in: the only member-to-live-session lookup there is. */
+function aLiveSessionRow(place: Place, member: string, session: string): void {
+  const crew = join(place.home, 'state', STATE_ROOT_NAME, 'crews', crewKeyOf(place.root))
+  const row = join(crew, 'row')
+  mkdirSync(row, { recursive: true, mode: 0o700 })
+  mkdirSync(join(crew, 'rows'), { recursive: true, mode: 0o700 })
+  const kept = { member, session, at: 1, ...theRowWithNothingSaid(), host: { model: 'opus', provider: '', contextPercent: null, costUsd: null } }
+  writeFileSync(join(row, rowFileNameOf(member)), `${JSON.stringify(kept)}\n`, { mode: 0o600 })
+}
+
+/** The crew's rows directory the release writes its mark into. */
+const theCrewsRows = (place: Place): string => join(place.home, 'state', STATE_ROOT_NAME, 'crews', crewKeyOf(place.root), 'rows')
+
+test('martha release with no terminal is refused, so a member’s shell cannot release itself', (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const run = martha(place, 'release', 'builder')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.match(run.said, /only the owner, at a terminal/)
+  allSaidByMartha(run.err)
+})
+
+test('martha release on a terminal clears the live session’s record and answers the count', (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const session = 'the-live-session'
+  aLiveSessionRow(place, 'builder', session)
+  const rows = rowStreamsDirectory(theCrewsRows(place))
+  return (async () => {
+    await rows.append(`${SESSION_RECORD_STREAM}${session}`, { ingested: [{ path: 'A2', from_node_id: 'a-stranger' }] })
+    const run = marthaOnATerminal(place, {}, 'release', 'builder')
+    assert.equal(run.status, EXIT_DONE, run.said)
+    assert.match(run.said, /Released builder: cleared 1 arrival/)
+    const marks = await releaseMarksIn(rows, session)
+    assert.equal(marks.length, 1, 'no release was written')
+    assert.equal(marks[0]?.cleared, 1)
+  })()
+})
+
+test('martha gate prints one line per declared member, and --member an unknown name is refused', (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const run = martha(place, 'gate')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  for (const member of SOLO_MEMBERS) assert.match(run.out, new RegExp(`^${member.name}: off$`, 'm'), run.out)
+  const unknown = martha(place, 'gate', '--member', 'nobody')
+  assert.equal(unknown.status, EXIT_REFUSED, unknown.said)
+  assert.match(unknown.said, /does not know nobody/)
+  assert.equal(martha(place, 'gate', '--member').status, EXIT_USAGE)
 })
 
 test('martha approve whose input is no terminal refuses, so a member\'s shell cannot approve', (t) => {

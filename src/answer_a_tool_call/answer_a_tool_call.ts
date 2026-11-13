@@ -38,6 +38,8 @@ import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
+import { keepAWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
+import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 export type { ApprovedLaunch, LaunchHost }
@@ -63,15 +65,25 @@ export interface ToolCall {
    */
   readonly agents_running?: readonly string[]
   /**
-   * Whether the owner turned the strict gate on in the crew's declaration (martha#259). Absent means on, so a caller
-   * that has not heard of the setting keeps the guard; the owner's off comes from the declaration through the launcher
-   * (../launch_a_claude_code_member). Off, every refusal here that stands on text the session took in allows the call.
+   * What the gate does to this member (martha#321), read from the declaration through the launcher
+   * (../read_the_gate_mode). Absent means enforced, so a caller that has not heard of the setting keeps the guard.
+   *
+   * Off: nothing here refuses on what the session took in. Audited: the call runs, and the refusal the gate would have
+   * given is written down before it runs (../audit_the_gate_for_a_member) — and the call is refused when that line
+   * cannot be kept, because an audit that can lose its evidence is worse than none.
    */
-  readonly strict_gate?: boolean
+  readonly gate?: GateMode
+  /** Where this member's audit lines are kept; required for an audited member, and refused without when it is audited. */
+  readonly audit?: GateAuditPlace
 }
 
+/** The refusal an audited member's call gets when its own line cannot be kept: the gate's words, then why it stopped. */
+const refusedBecauseTheAuditCouldNotBeKept = (refusal: string, why: string): ToolCallAnswer => ({
+  deny: `${refusal} (this member is audited, and its audit line could not be kept: ${why}, so the call is refused.)`,
+})
+
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [], strict_gate = true }: ToolCall): ToolCallAnswer {
+export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -93,11 +105,23 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
     }
   }
 
-  const onTheRecord = refusedOnWhatItTookIn(session, tool, agents_running, strict_gate)
+  // An audited member's call runs whatever its record holds: the refusals that stand on the text are exactly what the
+  // audit writes down below, and a refusal that names no arrival (an agent still running) leaves no line to write.
+  const onTheRecord = refusedOnWhatItTookIn(session, tool, agents_running, gate === 'enforced')
   if (onTheRecord !== undefined) return onTheRecord
 
-  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy, strict_gate })
-  return decision.allow ? undefined : { deny: decision.refusal }
+  return theGatesAnswer({ tool, session, policy, gate, audit })
+}
+
+/** What the gate answers this call, in the member's mode: refuse, run, or run with the refusal written down first. */
+function theGatesAnswer(asked: Pick<ToolCall, 'tool' | 'session' | 'policy'> & { readonly gate: GateMode; readonly audit: GateAuditPlace | undefined }): ToolCallAnswer {
+  const { tool, session, policy, gate, audit } = asked
+  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy, strict_gate: gate !== 'off' })
+  if (decision.allow) return undefined
+  if (gate !== 'audited') return { deny: decision.refusal }
+  if (audit === undefined) return refusedBecauseTheAuditCouldNotBeKept(decision.refusal, 'no place to write it was given to this launcher')
+  const unkept = keepAWouldRefusal(audit, { tool, arrival: decision.arrival, refusal: decision.refusal })
+  return unkept === undefined ? undefined : refusedBecauseTheAuditCouldNotBeKept(decision.refusal, unkept.refusal)
 }
 
 /**

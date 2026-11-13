@@ -33,6 +33,7 @@
 
 import { createHash } from 'node:crypto'
 
+import type { RowStore } from '../host_contract/host_contract.ts'
 import type { Ingestion, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 /** What prefixes a session's release stream; the rest is the session id, as the session record's stream does. */
@@ -108,19 +109,56 @@ export function releaseMarkFor(
   }
 }
 
+/** A whole number of no less than zero at `key`, or undefined when what is there is not one. */
+const countIn = (entry: Readonly<Record<string, unknown>>, key: string): number | undefined => {
+  const value = entry[key]
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined
+}
+
+/** A text of at least one character at `key`, or undefined when what is there is not one. */
+const textIn = (entry: Readonly<Record<string, unknown>>, key: string): string | undefined => {
+  const value = entry[key]
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
 /** A stored mark, or undefined when this is not one: a stream that holds something else releases nothing. */
 export function markOf(row: unknown): ReleaseMark | undefined {
   if (typeof row !== 'object' || row === null) return undefined
   const entry = row as Record<string, unknown>
-  const through = entry['through']
-  const digest = entry['digest']
-  const by = entry['by']
-  const at = entry['at']
-  const cleared = entry['cleared']
-  if (typeof through !== 'number' || !Number.isInteger(through) || through < 0) return undefined
-  if (typeof digest !== 'string' || digest === '') return undefined
-  if (typeof by !== 'string' || by === '') return undefined
-  if (typeof at !== 'string' || at === '') return undefined
-  if (typeof cleared !== 'number' || !Number.isInteger(cleared) || cleared < 0) return undefined
-  return { through, digest, by, at, cleared }
+  const mark = { through: countIn(entry, 'through'), digest: textIn(entry, 'digest'), by: textIn(entry, 'by'), at: textIn(entry, 'at'), cleared: countIn(entry, 'cleared') }
+  if (mark.through === undefined || mark.digest === undefined || mark.by === undefined || mark.at === undefined || mark.cleared === undefined) return undefined
+  return { through: mark.through, digest: mark.digest, by: mark.by, at: mark.at, cleared: mark.cleared }
 }
+
+/**
+ * Every release the owner made for this session, oldest first.
+ *
+ * A stream that cannot be read answers with no release at all: it does not read as an empty release, and it does not
+ * read as a lost record either, because a release nobody can read changes nothing (rule 3).
+ */
+export async function releaseMarksIn(rows: RowStore, session_id: string): Promise<readonly ReleaseMark[]> {
+  try {
+    const stored = await rows.read(releaseStreamOf(session_id))
+    return stored.flatMap(({ row }) => {
+      const mark = markOf(row)
+      return mark === undefined ? [] : [mark]
+    })
+  } catch {
+    return []
+  }
+}
+
+/**
+ * What this record reads as, with the owner's releases applied as the store holds them now.
+ *
+ * Read every time rather than once at the start, because the owner may release a member while it runs: the launcher
+ * asks this when it loads a record and again before every check, so the call after the release is the first one let
+ * through.
+ */
+export async function releasedIn(rows: RowStore, session_id: string, raw: readonly Ingestion[]): Promise<Session> {
+  return releasedRecordOf(raw, await releaseMarksIn(rows, session_id))
+}
+
+/** A reader of one row store's releases, in the shape ../session_records_in_rows keeps its records with. */
+export const releasesIn = (rows: RowStore) => (session_id: string, raw: readonly Ingestion[]): Promise<Session> =>
+  releasedIn(rows, session_id, raw)

@@ -35,6 +35,10 @@ export const GATE_ENFORCES = 'gate_enforces'
 /** The field that names who the gate audits: members' names. */
 export const GATE_AUDITS = 'gate_audits'
 
+/** The field that names who the gate enforces for: `all`, `nobody`, or members' names. */
+/** The one old field still read, named here because ../declare_crew cannot be imported (see withoutTheNewFields). */
+const STRICT_GATE = 'strict_gate'
+
 /** What the gate does to a member. */
 export type GateMode = 'off' | 'audited' | 'enforced'
 
@@ -100,7 +104,9 @@ function withoutTheNewFields(
 ): GateSetting | GateRefused {
   if (audited !== undefined) return namedOf([], audited, members)
   // The one upgrade reading: an old file's boolean still declares, and `true` is the owner asking for the gate.
-  return houseRules?.['strict_gate'] === true
+  // Named by literal, and declared in ../check_no_literal_restates_a_value/exceptions.ts: ../declare_crew imports this
+  // module, so importing its constant back would let it read its own fields before they are initialized.
+  return houseRules?.[STRICT_GATE] === true
     ? { kind: 'every-member', mode: 'enforced' }
     : { kind: 'off' }
 }
