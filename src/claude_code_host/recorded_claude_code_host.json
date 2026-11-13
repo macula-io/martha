@@ -2,8 +2,8 @@
   "_why": "What the Claude Code host itself says, recorded from its binary so the adapter derives from the host and not from a list typed by hand (#41). Re-record with: npm run record:claude-code-host -- <claude binary> <version>.",
   "host_version": "2.1.325",
   "memory_off": {
-    "version": "2.1.323",
-    "file_mode_guard": "function Cb(){if(po())return\"off\";if(aE())return\"off\";if(K())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Pe(e))return\"off\";if(ps(e))return\"forced_on\";return Rb()?\"off\":\"unset\"}",
+    "version": "2.1.325",
+    "file_mode_guard": "function Db(){if(ho())return\"off\";if(AE())return\"off\";if(K())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Pe(e))return\"off\";if(ws(e))return\"forced_on\";return Nb()?\"off\":\"unset\"}",
     "hosted_mode_variable": "CLAUDE_CODE_POST_TURN_MEMORY",
     "on_check": "function Pe(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}"
   },
