@@ -24,7 +24,8 @@ import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { OWNER_DIALOGS_FIELD } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { A_TOOL_WAS_STILL_RUNNING, CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, THE_REFRESH_ASK, THE_TURN_ENDED, THE_TURN_NOT_ENDED } from '../refresh_a_member/the_refresh_flow.ts'
+import { A_TOOL_WAS_STILL_RUNNING, CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, THE_REFRESH_ASK, THE_TURN_ENDED } from '../refresh_a_member/the_refresh_flow.ts'
+import { A_TOOL_WHILE_THE_END_IS_HELD } from '../refresh_a_member/hold_the_end.ts'
 import { CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { FORCED_ENDS, HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver } from './a_crews_tools.ts'
@@ -104,9 +105,8 @@ async function aMemberHandingOver(options: ACrewOptions) {
     beats,
     /** A beat while the turn runs. */
     beat: (minute: number, over: Readonly<Record<string, unknown>> = {}) => ask(minute, { turn_running: 1, ...over }),
-    /** The mod's report of what the host did with an end it was ordered. */
-    ended: (minute: number) => ask(minute, { turn_running: 1, end_outcome: THE_TURN_ENDED }),
-    refused: (minute: number, why: string) => ask(minute, { turn_running: 1, end_outcome: THE_TURN_NOT_ENDED, end_refusal: why }),
+    /** The held turn's own end, which is the end's outcome: the abort landed, or the turn ended first. */
+    ended: (minute: number) => ask(minute, { turn_id: THE_TURN, answer: '' }),
     /** A turn's end, carrying what the turn answered. */
     turnEnded: (minute: number, answer = '', turn_id = THE_TURN) => ask(minute, { turn_id, answer }),
     /** A new session's first question. */
@@ -157,35 +157,35 @@ test('#311: ceiling 40, a beat at minute 30 with the turn still running neither 
   assert.equal(member.flow().phase, 'handing_over', 'the beat abandoned the flow at minute 30 while its turn ran')
 })
 
-test('#311: ceiling 40, the end ends at minute 40, the ended turn completes at 41, the handover is answered at 45: the flow clears (mutant: drop the restart)', async () => {
+test('#311: ceiling 40, the end ordered at minute 40 ends its turn at 41, the handover is answered at 45: the flow clears (mutant: drop the restart)', async () => {
   const member = await aMemberHandingOver({ ceiling_minutes: 40 })
   assert.deepEqual(await member.beat(40), theEndOf(THE_TURN), 'the turn was not ended at the ceiling')
-  assert.deepEqual(await member.ended(40), NOTHING)
-  assert.deepEqual(await member.turnEnded(41), NOTHING, 'the ended turn\'s own end was answered with an act')
+  assert.deepEqual(await member.ended(41), NOTHING, 'the ended turn\'s own end was answered with an act')
   assert.equal(member.flow().phase, 'handing_over', 'the ended turn\'s own end abandoned the flow the end was for')
+  assert.deepEqual([member.flow().forced?.ends, member.flow().at], [1, member.minute(41)], 'the end did not count once, from the turn\'s end')
   await member.writesItsHandover()
   assert.deepEqual(await member.turnEnded(45, CREW_HANDOVER_WRITTEN, 'the-handover-turn'), { carry: CARRY_THE_CLEAR }, 'a handover written after the end did not clear')
 })
 
-test('#311: ceiling 40, the ended turn completes before the end\'s outcome arrives: the flow waits, then the end counts (mutant: drop the pending hold)', async () => {
+test('#311 placement ruling: a subagent\'s turn ending neither concludes the end nor drops its hold (mutant: drop on any turn end)', async () => {
   const member = await aMemberHandingOver({ ceiling_minutes: 40 })
   assert.deepEqual(await member.beat(40), theEndOf(THE_TURN))
-  assert.deepEqual(await member.turnEnded(40), NOTHING, 'the ended turn\'s end, arriving first, was answered with an act')
-  assert.equal(member.flow().phase, 'handing_over', 'the ended turn\'s end judged the stall while the end awaited its outcome')
+  assert.deepEqual(await member.turnEnded(40, '', 'a-subagent-turn'), NOTHING)
+  assert.notEqual(member.flow().ending, undefined, 'a subagent\'s turn ending concluded the end held on the main turn')
+  assert.equal(member.tools.ends.deniesACall(SESSION), A_TOOL_WHILE_THE_END_IS_HELD, 'a subagent\'s turn ending dropped the hold')
   assert.deepEqual(await member.ended(40), NOTHING)
-  assert.deepEqual([member.flow().forced?.ends, member.flow().at], [1, member.minute(40)], 'the end did not count once, from minute 40')
+  assert.equal(member.tools.ends.deniesACall(SESSION), undefined, 'the held turn\'s own end left its hold in place')
 })
 
-test('#311: ceiling 10, the first end is refused, the second ends at minute 20, the handover is answered at 31: the flow clears', async () => {
+test('#311 ruling D: an end due while a tool runs is held, rides on that tool\'s answer, and the turn\'s end concludes it (mutants: carry while in flight; hold after the answer)', async () => {
   const member = await aMemberHandingOver({ ceiling_minutes: 10 })
-  assert.deepEqual(await member.beat(10), theEndOf(THE_TURN))
-  assert.deepEqual(await member.refused(10, 'the host found no such turn'), NOTHING)
-  assert.equal(member.flow().forced, undefined, 'a refused end was counted')
-  assert.deepEqual(await member.beat(20), theEndOf(THE_TURN), 'the second end did not come after a refused first')
-  assert.deepEqual(await member.ended(20), NOTHING)
-  assert.deepEqual(await member.turnEnded(21), NOTHING)
-  await member.writesItsHandover()
-  assert.deepEqual(await member.turnEnded(31, CREW_HANDOVER_WRITTEN, 'the-handover-turn'), { carry: CARRY_THE_CLEAR }, 'the handover after the second end did not clear')
+  member.tools.ends.aCallAllowed(SESSION, 'a-long-tool')
+  assert.deepEqual(await member.beat(10), NOTHING, 'the end was ordered while a tool was in flight')
+  assert.notEqual(member.flow().ending, undefined, 'the end held behind a tool was not announced')
+  assert.equal(member.tools.ends.deniesACall(SESSION), A_TOOL_WHILE_THE_END_IS_HELD, 'a call started while the end was held')
+  assert.equal(member.tools.ends.aCallAnswered(SESSION, 'a-long-tool'), THE_TURN, 'the end did not ride on the last tool\'s answer')
+  assert.deepEqual(await member.ended(11), NOTHING)
+  assert.deepEqual([member.flow().ending, member.flow().forced?.ends], [undefined, 1], 'the held turn\'s end did not conclude and count the end')
 })
 
 test('#311: a handover written after the window passed, with no end at all, is still judged (mutant: judge the stall before the answer)', async () => {
@@ -218,15 +218,10 @@ test('#311: an end that ended leaves one announced and one concluded row, spends
   assert.equal((await member.linesToTheSupervisor()).length, 1, 'the Supervisor was not told once of the end')
 })
 
-test('#311: a refused end is concluded as refused, spends nothing, keeps the window and tells nobody (mutant: count it)', async () => {
-  const member = await aMemberHandingOver({ ceiling_minutes: 10, holds: PACKAGE })
-  const before = member.flow().at
+test('#311 placement ruling: an end ordered at once is held from the beat\'s own answer, so a call that arrives before the abort is denied (mutant: hold only while a tool runs)', async () => {
+  const member = await aMemberHandingOver({ ceiling_minutes: 10 })
   assert.deepEqual(await member.beat(10), theEndOf(THE_TURN))
-  assert.deepEqual(await member.refused(10, 'the host found no such turn'), NOTHING)
-  const outcomes = concluded(await member.ledgerRows()).map((row) => [row.outcome.succeeded, row.outcome.detail])
-  assert.deepEqual(outcomes, [[false, 'the host found no such turn']], 'the refusal was not concluded with the host\'s reason')
-  assert.deepEqual([member.flow().forced, member.flow().at], [undefined, before], 'a refused end spent an end or moved the window')
-  assert.equal((await member.linesToTheSupervisor()).length, 0, 'the Supervisor was told of an end that did not happen')
+  assert.equal(member.tools.ends.deniesACall(SESSION), A_TOOL_WHILE_THE_END_IS_HELD, 'a call approved between the beat\'s answer and the abort would run into the abort')
 })
 
 test('#311: an end whose outcome never arrives stays open, and the successor is told to check it (mutant: conclude on announcement)', async () => {
@@ -249,6 +244,7 @@ test('#311 ruling D: an end the mod still holds a ceiling later is concluded as 
   const outcomes = concluded(await member.ledgerRows()).map((row) => [row.outcome.succeeded, row.outcome.detail])
   assert.deepEqual(outcomes, [[false, A_TOOL_WAS_STILL_RUNNING]], 'the expired end was not concluded as blocked by a running tool')
   assert.deepEqual([member.flow().forced, member.flow().at, member.flow().ending], [{ ends: 1, last_at: member.minute(20) }, before, undefined], 'the expired end was not spent, or moved the window')
+  assert.equal(member.tools.ends.deniesACall(SESSION), undefined, 'an expired end still denied every call')
   assert.equal((await member.linesToTheSupervisor()).length, 0, 'the Supervisor was told of an end that did not happen')
 })
 

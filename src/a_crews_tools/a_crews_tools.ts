@@ -67,7 +67,8 @@ import {
 import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
-import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, THE_TURN_ENDED, THE_TURN_NOT_ENDED, type TheAct, type TheEndsOutcome, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
+import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
+import { holdingTheEnds, type TheEndsHold } from '../refresh_a_member/hold_the_end.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theHandoverAToolWrote, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import {
@@ -311,6 +312,11 @@ export interface CrewTools {
    * of the owner's asks stands on, so the relay hands every answer here and the queue decides which one is a menu.
    */
   noteTheCallsAnswer(call: { readonly tool: string }, session: string): void
+  /**
+   * The end of a running turn held at a tool boundary (martha#311, ruling D): the launcher's tool verdict asks it last,
+   * so it only narrows a yes, and hands the end out on a yes to the last call in flight.
+   */
+  readonly ends: TheEndsHold
 }
 
 /** What a session is handed at its start, and the sources its record takes in for it (martha#317). */
@@ -720,6 +726,20 @@ interface SessionState {
   row_model: string
   /** The share each session began at, by session id (martha#255): every refresh threshold is measured from it. */
   readonly began_at: Map<string, number>
+  /** The one hold on the end of a running turn this launch keeps (martha#311). */
+  readonly ends: TheEndsHold
+}
+
+/**
+ * A crew tool call as the mod posts it (martha#254): its session, the tool's own name and its arguments, or undefined
+ * when the body is not one. Read here, beside the tools it names, so the launcher only hands it on.
+ */
+export function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const { session_id, tool, args } = body as Record<string, unknown>
+  if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
+  return { session_id, tool, args: args as Readonly<Record<string, unknown>> }
 }
 
 /** The tools a member can call, over the place its launcher gave it. */
@@ -732,6 +752,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     session: '',
     row_model: held.launched_on ?? '',
     began_at: held.began_at ?? new Map<string, number>(),
+    ends: holdingTheEnds(),
   }
   const handlers = handlersOver(held, state)
 
@@ -764,6 +785,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
     refusesTheSubagent: (call) => refusesTheSubagent(held, call),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
+    ends: state.ends,
   }
 }
 
@@ -1294,20 +1316,7 @@ const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => st
   // The beat's mark (martha#311): 1 while the main turn runs, and nothing else; a mod sending another value is not one
   // this launcher reads, and a beat read as a turn's end would judge the stall the beat must not.
   (args) => (args['turn_running'] === undefined || args['turn_running'] === 1 ? undefined : 'the refresh question marks a running turn with something other than 1'),
-  (args) => (theEndsOutcomeIn(args) === null ? 'the refresh question reports an end of the turn this launcher cannot read' : undefined),
 ]
-
-/**
- * The outcome of an ordered end the question reports (martha#311): undefined when it reports none, null when what it
- * reports is not an outcome this launcher reads — a refusal must carry the host's reason.
- */
-function theEndsOutcomeIn(args: Readonly<Record<string, unknown>>): TheEndsOutcome | undefined | null {
-  const said = args['end_outcome']
-  if (said === undefined) return undefined
-  if (said === THE_TURN_ENDED) return { ended: true }
-  const why = args['end_refusal']
-  return said === THE_TURN_NOT_ENDED && typeof why === 'string' && why !== '' ? { ended: false, why } : null
-}
 
 /** The question the refresh flow is answered on, read strictly: a shape this launcher does not know is refused. */
 function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
@@ -1317,9 +1326,7 @@ function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: stri
   const turn_id = args['turn_id'] as string
   // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
   // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
-  const end_outcome = theEndsOutcomeIn(args) ?? undefined
-  const asked = { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
-  return end_outcome === undefined ? asked : { ...asked, end_outcome }
+  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
 }
 
 /**
@@ -1347,6 +1354,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): Parameter
     models: places.models ?? [],
     ledger: places.ledger,
     began_at: state.began_at,
+    ends: state.ends,
   }
 }
 

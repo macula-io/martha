@@ -53,6 +53,8 @@ interface Fake {
   readonly $: RelayEngine
   readonly posted: Posted[]
   readonly ran: (readonly string[])[]
+  /** The turns the relay asked the host to end (martha#311). */
+  readonly aborted: string[]
   fireTimers(): void
 }
 
@@ -63,6 +65,7 @@ const OWN_STAT = '4242 (claude) code) S 1 4242 4242 0 -1'
 function fakeEngine(launcher: Launcher, environment: Record<string, string> = { [RELAY_SOCKET_VARIABLE]: SOCKET }): Fake {
   const posted: Posted[] = []
   const ran: (readonly string[])[] = []
+  const aborted: string[] = []
   const timers: (() => void)[] = []
   const $: RelayEngine = {
     env: { get: async (name) => environment[name] },
@@ -89,8 +92,9 @@ function fakeEngine(launcher: Launcher, environment: Record<string, string> = { 
       },
     },
     ui: { toast: () => undefined },
+    turn: { abort: async ({ turnId }) => void aborted.push(turnId) },
   }
-  return { $, posted, ran, fireTimers: () => timers.splice(0).forEach((fn) => fn()) }
+  return { $, posted, ran, aborted, fireTimers: () => timers.splice(0).forEach((fn) => fn()) }
 }
 
 const answering =
@@ -292,6 +296,26 @@ test(`a launcher that does not answer within ${RELAY_DEADLINE_MS} ms: the prompt
   assert.equal(call.ran.length, 0)
 })
 
+test('#311 ruling D: a report the launcher answers yes with a turn to end ends that turn, after the tool ran, and stops nothing (mutant: drop the abort)', async () => {
+  const ending: Launcher = async ({ url }) =>
+    ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? '{"taken":1,"end_turn":"the-running-turn"}' : yesTo(url.slice(RELAY_ORIGIN.length)) })
+  const fake = fakeEngine(ending)
+  const call = await callThrough(fake)
+  assert.deepEqual(await call.answer, RESULT, 'the tool\'s result was not handed back')
+  assert.deepEqual(fake.aborted, ['the-running-turn'], 'the turn the launcher named was not ended')
+  assert.deepEqual(fake.ran, [], 'the member was stopped on a yes')
+  const plain = fakeEngine(sayYes)
+  await (await callThrough(plain)).answer
+  assert.deepEqual(plain.aborted, [], 'a turn was ended on a yes that named none')
+})
+
+test('#311 ruling D: a report answered with a turn to end that names none is no yes, and the member is stopped (mutant: read any end_turn as a yes)', async () => {
+  const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? '{"taken":1,"end_turn":""}' : yesTo(url.slice(RELAY_ORIGIN.length)) }))
+  const call = await callThrough(fake)
+  assert.equal(await settled(call.answer as Promise<unknown>), 'pending', 'a malformed end was read as a yes')
+  assert.deepEqual([fake.ran[0], fake.aborted], [['kill', '-s', 'KILL', '--', '-4242'], []], 'the member was not stopped, or a turn was ended')
+})
+
 test('a hook that failed: its catch drops or denies before the tool ran, and stops the member after', async () => {
   const hooks = hooksOfTheRelay()
   const fake = fakeEngine(sayYes)
@@ -364,7 +388,9 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
   // given all come from the launcher's answer, and the reading of those answers is the one file below (r=2 R1, R2),
   // so the mod itself holds no parser and no rule.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_channel_reading.ts', './crew_answers.ts'])
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_answers.ts'])
+  // The beat a running main turn is asked about on (martha#311): a plain file with no imports, as the channel's rule is.
+  assert.deepEqual(specifiers('crew_turn_beat.ts'), [])
   // The rule for when a session reads its crew's channel (martha#253 r=2): also a plain file with no imports, so a
   // fake engine can drive it.
   assert.deepEqual(specifiers('crew_channel_reading.ts'), [])

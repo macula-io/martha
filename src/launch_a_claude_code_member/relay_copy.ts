@@ -50,8 +50,6 @@ export const RELAY_FILES = [
   'hooks/crew_channel_reading.ts',
   // The beat a running main turn is asked about on (martha#311): crew.tsx imports it, so a copy without it is refused.
   'hooks/crew_turn_beat.ts',
-  // The end of a running turn held at a tool boundary (martha#311 ruling D): register.ts and crew.tsx import it.
-  'hooks/crew_turn_end.ts',
 ] as const
 
 /** The copy's name inside a launch's relay directory. */

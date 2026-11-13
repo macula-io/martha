@@ -12,6 +12,7 @@ import { declareCrew, MINUTE_MS, REFRESH_BETWEEN_TASKS, type CrewSettings } from
 import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import type { TheEndsHold } from './hold_the_end.ts'
 import { announceAct, concludeAct, REFRESH_FORCED, type LedgerHost, type Outcome } from '../log_ledger/log_ledger.ts'
 import { parkAMember, parkedPlace, theNewestHandover, theParkOf, type AHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -94,12 +95,7 @@ export interface TheSessionsQuestion {
    * or a session's start. `turn_id` is then the running turn's, kept by the mod from that turn's start.
    */
   readonly turn_running: boolean
-  /** The outcome of the end this session was ordered, when the question reports one (martha#311 design §5). */
-  readonly end_outcome?: TheEndsOutcome
 }
-
-/** What became of an ordered end: the host ended the turn, or refused to, with its reason. */
-export type TheEndsOutcome = { readonly ended: true } | { readonly ended: false; readonly why: string }
 
 /** Everything this flow is decided over: the crew's store, the member's row, and the declaration. */
 export interface TheRefreshPlaces {
@@ -114,6 +110,8 @@ export interface TheRefreshPlaces {
   readonly ledger: LedgerHost
   /** The share this member's session began at, by session id: the reference every threshold is measured from. */
   readonly began_at: Map<string, number>
+  /** The end of a running turn as the launcher holds it at a tool boundary (martha#311, ruling D). */
+  readonly ends: TheEndsHold
 }
 
 /** The reason a flow the limit started carries, as the owner reads it on the row. */
@@ -134,6 +132,7 @@ const A_STORM_PARK = 'two refreshes inside the window: parked so it cannot loop'
  * be read is never refreshed, and the owner is told why instead of watching a member that never hands over.
  */
 export async function theRefreshAct(places: TheRefreshPlaces, question: TheSessionsQuestion): Promise<TheAct> {
+  if (!question.turn_running) places.ends.aTurnEnded(question.session_id, question.turn_id)
   const opened = await theOpenFlow(places)
   if ('act' in opened) return opened.act
   const beganAt = places.began_at.get(question.session_id) ?? placeBegan(places, question)
@@ -222,7 +221,7 @@ async function carryOn(
 ): Promise<TheAct> {
   if (flow.phase === 'clearing') return await carryTheClear(places, place, flow, question, settings, now, aFlowStalled(flow, now))
   const current = await withAnOutlivedEndDropped(places, place, flow, question, settings, now)
-  if (question.end_outcome !== undefined) return await concludeTheEnd(places, place, current, { ...question, end_outcome: question.end_outcome }, settings, now)
+  if (theEndedTurnIsTheOneHeld(current, question)) return await concludeTheEnd(places, place, current, settings, now)
   return await carryTheHandover(places, place, current, question, settings, now)
 }
 
@@ -243,6 +242,7 @@ async function withAnOutlivedEndDropped(places: TheRefreshPlaces, place: CrewPla
   if (flow.ending === undefined) return flow
   const hold = anEndOutlived(flow.ending, { now, ceiling_ms: ceilingOf(settings), at_start: question.at_start })
   if (hold === 'holds') return flow
+  if (hold === 'expired') places.ends.anEndExpired(question.session_id)
   if (hold === 'expired') await concludeTheEndsAct(places, flow.ending, { succeeded: false, detail: A_TOOL_WAS_STILL_RUNNING })
   const dropped = hold === 'expired' ? theFlowEndExpired(flow, now) : theFlowNotEnded(flow)
   keepTheFlow(place, places.member, dropped)
@@ -250,26 +250,21 @@ async function withAnOutlivedEndDropped(places: TheRefreshPlaces, place: CrewPla
 }
 
 /**
- * The outcome of an end the mod carried out (design §5): concluded in the ledger with what the host said, and counted
- * only when the turn really ended. An ended end restarts the stall window (3b) and sends the Supervisor one line; a
- * refused one spends nothing, moves nothing and tells nobody. An outcome for an end this flow does not wait on is no act.
+ * Whether the turn that just ended is the one an end is held on (placement ruling on martha#311): the turn's own end
+ * is the outcome, so the mod reports none. A beat, a start, or a subagent's turn ending is never it.
  */
-async function concludeTheEnd(
-  places: TheRefreshPlaces,
-  place: CrewPlace,
-  flow: ARefresh,
-  question: TheSessionsQuestion & { readonly end_outcome: TheEndsOutcome },
-  settings: CrewSettings,
-  now: number,
-): Promise<TheAct> {
+function theEndedTurnIsTheOneHeld(flow: ARefresh, question: TheSessionsQuestion): flow is ARefresh & { readonly ending: AnEndPending } {
+  return flow.ending !== undefined && !question.turn_running && question.turn_id === flow.ending.turn_id
+}
+
+/**
+ * The end, concluded when the turn it was held on ended (design §5): ended whether the abort landed or the turn ended
+ * first, and counted. It restarts the stall window (3b) and sends the Supervisor one line. An abort the host refused
+ * while the turn ran ends nothing, and the end expires a ceiling on (ruling D).
+ */
+async function concludeTheEnd(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh & { readonly ending: AnEndPending }, settings: CrewSettings, now: number): Promise<TheAct> {
   const pending = flow.ending
-  if (pending === undefined || pending.turn_id !== question.turn_id) return NO_ACT
-  const outcome = question.end_outcome
-  await concludeTheEndsAct(places, pending, outcome.ended ? { succeeded: true, detail: THE_TURN_ENDED } : { succeeded: false, detail: outcome.why })
-  if (!outcome.ended) {
-    keepTheFlow(place, places.member, theFlowNotEnded(flow))
-    return NO_ACT
-  }
+  await concludeTheEndsAct(places, pending, { succeeded: true, detail: THE_TURN_ENDED })
   keepTheFlow(place, places.member, theFlowEnded(flow, now))
   sayToTheSupervisor(places, settings, theEndLine({ member: places.member, what: pending.what }))
   return { act: 'none', refresh: { phase: 'handing_over', reason: `its running turn was ended so its handover can run (${pending.what})` } }
@@ -297,7 +292,7 @@ async function theEndOfTheRunningTurn(
   const end = anEndIsDue({ turn_id: question.turn_id, flow, dialogs_open: dialogsOpen(places), percent: question.percent, now, ceiling_ms: ceilingOf(settings) })
   if (end.kind === 'none') return NO_ACT
   if (end.kind === 'give_up') return giveUp(places, place, flow, { why: end.why, turn_id: question.turn_id }, settings, now)
-  return await announceTheEnd(places, place, flow, { turn_id: question.turn_id, what: theEndAnnounced(end) }, now)
+  return await announceTheEnd(places, place, flow, { session_id: question.session_id, turn_id: question.turn_id, what: theEndAnnounced(end) }, now)
 }
 
 /** How many dialogs the member's row holds open for the owner: the host's word, never the row's working state. */
@@ -318,7 +313,7 @@ function giveUp(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, spen
  * pending end in the flow, then the order. A store that will not keep the row gives no order, and the next beat tries
  * again; a flow that cannot be kept concludes the row as not sent.
  */
-async function announceTheEnd(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, end: { readonly turn_id: string; readonly what: string }, now: number): Promise<TheAct> {
+async function announceTheEnd(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, end: { readonly session_id: string; readonly turn_id: string; readonly what: string }, now: number): Promise<TheAct> {
   const ledger_row = await announceTheEndsAct(places, end.what)
   if (ledger_row === undefined) return NO_ACT
   const pending: AnEndPending = { turn_id: end.turn_id, announced: now, what: end.what, ledger_row }
@@ -327,7 +322,9 @@ async function announceTheEnd(places: TheRefreshPlaces, place: CrewPlace, flow: 
     await concludeTheEndsAct(places, pending, { succeeded: false, detail: `the flow could not be kept, so the turn was not ended: ${refused.refusal}` })
     return NO_ACT
   }
-  return { act: CARRY_THE_END, turn_id: end.turn_id, refresh: { phase: 'handing_over', reason: `ending its running turn so its handover can run (${end.what})` } }
+  const refresh = { phase: 'handing_over', reason: `ending its running turn so its handover can run (${end.what})` } as const
+  // Held from here on, in the step that looks at what is in flight: carried now, or on the yes to the last call.
+  return places.ends.hold(end.session_id, end.turn_id) === 'now' ? { act: CARRY_THE_END, turn_id: end.turn_id, refresh } : { act: 'none', refresh }
 }
 
 /** The end's ledger row: null when the member holds no package, undefined when the store would not keep it. */
@@ -649,9 +646,8 @@ export const CARRY_A_MODEL = 'model'
  */
 export const CARRY_THE_END = 'end_the_turn'
 
-/** The words the mod reports an ordered end's outcome under (martha#311): the host ended the turn, or refused to. */
+/** What an end is concluded with once the turn it was held on ended (martha#311). */
 export const THE_TURN_ENDED = 'turn_ended'
-export const THE_TURN_NOT_ENDED = 'turn_not_ended'
 
 /** What an end the mod held for a ceiling behind a running tool is concluded with (ruling D on martha#311). */
 export const A_TOOL_WAS_STILL_RUNNING = 'a tool was still running'
