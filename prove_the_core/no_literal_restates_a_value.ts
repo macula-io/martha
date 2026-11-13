@@ -37,8 +37,9 @@
 //
 // Out of reach, and left to review: a value built at run time (`'Ba' + 'sh'`, a
 // template with a substitution, a value read from a fixture), and a literal that
-// CONTAINS a value without equalling it — the seven `mcp__<server>__<tool>` names
-// in the relay's hooks contain `CREW_SERVER` and never equal it (martha#289).
+// CONTAINS a value without equalling it — the sixteen `mcp__<server>__<tool>` names
+// in the relay's hooks contain the plugin's name from its manifest, and never equal
+// it (martha#289; the manifest, not a constant, since #343).
 
 import ts from 'typescript'
 

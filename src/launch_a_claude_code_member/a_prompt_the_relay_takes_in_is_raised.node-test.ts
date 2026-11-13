@@ -96,7 +96,7 @@ test('#253: a prompt a mod submitted reaches a turn listener as a result a mod d
   const relay = relayFor(places, turns)
   await startedSession(relay, 'session-a')
 
-  const answered = await relay.answer('prompt_submitted', { session_id: 'session-a', text: '[crew 1] A: a hand-off', origin: { kind: 'plugin', name: 'martha-relay' } })
+  const answered = await relay.answer('prompt_submitted', { session_id: 'session-a', text: '[crew 1] A: a hand-off', origin: { kind: 'plugin', name: 'martha' } })
 
   assert.equal(answered.answered, true)
   assert.deepEqual(heard, [{ text: '[crew 1] A: a hand-off', arrival: { source: 'mcp_result' } }], 'the listener never heard the turn the relay took in, so a message handed to a member can never be counted as taken in')
