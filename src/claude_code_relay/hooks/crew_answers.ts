@@ -8,13 +8,27 @@
 // a pane that stopped carrying its rows is red by name.
 
 /**
- * The order a session is given (martha#255): submit this text, clear the session, or nothing at all.
+ * The order a session is given (martha#255, #315): submit this text, clear the session, run the host's model command
+ * with this model, or nothing at all.
  *
  * The same shape the launcher answers in, ../../refresh_a_member/the_refresh_flow.ts `TheOrder`, which this copy
  * cannot import. The two are held together by ./crew_answers.node-test.ts, which puts the launcher's real answer
  * through `orderIn` and the mod's real order through it too.
  */
-export type TheOrder = { readonly carry: 'submit'; readonly text: string } | { readonly carry: 'clear' } | { readonly carry: 'none' }
+export type TheOrder =
+  | { readonly carry: 'submit'; readonly text: string }
+  | { readonly carry: 'clear' }
+  | { readonly carry: 'model'; readonly model: string }
+  | { readonly carry: 'none' }
+
+/**
+ * The words an order carries its act under. They are literals because a hooks module imports only its own files, and
+ * src/check_no_literal_restates_a_value/exceptions.ts declares each one against the core's constant (martha#255 r=2,
+ * #315).
+ */
+const CARRY_A_TEXT = 'submit'
+const CARRY_THE_CLEAR = 'clear'
+const CARRY_A_MODEL = 'model'
 
 /** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
 export interface ThePaneShown {
@@ -37,13 +51,20 @@ export const PANE_CHROME_ROWS = 3
 /** The order the launcher's answer carries, or null when it is not one this mod knows. */
 export function orderIn(said: string): TheOrder | null {
   try {
-    const parsed = JSON.parse(said) as { readonly carry?: unknown; readonly text?: unknown }
-    if (parsed.carry === 'clear' || parsed.carry === 'none') return { carry: parsed.carry }
-    if (parsed.carry === 'submit' && typeof parsed.text === 'string' && parsed.text !== '') return { carry: 'submit', text: parsed.text }
-    return null
+    const parsed = JSON.parse(said) as { readonly carry?: unknown; readonly text?: unknown; readonly model?: unknown }
+    return orderOf(parsed)
   } catch {
     return null
   }
+}
+
+/** One order, read field by field: the words it carries its act under, and the one field that act needs. */
+function orderOf(parsed: { readonly carry?: unknown; readonly text?: unknown; readonly model?: unknown }): TheOrder | null {
+  if (parsed.carry === CARRY_THE_CLEAR || parsed.carry === 'none') return { carry: parsed.carry }
+  if (parsed.carry === CARRY_A_TEXT && typeof parsed.text === 'string' && parsed.text !== '') return { carry: CARRY_A_TEXT, text: parsed.text }
+  // A model order names the model it switches to; one that names none is not an order this mod can carry out.
+  if (parsed.carry === CARRY_A_MODEL && typeof parsed.model === 'string' && parsed.model !== '') return { carry: CARRY_A_MODEL, model: parsed.model }
+  return null
 }
 
 /** What the pane draws, from the answer the launcher gives, or null when the answer is not one it can draw. */

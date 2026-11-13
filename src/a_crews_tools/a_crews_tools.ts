@@ -55,6 +55,19 @@ import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import {
+  homeModelOf,
+  modelPlace,
+  returnAMemberHome,
+  switchAMembersModel,
+  theModelOf,
+  theSwitchACallAsks,
+  theSwitchDirected,
+  type ModelMarker,
+} from '../switch_a_members_model/switch_a_members_model.ts'
+import { reviewModelRefusal, type ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { CARRY_A_MODEL, type TheOrder } from '../refresh_a_member/the_refresh_flow.ts'
+import { noteMilestone } from '../log_ledger/log_ledger.ts'
 
 /** The name a member parks with (martha#343): one act, and it says which by being this tool. */
 export const PARK_A_MEMBER = 'park_a_member'
@@ -68,6 +81,18 @@ export const WAKE_A_MEMBER = 'wake_a_member'
  * ledger already holds it and the host's vocabulary names it.
  */
 export const REFRESH_THIS_SESSION = 'refresh_this_session'
+
+/**
+ * The name the model switch is registered under (martha#315). A verb, as the nine tools beside it are: the owner's
+ * decision of 2026-11-13 took the `crew_` prefix off every tool, and the design's `crew_model` predates that by hours.
+ */
+export const SWITCH_YOUR_MODEL = 'switch_your_model'
+
+/** The name the return is registered under (martha#315): one act each, as `park_a_member` and `wake_a_member` are. */
+export const RETURN_TO_YOUR_OWN_MODEL = 'return_to_your_own_model'
+
+/** What the mod asks under to say which model the session now runs on, once the host's command resolved (martha#315). */
+export const THE_MODEL_REPORT_ASK = 'note_the_model_the_session_runs'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
 export const CREW_TOOL_NAMES = [
@@ -87,6 +112,8 @@ export const CREW_TOOL_NAMES = [
   FAST_FORWARD_AFTER_THE_OWNERS_YES,
   WORKTREE_OPEN,
   WORKTREE_FINISH,
+  SWITCH_YOUR_MODEL,
+  RETURN_TO_YOUR_OWN_MODEL,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -128,6 +155,19 @@ export interface CrewToolPlaces {
   /** The crew's declaration, whose workspace places the two worktree tools read (martha#256). */
   readonly settings?: CrewSettings
   /**
+   * The models the host runs, as its adapter records them (martha#315): the declaration is read back against them, so a
+   * crew whose `review_model` the host cannot spell is refused by name. A place given none names no model, and a
+   * declaration naming one is then refused — nothing here invents a model list.
+   */
+  readonly models?: readonly string[]
+  /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
+  readonly launched_on?: string
+  /**
+   * How this host spawns a subagent (martha#315): which tool, and which of its arguments say what the agent is and
+   * which model runs it, as the adapter records it. A place given none holds no review to the crew's reviewer model.
+   */
+  readonly spawn?: ASpawnedAgent
+  /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
    */
@@ -157,6 +197,11 @@ export interface CrewTools {
    */
   theLineToHandAtStart(): Promise<string | null>
   /**
+   * Why a subagent call this member made is not run: it spawns a review and does not name the crew's reviewer model
+   * (martha#315). Asked by the launcher's tool-call verdict, beside ../answer_a_tool_call, and never inside it.
+   */
+  refusesTheSubagent(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
+  /**
    * The session a clear was told in, when the crew's flow is waiting for its successor and this id is it (martha#255):
    * the launcher starts that session as a `crew_refresh` with this predecessor, whichever of the host's two events
    * names it first. Null when no clear is in flight, or when this id is the session the clear was told in.
@@ -166,6 +211,12 @@ export interface CrewTools {
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
 const A_PACKAGE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The work package, owner/repo#n, as the issue is named' }
+
+/** The model a switch names (martha#315): one the declaration names for this member. */
+const A_MODEL: Readonly<Record<string, unknown>> = {
+  type: 'string',
+  description: 'The model to run on: one this crew\'s declaration names for you (your own model, or its review_model)',
+}
 
 /** The clone a tool works in (martha#256): where the repository is on this machine, never a URL. */
 const A_CLONE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The clone to work in, as a path on this machine' }
@@ -199,6 +250,18 @@ export const PARK_A_MEMBER_DESCRIPTION =
 /** What `wake_a_member` says it is for: the other half, and what a wake does with the marker it finds. */
 export const WAKE_A_MEMBER_DESCRIPTION =
   'Bring a member out of a park, so it is refreshed between tasks again. The marker is written, not removed, so the reason stays readable. A member may always wake itself; waking another needs the declaration\'s table, and a refusal names the act that would have allowed it. Leave `member` out to wake yourself.'
+
+/** What `switch_your_model` says it is for: one package, one model the declaration names, and when it happens. */
+export const SWITCH_YOUR_MODEL_DESCRIPTION =
+  'Run on another model for one work package. The model must be one this crew\'s declaration names for you: your own ' +
+  'model, or the crew\'s review_model — anything else is refused by name. The switch happens at the end of this turn, ' +
+  'and you return to your own model when you park, report progress on another package, or call ' + '`return_to_your_own_model`.'
+
+/** What `return_to_your_own_model` says it is for: the other half of the switch, and when it happens. */
+export const RETURN_TO_YOUR_OWN_MODEL_DESCRIPTION =
+  'Return to your own model now, ending a switch made with `switch_your_model`. The record of what the package ran on ' +
+  'is kept. You would be returned automatically when you park or report progress on another package; this is for ending ' +
+  'a switch while you still hold the package.'
 
 /** What `write_my_handover` says it is for: the host writes the file, at the path the host chose, and stamps it. */
 export const WRITE_MY_HANDOVER_DESCRIPTION =
@@ -309,6 +372,28 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     },
   },
   {
+    name: SWITCH_YOUR_MODEL,
+    description: SWITCH_YOUR_MODEL_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        model: A_MODEL,
+        package: A_PACKAGE,
+        reason: { type: 'string', description: 'Why you switch, in one line: the ledger and the row read it' },
+      },
+      required: ['model', 'package', 'reason'],
+    },
+  },
+  {
+    name: RETURN_TO_YOUR_OWN_MODEL,
+    description: RETURN_TO_YOUR_OWN_MODEL_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { reason: { type: 'string', description: 'Why you come back, in one line: the ledger and the row read it' } },
+      required: ['reason'],
+    },
+  },
+  {
     name: WRITE_MY_HANDOVER_TOOL,
     description: WRITE_MY_HANDOVER_DESCRIPTION,
     inputSchema: {
@@ -385,13 +470,24 @@ export const CREW_TOOLS: readonly CrewTool[] = [
 interface SessionState {
   held: DashboardRow | null
   session: string
+  /**
+   * The model this member's row says it runs on (martha#315): the one the launch gave it, then the one a switch was
+   * CONFIRMED on. Written when the session reports the host's model command resolved, never when the launcher answers
+   * the tool, so the row never claims a switch the host has not made.
+   */
+  row_model: string
   /** The share each session began at, by session id (martha#255): every refresh threshold is measured from it. */
   readonly began_at: Map<string, number>
 }
 
 /** The tools a member can call, over the place its launcher gave it. */
 export function crewToolsOver(places: CrewToolPlaces): CrewTools {
-  const state: SessionState = { held: null, session: '', began_at: places.began_at ?? new Map<string, number>() }
+  const state: SessionState = {
+    held: null,
+    session: '',
+    row_model: places.launched_on ?? '',
+    began_at: places.began_at ?? new Map<string, number>(),
+  }
   const handlers = handlersOver(places, state)
 
   return {
@@ -419,6 +515,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     },
     theLineToHandAtStart: () => theLineToHandAtStart(places, state),
     thePredecessorOf: (session_id) => thePredecessorOf(places, session_id),
+    refusesTheSubagent: (call) => refusesTheSubagent(places, call),
   }
 }
 
@@ -438,6 +535,7 @@ async function answerAnAskOfTheMods(
   if (name === THE_CHANNEL_READ_ASK) return await theChannelReadAsk(places)
   if (name === THE_NEXT_MESSAGE_ASK) return await theNextMessageAsk(places)
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
+  if (name === THE_MODEL_REPORT_ASK) return theModelReported(places, state, args)
   return undefined
 }
 
@@ -467,7 +565,8 @@ async function theSessionsAct(
   if (typeof question === 'string') return { refused: question }
   const act: TheAct = await theRefreshAct(refreshPlacesOf(places, state), question)
   keepWhatTheSessionSaid(places, state, question, act)
-  return { answer: JSON.stringify(theOrderOf(act)) }
+  const switching = await theModelOrder(places, state)
+  return { answer: JSON.stringify(switching ?? theOrderOf(act)) }
 }
 
 /**
@@ -511,6 +610,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LOG_A_MILESTONE]: async (args) => ({ answer: (await keepTheMilestone(places.ledger, { ...workerOf(args), event: args['event'], note: args['note'] })).told }),
     [PARK_A_MEMBER]: async (args) => moveThePark(places, args, parkAMember),
     [WAKE_A_MEMBER]: async (args) => moveThePark(places, args, unparkAMember),
+    [SWITCH_YOUR_MODEL]: (args) => switchTheModel(places, args),
+    [RETURN_TO_YOUR_OWN_MODEL]: (args) => returnTheModel(places, args),
     write_my_handover: async (args) => theHandoverTheMemberWrote(places, state, args),
     [REFRESH_THIS_SESSION]: async (args) => {
       const reason = textOf(args['reason'])
@@ -620,10 +721,15 @@ const A_MEMBER_WITH_NO_BEAT = {
   host: { model: '', provider: '', contextPercent: null, costUsd: null },
 } satisfies Omit<DashboardRow, 'member' | 'session' | 'at'>
 
-/** The row as this session last left it: what a report moves and the heartbeat rewrites. */
+/**
+ * The row as this session last left it: what a report moves and the heartbeat rewrites. The model is this session's
+ * own (martha#315): the one the launch gave it, and then the one a confirmed switch put it on, never the one a
+ * heartbeat guessed.
+ */
 function rowNow(places: CrewToolPlaces, state: SessionState): DashboardRow {
   const kept = state.held ?? places.beats.read(places.member)
-  return { ...A_MEMBER_WITH_NO_BEAT, ...(kept ?? {}), member: places.member, session: state.session, at: places.ledger.clock.now() }
+  const host = { ...A_MEMBER_WITH_NO_BEAT.host, ...(kept?.host ?? {}), model: state.row_model }
+  return { ...A_MEMBER_WITH_NO_BEAT, ...(kept ?? {}), member: places.member, session: state.session, at: places.ledger.clock.now(), host }
 }
 
 /** Keeps the row, in this process and on disk. */
@@ -647,7 +753,8 @@ async function reportProgress(places: CrewToolPlaces, state: SessionState, args:
     waits: report.taken.waits,
     holds: report.taken.holds,
   })
-  return { answer: report.told }
+  const home = await returnedForAnotherPackage(places, report.taken.holds)
+  return { answer: home === null ? report.told : `${report.told} ${home}` }
 }
 
 /**
@@ -671,7 +778,18 @@ async function moveThePark(
   const asked = { actor: places.member, member, reason, at: new Date(places.ledger.clock.now()), declaration: theDeclarationOf(declared.settings) }
   const said = act(places, asked)
   if ('refusal' in said) return { refused: said.refusal }
-  return { answer: `${said.parked ? 'parked' : 'not parked'}: ${member} — ${said.reason}` }
+  const told = `${said.parked ? 'parked' : 'not parked'}: ${member} — ${said.reason}`
+  const home = await theParkReturnsIt(places, act === parkAMember, said.parked)
+  return { answer: home === null ? told : `${told} ${home}` }
+}
+
+/**
+ * The return a park makes of it (martha#315): a member that parks is back on its own model, and the return happens on
+ * the next turn's order rather than inside this call, because a host command cannot run inside a turn. Null when this
+ * was a wake, or when the park was refused.
+ */
+async function theParkReturnsIt(places: CrewToolPlaces, isAPark: boolean, parked: boolean): Promise<string | null> {
+  return isAPark && parked ? await returnedForTheTrigger(places, 'you parked') : null
 }
 
 /** The declaration as parking reads it: each member's name and role, and the table of who may what. */
@@ -761,6 +879,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): Parameter
     ...(places.stamps === undefined ? {} : { stamps: places.stamps }),
     root: places.root,
     documents: places.documents,
+    models: places.models ?? [],
     ledger: places.ledger,
     began_at: state.began_at,
   }
@@ -785,7 +904,7 @@ function theHandoverTheMemberWrote(places: CrewToolPlaces, state: SessionState, 
 /** The declaration, and the crew's names as a report's rules read them; or why it could not be read. */
 async function crewOrRefusal(places: CrewToolPlaces): Promise<{ readonly crew: TheCrew; readonly settings: CrewSettings } | { readonly refused: string }> {
   try {
-    const settings = await declareCrew(places.documents, places.root)
+    const settings = await declareCrew(places.documents, places.root, places.models ?? [])
     return { crew: { owner: settings.owner, members: settings.members.map((member) => member.name) }, settings }
   } catch (error) {
     return { refused: `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}` }
@@ -808,3 +927,150 @@ function beatsOf(store: DashboardStore, settings: CrewSettings): Readonly<Record
 
 /** The stream a package's ledger lives in, for a reader that wants the name: one way to build it, in the ledger. */
 export const ledgerStreamNameOf = ledgerStreamOf
+
+// --- the model switch (martha#315) ---------------------------------------------------------------
+//
+// A member's model, switched for one package and returned home: the tool that asks for it, the record in the crew
+// store (../switch_a_members_model), the ledger's checkpoint row for each, and the three return triggers. What the
+// member is TOLD is decided here; what the host does about it is one order (../../refresh_a_member/the_refresh_flow.ts
+// `CARRY_A_MODEL`) the mod carries out at the end of the turn, because a host command cannot run inside a turn that is
+// waiting on the tool that asked for it.
+
+/** `switch_your_model`: a model the declaration names, for one package, recorded and told. */
+async function switchTheModel(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  const place = modelPlace(places)
+  if ('refusal' in place) return { refused: place.refusal }
+  const current = theModelOf(place, places.member)
+  if (current.kind === 'unreadable') return { refused: current.refusal }
+  // The tool's own argument is `reason`, as a park's and a wake's are; the record calls it why.
+  const asked = theSwitchACallAsks({ model: args['model'], package: args['package'], why: args['reason'] }, declared.settings, places.member)
+  if (typeof asked === 'string') return { refused: asked }
+  const home = homeModelOf(declared.settings, places.member)
+  const switched = switchAMembersModel(places, { ...asked, member: places.member, home, at: new Date(places.ledger.clock.now()) })
+  if ('refusal' in switched) return { refused: switched.refusal }
+  const notKept = await keepTheModelCheckpoint(places, switched.package, `switched to ${asked.model} for the package: ${asked.why}`)
+  return { answer: `${whatASwitchTells(asked, home)}${notKept}` }
+}
+
+/** `return_to_your_own_model`: a switched member comes home, and nothing is directed when it is home already. */
+async function returnTheModel(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const reason = textOf(args['reason'])
+  if (reason === '') return { refused: 'a return says why in one line, and this one says nothing' }
+  const place = modelPlace(places)
+  if ('refusal' in place) return { refused: place.refusal }
+  const current = theModelOf(place, places.member)
+  if (current.kind === 'unreadable') return { refused: current.refusal }
+  if (current.kind !== 'switched' || current.marker.directed === false) {
+    return { answer: `${places.member} is on its own model already: no switch is recorded, so there is nothing to direct.` }
+  }
+  return { answer: await returnedHome(places, current.marker, reason) }
+}
+
+/**
+ * What a switch tells the member: the model, the package, and every way it comes back — so the member never has to ask
+ * when the switch ends. A home the declaration names is named; one it does not is the host's own default.
+ */
+function whatASwitchTells(asked: { readonly model: string; readonly package: string }, home: string): string {
+  const back = home === '' ? "the host's own default model" : home
+  return (
+    `Switching to ${asked.model} for ${asked.package} at the end of this turn; back to ${back} when you park, ` +
+    `report progress on another package, or call ${RETURN_TO_YOUR_OWN_MODEL}.`
+  )
+}
+
+/** A member returned home: the record written, the ledger told, and the member told what happens next. */
+async function returnedHome(places: CrewToolPlaces, marker: ModelMarker, why: string): Promise<string> {
+  const returned = returnAMemberHome(places, { member: places.member, marker, why, at: new Date(places.ledger.clock.now()) })
+  if ('refusal' in returned) return `Not recorded: ${returned.refusal}.`
+  const notKept = await keepTheModelCheckpoint(places, marker.package, `back from ${marker.model}: ${why}`)
+  return `Back to ${marker.home === '' ? "the host's own default model" : marker.home} at the end of this turn: ${why}.${notKept}`
+}
+
+/** The return a park or a return tool makes of it, or null when this member is not switched. */
+async function returnedForTheTrigger(places: CrewToolPlaces, why: string): Promise<string | null> {
+  const place = modelPlace(places)
+  if ('refusal' in place) return null
+  const current = theModelOf(place, places.member)
+  if (current.kind !== 'switched') return null
+  return await returnedHome(places, current.marker, why)
+}
+
+/**
+ * The return a report makes of it when it names another package: a member that moves on to new work is back on its own
+ * model, unless the switch was made for the package it now holds (then it keeps the switch for that work).
+ */
+async function returnedForAnotherPackage(places: CrewToolPlaces, holds: string): Promise<string | null> {
+  const place = modelPlace(places)
+  if ('refusal' in place) return null
+  const current = theModelOf(place, places.member)
+  if (current.kind !== 'switched' || holds === '' || holds === current.marker.package) return null
+  return await returnedHome(places, current.marker, `you reported progress on ${holds}`)
+}
+
+/**
+ * The ledger's checkpoint row for a switch or a return (martha#315): one line on the package, so the owner can see what
+ * a package cost on which model. The record in the crew store is what the return is decided by, so a row the ledger
+ * would not keep is said to the member and changes nothing else.
+ */
+async function keepTheModelCheckpoint(places: CrewToolPlaces, package_name: string, note: string): Promise<string> {
+  if (package_name === '') return ''
+  try {
+    await noteMilestone(places.ledger, { package: package_name, member: places.member, milestone: 'checkpoint_reached', note })
+    return ''
+  } catch (error) {
+    return ` Note: the ledger did not keep this row (${error instanceof Error ? error.message : String(error)}), so the package's history is missing it.`
+  }
+}
+
+/**
+ * The order that makes a recorded switch real, or null when there is nothing to direct (martha#315): one exact shape,
+ * `{carry: 'model', model}`, which the mod answers with the host's own model command once the turn has ended. The
+ * record is marked directed before the order goes back, so the same switch is not handed over twice; a return to a
+ * home the declaration does not name is the host's own default, which Martha cannot spell, so it says so and runs no
+ * command.
+ */
+async function theModelOrder(places: CrewToolPlaces, state: SessionState): Promise<TheOrder | null> {
+  const place = modelPlace(places)
+  if ('refusal' in place) return null
+  const current = theModelOf(place, places.member)
+  if (current.kind === 'unreadable') return null
+  const marker = current.kind === 'switched' ? current.marker : current.last_marker
+  if (marker === null || marker.directed) return null
+  const model = marker.switched ? marker.model : marker.home
+  if (model === '') {
+    state.row_model = ''
+    writeRow(places, state, rowNow(places, state))
+    return null
+  }
+  return 'refusal' in theSwitchDirected(places, places.member, marker) ? null : { carry: CARRY_A_MODEL, model }
+}
+
+/**
+ * What the mod says once the host's model command resolved (martha#315): the model this session runs on, written into
+ * the row. It is the only writer of a switched model, so the row never says a switch the host has not made.
+ */
+function theModelReported(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
+  const model = textOf(args['model'])
+  if (model === '') return { refused: 'a session reporting its model names it, and this one named none' }
+  state.row_model = model
+  writeRow(places, state, rowNow(places, state))
+  return { answer: `Noted: this row says ${model}.` }
+}
+
+/**
+ * The reviewer-model rule, as the launcher's tool-call verdict asks it (martha#315): the crew's `house_rules`
+ * `review_model`, the adapter's own data on which tool spawns a subagent and under which fields. A launch that cannot
+ * say what a host's spawn looks like refuses a review rather than letting it run unheld: the rule is the crew's, and a
+ * launcher that cannot judge it is not one that may pass it.
+ */
+async function refusesTheSubagent(places: CrewToolPlaces, call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return undefined
+  if (declared.settings.house_rules.review_model === null) return undefined
+  if (places.spawn === undefined) {
+    return `${call.tool} is not run: this crew holds reviews to ${declared.settings.house_rules.review_model}, and this launch cannot say which tool spawns a subagent, so no review may run.`
+  }
+  return reviewModelRefusal(call, { spawn: places.spawn, review_model: declared.settings.house_rules.review_model })
+}

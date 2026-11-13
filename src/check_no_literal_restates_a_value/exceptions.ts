@@ -20,12 +20,12 @@ import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
-import { THE_REFRESH_ASK, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import { PARK_A_MEMBER, REFRESH_THIS_SESSION, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
+import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -47,6 +47,13 @@ const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host 
  * in the tree stale at once, and a member's tool call is not worth that.
  */
 const THE_ARGUMENT_OF_A_WRITE = 'the host\'s own name for the argument that holds a whole file, which lives in the host glue a slice may not import'
+
+/**
+ * Why the mod writes `model` twice by literal (martha#315): it is the word an order carries a model under, which the
+ * launcher holds as a constant a hooks module cannot import, and it is also the name of the host command the mod runs to
+ * switch a session's model — the same spelling twice, and only the first is the launcher's word.
+ */
+const THE_MODEL_IN_THE_MOD = 'the word an order carries a model under, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs to switch a session, which the host names'
 
 /**
  * Why the mod writes `clear` twice by literal (martha#255 r=2): it is the word an order carries the clear under, which
@@ -99,6 +106,12 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the clear under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod submits a prompt under; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_CLEAR_IN_THE_MOD },
+  // The model order's word and the model switch's own tool names (martha#315): the same reason as the entries above.
+  { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a model under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_MODEL_IN_THE_MOD },
+  { value: SWITCH_YOUR_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: RETURN_TO_YOUR_OWN_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: THE_MODEL_REPORT_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher once a model switch resolved; ${THE_RELAY_CANNOT_IMPORT}` },
   // The same spelling in recorded host data (martha#255 r=2): three tests replay what the host recorded, and its word
   // for a session that began with /clear is its own.
   { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },

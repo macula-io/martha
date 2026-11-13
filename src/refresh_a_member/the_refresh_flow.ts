@@ -84,6 +84,8 @@ export interface TheRefreshPlaces {
   readonly stamps?: HandoverStampStore
   readonly root: string
   readonly documents: DocumentStore
+  /** The models the host runs (martha#315), which the declaration is read back against. */
+  readonly models: readonly string[]
   readonly ledger: LedgerHost
   /** The share this member's session began at, by session id: the reference every threshold is measured from. */
   readonly began_at: Map<string, number>
@@ -464,7 +466,7 @@ function saidOnTheRow(why: string): TheAct {
 /** The declaration this flow is decided over, or null when it cannot be read (the row then says nothing new). */
 async function settingsOrNull(places: TheRefreshPlaces): Promise<CrewSettings | null> {
   try {
-    return await declareCrew(places.documents, places.root)
+    return await declareCrew(places.documents, places.root, places.models)
   } catch {
     return null
   }
@@ -483,6 +485,13 @@ export const CARRY_A_TEXT = 'submit'
 export const CARRY_THE_CLEAR = 'clear'
 
 /**
+ * The word an order carries a model under (martha#315): the one the mod answers by running the host's own model command
+ * with the model the order names, once the turn has ended. A switch cannot run inside the turn whose tool call asked for
+ * it, so it waits for this order, which the mod already asks for at every turn's end.
+ */
+export const CARRY_A_MODEL = 'model'
+
+/**
  * The order the mod carries out (martha#255): the one thing it is told to do, and the text for the one that needs
  * it. It is answered in place of the act, so the mod reads three words and decides nothing.
  *
@@ -491,6 +500,7 @@ export const CARRY_THE_CLEAR = 'clear'
 export type TheOrder =
   | { readonly carry: typeof CARRY_A_TEXT; readonly text: string }
   | { readonly carry: typeof CARRY_THE_CLEAR }
+  | { readonly carry: typeof CARRY_A_MODEL; readonly model: string }
   | { readonly carry: 'none' }
 
 /**

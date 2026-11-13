@@ -27,6 +27,7 @@ import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { crewStateDirectory, openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
@@ -119,7 +120,7 @@ function version(): string {
 
 async function init(io: CommandIo, places: Places): Promise<number> {
   const owner = gitSays(places.root, 'config', 'user.name') ?? null
-  const declared = await declareSoloCrew({ root: places.root, owner, state: places.state, documents })
+  const declared = await declareSoloCrew({ root: places.root, owner, state: places.state, documents, models: CLAUDE_CODE_MODELS })
   if (!declared.declared) return refused(io, declared.refusal)
   io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.`)
   return EXIT_DONE
@@ -176,7 +177,7 @@ async function wake(io: CommandIo, places: Places, member: string): Promise<numb
 /** The declaration as parking and waking read it; or why it could not be read. */
 async function theDeclarationsOf(places: Places): Promise<TheDeclaration | string> {
   try {
-    const settings = await declareCrew(documents, places.root)
+    const settings = await declareCrew(documents, places.root, CLAUDE_CODE_MODELS)
     return { members: settings.members.map((member) => ({ name: member.name, role: member.role })), mode: { may: settings.mode.may } }
   } catch (error) {
     return `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}`
