@@ -22,7 +22,8 @@ import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
-import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, THE_TURN_ENDED, THE_TURN_NOT_ENDED } from '../refresh_a_member/the_refresh_flow.ts'
+import { OWNER } from '../report_progress/report_progress.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -165,8 +166,16 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: SWITCH_YOUR_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: RETURN_TO_YOUR_OWN_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: THE_MODEL_REPORT_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher once a model switch resolved; ${THE_RELAY_CANNOT_IMPORT}` },
+  // The end order's word and the two outcomes the mod reports back (martha#311): the same reason as the entries above.
+  { value: CARRY_THE_END, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the end of a running turn under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_THE_END, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod ends the running turn under; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_TURN_ENDED, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the outcome this mod reports when the host ended the turn; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_TURN_NOT_ENDED, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the outcome this mod reports when the host refused to end the turn; ${THE_RELAY_CANNOT_IMPORT}` },
   // A coincidence of names (martha#312): the declaration's own field, as v0.1.0's file lacks it, is not the launcher's ask.
   { value: THE_CHANNEL_READ_ASK, file: 'declare_crew/declare_crew.node-test.ts', reason: 'the declaration field a crew file names, which the launcher\'s ask happens to share' },
+  // The crew file's own top-level keys (martha#311 touched their line): a field a file names, not the launcher's ask or a progress wait.
+  { value: THE_CHANNEL_READ_ASK, file: 'declare_crew/declare_crew.ts', reason: 'the declaration field a crew file names, which the launcher\'s ask happens to share' },
+  { value: OWNER, file: 'declare_crew/declare_crew.ts', reason: 'the declaration field naming the crew\'s owner, not the word a progress report waits on' },
   // The same spelling in recorded host data (martha#255 r=2): three tests replay what the host recorded, and its word
   // for a session that began with /clear is its own.
   { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
