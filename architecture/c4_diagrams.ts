@@ -676,8 +676,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] },
   ],
   [
-    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, run_reviews_on_the_review_model', names: ['switch_a_members_model', 'run_reviews_on_the_review_model'], type: '[a member\'s model, and a review\'s]', code: true,
-      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the three ways back;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
+    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model'], type: '[a member\'s model, and the owner\'s]', code: true,
+      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the three ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
   ],
 ]
 
