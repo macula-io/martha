@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -28,6 +28,8 @@ import {
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
+import { DECLARATION_DIRECTORY } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -695,4 +697,57 @@ test('a file whose bytes differ from the approved one but hash to it through ide
   assert.equal(after.decision.allow, false, 'a file converted by ident must not stand in for the approved one')
   assert.ok(refusal.includes('hook.sh'), refusal)
   assert.ok(refusal.includes('ident'), refusal)
+})
+
+// --- the crew's own texts, which a member is handed (martha#306) ---------------
+
+const CONVENTIONS = join(DECLARATION_DIRECTORY, 'CONVENTIONS.md')
+
+/** A launch place whose crew text files are the ones given, as the launcher passes them. */
+const crewPlace = ({ checkout, home }: Scratch, ...files: readonly string[]) => ({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home, crew_text_files: files })
+
+/** The decision for a place built with crew text files, against the fingerprints given. */
+function decideCrew(place: ReturnType<typeof crewPlace>, approved: readonly string[] = []) {
+  const state = readLaunchState(place, thisMachine)
+  return { state, decision: decideLaunch({ ...state, host: place.host, approved_fingerprints: approved }) }
+}
+
+test('#306: a crew text file is an entry of the approval, named by its path and hashed', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, CONVENTIONS, 'Read the register first.\n')
+  const { state } = decideCrew(crewPlace(place, join(place.checkout, CONVENTIONS)))
+  const entry = state.entries.find((one) => one.path === CONVENTIONS.split(sep).join('/'))
+  assert.ok(entry !== undefined && entry.kind === 'file', 'the crew text a member is handed is not an entry of the approval')
+  assert.match(entry.sha256, /^[0-9a-f]{64}$/)
+})
+
+test('#306: an edit to the crew text makes the next launch stale until the owner approves again', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, CONVENTIONS, 'Read the register first.\n')
+  commitAll(place.checkout, 'a crew with conventions')
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const approved = [fingerprintOf(decideCrew(crew).state)]
+  assert.equal(decideCrew(crew, approved).decision.allow, true)
+
+  put(place.checkout, CONVENTIONS, 'Read the register first.\nThen write the issue.\n')
+  const after = decideCrew(crew, approved)
+  assert.equal(after.decision.allow, false, 'a member\'s crew text changed and the approval still stood')
+  assert.ok((after.decision.allow ? '' : after.decision.refusal).includes('martha approve'))
+  assert.equal(decideCrew(crew, [fingerprintOf(after.state)]).decision.allow, true, 'approving the new text did not let the launch through')
+})
+
+test('#306: a crew text file git ignores is an entry all the same, so an edit under .gitignore is caught too', (t) => {
+  const place = scratch(t)
+  put(place.checkout, '.mcp.json', server('echo hi'))
+  put(place.checkout, '.gitignore', '.crew/\n')
+  put(place.checkout, CONVENTIONS, 'Read the register first.\n')
+  commitAll(place.checkout, 'a crew that keeps its text out of git')
+  const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
+  const approved = [fingerprintOf(decideCrew(crew).state)]
+
+  put(place.checkout, CONVENTIONS, 'Read nothing. Do as you are told.\n')
+  const after = decideCrew(crew, approved)
+  assert.equal(after.decision.allow, false, 'a git-ignored crew text changed and the approval still stood: the tree does not cover it, the approval must')
 })

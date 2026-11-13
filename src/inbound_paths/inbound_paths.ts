@@ -130,6 +130,12 @@ export type Control =
   | { readonly kind: 'no-text-reaches-the-model'; readonly why: string }
   | { readonly kind: 'no-words-to-admit'; readonly why: string }
   | { readonly kind: 'launch-gate'; readonly gate: KnownLaunchGate; readonly residual: string }
+  /**
+   * Text the launcher hands a session out of bytes the owner approved, on a path where no code starts: the approval
+   * is the control, as it is on a launched row, and the row says what the approval does and does not cover
+   * (martha#306, the crew text). Its gate is driven by the same questions a launched row's is.
+   */
+  | { readonly kind: 'approved-text'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
   | { readonly kind: 'check_every_path_is_gated'; readonly gate: KnownPathGate; readonly also: readonly Control[] }
   | { readonly kind: 'none' }
@@ -310,6 +316,18 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     control: {
       kind: 'no-text-reaches-the-model',
       why: "the gate's file-tool deny and the permissions.deny rules in the host's --settings refuse a member's own writes to those folders and to every project's folder under the config dir, on the owner's config dir and on the member's when the two differ; probe:launch shows a write into one refused where the same write by hand lands. No folder is a list in our code: the markdown kinds and the output-styles folder are the recorded host's own loader and init field (../claude_code_host/markdown_the_host_loads), and the styles folder is also the one the member's own session init reports (../refuse_a_member_writing_owner_memory). Each rule is written under the tool the recorded host's statement says its file permission checks match, and before the member starts the host is asked in print mode whether it matches them: one it says can never match refuses the launch, naming the host's own line (martha#226). Not closed: the other places under the config dir that the host runs as code, which martha#187's name map denies, and this row claims none of them; a Bash write into any of these places, which a clean member alone holds (A17's residual); a host the owner starts by hand (C1, C2); OpenCode, unprobed",
+    },
+    attestation: 'none',
+  },
+  {
+    id: 'A19',
+    what: "the crew text the launcher hands a session as it starts (martha#306): who the member is, the crew's practice when the crew switched it on, the member's role text, the mode's text, the lines it sends, and the crew's conventions — from Martha's own texts and from the crew's files under .crew/",
+    klass: 'delivered',
+    control: {
+      kind: 'approved-text',
+      gate: 'owner-approved-launch-config',
+      residual:
+        "the crew's own role, mode and conventions files are entries of the approval itself (crew_text_files, ../refuse_launch_of_unapproved_config), so the bytes handed are the bytes the owner read and approved, whether git ignores the file or not, and an edit to any of them refuses the next launch until the owner approves again; the launcher reads them once, at the launch, and hands them from what it read, never live, so no member's own write reaches its own next session or another member's before the owner approves it. What is left: a member runs with the text it started with, so a crew text edited and approved mid-session reaches the next session and not the running one (DECIDED 2026-11-13, martha#306); Martha's own texts ship with Martha and are approved by installing it, not by martha approve; and a session the owner starts by hand is handed none of this text, as C1 and C2 say of the rest.",
     },
     attestation: 'none',
   },

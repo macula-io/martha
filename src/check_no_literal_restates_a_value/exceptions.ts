@@ -28,6 +28,7 @@ import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_mes
 import { PARK_A_MEMBER, REFRESH_THIS_SESSION, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -111,5 +112,9 @@ export const EXCEPTIONS: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  // The declaration's mode holds a `roles` field, the list of the crew's role names; `roles/` is the directory each
+  // role's text sits in (martha#306). One English word names the field and the folder, and the field reader is not a
+  // path: it is excused here, and a copy of the word anywhere else still fails.
+  { value: ROLE_TEXTS_DIRECTORY, file: 'declare_crew/declare_crew.ts', reason: 'the declaration\'s mode.roles field, a list of role names, and not the roles/ directory a role\'s text sits in' },
 ]
 

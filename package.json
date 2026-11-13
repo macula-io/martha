@@ -60,7 +60,7 @@
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
     ],
     "hostCeilings": {
-      "src/approve_a_checkouts_config": 59,
+      "src/approve_a_checkouts_config": 68,
       "src/claude_code_host": 1406,
       "src/claude_code_relay": 580,
       "src/declare_a_solo_crew": 83,
@@ -68,12 +68,12 @@
       "src/install_the_recorded_mesh_server": 312,
       "src/keep_martha_state_outside_the_checkout": 419,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 2822,
+      "src/launch_a_claude_code_member": 2838,
       "src/refuse_a_member_writing_owner_memory": 1081,
       "src/run_an_owner_signed_command": 562,
       "src/run_the_martha_command": 288,
       "src/run_the_nodes_own_npm_alone": 164,
-      "src/start_a_member": 189,
+      "src/start_a_member": 191,
       "src/crew_files_directory": 155,
       "src/linux_process_identity": 264,
       "src/row_streams_directory": 159

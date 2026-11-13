@@ -53,6 +53,7 @@ import { dirname, join, relative, sep } from 'node:path'
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
+
 export type { LaunchHost }
 
 /** What a launcher changes when it starts a host: arguments and environment it adds, and inherited variables it drops. */
@@ -372,6 +373,13 @@ export interface LaunchPlace {
    * own HEAD tree is used: the attributes an approval is first read against, before there is an approval.
    */
   readonly approved_tree?: string
+  /**
+   * The crew's own text files, as absolute paths (martha#306): the role and mode texts it writes for itself, and the
+   * conventions file its declaration names. They are read as entries of their own, so the approval names and
+   * fingerprints them whether git ignores them or not, and the text a member is handed is the text the owner
+   * approved. Omitted, the launch reads no crew text and this slice is as it was before it.
+   */
+  readonly crew_text_files?: readonly string[]
 }
 
 /**
@@ -397,12 +405,22 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
   return {
-    entries: readLaunchConfig(place, machine),
+    entries: [...readLaunchConfig(place, machine), ...readCrewText(place, machine)],
     tree: read.kind === 'tree' ? read.tree : null,
     ...(read.kind === 'refused' ? { refusal: read.refusal } : {}),
     ...(read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}),
     ...(read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}),
   }
+}
+
+/**
+ * The crew's own text files as entries, read from the checkout the same way a host config is (martha#306): whether
+ * git ignores one or not, the approval names it and its bytes are in the fingerprint. A path is written relative to
+ * the directory the host starts in, as `/`, so an approval names a file the owner can find.
+ */
+export function readCrewText(place: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
+  const start = realOrResolved(machine, place.launch_dir)
+  return (place.crew_text_files ?? []).map((file) => entryOf(machine, start, realOrResolved(machine, file)))
 }
 
 export type PreparedLaunch =

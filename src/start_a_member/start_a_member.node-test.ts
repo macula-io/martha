@@ -282,7 +282,7 @@ test('start on a config the owner has not approved starts nothing, naming martha
 test('init, approve and start bring a member up on the approved config, recorded under the node id init made', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   assert.equal(approved.kind, 'approved')
   const fake = fakeClaude(place)
   const lines: string[] = []
@@ -303,7 +303,7 @@ test('init, approve and start bring a member up on the approved config, recorded
 test('a place ends the member it started before it removes the home, while a child of it is still writing there (#272)', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const writer = aHostWritingIn(place)
   const lines: string[] = []
   const started = await startedOn(place, requestFor(place, writer.command, BUILDER!.name, lines))
@@ -457,7 +457,7 @@ const ownWritesPlace = (state: MarthaState): string => join(state.directory, OWN
 test('the launch a member is started as keeps its own writes: a write under that launch id is kept and read back (martha#162 r=2)', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   assert.equal(approved.kind, 'approved')
   const kept = readApprovals(place.state)
   assert.ok('approvals' in kept)
@@ -473,7 +473,7 @@ test('the launch a member is started as keeps its own writes: a write under that
 test('starting a member on an approval prunes the own writes of launches past the newest kept (martha#162 r=2)', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   assert.equal(approved.kind, 'approved')
   // One launch more than Martha keeps, each older than the one before, so the first two are the ones to go.
   mkdirSync(ownWritesPlace(place.state), { recursive: true, mode: 0o700 })
@@ -504,7 +504,7 @@ test("the declaration's strict gate is what the member's relay is handed, and of
       join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
       `${JSON.stringify({ ...soloDeclaration('Ada Owner'), house_rules }, null, 2)}\n`,
     )
-    const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+    const approved = await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
     assert.equal(approved.kind, 'approved')
     const fake = fakeClaude(place)
     const handed: MemberRelayPlace[] = []
