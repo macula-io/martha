@@ -57,6 +57,17 @@ test('#321: a mark reaching past the record is ignored rather than trusted', () 
   assert.equal(markHolds(mark, strangers(2)), false)
 })
 
+test('#321: a mark of the right length but a different prefix is ignored, so the digest is what decides', () => {
+  // The length alone cannot tell a released record from a replaced one: the member may have taken in two arrivals of
+  // its own after the owner typed the release, and a mark of the same length must not clear them.
+  const released = strangers(2)
+  const mark = releaseMarkFor(released, owner)
+  const replaced: Ingestion[] = [{ path: 'A3', from_node_id: 'someone-else' }, { path: 'A4', from_node_id: 'another' }]
+  assert.equal(replaced.length, mark.through, 'this test is about a length that would pass a length check')
+  assert.equal(markHolds(mark, replaced), false)
+  assert.deepEqual(releasedRecordOf(replaced, [mark]).ingested, replaced, 'a same-length prefix the mark never saw released the member')
+})
+
 test('#321: the newest matching mark wins', () => {
   const raw = strangers(3)
   const older = releaseMarkFor(raw.slice(0, 3), owner)

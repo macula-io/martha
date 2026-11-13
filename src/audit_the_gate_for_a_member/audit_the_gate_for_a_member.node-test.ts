@@ -122,3 +122,38 @@ test('#321: a line is one line of JSON, so the next one can be appended after it
   assert.equal(text.split('\n').filter((line) => line !== '').length, 2, 'two refusals did not leave two lines')
   for (const line of text.split('\n').filter((each) => each !== '')) JSON.parse(line)
 })
+
+/** A session that took nothing in: its only reason to be held is the one the case is about. */
+const aSessionThatTookNothingIn = () => {
+  const records: SessionRecordStore = { read: () => undefined, write: () => {} }
+  return beginSession(records, 's-clean')
+}
+
+test('#321: an audited member’s shell call while an agent runs is allowed and still writes one line, naming the agent', (t) => {
+  const audit = aCrewsPlace(t)
+  const answer = bash(aSessionThatTookNothingIn(), { gate: 'audited', audit, agents_running: ['agent-7'] })
+  assert.equal(answer, undefined, 'an audited member’s call was refused for a reason the owner never named')
+
+  const lines = theLinesIn(audit)
+  assert.ok(!('refusal' in lines), 'the audit could not be read back')
+  assert.equal(lines.length, 1, 'a refusal enforcement would have given left no line for the owner')
+  const line = lines[0]!
+  assert.equal(line['path'], null, 'the line claims a path the refusal does not stand on')
+  assert.equal(line['sender'], null, 'the line claims a sender the refusal does not stand on')
+  assert.match(String(line['why']), /agent-7/, 'the line does not say which agent the shell waits on')
+  assert.match(String(line['refusal']), /Nothing executes in this session/)
+})
+
+test('#321: an audited member whose record cannot be read is allowed and still writes one line, saying why', (t) => {
+  const audit = aCrewsPlace(t)
+  const lost = { id: 's-lost', gate: { ingested: [] }, record_missing: true }
+  const answer = bash(lost, { gate: 'audited', audit })
+  assert.equal(answer, undefined, 'an audited member’s call was refused for a reason the owner never named')
+
+  const lines = theLinesIn(audit)
+  assert.ok(!('refusal' in lines), 'the audit could not be read back')
+  assert.equal(lines.length, 1, 'a refusal enforcement would have given left no line for the owner')
+  const line = lines[0]!
+  assert.equal(line['path'], null, 'the line claims a path the refusal does not stand on')
+  assert.match(String(line['why']), /record .*cannot be read/i, 'the line does not say why the gate would have refused')
+})

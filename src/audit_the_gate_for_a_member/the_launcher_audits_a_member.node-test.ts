@@ -110,6 +110,19 @@ const deniedTo = (reply: { readonly answered: boolean }): string => {
   return String((reply.body as { deny: string }).deny)
 }
 
+test('#321: an audited member’s shell call while an agent runs runs and leaves one line, naming the agent', async (t) => {
+  const places = placesOf(t)
+  const relay = relayFor(places, 'audited', { directory: places.audit, member: MEMBER, lines: STATE_LINES })
+  await relay.answer('session_started', { session_id: SESSION, source: 'startup' })
+  await relay.answer('subagent_started', { session_id: SESSION, agent_id: 'agent-7' })
+  assert.deepEqual(await relay.answer('tool_called', bash), { answered: true, body: { allow: 1 } }, 'an audited member’s call was refused for a reason the owner never named')
+
+  const lines = theLinesIn({ directory: places.audit, member: MEMBER, lines: STATE_LINES })
+  assert.ok(!('refusal' in lines))
+  assert.equal(lines.length, 1, 'the would-be refusal the agent’s run stands on left no line')
+  assert.match(String(lines[0]?.['why']), /agent-7/, 'the line does not name the agent the shell waits on')
+})
+
 test('#321: the launcher hands the gate’s audit folder to the relay, and an audited call writes its line there', async (t) => {
   const places = placesOf(t)
   const relay = relayFor(places, 'audited', { directory: places.audit, member: MEMBER, lines: STATE_LINES })

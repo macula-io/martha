@@ -242,11 +242,11 @@ function agentStateOf(state: RelayState, id: unknown): { readonly id: string; re
   return { id, state: run.stopped ? 'unknown' : 'running' }
 }
 
-/** The agents started under this session that have not stopped: the shell is refused while any of them runs. */
+/** The agents started under this session that have not stopped, by id: the shell is refused while any of them runs. */
 function agentsRunning(state: RelayState, session: HostSession): readonly string[] {
-  return [...state.agents.values()]
-    .filter((run) => run.session_id === session.id && !run.stopped)
-    .map((run) => (run.started ? 'an agent' : 'an agent this launcher never saw start'))
+  return [...state.agents.entries()]
+    .filter(([, run]) => run.session_id === session.id && !run.stopped)
+    .map(([id, run]) => (run.started ? id : `an agent this launcher never saw start (${id})`))
 }
 
 /**

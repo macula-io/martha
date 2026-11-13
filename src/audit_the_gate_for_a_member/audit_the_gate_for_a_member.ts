@@ -20,7 +20,6 @@
 import { join } from 'node:path'
 
 import type { Refused } from '../host_contract/host_contract.ts'
-import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 /** The folder inside the crew's own state directory that holds one file per audited member. */
 export const GATE_AUDIT_PLACE = 'gate_would_refuse'
@@ -52,9 +51,24 @@ export interface AWouldRefusal {
   /** The tool class the call is, named as the caller named it. */
   readonly tool: string
   /** The arrival the gate refused on: its path, its sender, and why the recorder could not attribute one. */
-  readonly arrival: Ingestion
+  readonly arrival: AnArrivalItStandsOn
   /** The refusal the gate gave, in its own exact words. */
   readonly refusal: string
+}
+
+/**
+ * The arrival a would-be refusal stands on, or the place where it stands on none: a record that cannot be read, and an
+ * agent the host started that has not stopped, are refusals about the session and not about any one arrival
+ * (martha#321). Then the path and the sender are null, and `why` is the reason — the part of the refusal that is about
+ * which agent, or which record, rather than the gate's words to the model.
+ */
+export interface AnArrivalItStandsOn {
+  /** The path the text arrived on, or null when the refusal stands on no arrival. */
+  readonly path: string | null
+  /** The sender the record holds, or null when the refusal stands on no arrival. */
+  readonly from_node_id: string | null
+  /** Why the recorder could not attribute a sender, or why this refusal stands on no arrival. */
+  readonly why?: string
 }
 
 /** The file one member's would-be refusals are kept in. */

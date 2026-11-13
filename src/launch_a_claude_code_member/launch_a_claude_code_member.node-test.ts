@@ -833,6 +833,29 @@ test('#321: a release typed while the member runs is read before its next call',
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 })
 
+test('#321: a member released and then resumed keeps what it takes in after the release, so the gate holds it again', async (t) => {
+  const place = placeFor(t)
+  const first = answering(place)
+  await first.relay.answer('session_started', start('startup'))
+  await first.relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(isDenied(await first.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/))
+
+  // The owner releases the member, and the member resumes through a launcher that is new to this session: it reads the
+  // record the owner's release leaves, which is a shorter view of the stream than the stream holds, and the session it
+  // begins from that view is the one it goes on taking text in against.
+  await theOwnerReleases(first.rows, SESSION)
+  const { relay, rows } = answering(place)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'an arrival taken in after the release was lost from the stream, so the gate let the shell run',
+  )
+
+  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.equal(kept.length, 2, 'the stream lost the arrival the member took in after the owner released it')
+})
+
 test('#321: after a release the stream still holds the raw record, and what came after it is appended to it', async (t) => {
   const place = placeFor(t)
   const { relay, rows } = answering(place)

@@ -72,11 +72,12 @@ export interface SessionRecords {
 /** What the owner's release leaves of the last kept record: the record the gate reads, and how much of the raw it cleared. */
 interface Release {
   readonly record: Session
-  readonly cleared: number
+  /** The raw record's prefix the release cleared: where the record it leaves begins in the raw. */
+  readonly through: number
 }
 
 type Loaded =
-  | { readonly readable: true; length: number; last: Session | undefined; release: Release | undefined }
+  | { readonly readable: true; length: number; last: Session | undefined; release: Release | undefined; readonly handed: Session | undefined }
   | { readonly readable: false }
 
 /** The owner's releases of this record, read now; none when no release is asked for or nothing is kept yet. */
@@ -87,18 +88,41 @@ async function releaseOf(
 ): Promise<Release | undefined> {
   if (released === undefined || last === undefined) return undefined
   const record = await released(session_id, last.ingested)
-  return { record, cleared: last.ingested.length - record.ingested.length }
+  return { record, through: last.ingested.length - record.ingested.length }
 }
 
 /**
  * What the stream keeps for the record the core wrote: the raw record it held, with only what the session took in
- * after the release appended to it (martha#321 rule 1). Without a release — or with one that cleared nothing, and the
- * record the core wrote is then the whole of it — what the core wrote is what the stream keeps.
+ * after the view it was handed appended to it (martha#321 rule 1).
+ *
+ * WHICH VIEW THE CORE WAS HANDED IS THE ONE THIS STORE HANDED WHEN THE SESSION WAS LOADED, and it is never guessed
+ * from the written record (martha#321 r=2). Two views of one stream reach the core — the raw record, which a session
+ * taken up before the owner released it goes on extending, and the released one, which a session taken up after it
+ * begins from — and the arrivals after a release can be structurally identical to the prefix it cleared (two
+ * auto-continuations are both one B7), so what the written record begins with cannot tell the two apart. The release
+ * is read again at every check, but the view the core holds dates from the load and does not move.
  */
-function keptRawOf(last: Session | undefined, written: Session, release: Release | undefined): Session {
-  if (release === undefined || release.cleared === 0) return written
-  return { ingested: [...(last?.ingested ?? []), ...written.ingested.slice(release.cleared)] }
+function keptRawOf(last: Session | undefined, written: Session, release: Release | undefined, handed: Session | undefined): Session {
+  // A session this store handed no view of its own stream began from nothing (a fresh start) or from another
+  // session's record (an inheritance), and a record that cannot be read is kept as lost: in all three the stream keeps
+  // exactly what the core wrote.
+  if (release === undefined || handed === undefined || handed === LOST) return written
+  const afterHanded = afterTheViewOf(handed.ingested, written)
+  // A record that does not begin with the view it was handed was replaced rather than appended to (a `clear` starts
+  // one), and is kept as the core wrote it.
+  return afterHanded === undefined ? written : { ingested: [...(last?.ingested ?? []), ...afterHanded] }
 }
+
+/** What `written` holds after its first `view.length` entries, when it begins with that view; undefined when it does not. */
+function afterTheViewOf(view: readonly Ingestion[], written: Session): readonly Ingestion[] | undefined {
+  if (written.ingested.length < view.length) return undefined
+  const begins = view.every((entry, at) => sameIngestion(entry, written.ingested[at]!))
+  return begins ? written.ingested.slice(view.length) : undefined
+}
+
+/** The same arrival: its path, its sender, and the reason when the recorder knew one. */
+const sameIngestion = (one: Ingestion, another: Ingestion): boolean =>
+  one.path === another.path && one.from_node_id === another.from_node_id && one.why === another.why
 
 /** The session records of one launcher, in these rows, with the owner's releases applied as they are read. */
 export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): SessionRecords {
@@ -112,7 +136,10 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
         const stored = await rows.read(streamOf(session_id))
         const last = stored.at(-1)
         const record = last === undefined ? undefined : recordOf(last.row)
-        loaded.set(session_id, { readable: true, length: stored.length, last: record, release: await releaseOf(released, session_id, record) })
+        const release = await releaseOf(released, session_id, record)
+        // The view this load answers, and so the one the core begins from: it is taken here, once, because a release
+        // typed later changes what `read` answers while the core goes on extending the record it was handed.
+        loaded.set(session_id, { readable: true, length: stored.length, last: record, release, handed: release?.record ?? record })
       } catch {
         loaded.set(session_id, { readable: false })
       }
@@ -135,11 +162,15 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
       if (state === undefined || !state.readable) {
         throw new Error(`The record of session ${session_id} is not kept: its stream could not be read.`)
       }
-      const kept = keptRawOf(state.last, session, state.release)
+      const kept = keptRawOf(state.last, session, state.release, state.handed)
       await rows.append(streamOf(session_id), kept as unknown as Row, state.length)
       state.length += 1
       state.last = kept
-      if (state.release !== undefined) state.release = { record: session, cleared: state.release.cleared }
+      // The view handed out from here on is the owner's release applied to the record the stream now holds. Appending
+      // never changes the raw prefix a mark cleared, so the mark still holds, and the view it leaves is what follows
+      // that prefix: the record the core wrote is not the raw, and reading it as one would hand the next session the
+      // taint the release lifted.
+      if (state.release !== undefined) state.release = { record: { ingested: kept.ingested.slice(state.release.through) }, through: state.release.through }
     },
     check: async (session_id) => {
       const state = loaded.get(session_id)

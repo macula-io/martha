@@ -22,7 +22,9 @@
 // the call itself: a record that cannot be read, and an agent the host started
 // that has not stopped. The owner's switch (`house_rules.strict_gate`, martha#259)
 // turns those off as well as the taint rule, and turns nothing else off: the
-// recheck, the reach rule and the mesh read above stand whatever it says.
+// recheck, the reach rule and the mesh read above stand whatever it says. An
+// audited member runs on these two exactly as on the taint rule, and each leaves
+// its line before it runs (../audit_the_gate_for_a_member, martha#321 r=2).
 //
 // This is the whole wiring on the host side: one question per tool call. Which
 // host asks it is an adapter detail — the answer is the core's.
@@ -38,7 +40,7 @@ import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import { keepAWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
+import { keepAWouldRefusal, type AWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
@@ -108,12 +110,27 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
     }
   }
 
-  // An audited member's call runs whatever its record holds: the refusals that stand on the text are exactly what the
-  // audit writes down below, and a refusal that names no arrival (an agent still running) leaves no line to write.
-  const onTheRecord = refusedOnWhatItTookIn(session, tool, agents_running, gate === 'enforced')
-  if (onTheRecord !== undefined) return onTheRecord
+  // The refusals that stand on the session rather than on the call: a record that cannot be read, and an agent the host
+  // started that has not stopped. An audited member's call runs on them too, and each leaves its line (martha#321 r=2);
+  // the owner's switch turns them off with the taint rule and nothing else.
+  const offTheRecord = refusedOffTheRecord(session, tool, agents_running)
+  if (offTheRecord !== undefined && gate !== 'off') {
+    return gate === 'enforced'
+      ? { deny: offTheRecord.refusal }
+      : auditedOrRefused(audit, { tool, arrival: { path: null, from_node_id: null, why: offTheRecord.why }, refusal: offTheRecord.refusal })
+  }
 
   return theGatesAnswer({ tool, session, policy, gate, audit })
+}
+
+/**
+ * The line an audited member's call leaves before it runs, or the refusal when that line cannot be kept: an audit that
+ * can lose its evidence is worse than none (martha#321). Undefined answers the call, which then runs.
+ */
+function auditedOrRefused(audit: GateAuditPlace | undefined, wouldRefusal: AWouldRefusal): ToolCallAnswer {
+  if (audit === undefined) return refusedBecauseTheAuditCouldNotBeKept(wouldRefusal.refusal, 'no place to write it was given to this launcher')
+  const unkept = keepAWouldRefusal(audit, wouldRefusal)
+  return unkept === undefined ? undefined : refusedBecauseTheAuditCouldNotBeKept(wouldRefusal.refusal, unkept.refusal)
 }
 
 /** What the gate answers this call, in the member's mode: refuse, run, or run with the refusal written down first. */
@@ -121,30 +138,29 @@ function theGatesAnswer(asked: Pick<ToolCall, 'tool' | 'session' | 'policy'> & {
   const { tool, session, policy, gate, audit } = asked
   const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy, strict_gate: gate !== 'off' })
   if (decision.allow) return undefined
-  if (gate !== 'audited') return { deny: decision.refusal }
-  if (audit === undefined) return refusedBecauseTheAuditCouldNotBeKept(decision.refusal, 'no place to write it was given to this launcher')
-  const unkept = keepAWouldRefusal(audit, { tool, arrival: decision.arrival, refusal: decision.refusal })
-  return unkept === undefined ? undefined : refusedBecauseTheAuditCouldNotBeKept(decision.refusal, unkept.refusal)
+  return gate === 'audited' ? auditedOrRefused(audit, { tool, arrival: decision.arrival, refusal: decision.refusal }) : { deny: decision.refusal }
+}
+
+/** A refusal the gate would give that stands on the session, its own words, and the part that says what it stands on. */
+interface ARefusalOffTheRecord {
+  readonly refusal: string
+  readonly why: string
 }
 
 /**
  * The refusals that stand on text the session took in rather than on the call: a record that cannot be read, and an
- * agent the host started that has not stopped (martha#170). Both are part of the owner's strict gate (martha#259), and
- * with it off they allow the call; what the session took in is still recorded either way.
+ * agent the host started that has not stopped (martha#170). Both are part of the owner's strict gate (martha#259). They
+ * stand on no arrival, so the line an audited member's call leaves names none: its path and sender are null and `why`
+ * says which agent, or that the record cannot be read (martha#321 r=2).
  */
-function refusedOnWhatItTookIn(
-  session: HostSession,
-  tool: string,
-  agents_running: readonly string[],
-  strict_gate: boolean,
-): ToolCallAnswer {
-  if (!strict_gate) return undefined
+function refusedOffTheRecord(session: HostSession, tool: string, agents_running: readonly string[]): ARefusalOffTheRecord | undefined {
   if (session.record_missing) {
     return isShellTool(tool)
       ? {
-          deny:
+          refusal:
             'Nothing executes in this session: its record of what it has taken in cannot be read, so it is treated as ' +
             `having taken in everything. ${WHAT_CLEARS_IT}`,
+          why: 'the record of what this session took in cannot be read',
         }
       : undefined
   }
@@ -156,12 +172,14 @@ function refusedOnWhatItTookIn(
  * answer reaches the turn with no tool result to place it on, so nothing executes on text whose row has not been
  * decided yet. The agent's stop is what decides it.
  */
-function theAgentItWaitsOn(agents_running: readonly string[], tool: string): ToolCallAnswer {
+function theAgentItWaitsOn(agents_running: readonly string[], tool: string): ARefusalOffTheRecord | undefined {
   if (agents_running.length === 0 || !isShellTool(tool)) return undefined
+  const named = agents_running.join(', ')
   return {
-    deny:
-      `Nothing executes in this session: an agent this host started (${agents_running.join(', ')}) has not stopped, ` +
+    refusal:
+      `Nothing executes in this session: an agent this host started (${named}) has not stopped, ` +
       'and a background agent hands its answer into the turn with no call to place it on. The shell comes back when ' +
       'it stops.',
+    why: `an agent this host started (${named}) has not stopped`,
   }
 }
