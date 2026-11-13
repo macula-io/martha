@@ -1,13 +1,17 @@
 // The `who_is_free` tool's answer (martha#319 package A): who may ask, and what the Supervisor is told.
 //
 // The tools slice (../a_crews_tools) only gathers the rows and the park markers; every decision of this tool is here,
-// so the adapter decides nothing. Who may ask is the declaration's own table, as for parking (#255 r=3): the launch's
-// member, never a name read out of the call, and only when its role is allowed `assign_work`. A solo crew's one member
-// and a team's Supervisor both pass; a builder does not, because choosing who takes work is not its act.
+// so the adapter decides nothing. Who may ask is the declaration's own table, read for the launch's member and never for
+// a name out of the call (#255 r=3). Choosing who takes work is assigning it, so the predicate is the one the owner's
+// to-do list is kept by (#316, Uranus's ruling), imported from ../keep_the_owners_todo_list and not written twice:
+// a member may ask when its role is granted `assign_work`, or when the table grants that act to the owner and to no
+// role. So a solo crew, whose table grants every act to the owner alone, lets its builder and reviewer ask as the
+// owner's own sessions; a team granting `assign_work` to the owner and its Supervisor lets only the Supervisor ask.
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import type { CrewRow } from '../see_the_crew/see_the_crew.ts'
+import { mayKeepTheOwnersList } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { mayTakeAPackage, seeWhoIsFree, theAnswerToMayTake } from './see_who_is_free.ts'
 
 /** The name the tool is registered under. */
@@ -45,10 +49,9 @@ export function whoIsFreeOver(asked: WhoIsFreeAsked): { readonly answer: string 
   return 'refused' in answer ? answer : { answer: theAnswerToMayTake(answer) }
 }
 
-/** Why `asker` may not ask who is free, or null when its declared role is allowed to assign work: choosing who takes work is assigning it. */
+/** Why `asker` may not ask who is free, or null when the table lets it assign work: choosing who takes work is assigning it. */
 function whyTheAskerMayNot(settings: Pick<CrewSettings, 'members' | 'mode'>, asker: string): string | null {
-  const granted = settings.mode.may.assign_work
+  if (mayKeepTheOwnersList(settings, asker)) return null
   const role = settings.members.find((member) => member.name === asker)?.role
-  if (role !== undefined && granted.includes(role)) return null
-  return `${asker} may not ask who is free: the declaration allows assign_work to ${granted.join(', ') || 'nobody'}, and ${asker}'s role is ${role ?? 'none on this crew'}.`
+  return `${asker} may not ask who is free: the declaration allows assign_work to ${settings.mode.may.assign_work.join(', ') || 'nobody'}, and ${asker}'s role is ${role ?? 'none on this crew'}.`
 }
