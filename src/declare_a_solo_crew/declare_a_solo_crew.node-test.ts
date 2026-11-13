@@ -15,6 +15,9 @@ import { nodeIdsFor, openState, type MarthaState } from '../keep_martha_state_ou
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { declareSoloCrew, SOLO_MEMBERS } from './declare_a_solo_crew.ts'
 
+/** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
+const HOST_MODELS = ['opus', 'fable']
+
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 
 function placeFor(t: TestContext): { root: string; state: MarthaState } {
@@ -29,10 +32,10 @@ function placeFor(t: TestContext): { root: string; state: MarthaState } {
 
 test('init declares a solo crew of a builder and a reviewer that declareCrew reads, the owner may do every act', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
 
-  const settings = await declareCrew(documents, root)
+  const settings = await declareCrew(documents, root, HOST_MODELS)
   assert.equal(settings.owner, 'Ada Owner')
   assert.deepEqual(settings.members.map((member) => member.name), SOLO_MEMBERS.map((member) => member.name))
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
@@ -40,7 +43,7 @@ test('init declares a solo crew of a builder and a reviewer that declareCrew rea
 
 test('init gives each member a node id, outside the checkout, that the owner never types', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared)
   const ids = nodeIdsFor(state, SOLO_MEMBERS.map((member) => member.name))
   assert.ok('ids' in ids)
@@ -54,7 +57,7 @@ test('init refuses to overwrite a declaration, naming it, and leaves it as it wa
   const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   mkdirSync(join(root, DECLARATION_DIRECTORY))
   writeFileSync(file, '{"the owner": "wrote this"}')
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents, models: HOST_MODELS })
   assert.equal(declared.declared, false)
   assert.ok(!declared.declared && declared.refusal.includes(file), declared.declared ? '' : declared.refusal)
   assert.equal(readFileSync(file, 'utf8'), '{"the owner": "wrote this"}')
@@ -62,7 +65,7 @@ test('init refuses to overwrite a declaration, naming it, and leaves it as it wa
 
 test('init with no owner name refuses, saying how to set one, and writes nothing', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: null, state, documents })
+  const declared = await declareSoloCrew({ root, owner: null, state, documents, models: HOST_MODELS })
   assert.equal(declared.declared, false)
   assert.match(declared.declared ? '' : declared.refusal, /git config user\.name/)
   assert.equal(existsSync(join(root, DECLARATION_DIRECTORY)), false)
@@ -73,7 +76,7 @@ test('init refuses a declaration directory that is a link, naming it, and writes
   const elsewhere = join(root, '..', 'elsewhere')
   mkdirSync(elsewhere)
   symlinkSync(elsewhere, join(root, DECLARATION_DIRECTORY))
-  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents, models: HOST_MODELS })
   assert.equal(outcome.declared, false)
   const refusal = outcome.declared ? '' : outcome.refusal
   assert.ok(refusal.includes(join(root, DECLARATION_DIRECTORY)), refusal)
@@ -83,7 +86,7 @@ test('init refuses a declaration directory that is a link, naming it, and writes
 test('init refuses a declaration path that is a file, naming it, rather than throwing', async (t) => {
   const { root, state } = placeFor(t)
   writeFileSync(join(root, DECLARATION_DIRECTORY), 'not a directory\n')
-  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents })
+  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', state, documents, models: HOST_MODELS })
   assert.equal(outcome.declared, false)
   assert.ok(!outcome.declared && outcome.refusal.includes(join(root, DECLARATION_DIRECTORY)), outcome.declared ? '' : outcome.refusal)
 })

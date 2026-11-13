@@ -44,6 +44,9 @@ import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type Memb
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 
+/** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
+const HOST_MODELS = ['opus', 'fable']
+
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 const [BUILDER] = SOLO_MEMBERS
@@ -235,7 +238,7 @@ function requestFor(place: Place, command: string, member: string, lines: string
 }
 
 const declared = async (place: Place): Promise<void> => {
-  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', state: place.state, documents })
+  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', state: place.state, documents, models: HOST_MODELS })
   assert.ok(outcome.declared, outcome.declared ? '' : outcome.refusal)
 }
 
