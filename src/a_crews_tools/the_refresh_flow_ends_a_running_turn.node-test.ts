@@ -74,10 +74,7 @@ async function aMemberHandingOver(options: ACrewOptions) {
   const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, 'the test could not declare a crew')
   declareTheSupervisorAndTheCeiling(root, options.ceiling_minutes)
-  const records: SessionRecordStore = (() => {
-    const held = new Map<string, Parameters<SessionRecordStore['write']>[1]>()
-    return { read: (id) => held.get(id), write: (id, session) => void held.set(id, session) }
-  })()
+  const records = sessionRecordsInMemory()
   const sessions = new Map([SESSION, SUCCESSOR].map((id) => [id, beginSession(records, id)] as const))
   const ledger = { clock: { now: () => clock.at }, stores: { rows } }
   const beats = dashboardRowsIn(join(home, 'row'))
@@ -128,6 +125,12 @@ async function aMemberHandingOver(options: ACrewOptions) {
     ledgerRows: async (): Promise<readonly LedgerRow[]> => await readLedger({ clock: ledger.clock, stores: { rows: real } }, PACKAGE),
     linesToTheSupervisor: async () => (await readTheChannel(ledger)).filter((said) => JSON.stringify(said.message.to) === JSON.stringify([SUPERVISOR])),
   }
+}
+
+/** The member's session records, kept in memory for one test. */
+function sessionRecordsInMemory(): SessionRecordStore {
+  const held = new Map<string, Parameters<SessionRecordStore['write']>[1]>()
+  return { read: (id) => held.get(id), write: (id, session) => void held.set(id, session) }
 }
 
 /** The declaration with a member whose role is `supervisor`, and the ceiling the test names. */
