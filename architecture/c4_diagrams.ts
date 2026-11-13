@@ -666,6 +666,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['The five tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of'] },
     { col: 1, kind: 'b-cmp', name: 'keep_the_owners_todo_list', names: ['keep_the_owners_todo_list'], type: '[what waits on the owner]', code: true,
       desc: ['The owner\'s to-do list (martha#316):', 'the acts only the owner can do, each', 'command shown in full under what it', 'does. A member the table lets assign', 'work adds one; its own check or the', 'member takes it off. The pane and', 'martha todo show it'] },
+    { col: 2, kind: 'b-cmp', name: 'keep_the_supervisors_standing_items', names: ['keep_the_supervisors_standing_items'], type: '[what the Supervisor holds back]', code: true,
+      desc: ['The Supervisor\'s standing items', '(martha#317): what it holds back, who', 'owes what, and the rulings it recorded', 'as the owner\'s words. A hold closes', 'only on evidence; a fresh Supervisor', 'session is handed them at its start,', 'and the pane shows them'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'write_my_handover, refresh_a_member', names: ['write_my_handover', 'refresh_a_member'], type: '[the host writes a handover]', code: true,

@@ -276,6 +276,17 @@
 <text class="t-desc" x="364" y="1980">work adds one; its own check or the</text>
 <text class="t-desc" x="364" y="1996">member takes it off. The pane and</text>
 <text class="t-desc" x="364" y="2012">martha todo show it</text>
+<rect class="b-cmp" x="664" y="1846" width="300" height="198" rx="10"/>
+<text class="t-code" x="680" y="1874">keep_the_supervisors_</text>
+<text class="t-code" x="680" y="1892">standing_items</text>
+<text class="t-type" x="680" y="1910">[what the Supervisor holds back]</text>
+<text class="t-desc" x="680" y="1934">The Supervisor's standing items</text>
+<text class="t-desc" x="680" y="1950">(martha#317): what it holds back, who</text>
+<text class="t-desc" x="680" y="1966">owes what, and the rulings it recorded</text>
+<text class="t-desc" x="680" y="1982">as the owner's words. A hold closes</text>
+<text class="t-desc" x="680" y="1998">only on evidence; a fresh Supervisor</text>
+<text class="t-desc" x="680" y="2014">session is handed them at its start,</text>
+<text class="t-desc" x="680" y="2030">and the pane shows them</text>
 <rect class="b-cmp" x="32" y="2172" width="300" height="230" rx="10"/>
 <text class="t-code" x="48" y="2200">write_my_handover,</text>
 <text class="t-code" x="48" y="2218">refresh_a_member</text>
