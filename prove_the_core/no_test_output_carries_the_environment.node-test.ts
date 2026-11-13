@@ -101,7 +101,7 @@ test('a test file that captures what its child prints passes the run', async (t)
   assert.doesNotMatch(run.output, /martha#92/)
 })
 
-test("the runner ends with the command's own exit code when nothing was planted and the output ends with the summary", async (t) => {
+test("the runner ends with the command's own exit code when nothing was planted in the output", async (t) => {
   const run = await throughTheRunner(t, writesThenExits(`ok\n${aRunSummary}`, 3))
   assert.deepEqual(run, { code: 3, output: `ok\n${aRunSummary}` })
 })
