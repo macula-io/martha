@@ -13,9 +13,6 @@ export const CORE = 'src'
 /** Every package in martha whose tests npm test runs, by folder: the repository's and the installer's. */
 export const PACKAGES: readonly string[] = ['.', 'installer']
 
-/** The program package.json's scripts are run by: what a check, or a landing, runs a script with. */
-export const NPM = 'npm'
-
 /** The script package.json runs the host ceiling check by: the words a landing runs and a failure prints come from here. */
 export const HOST_CEILINGS_SCRIPT = 'check:host-ceilings'
 

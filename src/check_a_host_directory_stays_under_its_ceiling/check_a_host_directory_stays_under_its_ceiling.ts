@@ -11,7 +11,8 @@
 // than passing quietly; a ceiling left behind for a directory no list names is a
 // number nobody holds anything to, and says the map and the lists have drifted.
 
-import { HOST_CEILINGS_SCRIPT, NPM } from '../../prove_the_core/declared_in_package_json.ts'
+import { HOST_CEILINGS_SCRIPT } from '../../prove_the_core/declared_in_package_json.ts'
+import { NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { DeclaredDirectory, HostList } from './declared_host_directories.ts'
 import { standsAbove } from './record_the_ceilings.ts'
 

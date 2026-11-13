@@ -28,20 +28,26 @@ import {
 import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type LedgerRow, type Outcome } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
-import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /**
  * The programs a landing runs over the tree it is merging, and that tree's own scripts: a slice reaches the machine
  * through the host's processes and writes no file itself, so the generated files are redone by a program (martha#381)
  * and the ceilings are the check's own command (../check_a_host_directory_stays_under_its_ceiling).
  *
+ * Each program's path is the one package.json runs it by — `redo:generated` and `check:host-ceilings` — and the landing
+ * test holds the three together, so a program that moves cannot leave a constant pointing where nothing is.
+ *
  * `NODE` stays private: a program is named by its path, and the word `node` is written by other programs and tests that
- * owe this slice nothing, so exporting it would make every one of those copies stale at once (martha#289).
+ * owe this slice nothing, so exporting it would make every one of those copies stale at once (martha#289). `npm` is
+ * held once for the whole tree, in ../take_in_a_tool_result, beside the other commands a slice runs.
  */
 const NODE = 'node'
-export const NPM = 'npm'
 export const THE_REDO_PROGRAM = 'src/redo_the_generated_files_of_a_merge/main.ts'
 export const THE_CHECK_PROGRAM = 'src/check_a_host_directory_stays_under_its_ceiling/main.ts'
+
+/** The script package.json runs the redo program by; ../check_a_host_directory_stays_under_its_ceiling names the other. */
+export const THE_REDO_SCRIPT = 'redo:generated'
 
 /** The two tools this slice registers: the batch, and the fast-forward the owner's yes unlocks. */
 export const LAND_BATCH = 'land_batch'
@@ -361,7 +367,11 @@ async function theCeilingsHold(host: LandingHost, path: string): Promise<Step<tr
   return no(`the merged tree does not hold its ceilings: ${whatItSaid(THE_CHECK_PROGRAM, ran)}`)
 }
 
-/** What a landing runs over a tree it redid something in, before it pushes: npm's arguments, and what a failure calls it. */
+/**
+ * What a landing runs over a tree it redid something in, before it pushes: npm's arguments, and what a failure calls it.
+ * The two scripts are named here rather than read from the manifest, because a slice may not read disk: what keeps them
+ * honest is that CI runs the same two words on every push, so a manifest that renamed one goes red where it is read.
+ */
 const THE_RUNS_BEFORE_A_PUSH: readonly { readonly args: readonly string[]; readonly name: string }[] = [
   { args: ['run', '--silent', 'typecheck'], name: 'the type check' },
   { args: ['test'], name: 'the suite' },

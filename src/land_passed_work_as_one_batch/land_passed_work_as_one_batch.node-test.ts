@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -28,13 +28,13 @@ import { reviewWaitsIn } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
-import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
+import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
 import {
   LAND,
-  NPM,
   THE_CHECK_PROGRAM,
   THE_REDO_PROGRAM,
+  THE_REDO_SCRIPT,
   fastForwardAfterTheOwnersYes,
   landingsOf,
   landPassedWorkAsOneBatch,
@@ -159,8 +159,11 @@ interface TheRuns {
   readonly programs: ProcessRequest[]
 }
 
-const THE_CHECK_IN_THIS_TREE = join(import.meta.dirname, '..', 'check_a_host_directory_stays_under_its_ceiling', 'main.ts')
-const THE_REDO_IN_THIS_TREE = join(import.meta.dirname, '..', 'redo_the_generated_files_of_a_merge', 'main.ts')
+/** This repository, as the landing's programs are named from its top: the test runs them where package.json does. */
+const THE_ROOT_OF_THIS_TREE = join(import.meta.dirname, '..', '..')
+
+const THE_CHECK_IN_THIS_TREE = join(THE_ROOT_OF_THIS_TREE, THE_CHECK_PROGRAM)
+const THE_REDO_IN_THIS_TREE = join(THE_ROOT_OF_THIS_TREE, THE_REDO_PROGRAM)
 
 /**
  * The processes a landing meets in these tests: the two programs it runs over the tree are the real ones, run against
@@ -808,4 +811,56 @@ test('#381: a package.json that differs outside the ceilings is not a generated 
   assert.match(wordsOf(landed), /stopped at/, 'a clash outside the ceilings was settled by the landing')
   assert.match(wordsOf(landed), /package\.json differs outside/, `the answer did not say what the clash was: ${wordsOf(landed)}`)
   assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that could not settle its clash was pushed anyway')
+})
+
+test('#381: two heads merge cleanly and leave the tree over a ceiling: the batch stops, naming the directory', async (t) => {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+  })
+  // Each head adds a file of its own to the adapter and writes the same raised ceiling, so package.json merges cleanly,
+  // nothing is redone, and the two of them together count one line more than either review saw (martha#381, design §4).
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    [`${AN_ADAPTER}/three.ts`]: codeLines('d', 1),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], programs: [] }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.match(wordsOf(landed), /stopped at/, `a merged tree over its ceiling was landed: ${wordsOf(landed)}`)
+  assert.ok(wordsOf(landed).includes(packages[1] ?? ''), `the answer did not name the head the batch stopped at: ${wordsOf(landed)}`)
+  assert.ok(
+    wordsOf(landed).includes(`${AN_ADAPTER}: 4 lines of code, ceiling 3`),
+    `the answer did not name the directory that is over its ceiling: ${wordsOf(landed)}`,
+  )
+  assert.equal(
+    inTheOrigin(fixture, 'rev-parse', '--verify', '--quiet', 'refs/heads/main'),
+    base,
+    'the default branch moved for a tree the landing refuses',
+  )
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch whose merged tree is over its ceiling was pushed anyway')
+  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after the batch stopped')
+})
+
+test('#381: the programs the landing runs are the ones package.json runs them by, in the scripts it names', () => {
+  // The landing spells each program once, and package.json spells it again in the script that runs it: the three are
+  // held together here, so a program that moves cannot leave a constant or a script pointing where nothing is.
+  const declared = JSON.parse(readFileSync(manifestPathOf(THE_ROOT_OF_THIS_TREE), 'utf8')) as Manifest
+  assert.equal(
+    declared.scripts[THE_REDO_SCRIPT],
+    `node ${THE_REDO_PROGRAM}`,
+    `package.json's ${THE_REDO_SCRIPT} does not run the program the landing runs`,
+  )
+  assert.equal(
+    declared.scripts[HOST_CEILINGS_SCRIPT],
+    `node ${THE_CHECK_PROGRAM}`,
+    `package.json's ${HOST_CEILINGS_SCRIPT} does not run the program the landing runs`,
+  )
 })
