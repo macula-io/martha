@@ -90,8 +90,6 @@ export const WORKTREES = 'worktrees'
 export const HOUSE_RULE_PLACES = [CLONES, WORKTREES] as const
 export type HouseRulePlace = (typeof HOUSE_RULE_PLACES)[number]
 
-
-
 /** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
