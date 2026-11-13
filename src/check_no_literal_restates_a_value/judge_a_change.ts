@@ -15,8 +15,16 @@
 // the marker's line; otherwise an entry counts when its own line is added.
 //
 // Every value the merge base held under a name the head no longer holds with that
-// value — a constant or entry removed, renamed or revalued, or one in a source the
-// change deletes — is judged over the whole tree as the value it left behind.
+// value, in any source the change touches — a constant or entry removed, renamed
+// or revalued, or one in a source the change deletes — is judged over the whole
+// tree as the value it left behind.
+//
+// The sources a change touches are read with rename detection off, so a source git
+// would pair as moved is read at its old path at the merge base and at its new
+// path at the head: a constant removed or revalued while its file moves leaves its
+// value behind like any other, and one that moves unchanged is still held. The
+// lines a change adds keep git's rename detection, so a moved source is not judged
+// as if every one of its lines were new.
 //
 // This module reads git and the disk and never exits, so the self-test and the
 // tests drive the same reading the gate runs, on real ranges.
@@ -62,7 +70,7 @@ export function linesTheChangeAdds(root: string, base: string, head: string): Se
 
 /** The path of every source under the core that the change touches, deleted ones too, relative to the repository. */
 function touchedSources(root: string, merge_base: string, head: string): string[] {
-  return git(root, ['diff', '--name-only', merge_base, head, '--', CORE])
+  return git(root, ['diff', '--name-only', '--no-renames', merge_base, head, '--', CORE])
     .split('\n')
     .filter((path) => path !== '' && isScannedSource(basename(path)))
 }
@@ -85,27 +93,41 @@ const asDefined = (constant: ConstantInSource, module: string): DefinedByTheChan
 const isDefinedByTheChange = (constant: ConstantInSource, under: string, added: ReadonlySet<string>, markedBefore: ReadonlySet<string>): boolean =>
   constant.exported && (added.has(`${under}:${constant.line}`) || (constant.record !== undefined && !markedBefore.has(constant.record)))
 
-/** Whether the head still holds this value under this name, exported. */
+/** Whether the head still holds this value under this name, exported, in any source the change touches. */
 const isStillHeld = (was: ConstantInSource, now: readonly ConstantInSource[]): boolean =>
   now.some((each) => each.exported && each.name === was.name && each.value === was.value)
 
-/** The values one changed file brings: what it defines, and what it leaves behind. */
-function valuesOneFileBrings(root: string, merge_base: string, path: string, added: ReadonlySet<string>): DefinedByTheChange[] {
-  const under = underCore(path)
-  const now = constantsIn(readCheckedOut(root, path), under)
-  const before = constantsIn(readGitFile(root, merge_base, path), under)
-  const markedBefore = new Set(before.flatMap((constant) => (constant.record === undefined ? [] : [constant.record])))
-  const defines = now.filter((constant) => isDefinedByTheChange(constant, under, added, markedBefore))
-  const leaves = before.filter((was) => was.exported && was.value.length >= SHORTEST_VALUE && !isStillHeld(was, now))
-  return [...defines, ...leaves].map((constant) => asDefined(constant, under))
+/** One touched source, as the merge base and the head hold it. */
+interface BothEnds {
+  readonly under: string
+  readonly now: readonly ConstantInSource[]
+  readonly before: readonly ConstantInSource[]
+  /** The change deletes it: with rename detection off, the old side of a move. */
+  readonly deleted: boolean
 }
+
+function bothEndsOf(root: string, merge_base: string, path: string): BothEnds {
+  const under = underCore(path)
+  const text = readCheckedOut(root, path)
+  return { under, now: constantsIn(text, under), before: constantsIn(readGitFile(root, merge_base, path), under), deleted: text === '' }
+}
+
+const recordsMarkedIn = (constants: readonly ConstantInSource[]): string[] => constants.flatMap((constant) => (constant.record === undefined ? [] : [constant.record]))
 
 /**
  * Every value the change defines, revalues or takes away, with the constant it
  * belongs to, judged over the whole tree (martha#289, R1).
  */
 export function constantsTheChangeDefines(root: string, merge_base: string, head: string, added: ReadonlySet<string>): DefinedByTheChange[] {
-  return touchedSources(root, merge_base, head).flatMap((path) => valuesOneFileBrings(root, merge_base, path, added))
+  const touched = touchedSources(root, merge_base, head).map((path) => bothEndsOf(root, merge_base, path))
+  const nowAll = touched.flatMap((source) => source.now)
+  const markedInADeletedSource = touched.filter((source) => source.deleted).flatMap((source) => recordsMarkedIn(source.before))
+  return touched.flatMap(({ under, now, before }) => {
+    const markedBefore = new Set([...recordsMarkedIn(before), ...markedInADeletedSource])
+    const defines = now.filter((constant) => isDefinedByTheChange(constant, under, added, markedBefore))
+    const leaves = before.filter((was) => was.exported && was.value.length >= SHORTEST_VALUE && !isStillHeld(was, nowAll))
+    return [...defines, ...leaves].map((constant) => asDefined(constant, under))
+  })
 }
 
 export interface Judged {

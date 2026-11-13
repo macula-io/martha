@@ -290,19 +290,26 @@ const namedFor = (holder: Definition | undefined, fromTheChange: DefinedByTheCha
 
 /**
  * What a literal that DEFINES a constant is: a copy of another module's value
- * (R2), or the definition itself — and the constant the change itself defines is
- * the one definition that is not a copy.
+ * (R2), a copy of a value the change defines (R1), or the definition itself — and
+ * the constant the change itself defines is the one definition that is not a copy.
+ *
+ * Against a value the change defines, a definition is a copy wherever it sits,
+ * its own module included, unless it is itself an exported holder of that value
+ * in the same module: `EDIT_TOOL = 'Edit'` beside the record whose key it names
+ * holds the value as the record does, while a private `const T = 'Edit'` there
+ * is a copy of it.
  */
 function findingsForADefinition(definition: Definition, line: number, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] {
   const isItsOwnDefinition = declared.some((entry) => entry.value === definition.value && entry.module === definition.path && entry.name === definition.name)
   if (isItsOwnDefinition) return []
-  const elsewhere = (each: { readonly value: string }, module: string): boolean => each.value === definition.value && module !== definition.path
-  const holder = holdersOf(definition.value, definitions, definition.path).find((each) => elsewhere(each, each.path))
-  const fromTheChange = declared.find((entry) => elsewhere(entry, entry.module))
+  const holders = holdersOf(definition.value, definitions, definition.path)
+  const isACopyAgainst = (module: string): boolean => module !== definition.path || !definition.exported
+  const fromTheChange = declared.find((entry) => entry.value === definition.value && isACopyAgainst(entry.module))
   if (fromTheChange !== undefined) {
-    const { constant, gone } = namedFor(holder, fromTheChange)
+    const { constant, gone } = namedFor(holders.find((each) => isACopyAgainst(each.path)), fromTheChange)
     return [findingAt(definition.path, line, definition.value, constant, 'restates_a_value_the_change_defines', gone)]
   }
+  const holder = holders.find((each) => each.path !== definition.path)
   return holder === undefined ? [] : [findingAt(definition.path, line, definition.value, { module: holder.path, name: holder.name }, 'defines_an_exported_value')]
 }
 
@@ -408,6 +415,8 @@ function declarationMarkedBy(reference: ts.TypeReferenceNode): ts.VariableDeclar
 
 /** Why one use of the marker's type is not held, or null when it marks a record the check reads whole. */
 function whyAMarkerIsNotHeld(reference: ts.TypeReferenceNode): { readonly record: string; readonly reason: string } | null {
+  const alias = reference.parent
+  if (ts.isTypeAliasDeclaration(alias) && alias.type === reference) return { record: alias.name.text, reason: `aliases ${THE_MARKER}, which must be written by its own name` }
   const declaration = declarationMarkedBy(reference)
   if (declaration === null) return { record: THE_MARKER, reason: 'stands where no record is marked: it must be the outermost `satisfies` of a top-level exported const' }
   const record = (declaration.name as ts.Identifier).text
@@ -428,7 +437,7 @@ const isARenamedMarker = (node: ts.Node): node is ts.ImportSpecifier | ts.Export
  * Every marker the check cannot hold to its claim, by place: one inside a call or
  * anywhere but on a top-level exported const, one on a value that is not an
  * object literal, one on a record holding an entry the check cannot read, and one
- * imported or exported under a second name.
+ * imported, exported or aliased under a second name.
  */
 export function markersNotHeld(sources: readonly CoreSource[]): MarkerNotHeld[] {
   return parseAll(sources).flatMap(({ path, file }) =>
