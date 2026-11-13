@@ -261,6 +261,16 @@ function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: 
   return 'refusal' in crew ? {} : { lifecycle: stoppingHostOn({ launcher: request.places, crew: crew.path }) }
 }
 
+/**
+ * Where the owner's default lives, after finishing any switch a killed launch left unfinished (martha#359, step 7): the
+ * owner's file must be right before any new session reads it, and the line that needs the owner goes to the terminal.
+ */
+async function finishAnySwitchBeforeTheHostStarts(request: MemberStartRequest, crewStores: ReturnType<typeof theCrewsStores>): Promise<OwnersDefaultPlace | Refused> {
+  const owners = ownersDefaultPlaceOf(request)
+  for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard) })) request.tellOwner(told)
+  return owners
+}
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -274,10 +284,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   }
   const { snapshot_root, ...places } = request.places
   const crewStores = theCrewsStores(request.state, request.root)
-  const owners = ownersDefaultPlaceOf(request)
-  // A switch a killed launch left unfinished is finished here, before this member's host starts: the owner's file must
-  // be right before any new session reads it (martha#359, step 7).
-  for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard) })) request.tellOwner(told)
+  const owners = await finishAnySwitchBeforeTheHostStarts(request, crewStores)
   // One raising for this launch, and one channel carrier over it: the carrier hears every turn the host takes in, so
   // a message counts as taken in only when the host raised it back (martha#253).
   const turns = turnsRaised()
@@ -318,9 +325,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
-        // The owner's own settings file and the lock that guards it (martha#359): a switch to this member is only made
-        // when what the host does to the owner's default can be undone.
-        owners_settings: owners,
+        owners_settings: owners, // the owner's own settings file, and the lock that guards it (martha#359)
         ...theRestartPlaceOf(request),
       }),
     signed_runs: signedRunsOf(
