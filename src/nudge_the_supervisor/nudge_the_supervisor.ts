@@ -21,12 +21,10 @@
 // the same rule and the tests hold it.
 
 import { MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
-
-/** The addressee a message of the crew's channel names when it went to the whole crew (../keep_the_crew_channel). */
-const THE_WHOLE_CREW = 'crew'
 
 /** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge. */
 export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock'] as const
@@ -65,10 +63,14 @@ export interface ReviewWait {
 /** A message of the crew's channel, as this rule reads it: who sent it, who it is for, what it said, and when. */
 export interface SentMessage {
   readonly from: string
-  readonly to: readonly string[] | typeof THE_WHOLE_CREW
+  readonly to: Addressee
   readonly text: string
   readonly sent_at: number
 }
+
+/** Whether a message went to the whole crew. The channel names that addressee by a word rather than a list, so its own
+ * type is what this asks: a string is the whole crew, and a list is the members it names. */
+const toTheWholeCrew = (to: Addressee): to is Extract<Addressee, string> => typeof to === 'string'
 
 /** Whether `name` and `other` are the same name, compared as the declaration compares member names. */
 const same = (name: string, other: string): boolean => name.trim().toLowerCase() === other.trim().toLowerCase()
@@ -85,8 +87,8 @@ export const ANSWERING_VERBS = ['VERDICT', 'LAND'] as const
  * copy outlives the verdict it copied. A send naming anyone else starts the wait, whatever it was also copied to; a send
  * naming nobody starts none, since no verdict was ever going to come back.
  */
-const reachesAReviewer = (to: readonly string[] | typeof THE_WHOLE_CREW, receivers: readonly string[]): boolean => {
-  if (to === THE_WHOLE_CREW) return true
+const reachesAReviewer = (to: Addressee, receivers: readonly string[]): boolean => {
+  if (toTheWholeCrew(to)) return true
   return to.some((name) => !isAReceiver(name, receivers))
 }
 
@@ -113,7 +115,7 @@ export function reviewWaitsIn(messages: readonly SentMessage[], landed: LandedPa
     // A copy starts no wait and ends none; a landing or a verdict is what a wait ends on.
     const startsAWait = line.verb === 'HANDOFF' && !landed.has(line.package) && reachesAReviewer(message.to, receivers)
     if (startsAWait) {
-      waits.set(line.package, { package: line.package, from: message.from, to: message.to === THE_WHOLE_CREW ? [] : message.to, at: message.sent_at })
+      waits.set(line.package, { package: line.package, from: message.from, to: toTheWholeCrew(message.to) ? [] : message.to, at: message.sent_at })
       continue
     }
     if ((ANSWERING_VERBS as readonly string[]).includes(line.verb)) waits.delete(line.package)

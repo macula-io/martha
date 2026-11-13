@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import {
@@ -30,8 +31,7 @@ const PERSON = 30 * MINUTE_MS
 const WINDOWS = { stalled_ms: STALLED, review_ms: REVIEW, person_ms: PERSON }
 const CREW = { owner: 'Ann', members: [{ name: 'Vesta' }, { name: 'Mars' }, { name: 'Supervisor' }] }
 const RECEIVERS = ['Supervisor']
-/** The channel's word for the whole crew, and the dashboard's word for a parked member: both spelled by the slices. */
-const THE_WHOLE_CREW = 'crew'
+/** The dashboard's own word for a parked member, written once here as the slice writes it. */
 const PARKED_STATE: State = 'parked'
 
 /** One member's row, busy and reported a while ago unless the test says otherwise. */
@@ -57,7 +57,10 @@ function input(rows: readonly DashboardRow[], changes: Partial<NudgeInput> = {})
 }
 
 /** A message of the crew's channel. */
-const sent = (from: string, to: readonly string[] | typeof THE_WHOLE_CREW, text: string, at: number): SentMessage => ({ from, to, text, sent_at: at })
+const sent = (from: string, to: Addressee, text: string, at: number): SentMessage => ({ from, to, text, sent_at: at })
+
+/** The whole crew, as the channel names it: a list of every member the crew has. */
+const everyone = CREW.members.map((member) => member.name)
 
 /** A hand-off line, as a member writes one. */
 const handoff = (package_name: string, round = 1): string => `HANDOFF ${package_name} ${'a'.repeat(40)}..${'b'.repeat(40)} r=${round} ci=none:paths`
@@ -133,7 +136,7 @@ test('a HANDOFF to a reviewer opens a wait, and a copy addressed only to the rec
   const copy = [sent('Vesta', RECEIVERS, handoff('macula-io/martha#320'), NOW - REVIEW)]
   assert.deepEqual(reviewWaitsIn(copy, new Set(), RECEIVERS), [], 'a copy addressed only to the receivers is no wait: no verdict was coming back')
 
-  const toCrew = [sent('Vesta', THE_WHOLE_CREW, handoff('macula-io/martha#320'), NOW - REVIEW)]
+  const toCrew = [sent('Vesta', everyone, handoff('macula-io/martha#320'), NOW - REVIEW)]
   assert.equal(reviewWaitsIn(toCrew, new Set(), RECEIVERS).length, 1, 'a hand-off to the whole crew reached a reviewer')
 })
 
