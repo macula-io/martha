@@ -4,9 +4,9 @@
 // so the adapter decides nothing. Who may ask is the declaration's own table, read for the launch's member and never for
 // a name out of the call (#255 r=3). Choosing who takes work is assigning it, so the predicate is the one the owner's
 // to-do list is kept by (#316, Uranus's ruling), imported from ../keep_the_owners_todo_list and not written twice:
-// a member may ask when its role is granted `assign_work`, or when the table grants that act to the owner and to no
-// role. So a solo crew, whose table grants every act to the owner alone, lets its builder and reviewer ask as the
-// owner's own sessions; a team granting `assign_work` to the owner and its Supervisor lets only the Supervisor ask.
+// a member may ask when its role is granted `assign_work`, or when the table grants that act to the owner and to
+// nothing else. So a solo crew, whose table grants every act to the owner alone, lets its builder and reviewer ask as the
+// owner's own sessions; a team granting `assign_work` to the owner and a Supervisor lets only a member in that role ask, even when no member holds it.
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
