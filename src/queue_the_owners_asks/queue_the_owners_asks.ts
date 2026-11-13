@@ -23,9 +23,11 @@
 //
 // Every ask is stamped with the member the launcher started, never with a name the ask's text chose, and its text is
 // capped and stripped of the characters that repaint a row: it reaches the session that offers it as a menu, which is a
-// new way text reaches a session, so ../inbound_paths holds a row for it and this slice's gate stands on that row.
+// new way text reaches a session, so ../inbound_paths holds a row for it and this slice's gate stands on that row. An
+// ask that gate refuses is never handed over, and never stops the take: it is skipped and named in the answer, because
+// the ordinary way to get one is a member who asked and was then renamed or removed from the declaration.
 
-import { OFFER_OWNER_ASKS, OWNER } from '../declare_crew/declare_crew.ts'
+import { OFFER_OWNER_ASKS, OWNER, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import type { Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { CONTROL } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -191,8 +193,8 @@ export interface TheDeclaration {
   readonly mode: { readonly may: Readonly<Partial<Record<string, readonly string[]>>> }
 }
 
-/** Who this crew's table lets offer the owner's asks. */
-const theGrantOf = (declaration: TheDeclaration): readonly string[] => declaration.mode.may[OFFER_OWNER_ASKS] ?? []
+/** Who this crew's table lets offer the owner's asks: read as ../declare_crew reads any act a table does not name. */
+const theGrantOf = (declaration: TheDeclaration): readonly string[] => whoTheTableGrants(declaration.mode.may[OFFER_OWNER_ASKS])
 
 /**
  * Whether `member` may take the asks or settle a batch: its role is granted OFFER_OWNER_ASKS, or the table grants that
@@ -279,9 +281,11 @@ const withTheOwner = (claim: ABatch): string =>
   `Batch ${String(claim.id)} is taken and not settled: ${String(claim.asks.length)} ask(s) are with the owner.`
 
 /**
- * `take_asks`: every waiting ask claimed as one batch, or why nothing was. A batch already taken inside its window is
- * refused — the owner is still looking at it — and every ask is admitted by the queue's own gate before any of it is
- * handed over, so a row nobody wrote through `queue_ask` takes nothing.
+ * `take_asks`: every waiting ask this crew still declares claimed as one batch, or why nothing was. A batch already
+ * taken inside its window is refused — the owner is still looking at it — and every ask is admitted by the queue's own
+ * gate before any of it is handed over, so a row nobody wrote through `queue_ask` is never in a menu. An ask the gate
+ * refuses is skipped and named in the answer rather than stopping the take: the ordinary way to get one is a member who
+ * asked and was then renamed or removed from the declaration, and one such ask must not hold up everyone else's.
  */
 export async function takeTheAsks(
   host: LedgerHost,
@@ -295,13 +299,18 @@ export async function takeTheAsks(
   if (held !== undefined) return { refused: held }
   if (queue.waiting.length === 0) return { told: 'No asks are waiting for the owner.' }
   const members = taken.declaration.members.map((member) => member.name)
-  const unadmitted = queue.waiting.find((ask) => whyNotAdmitted(ask, members) !== undefined)
-  if (unadmitted !== undefined) return { refused: `ask ${String(unadmitted.id)} is not one this queue can hand over: ${whyNotAdmitted(unadmitted, members)}. Nothing was taken.` }
-  const row = { kind: ASKS_TAKEN, asks: queue.waiting.map((ask) => ask.id), at: host.clock.now(), by: taken.member, session: taken.session }
+  const admitted = queue.waiting.filter((ask) => admitsAnAskToTheOwner({ ask, members }))
+  const skipped = queue.waiting.filter((ask) => !admitsAnAskToTheOwner({ ask, members }))
+  if (admitted.length === 0) return { refused: `${theSkipsSaid(skipped, members).join('. ')}. Nothing was taken.` }
+  const row = { kind: ASKS_TAKEN, asks: admitted.map((ask) => ask.id), at: host.clock.now(), by: taken.member, session: taken.session }
   const kept = await appendAtLength(host, row, stored.length, '')
   if ('refused' in kept) return kept
-  return { told: theBatchOffered(queue.waiting, kept.position) }
+  return { told: theBatchOffered(admitted, kept.position, skipped, members) }
 }
+
+/** Why each of `skipped` may not be handed over, in the gate's own words: one sentence an ask. */
+const theSkipsSaid = (skipped: readonly AnAsk[], members: readonly string[]): string[] =>
+  skipped.map((ask) => `ask ${String(ask.id)} is not one this queue can hand over: ${whyNotAdmitted(ask, members) ?? ''}`)
 
 /** Why a batch already taken holds the queue, or undefined when the waiting asks may be taken. */
 function theHeldBatch(queue: TheQueue, now: number): string | undefined {
@@ -314,22 +323,38 @@ function theHeldBatch(queue: TheQueue, now: number): string | undefined {
 }
 
 /** What `take_asks` answers: one batch, each ask with its id for a menu option, and how to settle it. */
-function theBatchOffered(waiting: readonly AnAsk[], batch: number): string {
+function theBatchOffered(waiting: readonly AnAsk[], batch: number, skipped: readonly AnAsk[], members: readonly string[]): string {
   const one = waiting.length === 1
   return [
     `${String(waiting.length)} queued ${one ? 'ask' : 'asks'}, oldest first. Offer them to the owner as ONE multi-select menu, ` +
       `at most 4 options a question and more questions in the same menu when there are more, with each ask's id in its option. ` +
       `Then settle batch ${String(batch)} with the ids the owner ticked.`,
     ...waiting.map(theLineOf),
+    ...theSkipsOffered(skipped, members),
   ].join('\n')
 }
 
-/** The batch a call names, or why it is not one this queue took. */
+/** The lines a take says of the asks it will not hand over: each named, with the gate's own reason, and kept out of the menu. */
+function theSkipsOffered(skipped: readonly AnAsk[], members: readonly string[]): string[] {
+  if (skipped.length === 0) return []
+  const them = skipped.length === 1 ? 'it' : 'them'
+  return [
+    `${String(skipped.length)} ${skipped.length === 1 ? 'ask' : 'asks'} this queue will not hand over, and no menu should offer ${them}:`,
+    ...skipped.map((ask) => `${theLineOf(ask)} — ${whyNotAdmitted(ask, members) ?? ''}`),
+  ]
+}
+
+/** The batch a call names, or why it is not one this queue may settle: an id it never took, or one a settle already names. */
 function theBatchACallNames(args: Readonly<Record<string, unknown>>, stored: readonly StoredRow[]): { readonly batch: ABatch } | { readonly refused: string } {
   const batch = args['batch']
   if (!isPosition(batch)) return { refused: 'batch is the id take_asks answered, as a whole number' }
-  const held = theRowsIn(stored).batches.find((one) => one.id === batch)
-  return held === undefined ? { refused: `batch ${String(batch)} is not a batch this queue took` } : { batch: held }
+  const rows = theRowsIn(stored)
+  const held = rows.batches.find((one) => one.id === batch)
+  if (held === undefined) return { refused: `batch ${String(batch)} is not a batch this queue took` }
+  if (rows.settled.some((one) => one.batch === held.id)) {
+    return { refused: `batch ${String(batch)} was already settled, so it stands once: take the asks again for a new batch. Nothing was settled.` }
+  }
+  return { batch: held }
 }
 
 /** The ids a call names as the owner's yes, or why they are not ids of `claim`. */

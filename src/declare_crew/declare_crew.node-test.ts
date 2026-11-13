@@ -11,6 +11,7 @@ import {
   DECLARATION_VERSION,
   DeclarationRefused,
   HOUSE_RULE_SWITCHES,
+  OFFER_OWNER_ASKS,
   OWNER,
   STRICT_GATE,
   declareCrew,
@@ -206,7 +207,6 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, mode: { ...team.mode, roles: [] } }, 'mode.roles'],
     [{ ...team, mode: { ...team.mode, roles: ['builder', 'builder'] } }, 'mode.roles[1]'],
     [{ ...team, mode: { ...team.mode, roles: [OWNER] } }, 'mode.roles[0]'],
-    [{ ...team, mode: { ...team.mode, may: without('assign_work', team.mode.may) } }, 'mode.may.assign_work'],
     [{ ...team, mode: { ...team.mode, may: { ...team.mode.may, assign_work: [] } } }, 'mode.may.assign_work'],
     [{ ...team, mode: { ...team.mode, may: { ...team.mode.may, assign_work: ['nobody'] } } }, 'mode.may.assign_work[0]'],
     [{ ...team, conventions: '/etc/conventions.md' }, 'conventions'],
@@ -219,6 +219,19 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, extra: 1 }, 'extra'],
   ]
   for (const [declaration, field] of cases) await refusedWith(declaration, field)
+})
+
+test('an act a table does not name at all is the owner\'s alone, so a crew file written before the act existed still declares (martha#313, martha#312)', async () => {
+  // v0.1.0's `martha init` wrote tables with no offer_owner_asks in them. Such a file must declare after an upgrade and
+  // read as the owner-only grant a solo crew's own sessions need, not refuse every verb until the owner edits it by hand.
+  const settings = await declare({ ...solo, mode: { ...solo.mode, may: without(OFFER_OWNER_ASKS, solo.mode.may) } }).settings
+  assert.deepEqual(settings.mode.may[OFFER_OWNER_ASKS], [OWNER], 'the act the table does not name reaches the owner alone')
+  for (const act of ACTS) {
+    if (act !== OFFER_OWNER_ASKS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
+  }
+
+  // The rule is for an act that is absent. An act that is there and names nobody is still refused, as before.
+  await refusedWith({ ...solo, mode: { ...solo.mode, may: { ...solo.mode.may, [OFFER_OWNER_ASKS]: [] } } }, `mode.may.${OFFER_OWNER_ASKS}`)
 })
 
 // --- folded in from review r=3 ----------------------------------------------

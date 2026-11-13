@@ -134,6 +134,12 @@ test('a table that grants the act to the owner alone lets a member take, as a so
   assert.equal(mayOfferTheOwnersAsks(team(['reviewer']), BUILDER), false, 'a table naming a role no member holds lets no other role')
 })
 
+test('a table that does not name the act at all lets the members offer the asks, as a crew file written before the act still declares (mutant: the missing-act rule read as nobody)', () => {
+  const unnamed: TheDeclaration = { members: team([OWNER]).members, mode: { may: {} } }
+  assert.equal(mayOfferTheOwnersAsks(unnamed, BUILDER), true, 'an act the table does not name reaches the owner, whose own sessions the members act as')
+  assert.equal(mayOfferTheOwnersAsks(team([]), BUILDER), false, 'an act that is there and names nobody still lets nobody')
+})
+
 // --- take, take again, and the window ---------------------------------------------
 
 test('a batch taken twice offers nothing the second time, and the asks wait again once the window has passed', async () => {
@@ -201,6 +207,29 @@ test('a yes that names no ask of the batch is refused, and nothing is settled', 
   assert.match(REFUSED(await settling(host, LEAD, batch, [77])), /^77 is not an ask of batch \d+$/)
 })
 
+test('a batch a settle already names is not settled again, so a stale id cannot remove an ask the owner has not answered where it waits now (mutant: the already-settled check removed)', async () => {
+  const host = aHost()
+  TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
+  TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, BUILDER))
+  const first = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
+
+  host.at = START + 1
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  TOLD(await settling(host, LEAD, first, [0]))
+  host.at = START + 2
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  const second = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
+
+  host.at = START + 3
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  assert.match(
+    REFUSED(await settling(host, LEAD, first, [1])),
+    new RegExp(`^batch ${String(first)} was already settled, so it stands once: take the asks again for a new batch\\. Nothing was settled\\.$`),
+    'a settle stands once per batch, so a stale id writes no second one',
+  )
+  assert.equal(TOLD(await settling(host, LEAD, second, [1])), `Batch ${String(second)} settled: 1 the owner ticked, 0 back in the queue.`, 'the batch the ask now waits in settles as usual')
+})
+
 // --- the gate that stands on the inbound row --------------------------------------
 
 test('the gate admits an ask the launcher wrote and refuses one whose asker or text it did not', () => {
@@ -212,12 +241,28 @@ test('the gate admits an ask the launcher wrote and refuses one whose asker or t
   assert.equal(admitsAnAskToTheOwner({ ask: anAsk({ question: 'a'.repeat(MAX_ASK + 1) }), members }), false)
 })
 
-test('an ask row the gate refuses stops the take whole, and no batch is written', async () => {
+test('an ask row the gate refuses is never handed over, and one that is the only ask takes nothing', async () => {
+  const host = aHost()
+  const written = (await host.host.stores.rows.read(OWNER_ASKS_STREAM)).length
+  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'a hand-written row', asked_by: 'a stranger', since: START }, written)
+  assert.match(REFUSED(await taking(host, LEAD, 'session-lead')), /ask 0 is not one this queue can hand over: its asker "a stranger" is not a member this crew's launcher started\. Nothing was taken\./)
+  assert.equal((await host.host.stores.rows.read(OWNER_ASKS_STREAM)).some(({ row }) => row['kind'] === ASKS_TAKEN), false, 'nothing was taken')
+})
+
+test('an ask from a member the crew no longer declares is skipped and named, and the other members\' asks still reach the owner (mutant: the whole take refused for one refused ask)', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   const written = (await host.host.stores.rows.read(OWNER_ASKS_STREAM)).length
-  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'a hand-written row', asked_by: 'a stranger', since: START }, written)
-  assert.match(REFUSED(await taking(host, LEAD, 'session-lead')), /ask 1 is not one this queue can hand over: its asker "a stranger" is not a member this crew's launcher started/)
-  const rows = await host.host.stores.rows.read(OWNER_ASKS_STREAM)
-  assert.equal(rows.some(({ row }) => row['kind'] === ASKS_TAKEN), false, 'nothing was taken')
+  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'Was this a good idea?', asked_by: 'Juno', since: START }, written)
+  TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, LEAD))
+
+  // Juno asked while the crew declared her, and the crew has since renamed or removed her: her ask is not this queue's
+  // to hand over, but it must not stop the two members who are still here from reaching the owner.
+  const told = TOLD(await taking(host, LEAD, 'session-lead'))
+  assert.match(told, /^2 queued asks, oldest first\./, 'the two asks the crew still declares are offered')
+  assert.match(told, /^1 ask this queue will not hand over, and no menu should offer it:\n- 1 \(from Juno\): Was this a good idea\? — its asker "Juno" is not a member this crew's launcher started$/m)
+  assert.deepEqual((await waitingIn(host)).map((ask) => ask.id), [1], 'the ask nobody declares stays waiting, for the owner to read or for Juno to be declared again')
+
+  const batches = (await host.host.stores.rows.read(OWNER_ASKS_STREAM)).filter(({ row }) => row['kind'] === ASKS_TAKEN)
+  assert.deepEqual(batches.map(({ row }) => row['asks']), [[0, 2]], 'the batch holds the declared members\' asks only, never the retired member\'s')
 })
