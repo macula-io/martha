@@ -82,6 +82,12 @@ test('a free member is never chained into a deadlock, and a parked one only whil
   const free = row('Vesta', { state: 'idle', progress: { step: 4, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'work', since: NOW - PERSON } })
   assert.deepEqual(deadlocksOf(input([free])), [], 'a member with nothing in hand waits for work, which is nobody\'s fault')
 
+  // The pair that would close a ring if a free member's wait counted: Mars waits on Vesta, and Vesta has nothing in hand.
+  const pair = [free, row('Mars', { state: 'waiting', waits: { on: 'Vesta', for: 'a range', since: NOW - PERSON * 2 } })]
+  assert.deepEqual(deadlocksOf(input(pair)), [], 'a member waiting for work is no link in a cycle')
+  const working = row('Vesta', { state: 'waiting', progress: { step: 1, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'a ruling', since: NOW - PERSON } })
+  assert.equal(deadlocksOf(input([working, pair[1]!])).length, 1, 'the same pair, with the member at work, is the cycle it looks like')
+
   const resting = row('Vesta', { state: 'parked', progress: { step: 1, of: 4, at: NOW - 1_000 }, waits: { on: 'Mars', for: 'a ruling', since: NOW - PERSON } })
   assert.deepEqual(deadlocksOf(input([resting])), [], 'a parked member waits on nobody while it rests')
 })
@@ -107,4 +113,14 @@ test('a chain that ends at a member who cannot answer is a dead end, and the one
   assert.equal(found[0]?.kind, 'dead-end')
   assert.equal(found[0]?.must_act, 'Supervisor', 'the receiver brings a quiet member back, since nobody else starts it')
   assert.match(found[0]?.act ?? '', /is quiet/, 'and says why the member cannot answer')
+})
+
+test('a stalled member inside a cycle is one deadlock, not the cycle plus a chain into the same member', () => {
+  const rows = [
+    row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a ruling', since: NOW - PERSON }, progress: { step: 1, of: 4, at: NOW - STALLED } }),
+    row('Mars', { state: 'waiting', waits: { on: 'Vesta', for: 'a range', since: NOW - PERSON * 2 } }),
+  ]
+  const found = deadlocksOf(input(rows))
+  assert.equal(found.length, 1, 'the same waits were drawn twice: the cycle is the one kept')
+  assert.equal(found[0]?.kind, 'cycle', 'and it is the whole situation')
 })
