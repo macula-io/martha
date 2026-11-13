@@ -18,6 +18,7 @@ import {
   HANDOVER_LIMIT_PERCENT,
   theFlowEnded,
   theFlowEnding,
+  theFlowEndExpired,
   theFlowGivenUp,
   theFlowNotEnded,
   type AnEndPending,
@@ -98,9 +99,17 @@ test('#311: a flow given up remembers the turn it was given up on, and is over',
   assert.deepEqual([given.phase, given.gave_up_on], ['abandoned', 'a-turn'])
 })
 
-test('#311: a pending end is outlived by a new session or by one ceiling, not before (mutants: keep it across a start; never expire it)', () => {
+test('#311: a pending end is outlived by a new session or expires at one ceiling, not before (mutants: keep it across a start; never expire it)', () => {
   const pending = aPendingEnd(ASKED_AT)
-  assert.equal(anEndOutlived(pending, { now: ASKED_AT + 1, ceiling_ms: CEILING_MS, at_start: true }), true, 'an end was held across a new session')
-  assert.equal(anEndOutlived(pending, { now: ASKED_AT + CEILING_MS, ceiling_ms: CEILING_MS, at_start: false }), true, 'an end older than a ceiling never expired')
-  assert.equal(anEndOutlived(pending, { now: ASKED_AT + CEILING_MS - 1, ceiling_ms: CEILING_MS, at_start: false }), false, 'an end was dropped before its ceiling')
+  assert.equal(anEndOutlived(pending, { now: ASKED_AT + 1, ceiling_ms: CEILING_MS, at_start: true }), 'new_session', 'an end was held across a new session')
+  assert.equal(anEndOutlived(pending, { now: ASKED_AT + CEILING_MS, ceiling_ms: CEILING_MS, at_start: false }), 'expired', 'an end older than a ceiling never expired')
+  assert.equal(anEndOutlived(pending, { now: ASKED_AT + CEILING_MS - 1, ceiling_ms: CEILING_MS, at_start: false }), 'holds', 'an end was dropped before its ceiling')
+})
+
+test('#311 ruling D: an end held past its ceiling spends one end and restarts the gap between ends, but not the stall window (mutants: do not count it; move the window)', () => {
+  const held = theFlowEnding(aFlow({ forced: { ends: 1, last_at: ASKED_AT } }), aPendingEnd(ASKED_AT + CEILING_MS))
+  const expired = theFlowEndExpired(held, ASKED_AT + 2 * CEILING_MS)
+  assert.deepEqual(expired.forced, { ends: 2, last_at: ASKED_AT + 2 * CEILING_MS }, 'an end blocked by a running tool was not counted as tried')
+  assert.equal(expired.at, ASKED_AT, 'an end that never ended moved the stall window')
+  assert.equal(expired.ending, undefined, 'the expired end was still held as pending')
 })

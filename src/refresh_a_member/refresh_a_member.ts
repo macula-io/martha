@@ -521,7 +521,15 @@ export function theFlowEnded(flow: ARefresh, at: number): ARefresh {
   return { ...rest, at, forced: { ends: (flow.forced?.ends ?? 0) + 1, last_at: at } }
 }
 
-/** The flow once an end was refused, outlived, or its session replaced: the pending end gone, nothing spent or moved. */
+/**
+ * The flow once an end the mod held behind a running tool expired (ruling D on martha#311): the end was tried and was
+ * blocked, so it spends one end and restarts the gap to the next, but it never ended, so the stall window stays.
+ */
+export function theFlowEndExpired(flow: ARefresh, at: number): ARefresh {
+  return { ...theFlowNotEnded(flow), forced: { ends: (flow.forced?.ends ?? 0) + 1, last_at: at } }
+}
+
+/** The flow once an end was refused or its session replaced: the pending end gone, nothing spent or moved. */
 export function theFlowNotEnded(flow: ARefresh): ARefresh {
   const { ending: _refused, ...rest } = flow
   return rest
@@ -532,12 +540,17 @@ export function theFlowGivenUp(flow: ARefresh, why: string, turn_id: string, at:
   return { ...theFlowNotEnded(theFlowAbandoned(flow, theEndsSpentReason(why), at)), gave_up_on: turn_id }
 }
 
+/** Whether a pending end still holds, was outlived by a new session, or expired at one ceiling (design 3d, ruling D). */
+export type AnEndsHold = 'holds' | 'new_session' | 'expired'
+
 /**
- * Whether a pending end no longer holds (design 3d): a new session has started, so no end is in flight across it, or
- * the end is older than one ceiling and is taken as refused. Its ledger act is left open for the successor either way.
+ * Whether a pending end no longer holds (design 3d): a new session has started, so no end is in flight across it, and
+ * its act is left open for the successor; or the end is older than one ceiling, so the mod held it behind a tool that
+ * never finished (ruling D).
  */
-export function anEndOutlived(pending: AnEndPending, at: { readonly now: number; readonly ceiling_ms: number; readonly at_start: boolean }): boolean {
-  return at.at_start || at.now - pending.announced >= at.ceiling_ms
+export function anEndOutlived(pending: AnEndPending, at: { readonly now: number; readonly ceiling_ms: number; readonly at_start: boolean }): AnEndsHold {
+  if (at.at_start) return 'new_session'
+  return at.now - pending.announced >= at.ceiling_ms ? 'expired' : 'holds'
 }
 
 /** Whether this refresh is one too many inside the window: a storm, parked rather than refused. */

@@ -24,7 +24,7 @@ import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { OWNER_DIALOGS_FIELD } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, THE_REFRESH_ASK, THE_TURN_ENDED, THE_TURN_NOT_ENDED } from '../refresh_a_member/the_refresh_flow.ts'
+import { A_TOOL_WAS_STILL_RUNNING, CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, THE_REFRESH_ASK, THE_TURN_ENDED, THE_TURN_NOT_ENDED } from '../refresh_a_member/the_refresh_flow.ts'
 import { CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { FORCED_ENDS, HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver } from './a_crews_tools.ts'
@@ -196,6 +196,7 @@ test('#311: a new session while an end is pending drops it and judges the stall 
   assert.deepEqual(await member.beat(40), theEndOf(THE_TURN))
   await member.opens(41, SUCCESSOR)
   assert.equal(member.flow().ending, undefined, 'the pending end was held across a new session')
+  assert.equal(member.flow().forced, undefined, 'an end a new session cut off was spent as if a tool had blocked it')
   assert.equal(member.flow().phase, 'abandoned', 'the stall was not judged from the ask once the pending end was dropped')
 })
 
@@ -234,6 +235,30 @@ test('#311: an end whose outcome never arrives stays open, and the successor is 
   const resumed = await member.opens(12, SUCCESSOR)
   assert.equal(resumed['carry'], CARRY_A_TEXT, 'the successor was not resumed')
   assert.ok(String(resumed['text']).includes(REFRESH_FORCED), `the successor's resume prompt does not name the end left open: ${String(resumed['text'])}`)
+})
+
+test('#311 ruling D: an end the mod still holds a ceiling later is concluded as blocked by a tool, spends one end, keeps the window and tells nobody (mutants: leave it open; do not count it)', async () => {
+  const member = await aMemberHandingOver({ ceiling_minutes: 10, holds: PACKAGE })
+  const before = member.flow().at
+  assert.deepEqual(await member.beat(10), theEndOf(THE_TURN))
+  // A tool hangs: the mod holds the end and never reports an outcome. One ceiling on, the end has expired.
+  assert.deepEqual(await member.beat(20), NOTHING, 'a second end was ordered on the beat the first one expired')
+  const outcomes = concluded(await member.ledgerRows()).map((row) => [row.outcome.succeeded, row.outcome.detail])
+  assert.deepEqual(outcomes, [[false, A_TOOL_WAS_STILL_RUNNING]], 'the expired end was not concluded as blocked by a running tool')
+  assert.deepEqual([member.flow().forced, member.flow().at, member.flow().ending], [{ ends: 1, last_at: member.minute(20) }, before, undefined], 'the expired end was not spent, or moved the window')
+  assert.equal((await member.linesToTheSupervisor()).length, 0, 'the Supervisor was told of an end that did not happen')
+})
+
+test('#311 ruling D: two ends held past their ceilings give the flow up and tell the Supervisor once (mutant: do not count an expiry)', async () => {
+  const member = await aMemberHandingOver({ ceiling_minutes: 10 })
+  for (const [ordered, expired] of [[10, 20], [30, 40]] as const) {
+    assert.deepEqual(await member.beat(ordered), theEndOf(THE_TURN), `no end at minute ${ordered}`)
+    assert.deepEqual(await member.beat(expired), NOTHING, `the end ordered at minute ${ordered} was not left to expire`)
+  }
+  assert.equal(member.flow().forced?.ends, FORCED_ENDS, 'the expired ends were not both spent')
+  assert.deepEqual(await member.beat(50), NOTHING)
+  assert.equal(member.flow().phase, 'abandoned', 'a flow behind a hung tool was never given up')
+  assert.equal((await member.linesToTheSupervisor()).length, 1, 'the Supervisor was not told once of the give-up')
 })
 
 test('#311: a ledger that will not keep the announcement gives no end order (mutant: send the order anyway)', async () => {

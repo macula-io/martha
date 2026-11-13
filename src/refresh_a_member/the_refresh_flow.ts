@@ -36,6 +36,7 @@ import {
   theEndAnnounced,
   theEndLine,
   theFlowEnded,
+  theFlowEndExpired,
   theFlowEnding,
   theFlowGivenUp,
   theFlowNotEnded,
@@ -220,7 +221,7 @@ async function carryOn(
   now: number,
 ): Promise<TheAct> {
   if (flow.phase === 'clearing') return await carryTheClear(places, place, flow, question, settings, now, aFlowStalled(flow, now))
-  const current = withAnOutlivedEndDropped(places, place, flow, question, settings, now)
+  const current = await withAnOutlivedEndDropped(places, place, flow, question, settings, now)
   if (question.end_outcome !== undefined) return await concludeTheEnd(places, place, current, { ...question, end_outcome: question.end_outcome }, settings, now)
   return await carryTheHandover(places, place, current, question, settings, now)
 }
@@ -234,12 +235,16 @@ function heldByTheTurnItGaveUpOn(flow: ARefresh | undefined, question: TheSessio
 const ceilingOf = (settings: CrewSettings): number => settings.handover_ceiling_minutes * MINUTE_MS
 
 /**
- * The flow with a pending end dropped when it no longer holds (design 3d): a new session started, or the end is older
- * than one ceiling and is taken as refused. Its ledger act stays open, so the successor checks it.
+ * The flow with a pending end dropped when it no longer holds. A new session started (design 3d): the act stays open,
+ * so the successor checks it. Or the end is a ceiling old, held behind a tool that never finished (ruling D): it is
+ * concluded as blocked and spends one end, so a flow behind a hung tool is given up rather than ended forever.
  */
-function withAnOutlivedEndDropped(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): ARefresh {
-  if (flow.ending === undefined || !anEndOutlived(flow.ending, { now, ceiling_ms: ceilingOf(settings), at_start: question.at_start })) return flow
-  const dropped = theFlowNotEnded(flow)
+async function withAnOutlivedEndDropped(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): Promise<ARefresh> {
+  if (flow.ending === undefined) return flow
+  const hold = anEndOutlived(flow.ending, { now, ceiling_ms: ceilingOf(settings), at_start: question.at_start })
+  if (hold === 'holds') return flow
+  if (hold === 'expired') await concludeTheEndsAct(places, flow.ending, { succeeded: false, detail: A_TOOL_WAS_STILL_RUNNING })
+  const dropped = hold === 'expired' ? theFlowEndExpired(flow, now) : theFlowNotEnded(flow)
   keepTheFlow(place, places.member, dropped)
   return dropped
 }
@@ -647,6 +652,9 @@ export const CARRY_THE_END = 'end_the_turn'
 /** The words the mod reports an ordered end's outcome under (martha#311): the host ended the turn, or refused to. */
 export const THE_TURN_ENDED = 'turn_ended'
 export const THE_TURN_NOT_ENDED = 'turn_not_ended'
+
+/** What an end the mod held for a ceiling behind a running tool is concluded with (ruling D on martha#311). */
+export const A_TOOL_WAS_STILL_RUNNING = 'a tool was still running'
 
 /**
  * The order the mod carries out (martha#255): the one thing it is told to do, and the text for the one that needs
