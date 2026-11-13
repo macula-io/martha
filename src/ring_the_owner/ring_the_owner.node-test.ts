@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { OWNER } from '../declare_crew/declare_crew.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { takeAnOwnerDialog, type RaisingADialog } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
@@ -57,7 +58,7 @@ test('the bell rings again on the next change into needs you, and never on the w
 })
 
 test('a member\'s own report that it waits on the owner rings nothing (test 6)', () => {
-  const waiting = { ...row(200), state: 'waiting' as const, waits: { on: 'owner', for: 'a yes', since: 200 } }
+  const waiting = { ...row(200), state: 'waiting' as const, waits: { on: OWNER, for: 'a yes', since: 200 } }
   assert.equal(theBellsFor(row(), waiting, BOTH, true), '', 'the bell is the host\'s word, not a member\'s report')
 })
 

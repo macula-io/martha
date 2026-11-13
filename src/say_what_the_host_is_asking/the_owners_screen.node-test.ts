@@ -9,8 +9,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { theBellsFor } from '../ring_the_owner/ring_the_owner.ts'
-import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { IDLE, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { theOwnersScreen, type AnOwnersScreen } from './the_owners_screen.ts'
 
@@ -51,7 +52,7 @@ function aReportedRow(): DashboardRow {
   }
 }
 
-const A_PERMISSION = { tool: 'Bash', input: { command: 'rm -rf build' } }
+const A_PERMISSION = { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' } }
 
 test('a dialog leaves the member\'s own report alone, and the row reads needs you while it is open (test 1)', () => {
   const store = aStore(aReportedRow())
@@ -122,7 +123,7 @@ test('before the member has reported, a dialog writes a row of its own: idle, an
   assert.ok(row !== null)
   assert.equal(row.member, 'Vesta')
   assert.equal(row.session, 'a-session')
-  assert.equal(row.state, 'idle')
+  assert.equal(row.state, IDLE)
   assert.deepEqual(whatTheOwnerIsShown(row), { state: 'needs-you', needs: 'permission for Bash' })
 })
 

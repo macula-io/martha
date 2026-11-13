@@ -751,6 +751,24 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
   return launch.turns === undefined ? {} : { turns: launch.turns }
 }
 
+/**
+ * The two places this launch keeps of its own: its relay's journal, one file named by the approval it runs on (a launch
+ * started on no approval names itself, martha#240), and the owner's screen (martha#313) — the member's own row, moved
+ * by what the host asks, and the bell that change is worth, rung on the terminal this launcher was started on.
+ */
+function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen'> {
+  return {
+    journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
+    screen: theOwnersScreen({
+      beats: dashboardRowsIn(launch.places.dashboard),
+      member: launch.member_name,
+      bells: launch.owner_bell === undefined ? NO_BELLS : theBellsTheOwnerDeclared(launch.owner_bell),
+      onTheOwnersTerminal: isOnTheOwnersTerminal(launch.stdio),
+      write: (bytes) => void process.stdout.write(bytes),
+    }),
+  }
+}
+
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
@@ -786,18 +804,7 @@ async function servedRelay(
     ...crewOf(launch, sessions),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
-    // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
-    // (martha#240).
-    journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
-    // The owner's screen (martha#313): the member's own row, moved by what the host asks, and the bell that change is
-    // worth — rung on the terminal this launcher was started on, which is the owner's own.
-    screen: theOwnersScreen({
-      beats: dashboardRowsIn(launch.places.dashboard),
-      member: launch.member_name,
-      bells: launch.owner_bell === undefined ? NO_BELLS : theBellsTheOwnerDeclared(launch.owner_bell),
-      onTheOwnersTerminal: isOnTheOwnersTerminal(launch.stdio),
-      write: (bytes) => void process.stdout.write(bytes),
-    }),
+    ...thePlacesOfItsOwn(launch),
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)

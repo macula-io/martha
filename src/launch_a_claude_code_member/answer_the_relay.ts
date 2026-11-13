@@ -524,11 +524,7 @@ async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<
 }
 
 async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {
-  if (isText(body.session_id)) {
-    const why = await takeInARefreshedSession(state, body.session_id)
-    if (why !== undefined) return refused(why)
-  }
-  const session = sessionNamed(state, body.session_id)
+  const session = await theSessionOfAPrompt(state, body)
   if (typeof session === 'string') return refused(session)
   const origin = body.origin
   if (typeof body.text !== 'string' || !isBody(origin) || !isText(origin.kind)) {
@@ -544,6 +540,12 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   // contract names (martha#253). A prompt this launcher refused is never raised.
   state.place.turns?.prompted(body.text, origin.kind, whatAPromptCarries(body))
   return answered(TAKEN)
+}
+
+/** The session a prompt is for, or why this launcher refuses it: a refreshed session is taken in before it is named. */
+async function theSessionOfAPrompt(state: RelayState, body: Body): Promise<HostSession | string> {
+  if (!isText(body.session_id)) return sessionNamed(state, body.session_id)
+  return (await takeInARefreshedSession(state, body.session_id)) ?? sessionNamed(state, body.session_id)
 }
 
 function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined; readonly id: string | undefined } | undefined {
@@ -660,11 +662,28 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const unvouched = await vouchFor(state, session)
   if (unvouched !== undefined) return denied(unvouched)
   const agent_id = noteTheAgentsCall(state, session, body)
+  const denial = theDenialOfACall(state, session, call, agent_id)
+  if (denial !== undefined) return denied(denial)
+  place.signed_runs?.callAllowed(call.tool, call.input)
+  // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
+  // the tool runs, and never when this launcher refused the call, because a refused call never runs.
+  closeTheDialogTheCallRan(state, session, body, call)
+  return answered(ALLOW)
+}
+
+/** Why this call is refused before it runs, or undefined when nothing does: the owner's settings, their memory, the gate. */
+function theDenialOfACall(
+  state: RelayState,
+  session: HostSession,
+  call: { readonly tool: string; readonly input: Body },
+  agent_id: string | undefined,
+): string | undefined {
+  const { place } = state
   const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
-  if (settings !== undefined) return denied(settings)
+  if (settings !== undefined) return settings
   const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
-  if (memory !== undefined) return denied(memory)
-  const verdict = answerToolCall({
+  if (memory !== undefined) return memory
+  return answerToolCall({
     tool: call.tool,
     session,
     policy: place.policy,
@@ -674,13 +693,12 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.strict_gate === undefined ? {} : { strict_gate: place.strict_gate }),
-  })
-  if (verdict !== undefined) return denied(verdict.deny)
-  place.signed_runs?.callAllowed(call.tool, call.input)
-  // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
-  // the tool runs, and never when this launcher refused the call, because a refused call never runs.
-  place.screen?.heard(session.id, { said: 'ran', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
-  return answered(ALLOW)
+  })?.deny
+}
+
+/** The dialog a call raised, closed because the call is about to run (martha#313): the owner is no longer asked. */
+function closeTheDialogTheCallRan(state: RelayState, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
+  state.place.screen?.heard(session.id, { said: 'ran', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
 
 async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
@@ -691,8 +709,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
   const answering = noteAnAgentsAnswer(state, body)
-  // The host's own menu is answered by that call's own answer (martha#313): the dialog it opened closes here.
-  if (call.tool === MENU_TOOL) place.screen?.heard(session.id, { said: 'answered', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
+  closeTheMenuTheCallAnswered(place, session, body, call)
   // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
   const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
   const unvouched = recheckBeforeRecording(place, session, call)
@@ -703,6 +720,15 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   const { reply, recorded } = await recordToolResult(state, session, call, body.answer)
   noteWhatItsCallsRead(state, answering, recorded)
   return reply
+}
+
+/**
+ * The host's own menu, closed because its call was answered (martha#313): the menu it opened is answered by that
+ * call's own answer, and by nothing else. Every other call leaves the screen alone here.
+ */
+function closeTheMenuTheCallAnswered(place: MemberRelayPlace, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
+  if (call.tool !== MENU_TOOL) return
+  place.screen?.heard(session.id, { said: 'answered', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
 
 /** The own write kept and every recheck, or why the member is stopped (#132, #121, #122). */
