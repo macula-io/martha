@@ -9,6 +9,7 @@
 // BEAT_INTERVAL_MS so a pane can tell a working member from a session that has died. The heartbeat runs here, in the
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
+import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -34,8 +35,12 @@ import {
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import type { DocumentStore, HostContract, Stores } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
+import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
+import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import { theHandoverAToolWrote, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import {
   CREW_LOG_DESCRIPTION,
   NOTE_WHAT_BECAME_DESCRIPTION,
@@ -48,7 +53,7 @@ import {
 } from '../keep_the_ledger/keep_the_ledger.ts'
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
-import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
+import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -61,6 +66,8 @@ export const CREW_TOOL_NAMES = [
   'crew_say',
   'crew_receipts',
   'crew_park',
+  WRITE_MY_HANDOVER_TOOL,
+  CREW_REFRESH,
   VERIFY_RANGE,
   LAND_BATCH,
   FAST_FORWARD_AFTER_THE_OWNERS_YES,
@@ -97,7 +104,7 @@ export interface CrewToolPlaces {
   readonly root: string
   readonly documents: DocumentStore
   /** The crew's own store: the park marker this member keeps, and the handovers a wake reads (../park_and_wake_a_member). */
-  readonly stores: Pick<Stores, 'crew'>
+  readonly stores: TheCrewFilesStores
   /**
    * The host's own processes: the tools that read a range, land a batch or move a worktree run git and gh through
    * these, so nothing that acts runs inside the member's session (martha#256). A place that holds none refuses
@@ -111,6 +118,12 @@ export interface CrewToolPlaces {
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
    */
   readonly carrier?: MessageCarrier
+  /** Where the host keeps the stamps its handovers carry (martha#255). A launch given none writes no handover. */
+  readonly stamps?: HandoverStampStore
+  /** The sessions this launch took in, by id: what a handover is stamped with, and the predecessor a refresh inherits. */
+  readonly sessions?: { readonly of: (session_id: string) => HostSession | undefined }
+  /** The share each session began at, by session id: kept here, so every threshold is measured from where it started. */
+  readonly began_at?: Map<string, number>
 }
 
 /** What the mod asks for: how often, in seconds, to read the channel (martha#253). */
@@ -129,6 +142,12 @@ export interface CrewTools {
    * package or nothing of it was left waiting.
    */
   theLineToHandAtStart(): Promise<string | null>
+  /**
+   * The session a clear was told in, when the crew's flow is waiting for its successor and this id is it (martha#255):
+   * the launcher starts that session as a `crew_refresh` with this predecessor, whichever of the host's two events
+   * names it first. Null when no clear is in flight, or when this id is the session the clear was told in.
+   */
+  thePredecessorOf(session_id: string): Promise<string | null>
 }
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
@@ -162,6 +181,14 @@ const A_SLUG: Readonly<Record<string, unknown>> = {
 /** What `crew_park` says it is for: the design's own words, and what a park does and does not do. */
 export const CREW_PARK_DESCRIPTION =
   'Park a member, or bring one out of a park. A parked member is not refreshed between tasks and is never started by Martha on its own; the owner or a member whose role may resume parked work wakes it. Leave `member` out to park yourself.'
+
+/** What `write_my_handover` says it is for: the host writes the file, at the path the host chose, and stamps it. */
+export const WRITE_MY_HANDOVER_DESCRIPTION =
+  'Write your handover — what your successor needs to carry on — as one text. Martha writes and stamps the file at a path it chooses; a handover you write with your own file tool is not one and clears nothing. Answer CREW-HANDOVER-WRITTEN when your handover ask is done.'
+
+/** What `crew_refresh` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
+export const CREW_REFRESH_DESCRIPTION =
+  'Ask to be refreshed, when the owner or the Supervisor tells you to. The session hands over and is cleared at the end of this turn, and the reason you give is kept on the crew’s row.'
 
 /** The tools, as the mod registers them. */
 export const CREW_TOOLS: readonly CrewTool[] = [
@@ -253,6 +280,24 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     },
   },
   {
+    name: WRITE_MY_HANDOVER_TOOL,
+    description: WRITE_MY_HANDOVER_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { content: { type: 'string', description: 'The whole handover: first rules, what runs, open items, pending decisions, gotchas, and one line per package you hold' } },
+      required: ['content'],
+    },
+  },
+  {
+    name: CREW_REFRESH,
+    description: CREW_REFRESH_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { reason: { type: 'string', description: 'Why you are refreshing, in one line: the owner reads it on the row' } },
+      required: ['reason'],
+    },
+  },
+  {
     name: VERIFY_RANGE,
     description: VERIFY_RANGE_DESCRIPTION,
     inputSchema: {
@@ -311,27 +356,21 @@ export const CREW_TOOLS: readonly CrewTool[] = [
 interface SessionState {
   held: DashboardRow | null
   session: string
+  /** The share each session began at, by session id (martha#255): every refresh threshold is measured from it. */
+  readonly began_at: Map<string, number>
 }
 
 /** The tools a member can call, over the place its launcher gave it. */
 export function crewToolsOver(places: CrewToolPlaces): CrewTools {
-  const state: SessionState = { held: null, session: '' }
+  const state: SessionState = { held: null, session: '', began_at: places.began_at ?? new Map<string, number>() }
   const handlers = handlersOver(places, state)
 
   return {
     tools: CREW_TOOLS,
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
-      if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
-      // The two asks the mod makes on the channel's behalf, never a model's: how often to look, and what to hand next.
-      if (name === THE_CHANNEL_READ_ASK) {
-        const declared = await crewOrRefusal(places)
-        return 'refused' in declared ? declared : { answer: String(declared.settings.channel_read_seconds) }
-      }
-      if (name === THE_NEXT_MESSAGE_ASK) {
-        if (places.carrier === undefined) return { refused: 'this launch reads no crew channel' }
-        return { answer: (await places.carrier.next()) ?? '' }
-      }
+      const asked = await answerAnAskOfTheMods(places, state, name, args, from)
+      if (asked !== undefined) return asked
       const handle = handlers[name as CrewToolName]
       if (handle === undefined) {
         return { refused: `${JSON.stringify(name)} is not a tool this crew registers (they are ${CREW_TOOL_NAMES.join(', ')})` }
@@ -350,7 +389,56 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       return () => clearInterval(timer)
     },
     theLineToHandAtStart: () => theLineToHandAtStart(places, state),
+    thePredecessorOf: (session_id) => thePredecessorOf(places, session_id),
   }
+}
+
+/**
+ * The asks the mod makes on a session's behalf, never a model's: the tools to register, how often to read the channel,
+ * what to hand next, and what this session should do now. Undefined when `name` is one a member calls itself, which the
+ * handlers answer.
+ */
+async function answerAnAskOfTheMods(
+  places: CrewToolPlaces,
+  state: SessionState,
+  name: string,
+  args: Readonly<Record<string, unknown>>,
+  from: string,
+): Promise<CoreToolAnswer | undefined> {
+  if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
+  if (name === THE_CHANNEL_READ_ASK) return await theChannelReadAsk(places)
+  if (name === THE_NEXT_MESSAGE_ASK) return await theNextMessageAsk(places)
+  if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
+  return undefined
+}
+
+/** How often the mod is to read the crew channel, as the declaration gives it. */
+async function theChannelReadAsk(places: CrewToolPlaces): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  return 'refused' in declared ? declared : { answer: String(declared.settings.channel_read_seconds) }
+}
+
+/** The next crew message to hand the session, or '' when none is waiting. */
+async function theNextMessageAsk(places: CrewToolPlaces): Promise<CoreToolAnswer> {
+  if (places.carrier === undefined) return { refused: 'this launch reads no crew channel' }
+  return { answer: (await places.carrier.next()) ?? '' }
+}
+
+/**
+ * The question the refresh flow is answered on (martha#255): what this session says about itself, and the one act it is
+ * told to take. The mod makes it at a session's start and at every turn's end, and decides nothing itself.
+ */
+async function theSessionsAct(
+  places: CrewToolPlaces,
+  state: SessionState,
+  args: Readonly<Record<string, unknown>>,
+  from: string,
+): Promise<CoreToolAnswer> {
+  const question = theQuestionIn(args, from)
+  if (typeof question === 'string') return { refused: question }
+  const act: TheAct = await theRefreshAct(refreshPlacesOf(places, state), question)
+  keepWhatTheSessionSaid(places, state, question, act)
+  return { answer: JSON.stringify(theOrderOf(act)) }
 }
 
 /**
@@ -397,6 +485,14 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
       if ('refused' in declared) return declared
       return parkOrUnpark(places, declared.settings, args)
     },
+    write_my_handover: async (args) => theHandoverTheMemberWrote(places, state, args),
+    crew_refresh: async (args) => {
+      const reason = textOf(args['reason'])
+      if (reason === '') return { refused: 'a refresh says why in one line, and this one says nothing' }
+      const asked = askAMemberToRefresh(places, places.member, reason, places.ledger.clock.now())
+      if (asked !== undefined) return { refused: asked.refusal }
+      return { answer: `Refresh asked: ${reason}. This session hands over at the end of this turn; write your handover when Martha asks for it.` }
+    },
     what_was_sent: async (args) => ({ answer: (await whatWasSent(places.ledger, workerOf(args).package)).told }),
     note_what_became_of_an_act: async (args) => {
       const { announced_at, succeeded, detail } = args
@@ -408,6 +504,20 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WORKTREE_OPEN]: (args) => aWorktreeTool(places, openAWorktree, args),
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
   }
+}
+
+/**
+ * The session a clear was told in, when the crew's flow is waiting for its successor (martha#255). A flow in the
+ * clearing phase names the session it cleared from; any other id is not that flow's successor, and a store that will
+ * not answer names none — the session then starts as the host said it did, which is the fail-closed reading.
+ */
+async function thePredecessorOf(places: CrewToolPlaces, session_id: string): Promise<string | null> {
+  const place = refreshesPlace(places)
+  if ('refusal' in place) return null
+  const flow = theFlowOf(place, places.member)
+  if (flow === undefined || 'refusal' in flow) return null
+  if (flow.phase !== 'clearing' || flow.clear_from === '' || flow.clear_from === session_id) return null
+  return flow.clear_from
 }
 
 /**
@@ -549,7 +659,97 @@ async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   // from the declaration the launcher already read, so the mod decides nothing on its own. The interval it redraws on
   // is the beat's own, named here and read there, so the pane cannot drift from the beat the rows are written on
   // (part 2 r=2 R1): the host draws a `ui.render` once and caches it until a plugin invalidates it.
-  return { answer: JSON.stringify({ ...seen, pane_at_start: declared.settings.house_rules.dashboard, pane_redraw_ms: READER_BEAT_MS }) }
+  // What it draws is answered as words (martha#255): its header, one line per member, and how many rows it asks for,
+  // so the mod parses no row and formats nothing.
+  return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS)) }
+}
+
+/** The host's own reading of a session (martha#255), as the mod hands it over untouched. */
+interface AHostsUsage {
+  readonly context?: { readonly percent?: number | null }
+  readonly cost?: { readonly usd?: number | null }
+}
+
+/** The host's usage, read as the object it is, or undefined when what arrived is not one. */
+function usageIn(args: Readonly<Record<string, unknown>>): AHostsUsage | undefined {
+  const usage = args['usage']
+  return typeof usage === 'object' && usage !== null ? (usage as AHostsUsage) : undefined
+}
+
+/**
+ * A share of the context limit as the host reports it, or 0 when it reports none this launcher can trust (martha#255).
+ * The host's own number is taken as it comes: a session that says nothing about its context has not reached a limit.
+ */
+function aPercentOf(usage: AHostsUsage | undefined): number {
+  const percent = usage?.context?.percent
+  return typeof percent === 'number' && Number.isFinite(percent) ? percent : 0
+}
+
+/** What the session has cost as the host reports it, or null when it reports nothing this launcher can trust. */
+function aCostOf(usage: AHostsUsage | undefined): number | null {
+  const cost = usage?.cost?.usd
+  return typeof cost === 'number' ? cost : null
+}
+
+/** What each field of the question must be, and what is said when it is not: read in order, the first miss refused. */
+const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => string | undefined)[] = [
+  (args) => (typeof args['turn_id'] === 'string' && typeof args['answer'] === 'string' ? undefined : 'the refresh question carries no turn, or no answer for one'),
+]
+
+/** The question the refresh flow is answered on, read strictly: a shape this launcher does not know is refused. */
+function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
+  const refused = QUESTION_FIELDS.map((holds) => holds(args)).find((said) => said !== undefined)
+  if (refused !== undefined) return refused
+  const usage = usageIn(args)
+  const turn_id = args['turn_id'] as string
+  // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
+  // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
+  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '' }
+}
+
+/**
+ * Writes what the session reported about itself, and what the flow said it is doing, in ONE row write: the row store
+ * keeps the newest beat and refuses one that is not newer, so two writes in the same millisecond would lose the second.
+ */
+function keepWhatTheSessionSaid(places: CrewToolPlaces, state: SessionState, question: TheSessionsQuestion, act: TheAct): void {
+  const before = rowNow(places, state)
+  writeRow(places, state, {
+    ...before,
+    session: question.session_id,
+    at: places.ledger.clock.now(),
+    host: { ...before.host, contextPercent: question.percent, costUsd: question.cost_usd },
+    ...(act.refresh === undefined ? {} : { refresh: act.refresh }),
+  })
+}
+
+/** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
+function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): Parameters<typeof theRefreshAct>[0] {
+  return {
+    member: places.member,
+    stores: places.stores,
+    beats: places.beats,
+    ...(places.stamps === undefined ? {} : { stamps: places.stamps }),
+    root: places.root,
+    documents: places.documents,
+    ledger: places.ledger,
+    began_at: state.began_at,
+  }
+}
+
+/**
+ * `write_my_handover`: the host writes the member's handover where the host chose and stamps it. A launch with no
+ * stamps, or a call from a session this launch does not hold, refuses rather than writing a file nothing stamped —
+ * which would be a handover no successor could inherit from (martha#16).
+ */
+function theHandoverTheMemberWrote(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
+  if (places.stamps === undefined) return { refused: 'this launch keeps no handover stamps, so it writes no handover' }
+  const session = places.sessions?.of(state.session)
+  if (session === undefined) return { refused: 'this launch does not know the session this call came from, so no handover is stamped for it' }
+  const wrote = theHandoverAToolWrote(
+    { host: places, stamps: places.stamps, session, member: places.member, now: () => new Date(places.ledger.clock.now()) },
+    args,
+  )
+  return 'answer' in wrote ? wrote : { refused: wrote.refusal }
 }
 
 /** The declaration, and the crew's names as a report's rules read them; or why it could not be read. */

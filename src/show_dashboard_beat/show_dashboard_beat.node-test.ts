@@ -56,6 +56,13 @@ test('a row is a row only with every field of one, and what it holds is checked 
   assert.equal(isDashboardRow('a row'), false, 'and a string is not a row at all')
 })
 
+test('the refresh field belongs to the row, and what it holds is checked like every other field (martha#255)', () => {
+  assert.equal(isDashboardRow(beat('Vesta', 1, { refresh: { phase: 'parking', reason: 'the context is full' } })), true, 'a row in a refresh flow is a row')
+  assert.equal(isDashboardRow(beat('Vesta', 1, { refresh: null })), true, 'a row taken outside a flow reads as one')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), refresh: 'not a phase' }), false, 'a refresh that is not a phase is not a row')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), refresh: { phase: 'parking' } }), false, 'a phase with no reason is not a row')
+})
+
 test('the beat interval and its offline threshold are named once, and the threshold is a whole multiple of it (test 3, the constants)', () => {
   assert.ok(OFFLINE_AFTER_MS > BEAT_INTERVAL_MS, 'a row must miss more than one beat to read offline')
   assert.equal(OFFLINE_AFTER_MS % BEAT_INTERVAL_MS, 0, 'the threshold counts beats')

@@ -118,6 +118,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
       practice: false,
       strict_gate: false,
       dashboard: false,
+      refresh_between_tasks: false,
       review_model: null,
       clones: places.clones,
       worktrees: places.worktrees,

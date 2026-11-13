@@ -15,14 +15,57 @@
 // Keyed by value and file, so a file that drives git thirty times is one entry.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { THE_REFRESH_ASK, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+
+/**
+ * Why the relay's mod names these three by literal (martha#255): the host installs
+ * the relay as a copy of its own folder, and a hooks module may import only its own
+ * files, so no constant of the core is reachable from inside it.
+ */
+const THE_RELAY_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module there imports only its own files and the name it asks is held by literal'
 
 /** Why the five landing tools are named by literal in the hooks module (martha#256), as one wording for all five. */
 const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal'
 
+/**
+ * Why the handover's one argument is named by literal (martha#255): it is the
+ * argument the host's Write call takes, and the constant holding it sits in the
+ * host glue, which a slice may not import (prove_the_core keeps that boundary).
+ * The word is too common to define again: defining it would make every `content`
+ * in the tree stale at once, and a member's tool call is not worth that.
+ */
+const THE_ARGUMENT_OF_A_WRITE = 'the host\'s own name for the argument that holds a whole file, which lives in the host glue a slice may not import'
+
+/**
+ * Why the mod writes `clear` twice by literal (martha#255 r=2): it is the word an order carries the clear under, which
+ * the launcher holds as a constant a hooks module cannot import, and it is also the name of the host command the mod
+ * runs to clear a session — the same spelling twice, and only the first is the launcher's word. The list is keyed by
+ * value and file, so the two are one entry.
+ */
+const THE_CLEAR_IN_THE_MOD = 'the word an order carries the clear under, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs to clear a session, which the host names'
+
+/**
+ * Why three launch and refresh tests write `clear` as a literal (martha#255 r=2):
+ * it is the word the host records in a `session_started` event whose session began
+ * with `/clear` — recorded data, not the order a launcher answers, and the same
+ * spelling by coincidence in exactly the sense this list is for.
+ */
+const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started event it records, for a session that began with /clear: recorded data, not the order a launcher answers'
+
 export const EXCEPTIONS: readonly Exception[] = [
+  // The one rule in src/check_no_literal_restates_a_value makes an entry name its
+  // value, so the value is written as the constant that holds it: a literal here
+  // would be the same copy the rule exists to catch, in the very file that excuses it.
+  { value: THE_REFRESH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: WRITE_MY_HANDOVER_TOOL, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of a tool this mod answers and registers; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CREW_REFRESH, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of the other tool this mod answers and registers; ${THE_RELAY_CANNOT_IMPORT}` },
   // The five landing tools' hooks (martha#256): a hooks module runs with no Node and may import only its own files,
   // so the slice's own constant is not reachable there, and the host's plugin validator refuses a tool named by
   // anything but a literal. Each entry names the constant rather than another copy of its value.
@@ -31,4 +74,23 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: FAST_FORWARD_AFTER_THE_OWNERS_YES, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: WORKTREE_OPEN, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: WORKTREE_FINISH, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  // The socket the mod talks to its launcher over (martha#254): the name is read by the host from this very file, and
+  // the host refuses a hooks module that gives `$.env.get` anything but a literal, an imported constant included
+  // (#104) — so the copy of the name has to sit here, and this line is the one that says it is the same name.
+  { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the host reads this name from the hooks module and refuses anything but a literal in $.env.get, an imported constant included (#104)' },
+  { value: WHOLE_FILE_CONTENT, file: 'a_crews_tools/a_crews_tools.ts', reason: `the one argument the handover tool takes; ${THE_ARGUMENT_OF_A_WRITE}` },
+  { value: WHOLE_FILE_CONTENT, file: 'write_my_handover/write_my_handover.ts', reason: `the one argument this tool reads; ${THE_ARGUMENT_OF_A_WRITE}` },
+  // The order's two decision words (martha#255 r=2 R1): the launcher names them as constants, so the mod's own copy of
+  // each — it reads the answer and runs it, and a hooks module cannot import the constant — is held here. Reword either
+  // on the launcher's side and this entry matches no literal in the mod, and the gate says so by name.
+  { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a text under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the clear under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod submits a prompt under; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_CLEAR_IN_THE_MOD },
+  // The same spelling in recorded host data (martha#255 r=2): three tests replay what the host recorded, and its word
+  // for a session that began with /clear is its own.
+  { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
+  { value: CARRY_THE_CLEAR, file: 'launch_a_claude_code_member/a_refresh_is_not_wiped_by_the_clear.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
+  { value: CARRY_THE_CLEAR, file: 'launch_a_claude_code_member/launch_a_claude_code_member.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
 ]
+

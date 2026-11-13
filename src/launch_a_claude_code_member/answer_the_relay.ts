@@ -31,7 +31,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
   CLAUDE_CODE_TOOL_RESULT_ROWS,
@@ -57,7 +57,7 @@ import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from './remember_own_write_of_a_call.ts'
 import type { JournalAnswer, RelayJournal } from './keep_the_relays_journal.ts'
-import type { SessionRecords } from './session_records_in_rows.ts'
+import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
@@ -255,11 +255,11 @@ function agentOfAResult(
 }
 
 /** The launcher's answers for one member. */
-export function memberRelay(place: MemberRelayPlace): MemberRelay {
+export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostSession> = new Map<string, HostSession>()): MemberRelay {
   const state: RelayState = {
     place,
     approved_start: approvedStartTree(place.launch),
-    sessions: new Map<string, HostSession>(),
+    sessions,
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
   }
@@ -303,7 +303,7 @@ export function memberRelay(place: MemberRelayPlace): MemberRelay {
       return next
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
-    answerTool: async (body) => answerACoreTool(place, body),
+    answerTool: async (body) => answerACoreTool(state, body),
   }
 
   /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
@@ -325,10 +325,15 @@ export const NO_CREW_TOOLS = 'this launch was given no crew place, so it answers
  * slice decides the answer, and the launcher hands it back unchanged; a name the crew registers nothing for is
  * refused by name, never answered as though it had been.
  */
-async function answerACoreTool(place: MemberRelayPlace, body: unknown): Promise<Answered | Refused> {
+async function answerACoreTool(state: RelayState, body: unknown): Promise<Answered | Refused> {
+  const place = state.place
   if (place.crew === undefined) return { refused: NO_CREW_TOOLS }
   const call = bodyOfAToolCall(body)
   if (call === undefined) return { refused: 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments' }
+  // The mod's question at a refreshed session's start is a tool call, and it can arrive before the host's own `clear`
+  // start: taking the session in here is what makes the order of the host's two events not matter (martha#255).
+  const why = await takeInARefreshedSession(state, call.session_id)
+  if (why !== undefined) return { refused: why }
   return place.crew.answer(call.tool, call.args, call.session_id)
 }
 
@@ -408,9 +413,12 @@ async function vouchFor(state: RelayState, session: HostSession): Promise<string
 async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply> {
   if (!isText(body.session_id) || !isText(body.source)) return refused('the session start names no session or no source')
   if (state.broken.has(body.session_id)) return refused(state.broken.get(body.session_id) ?? '')
-  const start = sessionStartOf(body as SessionStartHookInput)
-  await state.place.records.load(start.session_id)
-  const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, start)
+  // A second start of a session this launch already holds changes nothing: re-beginning it would wipe the record the
+  // first one kept, which is exactly the wipe a `clear` after a refresh would be (martha#255).
+  if (state.sessions.has(body.session_id)) return answered(TAKEN)
+  const reported = sessionStartOf(body as SessionStartHookInput)
+  await state.place.records.load(reported.session_id)
+  const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, await asTheCrewsRefresh(state, reported))
   const handed = state.place.handed_at_start.reduce(
     (session, source) => takeInTurn(session, { source }, state.place.binder),
     started,
@@ -419,6 +427,47 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
   if (why !== undefined) return refused(why)
   const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
   return answered(lineToStartOn === null ? TAKEN : { taken: 1, handed: lineToStartOn })
+}
+
+/**
+ * The start the crew's own refresh makes of a session, when this start is the successor's (martha#255): one the crew's
+ * flow says it cleared from is started as `crew_refresh` with that predecessor, whatever the host called it. So a
+ * `clear` after a refresh can never wipe the record the successor inherited. A session this launch already holds never
+ * reaches here — its start was answered as taken — and one it holds is refused a predecessor by
+ * `theRefreshTheSessionInherits`, so the refresh that made it stands.
+ */
+async function asTheCrewsRefresh(state: RelayState, reported: SessionStart): Promise<SessionStart> {
+  const predecessor = await theRefreshTheSessionInherits(state, reported.session_id)
+  return predecessor === null ? reported : { event: CREW_REFRESH, session_id: reported.session_id, predecessor_id: predecessor }
+}
+
+/** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
+async function theRefreshTheSessionInherits(state: RelayState, session_id: string): Promise<string | null> {
+  if (state.place.crew === undefined || state.sessions.has(session_id) || state.broken.has(session_id)) return null
+  try {
+    return await state.place.crew.thePredecessorOf(session_id)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Takes in a session the crew refreshed before the host's own start of it has been answered (martha#255): the mod's
+ * question at its start, or the resume prompt it submits, can arrive first, and a session this launcher has not taken
+ * in is refused. It is made here exactly as the host's start would make it — inheriting the predecessor's record.
+ */
+async function takeInARefreshedSession(state: RelayState, session_id: string): Promise<string | undefined> {
+  if (state.sessions.has(session_id) || state.broken.has(session_id)) return undefined
+  const predecessor = await theRefreshTheSessionInherits(state, session_id)
+  if (predecessor === null) return undefined
+  await state.place.records.load(session_id)
+  const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, {
+    event: CREW_REFRESH,
+    session_id,
+    predecessor_id: predecessor,
+  })
+  const handed = state.place.handed_at_start.reduce((session, source) => takeInTurn(session, { source }, state.place.binder), started)
+  return keep(state, handed)
 }
 
 /**
@@ -437,6 +486,10 @@ async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<
 }
 
 async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {
+  if (isText(body.session_id)) {
+    const why = await takeInARefreshedSession(state, body.session_id)
+    if (why !== undefined) return refused(why)
+  }
   const session = sessionNamed(state, body.session_id)
   if (typeof session === 'string') return refused(session)
   const origin = body.origin

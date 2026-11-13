@@ -16,17 +16,26 @@ import { join } from 'node:path'
 
 import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, HandoverStampStore, Refused, Stores } from '../host_contract/host_contract.ts'
+import type { CrewPlace, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
 export const CREW_HANDOVER_WRITTEN = 'CREW-HANDOVER-WRITTEN'
 
+/** The word a member answers a handover ask it may not take, with one line saying which ground it gives. */
+export const CREW_REFRESH_DECLINED = 'CREW-REFRESH-DECLINED'
+
+/**
+ * The tool a member calls to hand over (martha#255): the name the launcher registers and the mod answers. Spelled
+ * here, where the file and the stamp are decided, so the prompt that names it quotes this one constant.
+ */
+export const WRITE_MY_HANDOVER_TOOL = 'write_my_handover'
+
 /** Where a crew keeps its handovers, under the one crew store (martha#254 part 1). */
 export const HANDOVERS_PLACE = 'handovers'
 
 /** What this slice asks of a host: the crew's own store, and nothing else. */
-export type HandingOverHost = { readonly stores: Pick<Stores, 'crew'> }
+export type HandingOverHost = { readonly stores: TheCrewFilesStores }
 
 /**
  * The file a member's handover written on `at` has: the day it was written and the member, and nothing the member
@@ -72,4 +81,36 @@ export function writeMyHandover(host: HandingOverHost, handing: HandingOver): st
   // A file no stamp was kept for is nobody's handover, so nothing will be cleared or woken from it; the member is told
   // rather than shown the word, and the next handover replaces the file rather than leaving two to choose between.
   return unstamped ?? CREW_HANDOVER_WRITTEN
+}
+
+/** What a member's own tool call is answered over: the host's store, the host's stamps, and the session it came from. */
+export interface TheHandoverToolPlaces {
+  readonly host: HandingOverHost
+  readonly stamps: HandoverStampStore
+  readonly session: HostSession
+  readonly member: string
+  readonly now: () => Date
+}
+
+/** What `write_my_handover` answers: the one word, or why the handover was not written. */
+export type TheHandoverToolAnswer = { readonly answer: string } | Refused
+
+/**
+ * `write_my_handover(content)`: the member's whole handover, written and stamped by the host at the path the host
+ * chose, and the one word back — or why it was not written. The argument is the text and never a path: a path from the
+ * member would be a place the launcher had not checked, and the file a successor reads is the one the host stamped.
+ * Empty text is refused rather than written, because an empty handover would clear the session and hand the successor
+ * nothing.
+ */
+export function theHandoverAToolWrote(places: TheHandoverToolPlaces, args: Readonly<Record<string, unknown>>): TheHandoverToolAnswer {
+  const content = typeof args['content'] === 'string' ? args['content'].trim() : ''
+  if (content === '') return { refusal: 'a handover is text, and this call carried none' }
+  const written = writeMyHandover(places.host, {
+    member: places.member,
+    content: `${content}\n`,
+    at: places.now(),
+    stamps: places.stamps,
+    session: places.session,
+  })
+  return typeof written === 'string' ? { answer: written } : written
 }

@@ -25,7 +25,7 @@ import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_m
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { sessionRecordsIn } from './session_records_in_rows.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 
 interface Places {
   readonly home: string
