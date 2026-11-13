@@ -264,26 +264,34 @@ test('every component box has a row in the Components table', () => {
 
 // The check above passes on a page that has every row, which proves nothing about it on its own. Each
 // page below is the real one with one box's row taken away in a way the check must still see.
-const CREW_BOX = 'show_dashboard_beat, keep_the_ledger'
-const STORE_BOX = 'crew_files_directory'
-/** The table row whose Component cell opens with the box title's first directory. */
-const rowOf = (title: string): string =>
-  README.split('\n').find((line) => line.startsWith(`| \`${title.split(', ')[0]}\``))!
+// The boxes are found by a directory each stands for, and their titles are read from the drawing, so a
+// title renamed in c4_diagrams.ts is followed here rather than restated.
+const boxHolding = (directory: string): { readonly name: string; readonly names: readonly string[] } =>
+  components().coverage.find((box) => box.names.includes(directory))!
+const CREW_BOX = boxHolding('show_dashboard_beat')
+const STORE_BOX = boxHolding('crew_files_directory')
+const HANDOVER_BOX = boxHolding('write_my_handover')
+
+/** The table row whose Component cell opens with the given directory. */
+const rowOf = (directory: string): string =>
+  README.split('\n').find((line) => line.startsWith(`| \`${directory}\``))!
 
 test('a box whose row is gone, named only in the text of another row, or tabled below the Components table has no row', () => {
-  const crewRow = rowOf(CREW_BOX)
-  const storeRow = rowOf(STORE_BOX)
+  const crewRow = rowOf(CREW_BOX.names[0]!)
+  const storeName = STORE_BOX.names[0]!
+  const storeRow = rowOf(storeName)
   const rowGone = README.replace(`${crewRow}\n`, '')
-  const handoverRow = rowOf('write_my_handover')
+  const handoverRow = rowOf(HANDOVER_BOX.names[0]!)
   const namedOnlyInText = README.replace(`${storeRow}\n`, '')
-    .replace(handoverRow, handoverRow.replace(/ \|$/, ` \`${STORE_BOX}\` keeps all of it whole. |`))
-  const tabledBelow = rowGone.replace('| `record_mesh_answers` |', `${crewRow}\n| \`record_mesh_answers\` |`)
-  assert.ok(!rowGone.includes(crewRow) && !namedOnlyInText.includes(storeRow) && namedOnlyInText.includes(STORE_BOX)
+    .replace(handoverRow, handoverRow.replace(/ \|$/, ` \`${storeName}\` keeps all of it whole. |`))
+  const leftOutRow = rowOf(LEFT_OUT[0]!.name)
+  const tabledBelow = rowGone.replace(leftOutRow, `${crewRow}\n${leftOutRow}`)
+  assert.ok(!rowGone.includes(crewRow) && !namedOnlyInText.includes(storeRow) && namedOnlyInText.includes(storeName)
     && tabledBelow.includes(crewRow),
     'a page below was not changed the way its name says, so its answer would prove nothing')
-  assert.deepEqual(boxesWithNoRow(rowGone), [CREW_BOX])
-  assert.deepEqual(boxesWithNoRow(namedOnlyInText), [STORE_BOX])
-  assert.deepEqual(boxesWithNoRow(tabledBelow), [CREW_BOX])
+  assert.deepEqual(boxesWithNoRow(rowGone), [CREW_BOX.name])
+  assert.deepEqual(boxesWithNoRow(namedOnlyInText), [STORE_BOX.name])
+  assert.deepEqual(boxesWithNoRow(tabledBelow), [CREW_BOX.name])
 })
 
 test('a component box stands for directories that are in src/, and names each one it stands for', () => {
