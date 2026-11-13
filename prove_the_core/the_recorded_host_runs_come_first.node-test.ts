@@ -16,24 +16,22 @@ const repository = join(import.meta.dirname, '..')
 /** The runner of the recorded-host runs, as the test script names it. */
 const RECORDED_HOST_RUNNER = 'prove_the_relay_loads/run_the_recorded_host_runs.sh'
 
+type Command = ReturnType<typeof testCommandsOf>[number]
+const NO_COMMAND: Command = { unsets: [], words: [] }
+const runsTheRunner = (command: Command): boolean => command.words.includes(RECORDED_HOST_RUNNER)
+/** The problem when `holds` is false, or none: one condition of the shape, named. */
+const unless = (holds: boolean, problem: string): string[] => (holds ? [] : [problem])
+
 /** What is wrong with the shape of a test script: each problem by name, none when the runner comes first and alone. */
 function shapeProblemsOf(manifest: Manifest): string[] {
   const commands = testCommandsOf(manifest)
-  const runs_the_runner = (words: readonly string[]): boolean => words.includes(RECORDED_HOST_RUNNER)
-  const parallel = commands.at(-1)
+  const first = commands[0] ?? NO_COMMAND
+  const parallel = commands.at(-1) ?? NO_COMMAND
   return [
-    ...(runs_the_runner(commands[0]?.words ?? []) && commands.length > 1
-      ? []
-      : [`the test script's first command is not ${RECORDED_HOST_RUNNER}, so the recorded-host files would run inside the parallel run`]),
-    ...(runs_the_runner(commands[0]?.words ?? []) && (commands[0]?.unsets.length ?? 0) > 0
-      ? [`the test script's first command unsets ${commands[0]?.unsets.join(', ') ?? ''}, so the recorded-host runs would never meet the host`]
-      : []),
-    ...(parallel?.unsets.includes(RECORDED_HOST_VARIABLE) === true
-      ? []
-      : [`the test script's parallel run does not unset ${RECORDED_HOST_VARIABLE}, so the recorded-host cases would run twice, once under the suite's contention`]),
-    ...(commands.slice(1).some((command) => runs_the_runner(command.words))
-      ? [`the test script runs ${RECORDED_HOST_RUNNER} after its first command, where a parallel run before it has already met the host`]
-      : []),
+    ...unless(runsTheRunner(first) && commands.length > 1, `the test script's first command is not ${RECORDED_HOST_RUNNER}, so the recorded-host files would run inside the parallel run`),
+    ...unless(!runsTheRunner(first) || first.unsets.length === 0, `the test script's first command unsets ${first.unsets.join(', ')}, so the recorded-host runs would never meet the host`),
+    ...unless(parallel.unsets.includes(RECORDED_HOST_VARIABLE), `the test script's parallel run does not unset ${RECORDED_HOST_VARIABLE}, so the recorded-host cases would run twice, once under the suite's contention`),
+    ...unless(!commands.slice(1).some(runsTheRunner), `the test script runs ${RECORDED_HOST_RUNNER} after its first command, where a parallel run before it has already met the host`),
   ]
 }
 
