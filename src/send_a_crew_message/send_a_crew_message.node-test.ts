@@ -21,6 +21,8 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { OWNER } from '../declare_crew/declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -137,7 +139,7 @@ const DECLARATION = {
     { name: 'Builder', role: 'builder' },
     { name: 'Reviewer', role: 'reviewer' },
   ],
-  mode: { name: 'solo', roles: ['builder', 'reviewer'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'] } },
+  mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], offer_owner_asks: [OWNER] } },
   channel_read_seconds: 30,
 }
 

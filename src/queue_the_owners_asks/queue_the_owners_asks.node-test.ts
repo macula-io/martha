@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { OFFER_OWNER_ASKS, OWNER } from '../declare_crew/declare_crew.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import {
@@ -38,19 +39,19 @@ const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-owner-asks-'))
 after(() => removeTheTree(homeOfAll))
 
 const START = 5_000_000
-const SUPERVISOR = 'Lead'
+const LEAD = 'Lead'
 const BUILDER = 'Builder1'
 
 /** The declaration a team crew is answered from: two roles, and the table that names who may offer the asks. */
 const team = (granted: readonly string[]): TheDeclaration => ({
   members: [
-    { name: SUPERVISOR, role: 'supervisor' },
+    { name: LEAD, role: SUPERVISOR },
     { name: BUILDER, role: 'builder' },
   ],
   mode: { may: { [OFFER_OWNER_ASKS]: granted } },
 })
 
-const SUPERVISED = team(['supervisor'])
+const SUPERVISED = team([SUPERVISOR])
 
 /** A host over a row store of its own, in a directory no other test shares, with a clock the test moves. */
 let storesSoFar = 0
@@ -138,28 +139,28 @@ test('a table that grants the act to the owner alone lets a member take, as a so
 test('a batch taken twice offers nothing the second time, and the asks wait again once the window has passed', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
-  const first = TOLD(await taking(host, SUPERVISOR, 'session-lead'))
+  const first = TOLD(await taking(host, LEAD, 'session-lead'))
   assert.match(first, /^1 queued ask, oldest first\..*Then settle batch 1 with the ids the owner ticked\.\n- 0 \(from Builder1\): Remove the stale worktree\?$/)
   assert.deepEqual(await waitingIn(host), [], 'an ask in a live batch is not waiting')
 
-  assert.match(REFUSED(await taking(host, SUPERVISOR, 'session-lead')), /batch 1 was taken 0 minute\(s\) ago and is not settled/)
+  assert.match(REFUSED(await taking(host, LEAD, 'session-lead')), /batch 1 was taken 0 minute\(s\) ago and is not settled/)
 
   host.at = START + ASK_CLAIM_MS + 1
   assert.equal((await waitingIn(host)).length, 1, 'the window has passed, so the ask waits again')
-  assert.match(TOLD(await taking(host, SUPERVISOR, 'session-lead')), /Then settle batch 2 with the ids the owner ticked/)
+  assert.match(TOLD(await taking(host, LEAD, 'session-lead')), /Then settle batch 2 with the ids the owner ticked/)
 })
 
 test('a settle after the window still removes the asks the owner ticked, and puts the rest back', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
-  TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, SUPERVISOR))
-  const taken = TOLD(await taking(host, SUPERVISOR, 'session-lead'))
+  TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, LEAD))
+  const taken = TOLD(await taking(host, LEAD, 'session-lead'))
   const batch = Number(/settle batch (\d+)/.exec(taken)?.[1])
 
   host.at = START + 1
   host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
   host.at = START + ASK_CLAIM_MS + 1
-  assert.equal(TOLD(await settling(host, SUPERVISOR, batch, [0])), `Batch ${String(batch)} settled: 1 the owner ticked, 1 back in the queue.`)
+  assert.equal(TOLD(await settling(host, LEAD, batch, [0])), `Batch ${String(batch)} settled: 1 the owner ticked, 1 back in the queue.`)
   const waiting = await waitingIn(host)
   assert.deepEqual(waiting.map((ask) => ask.question), ['Delete the merged branch?'], 'the ask the owner did not tick waits again')
 })
@@ -169,41 +170,41 @@ test('a settle after the window still removes the asks the owner ticked, and put
 test('a settle with no menu closed since the take is refused (mutant: the menu check removed)', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
-  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, SUPERVISOR, 'session-lead')))?.[1])
-  assert.match(REFUSED(await settling(host, SUPERVISOR, batch, [0])), /no menu has closed in the session that took batch \d+/)
+  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
+  assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed in the session that took batch \d+/)
 
   host.menus.noteTheCallsAnswer({ tool: 'a tool that is not the menu' }, 'session-lead')
-  assert.match(REFUSED(await settling(host, SUPERVISOR, batch, [0])), /no menu has closed/, 'another tool\'s answer is not a menu')
+  assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed/, 'another tool\'s answer is not a menu')
 
   host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'another-session')
-  assert.match(REFUSED(await settling(host, SUPERVISOR, batch, [0])), /no menu has closed/, 'a menu in another session is not this one')
+  assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed/, 'a menu in another session is not this one')
 
   host.at = START + 1
   host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
-  assert.match(TOLD(await settling(host, SUPERVISOR, batch, [0])), /^Batch \d+ settled: 1 the owner ticked, 0 back in the queue\.$/)
+  assert.match(TOLD(await settling(host, LEAD, batch, [0])), /^Batch \d+ settled: 1 the owner ticked, 0 back in the queue\.$/)
 })
 
 test('a launch that keeps no record of menus settles nothing, and says so', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
-  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, SUPERVISOR, 'session-lead')))?.[1])
-  const said = await settleTheAsks(host.host, { member: SUPERVISOR, declaration: SUPERVISED, menus: undefined }, { batch, yes: [0] })
+  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
+  const said = await settleTheAsks(host.host, { member: LEAD, declaration: SUPERVISED, menus: undefined }, { batch, yes: [0] })
   assert.match(REFUSED(said), /this launch keeps no record of menus/)
 })
 
 test('a yes that names no ask of the batch is refused, and nothing is settled', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
-  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, SUPERVISOR, 'session-lead')))?.[1])
+  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
   host.at = START + 1
   host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
-  assert.match(REFUSED(await settling(host, SUPERVISOR, batch, [77])), /^77 is not an ask of batch \d+$/)
+  assert.match(REFUSED(await settling(host, LEAD, batch, [77])), /^77 is not an ask of batch \d+$/)
 })
 
 // --- the gate that stands on the inbound row --------------------------------------
 
 test('the gate admits an ask the launcher wrote and refuses one whose asker or text it did not', () => {
-  const members = [SUPERVISOR, BUILDER]
+  const members = [LEAD, BUILDER]
   const anAsk = (changed: Partial<AnAsk> = {}): AnAsk => ({ id: 0, question: 'Remove the stale worktree?', asked_by: BUILDER, since: START, ...changed })
   assert.equal(admitsAnAskToTheOwner({ ask: anAsk(), members }), true)
   assert.equal(admitsAnAskToTheOwner({ ask: anAsk({ asked_by: 'a stranger' }), members }), false, 'a name the text chose is nobody')
@@ -216,7 +217,7 @@ test('an ask row the gate refuses stops the take whole, and no batch is written'
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   const written = (await host.host.stores.rows.read(OWNER_ASKS_STREAM)).length
   await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'a hand-written row', asked_by: 'a stranger', since: START }, written)
-  assert.match(REFUSED(await taking(host, SUPERVISOR, 'session-lead')), /ask 1 is not one this queue can hand over: its asker "a stranger" is not a member this crew's launcher started/)
+  assert.match(REFUSED(await taking(host, LEAD, 'session-lead')), /ask 1 is not one this queue can hand over: its asker "a stranger" is not a member this crew's launcher started/)
   const rows = await host.host.stores.rows.read(OWNER_ASKS_STREAM)
   assert.equal(rows.some(({ row }) => row['kind'] === ASKS_TAKEN), false, 'nothing was taken')
 })

@@ -10,6 +10,7 @@ import {
   type SupervisorOnlyAction,
 } from './who_may_act.ts'
 import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const supervisor_node = 'a'.repeat(64)
@@ -96,7 +97,7 @@ test('taking the owner\'s asks is not on the list: the declaration\'s table deci
 test('the list is exactly the six supervisor-only tools the crew has today', () => {
   assert.deepEqual(
     [...SUPERVISOR_ONLY_ACTIONS].sort(),
-    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', 'restart_member', 'verify_range'],
+    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', 'restart_member', VERIFY_RANGE],
   )
 })
 
