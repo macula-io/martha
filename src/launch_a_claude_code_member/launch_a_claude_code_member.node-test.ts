@@ -34,7 +34,7 @@ import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readL
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
-import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { POLL_MS, until } from './wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'

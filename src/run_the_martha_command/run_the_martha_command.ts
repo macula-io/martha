@@ -1,5 +1,5 @@
 // The `martha` command a stranger types (martha#98): `martha init`, `martha approve`, `martha start <member>`,
-// `martha todo` (martha#316), `martha install`, and `martha --version`.
+// `martha ls` and `martha stop [<member>]` (martha#312), `martha todo` (martha#316), `martha install`, and `martha --version`.
 //
 // This exists so a person who installed Martha gets a solo crew running without writing code or knowing its
 // internals. It is the one place that reads the machine's environment, and only to find places: the project
@@ -39,6 +39,8 @@ import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
+import { stopTheCrew, theCrewListed, type TheCrewsPlaces } from './list_and_stop_the_crew.ts'
+import { STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 
 /** The command ended as asked. */
 export const EXIT_DONE = 0
@@ -52,7 +54,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha ls | martha stop [<member>] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -209,8 +211,7 @@ async function startingTheMember(
   args: readonly string[],
   prompt?: string,
 ): Promise<MemberStarted> {
-  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
-  const launcher = launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
+  const launcher = launcherOf(io, places)
   if ('refusal' in launcher) {
     tellOwnerOn(io)(launcher.refusal)
     return { started: false, refusal: launcher.refusal }
@@ -228,6 +229,42 @@ async function startingTheMember(
     tellOwner: tellOwnerOn(io),
     ...(prompt === undefined ? {} : { initial_prompt: prompt }),
   })
+}
+
+/** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
+function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPlacesOf> {
+  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
+  return launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
+}
+
+/** What `martha ls` and `martha stop` read (martha#312); or why it cannot be read. */
+async function crewsPlacesOf(io: CommandIo, places: Places): Promise<TheCrewsPlaces | string> {
+  const launcher = launcherOf(io, places)
+  if ('refusal' in launcher) return launcher.refusal
+  const crew = crewStateDirectory(places.state.state_root, places.root)
+  if ('refusal' in crew) return crew.refusal
+  try {
+    return { launcher, crew: crew.path, settings: await declareCrew(documents, places.root, CLAUDE_CODE_MODELS) }
+  } catch (error) {
+    return `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
+/** `martha ls` (martha#312): one line per declared member, on stdout. */
+async function ls(io: CommandIo, places: Places): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  for (const line of theCrewListed(crew, Date.now())) io.out(line)
+  return EXIT_DONE
+}
+
+/** `martha stop [<member>]` (martha#312): one member, or every running one; each outcome told to the owner. */
+async function stop(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const outcomes = await stopTheCrew(crew, member)
+  for (const outcome of outcomes) tellOwnerOn(io)(outcome.told)
+  return outcomes.some((outcome) => outcome.kind === 'refused') ? EXIT_REFUSED : EXIT_DONE
 }
 
 /**
@@ -281,7 +318,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 }
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
-const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', '--version']
+const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
 /** The acts that take exactly one argument (martha#129). */
 const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake']
 /** The switches `martha install` passes through to the installer; any other is no way the command is used. */
@@ -297,6 +334,7 @@ function actOf(argv: readonly string[]): Asked | undefined {
   if (ACTS_ALONE.includes(act)) return argv.length === 1 ? { act, args: [] } : undefined
   if (ACTS_OF_ONE.includes(act)) return actOfOne(act, argv)
   if (act === 'install') return installOf(act, argv)
+  if (act === STOP) return stopOf(act, argv)
   return act === 'start' ? startOf(act, argv) : undefined
 }
 
@@ -320,6 +358,13 @@ function startOf(act: string, argv: readonly string[]): Asked | undefined {
   if (member === undefined || member.startsWith('-')) return undefined
   if (separator === undefined) return { act, member, args: [] }
   return separator === '--' ? { act, member, args: rest } : undefined
+}
+
+/** `stop [<member>]`: one member's name at most, and no switch. */
+function stopOf(act: string, argv: readonly string[]): Asked | undefined {
+  const [, member] = argv
+  if (argv.length === 1) return { act, args: [] }
+  return argv.length === 2 && member !== undefined && member !== '' && !member.startsWith('-') ? { act, member, args: [] } : undefined
 }
 
 /** An act of one argument: exactly one, and not empty. */
@@ -390,6 +435,8 @@ async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<numbe
   if (asked.act === 'approve') return approve(io, places)
   if (asked.act === 'todo') return todo(io, places)
   if (asked.act === 'wake') return wake(io, places, asked.args[0]!)
+  if (asked.act === 'ls') return ls(io, places)
+  if (asked.act === STOP) return stop(io, places, asked.member)
   return start(io, places, asked.member!, asked.args)
 }
 

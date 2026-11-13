@@ -19,6 +19,7 @@ import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
@@ -77,6 +78,14 @@ const THE_CLEAR_IN_THE_MOD = 'the word an order carries the clear under, which t
 const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started event it records, for a session that began with /clear: recorded data, not the order a launcher answers'
 
 /**
+ * Why the relay registers the host's five hook events by literal (martha#313): the host's plugin validator reads the
+ * module and refuses a relay whose `on(...)` names its event by anything but a string literal, and the relay is installed
+ * as a copy of its own folder, where a hooks module imports only its own files. The adapter that reads those same
+ * events holds their names, and this entry is what keeps the two spellings one name.
+ */
+const THE_HOST_NAMES_ITS_HOOKS = 'the host\'s plugin validator refuses an on(...) whose event is not a string literal, and a hooks module imports only its own files'
+
+/**
  * Why `model` is written by literal in five files that are not about the order (martha#315): each names a field of
  * something else, and the order's carry word is a different word that happens to be spelled the same. The host's Agent
  * schema names its own argument; the request body the stand-in host reads carries the model under its own key.
@@ -91,7 +100,6 @@ const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared un
 
 /** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */
 const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narrows on by literal; the crew\'s park place is named the same word and is not this'
-
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
@@ -151,6 +159,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   // The park test reads back the state a marker holds, and checks that the old single tool's argument is gone
   // (martha#343). Both spell the word the crew's park place is named with, and neither is that place.
   { value: PARKED_PLACE, file: 'a_crews_tools/the_park_tool_keeps_the_marker.node-test.ts', reason: 'the state a park marker reads back as, and the argument the one tool used to take; the crew\'s park place is named the same word and is not this' },
+  { value: PARKED_PLACE, file: 'stop_and_restart_a_member/list_the_members.ts', reason: 'the state martha ls shows a parked member in, and the kind a park read answers with (martha#312); the crew\'s park place is named the same word and is not this' },
+  { value: PARKED_PLACE, file: 'stop_and_restart_a_member/stop_and_restart_a_member.node-test.ts', reason: 'the state martha ls shows a parked member in, and the kind a park read answers with, as the test expects them (martha#312); the crew\'s park place is named the same word and is not this' },
   // Who is free reads a park by its kind (martha#319): `parked` is the tag of the ThePark union, which TypeScript
   // narrows on and which no constant can stand in for, and the crew's park place is named the same word and is not it.
   { value: PARKED_PLACE, file: 'see_who_is_free/see_who_is_free.ts', reason: THE_KIND_OF_A_PARK },
@@ -163,6 +173,13 @@ export const EXCEPTIONS: readonly Exception[] = [
   // role's text sits in (martha#306). One English word names the field and the folder, and the field reader is not a
   // path: it is excused here, and a copy of the word anywhere else still fails.
   { value: ROLE_TEXTS_DIRECTORY, file: 'declare_crew/declare_crew.ts', reason: 'the declaration\'s mode.roles field, a list of role names, and not the roles/ directory a role\'s text sits in' },
+  // The five events the relay hears from the host (martha#313), each spelled out because the host's validator will take
+  // nothing else there.
+  { value: PERMISSION_REQUEST, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
+  { value: ELICITATION, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
+  { value: ELICITATION_RESULT, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
+  { value: NOTIFICATION, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
+  { value: TOOL_CHECK, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
   { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },

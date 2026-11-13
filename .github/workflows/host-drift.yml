@@ -9,6 +9,10 @@
 #   npm run record:claude-code-host -- <claude binary> <version>
 # then a PR with whatever the named fields call for. prove_the_recorded_host_is_current.sh says how.
 #
+# The job also measures the order the host raises its dialog events in, on the host it just installed (martha#313): the
+# owner's row closes on a call's answer because nothing else arrives between the owner's answer and the run, and a
+# release is what can change that. So a new host fails here, naming the pair, rather than in a member's row.
+#
 # The re-record also re-takes the `Bash` answers recording, which this check never touches and which is a live
 # observation of the host (martha#193): re-observe it on the new host the way its own `_why` says, because
 # claude_code_host.node-test.ts fails, naming both versions, until the two recordings name one host.
@@ -31,6 +35,7 @@ on:
       - 'src/claude_code_host/**'
       - 'src/record_claude_code_host/**'
       - 'prove_the_recorded_host_is_current/**'
+      - 'prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs'
       - '.github/workflows/host-drift.yml'
 
 permissions:
@@ -49,4 +54,9 @@ jobs:
           node-version: '24'
       - run: npm ci
       - name: the recording matches npm's latest Claude Code
-        run: prove_the_recorded_host_is_current/prove_the_recorded_host_is_current.sh "${{ runner.temp }}/host-drift"
+        run: prove_the_recorded_host_is_current/prove_the_recorded_host_is_current.sh "${{ runner.temp }}/host-drift" "${{ runner.temp }}/the-host"
+      # The owner's row says "needs you" until the call its dialog raised is answered, and that rests on the order the
+      # host raises its events in, measured on the host itself (martha#313). A new release is the one thing that can
+      # change that order, so it is measured here, on the host the step above installed.
+      - name: the order the host raises its dialog events in
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs "${{ runner.temp }}/dialog-order"
