@@ -13,7 +13,6 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -26,7 +25,7 @@ import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
-import { crewToolsOver, CREW_TOOL_NAMES, type CrewTools } from './a_crews_tools.ts'
+import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-refresh-tool-'))
 after(() => removeTheTree(homeOfAll))
@@ -189,10 +188,10 @@ test('#255: a member whose session began above the limit is not asked on its fir
   assert.deepEqual(JSON.parse(first.answer), { carry: 'none' })
 })
 
-test('#255: crew_refresh asks for a refresh, and the next question is answered with the handover prompt', async () => {
+test('#255: refresh_this_session asks for a refresh, and the next question is answered with the handover prompt', async () => {
   const { tools } = await aCrewOfTools('builder')
-  const asked = await tools.answer(CREW_REFRESH, { reason: 'the owner is moving me off a large context' }, 'a-session')
-  assert.ok('answer' in asked, `crew_refresh refused the ask: ${'refused' in asked ? asked.refused : ''}`)
+  const asked = await tools.answer(REFRESH_THIS_SESSION, { reason: 'the owner is moving me off a large context' }, 'a-session')
+  assert.ok('answer' in asked, `refresh_this_session refused the ask: ${'refused' in asked ? asked.refused : ''}`)
   const answered = await tools.answer(THE_REFRESH_ASK, questionOf(5, null, 't-2', ''), 'a-session')
   assert.ok('answer' in answered)
   const act = JSON.parse(answered.answer) as { readonly carry?: unknown; readonly text?: unknown }
@@ -289,7 +288,7 @@ test('#255: a successor taken past the limit hands over on the task its predeces
 
 test('#255: a refresh someone asked for that is declined is abandoned, and the Supervisor is told once (r=1 R3)', async () => {
   const crew = await aCrewOfTools('builder', { supervisor: true })
-  assert.ok('answer' in (await crew.tools.answer(CREW_REFRESH, { reason: 'the owner is moving me off a large context' }, 'a-session')))
+  assert.ok('answer' in (await crew.tools.answer(REFRESH_THIS_SESSION, { reason: 'the owner is moving me off a large context' }, 'a-session')))
   assert.equal(await crew.ask('a-session', 30), CARRY_A_TEXT, 'the ask someone made did not start a flow')
   assert.equal(await crew.ask('a-session', 30, `${CREW_REFRESH_DECLINED} a change in hand`), 'none')
   const said = await crew.saidInTheChannel()

@@ -9,7 +9,6 @@
 // BEAT_INTERVAL_MS so a pane can tell a working member from a session that has died. The heartbeat runs here, in the
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -63,6 +62,13 @@ export const PARK_A_MEMBER = 'park_a_member'
 /** The name a member wakes another with (martha#343): the other half of the park, as a tool of its own. */
 export const WAKE_A_MEMBER = 'wake_a_member'
 
+/**
+ * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
+ * refreshed session is recorded with: the SessionStart source value keeps its own name, `CREW_REFRESH`, because a
+ * ledger already holds it and the host's vocabulary names it.
+ */
+export const REFRESH_THIS_SESSION = 'refresh_this_session'
+
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
 export const CREW_TOOL_NAMES = [
   'report_progress',
@@ -75,7 +81,7 @@ export const CREW_TOOL_NAMES = [
   PARK_A_MEMBER,
   WAKE_A_MEMBER,
   WRITE_MY_HANDOVER_TOOL,
-  CREW_REFRESH,
+  REFRESH_THIS_SESSION,
   VERIFY_RANGE,
   LAND_BATCH,
   FAST_FORWARD_AFTER_THE_OWNERS_YES,
@@ -198,7 +204,7 @@ export const WAKE_A_MEMBER_DESCRIPTION =
 export const WRITE_MY_HANDOVER_DESCRIPTION =
   'Write your handover — what your successor needs to carry on — as one text. Martha writes and stamps the file at a path it chooses; a handover you write with your own file tool is not one and clears nothing. Answer CREW-HANDOVER-WRITTEN when your handover ask is done.'
 
-/** What `crew_refresh` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
+/** What `refresh_this_session` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
 export const CREW_REFRESH_DESCRIPTION =
   'Ask to be refreshed, when the owner or the Supervisor tells you to. The session hands over and is cleared at the end of this turn, and the reason you give is kept on the crew’s row.'
 
@@ -312,7 +318,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     },
   },
   {
-    name: CREW_REFRESH,
+    name: REFRESH_THIS_SESSION,
     description: CREW_REFRESH_DESCRIPTION,
     inputSchema: {
       type: 'object',
@@ -506,7 +512,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [PARK_A_MEMBER]: async (args) => moveThePark(places, args, parkAMember),
     [WAKE_A_MEMBER]: async (args) => moveThePark(places, args, unparkAMember),
     write_my_handover: async (args) => theHandoverTheMemberWrote(places, state, args),
-    crew_refresh: async (args) => {
+    [REFRESH_THIS_SESSION]: async (args) => {
       const reason = textOf(args['reason'])
       if (reason === '') return { refused: 'a refresh says why in one line, and this one says nothing' }
       const asked = askAMemberToRefresh(places, places.member, reason, places.ledger.clock.now())
