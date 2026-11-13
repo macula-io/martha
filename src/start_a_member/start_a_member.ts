@@ -71,7 +71,7 @@ import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape
 import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { decideLaunch, fingerprintOf, readLaunchState, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -152,23 +152,6 @@ async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | s
   }
 }
 
-/** The approval the start is on, undefined when the checkout needs none, or why it may not start. */
-function approvalInUse(request: MemberStartRequest, approvals: readonly Approval[]): Approval | undefined | string {
-  const place = { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }
-  // Each approval is read under the tree it approved, which is the only source of the attributes a checkout is read
-  // with (martha#167): a checkout whose attributes changed since an approval reads back as another tree.
-  for (const approval of approvals) {
-    const under = readLaunchState(place, thisMachine, approval.tree ?? undefined)
-    if (decideLaunch({ host: CLAUDE_CODE, ...under, approved_fingerprints: [approval.fingerprint] }).allow) return approval
-  }
-  const launch = readLaunchState(place, thisMachine)
-  const fingerprint = fingerprintOf(launch)
-  if (decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: [] }).allow) return undefined
-  const unapproved = decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: [fingerprint] }).allow
-  if (!unapproved) return undefined
-  const present = launch.entries.filter((entry) => entry.kind !== 'absent').map((entry) => entry.path)
-  return `${NOT_STARTED}: this checkout holds config that starts code by itself (${present.join(', ')}), and you have not approved it as it is now. Run martha approve, read what it shows, and answer yes.`
-}
 
 /** Everything a start needs before the launcher is asked, or why it may not start. */
 async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly strict_gate: boolean; readonly settings: CrewSettings } | string> {
@@ -184,9 +167,12 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   if ('refusal' in ids) return `${NOT_STARTED}: ${ids.refusal}`
   const kept = readApprovals(request.state)
   if ('refusal' in kept) return `${NOT_STARTED}: ${kept.refusal}`
-  const approval = approvalInUse(request, kept.approvals)
-  if (typeof approval === 'string') return approval
-  return { node_id: ids.ids[member.name]!, model: member.model, approval, strict_gate: settings.house_rules[STRICT_GATE], settings }
+  const inUse = theApprovalInUse({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home }, kept.approvals, thisMachine)
+  // What the owner reads when the checkout holds a config nobody approved: the entries, and the command that fixes it.
+  if ('needs_approval' in inUse) {
+    return `${NOT_STARTED}: this checkout holds config that starts code by itself (${inUse.needs_approval.join(', ')}), and you have not approved it as it is now. Run martha approve, read what it shows, and answer yes.`
+  }
+  return { node_id: ids.ids[member.name]!, model: member.model, approval: inUse.approval, strict_gate: settings.house_rules[STRICT_GATE], settings }
 }
 
 /**

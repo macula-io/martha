@@ -593,3 +593,36 @@ function pathFrom(start: string, path: string): string {
 function codeOf(error: unknown): string {
   return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : String(error)
 }
+
+/**
+ * What a launch's approval comes to (martha#98): the approval it runs under (or none, where the checkout needs none),
+ * or the config entries that still need approving. The three are told apart by which field is there, so a caller that
+ * formats a sentence for the owner cannot mistake one for another.
+ */
+export type TheApproval<A> =
+  | { readonly approval: A | undefined }
+  | { readonly needs_approval: readonly string[] }
+
+/**
+ * The approval a launch is on, as `TheApproval` (martha#98, moved out of `start_a_member` under martha#255). Which
+ * approval a start runs under is a decision about the checkout: the command that starts a member has no part in it,
+ * so the entries still needing approval are answered, and the caller owns the words the owner reads.
+ *
+ * Each approval is read under the tree it approved, which is the only source of the attributes a checkout is read
+ * with (martha#167): a checkout whose attributes changed since an approval reads back as another tree.
+ */
+export function theApprovalInUse<A extends { readonly tree: string | null; readonly fingerprint: string }>(
+  place: LaunchPlace,
+  approvals: readonly A[],
+  machine: LaunchHost,
+): TheApproval<A> {
+  for (const approval of approvals) {
+    const under = readLaunchState(place, machine, approval.tree ?? undefined)
+    if (decideLaunch({ ...under, host: place.host, approved_fingerprints: [approval.fingerprint] }).allow) return { approval }
+  }
+  const launch = readLaunchState(place, machine)
+  const fingerprint = fingerprintOf(launch)
+  if (decideLaunch({ ...launch, host: place.host, approved_fingerprints: [] }).allow) return { approval: undefined }
+  if (!decideLaunch({ ...launch, host: place.host, approved_fingerprints: [fingerprint] }).allow) return { approval: undefined }
+  return { needs_approval: launch.entries.filter((entry) => entry.kind !== 'absent').map((entry) => entry.path) }
+}
