@@ -108,7 +108,7 @@ test('a list of things waited for is never read as a chain', () => {
 test('a chain that ends at a member who cannot answer is a dead end, and the one that must act is named', () => {
   const rows = [
     row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON } }),
-    row('Mars', { at: NOW - OFFLINE_AFTER_MS - 1, state: 'idle', progress: { step: 4, of: 4, at: NOW - PERSON } }),
+    row('Mars', { at: NOW - OFFLINE_AFTER_MS - 1, state: IDLE, progress: { step: 4, of: 4, at: NOW - PERSON } }),
   ]
   const found = deadlocksOf(input(rows))
   assert.equal(found.length, 1, 'one dead end')
