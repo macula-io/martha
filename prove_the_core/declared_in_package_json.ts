@@ -21,6 +21,8 @@ export interface Manifest {
     readonly hostAdapters?: readonly string[]
     /** Files inside a host adapter that are decisions, not the adapter's machinery (martha#158). */
     readonly decisionFiles?: readonly string[]
+    /** How many code lines each host directory may hold, by the directory package.json declares (martha#322). */
+    readonly hostCeilings?: Readonly<Record<string, number>>
     readonly packageImports?: Readonly<Record<string, string>>
     readonly loaderImports?: Readonly<Record<string, string>>
   }

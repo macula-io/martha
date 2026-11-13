@@ -245,6 +245,30 @@ jobs:
         working-directory: installer
         run: ../node_modules/.bin/eslint . --max-warnings=0
 
+  # The line ceiling per host directory (martha#322). No core check reads an
+  # adapter or the glue: `no_setting_outside_the_declaration` treats both as
+  # outside the core, and no slice may import them. So a decision can hide in
+  # one, and the code the port map wants to shrink can grow instead. Each
+  # directory package.json declares under martha.hostAdapters or
+  # martha.hostGlue carries a ceiling in martha.hostCeilings: how many lines of
+  # code it may hold, counting the files the linter reads as code and the lines
+  # the compiler reads as code. The caps are named once, in package.json, and the
+  # tests under src/check_a_host_directory_stays_under_its_ceiling/ prove the
+  # check bites (one line over, no ceiling, a `.json` that does not count, code
+  # in a dot directory that does), so this job runs the live judge over the tree
+  # and nothing else.
+  ceilings:
+    name: host directories under their ceilings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:host-ceilings
+
   # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
   # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the

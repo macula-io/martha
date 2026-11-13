@@ -16,6 +16,7 @@
     "check:logos": "node src/check_the_logos_are_valid_svg/main.ts",
     "check:base-tests": "node src/check_no_test_the_base_passed_goes_missing/main.ts",
     "check:restated-values": "node src/check_no_literal_restates_a_value/main.ts",
+    "check:host-ceilings": "node src/check_a_host_directory_stays_under_its_ceiling/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
@@ -58,6 +59,25 @@
     "decisionFiles": [
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
     ],
+    "hostCeilings": {
+      "src/approve_a_checkouts_config": 59,
+      "src/claude_code_host": 1410,
+      "src/claude_code_relay": 570,
+      "src/declare_a_solo_crew": 83,
+      "src/install_the_pinned_installer": 124,
+      "src/install_the_recorded_mesh_server": 312,
+      "src/keep_martha_state_outside_the_checkout": 419,
+      "src/keep_what_the_owner_signed": 97,
+      "src/launch_a_claude_code_member": 2860,
+      "src/refuse_a_member_writing_owner_memory": 1081,
+      "src/run_an_owner_signed_command": 562,
+      "src/run_the_martha_command": 288,
+      "src/run_the_nodes_own_npm_alone": 164,
+      "src/start_a_member": 191,
+      "src/crew_files_directory": 155,
+      "src/linux_process_identity": 243,
+      "src/row_streams_directory": 159
+    },
     "packageImports": {
       "typescript": "prove_the_core",
       "eslint": "prove_the_core",
