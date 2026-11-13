@@ -12,7 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
-import { orderIn, paneIn, PANE_CHROME_ROWS, type TheOrder } from './crew_answers.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
 
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
@@ -52,6 +52,8 @@ interface CrewEngine {
     /** Asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it (martha#254). */
     invalidate(event: string): Promise<unknown>
     toast(text: string): unknown
+    /** Puts text on the clipboard of the session whose button was pressed: the surface is the press's own handle. */
+    copy(input: { readonly text: string; readonly surface?: unknown }): Promise<unknown>
     resolve(event: unknown): { Box: unknown; Text: unknown; Button: unknown }
   }
 }
@@ -69,6 +71,15 @@ const THE_CHANNEL_READ = 'channel_read_seconds'
 
 /** What the mod asks the launcher for: what this session should do now, if a refresh is due (martha#255). */
 const THE_REFRESH_QUESTION = 'the_refresh_of_this_session'
+
+/** What the mod asks the launcher for: the owner's to-do list, as the pane draws it (martha#316). */
+const THE_OWNERS_TODO = 'the_owners_todo'
+
+/**
+ * The row of the owner's list the keyboard is on, by id (martha#316): the pane's own glue. The launcher decides what
+ * that reveals, and only a revealed row carries anything to copy.
+ */
+let ownersFocus = ''
 
 /** The interval the channel is read on, once the launcher has named it; null until it has. */
 let readingTheChannel: { cancel(): void } | null = null
@@ -215,11 +226,62 @@ async function shutThePane($: CrewEngine): Promise<void> {
   await $.ui.close({ id: PANE })
 }
 
+/** The owner's list as the launcher answers it for the row the keyboard is on, or null when it could not be read. */
+async function theOwnersList($: CrewEngine): Promise<TheOwnersListShown | null> {
+  const heard = await hearTheLauncher($, THE_OWNERS_TODO, { focus: ownersFocus })
+  return 'said' in heard ? theOwnersListIn(heard.said) : null
+}
+
+/** Moves the keyboard to the row the launcher named next, and asks the host to draw the pane again. */
+async function stepTheOwnersList($: CrewEngine, next: string): Promise<void> {
+  ownersFocus = next
+  await $.ui.invalidate(THE_PANES_RENDER)
+}
+
+type TheViews = { Box: unknown; Text: unknown; Button: unknown }
+
+/** One row of the owner's list: what each command does, and on the revealed row the command itself and its copy. */
+function anOwnersRow($: CrewEngine, views: TheViews, row: TheOwnersRowShown): unknown {
+  const { Box, Text, Button } = views
+  return (
+    <Box key={`todo:${row.id}`} flexDirection="column">
+      <Text bold={row.revealed}>{`${row.revealed ? '▶' : ' '} ${row.heading}`}</Text>
+      {row.goal === '' ? null : <Text dimColor>{`    ${row.goal}`}</Text>}
+      {row.acts.map((act, at) => (
+        <Box key={`todo:${row.id}:${at}`} flexDirection="column">
+          <Text>{`    ${row.revealed ? '▾' : '▸'} ${act.does}`}</Text>
+          {act.line === '' ? null : <Text bold>{`      ${act.line}`}</Text>}
+        </Box>
+      ))}
+      {row.copy === '' ? null : (
+        <Button key={`todo:${row.id}:copy`} label="copy" hotkey="c" onPress={(press: { surface?: unknown } | undefined) => void $.ui.copy({ text: row.copy, surface: press?.surface }).catch(() => undefined)} />
+      )}
+    </Box>
+  )
+}
+
+/** The owner's list under the crew (martha#316): its heading, the line saying a member wrote it, and its rows. */
+function theOwnersListBlock($: CrewEngine, views: TheViews, list: TheOwnersListShown | null): unknown {
+  const { Box, Text, Button } = views
+  if (list === null) return <Text>Could not read the owner's list.</Text>
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" justifyContent="space-between">
+        <Text bold>{list.heading}</Text>
+        {list.rows.length < 2 ? null : <Button key="todo:next" label="next" hotkey="n" onPress={() => void stepTheOwnersList($, list.next)} />}
+      </Box>
+      <Text dimColor>{list.claim}</Text>
+      {list.rows.map((row) => anOwnersRow($, views, row))}
+    </Box>
+  )
+}
+
 /** Opens the pane, with the rows the launcher asks the host for, and asks it to keep drawing while it is open. */
 async function openThePane($: CrewEngine): Promise<void> {
   const heard = await hearTheLauncher($, 'see_the_crew', {})
   const shown = 'said' in heard ? paneIn(heard.said) : null
-  await $.ui.open({ id: PANE, title: 'Crew', rows: shown === null ? PANE_CHROME_ROWS : shown.rows })
+  const list = await theOwnersList($)
+  await $.ui.open({ id: PANE, title: 'Crew', rows: (shown === null ? PANE_CHROME_ROWS : shown.rows) + (list === null ? 1 : list.lines) })
   if (shown !== null) startRedrawing($, shown.redraw_ms)
 }
 
@@ -264,6 +326,32 @@ const answerLandBatch = ($: CrewEngine, e: Record<string, unknown>): Promise<unk
 const answerFastForward = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'fast_forward_after_the_owners_yes')
 const answerWorktreeOpen = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_open')
 const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_finish')
+const answerOwnerTodoAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_add')
+const answerOwnerTodoDone = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_done')
+
+/** The pane as the host draws it: the crew's rows, then the owner's list (martha#316). */
+async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
+  const { Box, Text, Button } = $.ui.resolve(e) as { Box: unknown; Text: unknown; Button: unknown }
+  const heard = await hearTheLauncher($, 'see_the_crew', {})
+  const shown = 'said' in heard ? paneIn(heard.said) : null
+  if (shown === null) return unreadablePane($, { Box, Text, Button }, 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why)
+  // A pane that is being drawn is a pane that is open: if nothing is asking the host to draw it again, ask, so a
+  // member who reports after it opened is drawn without the owner typing anything (part 2 r=2 R1).
+  startRedrawing($, shown.redraw_ms)
+  const list = await theOwnersList($)
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" justifyContent="space-between">
+        <Text bold>{shown.header}</Text>
+        <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
+      </Box>
+      {shown.lines.map((line, at) => (
+        <Text key={`${at}`}>{line}</Text>
+      ))}
+      {theOwnersListBlock($, { Box, Text, Button }, list)}
+    </Box>
+  )
+}
 
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
@@ -285,32 +373,15 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__fast_forward_after_the_owners_yes' }, answerFastForward)
   on('tool.call', { tool: 'mcp__martha__worktree_open' }, answerWorktreeOpen)
   on('tool.call', { tool: 'mcp__martha__worktree_finish' }, answerWorktreeFinish)
+  on('tool.call', { tool: 'mcp__martha__owner_todo_add' }, answerOwnerTodoAdd)
+  on('tool.call', { tool: 'mcp__martha__owner_todo_done' }, answerOwnerTodoDone)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)
     return { text: '' }
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($: CrewEngine, e: unknown) => {
-    const { Box, Text, Button } = $.ui.resolve(e) as { Box: unknown; Text: unknown; Button: unknown }
-    const heard = await hearTheLauncher($, 'see_the_crew', {})
-    const shown = 'said' in heard ? paneIn(heard.said) : null
-    if (shown === null) return unreadablePane($, { Box, Text, Button }, 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why)
-    // A pane that is being drawn is a pane that is open: if nothing is asking the host to draw it again, ask, so a
-    // member who reports after it opened is drawn without the owner typing anything (part 2 r=2 R1).
-    startRedrawing($, shown.redraw_ms)
-    return (
-      <Box flexDirection="column">
-        <Box flexDirection="row" justifyContent="space-between">
-          <Text bold>{shown.header}</Text>
-          <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
-        </Box>
-        {shown.lines.map((line, at) => (
-          <Text key={`${at}`}>{line}</Text>
-        ))}
-      </Box>
-    )
-  })
+  on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
