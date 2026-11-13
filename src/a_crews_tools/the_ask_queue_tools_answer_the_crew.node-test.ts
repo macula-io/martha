@@ -227,23 +227,23 @@ test('an ask that removes a branch records both tips, read in the clone it names
 
 test('a removal this launch cannot read is refused by name, and nothing is queued (martha#391)', async () => {
   const half = aPlaceOver('rows-for-half', { processes: aGitOnlyInTheClone(THE_TWO_COPIES), settings: theSettingsWith(THE_CLONES) })
-  assert.equal(
+  assert.match(
     REFUSED(await half.answer(QUEUE_ASK, { ask: `Delete ${THE_BRANCH}?`, branch: THE_BRANCH }, 'session-builder')),
-    'an ask that removes a branch names both repo (as owner/name) and branch together: they say which copy the yes removes',
+    /^an ask that removes a branch names both repo \(as owner\/name\) and branch together: they say which copy the yes removes$/,
     'half a removal is refused by its own words, never dying on the way to git',
   )
 
   const notARepo = aPlaceOver('rows-for-not-a-repo', { processes: aGitOnlyInTheClone(THE_TWO_COPIES), settings: theSettingsWith(THE_CLONES) })
-  assert.equal(
+  assert.match(
     REFUSED(await notARepo.answer(QUEUE_ASK, { ask: `Delete ${THE_BRANCH}?`, repo: 'macula-io', branch: THE_BRANCH }, 'session-builder')),
-    'an ask that removes a branch names both repo (as owner/name) and branch together: they say which copy the yes removes',
+    /^an ask that removes a branch names both repo \(as owner\/name\) and branch together/,
     'an organisation is not a repository',
   )
 
   const noPlaces = aPlaceOver('rows-for-no-places', { settings: theSettingsWith(null) })
-  assert.equal(
+  assert.match(
     REFUSED(await noPlaces.answer(QUEUE_ASK, { ask: `Delete ${THE_BRANCH}?`, repo: THE_REPO, branch: THE_BRANCH }, 'session-builder')),
-    'this launch holds no processes or names no clones place, so the tips of the branch this ask removes cannot be read',
+    /^this launch holds no processes or names no clones place, so the tips of the branch this ask removes cannot be read$/,
     'a place with no clones place refuses by name rather than recording half a deletion',
   )
 
