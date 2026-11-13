@@ -72,10 +72,8 @@ function approvedProjectWithTheLeastCeiling(t: TestContext): Project {
     writeFileSync(join(checkout, path), text)
   }
   git(checkout, 'init', '-q', '.')
-  git(checkout, 'config', 'user.name', GIT_NAME)
-  git(checkout, 'config', 'user.email', GIT_EMAIL)
   git(checkout, 'add', '--all')
-  git(checkout, 'commit', '-q', '-m', 'start')
+  git(checkout, '-c', `user.name=${GIT_NAME}`, '-c', `user.email=${GIT_EMAIL}`, 'commit', '-q', '-m', 'start')
   const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
   const declared = marthaOnATerminal(place, ['init'])
