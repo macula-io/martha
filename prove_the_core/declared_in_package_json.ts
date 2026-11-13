@@ -28,9 +28,16 @@ export interface Manifest {
   }
 }
 
+/**
+ * The manifest's own file name, named where the manifest is read (martha#256 r=3). Every check that writes or reads
+ * one takes the name from here, so none of them reaches into an unrelated slice for it, and a change of name lands
+ * once.
+ */
+export const MANIFEST = 'package.json'
+
 /** The repository's package.json. */
 export const manifestOf = (repository: string): Manifest =>
-  JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as Manifest
+  JSON.parse(readFileSync(join(repository, MANIFEST), 'utf8')) as Manifest
 
 /** Text as a regular expression matches it literally. */
 export const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { MANIFEST } from '../../prove_the_core/declared_in_package_json.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree } from './judge_the_tree.ts'

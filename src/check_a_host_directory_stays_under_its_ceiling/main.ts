@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { MANIFEST } from '../../prove_the_core/declared_in_package_json.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree, type Judged } from './judge_the_tree.ts'
 import { withLoweredCeilings } from './record_the_ceilings.ts'
