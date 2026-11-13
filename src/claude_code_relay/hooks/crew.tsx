@@ -293,6 +293,7 @@ function theOwnersListBlock($: CrewEngine, views: TheViews, list: TheOwnersListS
       </Box>
       <Text dimColor>{list.claim}</Text>
       {list.rows.map((row) => anOwnersRow($, views, row))}
+      {list.standing.map((line, at) => <Text key={`standing:${at}`} bold={at === 0}>{line}</Text>)}
     </Box>
   )
 }
@@ -356,6 +357,9 @@ const answerQueueAsk = ($: CrewEngine, e: Record<string, unknown>): Promise<unkn
 const answerListAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'list_asks')
 const answerTakeAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'take_asks')
 const answerSettleAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'settle_asks')
+const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_add')
+const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
+const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
 
 /** The pane as the host draws it: the crew's rows, then the owner's list (martha#316). */
 async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
@@ -410,6 +414,9 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__list_asks' }, answerListAsks)
   on('tool.call', { tool: 'mcp__martha__take_asks' }, answerTakeAsks)
   on('tool.call', { tool: 'mcp__martha__settle_asks' }, answerSettleAsks)
+  on('tool.call', { tool: 'mcp__martha__standing_add' }, answerStandingAdd)
+  on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
+  on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)

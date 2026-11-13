@@ -73,6 +73,7 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   git_history: 'B5',
   web: 'B6',
   subagent: 'B7',
+  standing_items: 'A20',
 }
 
 /** A session, with the record the gate reads and whether that record could be read. */
@@ -169,7 +170,7 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   // words refused before the host starts never become a turn: the argument gate stands there
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'refused-before-launch').map((path) => path.id),
   // an ask taken from the owner's queue reaches a model as the launcher's own answer to one of the crew's MCP tools,
-  // which the seam records on B2 like every other tool result; A20 names the gate on that text, not a source of its own
+  // which the seam records on B2 like every other tool result; A21 names the gate on that text, not a source of its own
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'ask-gate').map((path) => path.id),
 ]
 

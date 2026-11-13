@@ -59,7 +59,7 @@ const coverageOf = (
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 20 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 21 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
@@ -189,7 +189,7 @@ test('an ask gate that admits every ask is not a control', () => {
   const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, { 'a-crews-own-asker': () => true })
   assert.deepEqual(
     gaps.map((gap) => gap.path),
-    ['A20'],
+    ['A21'],
   )
   assert.match(gaps[0]?.why ?? '', /admits an ask whose asker is not a member this crew started/)
 })
@@ -198,7 +198,7 @@ test('an ask gate that refuses every ask is caught too', () => {
   const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, { 'a-crews-own-asker': () => false })
   assert.deepEqual(
     gaps.map((gap) => gap.path),
-    ['A20'],
+    ['A21'],
   )
   assert.match(gaps[0]?.why ?? '', /refuses an ask from a member this crew started/)
 })

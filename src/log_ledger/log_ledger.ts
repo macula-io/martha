@@ -34,11 +34,17 @@ import type { HostContract, Row, StoredRow } from '../host_contract/host_contrac
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
 /**
- * The milestones a member keeps on a package, and the one only a VERDICT line keeps (martha#350): the verdict that
- * ended a review round. The tool a member logs with cannot write it: it maps its own events onto the milestones above
- * (../keep_the_ledger) and this name is not among them, so a review round a member logs passes no head. A line does
- * write it, and the member that sends the line is not checked (../send_a_crew_message, martha#253), so a verdict row
- * can still be claimed: what this kind shuts is the log path, not the say path.
+ * The milestones a member keeps on a package, and the two only another act keeps.
+ *
+ * A VERDICT line keeps `verdict_given` (martha#350): the verdict that ended a review round. The tool a member logs with
+ * cannot write it: it maps its own events onto the milestones above (../keep_the_ledger) and this name is not among
+ * them, so a review round a member logs passes no head. A line does write it, and the member that sends the line is not
+ * checked (../send_a_crew_message, martha#253), so a verdict row can still be claimed: what this kind shuts is the log
+ * path, not the say path.
+ *
+ * A landing keeps `package_landed` (martha#320's ruling): a package reaching the default branch is a fact about the
+ * package, and it is what ends a package's waits. A member never writes it either, so a member cannot close every wait
+ * on a package with one call.
  */
 export const MILESTONES = [
   'checkpoint_reached',
@@ -46,6 +52,7 @@ export const MILESTONES = [
   'release_shipped',
   'fix_shipped_after_release',
   'verdict_given',
+  'package_landed',
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
 

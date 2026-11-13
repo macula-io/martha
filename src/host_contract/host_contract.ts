@@ -375,6 +375,7 @@ export type TurnSource =
   | 'git_history'
   | 'web'
   | 'subagent'
+  | 'standing_items'
 
 /**
  * What a host attests about who sent one delivery: the sending process, as the

@@ -14,7 +14,7 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS, OWNER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, NUDGES, OFFER_OWNER_ASKS, OWNER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -116,7 +116,7 @@ test('an ask that removes a branch is queued with both tips read here, and one t
     owner: 'Ann',
     members: [{ name: LEAD, role: SUPERVISOR, model: null }, { name: BUILDER, role: 'builder', model: null }],
     mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: [OWNER], resume_parked_work: [SUPERVISOR], [OFFER_OWNER_ASKS]: [SUPERVISOR] } },
-    house_rules: { owner_items: false, workspace_layout: true, member_work: false, practice: false, strict_gate: false, dashboard: false, owner_bell: false, refresh_between_tasks: false, review_model: null, [CLONES]: theClones, [WORKTREES]: join(home, 'the-worktrees') },
+    house_rules: { owner_items: false, workspace_layout: true, member_work: false, practice: false, strict_gate: false, dashboard: false, owner_bell: false, refresh_between_tasks: false, [NUDGES]: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, [CLONES]: theClones, [WORKTREES]: join(home, 'the-worktrees') },
     channel_read_seconds: 30,
   }
   const place = crewToolsOver({

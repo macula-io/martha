@@ -57,6 +57,18 @@ import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import {
+  nudgesOf,
+  reviewWaitsIn,
+  theNudgesGoTo,
+  theNudgesPartLines,
+  windowsOf,
+  type SentMessage,
+} from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -107,6 +119,24 @@ import {
   whoMayKeepTheList,
   type TodoAnswer,
 } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import {
+  STANDING,
+  STANDING_ADD,
+  STANDING_ADD_DESCRIPTION,
+  STANDING_CLOSE,
+  STANDING_CLOSE_DESCRIPTION,
+  STANDING_DESCRIPTION,
+  STANDING_HEADING,
+  STANDING_KINDS,
+  STANDING_STREAM,
+  closeAStandingItem,
+  recordAStandingItem,
+  theStandingItems,
+  theStandingList,
+  theStandingPartOfTheStart,
+  todayOf,
+} from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
+import type { TurnSource } from '../host_contract/host_contract.ts'
 
 /** The name a member parks with (martha#343): one act, and it says which by being this tool. */
 export const PARK_A_MEMBER = 'park_a_member'
@@ -160,6 +190,9 @@ export const CREW_TOOL_NAMES = [
   LIST_ASKS,
   TAKE_ASKS,
   SETTLE_ASKS,
+  STANDING_ADD,
+  STANDING_CLOSE,
+  STANDING,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -247,11 +280,12 @@ export interface CrewTools {
    */
   startSweeping(): () => void
   /**
-   * The line a session starting on a package is handed, once, at its start (martha#254 design, test 10): every act of
-   * the package this member holds that was sent with no outcome recorded, oldest first, or null when it holds no
-   * package or nothing of it was left waiting.
+   * The line a session is handed, once, at its start: the Supervisor's standing items, when the table lets this member
+   * assign work (martha#317), then every act of the package this member holds that was sent with no outcome recorded,
+   * oldest first (martha#254 design, test 10). Null when there is neither. `taken_in` names the sources the line
+   * carries that the session's record must take in, so the shell gate stands behind what the line handed.
    */
-  theLineToHandAtStart(): Promise<string | null>
+  theLineToHandAtStart(): Promise<TheStartLine | null>
   /**
    * Why a subagent call this member made is not run: it spawns a review and does not name the crew's reviewer model
    * (martha#315). Asked by the launcher's tool-call verdict, beside ../answer_a_tool_call, and never inside it.
@@ -269,6 +303,15 @@ export interface CrewTools {
    */
   noteTheCallsAnswer(call: { readonly tool: string }, session: string): void
 }
+
+/** What a session is handed at its start, and the sources its record takes in for it (martha#317). */
+export interface TheStartLine {
+  readonly line: string
+  readonly taken_in: readonly TurnSource[]
+}
+
+/** The source the standing items are taken in on, at a session's start (martha#317): its own inbound path. */
+export const STANDING_ITEMS_SOURCE: TurnSource = 'standing_items'
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
 const A_PACKAGE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The work package, owner/repo#n, as the issue is named' }
@@ -603,6 +646,44 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       required: ['batch', 'yes'],
     },
   },
+  {
+    name: STANDING_ADD,
+    description: STANDING_ADD_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: [...STANDING_KINDS], description: 'held, awaiting or decided' },
+        id: { type: 'string', description: 'A slug naming the item, such as martha-317 (a package ref is refused): letters, digits, ".", "_" or "-"' },
+        item: { type: 'string', description: 'held: what is held back, in one line' },
+        reason: { type: 'string', description: 'held: why, in one line' },
+        until: { type: 'string', description: 'held: a YYYY-MM-DD day first, or the condition that ends the hold' },
+        owes: { type: 'string', description: 'awaiting: who owes it' },
+        what: { type: 'string', description: 'awaiting: what they owe' },
+        rule: { type: 'string', description: 'decided: the rule, in one line' },
+        date: { type: 'string', description: 'decided: the day the owner said it, YYYY-MM-DD' },
+        words: { type: 'string', description: "decided: the owner's own words" },
+      },
+      required: ['kind', 'id'],
+    },
+  },
+  {
+    name: STANDING_CLOSE,
+    description: STANDING_CLOSE_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: "The item's id, as it was recorded" },
+        kind: { type: 'string', enum: [...STANDING_KINDS], description: 'The kind, when the id stands as more than one' },
+        evidence: { type: 'string', description: 'One line: how the condition was met. Required to close a held item' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: STANDING,
+    description: STANDING_DESCRIPTION,
+    inputSchema: { type: 'object', properties: {} },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -686,8 +767,12 @@ async function answerAnAskOfTheMods(
 
 /** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
 async function theOwnersTodoAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
-  const rows = theOpenRows(await places.ledger.stores.rows.read(OWNER_TODO_STREAM))
-  return { answer: JSON.stringify(theListForThePane(rows, args['focus'], places.ledger.clock.now())) }
+  const now = places.ledger.clock.now()
+  const pane = theListForThePane(theOpenRows(await places.ledger.stores.rows.read(OWNER_TODO_STREAM)), args['focus'], now)
+  const items = await theItemsThatStand(places)
+  // The standing items under the list (martha#317): a heading and one line each, or nothing when none stands.
+  const standing = items.length === 0 ? [] : [STANDING_HEADING, ...theStandingList(items, todayOf(now))]
+  return { answer: JSON.stringify({ ...pane, standing, lines: pane.lines + standing.length }) }
 }
 
 /**
@@ -771,12 +856,49 @@ async function theSessionsAct(
  * that resumes a package reads its predecessor's package and checks what became of what it sent, instead of hoping it
  * asks. Null when the member holds no package, or when nothing of it was left waiting.
  */
-async function theLineToHandAtStart(places: CrewToolPlaces, state: SessionState): Promise<string | null> {
+async function theLineToHandAtStart(places: CrewToolPlaces, state: SessionState): Promise<TheStartLine | null> {
+  const standing = await theStandingPartHanded(places)
+  const acts = await theOpenActsHanded(places, state)
+  const line = [standing, acts].filter((part) => part !== null).join('\n\n')
+  if (line === '') return null
+  return { line, taken_in: standing === null ? [] : [STANDING_ITEMS_SOURCE] }
+}
+
+/** The open acts of the package this member holds, or null when it holds none or nothing of it waits. */
+async function theOpenActsHanded(places: CrewToolPlaces, state: SessionState): Promise<string | null> {
   const held = state.held ?? places.beats.read(places.member)
   const package_name = held?.holds ?? ''
   if (package_name === '') return null
   const sent = await whatWasSent(places.ledger, package_name)
   return theLineAStartingSessionIsHanded(package_name, sent.acts)
+}
+
+/**
+ * The standing items a starting session is handed (martha#317): only to a member the table lets assign work, and
+ * nothing when the declaration cannot be read or nothing stands.
+ */
+async function theStandingPartHanded(places: CrewToolPlaces): Promise<string | null> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared || !mayKeepTheOwnersList(theDeclarationOf(declared.settings), places.member)) return null
+  return theStandingPartOfTheStart(await theItemsThatStand(places), todayOf(places.ledger.clock.now()))
+}
+
+/** What stands in the crew's standing items. */
+async function theItemsThatStand(places: CrewToolPlaces): Promise<ReturnType<typeof theStandingItems>> {
+  return theStandingItems(await places.ledger.stores.rows.read(STANDING_STREAM))
+}
+
+/**
+ * `standing_add` and `standing_close` (martha#317): the same table as the owner's list says who may (#316's answer),
+ * and the item is written as this launch's member, never as a name the call carries.
+ */
+async function keepTheStandingItems(places: CrewToolPlaces, act: () => Promise<TodoAnswer>): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  const declaration = theDeclarationOf(declared.settings)
+  if (mayKeepTheOwnersList(declaration, places.member)) return asAnAnswer(await act())
+  const granted = declaration.mode.may.assign_work ?? []
+  return { refused: `${places.member} may not record or close standing items: this crew's table lets ${granted.join(', ') || 'nobody'} assign work, and only they may. Nothing was written; ${STANDING} reads them.` }
 }
 
 /** What each tool answers, over one place: every tool is one slice's answer, told to the member. */
@@ -833,6 +955,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LIST_ASKS]: async () => asAnAnswer(await listTheAsks(places.ledger)),
     [TAKE_ASKS]: () => theTakeOfTheAsks(places, state),
     [SETTLE_ASKS]: (args) => theSettlingOfTheAsks(places, state, args),
+    [STANDING_ADD]: (args) => keepTheStandingItems(places, () => recordAStandingItem(places.ledger, args, places.member)),
+    [STANDING_CLOSE]: (args) => keepTheStandingItems(places, () => closeAStandingItem(places.ledger, args, places.member)),
+    [STANDING]: async () => ({ answer: theStandingList(await theItemsThatStand(places), todayOf(places.ledger.clock.now())).join('\n') }),
   }
 }
 
@@ -1081,7 +1206,44 @@ async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   // (part 2 r=2 R1): the host draws a `ui.render` once and caches it until a plugin invalidates it.
   // What it draws is answered as words (martha#255): its header, one line per member, and how many rows it asks for,
   // so the mod parses no row and formats nothing.
-  return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS)) }
+  const nudges = await theNudgesFor(places, declared.settings, beatsOf(places.beats, declared.settings))
+  return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS, nudges)) }
+}
+
+/**
+ * The nudges this member is told, as the lines its pane draws (martha#320), or none: a crew that reads no nudges, and a
+ * member the mode's table grants nobody's work to, are told nothing. The rules run here, in the launcher, and the session
+ * draws what they answered; nothing here acts on what it finds.
+ */
+async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows: Readonly<Record<string, DashboardRow>>): Promise<readonly string[]> {
+  if (!settings.house_rules.nudges) return []
+  const receivers = theNudgesGoTo(settings)
+  if (!receivers.some((receiver) => receiver.toLowerCase() === places.member.toLowerCase())) return []
+  const channel = await readTheChannel(places.ledger)
+  const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
+  const waits = reviewWaitsIn(messages, await landingsOf(places.ledger, packagesNamed(messages)), receivers)
+  const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
+  return theNudgesPartLines(nudgesOf(input, deadlockNudges(input)), settings)
+}
+
+/** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
+function packagesNamed(messages: readonly SentMessage[]): readonly string[] {
+  const named = messages.flatMap((message) => {
+    const read = readACrewLine(message.text)
+    return 'line' in read && read.line !== null ? [read.line.package] : []
+  })
+  return [...new Set(named)]
+}
+
+/** The members whose park marker says they are parked, or none when the crew's store will not answer (martha#255): a
+ * store that cannot say is not the same fact as a member nobody parked, and a reader that cannot say reads no park. */
+function parkedMembersOf(places: CrewToolPlaces, settings: CrewSettings): readonly string[] {
+  const place = parkedPlace(places)
+  if ('refusal' in place) return []
+  return settings.members.flatMap((member) => {
+    const park = theParkOf(place, member.name)
+    return 'marker' in park && park.marker.parked ? [member.name] : []
+  })
 }
 
 /**
