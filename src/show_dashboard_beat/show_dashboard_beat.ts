@@ -156,8 +156,12 @@ export function beatAfter(held: DashboardRow | null, beat: DashboardRow): Dashbo
 export interface DashboardStore {
   /** The member's row as it is, or null when the store holds none. */
   read(member: string): DashboardRow | null
-  /** Keeps a whole row if it is newer than the one held; whether it was kept, and why not. */
-  keep(row: DashboardRow): { readonly kept: boolean; readonly why?: string }
+  /**
+   * Changes the member's row: the store reads the row it holds, hands it to `change`, and keeps what `change` answers,
+   * or nothing when it answers null (martha#380). A caller says what changes and never what the row is, so a copy a
+   * caller read before the call is never the one written.
+   */
+  change(member: string, change: (held: DashboardRow | null) => DashboardRow | null): { readonly kept: boolean; readonly why?: string }
   /** Every member's row the store holds, by member. */
   all(): Readonly<Record<string, DashboardRow>>
 }

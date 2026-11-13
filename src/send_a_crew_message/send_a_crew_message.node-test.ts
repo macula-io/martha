@@ -142,7 +142,7 @@ const DECLARATION = {
 }
 
 /** A dashboard store that holds no row: the member has reported nothing, so it holds no package. */
-const NO_BEATS: DashboardStore = { read: () => null, keep: () => ({ kept: false, why: 'a test holds no rows' }), all: () => ({}) }
+const NO_BEATS: DashboardStore = { read: () => null, change: () => ({ kept: false, why: 'a test holds no rows' }), all: () => ({}) }
 
 /** The crew's tools over a declaration of two members and a channel of the test's own. */
 function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typeof crewToolsOver> {

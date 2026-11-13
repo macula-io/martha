@@ -56,7 +56,7 @@ export function theOwnersScreen(place: AnOwnersScreen): TheScreenKeeper {
 function applyTheEvent(place: AnOwnersScreen, session_id: string, event: OwnerDialogEvent): void {
   const before = place.beats.read(place.member)
   const next = takeAnOwnerDialog(rowBefore(before, place.member, session_id, event.at), event)
-  if (!place.beats.keep(next).kept) return
+  if (!place.beats.change(place.member, () => next).kept) return
   // The bell is the row's own change, read from the row that was kept: a write the store refused is a change the owner
   // does not see, and a bell for it would say something happened that did not. No bytes is no write at all.
   const bytes = theBellsFor(before, next, place.bells, place.onTheOwnersTerminal)

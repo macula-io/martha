@@ -981,7 +981,7 @@ test('a session starting on a package is handed its predecessor\'s unfinished ac
     stores: { crew: crewFilesDirectory(join(place.rows, 'crew')) },
   })
   // The predecessor's row: the member holds a package, and says so where the launcher reads it.
-  const kept = dashboardRowsIn(place.dashboard).keep({
+  const kept = dashboardRowsIn(place.dashboard).change(member, () => ({
     member,
     session: 'the-session-before',
     at: 1_000,
@@ -992,7 +992,7 @@ test('a session starting on a package is handed its predecessor\'s unfinished ac
     waits: null,
     needs: '',
     host: { model: 'opus', provider: '', contextPercent: null, costUsd: null },
-  })
+  }))
   assert.equal(kept.kept, true, kept.why ?? '')
   // An act it sent with no outcome recorded.
   await rowStreamsDirectory(place.rows).append(ledgerStreamOf(PACKAGE), {

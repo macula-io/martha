@@ -109,6 +109,21 @@ test('a tool call posted by the mod is answered by the core\'s slice, and the ro
   assert.equal(row?.session, SESSION, 'and it names the session the call came from')
 })
 
+test('#380: a beat landing behind the row held is dropped whole, and the row keeps what the newer beat said', async (t) => {
+  const place = aCrewPlace(t)
+  let now = 1_000
+  const crew = toolsIn(place, () => now)
+
+  assert.ok('answer' in (await crew.answer('report_progress', { task: 'the newer report', step: 2, of: 3 }, SESSION)))
+  now = 900
+  assert.ok('answer' in (await crew.answer('report_progress', { task: 'a beat landing late', step: 1, of: 3 }, SESSION)))
+
+  const row = dashboardRowsIn(place.dashboard).read(MEMBER)
+  assert.equal(row?.task, 'the newer report', 'a beat landing late took back the row the newer beat put there')
+  assert.equal(row?.progress.step, 2, 'and the figures the newer beat had')
+  assert.equal(row?.at, 1_000, 'and the row\'s own beat')
+})
+
 test('the heartbeat of a member that has reported nothing says idle, never working (test 7, r=1 R2)', (t) => {
   const place = aCrewPlace(t)
   const crew = toolsIn(place, () => 1_000)
