@@ -64,6 +64,8 @@ export interface SoloCrewRequest {
   readonly owner: string | null
   readonly state: MarthaState
   readonly documents: DocumentStore
+  /** The models the host runs (martha#315), as its adapter records them: what the declaration is read back against. */
+  readonly models: readonly string[]
 }
 
 export type SoloCrewDeclared =
@@ -109,7 +111,7 @@ export async function declareSoloCrew(request: SoloCrewRequest): Promise<SoloCre
 
   let settings: CrewSettings
   try {
-    settings = await declareCrew(request.documents, request.root)
+    settings = await declareCrew(request.documents, request.root, request.models)
   } catch (error) {
     if (error instanceof DeclarationRefused) return { declared: false, refusal: error.message }
     throw error
