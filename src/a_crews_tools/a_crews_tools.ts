@@ -587,6 +587,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
         item: { type: 'string', description: 'held: what is held back, in one line' },
         reason: { type: 'string', description: 'held: why, in one line' },
         until: { type: 'string', description: 'held: a YYYY-MM-DD day first, or the condition that ends the hold' },
+        package: { type: 'string', description: 'held, when the hold is on a package: owner/repo#n, as a batch names it; a batch that lands it is refused' },
         owes: { type: 'string', description: 'awaiting: who owes it' },
         what: { type: 'string', description: 'awaiting: what they owe' },
         rule: { type: 'string', description: 'decided: the rule, in one line' },
