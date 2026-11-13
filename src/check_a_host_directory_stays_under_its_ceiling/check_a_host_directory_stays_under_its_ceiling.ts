@@ -22,6 +22,9 @@ export type Finding =
   | { readonly kind: 'no_ceiling'; readonly list: HostList; readonly directory: string }
   | { readonly kind: 'stale_ceiling'; readonly directory: string }
 
+/** The command that brings every ceiling down to its directory's count. */
+export const RECORD_COMMAND = 'npm run check:host-ceilings -- --record'
+
 /** Where a decision belongs once a directory is over its ceiling, said for the list it came from. */
 const ADVICE: Readonly<Record<HostList, string>> = {
   hostAdapters: 'an adapter composes slices of the core; a decision inside it belongs in a slice',

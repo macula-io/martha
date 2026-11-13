@@ -1,4 +1,4 @@
-// The ceiling bites (martha#322).
+// The ceiling bites (martha#322), both ways (martha#341).
 //
 // A host directory's ceiling is only worth having if it fails a directory that
 // grew by one line of code, and stays quiet for what is not code. These plants
@@ -9,14 +9,14 @@
 // that only exercised a helper would prove neither.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
+import { describe, RECORD_COMMAND } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree } from './judge_the_tree.ts'
 import { withLoweredCeilings } from './record_the_ceilings.ts'
 
@@ -136,7 +136,30 @@ test('recording brings a ceiling down, and never raises one nor invents one', as
   assert.deepEqual(after.martha.hostCeilings, { 'src/shrunk': 12, 'src/grew': 5 }, 'nothing was raised or added')
   assert.equal(withLoweredCeilings(recorded.text, { 'src/shrunk': 99 }).text, recorded.text, 'and a rise writes nothing')
   assert.ok(recorded.text.includes(`"src/shrunk": 12`), 'the number is written as the map holds it, unformatted')
+})
 
-  const root = craft(t, { adapters: ['src/shrunk'], ceilings: { 'src/shrunk': 30 }, files: { 'src/shrunk/a.ts': TWO_LINES } })
-  assert.deepEqual(await findingsIn(root), [], 'a ceiling above the count is not a failure until it is recorded down')
+test('a ceiling above its directory fails naming the headroom and the command that lowers it (#341)', async (t) => {
+  const files = { 'src/an_adapter/an_adapter.ts': TWO_LINES, 'src/the_glue/g.ts': TWO_LINES }
+  const root = craft(t, {
+    adapters: ['src/an_adapter'],
+    glue: ['src/the_glue'],
+    ceilings: { 'src/an_adapter': 3, 'src/the_glue': 2 },
+    files,
+  })
+  assert.deepEqual(await findingsIn(root), [
+    'src/an_adapter: 2 lines of code, ceiling 3 (martha.hostCeilings): 1 line(s) of room to grow back unseen\n' +
+      `  lower it in the change that shrank it: ${RECORD_COMMAND}`,
+  ])
+})
+
+test('after recording, a tree with headroom passes: the check fails exactly when recording would write (#341)', async (t) => {
+  const files = { 'src/shrunk/a.ts': TWO_LINES, 'src/held/h.ts': TWO_LINES }
+  const root = craft(t, { adapters: ['src/shrunk', 'src/held'], ceilings: { 'src/shrunk': 30, 'src/held': 2 }, files })
+  assert.equal((await findingsIn(root)).length, 1, 'the shrunk directory fails before it is recorded')
+
+  const judged = await judgeTheTree(root)
+  const recorded = withLoweredCeilings(readFileSync(manifestPathOf(root), 'utf8'), judged.code)
+  assert.deepEqual(recorded.lowered, [{ directory: 'src/shrunk', from: 30, to: 2 }])
+  writeFileSync(manifestPathOf(root), recorded.text)
+  assert.deepEqual(await findingsIn(root), [], 'and nothing fails once the ceiling follows the code down')
 })
