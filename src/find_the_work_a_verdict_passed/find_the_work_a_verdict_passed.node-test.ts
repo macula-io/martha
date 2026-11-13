@@ -130,7 +130,7 @@ test('#256: a reviewer\'s own words in a review round row after the VERDICT do n
 
 test('#350: a VERDICT-shaped note a member logs with log_a_milestone passes no head', async () => {
   const { host, asked } = await aLedgerOf(PACKAGE, [], ghSaid(OPEN.answer))
-  // A builder naming its own tip as passed: a real VERDICT line, logged as a review round with the crew's own tool.
+  // A builder naming its own tip as passed the way the log tool allows: a real VERDICT line, logged as a review round.
   const logged = await keepTheMilestone(host, { package: PACKAGE, member: 'Hygiea', event: 'review_round', note: verdictLine(PACKAGE, 'PASS', OPEN.sha) })
   assert.match(logged.told, /^Kept: review_round/, 'a review round is a milestone the crew keeps, so the row is written')
   const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })

@@ -5,9 +5,11 @@
 // pushes nothing and registers no tool. The package that adds the merges calls this first.
 //
 // The passed head is not asked for: it is the tip of the range the reviewer's VERDICT line named, kept on the
-// package's ledger as the row a line adds (../read_a_crew_line). Only that row counts, and it is the one kind a
-// member's own milestone cannot be (martha#350): a VERDICT-shaped note logged with log_a_milestone answers for
-// nothing, so a member can neither pass a head nobody reviewed nor hide a PASS a reviewer really gave.
+// package's ledger as the row a line adds (../read_a_crew_line). Only that row counts (martha#350): the milestone a
+// member logs with log_a_milestone is never it, so a VERDICT-shaped review round a member logs answers for nothing
+// and hides nothing. The row a VERDICT line adds is the other door, and it is open by decision: a member that sends
+// the line with say_to_the_crew writes that row under its own name, its sender unchecked (../send_a_crew_message,
+// martha#253), so what the landing trusts is the name on the row, never a signature.
 //
 // The latest VERDICT decides — a FAIL after a PASS
 // leaves no PASS row, and an older PASS is never the answer. The pull request is found from GitHub, the one open pull
