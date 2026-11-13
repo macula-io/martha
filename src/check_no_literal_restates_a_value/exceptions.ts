@@ -65,6 +65,9 @@ const THE_CLEAR_IN_THE_MOD = 'the word an order carries the clear under, which t
  */
 const THE_HOSTS_WORD_FOR_A_CLEAR = 'the host\'s own word in the session_started event it records, for a session that began with /clear: recorded data, not the order a launcher answers'
 
+/** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */
+const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narrows on by literal; the crew\'s park place is named the same word and is not this'
+
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
@@ -110,6 +113,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   // The park test reads back the state a marker holds, and checks that the old single tool's argument is gone
   // (martha#343). Both spell the word the crew's park place is named with, and neither is that place.
   { value: PARKED_PLACE, file: 'a_crews_tools/the_park_tool_keeps_the_marker.node-test.ts', reason: 'the state a park marker reads back as, and the argument the one tool used to take; the crew\'s park place is named the same word and is not this' },
+  // Who is free reads a park by its kind (martha#319): `parked` is the tag of the ThePark union, which TypeScript
+  // narrows on and which no constant can stand in for, and the crew's park place is named the same word and is not it.
+  { value: PARKED_PLACE, file: 'see_who_is_free/see_who_is_free.ts', reason: THE_KIND_OF_A_PARK },
+  { value: PARKED_PLACE, file: 'see_who_is_free/see_who_is_free.node-test.ts', reason: THE_KIND_OF_A_PARK },
   // A host sends the calling plugin's own name as an origin's name (martha#343), and the relay's plugin is called
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
