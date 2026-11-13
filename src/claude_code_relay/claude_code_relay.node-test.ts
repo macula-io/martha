@@ -191,8 +191,8 @@ test('the relay posts the call before the check, and the check before the ask, s
   // then runs it. The row's close is the answer at the end, because nothing the host posts earlier comes after the
   // owner's answer — and the posting comes before the ask, so a row that closed on it would close before it opened.
   const theHostInsideItsCall = async (): Promise<unknown> => {
-    await hooks.get('tool.check')?.hook(fake.$, check, next(check).fn)
-    await hooks.get('classic.PermissionRequest')?.hook(fake.$, ask, next(ask).fn)
+    await hooks.get(TOOL_CHECK)?.hook(fake.$, check, next(check).fn)
+    await hooks.get(PERMISSION_REQUEST)?.hook(fake.$, ask, next(ask).fn)
     return RESULT
   }
   assert.deepEqual(await hooks.get('tool.call')?.hook(fake.$, CALL, theHostInsideItsCall), RESULT)
