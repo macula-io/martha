@@ -4,7 +4,8 @@
 // never matches. This runs the question the launch asks (host_runs_the_relay's `whatTheHostSaysWithTheseSettings`) on
 // the recorded host's own binary: it says nothing about the rules the launch writes, and in the same run it names an
 // inert twin of one — so the test shows both that the host matches ours and that the reader sees a rule it would not.
-// The relay CI job names the binary in MARTHA_RECORDED_HOST; without it this is skipped.
+// It skips on RECORDED_HOST_SKIP: ci.yml's relay job runs it with the recorded host, as
+// prove_the_relay_loads/recorded_host_runs.json lists.
 
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
@@ -13,19 +14,16 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
-import { RECORDED_HOST_VARIABLE } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
+import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { whatTheHostSaysWithTheseSettings } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
 
-const recordedHost = process.env[RECORDED_HOST_VARIABLE]
-const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
-
 /** The rule written under the same place as `rule`, but under a tool the file permission checks never use. */
 const anInertTwinOf = (rule: string): string => rule.replace(/^\w+\(/, 'Write(')
 
-test('the recorded host matches every rule the launch writes, and names an inert twin of one in the same run (#226)', { skip }, async (t) => {
+test('the recorded host matches every rule the launch writes, and names an inert twin of one in the same run (#226)', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-rules-')))
   t.after(() => removeTheTree(home))
   const env = { HOME: home, PATH: [join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color' }
@@ -36,7 +34,7 @@ test('the recorded host matches every rule the launch writes, and names an inert
   /** What the host says about `rules`, asked the way a launch asks; refuses to pass on an answer that read no rules. */
   const whatItSaysAbout = async (rules: readonly string[]): Promise<string> => {
     writeFileSync(settings, JSON.stringify({ permissions: { deny: rules } }))
-    const printed = await whatTheHostSaysWithTheseSettings(recordedHost ?? '', [], settings, env, home)
+    const printed = await whatTheHostSaysWithTheseSettings(recordedHost(), [], settings, env, home)
     if ('failure' in printed) assert.fail(`the host could not be asked: ${printed.failure}`)
     // The host ends on its own words about having no input, which is the run that read the rules: a host that answered
     // nothing would leave nothing to read, and the assertion below would pass on an empty answer.
