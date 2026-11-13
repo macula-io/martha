@@ -36,6 +36,18 @@ import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_messag
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import {
+  nudgesOf,
+  reviewWaitsIn,
+  theNudgesGoTo,
+  theNudgesPartLines,
+  windowsOf,
+  type SentMessage,
+} from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -926,7 +938,44 @@ async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   // (part 2 r=2 R1): the host draws a `ui.render` once and caches it until a plugin invalidates it.
   // What it draws is answered as words (martha#255): its header, one line per member, and how many rows it asks for,
   // so the mod parses no row and formats nothing.
-  return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS)) }
+  const nudges = await theNudgesFor(places, declared.settings, beatsOf(places.beats, declared.settings))
+  return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS, nudges)) }
+}
+
+/**
+ * The nudges this member is told, as the lines its pane draws (martha#320), or none: a crew that reads no nudges, and a
+ * member the mode's table grants nobody's work to, are told nothing. The rules run here, in the launcher, and the session
+ * draws what they answered; nothing here acts on what it finds.
+ */
+async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows: Readonly<Record<string, DashboardRow>>): Promise<readonly string[]> {
+  if (!settings.house_rules.nudges) return []
+  const receivers = theNudgesGoTo(settings)
+  if (!receivers.some((receiver) => receiver.toLowerCase() === places.member.toLowerCase())) return []
+  const channel = await readTheChannel(places.ledger)
+  const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
+  const waits = reviewWaitsIn(messages, await landingsOf(places.ledger, packagesNamed(messages)), receivers)
+  const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
+  return theNudgesPartLines(nudgesOf(input, deadlockNudges(input)), settings)
+}
+
+/** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
+function packagesNamed(messages: readonly SentMessage[]): readonly string[] {
+  const named = messages.flatMap((message) => {
+    const read = readACrewLine(message.text)
+    return 'line' in read && read.line !== null ? [read.line.package] : []
+  })
+  return [...new Set(named)]
+}
+
+/** The members whose park marker says they are parked, or none when the crew's store will not answer (martha#255): a
+ * store that cannot say is not the same fact as a member nobody parked, and a reader that cannot say reads no park. */
+function parkedMembersOf(places: CrewToolPlaces, settings: CrewSettings): readonly string[] {
+  const place = parkedPlace(places)
+  if ('refusal' in place) return []
+  return settings.members.flatMap((member) => {
+    const park = theParkOf(place, member.name)
+    return 'marker' in park && park.marker.parked ? [member.name] : []
+  })
 }
 
 /**

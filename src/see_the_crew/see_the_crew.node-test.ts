@@ -115,3 +115,16 @@ test('a row whose host is asking the owner something reads needs you, and is cou
   })
   assert.equal(seeTheCrew(CREW, { Vesta: opened_but_quiet }, NOW).rows[0]!.state, OFFLINE, 'a row gone quiet says so: nothing is left to answer the prompt')
 })
+
+test('#320: a part another slice composed is drawn under the members, and the rows the pane asks for count it', () => {
+  const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 500) }, NOW)
+  const without = thePaneAnsweredBy(seen, true, 1_000)
+  assert.deepEqual(thePaneAnsweredBy(seen, true, 1_000, []), without, 'a crew with no part draws exactly the pane it drew before')
+
+  const block = ['Crew nudges: nothing here acts.', '- stalled: Vesta, since 09:15 UTC']
+  const withBlock = thePaneAnsweredBy(seen, true, 1_000, block)
+  assert.deepEqual(withBlock.lines.slice(-block.length), block, 'the part is drawn under the members, in its own order')
+  assert.equal(withBlock.rows, without.rows + block.length, 'the rows the pane asks for count the part')
+  assert.equal(withBlock.header, without.header, 'the part is no member, so the header counts none of it')
+})
+
