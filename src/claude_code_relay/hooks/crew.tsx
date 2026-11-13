@@ -14,12 +14,6 @@ import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from '.
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, type TheOrder } from './crew_answers.ts'
 
-/**
- * The server name the host gives this plugin's tools: `mcp__<server>__<tool>`. It is the plugin's own name, and each
- * tool name below is spelled out in full because the host's plugin validator refuses a hook that builds one.
- */
-export const CREW_SERVER = 'martha-relay'
-
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
 
@@ -272,6 +266,10 @@ const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promis
 
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
+  // Every tool is named here in full, `mcp__<the plugin's name>__<tool>`, because the host's plugin validator refuses
+  // a hook that builds its name. The plugin's name is the manifest's, in ./.claude-plugin/plugin.json, and the test
+  // that pairs every tool with its hook reads that manifest, so a rename fails there rather than in a silent session
+  // (martha#343).
   on('tool.call', { tool: 'mcp__martha-relay__report_progress' }, answerReportProgress)
   on('tool.call', { tool: 'mcp__martha-relay__crew_log' }, answerCrewLog)
   on('tool.call', { tool: 'mcp__martha-relay__what_was_sent' }, answerWhatWasSent)

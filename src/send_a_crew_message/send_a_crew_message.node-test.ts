@@ -24,6 +24,15 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
+/**
+ * The server part of every tool the host names for this plugin, read from the manifest the host reads it from
+ * (martha#343): `mcp__<the plugin's name>__<tool>`. It is read rather than written here, because a literal that
+ * agrees with today's manifest and not with tomorrow's is exactly the failure this file's hook test exists to catch.
+ */
+const THE_PLUGINS_NAME = (JSON.parse(
+  readFileSync(new URL('../claude_code_relay/.claude-plugin/plugin.json', import.meta.url), 'utf8'),
+) as { name: string }).name
+
 const channelHost = (): ChannelHost & { readonly clock: { now(): number } } => {
   const { host } = hostForTests({ now: 7_500 })
   return { clock: host.clock, stores: { rows: host.stores.rows } }
@@ -171,10 +180,12 @@ test('#253: a crew_say to a name the declaration does not hold is answered with 
 
 test('#253: every tool the launcher names has a hook in the mod that answers it', () => {
   // The mod registers a hook per tool by a literal name: a tool added to the launcher's list without a hook here is
-  // registered in the session and never answered, and only a live run would notice. This reads the mod's own text.
+  // registered in the session and never answered, and only a live run would notice. This reads the mod's own text,
+  // and takes the server part from the plugin's manifest, so a renamed plugin fails here instead of in a session
+  // (martha#343): every hook would miss and every crew tool would go unanswered.
   const mod = readFileSync(new URL('../claude_code_relay/hooks/crew.tsx', import.meta.url), 'utf8')
-  const missing = CREW_TOOL_NAMES.filter((name) => !mod.includes(`'mcp__martha-relay__${name}'`))
-  assert.deepEqual(missing, [], 'the mod registers no hook for these tools, so their calls go unanswered')
+  const missing = CREW_TOOL_NAMES.filter((name) => !mod.includes(`'mcp__${THE_PLUGINS_NAME}__${name}'`))
+  assert.deepEqual(missing, [], `the mod registers no hook for these tools, so their calls go unanswered: ${missing.join(', ')}`)
 })
 
 test('#253: a hand-off whose line does not read is answered with the field, before anything is sent', async () => {
