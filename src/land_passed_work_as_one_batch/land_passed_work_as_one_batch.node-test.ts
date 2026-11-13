@@ -25,14 +25,17 @@ import { noteMilestone, readLedger } from '../log_ledger/log_ledger.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import {
-  FAST_FORWARD_AFTER_THE_OWNERS_YES,
-  LAND_BATCH,
   LAND,
   fastForwardAfterTheOwnersYes,
-  landPassedWorkAndFastForward,
   landPassedWorkAsOneBatch,
+  theBatchACallNames,
+  theFastForwardACallNames,
   type Landing,
 } from './land_passed_work_as_one_batch.ts'
+
+/** What a call the slice refuses says, or a failure naming what it answered instead. */
+const refusedBy = (asked: { readonly ok?: unknown; readonly refused?: string }): string =>
+  asked.refused ?? assert.fail(`the call was not refused: ${JSON.stringify(asked)}`)
 
 /** A clock that stands still, so the integration branch's date is the test's to know. */
 const THE_DAY = Date.UTC(2026, 10, 12)
@@ -450,17 +453,11 @@ test('#256: a push whose outcome the ledger cannot keep stands announced and unc
   assert.equal(kept.filter((row) => row.kind === 'act_concluded').length, 0, 'an outcome was kept although the store refused it')
 })
 
-test('#256: the two landing tools are registered, and a call that names no package is refused by name', async () => {
-  const tests = hostForTests({ run: runReal, now: THE_DAY })
-  landPassedWorkAndFastForward({ host: tests.host, member: MEMBER })
-  const land = tests.registeredTool(LAND_BATCH)
-  const fast = tests.registeredTool(FAST_FORWARD_AFTER_THE_OWNERS_YES)
-  assert.ok(land !== undefined, `${LAND_BATCH} was not registered`)
-  assert.ok(fast !== undefined, `${FAST_FORWARD_AFTER_THE_OWNERS_YES} was not registered`)
-  assert.match(await land.answer({ path: '/clone' }), /work packages it lands/)
-  assert.match(await fast.answer({ path: '/clone', packages: ['synthetic-owner/widget#1'] }), /names the base the range was checked against/)
-  assert.match(await fast.answer({ path: '/clone', base: 'a', packages: ['synthetic-owner/widget#1'] }), /names the tip the owner said yes to/)
-  assert.match(await fast.answer({ path: '/clone', base: '', packages: ['synthetic-owner/widget#1'] }), /names the base the range was checked against/)
+test('#256: a landing call that names no package, no base or no tip is refused by name', () => {
+  assert.match(refusedBy(theBatchACallNames({ path: '/clone' })), /work packages it lands/)
+  assert.match(refusedBy(theFastForwardACallNames({ path: '/clone', packages: ['synthetic-owner/widget#1'] })), /names the base the range was checked against/)
+  assert.match(refusedBy(theFastForwardACallNames({ path: '/clone', base: 'a', packages: ['synthetic-owner/widget#1'] })), /names the tip the owner said yes to/)
+  assert.match(refusedBy(theFastForwardACallNames({ path: '/clone', base: '', packages: ['synthetic-owner/widget#1'] })), /names the base the range was checked against/)
 })
 
 test('#256: a fast-forward whose row one package will not keep does not run, and the package already announced is told so', async (t) => {

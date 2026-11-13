@@ -20,15 +20,15 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { type CrewSettings } from '../declare_crew/declare_crew.ts'
-import type { ProcessOutcome, ProcessRequest, Tool } from '../host_contract/host_contract.ts'
+import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { readLedger } from '../log_ledger/log_ledger.ts'
 import {
   NO_LAYOUT,
-  WORKTREE_FINISH,
-  WORKTREE_OPEN,
-  openAndFinishAWorktree,
+  finishAWorktree,
+  openAWorktree,
+  type WorktreesRequest,
 } from './open_and_finish_a_worktree.ts'
 
 /** The member these tools answer for, and the branch prefix its worktrees carry. */
@@ -103,10 +103,15 @@ const runReal = async (request: ProcessRequest): Promise<ProcessOutcome> => {
 }
 
 interface Tools {
-  readonly open: Tool
-  readonly finish: Tool
+  readonly open: AnsweringTool
+  readonly finish: AnsweringTool
   /** The host the tools run over: its store's rows are the package's ledger (martha#25). */
   readonly host: HostForTests
+}
+
+/** One of the two tools, as a call reaches it: the slice's own answer for the arguments a call names (martha#256). */
+interface AnsweringTool {
+  answer(args: Readonly<Record<string, unknown>>): Promise<string>
 }
 
 function toolsOf(
@@ -115,14 +120,20 @@ function toolsOf(
   run: (request: ProcessRequest) => Promise<ProcessOutcome> = runReal,
 ): Tools {
   const testHost = hostForTests({ run })
-  openAndFinishAWorktree({ host: testHost.host, settings, member })
-  const tool = (name: string): Tool => {
-    const registered = testHost.registeredTool(name)
-    assert.ok(registered !== undefined, `${name} is registered`)
-    return registered
+  const request: WorktreesRequest = { host: theHostOver(testHost), settings, member }
+  return {
+    open: { answer: (args) => openAWorktree(request, args) },
+    finish: { answer: (args) => finishAWorktree(request, args) },
+    host: testHost,
   }
-  return { open: tool(WORKTREE_OPEN), finish: tool(WORKTREE_FINISH), host: testHost }
 }
+
+/** The host the slice acts over: the test host's own processes, with the ledger's clock and rows (martha#256). */
+const theHostOver = (testHost: HostForTests): WorktreesRequest['host'] => ({
+  processes: testHost.host.processes,
+  clock: testHost.host.clock,
+  stores: { rows: testHost.host.stores.rows },
+})
 
 const asked = (repo: string, slug: string): Readonly<Record<string, unknown>> => ({ repo, slug })
 

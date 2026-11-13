@@ -127,35 +127,16 @@ export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: st
   return 'refused' in sent ? sent : { told: `${sent.sent}; ${forward.packages.join(', ')} are on it.` }
 }
 
-/** Registers `land_batch` and `fast_forward_after_the_owners_yes` for one member. */
-export function landPassedWorkAndFastForward(request: LandingRequest): void {
-  request.host.tools.register({
-    name: LAND_BATCH,
-    description:
-      'Lands a batch of packages whose reviews passed, as one integration branch: one --no-ff merge per package at the head its reviewer passed, then the branch pushed. Answers with the range to check before the owner says yes.',
-    answer: async (args) => {
-      const asked = theBatchAsked(args)
-      if ('refused' in asked) return asked.refused
-      return toldOrRefused(await landPassedWorkAsOneBatch(request.host, request.member, asked.ok))
-    },
-  })
-  request.host.tools.register({
-    name: FAST_FORWARD_AFTER_THE_OWNERS_YES,
-    description:
-      'Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the range was checked.',
-    answer: async (args) => {
-      const asked = theFastForwardAsked(args)
-      if ('refused' in asked) return asked.refused
-      return toldOrRefused(await fastForwardAfterTheOwnersYes(request.host, request.member, asked.ok))
-    },
-  })
-}
+/** What `land_batch` says it is for, as the launcher answers the mod's ask (martha#256). */
+export const LAND_BATCH_DESCRIPTION =
+  'Lands a batch of packages whose reviews passed, as one integration branch: one --no-ff merge per package at the head its reviewer passed, then the branch pushed. Answers with the range to check before the owner says yes.'
 
-/** What a landing says as a tool answers: what it did, or why it did nothing. */
-const toldOrRefused = (landing: Landing): string => ('told' in landing ? landing.told : landing.refused)
+/** What `fast_forward_after_the_owners_yes` says it is for (martha#256). */
+export const FAST_FORWARD_DESCRIPTION =
+  'Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the range was checked.'
 
-/** The batch a call names, or why it names none. */
-function theBatchAsked(args: Readonly<Record<string, unknown>>): Step<TheBatch> {
+/** The batch a call of `land_batch` names, or why it names none. */
+export function theBatchACallNames(args: Readonly<Record<string, unknown>>): Step<TheBatch> {
   const path = args['path']
   if (typeof path !== 'string' || path === '') return no('a batch names the clone it is landed in, as path.')
   const packages = args['packages']
@@ -165,9 +146,9 @@ function theBatchAsked(args: Readonly<Record<string, unknown>>): Step<TheBatch> 
   return { ok: { path, packages: packages as readonly string[] } }
 }
 
-/** The fast-forward a call names, or why it names none. */
-function theFastForwardAsked(args: Readonly<Record<string, unknown>>): Step<TheFastForward> {
-  const batch = theBatchAsked(args)
+/** The fast-forward a call of `fast_forward_after_the_owners_yes` names, or why it names none. */
+export function theFastForwardACallNames(args: Readonly<Record<string, unknown>>): Step<TheFastForward> {
+  const batch = theBatchACallNames(args)
   if ('refused' in batch) return batch
   const base = args['base']
   const tip = args['tip']

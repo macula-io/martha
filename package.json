@@ -62,7 +62,7 @@
     "hostCeilings": {
       "src/approve_a_checkouts_config": 59,
       "src/claude_code_host": 1435,
-      "src/claude_code_relay": 570,
+      "src/claude_code_relay": 580,
       "src/declare_a_solo_crew": 83,
       "src/install_the_pinned_installer": 124,
       "src/install_the_recorded_mesh_server": 312,
@@ -73,9 +73,9 @@
       "src/run_an_owner_signed_command": 562,
       "src/run_the_martha_command": 288,
       "src/run_the_nodes_own_npm_alone": 164,
-      "src/start_a_member": 191,
+      "src/start_a_member": 193,
       "src/crew_files_directory": 155,
-      "src/linux_process_identity": 243,
+      "src/linux_process_identity": 264,
       "src/row_streams_directory": 159
     },
     "packageImports": {

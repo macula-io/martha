@@ -268,6 +268,11 @@ const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<un
 const answerCrewSay = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_say')
 const answerCrewReceipts = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_receipts')
 const answerCrewPark = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_park')
+const answerVerifyRange = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'verify_range')
+const answerLandBatch = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'land_batch')
+const answerFastForward = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'fast_forward_after_the_owners_yes')
+const answerWorktreeOpen = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_open')
+const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_finish')
 
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
@@ -279,6 +284,11 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha-relay__crew_say' }, answerCrewSay)
   on('tool.call', { tool: 'mcp__martha-relay__crew_receipts' }, answerCrewReceipts)
   on('tool.call', { tool: 'mcp__martha-relay__crew_park' }, answerCrewPark)
+  on('tool.call', { tool: 'mcp__martha-relay__verify_range' }, answerVerifyRange)
+  on('tool.call', { tool: 'mcp__martha-relay__land_batch' }, answerLandBatch)
+  on('tool.call', { tool: 'mcp__martha-relay__fast_forward_after_the_owners_yes' }, answerFastForward)
+  on('tool.call', { tool: 'mcp__martha-relay__worktree_open' }, answerWorktreeOpen)
+  on('tool.call', { tool: 'mcp__martha-relay__worktree_finish' }, answerWorktreeFinish)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)
