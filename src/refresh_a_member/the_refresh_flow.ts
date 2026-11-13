@@ -11,6 +11,7 @@
 import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, DocumentStore, HandoverStampStore, Stores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { parkAMember, parkedPlace, theNewestHandover, theParkOf, type AHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -347,7 +348,7 @@ function tellTheSupervisor(places: TheRefreshPlaces, place: CrewPlace, flow: ARe
  * holds. A crew with no such member sends nothing: the row still says what happened.
  */
 function sayToTheSupervisor(places: TheRefreshPlaces, settings: CrewSettings, line: string): void {
-  const supervisor = settings.members.find((one) => one.role === 'supervisor')
+  const supervisor = settings.members.find((one) => one.role === SUPERVISOR)
   if (supervisor === undefined) return
   const held = places.beats.read(places.member)?.holds ?? ''
   // A milestone is kept in the ledger of the package the member holds, and a member that holds none has no ledger to

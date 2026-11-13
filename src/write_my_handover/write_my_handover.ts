@@ -15,6 +15,7 @@
 import { join } from 'node:path'
 
 import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, HandoverStampStore, Refused, Stores } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -103,7 +104,7 @@ export type TheHandoverToolAnswer = { readonly answer: string } | Refused
  * nothing.
  */
 export function theHandoverAToolWrote(places: TheHandoverToolPlaces, args: Readonly<Record<string, unknown>>): TheHandoverToolAnswer {
-  const content = typeof args['content'] === 'string' ? args['content'].trim() : ''
+  const content = typeof args[WHOLE_FILE_CONTENT] === 'string' ? args[WHOLE_FILE_CONTENT].trim() : ''
   if (content === '') return { refusal: 'a handover is text, and this call carried none' }
   const written = writeMyHandover(places.host, {
     member: places.member,

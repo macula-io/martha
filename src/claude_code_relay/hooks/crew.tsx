@@ -13,6 +13,9 @@ import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { opensAtStartOf, rowsToOpen } from './pane_rule.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
+import { CREW_REFRESH } from '../../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { THE_REFRESH_ASK } from '../../refresh_a_member/the_refresh_flow.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../../write_my_handover/write_my_handover.ts'
 
 /**
  * The server name the host gives this plugin's tools: `mcp__<server>__<tool>`. It is the plugin's own name, and each
@@ -72,9 +75,6 @@ const THE_NEXT_MESSAGE = 'take_a_crew_message'
 
 /** What the mod asks the launcher for: how often, in seconds, to read the channel again (martha#253). */
 const THE_CHANNEL_READ = 'channel_read_seconds'
-
-/** What the mod asks the launcher for: what this session should do now, if a refresh is due (martha#255). */
-const THE_REFRESH_QUESTION = 'the_refresh_of_this_session'
 
 /** The interval the channel is read on, once the launcher has named it; null until it has. */
 let readingTheChannel: { cancel(): void } | null = null
@@ -152,7 +152,7 @@ async function takeTheAct($: CrewEngine, e: unknown): Promise<void> {
 
 /** The act the launcher answers this session's question with, or null when it said none this mod could read. */
 async function theActTheLauncherAnswers($: CrewEngine, e: unknown): Promise<TheAct | null> {
-  const heard = await hearTheLauncher($, THE_REFRESH_QUESTION, await whatTheSessionSays($, e))
+  const heard = await hearTheLauncher($, THE_REFRESH_ASK, await whatTheSessionSays($, e))
   return 'said' in heard ? actIn(heard.said) : null
 }
 
@@ -349,8 +349,8 @@ const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promis
 const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
 const answerCrewSay = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_say')
 const answerCrewReceipts = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_receipts')
-const answerWriteMyHandover = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'write_my_handover')
-const answerCrewRefresh = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_refresh')
+const answerWriteMyHandover = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, WRITE_MY_HANDOVER_TOOL)
+const answerCrewRefresh = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, CREW_REFRESH)
 const answerCrewPark = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'crew_park')
 
 /** The crew's tools registered with this host, and the pane drawn. */

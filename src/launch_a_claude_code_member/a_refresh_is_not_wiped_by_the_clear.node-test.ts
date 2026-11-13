@@ -14,11 +14,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -44,7 +47,7 @@ function placesOf(t: TestContext): Places {
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
-  const rows = join(home, 'rows')
+  const rows = join(home, CREW_ROWS_PLACE)
   mkdirSync(rows, { mode: 0o700 })
   return { home, checkout, rows }
 }
@@ -52,7 +55,7 @@ function placesOf(t: TestContext): Places {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** The crew's tools, of which this test uses only the one question the flow is asked through the launcher. */
@@ -78,7 +81,7 @@ function relayFor(places: Places, crew: CrewTools, sessions?: Map<string, never>
       binder: bindNothing,
       handed_at_start: sourcesALaunchHandsTheModel({}),
       hookSettings: hookSettingsWatch({
-        user: join(places.home, '.claude', 'settings.json'),
+        user: join(places.home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
         home: places.home,
         approved: undefined,
         managed: { ...RECORDED_HOST.managed_settings, dir: join(places.home, 'managed') },

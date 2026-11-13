@@ -15,6 +15,8 @@
 // The row is never removed. A member that stops beating reads `offline` once OFFLINE_AFTER_MS has passed, which is
 // the reader's word about a row that has gone quiet, not a state anyone writes.
 
+import { REFRESHES_PLACE } from '../refresh_a_member/refresh_a_member.ts'
+
 /** The states a row can be in, as the owner reads them. */
 export const STATES = ['working', 'reviewing', 'waiting', 'needs-you', 'idle', 'parked'] as const
 export type State = (typeof STATES)[number]
@@ -119,7 +121,7 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
     isHostFacts(value['host']) &&
     isWaits(value['waits']) &&
     // Absent on every row written before the refresh flow existed, so it is optional and never demanded (martha#255).
-    (value['refresh'] === undefined || value['refresh'] === null || isARefreshsPhase(value['refresh']))
+    (value[REFRESHES_PLACE] === undefined || value[REFRESHES_PLACE] === null || isARefreshsPhase(value[REFRESHES_PLACE]))
   )
 }
 

@@ -9,6 +9,8 @@
 // BEAT_INTERVAL_MS so a pane can tell a working member from a session that has died. The heartbeat runs here, in the
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
+import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -35,7 +37,7 @@ import { seeTheCrew, READER_BEAT_MS } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
-export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts', 'crew_park', WRITE_MY_HANDOVER_TOOL, 'crew_refresh'] as const
+export const CREW_TOOL_NAMES = ['report_progress', 'crew_log', 'what_was_sent', 'note_what_became_of_an_act', 'see_the_crew', 'crew_say', 'crew_receipts', 'crew_park', WRITE_MY_HANDOVER_TOOL, CREW_REFRESH] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
 /**
@@ -213,12 +215,12 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: WRITE_MY_HANDOVER_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: { content: { type: 'string', description: 'The whole handover: first rules, what runs, open items, pending decisions, gotchas, and one line per package you hold' } },
-      required: ['content'],
+      properties: { [WHOLE_FILE_CONTENT]: { type: 'string', description: 'The whole handover: first rules, what runs, open items, pending decisions, gotchas, and one line per package you hold' } },
+      required: [WHOLE_FILE_CONTENT],
     },
   },
   {
-    name: 'crew_refresh',
+    name: CREW_REFRESH,
     description: CREW_REFRESH_DESCRIPTION,
     inputSchema: {
       type: 'object',

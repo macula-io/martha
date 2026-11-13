@@ -13,13 +13,17 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
-import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import { THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, type CrewTools } from './a_crews_tools.ts'
@@ -67,11 +71,11 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
   const crew = join(home, 'crew')
-  const rows = rowStreamsDirectory(join(home, 'rows'))
+  const rows = rowStreamsDirectory(join(home, CREW_ROWS_PLACE))
   const clock = { at: 1_000 }
   mkdirSync(root, { recursive: true })
   mkdirSync(join(home, 'row'), { recursive: true })
-  mkdirSync(join(home, 'rows'), { recursive: true })
+  mkdirSync(join(home, CREW_ROWS_PLACE), { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
   const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents })
@@ -93,7 +97,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   /** The act of the next question, one turn later than the last write: a beat the row store takes as the newest. */
   const answerWith = async (session: string, percent: number, answer: string, at_start: boolean): Promise<string> => {
     clock.at += 60_000
-    const answered = await tools.answer('the_refresh_of_this_session', { percent, cost_usd: null, turn_id: `t-${clock.at}`, answer, at_start }, session)
+    const answered = await tools.answer(THE_REFRESH_ASK, { percent, cost_usd: null, turn_id: `t-${clock.at}`, answer, at_start }, session)
     assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
     return (JSON.parse(answered.answer) as { readonly act: string }).act
   }
@@ -115,11 +119,11 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
 
 /** The declaration as a test needs it to read: the after-a-task trigger on, or a member whose role is `supervisor`. */
 function switchOnInTheDeclaration(root: string, options: ACrewOptions): void {
-  const file = join(root, '.crew', 'crew.json')
+  const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; role: string }[]; mode: { roles: string[] }; house_rules?: Record<string, unknown> }
   if (options.supervisor === true) {
-    declared.members = [...declared.members, { name: 'supervisor', role: 'supervisor' }]
-    declared.mode.roles = [...declared.mode.roles, 'supervisor']
+    declared.members = [...declared.members, { name: SUPERVISOR, role: SUPERVISOR }]
+    declared.mode.roles = [...declared.mode.roles, SUPERVISOR]
   }
   if (options.refresh_between_tasks === true) declared.house_rules = { ...(declared.house_rules ?? {}), refresh_between_tasks: true }
   writeFileSync(file, `${JSON.stringify(declared, null, 2)}\n`)
@@ -155,10 +159,10 @@ test('#255: a session past the limit is answered with the handover prompt, and i
   const home = crew.replace(/\/crew$/, '')
   // The session's own start is where it began, and every threshold is measured from there: a session that opens at
   // 75% is never refreshed into the same 75% (#470), so the test opens it low and grows it past the limit.
-  const opened = await tools.answer('the_refresh_of_this_session', { percent: 10, cost_usd: 0.1, turn_id: '', answer: '', at_start: true }, 'a-session')
+  const opened = await tools.answer(THE_REFRESH_ASK, { percent: 10, cost_usd: 0.1, turn_id: '', answer: '', at_start: true }, 'a-session')
   assert.ok('answer' in opened, 'the flow refused the session’s first question')
   clock.at += 5_000
-  const answered = await tools.answer('the_refresh_of_this_session', { percent: HANDOVER_LIMIT_PERCENT + 5, cost_usd: 0.4, turn_id: 't-1', answer: '', at_start: false }, 'a-session')
+  const answered = await tools.answer(THE_REFRESH_ASK, { percent: HANDOVER_LIMIT_PERCENT + 5, cost_usd: 0.4, turn_id: 't-1', answer: '', at_start: false }, 'a-session')
   assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
   const act = JSON.parse(answered.answer) as { readonly act?: unknown }
   assert.equal(act.act, 'prompt', `the flow answered ${JSON.stringify(act)} rather than a prompt`)
@@ -171,16 +175,16 @@ test('#255: a session past the limit is answered with the handover prompt, and i
 test('#255: a member whose session began above the limit is not asked on its first report (#470)', async () => {
   const { tools } = await aCrewOfTools('builder')
   const question = { percent: HANDOVER_LIMIT_PERCENT + 5, cost_usd: null, turn_id: 't-1', answer: '', at_start: true }
-  const first = await tools.answer('the_refresh_of_this_session', question, 'a-session')
+  const first = await tools.answer(THE_REFRESH_ASK, question, 'a-session')
   assert.ok('answer' in first)
   assert.deepEqual(JSON.parse(first.answer), { act: 'none' })
 })
 
 test('#255: crew_refresh asks for a refresh, and the next question is answered with the handover prompt', async () => {
   const { tools } = await aCrewOfTools('builder')
-  const asked = await tools.answer('crew_refresh', { reason: 'the owner is moving me off a large context' }, 'a-session')
+  const asked = await tools.answer(CREW_REFRESH, { reason: 'the owner is moving me off a large context' }, 'a-session')
   assert.ok('answer' in asked, `crew_refresh refused the ask: ${'refused' in asked ? asked.refused : ''}`)
-  const answered = await tools.answer('the_refresh_of_this_session', { percent: 5, cost_usd: null, turn_id: 't-2', answer: '', at_start: false }, 'a-session')
+  const answered = await tools.answer(THE_REFRESH_ASK, { percent: 5, cost_usd: null, turn_id: 't-2', answer: '', at_start: false }, 'a-session')
   assert.ok('answer' in answered)
   const act = JSON.parse(answered.answer) as { readonly act?: unknown; readonly text?: unknown }
   assert.equal(act.act, 'prompt', 'a refresh someone asked for was not asked')
@@ -195,7 +199,7 @@ test('#255: the clear is told with the session it was told in, so its successor 
   assert.equal(await tools.thePredecessorOf('a-session'), null, 'the session the clear was told in was named its own successor')
   const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'a handover naming no package' }, 'a-session')
   assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
-  const moved = await tools.answer('the_refresh_of_this_session', { percent: 80, cost_usd: null, turn_id: 't-3', answer: CREW_HANDOVER_WRITTEN, at_start: false }, 'a-session')
+  const moved = await tools.answer(THE_REFRESH_ASK, { percent: 80, cost_usd: null, turn_id: 't-3', answer: CREW_HANDOVER_WRITTEN, at_start: false }, 'a-session')
   assert.ok('answer' in moved)
   assert.deepEqual(JSON.parse(moved.answer), { act: 'clear' })
   const after = theFlowOf(place, 'builder')
@@ -214,7 +218,7 @@ test('#255: a handover written before the flow asked is sent back, not cleared',
   assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'an old handover' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
   const flow = aFlowStarting({ trigger: 'after_a_task', reason: 'its task finished', at: clock.at + 1_000, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
   assert.equal(keepTheFlow(place, 'builder', flow), undefined)
-  const answered = await tools.answer('the_refresh_of_this_session', { percent: 80, cost_usd: null, turn_id: 't-4', answer: CREW_HANDOVER_WRITTEN, at_start: false }, 'a-session')
+  const answered = await tools.answer(THE_REFRESH_ASK, { percent: 80, cost_usd: null, turn_id: 't-4', answer: CREW_HANDOVER_WRITTEN, at_start: false }, 'a-session')
   assert.ok('answer' in answered)
   const act = JSON.parse(answered.answer) as { readonly act?: unknown }
   assert.equal(act.act, 'prompt', 'a stale handover cleared the session rather than being sent back')
@@ -276,12 +280,12 @@ test('#255: a successor taken past the limit hands over on the task its predeces
 
 test('#255: a refresh someone asked for that is declined is abandoned, and the Supervisor is told once (r=1 R3)', async () => {
   const crew = await aCrewOfTools('builder', { supervisor: true })
-  assert.ok('answer' in (await crew.tools.answer('crew_refresh', { reason: 'the owner is moving me off a large context' }, 'a-session')))
+  assert.ok('answer' in (await crew.tools.answer(CREW_REFRESH, { reason: 'the owner is moving me off a large context' }, 'a-session')))
   assert.equal(await crew.ask('a-session', 30), 'prompt', 'the ask someone made did not start a flow')
   assert.equal(await crew.ask('a-session', 30, `${CREW_REFRESH_DECLINED} a change in hand`), 'none')
   const said = await crew.saidInTheChannel()
   assert.equal(said.length, 1, `the Supervisor was not told once, it was told ${said.length} times`)
-  assert.deepEqual(said[0]?.message.to, ['supervisor'], 'the line did not go to the crew\'s supervisor')
+  assert.deepEqual(said[0]?.message.to, [SUPERVISOR], 'the line did not go to the crew\'s supervisor')
   assert.ok(said[0]?.message.text.includes('builder'), 'the line does not name the member')
   // A second turn in the same state sends nothing more: one line per flow, not one per ask.
   assert.equal(await crew.ask('a-session', 31), 'none')
@@ -295,7 +299,7 @@ test('#255: a decline at the limit is said once, and a later decline at the limi
   assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 1, `${CREW_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
   const said = await crew.saidInTheChannel()
   assert.equal(said.length, 1, `the Supervisor was not told once at the limit, it was told ${said.length} times`)
-  assert.deepEqual(said[0]?.message.to, ['supervisor'])
+  assert.deepEqual(said[0]?.message.to, [SUPERVISOR])
   assert.ok(said[0]?.message.text.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the line does not say the member is at its limit')
   // The member is asked again on the next finished task, as the design has it, and declines again: the Supervisor is
   // told once, not once per ask.
