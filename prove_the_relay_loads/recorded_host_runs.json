@@ -1,0 +1,28 @@
+[
+  {
+    "file": "src/launch_a_claude_code_member/launch_a_claude_code_member.node-test.ts",
+    "name_pattern": "a launch leaves the installed relay folder as it was",
+    "cases": 1,
+    "proves": "a launch leaves the installed relay folder as it was (martha#117)"
+  },
+  {
+    "file": "src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts",
+    "cases": 5,
+    "proves": "a member's own writes do not stop it and an outsider's change does (martha#132)"
+  },
+  {
+    "file": "src/refuse_a_member_writing_owner_memory/the_rules_the_host_matches.node-test.ts",
+    "cases": 1,
+    "proves": "the host matches every rule the launch writes, and names an inert twin of one (martha#226)"
+  },
+  {
+    "file": "src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts",
+    "cases": 2,
+    "proves": "a member switches its model in this host and a review off the reviewer model is refused (martha#315)"
+  },
+  {
+    "file": "src/launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts",
+    "cases": 1,
+    "proves": "a permission prompt reaches the owner's row and clears once the owner answers it (martha#363)"
+  }
+]

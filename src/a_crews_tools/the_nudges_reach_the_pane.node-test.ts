@@ -125,7 +125,7 @@ function aCrew(t: TestContext, changes: { readonly member?: string; readonly nud
   const at = (moment: number): void => started.advanceClock(moment - started.host.clock.now())
   /** Keeps a row, and fails loudly when the store would not: a row a test wrote but the crew never read proves nothing. */
   const beat = (held: DashboardRow): void => {
-    const kept = beats.keep(held)
+    const kept = beats.change(held.member, () => held)
     assert.ok(kept.kept, `the test's row for ${held.member} was not kept: ${kept.why ?? ''}`)
   }
   return { tools, beats, ledger, at, beat }

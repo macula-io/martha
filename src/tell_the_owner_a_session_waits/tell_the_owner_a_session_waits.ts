@@ -61,15 +61,15 @@ export type OwnerDialogEvent =
   | { readonly change: 'turn-started'; readonly at: number }
 
 /**
- * The row to write for one thing the host said: the dialogs it holds, changed, at the moment the host said it. The
- * member's own state and words are left exactly as they were, and so is every other field, so a dialog never costs a
- * member its report (martha#313).
+ * The row to write for one thing the host said: the dialogs it holds, changed. The member's own state and words are
+ * left exactly as they were, and so is every other field, so a dialog never costs a member its report (martha#313) —
+ * and never moves the row's `at`, which is the member's own beat: a dialog is the host's word, and a beat can never
+ * refuse one (martha#380).
  */
 export function takeAnOwnerDialog(row: DashboardRow, event: OwnerDialogEvent): DashboardRow {
   const kept = dialogsAfter(row[OWNER_DIALOGS_FIELD] ?? [], event)
-  const next: DashboardRow = { ...row, at: event.at }
-  if (kept.length > 0) return { ...next, [OWNER_DIALOGS_FIELD]: kept }
-  const { [OWNER_DIALOGS_FIELD]: _none, ...without } = next
+  if (kept.length > 0) return { ...row, [OWNER_DIALOGS_FIELD]: kept }
+  const { [OWNER_DIALOGS_FIELD]: _none, ...without } = row
   return without
 }
 

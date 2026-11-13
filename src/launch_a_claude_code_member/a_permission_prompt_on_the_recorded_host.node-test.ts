@@ -5,8 +5,9 @@
 // says "needs you", and once the owner has answered and the call has run, it reads what it read before.
 //
 // The real `martha` command, the real Claude Code at the recorded version, the real relay and launcher; only the model
-// is a stand-in (./drive_the_recorded_host.ts). The relay CI job installs the recorded host and names it in
-// MARTHA_RECORDED_HOST; without it this test is skipped, and prove_the_relay_loads.sh fails a run that skipped it.
+// is a stand-in (./drive_the_recorded_host.ts). It skips on RECORDED_HOST_SKIP: ci.yml's
+// relay job runs it with the recorded host, as prove_the_relay_loads/recorded_host_runs.json lists, and fails a run that
+// skipped it.
 //
 // The relay half (./the_hosts_dialogs_reach_the_owners_row.node-test.ts) feeds the launcher the order the host raises
 // its events in, and prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs measures that order on the host. What only
@@ -18,9 +19,9 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_FILE_WRITING_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -31,16 +32,12 @@ import {
   firstRunDone,
   marthaOnATerminal,
   plainTextOf,
-  RECORDED_HOST_VARIABLE,
   standInCallId,
   stateHomeUnder,
   type TheOwnersHands,
 } from './drive_the_recorded_host.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS, POLL_MS } from './wait_while_the_host_keeps_showing.ts'
-
-const recordedHost = process.env[RECORDED_HOST_VARIABLE]
-const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -83,7 +80,7 @@ function approvedProject(t: TestContext): Project {
   git(checkout, 'config', 'user.email', GIT_EMAIL)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
-  const place = { claude: recordedHost ?? '', home, checkout }
+  const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
   const declared = marthaOnATerminal(place, ['init'])
   assert.equal(declared.exit_code, 0, plainTextOf(declared.shown))
@@ -160,12 +157,12 @@ async function theOwnerAllows(hands: TheOwnersHands, callHasRun: () => boolean):
   await hands.until('the call the owner allowed running', callHasRun)
 }
 
-test('a permission prompt the recorded host draws for a launched member reaches the owner\'s row, and clears once answered', { skip }, async (t) => {
+test('a permission prompt the recorded host draws for a launched member reaches the owner\'s row, and clears once answered', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   let whileAsked: DashboardRow | undefined
   let afterTheAnswer: DashboardRow | undefined
   const ran = await driveTheRecordedHost({
-    claude: recordedHost ?? '',
+    claude: recordedHost(),
     ...project,
     member: MEMBER,
     owner_turn: OWNER_TURN,
