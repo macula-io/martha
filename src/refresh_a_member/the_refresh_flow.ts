@@ -9,7 +9,7 @@
 // owner watches the dashboard and should not have to ask whether a refresh is in flight.
 
 import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, DocumentStore, HandoverStampStore, Stores } from '../host_contract/host_contract.ts'
+import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
@@ -79,7 +79,7 @@ export interface TheSessionsQuestion {
 /** Everything this flow is decided over: the crew's store, the member's row, and the declaration. */
 export interface TheRefreshPlaces {
   readonly member: string
-  readonly stores: Pick<Stores, 'crew'>
+  readonly stores: TheCrewFilesStores
   readonly beats: DashboardStore
   readonly stamps?: HandoverStampStore
   readonly root: string
@@ -443,7 +443,7 @@ export function consumeTheAsk(place: CrewPlace, member: string, now: number): vo
  * Asks a member to refresh, as the owner or the Supervisor's tool does: the file the member's flow takes up. A member
  * may ask itself too — the crew's practice has the Supervisor tell a member to refresh, and the member call the tool.
  */
-export function askAMemberToRefresh(host: { readonly stores: Pick<Stores, 'crew'> }, member: string, reason: string, at: number): { readonly refusal: string } | undefined {
+export function askAMemberToRefresh(host: { readonly stores: TheCrewFilesStores }, member: string, reason: string, at: number): { readonly refusal: string } | undefined {
   const place = refreshesPlace(host)
   if ('refusal' in place) return place
   return place.keep(`${member}.asked.json`, `${JSON.stringify({ reason, asked_at: at, seen_at: 0 })}\n`)

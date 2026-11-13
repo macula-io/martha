@@ -10,12 +10,11 @@
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CREW_SAY_DESCRIPTION, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import type { DocumentStore, HandoverStampStore, Stores } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
@@ -68,7 +67,7 @@ export interface CrewToolPlaces {
   readonly root: string
   readonly documents: DocumentStore
   /** The crew's own store: the park marker this member keeps, and the handovers a wake reads (../park_and_wake_a_member). */
-  readonly stores: Pick<Stores, 'crew'>
+  readonly stores: TheCrewFilesStores
   /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
@@ -215,8 +214,8 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: WRITE_MY_HANDOVER_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: { [WHOLE_FILE_CONTENT]: { type: 'string', description: 'The whole handover: first rules, what runs, open items, pending decisions, gotchas, and one line per package you hold' } },
-      required: [WHOLE_FILE_CONTENT],
+      properties: { content: { type: 'string', description: 'The whole handover: first rules, what runs, open items, pending decisions, gotchas, and one line per package you hold' } },
+      required: ['content'],
     },
   },
   {

@@ -23,7 +23,7 @@
 import { join } from 'node:path'
 
 import { OWNER } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, HandoverStampStore, Refused, Stores } from '../host_contract/host_contract.ts'
+import type { CrewPlace, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 
 /** Where a crew keeps its park markers, under the one crew store (martha#254 part 1). */
 export const PARKED_PLACE = 'parked'
@@ -32,7 +32,7 @@ export const PARKED_PLACE = 'parked'
 export const theParkMarker = (member: string): string => `${member}.parked.json`
 
 /** What this slice asks of a host: the crew's own store, and nothing else. */
-export type ParkingHost = { readonly stores: Pick<Stores, 'crew'> }
+export type ParkingHost = { readonly stores: TheCrewFilesStores }
 
 /** A member's park, as the host wrote it: whether it is parked, why, and since when. An unpark is one of these too. */
 export interface ParkMarker {

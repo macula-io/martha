@@ -17,7 +17,7 @@ import { after, test } from 'node:test'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { CREW_HANDOVER_WRITTEN } from '../write_my_handover/write_my_handover.ts'
+import { CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import {
   aDeclineIsAllowed,
   theFlowSentBack,
@@ -29,7 +29,6 @@ import {
   isAStorm,
   keepTheFlow,
   REFRESH_MARGIN_PERCENT,
-  REFRESHES_PLACE,
   refreshesPlace,
   STORM_WINDOW_MS,
   theFlowAbandoned,
@@ -46,7 +45,7 @@ import {
 
 const home = mkdtempSync(join(tmpdir(), 'martha-refresh-'))
 after(() => removeTheTree(home))
-const crew = join(home, 'crew')
+const crew = join(home, 'the-crew-files')
 
 /** A reading of a session that has done nothing yet: a small context, no flow, no task finished. */
 const reading = (over: Partial<TheSessionsReading> = {}): TheSessionsReading => ({
@@ -163,7 +162,7 @@ test('#255: the send-back note names what was missing and the word to answer wit
 test('#255: the handover prompt names the limit and the tool, and asks for the word', () => {
   const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2 })
   assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
-  assert.ok(atTheLimit.includes('write_my_handover'), 'the prompt does not name the tool that writes the handover')
+  assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
   assert.ok(atTheLimit.includes(CREW_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
   assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30 }).includes('handover limit'), 'a task’s end reads as the limit')
 })
@@ -206,7 +205,6 @@ test('#255: a flow file that is not one is a refusal, never read as no flow', ()
 })
 
 test('#255: the flow place is one named place in the crew’s store', () => {
-  assert.equal(REFRESHES_PLACE, 'refresh')
   assert.equal(theRefreshFile('builder'), 'builder.refresh.json')
   // An ended flow keeps its reason, so the owner reads why rather than only that nothing is running.
   const ended = theFlowAbandoned(theFlowDeclined(aFlow(), 'a change in hand', 2_000), 'no answer to the handover ask', 3_000)

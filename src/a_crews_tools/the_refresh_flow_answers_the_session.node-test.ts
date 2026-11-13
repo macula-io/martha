@@ -70,7 +70,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   crewsSoFar += 1
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
-  const crew = join(home, 'crew')
+  const crew = join(home, 'the-crew-files')
   const rows = rowStreamsDirectory(join(home, CREW_ROWS_PLACE))
   const clock = { at: 1_000 }
   mkdirSync(root, { recursive: true })
@@ -155,8 +155,7 @@ test('#255: a handover that carries no text is refused rather than written, so n
 })
 
 test('#255: a session past the limit is answered with the handover prompt, and its row says where it began', async () => {
-  const { tools, crew, clock } = await aCrewOfTools('builder')
-  const home = crew.replace(/\/crew$/, '')
+  const { tools, home, clock } = await aCrewOfTools('builder')
   // The session's own start is where it began, and every threshold is measured from there: a session that opens at
   // 75% is never refreshed into the same 75% (#470), so the test opens it low and grows it past the limit.
   const opened = await tools.answer(THE_REFRESH_ASK, { percent: 10, cost_usd: 0.1, turn_id: '', answer: '', at_start: true }, 'a-session')

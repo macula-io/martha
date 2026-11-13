@@ -15,9 +15,8 @@
 import { join } from 'node:path'
 
 import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, HandoverStampStore, Refused, Stores } from '../host_contract/host_contract.ts'
+import type { CrewPlace, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
@@ -36,7 +35,7 @@ export const WRITE_MY_HANDOVER_TOOL = 'write_my_handover'
 export const HANDOVERS_PLACE = 'handovers'
 
 /** What this slice asks of a host: the crew's own store, and nothing else. */
-export type HandingOverHost = { readonly stores: Pick<Stores, 'crew'> }
+export type HandingOverHost = { readonly stores: TheCrewFilesStores }
 
 /**
  * The file a member's handover written on `at` has: the day it was written and the member, and nothing the member
@@ -104,7 +103,7 @@ export type TheHandoverToolAnswer = { readonly answer: string } | Refused
  * nothing.
  */
 export function theHandoverAToolWrote(places: TheHandoverToolPlaces, args: Readonly<Record<string, unknown>>): TheHandoverToolAnswer {
-  const content = typeof args[WHOLE_FILE_CONTENT] === 'string' ? args[WHOLE_FILE_CONTENT].trim() : ''
+  const content = typeof args['content'] === 'string' ? args['content'].trim() : ''
   if (content === '') return { refusal: 'a handover is text, and this call carried none' }
   const written = writeMyHandover(places.host, {
     member: places.member,

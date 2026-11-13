@@ -15,7 +15,7 @@
 // ../a_crews_tools's theLineToHandAtStart), and it does not decide who may run it — it is a verb of the `martha` command
 // beside `martha start`, and a member starts on the owner's terminal or not at all (martha#98).
 
-import type { HandoverStampStore, Refused, Stores } from '../host_contract/host_contract.ts'
+import type { HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import {
   clearTheParkOnAWake,
   parkedPlace,
@@ -29,7 +29,7 @@ import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 
 /** What this slice asks of a host: the crew's own store, and the stamps the host keeps its handovers' times in. */
 export interface WakeHost {
-  readonly stores: Pick<Stores, 'crew'>
+  readonly stores: TheCrewFilesStores
   readonly stamps: HandoverStampStore
 }
 

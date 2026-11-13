@@ -15,5 +15,34 @@
 // Keyed by value and file, so a file that drives git thirty times is one entry.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
+import { THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 
-export const EXCEPTIONS: readonly Exception[] = []
+/**
+ * Why the relay's mod names these three by literal (martha#255): the host installs
+ * the relay as a copy of its own folder, and a hooks module may import only its own
+ * files, so no constant of the core is reachable from inside it.
+ */
+const THE_RELAY_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module there imports only its own files and the name it asks is held by literal'
+
+/**
+ * Why the handover's one argument is named by literal (martha#255): it is the
+ * argument the host's Write call takes, and the constant holding it sits in the
+ * host glue, which a slice may not import (prove_the_core keeps that boundary).
+ * The word is too common to define again: defining it would make every `content`
+ * in the tree stale at once, and a member's tool call is not worth that.
+ */
+const THE_ARGUMENT_OF_A_WRITE = 'the host\'s own name for the argument that holds a whole file, which lives in the host glue a slice may not import'
+
+export const EXCEPTIONS: readonly Exception[] = [
+  // The one rule in src/check_no_literal_restates_a_value makes an entry name its
+  // value, so the value is written as the constant that holds it: a literal here
+  // would be the same copy the rule exists to catch, in the very file that excuses it.
+  { value: THE_REFRESH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: WRITE_MY_HANDOVER_TOOL, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of a tool this mod answers and registers; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: CREW_REFRESH, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of the other tool this mod answers and registers; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: WHOLE_FILE_CONTENT, file: 'a_crews_tools/a_crews_tools.ts', reason: `the one argument the handover tool takes; ${THE_ARGUMENT_OF_A_WRITE}` },
+  { value: WHOLE_FILE_CONTENT, file: 'write_my_handover/write_my_handover.ts', reason: `the one argument this tool reads; ${THE_ARGUMENT_OF_A_WRITE}` },
+]

@@ -23,7 +23,9 @@
 // over — falls back to the whole tree.
 //
 // The exceptions (`./exceptions.ts`) are read in both modes, and a list that no
-// longer matches the tree is an error, never a pass.
+// longer matches the tree is an error, never a pass. They belong to this checkout:
+// a tree brought here with `--root` is judged without them, because an entry names
+// a file here and says nothing about another tree.
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -47,6 +49,7 @@ import type { CoreSource } from '../host_contract/core_source.ts'
 import { EXCEPTIONS } from './exceptions.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { CORE } from './the_core_the_check_reads.ts'
+import { exceptionsThatApply } from './the_exceptions_that_apply.ts'
 import { addedLinesIn, underCore } from './the_lines_a_change_adds.ts'
 
 const ZERO = /^0+$/
@@ -141,14 +144,18 @@ function selfTest(): string[] {
 /** What this check is called, in every line it prints. */
 const NAME = 'check_no_literal_restates_a_value'
 
+/** The tree this check lives in: this file's directory, two levels below it. */
+const CHECKOUT = join(import.meta.dirname, '..', '..')
+
 const main = (): number => {
   const root = option('--root') ?? process.cwd()
   const sources = coreSources(join(root, CORE))
   if (process.argv.includes('--self-test')) return runSelfTest()
-  const stale = exceptionsNotHeld(sources, EXCEPTIONS)
+  const exceptions = exceptionsThatApply(root, CHECKOUT, EXCEPTIONS)
+  const stale = exceptionsNotHeld(sources, exceptions)
   if (stale.length > 0) return reportStale(stale)
-  if (process.argv.includes('--report')) return runReport(sources)
-  return runGate(root, sources)
+  if (process.argv.includes('--report')) return runReport(sources, exceptions)
+  return runGate(root, sources, exceptions)
 }
 
 function runSelfTest(): number {
@@ -165,17 +172,17 @@ function reportStale(stale: readonly Exception[]): number {
   return 2
 }
 
-function runReport(sources: readonly CoreSource[]): number {
-  const remaining = restatementsIn(sources, { judged: null, exceptions: EXCEPTIONS })
+function runReport(sources: readonly CoreSource[], exceptions: readonly Exception[]): number {
+  const remaining = restatementsIn(sources, { judged: null, exceptions })
   console.log(`${NAME}: ${remaining.length} site(s) remain in the tree. This is a report, not a gate: the cleanup is its own package, cut by slice.`)
   return 0
 }
 
-function runGate(root: string, sources: readonly CoreSource[]): number {
+function runGate(root: string, sources: readonly CoreSource[], exceptions: readonly Exception[]): number {
   const judged = rangeOf(root, option('--range'))
   if (judged === null) console.log(`${NAME}: no readable range, so the whole tree is judged`)
   const defined = judged === null ? [] : constantsTheChangeDefines(root, judged.merge_base, judged.head, judged.added)
-  const findings = restatementsIn(sources, { judged: judged === null ? null : judged.added, defined, exceptions: EXCEPTIONS })
+  const findings = restatementsIn(sources, { judged: judged === null ? null : judged.added, defined, exceptions })
   report(findings)
   if (judged !== null) console.log(`${NAME}: range ${judged.merge_base}..${judged.head} (asked ${judged.asked}), ${literalSitesJudged(sources, judged.added)} literal site(s) judged, ${defined.length} value(s) judged over the whole tree`)
   if (findings.length === 0) {
