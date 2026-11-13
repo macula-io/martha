@@ -1,7 +1,8 @@
 // The crew's one GitHub budget (martha#320, package B).
 //
 // What is pinned here: that the record asks GitHub what is left before it spends anything and spends nothing at all at
-// its floor; that what GitHub said is left comes down by every call the crew makes; that a call is followed by a wait
+// its floor; that the question is asked before every call, so a token another reader spent down to the floor stops this
+// crew too, and that the crew stops after as many calls as it was above its floor; that a call is followed by a wait
 // that doubles to five minutes and then stays there, and that the wait belongs to the thing read, so two packages
 // waiting are both read; that a crew whose store will not keep its count spends nothing; that a green found on a sha is
 // answered for the crew's next wait without a call; that a read GitHub does not answer keeps the head it last showed
@@ -71,17 +72,35 @@ const anAnswer = (stdout: string): ProcessOutcome => ({ exit_code: 0, stdout, st
 
 const aFailure = (stderr: string): ProcessOutcome => ({ exit_code: 1, stdout: '', stderr })
 
-/** A runner that answers from a list, in order, and keeps what it was asked. */
-const aRunner = (answers: readonly ProcessOutcome[]): { readonly asked: readonly string[][]; readonly run: (args: readonly string[]) => Promise<ProcessOutcome> } => {
+/** Whether `gh` was asked what the crew has left, which is the one read made before every other. */
+const asksWhatIsLeft = (args: readonly string[]): boolean => args[1] === 'rate_limit'
+
+/** What the tests' GitHub says is left, unless a test says otherwise: a window with plenty in it. */
+const PLENTY_LEFT = whatsLeft(THE_FLOOR * 10, MINUTE_MS * 60)
+
+/**
+ * A runner that answers what GitHub is asked what is left with `left`, and every other read from a list, in order, so a
+ * test says what each call of the crew's own reads and the question before it is not counted against that list.
+ */
+const aRunner = (
+  answers: readonly ProcessOutcome[],
+  left: ProcessOutcome = PLENTY_LEFT,
+): { readonly asked: readonly string[][]; readonly run: (args: readonly string[]) => Promise<ProcessOutcome> } => {
   const asked: string[][] = []
+  let read = 0
   return {
     asked,
     run: async (args) => {
       asked.push([...args])
-      return answers[asked.length - 1] ?? anAnswer('{}')
+      if (asksWhatIsLeft(args)) return left
+      read += 1
+      return answers[read - 1] ?? anAnswer('{}')
     },
   }
 }
+
+/** The reads of the list a runner was asked, apart from the question asked before each. */
+const theReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => asked.filter((args) => !asksWhatIsLeft(args))
 
 /** A spender over the place and the runner the test gives it. */
 const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run })
@@ -100,7 +119,7 @@ const theBudgetHeld = (place: CrewPlace): TheBudget => {
 test('#320 B: the budget asks GitHub what is left before it spends its first call', async () => {
   const place = aPlace()
   const clock = aClock(Date.now())
-  const runner = aRunner([whatsLeft(THE_FLOOR * 20, MINUTE_MS * 60), anAnswer('{"workflow_runs":[]}')])
+  const runner = aRunner([anAnswer('{"workflow_runs":[]}')], whatsLeft(THE_FLOOR * 20, MINUTE_MS * 60))
   const spent = await spendTheGithubBudget(aSpender(place, clock, runner.run), ['api', 'repos/macula-io/martha/actions/runs'])
   assert.ok(!('refusal' in spent), `the first call was refused: ${JSON.stringify(spent)}`)
   assert.deepEqual(runner.asked[0], ['api', 'rate_limit'], 'the budget did not ask GitHub what was left first')
@@ -124,7 +143,7 @@ test('#320 B: at its floor the budget spends nothing, and says where the floor i
 test('#320 B: a call is followed by a wait that doubles to five minutes and then stays there', async () => {
   const place = aPlace()
   const clock = aClock(Date.now())
-  const runner = aRunner([whatsLeft(THE_FLOOR * 20, MINUTE_MS * 60), anAnswer('{}'), anAnswer('{}'), anAnswer('{}')])
+  const runner = aRunner([anAnswer('{}'), anAnswer('{}'), anAnswer('{}')], whatsLeft(THE_FLOOR * 20, MINUTE_MS * 60))
   const spender = aSpender(place, clock, runner.run)
   await spendTheGithubBudget(spender, ['api', 'one'])
   const tooSoon = await spendTheGithubBudget(spender, ['api', 'two'])
@@ -205,20 +224,21 @@ test('#320 B: two packages waiting are both read, so no reader holds the crew', 
   const place = aPlace()
   const clock = aClock(Date.now())
   place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
-  let asked = 0
-  const run = async (): Promise<ProcessOutcome> => {
-    asked += 1
+  const asked: string[][] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    if (asksWhatIsLeft(args)) return PLENTY_LEFT
     return anAnswer(JSON.stringify([aPullRequest(143, 'a'.repeat(40)), aPullRequest(144, 'b'.repeat(40))]))
   }
   const spender = aSpender(place, clock, run)
   const first = await theHeadsOfTheWaits(spender, [A_PACKAGE, ANOTHER_PACKAGE])
   assert.ok(!('refusal' in first), `the heads could not be read: ${JSON.stringify(first)}`)
-  assert.equal(asked, 2, 'the second package was not read while the first one was being read')
+  assert.equal(theReadsOf(asked).length, 2, 'the second package was not read while the first one was being read')
   assert.equal(first[ANOTHER_PACKAGE]?.head, 'b'.repeat(40), 'the second package\'s head was not kept')
   // A redraw six minutes on reads both again: each package's wait is its own, and neither has grown past that.
   clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
   await theHeadsOfTheWaits(spender, [A_PACKAGE, ANOTHER_PACKAGE])
-  assert.equal(asked, 4, 'a package was skipped on the redraw after it was read')
+  assert.equal(theReadsOf(asked).length, 4, 'a package was skipped on the redraw after it was read')
 })
 
 test('#320 B: an old record\'s spacing has run out, and no read renews it', async () => {
@@ -226,16 +246,17 @@ test('#320 B: an old record\'s spacing has run out, and no read renews it', asyn
   const clock = aClock(Date.now())
   // A record written while the crew had one clock for everything: five minutes, from a call ten minutes ago.
   place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), last_call_at: clock.now() - BACKOFF_MAX_MS * 2, backoff_ms: BACKOFF_MAX_MS }))
-  let asked = 0
-  const run = async (): Promise<ProcessOutcome> => {
-    asked += 1
+  const asked: string[][] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    if (asksWhatIsLeft(args)) return PLENTY_LEFT
     return anAnswer(JSON.stringify([aPullRequest(143, 'a'.repeat(40)), aPullRequest(144, 'b'.repeat(40))]))
   }
   const spender = aSpender(place, clock, run)
   await theHeadsOfTheWaits(spender, [A_PACKAGE])
-  assert.equal(asked, 1, 'the first package of a record whose spacing has run out was not read')
+  assert.equal(theReadsOf(asked).length, 1, 'the first package of a record whose spacing has run out was not read')
   await theHeadsOfTheWaits(spender, [A_PACKAGE, ANOTHER_PACKAGE])
-  assert.equal(asked, 2, 'the crew\'s spacing was renewed by a read that names what it reads, holding a new reader out')
+  assert.equal(theReadsOf(asked).length, 2, 'the crew\'s spacing was renewed by a read that names what it reads, holding a new reader out')
 })
 
 test('#320 B: a thing\'s own wait is the one that holds it, and it holds nothing else', async () => {
@@ -245,14 +266,15 @@ test('#320 B: a thing\'s own wait is the one that holds it, and it holds nothing
     ...withRoom(clock.now()),
     waits: { [A_PACKAGE]: { last_at: clock.now(), wait_ms: BACKOFF_MAX_MS } },
   }))
-  let asked = 0
-  const run = async (): Promise<ProcessOutcome> => {
-    asked += 1
+  const asked: string[][] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    if (asksWhatIsLeft(args)) return PLENTY_LEFT
     return anAnswer(JSON.stringify([aPullRequest(143, 'a'.repeat(40)), aPullRequest(144, 'b'.repeat(40))]))
   }
   const heads = await theHeadsOfTheWaits(aSpender(place, clock, run), [A_PACKAGE, ANOTHER_PACKAGE])
   assert.ok(!('refusal' in heads), `the heads could not be read: ${JSON.stringify(heads)}`)
-  assert.equal(asked, 1, 'the package held by its own wait was read anyway')
+  assert.equal(theReadsOf(asked).length, 1, 'the package held by its own wait was read anyway')
   assert.equal(heads[ANOTHER_PACKAGE]?.head, 'b'.repeat(40), 'the second package was held out by the first package\'s wait')
   assert.equal(heads[A_PACKAGE], undefined, 'the package held by its own wait answered a head it never read')
 })
@@ -262,9 +284,9 @@ test('#320 B: a call comes down off what GitHub said is left, so the floor is re
   const clock = aClock(Date.now())
   const toSpend = 7
   place.keep(THE_BUDGET_FILE, theTextOf({ ...A_FRESH_BUDGET, remaining: THE_FLOOR + toSpend, resets_at: clock.now() + MINUTE_MS * 60 * 100 }))
-  let made = 0
-  const run = async (): Promise<ProcessOutcome> => {
-    made += 1
+  const asked: string[][] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
     return anAnswer('{}')
   }
   const spender = aSpender(place, clock, run)
@@ -272,8 +294,34 @@ test('#320 B: a call comes down off what GitHub said is left, so the floor is re
     await spendTheGithubBudget(spender, ['api', 'x'])
     clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
   }
-  assert.equal(made, toSpend, `the crew spent ${String(made)} calls from ${String(toSpend)} above its floor`)
-  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR, 'what GitHub said is left was never brought down by the calls spent')
+  // Every call the crew made comes down off the count — the question asked before each read included, since an answer
+  // this cannot read keeps the last flag rather than replacing it — so the crew stops after as many calls as it was
+  // above its floor.
+  assert.equal(asked.length, toSpend, `the crew spent ${String(asked.length)} calls from ${String(toSpend)} above its floor`)
+  assert.equal(theBudgetHeld(place).remaining, THE_FLOOR, 'the count the crew held was never brought down by the calls spent')
+})
+
+test('#320 B: another spender on the same token is seen before the next call, and the crew stops at its floor', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  let left = THE_FLOOR * 2
+  const asked: string[][] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    return asksWhatIsLeft(args) ? whatsLeft(left, MINUTE_MS * 60) : anAnswer('{}')
+  }
+  const spender = aSpender(place, clock, run)
+  const first = await spendTheGithubBudget(spender, ['api', 'one'])
+  assert.ok(!('refusal' in first), `the first call was refused: ${JSON.stringify(first)}`)
+  // Another reader of the same token — the range check, the owner's list, a member's own `gh` — spends it below the
+  // floor while the crew is between calls. The record still says plenty.
+  left = THE_FLOOR - 1
+  clock.wait(BACKOFF_MAX_MS + MINUTE_MS)
+  const second = await spendTheGithubBudget(spender, ['api', 'two'])
+  assert.ok('refusal' in second, 'a call was spent on a token another reader had already drained below the floor')
+  assert.match(second.refusal, /is at its floor/, 'the refusal did not name the floor')
+  assert.deepEqual(theReadsOf(asked), [['api', 'one']], 'the call refused at the floor reached GitHub anyway')
 })
 
 test('#320 B: a crew whose store will not keep its count spends nothing', async () => {

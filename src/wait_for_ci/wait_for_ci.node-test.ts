@@ -66,17 +66,32 @@ const aRun = (id: number, status: string, conclusion: string | null): Record<str
 /** What GitHub answers for a page of runs. */
 const theRuns = (...runs: readonly Record<string, unknown>[]): ProcessOutcome => ({ exit_code: 0, stdout: JSON.stringify({ workflow_runs: runs }), stderr: '' })
 
-/** A runner that answers from a list, in order, and keeps what it was asked. */
-const aRunner = (answers: readonly ProcessOutcome[]): { readonly asked: readonly string[][]; readonly run: (args: readonly string[]) => Promise<ProcessOutcome> } => {
+/** Whether `gh` was asked what the crew has left, which is the one read made before every other. */
+const asksWhatIsLeft = (args: readonly string[]): boolean => args[1] === 'rate_limit'
+
+/**
+ * A runner that answers what GitHub is asked what is left with `left`, and every other read from a list, in order, so a
+ * test says what each read of the crew's own came to and the question before it is not counted against that list.
+ */
+const aRunner = (
+  answers: readonly ProcessOutcome[],
+  left: ProcessOutcome = whatsLeft(THE_FLOOR * 10),
+): { readonly asked: readonly string[][]; readonly run: (args: readonly string[]) => Promise<ProcessOutcome> } => {
   const asked: string[][] = []
+  let read = 0
   return {
     asked,
     run: async (args) => {
       asked.push([...args])
-      return answers[asked.length - 1] ?? theRuns()
+      if (asksWhatIsLeft(args)) return left
+      read += 1
+      return answers[read - 1] ?? theRuns()
     },
   }
 }
+
+/** The reads of the runs a runner was asked, apart from the question asked before each. */
+const theReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => asked.filter((args) => !asksWhatIsLeft(args))
 
 /** A spender over the place and the runner the test gives it, with a window the test wrote or none. */
 const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run })
@@ -87,7 +102,7 @@ const withRoom = (now: number): typeof A_FRESH_BUDGET => ({ ...A_FRESH_BUDGET, r
 test('#320 B: the runs on a sha that all succeeded answer green, and the green is kept for the crew', async () => {
   const place = aPlace()
   const clock = aClock(Date.now())
-  const runner = aRunner([whatsLeft(THE_FLOOR * 10), theRuns(aRun(1, 'completed', 'success'), aRun(2, 'completed', 'success'))])
+  const runner = aRunner([theRuns(aRun(1, 'completed', 'success'), aRun(2, 'completed', 'success'))])
   const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, sha: A_SHA })
   assert.deepEqual(outcome, { kind: 'green', run_ids: [1, 2], reused: false }, 'the runs that all succeeded did not answer green')
   const held = theBudgetIn(place)
@@ -179,15 +194,16 @@ test('#320 B: two shas waiting are both read, so one member\'s wait does not hol
   const clock = aClock(Date.now())
   place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
   const another = 'f'.repeat(40)
-  const asked: string[] = []
+  const asked: string[][] = []
   const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
-    asked.push(args[args.length - 1] ?? '')
+    asked.push([...args])
+    if (asksWhatIsLeft(args)) return whatsLeft(THE_FLOOR * 10)
     return theRuns(aRun(1, 'completed', 'success'))
   }
   const spender = aSpender(place, clock, run)
   await waitForCi(spender, { repo: A_REPO, sha: A_SHA })
   await waitForCi(spender, { repo: A_REPO, sha: another })
-  assert.equal(asked.length, 2, 'the second sha was held out by the wait the first one began')
+  assert.equal(theReadsOf(asked).length, 2, 'the second sha was held out by the wait the first one began')
 })
 
 test('#320 B: a sha is read while a package\'s head is backing off', async () => {
@@ -199,13 +215,14 @@ test('#320 B: a sha is read while a package\'s head is backing off', async () =>
   const listed = JSON.stringify([{ number: 1, headRefOid: head, state: 'OPEN', title: 'feat(#143): a thing', body: '' }])
   const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
     asked.push([...args])
+    if (asksWhatIsLeft(args)) return whatsLeft(THE_FLOOR * 10)
     return args[0] === 'pr' ? { exit_code: 0, stdout: listed, stderr: '' } : theRuns(aRun(1, 'completed', 'success'))
   }
   const spender = aSpender(place, clock, run)
   await theHeadsOfTheWaits(spender, ['macula-io/martha#143'])
   const outcome = await waitForCi(spender, { repo: A_REPO, sha: A_SHA })
   assert.equal(outcome.kind, 'green', 'the wait on this sha was held by the wait on a package\'s head')
-  assert.ok(asked.some((args) => args[0] === 'api'), 'no read of the runs was made while a head was backing off')
+  assert.ok(asked.some((args) => args[1]?.includes('actions/runs') === true), 'no read of the runs was made while a head was backing off')
 })
 
 test('#320 B: a run that was cancelled or timed out answers red, never green', async () => {
