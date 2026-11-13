@@ -140,11 +140,12 @@ function textIn(files: Pick<FileTree, 'kindOf' | 'bytesOf'>): ReadAText {
 /**
  * The crew's own text files for a project, or none when there is no crew declared there. A declaration that is there
  * and is refused is not answered as none: its refusal names the file and the field, and the owner is told that rather
- * than being shown an approval that quietly holds no crew text (martha#306, r=2).
+ * than being shown an approval that quietly holds no crew text (martha#306, r=2). It is read with the models the host
+ * offers, as a member's own start reads it, so an approval and a start can never disagree about the declaration.
  */
-export async function crewTextFilesToApprove(documents: DocumentStore, root: string): Promise<readonly string[]> {
+export async function crewTextFilesToApprove(documents: DocumentStore, root: string, models: readonly string[]): Promise<readonly string[]> {
   try {
-    return crewTextFilesOf(await declareCrew(documents, root))
+    return crewTextFilesOf(await declareCrew(documents, root, models))
   } catch (error) {
     if (error instanceof DeclarationRefused && error.field === null && error.message.endsWith('is missing')) return []
     throw error

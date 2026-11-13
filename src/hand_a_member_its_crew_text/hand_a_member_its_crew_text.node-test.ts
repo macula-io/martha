@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import { DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import {
@@ -254,12 +255,12 @@ test('#306: a shipped text that is a directory is refused, naming it, rather tha
 
 test('#306: a project with no declaration approves no crew text, and a declaration that is refused is told to the owner', async () => {
   const nothing = { read: async (): Promise<string> => { throw Object.assign(new Error('no such file'), { code: 'ENOENT' }) } }
-  assert.deepEqual(await crewTextFilesToApprove(nothing, ROOT), [], 'a project with no crew declared was asked for crew texts')
+  assert.deepEqual(await crewTextFilesToApprove(nothing, ROOT, CLAUDE_CODE_MODELS), [], 'a project with no crew declared was asked for crew texts')
 
   const declaration = join(ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const refused = { read: async (): Promise<string> => JSON.stringify({ version: 1, owner: 'Raf' }) }
   await assert.rejects(
-    crewTextFilesToApprove(refused, ROOT),
+    crewTextFilesToApprove(refused, ROOT, CLAUDE_CODE_MODELS),
     (error: unknown) => error instanceof DeclarationRefused && error.message.startsWith(`${declaration}: `),
     'a declaration that is there and is refused was approved as a project with no crew text',
   )

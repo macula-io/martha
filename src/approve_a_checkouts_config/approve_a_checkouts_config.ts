@@ -25,6 +25,7 @@
 // symlink, config outside any checkout): that refusal is shown instead.
 
 import { crewTextFilesToApprove } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -85,7 +86,7 @@ const lineOf = (entry: ConfigEntry): string =>
  */
 async function crewTextFilesHere(request: ApproveRequest): Promise<{ readonly crew_text_files?: readonly string[] }> {
   if (request.documents === undefined) return {}
-  const files = await crewTextFilesToApprove(request.documents, request.root)
+  const files = await crewTextFilesToApprove(request.documents, request.root, CLAUDE_CODE_MODELS)
   return files.length === 0 ? {} : { crew_text_files: files }
 }
 

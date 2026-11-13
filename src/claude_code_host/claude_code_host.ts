@@ -51,6 +51,7 @@
 // package (#25's import rule). The mod that loads Martha passes its `$`.
 
 import { readFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 
 import { bindNothing, type Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -67,6 +68,7 @@ import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_m
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { HOSTS, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import type { ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
 
 /** The engine calls the adapter makes, as Claude Code's `$` offers them. */
@@ -232,4 +234,34 @@ export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
 /** Whether a called tool is an MCP server's: its result is that server's text (B2). */
 export function isMcpToolCall(called: string): boolean {
   return called.startsWith(MCP_NAME_PREFIX)
+}
+
+/** The models the recorded host accepts in a subagent's `model` field, as that host's own declaration lists them. */
+export interface RecordedModels {
+  readonly host_version: string
+  readonly aliases: readonly string[]
+}
+
+/** The recording this repository carries (martha#315): the alias vocabulary of the host in recorded_claude_code_host.json. */
+export const RECORDED_MODELS: RecordedModels = JSON.parse(
+  readFileSync(new URL('./recorded_claude_code_models.json', import.meta.url), 'utf8'),
+) as RecordedModels
+
+/**
+ * The model names this host runs, as its own declaration spells them (martha#315). A crew's `house_rules.review_model`
+ * must be one of these: the host publishes no alias-to-id mapping, so a name outside this list is one Martha could not
+ * spell to the host at all. A host that adds a model changes this list by a re-recording, never by an edit here.
+ */
+export const CLAUDE_CODE_MODELS: readonly string[] = RECORDED_MODELS.aliases
+
+/**
+ * The tool that spawns a subagent in this host, and the fields of its call that say what the agent is and which model
+ * runs it (martha#315). Read from the same declaration the models are: `AgentInput` in the host's sdk-tools.d.ts names
+ * `subagent_type`, `description` and `model`; `Task` is the name older hosts give the same tool.
+ */
+export const CLAUDE_CODE_SUBAGENT_SPAWN: ASpawnedAgent = {
+  tools: ['Agent', 'Task'],
+  type_field: 'subagent_type',
+  description_field: 'description',
+  model_field: 'model',
 }
