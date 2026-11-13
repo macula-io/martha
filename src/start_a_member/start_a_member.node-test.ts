@@ -827,7 +827,8 @@ test('#306 r=4: a crew directory that is a link refuses the start, naming the li
 test('#312: a member Martha started is stopped by its own launcher when the owner asks, not by the verb', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
   await declared(place)
-  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  // The crew's own texts are approved with the config (martha#306), so this approval covers them as every other here does.
+  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const fake = fakeClaude(place)
   const lines: string[] = []
   const request = requestFor(place, fake.command, BUILDER!.name, lines)
