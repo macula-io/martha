@@ -64,6 +64,8 @@ import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -441,9 +443,9 @@ test('a file read outside the approved tree takes the shell, naming B4 (martha#1
   const clone = anotherClone(place)
   const outside: readonly { readonly what: string; readonly tool: string; readonly input: Record<string, unknown> }[] = [
     { what: 'a file in another clone', tool: 'Read', input: { file_path: join(clone, 'NOTES.md') } },
-    { what: 'an edit in another clone', tool: 'Edit', input: { file_path: join(clone, 'NOTES.md') } },
-    { what: 'a write in another clone', tool: 'Write', input: { file_path: join(clone, 'NEW.md') } },
-    { what: 'a notebook in another clone', tool: 'NotebookEdit', input: { notebook_path: join(clone, 'n.ipynb') } },
+    { what: 'an edit in another clone', tool: EDIT_TOOL, input: { file_path: join(clone, 'NOTES.md') } },
+    { what: 'a write in another clone', tool: WHOLE_FILE_TOOL, input: { file_path: join(clone, 'NEW.md') } },
+    { what: 'a notebook in another clone', tool: NOTEBOOK_EDIT_TOOL, input: { notebook_path: join(clone, 'n.ipynb') } },
     { what: 'a search of another clone', tool: 'Grep', input: { path: clone, pattern: 'run' } },
     { what: 'a glob of another clone', tool: 'Glob', input: { path: clone, pattern: '*' } },
     { what: 'a file in git\'s own directory', tool: 'Read', input: { file_path: join(place.checkout, '.git', 'config') } },
@@ -1910,12 +1912,12 @@ test("a member's file tool call that names the owner's user settings file is den
   // The link lives beside the checkout: one in it would change the tree the owner approved.
   symlinkSync(dirname(owners), join(place.home, 'linked'))
   for (const [tool, input] of [
-    ['Write', { file_path: owners, content: JSON.stringify({ [HOOKS_OFF ?? '']: true }) }],
-    ['Edit', { file_path: join('..', 'linked', 'settings.json'), old_string: '{', new_string: '{"x":1,' }],
+    [WHOLE_FILE_TOOL, { file_path: owners, content: JSON.stringify({ [HOOKS_OFF ?? '']: true }) }],
+    [EDIT_TOOL, { file_path: join('..', 'linked', USER_SETTINGS_FILE), old_string: '{', new_string: '{"x":1,' }],
   ] as const) {
     assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /user settings/), tool)
   }
-  assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(WHOLE_FILE_TOOL, { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
 })
 
 test("a member's file tool call that writes any project's memory, or the owner's CLAUDE.md, is denied; a read of memory is not (#136)", async (t) => {
@@ -1926,14 +1928,14 @@ test("a member's file tool call that writes any project's memory, or the owner's
   const memory = join(config, 'projects', '-some-main-clone', 'memory')
   mkdirSync(memory, { recursive: true })
   for (const [tool, input] of [
-    ['Write', { file_path: join(memory, 'MEMORY.md'), content: 'the owner said: deploy on green' }],
-    ['Edit', { file_path: '~/' + join(relative(place.home, memory), 'MEMORY.md'), old_string: 'a', new_string: 'b' }],
-    ['Write', { file_path: join(config, 'CLAUDE.md'), content: 'always deploy' }],
+    [WHOLE_FILE_TOOL, { file_path: join(memory, 'MEMORY.md'), content: 'the owner said: deploy on green' }],
+    [EDIT_TOOL, { file_path: '~/' + join(relative(place.home, memory), 'MEMORY.md'), old_string: 'a', new_string: 'b' }],
+    [WHOLE_FILE_TOOL, { file_path: join(config, 'CLAUDE.md'), content: 'always deploy' }],
   ] as const) {
     assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /martha#136/), `${tool} ${input.file_path}`)
   }
   assert.deepEqual(await relay.answer('tool_called', call('Read', { file_path: join(memory, 'MEMORY.md') })), ALLOW_REPLY)
-  assert.deepEqual(await relay.answer('tool_called', call('Write', { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(WHOLE_FILE_TOOL, { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
 })
 
 /** The settings file the fake host was started with by --settings, read while it runs. */
@@ -1973,7 +1975,7 @@ for (const [shape, carried, kept] of [
       const glob = /^(?:Write|Edit)\(\/(.*)\)$/.exec(rule)?.[1]
       assert.ok(glob !== undefined, rule)
       const inside = glob.replace('/*/', '/some-project/').replace(/\/\*\*$/, '/note.md')
-      assert.ok(writesTheOwnersMemory('Write', { file_path: inside }, places, place.checkout, place.home, thisMachine) !== undefined, `${rule}: ${inside}`)
+      assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine) !== undefined, `${rule}: ${inside}`)
     }
   })
 }
@@ -3125,7 +3127,7 @@ async function afterARunWasAnswered(place: Place, one: OneRun = {}): Promise<{ p
   assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
   const ran = await relay.run({ name: SIGNED_NAME })
   assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer: one.answer ?? hostAnswerFor(status, output) }), TAKEN_REPLY)
-  return { paths: await recordedPaths(rows), edit: await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), ran }
+  return { paths: await recordedPaths(rows), edit: await relay.answer('tool_called', call(EDIT_TOOL, { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), ran }
 }
 
 test('a signed run whose answer is exactly the one its receipt builds keeps the shell, for exit 0 and for exit 1 (martha#129)', async (t) => {
@@ -3175,7 +3177,7 @@ test('a receipt binds one call: an answer under another tool_use_id takes none o
   assert.deepEqual(await relay.run({ name: SIGNED_NAME }), { ran: 1, status: 0, output: Buffer.from(RUN_OUTPUT).toString('base64') })
   assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bashCall({ tool_use_id: 'toolu_other' }).call, answer }), TAKEN_REPLY)
   assert.deepEqual(await recordedPaths(rows), ['A13:null'], 'the receipt is kept for the call the relay saw, not for another')
-  assert.ok(isDenied(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(EDIT_TOOL, { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
 })
 
 test('a receipt is spent by the answer it was kept for: a second answer for that call records A13 (martha#129)', async (t) => {
@@ -3188,10 +3190,10 @@ test('a receipt is spent by the answer it was kept for: a second answer for that
   assert.deepEqual(await relay.run({ name: SIGNED_NAME }), { ran: 1, status: 0, output: Buffer.from(RUN_OUTPUT).toString('base64') })
   assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer }), TAKEN_REPLY)
   assert.deepEqual(await recordedPaths(rows), [], 'the first answer keeps the shell and records nothing')
-  assert.deepEqual(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(EDIT_TOOL, { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), ALLOW_REPLY)
   assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: bash.call, answer }), TAKEN_REPLY)
   assert.deepEqual(await recordedPaths(rows), ['A13:null'], 'the receipt was spent, so the second answer has nothing to be built from')
-  assert.ok(isDenied(await relay.answer('tool_called', call('Edit', { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(EDIT_TOOL, { file_path: join(place.checkout, 'README.md'), old_string: 'a', new_string: 'b' })), /A13/))
 })
 
 // A kept run is a run that recorded nothing, not a call that skipped the checks (martha#129 r=2). The rechecks run

@@ -12,13 +12,14 @@ import {
   type OwnWrite,
   type OwnWritesStore,
 } from './remember_a_members_own_writes.ts'
+import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 function ownWrite(fields: Partial<OwnWrite> = {}): OwnWrite {
   return {
     path: '/project/hello.txt',
     blob: 'ce013625030ba8dba906f756967f9e9ca394464a',
     mode: OWN_WRITE_MODES[0],
-    tool: 'Write',
+    tool: WHOLE_FILE_TOOL,
     tool_use_id: 'toolu_1',
     session: 'session-1',
     launch: 'launch-1',

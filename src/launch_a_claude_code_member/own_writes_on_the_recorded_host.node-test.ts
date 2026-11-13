@@ -24,6 +24,8 @@ import {
 } from './drive_the_recorded_host.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const recordedHost = process.env[RECORDED_HOST_VARIABLE]
 const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
@@ -37,7 +39,7 @@ const OUTSIDER_BRANCH = 'outsider'
  * auto mode, which asks the model to judge each shell command first; the stand-in plays the member, not that judge,
  * so the mode is pinned to the one where the allow list alone decides.
  */
-const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: ['Write', 'Edit', 'Bash'] } })
+const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, EDIT_TOOL, CLAUDE_CODE_SHELL_TOOL] } })
 
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
@@ -110,7 +112,7 @@ test("a member's own Write, then one shell command that branches and commits it,
   const project = approvedProject(t)
   const ran = await run(project, 3, ({ number }) =>
     [
-      { tool: 'Write', input: { file_path: join(project.checkout, 'hello.txt'), content: 'hello\n' } },
+      { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, 'hello.txt'), content: 'hello\n' } },
       { tool: 'Bash', input: { command: 'git checkout -q -b first-task && git add hello.txt && git commit -q -m "the hello note"' } },
     ][number - 1] ?? END,
   )
@@ -144,7 +146,7 @@ test('an outsider writing beside the member is refused before its next call, and
 test("a member's own Write over a file whose lines end in CRLF does not stop it", { skip }, async (t) => {
   const project = approvedProject(t)
   const ran = await run(project, 2, ({ number }) =>
-    number === 1 ? { tool: 'Write', input: { file_path: join(project.checkout, CRLF_FILE), content: 'one\r\ntwo\r\nthree\r\n' } } : END,
+    number === 1 ? { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, CRLF_FILE), content: 'one\r\ntwo\r\nthree\r\n' } } : END,
   )
   assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
   assert.equal(readFileSync(join(project.checkout, CRLF_FILE), 'utf8'), 'one\r\ntwo\r\nthree\r\n')
@@ -153,7 +155,7 @@ test("a member's own Write over a file whose lines end in CRLF does not stop it"
 test("a member's own CRLF Write where git normalises line ends as it adds (text=auto) does not stop it", { skip }, async (t) => {
   const project = approvedProject(t, { '.gitattributes': '* text=auto\n' })
   const ran = await run(project, 2, ({ number }) =>
-    number === 1 ? { tool: 'Write', input: { file_path: join(project.checkout, 'notes.txt'), content: 'one\r\ntwo\r\n' } } : END,
+    number === 1 ? { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, 'notes.txt'), content: 'one\r\ntwo\r\n' } } : END,
   )
   assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
   assert.equal(readFileSync(join(project.checkout, 'notes.txt'), 'utf8'), 'one\r\ntwo\r\n')

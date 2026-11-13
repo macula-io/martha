@@ -18,7 +18,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -36,7 +36,7 @@ const THE_PACKAGE = 'macula-io/martha#315'
 /** The model the member is launched on, and the crew's reviewer model: two the host runs, so a switch is allowed. */
 const LAUNCHED_ON = 'sonnet'
 const THE_REVIEWER_MODEL = 'opus'
-const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, 'Edit', CLAUDE_CODE_SHELL_TOOL] } })
+const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, EDIT_TOOL, CLAUDE_CODE_SHELL_TOOL] } })
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
 
