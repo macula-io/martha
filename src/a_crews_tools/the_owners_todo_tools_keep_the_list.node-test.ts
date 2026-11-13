@@ -82,7 +82,7 @@ function toolsOf(place: APlace, member: string, run?: (request: ProcessRequest) 
     root: place.root,
     documents: place.documents,
     stores: { crew: crewFilesDirectory(join(place.rows, '..', 'crew-store')) },
-    ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null } }),
+    ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null, signalGroup: () => ({ signalled: false, refusal: 'the to-do tools signal no process' }) } }),
   })
 }
 
