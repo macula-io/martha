@@ -48,10 +48,11 @@
 // the host it reads through.
 
 import { createHash } from 'node:crypto'
-import { dirname, join, relative, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+
 
 export type { LaunchHost }
 
@@ -290,7 +291,7 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
   if (unpinned !== undefined) {
     return {
       allow: false,
-      refusal: `${REFUSED}: ${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file.`,
+      refusal: `${REFUSED}: ${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`,
     }
   }
 
@@ -372,6 +373,13 @@ export interface LaunchPlace {
    * own HEAD tree is used: the attributes an approval is first read against, before there is an approval.
    */
   readonly approved_tree?: string
+  /**
+   * The crew's own text files, as absolute paths (martha#306): the role and mode texts it writes for itself, and the
+   * conventions file its declaration names. They are read as entries of their own, so the approval names and
+   * fingerprints them whether git ignores them or not, and the text a member is handed is the text the owner
+   * approved. Omitted, the launch reads no crew text and this slice is as it was before it.
+   */
+  readonly crew_text_files?: readonly string[]
 }
 
 /**
@@ -396,13 +404,77 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
 /** The config and the work tree, as the gate reads them. */
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
+  const crewText = readCrewText(place, machine)
+  // One refusal, whichever half of the state refuses first: the checkout's tree, or a crew text that is a directory.
+  const refusal = read.kind === 'refused' ? read.refusal : crewTextDirectoryIn(crewText)
   return {
-    entries: readLaunchConfig(place, machine),
+    entries: [...readLaunchConfig(place, machine), ...crewText],
     tree: read.kind === 'tree' ? read.tree : null,
-    ...(read.kind === 'refused' ? { refusal: read.refusal } : {}),
+    ...(refusal === undefined ? {} : { refusal }),
     ...(read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}),
     ...(read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}),
   }
+}
+
+/**
+ * The crew text path that is a directory, or undefined when every one of them is a file or absent: a directory here
+ * cannot be approved as a text, and reading it as absent would quietly hand the shipped text instead (martha#306).
+ */
+function crewTextDirectoryIn(crewText: readonly ConfigEntry[]): string | undefined {
+  const found = crewText.find((entry) => entry.kind === 'directory')
+  return found === undefined ? undefined : `${REFUSED}: ${found.path} is a directory, and a crew text is one file. Write the text there, or remove the directory.`
+}
+
+/**
+ * The crew's own text files as entries, read from the checkout the same way a host config is (martha#306): whether
+ * git ignores one or not, the approval names it and its bytes are in the fingerprint. A path is written relative to
+ * the directory the host starts in, as `/`, so an approval names a file the owner can find. A link anywhere between
+ * that start and the text — the text itself, or any directory above it — is the entry, so the decision refuses it by
+ * name rather than following it to a file under a name the crew never wrote (martha#306 r=4).
+ */
+export function readCrewText(place: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
+  const start = realOrResolved(machine, place.launch_dir)
+  return (place.crew_text_files ?? []).map((file) => {
+    const at = join(start, crewTextAt(place, file))
+    return linkOnTheWayTo(machine, start, at) ?? entryOf(machine, start, at)
+  })
+}
+
+/**
+ * Where a crew text stands for the approval, the launch and the compose (martha#306 r=4): its path below the project
+ * root, spelled as the crew names it, with nothing below the root resolved. This is the one rule for a crew text's
+ * name: the approval's entry, the bytes the launch carries (keyed by that entry) and the compose that looks them up
+ * all spell the text this way, so no two of them can come to name the same file differently — whether the crew wrote a
+ * plain file, a link at the file, or a directory of theirs reached through a link.
+ */
+function crewTextAt(place: LaunchPlace, file: string): string {
+  return pathFrom(resolve(place.launch_dir), resolve(file))
+}
+
+/**
+ * The first link on the way from the launch's start down to `at`, the text itself included, or undefined: a crew text
+ * is what stands where the crew put it, and a link is refused by name (martha#306 r=4). Two rounds tried approving
+ * what a link pointed at, and each time the launch and the compose then spelled the file differently — resolving the
+ * file, then the directories above it — and the member was quietly handed Martha's shipped text instead.
+ */
+function linkOnTheWayTo(machine: LaunchHost, start: string, at: string): ConfigEntry | undefined {
+  let walked = start
+  for (const part of pathFrom(start, at).split('/')) {
+    walked = join(walked, part)
+    const entry = entryOf(machine, start, walked)
+    if (entry.kind === 'symlink') return entry
+  }
+  return undefined
+}
+
+/**
+ * The crew's own text files as `readCrewText` names them: the entries whose bytes a launch carries into its snapshot
+ * and hands to every session it starts, rather than passing them over as config it does not load (martha#306). It reads
+ * its paths through `crewTextAt`, the same way `readCrewText` does, so the two can never come to name a file
+ * differently.
+ */
+function crewTextPathsOf(place: LaunchPlace): ReadonlySet<string> {
+  return new Set((place.crew_text_files ?? []).map((file) => crewTextAt(place, file)))
 }
 
 export type PreparedLaunch =
@@ -456,7 +528,8 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
   const snapshot_dir = snapshot.path
 
   const carrying: Carrying = { carried: [launch.project_config_off], carried_files: {}, not_carried: [] }
-  const changed = carryApproved(state.entries, { launch, start, snapshot, machine }, carrying)
+  const crewText = crewTextPathsOf(place)
+  const changed = carryApproved(state.entries, { launch, start, snapshot, machine, crewText }, carrying)
   if (changed !== undefined) {
     snapshot.remove()
     return { allow: false, refusal: `${REFUSED}: ${changed} changed while it was being approved. Start again.` }
@@ -495,25 +568,34 @@ interface CopyPlace {
   readonly start: string
   readonly snapshot: ReturnType<LaunchHost['stores']['scratch']['make']>
   readonly machine: LaunchHost
+  /** The crew's own text files, as the entries name them: carried for their bytes, with no switch of their own. */
+  readonly crewText: ReadonlySet<string>
 }
 
 /**
  * Copy each carried entry into the snapshot, in order, and note the rest. Stops
  * at the first file whose bytes no longer hash as approved and returns its path.
+ *
+ * The crew's own text files are carried the same way (martha#306): they start no
+ * code, so they carry no switch, but they are handed to every session this
+ * launch starts, so their bytes have to be the bytes the approval read and
+ * hashed, and they are never reported to the owner as "not loaded".
  */
 function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carrying: Carrying): string | undefined {
-  const { launch, start, snapshot, machine } = place
+  const { launch, start, snapshot, machine, crewText } = place
   for (const entry of entries) {
     if (entry.kind === 'absent') continue
-    const carry = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
-    if (carry === undefined || entry.kind !== 'file') {
+    const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
+    const ownText = crewText.has(entry.path)
+    if (entry.kind !== 'file' || (switchesFor === undefined && !ownText)) {
       noteNotCarried(carrying.not_carried, entry.path)
       continue
     }
 
     const content = machine.stores.files.bytesOf(join(start, entry.path))
     if (createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
-    carrying.carried.push(carry(snapshot.write(entry.path, content)))
+    const copied = snapshot.write(entry.path, content)
+    if (switchesFor !== undefined) carrying.carried.push(switchesFor(copied))
     carrying.carried_files[entry.path] = content
   }
   return undefined
