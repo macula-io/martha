@@ -35,7 +35,7 @@ import {
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
-import { parkAMember, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -54,6 +54,7 @@ import {
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
+import { WHO_IS_FREE, WHO_IS_FREE_DESCRIPTION, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The name a member parks with (martha#343): one act, and it says which by being this tool. */
@@ -76,6 +77,7 @@ export const CREW_TOOL_NAMES = [
   'what_was_sent',
   'note_what_became_of_an_act',
   'see_the_crew',
+  WHO_IS_FREE,
   SAY_TO_THE_CREW,
   READ_THE_RECEIPTS,
   PARK_A_MEMBER,
@@ -263,6 +265,14 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     name: 'see_the_crew',
     description: "Every member's row of this crew, in the declaration's order, with what has gone quiet marked.",
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: WHO_IS_FREE,
+    description: WHO_IS_FREE_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { member: { type: 'string', description: 'The member to ask about: may it take a package now? Leave it out for every member\'s row' } },
+    },
   },
   {
     name: SAY_TO_THE_CREW,
@@ -490,6 +500,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   return {
     report_progress: (args) => reportProgress(places, state, args),
     see_the_crew: () => seeTheCrewOf(places),
+    [WHO_IS_FREE]: (args) => whoIsFreeOf(places, args),
     [READ_THE_RECEIPTS]: async () => {
       const declared = await crewOrRefusal(places)
       if ('refused' in declared) return declared
@@ -646,6 +657,7 @@ async function reportProgress(places: CrewToolPlaces, state: SessionState, args:
     progress: report.taken.progress,
     waits: report.taken.waits,
     holds: report.taken.holds,
+    reported_at: report.taken.reported_at,
   })
   return { answer: report.told }
 }
@@ -692,6 +704,25 @@ async function seeTheCrewOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   // What it draws is answered as words (martha#255): its header, one line per member, and how many rows it asks for,
   // so the mod parses no row and formats nothing.
   return { answer: JSON.stringify(thePaneAnsweredBy(seen, declared.settings.house_rules.dashboard, READER_BEAT_MS)) }
+}
+
+/**
+ * `who_is_free` (martha#319): the crew's rows and its park markers, handed to the slice that decides. The launch's own
+ * member is the asker, never a name read out of the call, and only a role the declaration lets `assign_work` may ask.
+ */
+async function whoIsFreeOf(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  const parked = parkedPlace(places)
+  const seen = seeTheCrew(declared.settings, beatsOf(places.beats, declared.settings), places.ledger.clock.now())
+  return whoIsFreeOver({
+    settings: declared.settings,
+    asker: places.member,
+    rows: seen.rows,
+    parkOf: (member) => ('refusal' in parked ? { kind: 'unreadable', refusal: parked.refusal } : theParkOf(parked, member)),
+    now: places.ledger.clock.now(),
+    member: textOf(args['member']),
+  })
 }
 
 /** The host's own reading of a session (martha#255), as the mod hands it over untouched. */
