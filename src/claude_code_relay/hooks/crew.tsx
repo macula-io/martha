@@ -272,6 +272,7 @@ function theOwnersListBlock($: CrewEngine, views: TheViews, list: TheOwnersListS
       </Box>
       <Text dimColor>{list.claim}</Text>
       {list.rows.map((row) => anOwnersRow($, views, row))}
+      {list.standing.map((line, at) => <Text key={`standing:${at}`} bold={at === 0}>{line}</Text>)}
     </Box>
   )
 }
@@ -329,6 +330,9 @@ const answerWorktreeOpen = ($: CrewEngine, e: Record<string, unknown>): Promise<
 const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_finish')
 const answerOwnerTodoAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_add')
 const answerOwnerTodoDone = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_done')
+const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_add')
+const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
+const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
 
 /** The pane as the host draws it: the crew's rows, then the owner's list (martha#316). */
 async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
@@ -377,6 +381,9 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__worktree_finish' }, answerWorktreeFinish)
   on('tool.call', { tool: 'mcp__martha__owner_todo_add' }, answerOwnerTodoAdd)
   on('tool.call', { tool: 'mcp__martha__owner_todo_done' }, answerOwnerTodoDone)
+  on('tool.call', { tool: 'mcp__martha__standing_add' }, answerStandingAdd)
+  on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
+  on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)

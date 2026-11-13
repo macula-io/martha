@@ -30,6 +30,7 @@ import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -98,6 +99,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: OWNER_TODO_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: OWNER_TODO_DONE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: THE_OWNERS_TODO_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  // The Supervisor's standing items (martha#317): three more tools the mod answers by a literal, for the same reason.
+  { value: STANDING_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: STANDING_CLOSE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  { value: STANDING, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   // The socket the mod talks to its launcher over (martha#254): the name is read by the host from this very file, and
   // the host refuses a hooks module that gives `$.env.get` anything but a literal, an imported constant included
   // (#104) — so the copy of the name has to sit here, and this line is the one that says it is the same name.

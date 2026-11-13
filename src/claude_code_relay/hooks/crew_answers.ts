@@ -69,6 +69,8 @@ export interface TheOwnersListShown {
   readonly focus: string
   readonly next: string
   readonly rows: readonly TheOwnersRowShown[]
+  /** The Supervisor's standing items under the list (martha#317): a heading and one line each, or none. */
+  readonly standing: readonly string[]
   readonly lines: number
 }
 
@@ -86,9 +88,10 @@ export interface TheOwnersRowShown {
 export function theOwnersListIn(said: string): TheOwnersListShown | null {
   try {
     const parsed = JSON.parse(said) as Partial<TheOwnersListShown>
-    const { heading, claim, focus, next, rows, lines } = parsed
+    const { heading, claim, focus, next, rows, standing, lines } = parsed
     if (typeof heading !== 'string' || typeof claim !== 'string' || typeof focus !== 'string' || typeof next !== 'string') return null
-    return Array.isArray(rows) && typeof lines === 'number' ? { heading, claim, focus, next, rows, lines } : null
+    if (!Array.isArray(standing) || standing.some((line) => typeof line !== 'string')) return null
+    return Array.isArray(rows) && typeof lines === 'number' ? { heading, claim, focus, next, rows, standing, lines } : null
   } catch {
     return null
   }
