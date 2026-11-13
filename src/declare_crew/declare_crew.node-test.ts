@@ -11,6 +11,7 @@ import {
   DECLARATION_VERSION,
   DeclarationRefused,
   HOUSE_RULE_SWITCHES,
+  NUDGES,
   OWNER,
   STRICT_GATE,
   declareCrew,
@@ -246,11 +247,13 @@ test('the strict gate is a house rule, off unless the declaration names it, and 
 })
 
 test('every declared switch is read from the one list, so a new rule is neither misspelt nor forgotten', async () => {
-  // The workspace layout is the one switch that also names its places (martha#256): switching it on alone is
-  // refused, as the test below says, so it is named here with them.
+  // Two switches also name what they read with (martha#256's places, martha#320's windows): switching either on alone is
+  // refused, as the tests below say, so each is named here with them.
   const places = { clones: '/crew-place/clones', worktrees: '/crew-place/worktrees' }
+  const windows = { stalled_minutes: 60, review_minutes: 45, person_minutes: 30 }
+  const withIt = (name: string) => (name === 'workspace_layout' ? places : name === NUDGES ? windows : {})
   for (const name of HOUSE_RULE_SWITCHES) {
-    const named = await declare({ ...solo, house_rules: { ...(name === 'workspace_layout' ? places : {}), [name]: true } }).settings
+    const named = await declare({ ...solo, house_rules: { ...withIt(name), [name]: true } }).settings
     assert.equal(named.house_rules[name], true, name)
   }
   assert.ok(HOUSE_RULE_SWITCHES.includes(STRICT_GATE), 'the strict gate is one of the declared switches')
@@ -324,4 +327,40 @@ test('#253: a crew that does not say how often its sessions read the channel is 
 
 test('#253: the interval a crew declares is the one its settings carry', async () => {
   assert.equal((await declare({ ...solo, channel_read_seconds: 7 }).settings).channel_read_seconds, 7)
+})
+
+// --- 7. the windows a crew that reads nudges names (martha#320) ---------------
+
+const nudging = { ...solo, house_rules: { nudges: true, stalled_minutes: 60, review_minutes: 45, person_minutes: 30 } }
+
+test('#320: a crew that reads nudges and names no window is refused, naming the field that is missing', async () => {
+  for (const missing of ['stalled_minutes', 'review_minutes', 'person_minutes']) {
+    await refusedWith({ ...nudging, house_rules: without(missing, nudging.house_rules) }, `house_rules.${missing}`)
+  }
+})
+
+test('#320: a window that is not a whole number of minutes, zero or more, is refused by its own field', async () => {
+  await refusedWith({ ...nudging, house_rules: { ...nudging.house_rules, stalled_minutes: -1 } }, 'house_rules.stalled_minutes')
+  await refusedWith({ ...nudging, house_rules: { ...nudging.house_rules, review_minutes: 1.5 } }, 'house_rules.review_minutes')
+  await refusedWith({ ...nudging, house_rules: { ...nudging.house_rules, person_minutes: '30' } }, 'house_rules.person_minutes')
+})
+
+test('#320: zero is a window a crew may mean, and a crew that names no nudges carries none', async () => {
+  const off = await declare({ ...nudging, house_rules: { ...nudging.house_rules, stalled_minutes: 0 } }).settings
+  assert.equal(off.house_rules.stalled_minutes, 0, 'zero turns that kind of nudge off, and is not refused')
+
+  const quiet = await declare(solo).settings
+  assert.equal(quiet.house_rules.nudges, false, 'a crew that names no nudges reads none')
+  assert.equal(quiet.house_rules.stalled_minutes, null, 'and carries no window it never named')
+  assert.equal(quiet.house_rules.review_minutes, null)
+  assert.equal(quiet.house_rules.person_minutes, null)
+})
+
+test('#320: the windows a crew declares are the ones its settings carry', async () => {
+  const settings = await declare(nudging).settings
+  assert.equal(settings.house_rules.nudges, true)
+  assert.deepEqual(
+    [settings.house_rules.stalled_minutes, settings.house_rules.review_minutes, settings.house_rules.person_minutes],
+    [60, 45, 30],
+  )
 })

@@ -53,8 +53,27 @@ export const STRICT_GATE = 'strict_gate'
 /** Whether a member hands over after a finished task (martha#255): off unless the declaration says true. */
 export const REFRESH_BETWEEN_TASKS = 'refresh_between_tasks'
 
+/**
+ * The house rule that has the crew tell its Supervisor when work stalls (martha#320): a quiet member, a HANDOFF nobody
+ * answered, a wait on a person, and a cycle of waits. Off unless the declaration names it, as every switch is, and it
+ * takes three windows with it, so a crew that turns nudges on and names no window is refused rather than given one in
+ * code.
+ */
+export const NUDGES = 'nudges'
+
+/** The three windows a crew that reads nudges names, each in whole minutes: how long a stall, a review and a wait on a
+ * person are allowed to last. Zero is a number a crew may mean — it turns that kind of nudge off. */
+export const STALLED_MINUTES = 'stalled_minutes'
+export const REVIEW_MINUTES = 'review_minutes'
+export const PERSON_MINUTES = 'person_minutes'
+export const HOUSE_RULE_MINUTES = [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES] as const
+export type HouseRuleMinutes = (typeof HOUSE_RULE_MINUTES)[number]
+
+/** How many milliseconds a minute is: the unit these windows are named in, and the one the rules read them as. */
+export const MINUTE_MS = 60_000
+
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS] as const
+export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, NUDGES] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */
@@ -70,6 +89,8 @@ export const CLONES = 'clones'
 export const WORKTREES = 'worktrees'
 export const HOUSE_RULE_PLACES = [CLONES, WORKTREES] as const
 export type HouseRulePlace = (typeof HOUSE_RULE_PLACES)[number]
+
+
 
 /** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
@@ -91,7 +112,7 @@ export type HouseRules = Readonly<Record<HouseRuleSwitch, boolean>> & {
   readonly review_model: string | null
   readonly clones: string | null
   readonly worktrees: string | null
-}
+} & Readonly<Record<HouseRuleMinutes, number | null>>
 
 export interface CrewPaths {
   readonly root: string
@@ -136,7 +157,7 @@ const MODE_KEYS = ['name', 'roles', 'may'] as const
 // What a field must look like, written from its keys: `{ a, b, c? }`.
 const shapeOf = (required: readonly string[], optional: readonly string[] = []) =>
   `{ ${[...required, ...optional.map(key => `${key}?`)].join(', ')} }`
-const HOUSE_RULE_KEYS: readonly string[] = [...HOUSE_RULE_SWITCHES, REVIEW_MODEL, ...HOUSE_RULE_PLACES]
+const HOUSE_RULE_KEYS: readonly string[] = [...HOUSE_RULE_SWITCHES, REVIEW_MODEL, ...HOUSE_RULE_PLACES, ...HOUSE_RULE_MINUTES]
 
 type Json = Record<string, unknown>
 
@@ -283,6 +304,7 @@ function houseRulesOf(refuse: Refuse, value: unknown): HouseRules {
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
   refuseSwitches(refuse, value)
   refusePlaces(refuse, value)
+  refuseMinutes(refuse, value)
   return houseRulesFrom(value)
 }
 
@@ -312,15 +334,40 @@ function refusePlaces(refuse: Refuse, value: Json): void {
 
 const textOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 
+/**
+ * The three windows a crew that reads nudges names (martha#320): each a whole number of minutes, zero or more, and all
+ * three named, so a member is never nudged on a window the code made up. A crew that turns nudges off names none of
+ * them and reads no nudge.
+ */
+function refuseMinutes(refuse: Refuse, value: Json): void {
+  for (const minutes of HOUSE_RULE_MINUTES) {
+    const named = value[minutes]
+    if (named !== undefined && (typeof named !== 'number' || !Number.isInteger(named) || named < 0)) {
+      refuse.at(`house_rules.${minutes}`, 'is not a whole number of minutes, zero or more')
+    }
+  }
+  if (value[NUDGES] !== true) return
+  const missing = HOUSE_RULE_MINUTES.find((minutes) => value[minutes] === undefined)
+  if (missing !== undefined) {
+    refuse.at(`house_rules.${missing}`, `is missing, and house_rules.${NUDGES} is on in this declaration`)
+  }
+}
+
 function houseRulesFrom(value: Json): HouseRules {
   const switches = Object.fromEntries(HOUSE_RULE_SWITCHES.map(name => [name, value[name] === true]))
   const places = Object.fromEntries(HOUSE_RULE_PLACES.map(place => [place, textOrNull(value[place])]))
+  const minutes = Object.fromEntries(HOUSE_RULE_MINUTES.map(name => [name, minuteOrNull(value[name])]))
   return {
     ...(switches as Record<HouseRuleSwitch, boolean>),
     ...(places as Record<HouseRulePlace, string | null>),
+    ...(minutes as Record<HouseRuleMinutes, number | null>),
     review_model: textOrNull(value[REVIEW_MODEL]),
   }
 }
+
+/** A window in minutes as it is kept, or null when the declaration names none. A missing one is never zero: zero is a
+ * crew turning a kind of nudge off, which is a decision, and no window at all is a crew that reads no nudge. */
+const minuteOrNull = (value: unknown): number | null => (typeof value === 'number' ? value : null)
 
 // The conventions document is named relative to the crew directory and must stay inside it.
 function conventionsOf(refuse: Refuse, value: unknown, crew: string): string | null {

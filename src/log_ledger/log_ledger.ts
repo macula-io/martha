@@ -31,12 +31,14 @@
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
-/** The milestones a member keeps on a package. */
+/** The milestones a member keeps on a package, and the one a landing keeps: a package reaching the default branch is a
+ * fact about the package, and it is what ends a review wait that no verdict answered (martha#320). */
 export const MILESTONES = [
   'checkpoint_reached',
   'review_round_closed',
   'release_shipped',
   'fix_shipped_after_release',
+  'landed',
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
 

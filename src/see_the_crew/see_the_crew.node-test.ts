@@ -98,3 +98,15 @@ test('the pane opens by itself only when the declaration switched the dashboard 
   assert.equal(answered(true), true, 'a crew that switched the dashboard on opens the pane at a start')
   assert.equal(answered(false), false, 'a crew that did not switch it on opens nothing')
 })
+
+test('#320: a part another slice composed is drawn under the members, and the rows the pane asks for count it', () => {
+  const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 500) }, NOW)
+  const without = thePaneAnsweredBy(seen, true, 1_000)
+  assert.deepEqual(thePaneAnsweredBy(seen, true, 1_000, []), without, 'a crew with no part draws exactly the pane it drew before')
+
+  const block = ['Crew nudges: nothing here acts.', '- stalled: Vesta, since 09:15 UTC']
+  const withBlock = thePaneAnsweredBy(seen, true, 1_000, block)
+  assert.deepEqual(withBlock.lines.slice(-block.length), block, 'the part is drawn under the members, in its own order')
+  assert.equal(withBlock.rows, without.rows + block.length, 'the rows the pane asks for count the part')
+  assert.equal(withBlock.header, without.header, 'the part is no member, so the header counts none of it')
+})

@@ -25,7 +25,7 @@ import {
   findTheWorkTheseVerdictsPassed,
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
-import { announceAct, concludeAct, type Outcome } from '../log_ledger/log_ledger.ts'
+import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type Outcome } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -124,7 +124,40 @@ export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: st
   if (forward.packages.length === 0) return no('the fast-forward names no package it lands.')
   const what = `the default branch of ${forward.path} fast-forwarded to ${forward.tip}`
   const sent = await pushForEveryPackage(host, member, forward.packages, what, () => fastForward(host, forward))
-  return 'refused' in sent ? sent : { told: `${sent.sent}; ${forward.packages.join(', ')} are on it.` }
+  if ('refused' in sent) return sent
+  // The packages are on the default branch: that is the fact a review wait ends on (martha#320), so each package's
+  // ledger is told, by the act that landed it. A ledger that will not take the row does not undo the landing, and the
+  // answer says so rather than throwing after the branch has moved.
+  const not_told = await noteTheLanding(host, member, forward.packages)
+  const told = `${sent.sent}; ${forward.packages.join(', ')} are on it.`
+  return { told: not_told === undefined ? told : `${told} The ledger was not told they landed (${not_told}), so a review wait on them ends only when someone reads the branch.` }
+}
+
+/** Records that each package landed; answers why one could not be recorded, or undefined when they all were. */
+async function noteTheLanding(host: LandingHost, member: string, packages: readonly string[]): Promise<string | undefined> {
+  let first_not_kept: string | undefined
+  for (const package_name of packages) {
+    try {
+      await noteMilestone(host, { package: package_name, member, milestone: 'landed', note: 'the default branch holds it' })
+    } catch (error) {
+      first_not_kept ??= detailOf(error)
+    }
+  }
+  return first_not_kept
+}
+
+/**
+ * The packages, of those asked about, whose ledger says they landed (martha#320): the fact a review wait ends on. A
+ * package whose ledger holds no such row is not landed, which is not the same as a ledger that could not be read — a
+ * read that fails rejects, so a caller cannot take an unreadable ledger for a package that never landed.
+ */
+export async function landedPackagesOf(host: LedgerHost, packages: readonly string[]): Promise<ReadonlySet<string>> {
+  const landed = new Set<string>()
+  for (const package_name of packages) {
+    const rows = await readLedger(host, package_name)
+    if (rows.some((row) => row.kind === 'landed')) landed.add(package_name)
+  }
+  return landed
 }
 
 /** What `land_batch` says it is for, as the launcher answers the mod's ask (martha#256). */
