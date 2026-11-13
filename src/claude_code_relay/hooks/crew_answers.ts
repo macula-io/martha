@@ -32,7 +32,6 @@ const CARRY_THE_CLEAR = 'clear'
 const CARRY_A_MODEL = 'model'
 const CARRY_THE_END = 'end_the_turn'
 
-
 /**
  * The two acts a model switch is made of, as the mod holds them (martha#315): the host's own command, and the report
  * that makes the member's row say what this session runs.
@@ -60,7 +59,8 @@ export async function switchTheModelOnTheHost(host: TheModelSwitchHost, model: s
   await host.noteTheModel(model)
 }
 
-/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */export interface ThePaneShown {
+/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
+export interface ThePaneShown {
   readonly header: string
   readonly lines: readonly string[]
   readonly open_at_start: boolean
@@ -90,14 +90,21 @@ export function orderIn(said: string): TheOrder | null {
 /** One order, read field by field: the words it carries its act under, and the one field that act needs. */
 type AnOrderOnTheWire = { readonly carry?: unknown; readonly text?: unknown; readonly model?: unknown; readonly turn_id?: unknown }
 
+/**
+ * The one field each order that needs one carries: a text submits its text, a model order names the model, and an end
+ * names the turn it ends (martha#311). An order missing its field is not one this mod can carry out.
+ */
+const THE_FIELD_AN_ORDER_NEEDS = new Map<unknown, 'text' | 'model' | 'turn_id'>([
+  [CARRY_A_TEXT, 'text'],
+  [CARRY_A_MODEL, 'model'],
+  [CARRY_THE_END, 'turn_id'],
+])
+
 function orderOf(parsed: AnOrderOnTheWire): TheOrder | null {
   if (parsed.carry === CARRY_THE_CLEAR || parsed.carry === 'none') return { carry: parsed.carry }
-  if (parsed.carry === CARRY_A_TEXT && typeof parsed.text === 'string' && parsed.text !== '') return { carry: CARRY_A_TEXT, text: parsed.text }
-  // A model order names the model it switches to; one that names none is not an order this mod can carry out.
-  if (parsed.carry === CARRY_A_MODEL && typeof parsed.model === 'string' && parsed.model !== '') return { carry: CARRY_A_MODEL, model: parsed.model }
-  // An end names the turn it ends (martha#311); one that names none is not an order this mod can carry out.
-  if (parsed.carry === CARRY_THE_END && typeof parsed.turn_id === 'string' && parsed.turn_id !== '') return { carry: CARRY_THE_END, turn_id: parsed.turn_id }
-  return null
+  const field = THE_FIELD_AN_ORDER_NEEDS.get(parsed.carry)
+  const value = field === undefined ? undefined : parsed[field]
+  return field !== undefined && typeof value === 'string' && value !== '' ? ({ carry: parsed.carry, [field]: value } as TheOrder) : null
 }
 
 /** What the pane draws, from the answer the launcher gives, or null when the answer is not one it can draw. */
