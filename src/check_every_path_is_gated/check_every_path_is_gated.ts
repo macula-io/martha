@@ -200,6 +200,8 @@ function gapOfAClaimedControl(
 
   if (control.kind === 'launch-gate') return launchedRowGap(path, control, gates.launch)
 
+  if (control.kind === 'approved-text') return approvedTextRowGap(path, control, gates.launch)
+
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
   if (control.kind === 'ask-gate') return askRowGap(path, control.gate, gates.ask)
@@ -375,6 +377,21 @@ function launchedRowGap(
     : control.residual.trim() === ''
       ? 'does not say what happens where Martha does not start the host'
       : launchGateGap(control.gate, launch_gates[control.gate])
+}
+
+/**
+ * Why a row claiming text from the owner's approved bytes is a gap: it is code the host starts by itself (which the
+ * launch gate owns), it does not say what the approval covers, or the gate it names fails a question (martha#306).
+ * The gate is driven exactly as a launched row's is: a name is not a control.
+ */
+function approvedTextRowGap(
+  path: InboundPath,
+  control: Extract<Control, { kind: 'approved-text' }>,
+  launch_gates: Readonly<Record<string, LaunchGate>>,
+): string | undefined {
+  if (path.klass === 'launched') return 'claims approved text on code the host starts by itself, which the launch gate owns'
+  if (control.residual.trim() === '') return 'does not say what the approval covers'
+  return launchGateGap(control.gate, launch_gates[control.gate])
 }
 
 /** Why a row claiming the shell gate, a delivery gate or that no text reaches the model is a gap. */

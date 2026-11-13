@@ -31,6 +31,7 @@ import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RETURN_TO_YOUR_OWN_MODEL, SWITCH_Y
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -158,6 +159,9 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
   { value: CARRY_THE_CLEAR, file: 'launch_a_claude_code_member/a_refresh_is_not_wiped_by_the_clear.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
   { value: CARRY_THE_CLEAR, file: 'launch_a_claude_code_member/launch_a_claude_code_member.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
+  // The same word again (martha#306 r=2): this test posts the start the host posts after a /clear, so the source is the
+  // host's own vocabulary and not the word an order carries a clear under.
+  { value: CARRY_THE_CLEAR, file: 'start_a_member/start_a_member.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
   // The park test reads back the state a marker holds, and checks that the old single tool's argument is gone
   // (martha#343). Both spell the word the crew's park place is named with, and neither is that place.
   { value: PARKED_PLACE, file: 'a_crews_tools/the_park_tool_keeps_the_marker.node-test.ts', reason: 'the state a park marker reads back as, and the argument the one tool used to take; the crew\'s park place is named the same word and is not this' },
@@ -171,6 +175,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  // The declaration's mode holds a `roles` field, the list of the crew's role names; `roles/` is the directory each
+  // role's text sits in (martha#306). One English word names the field and the folder, and the field reader is not a
+  // path: it is excused here, and a copy of the word anywhere else still fails.
+  { value: ROLE_TEXTS_DIRECTORY, file: 'declare_crew/declare_crew.ts', reason: 'the declaration\'s mode.roles field, a list of role names, and not the roles/ directory a role\'s text sits in' },
   // The five events the relay hears from the host (martha#313), each spelled out because the host's validator will take
   // nothing else there.
   { value: PERMISSION_REQUEST, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
@@ -181,6 +189,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
   { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
+  // The same git subcommand, in the permission-prompt run's throwaway repository (martha#363).
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
   // The word `model` in the model-switch work (martha#315), in five files that each mean a field of their own by it.
   { value: CLAUDE_CODE_SHELL_TOOL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: 'a call to a tool that spawns no subagent, named as the host names its shell: what the test needs is a real tool the rule must not hold' },
   { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
