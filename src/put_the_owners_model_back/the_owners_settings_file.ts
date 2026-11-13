@@ -14,9 +14,6 @@ import { createHash } from 'node:crypto'
 
 import type { Refused, TheOwnersSettingsRead } from '../host_contract/host_contract.ts'
 
-/** The file the host's `/model` command saves the owner's default into, inside the config directory it reads. */
-export const OWNERS_SETTINGS_FILE = 'settings.json'
-
 /** The one key in it a restore may touch. Every other key is the owner's. */
 export const THE_MODEL_KEY = 'model'
 

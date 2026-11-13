@@ -27,6 +27,8 @@
 // their own session inside the window cannot be told from the host's save, and the restore undoes it.
 
 import type { ASwitchLock, Refused, TheOwnersSettingsStore } from '../host_contract/host_contract.ts'
+import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { modelPlace, theModelOf, theOwnersDefaultKept, type SwitchingHost } from '../switch_a_members_model/switch_a_members_model.ts'
 import {
   NO_FILE_BEFORE,
   settingsWithTheOwnerModelBack,
@@ -257,3 +259,45 @@ const changedAfterTheSwitch = (place: OwnersDefaultPlace): string =>
 /** No file to finish a switch on: the file the save was seen in is gone, so there is nothing left to put back. */
 const noFileToFinish = (place: OwnersDefaultPlace): string =>
   `${place.file} is gone, so the model a switch left there could not be put back`
+
+/** What a launch hands the finishing below: this member, the crew's own store, where the owner's default lives, and the
+ * row the launch writes for the member — or no place at all, when the launch could not name the owner's settings file. */
+export interface TheOwnersDefaultAtLaunch {
+  readonly member: string
+  readonly host: SwitchingHost
+  /** Where the owner's default lives, or the host's own refusal to name it: a launch that cannot name the file it would
+   * have to undo made no switch, so there is no record to finish. */
+  readonly owners: OwnersDefaultPlace | Refused
+  readonly beats: DashboardStore
+}
+
+/**
+ * Step 7 at a launch, before the member's host starts (martha#359): a switch that was recorded and never put back is put
+ * back here, by the hash the record kept, or the owner is told why it was not. The record says what became of it either
+ * way, so nothing is left claiming work that was done, and the line that needs the owner goes into the member's own row
+ * as well as back to the caller, so the dashboard says it and not only the terminal.
+ *
+ * A launch that could name no owner's settings file finishes nothing: there is no record it could have written, because
+ * a switch is refused before it starts when the file it would have to undo cannot be named.
+ */
+export async function finishTheOwnersDefaultAtLaunch(at: TheOwnersDefaultAtLaunch): Promise<readonly string[]> {
+  if ('refusal' in at.owners) return []
+  const place = modelPlace(at.host)
+  if ('refusal' in place) return []
+  const current = theModelOf(place, at.member)
+  if (current.kind === 'unreadable') return []
+  const marker = current.kind === 'switched' ? current.marker : current.last_marker
+  if (marker === null || marker.settings === undefined) return []
+  const after = await finishAnUnfinishedSwitch(at.owners, marker.settings)
+  theOwnersDefaultKept(at.host, at.member, marker, after.record)
+  if (after.why === '') return []
+  keepTheOwnerNeedInTheRow(at, after.why)
+  return [after.why]
+}
+
+/** The line that needs the owner, in the member's own row, so the dashboard says it rather than only the terminal. */
+function keepTheOwnerNeedInTheRow(at: TheOwnersDefaultAtLaunch, why: string): void {
+  const held = at.beats.read(at.member)
+  if (held === null) return
+  at.beats.keep({ ...held, at: Date.now(), needs: why })
+}

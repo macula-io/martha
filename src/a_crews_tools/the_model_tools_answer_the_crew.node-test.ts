@@ -17,6 +17,7 @@ import { after, test } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -111,7 +112,7 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
     stores: { crew: crewFilesDirectory(crew) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
-    owners_settings: { config_dir, file: join(config_dir, 'settings.json'), store: ownersSettingsIn(join(config_dir, 'settings.json'), config_dir, state.state_root) },
+    owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
   return { tools, crew, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += 60_000) }
 }

@@ -34,7 +34,7 @@ import {
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
@@ -205,7 +205,7 @@ export interface CrewToolPlaces {
    * command saves the switched model into as the owner's default. A launch given none refuses a switch by name, because
    * a switch that cannot be put back would leave the owner's every new session on the member's model.
    */
-  readonly owners_settings?: OwnersDefaultPlace
+  readonly owners_settings?: OwnersDefaultPlace | Refused
   /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
@@ -1228,6 +1228,7 @@ async function theModelOrder(places: CrewToolPlaces, state: SessionState): Promi
 async function guardedOrder(places: CrewToolPlaces, state: SessionState, marker: ModelMarker): Promise<TheOrder | null> {
   const owners = places.owners_settings
   if (owners === undefined) return refuseTheSwitch(places, state, marker, noOwnersSettings(places))
+  if ('refusal' in owners) return refuseTheSwitch(places, state, marker, owners.refusal)
   const guard = await guardTheOwnersDefault(owners)
   if ('refusal' in guard) return refuseTheSwitch(places, state, marker, guard.refusal)
   const kept = theOwnersDefaultKept(places, places.member, marker, guard.record)
@@ -1289,7 +1290,7 @@ async function theOwnersDefaultPutBack(places: CrewToolPlaces, state: SessionSta
   const guard = state.guarded
   state.guarded = null
   const owners = places.owners_settings
-  if (guard === null || owners === undefined) return { why: '', before: '' }
+  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: '' }
   try {
     return theOwnersDefaultAnswered(places, owners, guard, await theSaveInTheFile(owners, guard))
   } finally {
@@ -1306,7 +1307,7 @@ async function closeTheGuardNoOneReported(places: CrewToolPlaces, state: Session
   const guard = state.guarded
   state.guarded = null
   const owners = places.owners_settings
-  if (guard === null || owners === undefined) return { why: '', before: '' }
+  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: '' }
   try {
     const told = theOwnersDefaultAnswered(places, owners, guard, theSaveSeenNow(owners, guard) ?? theSaveThatNeverShowed(owners, guard.record))
     state.owner_needs = told

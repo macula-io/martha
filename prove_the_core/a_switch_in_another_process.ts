@@ -83,7 +83,7 @@ async function theCrewTools(): Promise<ReturnType<typeof crewToolsOver>> {
     stores: { crew: crewFilesDirectory(crew) },
     models: [its.own_model, its.review_model],
     launched_on: its.own_model,
-    owners_settings: { config_dir: its.config_dir, file: its.settings_file, store: ownersSettingsIn(its.settings_file, its.config_dir, its.lock_root) },
+    owners_settings: { config_dir: its.config_dir, file: its.settings_file, store: ownersSettingsIn(its.settings_file, its.lock_root) },
   })
 }
 

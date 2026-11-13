@@ -45,13 +45,17 @@ export const THE_LOCK_STEP_MS = 25
 /** The mode bits that say who may read, write and enter: kept as the file had them, never widened. */
 const PERMISSION_BITS = 0o777
 
-/** The owner's settings file at `settings_file`, and the one lock for `config_dir`, kept under `lock_root`. */
-export function ownersSettingsIn(settings_file: string, config_dir: string, lock_root: string): TheOwnersSettingsStore {
+/**
+ * The owner's settings file at `settings_file`, and the one lock for its config directory, kept under `lock_root`. The
+ * config directory is the file's own directory and is not passed beside it: the file is `<config dir>/settings.json`,
+ * and two of them could name a lock and a file that disagree.
+ */
+export function ownersSettingsIn(settings_file: string, lock_root: string): TheOwnersSettingsStore {
   return {
     read: () => readTheOwnersSettings(settings_file),
     writeBack: (bytes, mode) => writeTheOwnersSettingsBack(settings_file, bytes, mode),
     remove: () => removeTheOwnersSettings(settings_file),
-    takeTheLock: () => takeTheSwitchLock(lock_root, config_dir),
+    takeTheLock: () => takeTheSwitchLock(lock_root, dirname(settings_file)),
   }
 }
 

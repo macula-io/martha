@@ -21,9 +21,10 @@ import { after, test } from 'node:test'
 
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CREW_ROWS_PLACE, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -37,7 +38,7 @@ import {
   type OwnersDefaultPlace,
   type TheSaveSeen,
 } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
-import { THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { CARRY_A_MODEL, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 /** The models a crew names: this member's own, and the one every review runs on. */
@@ -89,8 +90,8 @@ async function aCrew(owners: Record<string, unknown> | null = OWNERS_SETTINGS): 
   const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   declareTheModels(root)
-  const settings_file = join(config_dir, 'settings.json')
-  const owners_place: OwnersDefaultPlace = { config_dir, file: settings_file, store: ownersSettingsIn(settings_file, config_dir, state.state_root) }
+  const settings_file = join(config_dir, USER_SETTINGS_FILE)
+  const owners_place: OwnersDefaultPlace = { config_dir, file: settings_file, store: ownersSettingsIn(settings_file, state.state_root) }
   if (owners !== null) writeFileSync(settings_file, `${JSON.stringify(owners, null, 2)}\n`)
   const beats = dashboardRowsIn(join(home, 'row'))
   const tools = crewToolsOver({
@@ -234,7 +235,7 @@ test('a switch is refused, and nothing recorded as switched, when the owner\'s s
   mkdirSync(crew.settings_file)
   await switched(crew.tools)
   const order = await ordered(crew)
-  assert.notEqual(order['carry'], 'model', 'a switch ran whose owner\'s settings file could not have been put back')
+  assert.notEqual(order['carry'], CARRY_A_MODEL, 'a switch ran whose owner\'s settings file could not have been put back')
   assert.equal(theRecordOf(crew.crew)?.switched, false, 'the record still says the member was switched when the host was never ordered to')
   assert.match(String(crew.theRow()?.['needs']), /is not a regular file/, 'the row does not say what needs the owner about the refused switch')
 })
@@ -246,7 +247,7 @@ test('a second switch waits for the one holding the owner\'s file, and is no ord
   try {
     await switched(crew.tools)
     const order = await ordered(crew)
-    assert.notEqual(order['carry'], 'model', 'a second switch ran while the first still held the owner\'s settings file')
+    assert.notEqual(order['carry'], CARRY_A_MODEL, 'a second switch ran while the first still held the owner\'s settings file')
   } finally {
     guard.lock.release()
   }
@@ -288,9 +289,9 @@ test('two switches in two processes are one at a time: the second waits, and the
   const shared = join(homeOfAll, 'two-processes')
   const config_dir = join(shared, 'claude')
   mkdirSync(config_dir, { recursive: true })
-  const settings_file = join(config_dir, 'settings.json')
+  const settings_file = join(config_dir, USER_SETTINGS_FILE)
   writeFileSync(settings_file, OWNERS_BYTES)
-  const lock_root = join(shared, 'state', 'martha')
+  const lock_root = join(shared, 'state', STATE_ROOT_NAME)
   // Two crews of one owner, so what they share is the owner's file and nothing else: the models are told apart by
   // being each other's, which is what a switch across two crews would really look like.
   const first = aProcessToSwitch(shared, { tag: 'a', own_model: OWN_MODEL, review_model: THE_REVIEWER_MODEL, member: 'builder', config_dir, settings_file, lock_root, waits_for_go: true })

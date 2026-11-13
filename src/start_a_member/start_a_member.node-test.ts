@@ -40,6 +40,7 @@ import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.
 import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
@@ -47,7 +48,7 @@ import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/ke
 import { stopTheCrew } from '../run_the_martha_command/list_and_stop_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
-import { canonicalHashWithoutModel, OWNERS_SETTINGS_FILE, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
+import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -647,9 +648,9 @@ test('#312: a member Martha started is stopped by its own launcher when the owne
 test('#359: a switch a killed launch left unfinished is finished before the member\'s host starts', async (t) => {
   const place = placeFor(t, {})
   await declared(place)
-  const config = join(place.home, '.claude')
+  const config = join(place.home, DEFAULT_CONFIG_DIR)
   mkdirSync(config, { recursive: true })
-  const settings_file = join(config, OWNERS_SETTINGS_FILE)
+  const settings_file = join(config, USER_SETTINGS_FILE)
   const theOwnersModel = 'opus'
   const theSavedModel = 'sonnet'
   const anOwnersSetting = { includeCoAuthoredBy: false }
