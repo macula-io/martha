@@ -255,6 +255,7 @@ test('a return home over a switch whose restore was refused puts the owner\'s ow
   assert.equal(now.model, OWN_MODEL, 'the owner\'s default was left on the member\'s model by the return home')
   assert.equal(now.env?.['MARTHA_TEST'], '2', 'the owner\'s own edit was written over')
   assert.equal(theRecordOf(crew.crew)?.settings, undefined, 'a record of the owner\'s default outlived the return that put it back')
+  assert.equal(crew.theRow()?.['needs'], '', 'the row still says the owner\'s default may be the member\'s, with the record cleared and the owner\'s file their own again')
 })
 
 test('a return home over a switch whose save landed after the wait puts the owner\'s own model back (mutant: an open record replaced by a fresh snapshot)', async () => {
@@ -267,6 +268,26 @@ test('a return home over a switch whose save landed after the wait puts the owne
   await returnedHome(crew)
   assert.equal(readFileSync(crew.settings_file, 'utf8'), OWNERS_BYTES, 'the owner\'s settings file did not end as the owner wrote it')
   assert.equal(theRecordOf(crew.crew)?.settings, undefined, 'a record of the owner\'s default outlived the return that put it back')
+  assert.equal(crew.theRow()?.['needs'], '', 'the row still says the next launch finishes a switch, with the record cleared and the owner\'s own bytes back')
+})
+
+test('a refused restore, an owner who edits again, then the return home: the owner\'s own model goes back, and no record outlives it (mutant: the carried owner model dropped)', async () => {
+  const crew = await aCrew()
+  await switched(crew.tools)
+  await ordered(crew)
+  theHostSaved(crew)
+  // The owner's first edit: the restore is refused, and the member's model stands in their file.
+  writeFileSync(crew.settings_file, THE_OWNERS_EDIT)
+  assert.match(await reported(crew), /something other than the model changed/, 'the restore was not refused, so this case never reached the unfinished record it is about')
+  // The owner's second edit, after the report: the guard's own recovery is refused too, so the return home is built on a
+  // record the recovery could not finish. The owner's model it carries is the owner's, not whatever the file says now.
+  writeFileSync(crew.settings_file, `${JSON.stringify({ env: { MARTHA_TEST: '3' }, model: THE_REVIEWER_MODEL }, null, 2)}\n`)
+  await returnedHome(crew)
+  const now = JSON.parse(readFileSync(crew.settings_file, 'utf8')) as { model?: string; env?: Record<string, unknown> }
+  assert.equal(now.model, OWN_MODEL, 'the owner\'s default ended on the member\'s model, so the record took the owner\'s model from a file that held the member\'s')
+  assert.equal(now.env?.['MARTHA_TEST'], '3', 'the owner\'s second edit was written over')
+  assert.equal(theRecordOf(crew.crew)?.settings, undefined, 'a record of the owner\'s default outlived the return that put it back')
+  assert.equal(crew.theRow()?.['needs'], '', 'the row still says the owner\'s default may be the member\'s, with the record cleared and the owner\'s own model back')
 })
 
 test('a file that changed in more than its model is never written over: nothing is put back, and both the row and the answer say why (mutant: the compare-and-swap removed)', async () => {

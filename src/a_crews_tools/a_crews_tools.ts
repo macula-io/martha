@@ -1206,7 +1206,7 @@ function theNeedsAfter(state: SessionState, row: DashboardRow): string {
   if (told === null) return row.needs
   state.owner_needs = null
   if (told.why !== '') return told.why
-  return row.needs === told.before ? '' : row.needs
+  return told.before.includes(row.needs) ? '' : row.needs
 }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
@@ -1421,7 +1421,7 @@ async function guardedOrder(places: CrewToolPlaces, state: SessionState, marker:
 /** A switch the launcher will not make, in the member's own row: the member stayed where it was, and the owner is told. */
 function refuseTheSwitch(places: CrewToolPlaces, state: SessionState, marker: ModelMarker, why: string): null {
   theSwitchRefused(places, places.member, marker, why, new Date(places.ledger.clock.now()))
-  state.owner_needs = { why, before: '' }
+  state.owner_needs = { why, before: [] }
   return null
 }
 
@@ -1447,10 +1447,14 @@ async function theModelReported(places: CrewToolPlaces, state: SessionState, arg
   return { answer: putBack.why === '' ? noted : `${noted} ${putBack.why}` }
 }
 
-/** What a switch left for the owner: the line that needs them, and the line the row said before it, so it can be cleared. */
+/** What a switch left for the owner: the line that needs them, and every line the row may still say of it, so it can be cleared. */
 interface TheOwnersDefaultTold {
   readonly why: string
-  readonly before: string
+  /**
+   * The lines this switch is answerable for in the row (martha#359 r=3): the one its own record carries, and the one an
+   * open record it settled left there. The row's line goes when it is one of these and nothing needs the owner any more.
+   */
+  readonly before: readonly string[]
 }
 
 /**
@@ -1462,7 +1466,7 @@ async function theOwnersDefaultPutBack(places: CrewToolPlaces, state: SessionSta
   const guard = state.guarded
   state.guarded = null
   const owners = places.owners_settings
-  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: '' }
+  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: [] }
   try {
     return theOwnersDefaultAnswered(places, owners, guard, await theSaveInTheFile(owners, guard))
   } finally {
@@ -1479,7 +1483,7 @@ async function closeTheGuardNoOneReported(places: CrewToolPlaces, state: Session
   const guard = state.guarded
   state.guarded = null
   const owners = places.owners_settings
-  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: '' }
+  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: [] }
   try {
     const told = theOwnersDefaultAnswered(places, owners, guard, theSaveSeenNow(owners, guard) ?? theSaveThatNeverShowed(owners, guard))
     state.owner_needs = told
@@ -1492,11 +1496,11 @@ async function closeTheGuardNoOneReported(places: CrewToolPlaces, state: Session
 /** The restore itself, over one guarded switch and what the file showed of it: the record kept, and the row's line. */
 function theOwnersDefaultAnswered(places: CrewToolPlaces, owners: OwnersDefaultPlace, guard: AGuardedSwitch, seen: TheSaveSeen): TheOwnersDefaultTold {
   const place = modelPlace(places)
-  if ('refusal' in place) return { why: seen.why, before: '' }
+  if ('refusal' in place) return { why: seen.why, before: [] }
   const current = theModelOf(place, places.member)
   const marker = current.kind === 'switched' ? current.marker : current.kind === 'home' ? current.last_marker : null
-  if (marker === null) return { why: seen.why, before: '' }
-  const before = marker.settings?.why ?? ''
+  if (marker === null) return { why: seen.why, before: [] }
+  const before = linesTheRowMaySay(marker.settings?.why ?? '', guard)
   if (!seen.moved) {
     theOwnersDefaultKept(places, places.member, marker, seen.record)
     return { why: seen.why, before }
@@ -1506,11 +1510,19 @@ function theOwnersDefaultAnswered(places: CrewToolPlaces, owners: OwnersDefaultP
   return { why: after.why, before }
 }
 
+/**
+ * Every line this switch is answerable for in the row (martha#359 r=3): the line its own record carries, and the line an
+ * open record it settled left there. The two differ when the guard's recovery refused and wrote a fresh reason over the
+ * open one — the row keeps the older line until the switch that settled the record takes it away.
+ */
+const linesTheRowMaySay = (fromTheRecord: string, guard: AGuardedSwitch): readonly string[] =>
+  fromTheRecord === guard.settled ? [fromTheRecord] : [fromTheRecord, ...(guard.settled === undefined ? [] : [guard.settled])]
+
 /** The row after a switch: the model reported, and the line that needs the owner when the file was not put back. */
 function rowAfterASwitch(places: CrewToolPlaces, state: SessionState, told: TheOwnersDefaultTold): DashboardRow {
   const row = rowNow(places, state)
   if (told.why !== '') return { ...row, needs: told.why }
-  return row.needs === told.before ? { ...row, needs: '' } : row
+  return told.before.includes(row.needs) ? { ...row, needs: '' } : row
 }
 
 /**

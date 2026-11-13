@@ -92,6 +92,13 @@ export interface AGuardedSwitch {
    * recovery's write rather than restoring a file whose model was never the owner's.
    */
   readonly unfinished?: TheOwnersModelRecord
+  /**
+   * The line the open record left in the member's row, when this switch settled one (martha#359 r=3): the row still
+   * says it until something takes it away, and once the owner's default really is the owner's again this switch is what
+   * takes it away. It is the open record's own `why`, which is not the line this switch's record carries when the guard's
+   * recovery refuses and writes a fresh reason over it.
+   */
+  readonly settled?: string
 }
 
 /** What becomes of the owner's default: the record left for a later launch (null when the switch is finished), and the
@@ -124,6 +131,7 @@ export async function guardTheOwnersDefault(place: OwnersDefaultPlace, asked: st
     asked,
     record: theRecordFor(place, snapshot, carried?.why ?? '', carried),
     ...(carried === undefined ? {} : { unfinished: carried }),
+    ...(open === undefined ? {} : { settled: open.why }),
   }
 }
 
