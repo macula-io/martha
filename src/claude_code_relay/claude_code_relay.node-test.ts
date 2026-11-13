@@ -305,14 +305,19 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   assert.deepEqual(specifiers('relay_protocol.ts'), [])
   // The crew's mod is the second module the host loads (martha#254): it carries its tools' calls to the launcher the
   // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
-  // given all come from the launcher's answer, so the mod holds no rule that would need a file of its own.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_channel_reading.ts'])
+  // given all come from the launcher's answer, and the reading of those answers is the one file below (r=2 R1, R2),
+  // so the mod itself holds no parser and no rule.
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_channel_reading.ts', './crew_answers.ts'])
   // The rule for when a session reads its crew's channel (martha#253 r=2): also a plain file with no imports, so a
   // fake engine can drive it.
   assert.deepEqual(specifiers('crew_channel_reading.ts'), [])
   // The third is the one parser for the tools the launcher answers with (martha#254 part 2 r=4): a plain file with no
   // imports, so a test can feed it the launcher's own answer without the host, which is what r=3 lacked.
   assert.deepEqual(specifiers('crew_tools_answer.ts'), [])
+  // What the launcher answers are read with (martha#255 r=2 R1 and R2): the order and the pane, plain functions with no
+  // imports, so a test feeds them the launcher's own answers — which is what r=1 lacked, and why a reworded order or a
+  // pane whose rows the mod ignored went unseen.
+  assert.deepEqual(specifiers('crew_answers.ts'), [])
   // The host loads one hooks module per plugin, so ONE file is listed and it hands the registration to both; a
   // hooks.json naming two was refused outright, which would have left every gate off (martha#254).
   // The entry itself is a .tsx (it hands the registration to a module that draws), and the host compiles it; what this
