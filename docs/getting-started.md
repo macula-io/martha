@@ -192,8 +192,8 @@ while the agent runs; the answer is recorded and nothing is refused.
 ## Parking a member, and waking it
 
 A member can park itself when it has nothing to do, so it is not refreshed and
-does not take a turn you did not ask for. It calls the `crew_park` tool with a
-reason, and the reason is kept: the marker sits in the crew's own `parked/`
+does not take a turn you did not ask for. It calls the `park_a_member` tool with
+a reason, and the reason is kept: the marker sits in the crew's own `parked/`
 place, one file per member, and a park outlives the session it was made in.
 
 To bring a member back, run, in the checkout:
@@ -205,6 +205,10 @@ martha wake builder
 ```text
 builder woken from ~/.local/state/martha/crews/6f2c…/handovers/HANDOVER_2026-11-12_builder.md
 ```
+
+A member whose role the declaration grants `resume_parked_work` can also bring
+another member back from inside the crew, with the `wake_a_member` tool and a
+reason; both tools mark the reason on the same marker file.
 
 `martha wake` starts the member from the newest handover the host wrote and
 stamped for it, on a prompt that names that file and nothing else of it, and it

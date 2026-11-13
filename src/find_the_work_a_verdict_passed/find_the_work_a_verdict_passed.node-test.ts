@@ -122,7 +122,7 @@ test('#256: the PASS line the crew really sends, with req=0, is kept and read ba
 test('#256: a reviewer\'s own words in a review round row after the VERDICT do not hide the passed head', async () => {
   const recorded = recordedPull(OPEN)
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(OPEN.answer))
-  // The row `crew_log` writes for a review round: the same row kind, in the reviewer's own words rather than a line.
+  // The row `log_a_milestone` writes for a review round: the same row kind, in the reviewer's own words rather than a line.
   await keepTheMilestone(host, { package: PACKAGE, member: 'Pluto', event: 'review_round', note: 'round 1 closed: three changes folded in and the tip is green again' })
   const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
   assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, `a free-text review round row was taken for the latest verdict: ${JSON.stringify(found)}`)

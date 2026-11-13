@@ -1,4 +1,4 @@
-// `crew_log`, `what_was_sent` and `note_what_became_of_an_act`: the ledger, loaded (martha#254, #25's
+// `log_a_milestone`, `what_was_sent` and `note_what_became_of_an_act`: the ledger, loaded (martha#254, #25's
 // remainder).
 //
 // This exists so what a member did on a package outlives its session. The ledger itself landed with #25 — an
@@ -98,7 +98,10 @@ export function theLineAStartingSessionIsHanded(package_name: string, acts: read
   )
 }
 
-/** The description of crew_log, as the crew's mod registers it. */
+/** The name the crew registers this tool under (martha#343): one milestone of a package, in the crew's ledger. */
+export const LOG_A_MILESTONE = 'log_a_milestone'
+
+/** The description of log_a_milestone, as the crew's mod registers it. */
 export const CREW_LOG_DESCRIPTION =
   `Log a work package milestone in the crew's ledger, which the owner and every later session of this crew reads. ` +
   `The events are ${CREW_LOG_EVENTS.join(', ')}. Every later session on the package reads back what you kept.`

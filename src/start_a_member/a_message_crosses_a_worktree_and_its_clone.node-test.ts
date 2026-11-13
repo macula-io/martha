@@ -22,6 +22,8 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { launcherPlacesOf } from './start_a_member.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 
 const MEMBERS = ['Builder', 'Reviewer'] as const
 
@@ -64,7 +66,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const crewOf = (member: string, root: string): ReturnType<typeof crewToolsOver> =>
     crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew')) }, carrier: carryingTo({ member, host: channel, turns }) })
 
-  const sent = await crewOf('Builder', worktree).answer('crew_say', { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
+  const sent = await crewOf('Builder', worktree).answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
   assert.ok('answer' in sent, `the send from the worktree was not answered: ${JSON.stringify(sent)}`)
 
   const handed = await crewOf('Reviewer', clone).answer('take_a_crew_message', {}, 'session-b')
@@ -74,7 +76,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   turns.prompted(handed.answer, 'plugin', { command: false, meta: false })
   await new Promise((resolve) => setImmediate(resolve))
 
-  const receipts = await crewOf('Builder', worktree).answer('crew_receipts', {}, 'session-a')
+  const receipts = await crewOf('Builder', worktree).answer(READ_THE_RECEIPTS, {}, 'session-a')
   assert.ok('answer' in receipts)
   assert.match(receipts.answer, /taken in by Reviewer/, `the sender's receipts do not read the reviewer's taken-in row: ${receipts.answer}`)
 })

@@ -7,6 +7,9 @@
 
 import { type ChannelHost, readTheChannel, takenInBy } from '../keep_the_crew_channel/crew_channel.ts'
 
+/** The name the crew registers this tool under (martha#343): what became of what you sent. */
+export const READ_THE_RECEIPTS = 'read_the_receipts'
+
 /** What the tool says it is for, as the model reads it. */
 export const CREW_RECEIPTS_DESCRIPTION =
   'What became of every message you sent on this crew: written, and for each member it was for, whether that member has taken it in.'

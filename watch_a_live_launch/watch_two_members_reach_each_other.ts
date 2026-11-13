@@ -34,6 +34,8 @@ import { addressedTo, readTheChannel, tookInRowsOf, type ChannelHost, type Place
 import { CREW_LINES, VALUE_SHAPES } from '../src/read_a_crew_line/crew_lines.ts'
 import { readACrewLine } from '../src/read_a_crew_line/read_a_crew_line.ts'
 import { rowStreamsDirectory } from '../src/row_streams_directory/row_streams_directory.ts'
+import { SAY_TO_THE_CREW } from '../src/send_a_crew_message/send_a_crew_message.ts'
+import { READ_THE_RECEIPTS } from '../src/show_what_a_message_became/show_what_a_message_became.ts'
 import {
   aCallAndItsResult,
   aCheckoutToWatch,
@@ -61,8 +63,8 @@ const THE_MODS_NAME = (JSON.parse(readFileSync(join(import.meta.dirname, '..', '
 const called = (tool: string): string => `mcp__${THE_MODS_NAME}__${tool}`
 
 /** The two crew tools this observation uses, by the names the crew registers. */
-const SAY = called('crew_say')
-const RECEIPTS = called('crew_receipts')
+const SAY = called(SAY_TO_THE_CREW)
+const RECEIPTS = called(READ_THE_RECEIPTS)
 
 /** The host's own agent tool, as the adapter names it, and the kind of agent it starts: the host's own default one. */
 const THE_HOSTS_AGENT_TOOL = 'Task'

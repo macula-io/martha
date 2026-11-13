@@ -36,7 +36,7 @@ async function announce(hosts: LedgerHost, member: string, kind: 'push' | 'hando
   return hosts.stores.rows.append(ledgerStreamOf(PACKAGE), { kind: 'act_announced', package: PACKAGE, member, at: hosts.clock.now(), act: { kind, what } })
 }
 
-test('a milestone kept with crew_log is read back by a later session of the same member, and nothing of it is in the checkout (test 9)', async (t) => {
+test('a milestone kept with log_a_milestone is read back by a later session of the same member, and nothing of it is in the checkout (test 9)', async (t) => {
   const place = aCrewPlace(t)
   const before = readdirSync(place.checkout)
 

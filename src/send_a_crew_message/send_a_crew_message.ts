@@ -1,7 +1,7 @@
 // One member of a crew saying something to another, or to all of them (martha#253, slice 1).
 //
 // This exists so a hand-off and a verdict can travel between members without the owner carrying them. The member
-// says `crew_say {to, text}`; the message is one row of the crew's channel, and the send is announced and concluded
+// says `say_to_the_crew {to, text}`; the message is one row of the crew's channel, and the send is announced and concluded
 // in the ledger of the package the member holds, as a `room_message`, so a member refreshed mid-send finds the act
 // it never saw confirmed instead of hoping it asked.
 //
@@ -14,6 +14,9 @@ import { sendOutwardAct } from '../log_ledger/log_ledger.ts'
 import { type Addressee, type ChannelHost, appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+
+/** The name the crew registers this tool under (martha#343): the one tool that speaks, and it speaks to the crew. */
+export const SAY_TO_THE_CREW = 'say_to_the_crew'
 
 /**
  * What the tool says it is for, as the model reads it. The shapes a hand-off and a verdict take are not written here:

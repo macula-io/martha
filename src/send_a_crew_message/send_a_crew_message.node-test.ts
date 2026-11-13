@@ -18,7 +18,7 @@ import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { readLedger, ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { addresseesOf, CREW_SAY_DESCRIPTION, sendACrewMessage } from './send_a_crew_message.ts'
+import { addresseesOf, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 
@@ -159,20 +159,20 @@ function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typ
   })
 }
 
-test('#253: crew_say is a tool the launcher names, and answering it writes to the crew\'s channel', async (t) => {
+test('#253: say_to_the_crew is a tool the launcher names, and answering it writes to the crew\'s channel', async (t) => {
   const crew = crewOverAFreshPlace(t)
   const named = await crew.answer(THE_TOOLS_ASK, {}, 'session-253')
   assert.ok('answer' in named)
-  assert.ok(CREW_TOOL_NAMES.includes('crew_say'), 'the launcher does not name crew_say, so the mod never registers it')
+  assert.ok(CREW_TOOL_NAMES.includes(SAY_TO_THE_CREW), 'the launcher does not name say_to_the_crew, so the mod never registers it')
 
-  const answered = await crew.answer('crew_say', { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-253')
-  assert.ok('answer' in answered, `crew_say was not answered: ${JSON.stringify(answered)}`)
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-253')
+  assert.ok('answer' in answered, `say_to_the_crew was not answered: ${JSON.stringify(answered)}`)
   assert.match(answered.answer, /sent as message 0 to Reviewer/)
 })
 
-test('#253: a crew_say to a name the declaration does not hold is answered with its members', async (t) => {
+test('#253: a say_to_the_crew to a name the declaration does not hold is answered with its members', async (t) => {
   const crew = crewOverAFreshPlace(t)
-  const answered = await crew.answer('crew_say', { to: ['Pluto'], text: 'a hand-off' }, 'session-253')
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Pluto'], text: 'a hand-off' }, 'session-253')
 
   assert.ok('refused' in answered)
   assert.match(answered.refused, /Builder, Reviewer/)
