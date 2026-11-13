@@ -62,7 +62,6 @@ const PARKED_STATE: State = 'parked'
 const parked = (row: DashboardRow, input: NudgeInput): boolean =>
   row.state === PARKED_STATE || input.parked.some((name) => named(name, row.member))
 
-
 /** Whether a member has nothing in hand: its own row says idle, and its last report is done or there is none. */
 const free = (row: DashboardRow): boolean => row.state === IDLE && row.progress.step >= row.progress.of
 
