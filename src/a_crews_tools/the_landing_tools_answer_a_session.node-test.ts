@@ -30,7 +30,7 @@ import {
   theBatchACallNames,
   theFastForwardACallNames,
 } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -118,6 +118,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
       practice: false,
       strict_gate: false,
       dashboard: false,
+      owner_bell: false,
       refresh_between_tasks: false,
       review_model: null,
       clones: places.clones,

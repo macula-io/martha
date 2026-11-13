@@ -18,7 +18,7 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { parkedPlace, theParkMarker, theParkOf } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { THE_TOOLS_ASK, PARK_A_MEMBER, WAKE_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'

@@ -54,7 +54,7 @@ import {
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
-import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The name a member parks with (martha#343): one act, and it says which by being this tool. */
 export const PARK_A_MEMBER = 'park_a_member'
@@ -604,26 +604,10 @@ async function aWorktreeTool(
   return request === null ? { refused: NO_ACTING_PLACE } : asAnAnswer(await act(request, args))
 }
 
-/**
- * What a member that has reported nothing reads as, until its first report moves its row: `idle`, never `working`
- * (martha#254 test 7, r=1 R2). The heartbeat runs from the launch, before the member has said anything about itself,
- * so a row written with `working` here would make every live member read as working and no live member ever read
- * idle. What the member is doing is only ever the member's own report.
- */
-const A_MEMBER_WITH_NO_BEAT = {
-  state: IDLE,
-  holds: '',
-  task: '',
-  progress: { step: 0, of: 1 },
-  waits: null,
-  needs: '',
-  host: { model: '', provider: '', contextPercent: null, costUsd: null },
-} satisfies Omit<DashboardRow, 'member' | 'session' | 'at'>
-
 /** The row as this session last left it: what a report moves and the heartbeat rewrites. */
 function rowNow(places: CrewToolPlaces, state: SessionState): DashboardRow {
   const kept = state.held ?? places.beats.read(places.member)
-  return { ...A_MEMBER_WITH_NO_BEAT, ...(kept ?? {}), member: places.member, session: state.session, at: places.ledger.clock.now() }
+  return { ...theRowWithNothingSaid(), ...(kept ?? {}), member: places.member, session: state.session, at: places.ledger.clock.now() }
 }
 
 /** Keeps the row, in this process and on disk. */

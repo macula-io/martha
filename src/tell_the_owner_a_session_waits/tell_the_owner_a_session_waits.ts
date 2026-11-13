@@ -11,11 +11,12 @@
 // you" (`whatTheOwnerIsShown`), so a dialog that closes leaves the row exactly as it read before it, with nothing put
 // back and nothing remembered.
 //
-// A dialog is keyed by what raised it, never by its own text. A permission is keyed by the agent that called the tool,
-// the tool and a digest of its input, so two agents asking for the same tool are two dialogs and one closing does not
-// clear the other. An elicitation is keyed by its id, which the host gives one per request. And a dialog an earlier
-// turn left open is dropped when a turn starts, so a prompt nobody answered cannot pin the row at "needs you" for the
-// rest of the session.
+// A dialog is keyed by what raised it, never by its own text. A permission is keyed by the host's own id for the call
+// when the engine named one before it asked, so two identical calls in flight are two dialogs and the one that runs
+// closes only itself; without one it is keyed by the agent that called the tool, the tool and a digest of its input,
+// and two identical calls at once are one dialog until the next turn starts. An elicitation is keyed by its id, which
+// the host gives one per request. And a dialog an earlier turn left open is dropped when a turn starts, so a prompt
+// nobody answered cannot pin the row at "needs you" for the rest of the session.
 //
 // Nothing a server says reaches the row as it was sent: every word is stripped of what a terminal cannot show and cut
 // to one line's worth, because an MCP server's question is not this crew's text.
@@ -36,10 +37,22 @@ export const MENU = 'a menu'
 
 /** What raised a dialog, as the host told this slice. */
 export type RaisingADialog =
-  | { readonly kind: 'permission'; readonly agent: string; readonly tool: string; readonly input: unknown }
+  | {
+      readonly kind: 'permission'
+      readonly agent: string
+      readonly tool: string
+      readonly input: unknown
+      /**
+       * The host's own id for the call the owner is asked about, when the engine named one before it asked
+       * (martha#313): two identical calls in flight are then two dialogs, and a call that runs closes the one it
+       * was. Absent, the dialog is keyed by what asked (the agent, the tool and the input), and two identical calls
+       * at once are one dialog until the next turn starts.
+       */
+      readonly uses?: string
+    }
   | { readonly kind: 'elicitation'; readonly server: string; readonly question: string; readonly id?: string }
   | { readonly kind: 'notification'; readonly message: string }
-  | { readonly kind: 'menu' }
+  | { readonly kind: 'menu'; readonly uses?: string }
 
 /** One thing the host said about the owner's screen: a dialog raised, put away, or a turn that starts with none. */
 export type OwnerDialogEvent =
@@ -95,28 +108,35 @@ export function theWordsOfADialog(raised: RaisingADialog): string {
 
 /** The key a dialog's opening and its closing meet on: what raised it, never its text. */
 export function theKeyOf(raised: RaisingADialog): string {
-  if (raised.kind === 'permission') return theKeyOfAPermission(raised.agent, raised.tool, raised.input)
+  if (raised.kind === 'permission') return theKeyOfAPermission(raised.agent, raised.tool, raised.input, raised.uses)
   if (raised.kind === 'elicitation') return theKeyOfAnElicitation(raised.id, raised.server, raised.question)
-  if (raised.kind === 'notification') return theKeyOfTheWords(raised.kind, raised.message)
-  return theKeyOfTheWords(raised.kind, MENU)
-}
-
-/** The key of a permission: the agent, the tool, and a digest of the input, so two agents asking are two dialogs. */
-export function theKeyOfAPermission(agent: string, tool: string, input: unknown): string {
-  return `permission:${agent}:${tool}:${digestOf(input)}`
+  if (raised.kind === 'menu') return theKeyOfAMenu(raised.uses)
+  return theKeyOfTheWords(raised.kind, raised.message)
 }
 
 /**
- * The key of an elicitation: its own id, which the host gives one per request; and, for a host that gives none, the
- * server and its question, digested, so an opening still meets its closing.
+ * The key of a permission: the host's own id for the call when it named one before asking, so two identical calls in
+ * flight are two dialogs; and otherwise the agent, the tool and a digest of the input, so two agents asking are still
+ * two dialogs (martha#313).
  */
-export function theKeyOfAnElicitation(id: string | undefined, server: string, question: string): string {
-  return id === undefined || id === '' ? `elicitation:${server}:${digestOf(question)}` : `elicitation:${id}`
+export function theKeyOfAPermission(agent: string, tool: string, input: unknown, uses?: string): string {
+  return uses === undefined || uses === '' ? `permission:${agent}:${tool}:${theDigestOf(input)}` : `permission:${uses}`
 }
 
-/** The key of a notification or a menu: what the host said, digested, since neither has an id of its own. */
+/** The key of an elicitation: its own id, which the host gives one per request; and, for a host that gives none, the
+ * server and its question, digested, so an opening still meets its closing. */
+export function theKeyOfAnElicitation(id: string | undefined, server: string, question: string): string {
+  return id === undefined || id === '' ? `elicitation:${server}:${theDigestOf(question)}` : `elicitation:${id}`
+}
+
+/** The key of a menu: the host's own id for the call it opened the menu with, or the menu's one word when it gave none. */
+export function theKeyOfAMenu(uses?: string): string {
+  return uses === undefined || uses === '' ? theKeyOfTheWords('menu', MENU) : `menu:${uses}`
+}
+
+/** The key of a notification: what the host said, digested, since it has no id of its own. */
 export function theKeyOfTheWords(kind: OwnerDialogKind, words: string): string {
-  return `${kind}:${digestOf(words)}`
+  return `${kind}:${theDigestOf(words)}`
 }
 
 /** What the owner is told about one notification the host can send. */
@@ -181,7 +201,7 @@ export function cutForTheRow(words: string): string {
 }
 
 /** A digest of a value as it would be written down, with every object's fields in one order, so two equal values agree. */
-function digestOf(value: unknown): string {
+export function theDigestOf(value: unknown): string {
   return createHash('sha256').update(canonical(value)).digest('hex')
 }
 

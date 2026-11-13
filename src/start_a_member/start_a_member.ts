@@ -35,7 +35,7 @@ import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.t
 import type { HandoverStampStore } from '../host_contract/host_contract.ts'
 import type { CrewStore, DocumentStore } from '../host_contract/host_contract.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
-import { DeclarationRefused, declareCrew, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { DeclarationRefused, declareCrew, OWNER_BELL, STRICT_GATE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import {
   CREW_ROW_PLACE,
@@ -60,7 +60,7 @@ import {
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -205,23 +205,15 @@ function signedShapeNames(state: MarthaState): readonly string[] {
 }
 
 /**
- * The crew's own store for this launch (martha#254 R1, #255): a member's park marker and the handovers a wake reads.
- * A crew directory that is not this user's own is answered as a store that refuses every place, so a tool that needed
- * it says why rather than writing somewhere else.
+ * The two stores a crew's own directory holds (martha#254 R1, #255): the places its tools keep files in — a member's
+ * park marker, the handovers a wake reads — and the stamps a handover carries. A crew directory that is not this
+ * user's own is answered as stores that refuse both ways, so a tool that needed one says why rather than writing a
+ * file nothing stamped.
  */
-function theCrewStore(state: MarthaState, root: string): CrewStore {
+function theCrewsStores(state: MarthaState, root: string): { readonly crew: CrewStore; readonly stamps: HandoverStampStore } {
   const crew = crewStateDirectory(state.state_root, root)
-  return 'refusal' in crew ? { place: () => crew } : crewFilesDirectory(crew.path)
-}
-
-/**
- * The stamps this crew's handovers carry (martha#255): the host's record of which it wrote, when, and for which member.
- * A crew directory that is not this user's own is answered as a store that refuses both ways, so the handover tool
- * says why instead of writing a file nothing stamped.
- */
-function theHandoverStamps(state: MarthaState, root: string): HandoverStampStore {
-  const crew = crewStateDirectory(state.state_root, root)
-  return 'refusal' in crew ? { read: () => crew, write: () => crew } : handoverStampsIn(crew.path)
+  if ('refusal' in crew) return { crew: { place: () => crew }, stamps: { read: () => crew, write: () => crew } }
+  return { crew: crewFilesDirectory(crew.path), stamps: handoverStampsIn(crew.path) }
 }
 
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
@@ -236,6 +228,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     for (const unremoved of pruneOwnWritesOfOldLaunches(request.state)) request.tellOwner(unremoved)
   }
   const { snapshot_root, ...places } = request.places
+  const crewStores = theCrewsStores(request.state, request.root)
   // One raising for this launch, and one channel carrier over it: the carrier hears every turn the host takes in, so
   // a message counts as taken in only when the host raised it back (martha#253).
   const turns = turnsRaised()
@@ -246,6 +239,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, ...approvedPlace(request, ready.approval) },
     policy: { may_send_executable_text: [] },
     strict_gate: ready.strict_gate,
+    owner_bell: ready.settings.house_rules[OWNER_BELL],
     places,
     command: request.command,
     args: [...(ready.model === null ? [] : ['--model', ready.model]), ...request.args, ...(request.initial_prompt === undefined ? [] : [request.initial_prompt])],
@@ -261,12 +255,12 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         beats: dashboardRowsIn(request.places.dashboard),
         root: request.root,
         documents: request.documents,
-        stores: { crew: theCrewStore(request.state, request.root) },
+        stores: { crew: crewStores.crew },
         carrier: carryingTo({ member: request.member, host: channel, turns }),
         sessions,
         // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
         // session writes is the one its successor inherits.
-        stamps: theHandoverStamps(request.state, request.root),
+        stamps: crewStores.stamps,
         // The five tools that act run git and gh through the launcher's own processes, over the declaration's
         // workspace places: nothing that acts runs inside the member's session (martha#256).
         processes: thisMachine.processes,

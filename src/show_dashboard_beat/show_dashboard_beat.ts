@@ -109,6 +109,23 @@ export function rowFileNameOf(member: string): string {
   return `${encodeURIComponent(member).replaceAll('.', '%2E')}.json`
 }
 
+/**
+ * A row with nothing said in it: what a member reads as before its first report (`idle`, never `working` — martha#254
+ * test 7, r=1 R2), and what a launcher writes when the host is asking the owner something before the member has said
+ * anything about itself (martha#313). One default, so a report and a dialog start from the same row.
+ */
+export function theRowWithNothingSaid(): Omit<DashboardRow, 'member' | 'session' | 'at'> {
+  return {
+    state: IDLE,
+    holds: '',
+    task: '',
+    progress: { step: 0, of: 1 },
+    waits: null,
+    needs: '',
+    host: { model: '', provider: '', contextPercent: null, costUsd: null },
+  }
+}
+
 /** The member a row file name keeps, or undefined when it is not one a row store writes. */
 export function memberOfRowFileName(name: string): string | undefined {
   if (!name.endsWith('.json')) return undefined

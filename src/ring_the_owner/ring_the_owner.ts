@@ -28,6 +28,11 @@ export interface TheBellsSwitch {
 /** Neither: a launch that says nothing about its bells rings none, as every switch in the declaration is off unasked. */
 export const NO_BELLS: TheBellsSwitch = { bell: false, notify: false }
 
+/** The bells a crew's declaration asks for (martha#313): the bell and the notification both, or neither. */
+export function theBellsTheOwnerDeclared(on: boolean): TheBellsSwitch {
+  return { bell: on, notify: on }
+}
+
 /** The kitty notification protocol's opening, and the string terminator that ends it whatever it carried. */
 export const NOTIFICATION_OPENING = '\u001b]99;i=martha:d=0;'
 export const NOTIFICATION_ENDING = '\u001b\\'

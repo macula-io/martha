@@ -298,6 +298,40 @@ test('the relay holds no verdict of its own: a deny is the launcher\'s reason, w
   }
 })
 
+test('the host\'s four dialogs are relayed with the hook\'s own name and fields, and the owner\'s answer is the host\'s alone (martha#313)', async () => {
+  for (const [event, fields] of [
+    ['classic.PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf build' }, permission_suggestions: [] }],
+    ['classic.Elicitation', { mcp_server_name: 'a-server', message: 'which file?', elicitation_id: 'e-1' }],
+    ['classic.ElicitationResult', { mcp_server_name: 'a-server', action: 'accept' }],
+    ['classic.Notification', { notification_type: 'agent_needs_input', message: 'An agent needs you' }],
+  ] as const) {
+    const fake = fakeEngine(sayYes)
+    const { fn, calls } = next<Readonly<Record<string, unknown>>>({ fromTheHost: 1 })
+    const answer = await hooksOfTheRelay().get(event)?.hook(fake.$, fields, fn)
+    assert.deepEqual(answer, { fromTheHost: 1 }, `${event}: the rest of the chain's answer stands, whatever the launcher said`)
+    assert.deepEqual(calls, [fields], `${event}: the chain is handed the host's own input unchanged`)
+    assert.deepEqual(fake.posted, [{ url: `${RELAY_ORIGIN}${RELAY_PATHS.owner_dialog}`, body: { session_id: SESSION, hook: event, fields }, socketPath: SOCKET }])
+  }
+})
+
+test('a dialog the launcher cannot be told of still reaches the owner: the relay never drops the host\'s own question (martha#313)', async () => {
+  const fake = fakeEngine(async () => ({ status: 500, text: 'no' }))
+  const { fn, calls } = next<Readonly<Record<string, unknown>>>({ fromTheHost: 1 })
+  const answer = await hooksOfTheRelay().get('classic.PermissionRequest')?.hook(fake.$, { tool_name: 'Bash' }, fn)
+  assert.deepEqual(answer, { fromTheHost: 1 })
+  assert.deepEqual(calls, [{ tool_name: 'Bash' }], 'the host\'s dialog is not gated on Martha hearing about it')
+})
+
+test('the check the host runs about a call is relayed whole, and its decision is the engine\'s own (martha#313)', async () => {
+  const fake = fakeEngine(sayYes)
+  const check = { tool: 'Bash', input: { command: 'rm -rf build' }, tool_use_id: 'toolu_9', isReadOnly: false }
+  const { fn, calls } = next<Readonly<Record<string, unknown>>>({ decision: 'ask', reason: 'the owner is asked' })
+  const answer = await hooksOfTheRelay().get('tool.check')?.hook(fake.$, check, fn)
+  assert.deepEqual(answer, { decision: 'ask', reason: 'the owner is asked' }, 'Martha decides nothing about a call here')
+  assert.deepEqual(calls, [check])
+  assert.deepEqual(fake.posted, [{ url: `${RELAY_ORIGIN}${RELAY_PATHS.tool_checked}`, body: { session_id: SESSION, check }, socketPath: SOCKET }])
+})
+
 test('the relay imports only its protocol, and the protocol imports nothing', () => {
   const read = (name: string): string => readFileSync(new URL(`./hooks/${name}`, import.meta.url), 'utf8')
   const specifiers = (name: string) => moduleReferencesOf(read(name), name).map(({ specifier }) => specifier)
