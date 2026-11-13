@@ -13,13 +13,13 @@ import { OFFER_OWNER_ASKS, OWNER } from '../declare_crew/declare_crew.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
+import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import {
   ASK_CLAIM_MS,
   ASK_QUEUED,
   ASKS_TAKEN,
   MAX_ASK,
   OWNER_ASKS_STREAM,
-  THE_MENUS_TOOL,
   admitsAnAskToTheOwner,
   listTheAsks,
   mayOfferTheOwnersAsks,
@@ -158,7 +158,7 @@ test('a settle after the window still removes the asks the owner ticked, and put
   const batch = Number(/settle batch (\d+)/.exec(taken)?.[1])
 
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   host.at = START + ASK_CLAIM_MS + 1
   assert.equal(TOLD(await settling(host, LEAD, batch, [0])), `Batch ${String(batch)} settled: 1 the owner ticked, 1 back in the queue.`)
   const waiting = await waitingIn(host)
@@ -176,11 +176,11 @@ test('a settle with no menu closed since the take is refused (mutant: the menu c
   host.menus.noteTheCallsAnswer({ tool: 'a tool that is not the menu' }, 'session-lead')
   assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed/, 'another tool\'s answer is not a menu')
 
-  host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'another-session')
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'another-session')
   assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed/, 'a menu in another session is not this one')
 
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   assert.match(TOLD(await settling(host, LEAD, batch, [0])), /^Batch \d+ settled: 1 the owner ticked, 0 back in the queue\.$/)
 })
 
@@ -197,7 +197,7 @@ test('a yes that names no ask of the batch is refused, and nothing is settled', 
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   assert.match(REFUSED(await settling(host, LEAD, batch, [77])), /^77 is not an ask of batch \d+$/)
 })
 

@@ -18,6 +18,8 @@ import {
   type RelayEngine,
   type RelayHook,
 } from './hooks/register.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { heardTaken, LARGEST_RELAYED_ANSWER, RELAY_DEADLINE_MS, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 type AnyHook = RelayHook<any, any>
@@ -180,6 +182,27 @@ test('the relay sends the engine fields unchanged: the start whole, the origin w
   )
 })
 
+test('the relay posts the call before the check, and the check before the ask, so a call\'s answer is the row\'s only close (r=2 R1, R2)', async () => {
+  const fake = fakeEngine(sayYes)
+  const hooks = hooksOfTheRelay()
+  const check = { tool: CALL.tool, input: { command: CALL.command }, tool_use_id: CALL.tool_use_id }
+  const ask = { hook_event_name: 'PermissionRequest', session_id: SESSION, tool_name: CALL.tool, tool_input: { command: CALL.command } }
+  // What the host does inside tool.call on 2.1.323: it posts the call, checks it, asks the owner about it, and only
+  // then runs it. The row's close is the answer at the end, because nothing the host posts earlier comes after the
+  // owner's answer — and the posting comes before the ask, so a row that closed on it would close before it opened.
+  const theHostInsideItsCall = async (): Promise<unknown> => {
+    await hooks.get(TOOL_CHECK)?.hook(fake.$, check, next(check).fn)
+    await hooks.get(PERMISSION_REQUEST)?.hook(fake.$, ask, next(ask).fn)
+    return RESULT
+  }
+  assert.deepEqual(await hooks.get('tool.call')?.hook(fake.$, CALL, theHostInsideItsCall), RESULT)
+  assert.deepEqual(
+    fake.posted.map(({ url }) => url.slice(RELAY_ORIGIN.length)),
+    [RELAY_PATHS.tool_called, RELAY_PATHS.tool_checked, RELAY_PATHS.owner_dialog, RELAY_PATHS.tool_answered],
+    'the order the owner\'s row relies on: the call, then its check, then the ask, then the call\'s answer',
+  )
+})
+
 test('an answer too big to send is left out of the tool_answered body, and the call records A13 rather than a body the launcher stops the member over (martha#129)', async () => {
   const huge = { text: 'x'.repeat(LARGEST_RELAYED_ANSWER) }
   const fake = fakeEngine(sayYes)
@@ -296,6 +319,40 @@ test('the relay holds no verdict of its own: a deny is the launcher\'s reason, w
   for (const policy of ['Bash', 'mcp__', 'composer', 'peer', 'owner_paste', 'cross_session']) {
     assert.doesNotMatch(source.replace(/^\s*\/\/.*$/gm, ''), new RegExp(`['"\`]${policy}`), policy)
   }
+})
+
+test('the host\'s four dialogs are relayed with the hook\'s own name and fields, and the owner\'s answer is the host\'s alone (martha#313)', async () => {
+  for (const [event, fields] of [
+    [PERMISSION_REQUEST, { tool_name: CLAUDE_CODE_SHELL_TOOL, tool_input: { command: 'rm -rf build' }, permission_suggestions: [] }],
+    [ELICITATION, { mcp_server_name: 'a-server', message: 'which file?', elicitation_id: 'e-1' }],
+    [ELICITATION_RESULT, { mcp_server_name: 'a-server', action: 'accept' }],
+    [NOTIFICATION, { notification_type: 'agent_needs_input', message: 'An agent needs you' }],
+  ] as const) {
+    const fake = fakeEngine(sayYes)
+    const { fn, calls } = next<Readonly<Record<string, unknown>>>({ fromTheHost: 1 })
+    const answer = await hooksOfTheRelay().get(event)?.hook(fake.$, fields, fn)
+    assert.deepEqual(answer, { fromTheHost: 1 }, `${event}: the rest of the chain's answer stands, whatever the launcher said`)
+    assert.deepEqual(calls, [fields], `${event}: the chain is handed the host's own input unchanged`)
+    assert.deepEqual(fake.posted, [{ url: `${RELAY_ORIGIN}${RELAY_PATHS.owner_dialog}`, body: { session_id: SESSION, hook: event, fields }, socketPath: SOCKET }])
+  }
+})
+
+test('a dialog the launcher cannot be told of still reaches the owner: the relay never drops the host\'s own question (martha#313)', async () => {
+  const fake = fakeEngine(async () => ({ status: 500, text: 'no' }))
+  const { fn, calls } = next<Readonly<Record<string, unknown>>>({ fromTheHost: 1 })
+  const answer = await hooksOfTheRelay().get(PERMISSION_REQUEST)?.hook(fake.$, { tool_name: CLAUDE_CODE_SHELL_TOOL }, fn)
+  assert.deepEqual(answer, { fromTheHost: 1 })
+  assert.deepEqual(calls, [{ tool_name: CLAUDE_CODE_SHELL_TOOL }], 'the host\'s dialog is not gated on Martha hearing about it')
+})
+
+test('the check the host runs about a call is relayed whole, and its decision is the engine\'s own (martha#313)', async () => {
+  const fake = fakeEngine(sayYes)
+  const check = { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'rm -rf build' }, tool_use_id: 'toolu_9', isReadOnly: false }
+  const { fn, calls } = next<Readonly<Record<string, unknown>>>({ decision: 'ask', reason: 'the owner is asked' })
+  const answer = await hooksOfTheRelay().get(TOOL_CHECK)?.hook(fake.$, check, fn)
+  assert.deepEqual(answer, { decision: 'ask', reason: 'the owner is asked' }, 'Martha decides nothing about a call here')
+  assert.deepEqual(calls, [check])
+  assert.deepEqual(fake.posted, [{ url: `${RELAY_ORIGIN}${RELAY_PATHS.tool_checked}`, body: { session_id: SESSION, check }, socketPath: SOCKET }])
 })
 
 test('the relay imports only its protocol, and the protocol imports nothing', () => {

@@ -29,27 +29,22 @@ type CrewTool = ALaunchersTool
 /** The engine calls this module makes, typed by shape as the relay's own module types them. */
 interface CrewEngine {
   readonly env: { get(name: string): Promise<string | undefined> }
-  readonly http: {
-    fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }>
-  }
+  readonly http: { fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }> }
   /** The session's id, and the host's own reading of it: its usage, taken as it comes and read by the core. */
   readonly session: { id(): Promise<string>; usage(): Promise<unknown> }
-  readonly clock: {
-    after(ms: number, fn: () => void): { cancel(): void }
-    every(ms: number, fn: () => void): { cancel(): void }
-  }
+  readonly clock: { after(ms: number, fn: () => void): { cancel(): void }; every(ms: number, fn: () => void): { cancel(): void } }
   /** Submits a prompt into this session (martha#253): the text a message is handed in. */
   readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
-  readonly command: {
-    register(command: { name: string; description: string }): Promise<unknown>
-    /** Runs one of the host's own commands in this session: the refresh flow's clear is this one (martha#255). */
-    run(command: { command: string; args?: string }): Promise<unknown>
-  }
+  /** `run` runs one of the host's own commands in this session: the refresh flow's clear is that one (martha#255). */
+  readonly command: { register(command: { name: string; description: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
+  /**
+   * `invalidate` asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it
+   * (martha#254).
+   */
   readonly ui: {
     open(view: { id: string; title: string; rows: number }): Promise<unknown>
     close(view: { id: string }): Promise<unknown>
-    /** Asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it (martha#254). */
     invalidate(event: string): Promise<unknown>
     toast(text: string): unknown
     /** Puts text on the clipboard of the session whose button was pressed: the surface is the press's own handle. */
@@ -225,20 +220,15 @@ async function askTheLauncher($: CrewEngine, tool: string, args: Readonly<Record
   return 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}`
 }
 
-/** What the launcher gives the relay when it asks for the tools to register. */
-interface FromTheLauncher {
-  readonly tools: readonly CrewTool[]
-}
-
 /** Asks the launcher for the tools to register, which it alone names and describes. */
-async function toolsFromTheLauncher($: CrewEngine): Promise<FromTheLauncher> {
+async function toolsFromTheLauncher($: CrewEngine): Promise<readonly CrewTool[]> {
   const heard = await hearTheLauncher($, 'the_crews_tools', {})
   const tools = 'said' in heard ? crewToolsIn(heard.said) : null
-  if (tools !== null) return { tools }
+  if (tools !== null) return tools
   // A launcher that could not answer is not a crew with no tools: registering nothing in silence would leave the
   // member calling tools that were never registered, and nothing would say why (martha#254 part 2 r=2 R2).
   $.ui.toast(`Martha did not give the crew's tools: ${'said' in heard ? 'its answer is not a list of them' : heard.why}`)
-  return { tools: [] }
+  return []
 }
 
 /** The pane's redraw timer while a pane is open: the host draws a `ui.render` once and caches it until invalidated. */
@@ -431,8 +421,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
   on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
-    const fromTheLauncher = await toolsFromTheLauncher($)
-    for (const tool of fromTheLauncher.tools) await $.tool.register(tool)
+    for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (paneIn(first)?.open_at_start === true) await openThePane($)
     await startReadingTheChannel($)

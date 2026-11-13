@@ -19,7 +19,7 @@ import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { launcherPlacesOf } from './start_a_member.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'

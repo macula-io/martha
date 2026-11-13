@@ -15,7 +15,8 @@ import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFF
 import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, THE_MENUS_TOOL, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
@@ -90,7 +91,7 @@ test('the session the table does not name is refused, and the one it names takes
   assert.match(REFUSED(await lead.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), /no menu has closed/)
 
   clock.at = 3_000
-  lead.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
+  lead.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   assert.equal(TOLD(await lead.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), `Batch ${String(batch)} settled: 1 the owner ticked, 0 back in the queue.`)
   assert.equal(TOLD(await lead.answer(LIST_ASKS, {}, 'session-lead')), 'No asks are waiting for the owner.')
 })
@@ -108,6 +109,6 @@ test('a place handed no menu record keeps its own over the crew clock, so a menu
   TOLD(await place.answer(QUEUE_ASK, { ask: 'Remove the stale worktree?' }, 'session-lead'))
   const batch = Number(/settle batch (\d+)/.exec(TOLD(await place.answer(TAKE_ASKS, {}, 'session-lead')))?.[1])
   clock.at = 5_000
-  place.noteTheCallsAnswer({ tool: THE_MENUS_TOOL }, 'session-lead')
+  place.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   assert.match(TOLD(await place.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), /^Batch \d+ settled: 1 the owner ticked, 0 back in the queue\.$/)
 })

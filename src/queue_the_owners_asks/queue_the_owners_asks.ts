@@ -17,8 +17,9 @@
 //
 // A settle is refused unless a menu closed in the session that took the batch after it took it. The launcher sees that,
 // because its relay answers every tool call the host made, the menu tool included; the model's own word that it showed
-// the owner a menu never counts. The launcher keeps those closings in memory (menusTheLauncherKeeps), so a refresh
-// forgets them and the next settle is refused rather than trusted.
+// the owner a menu never counts. Which tool that is is the dialogs half's to name, once, in
+// ../say_what_the_host_is_asking, and this slice reads it from there. The launcher keeps those closings in memory
+// (menusTheLauncherKeeps), so a refresh forgets them and the next settle is refused rather than trusted.
 //
 // Every ask is stamped with the member the launcher started, never with a name the ask's text chose, and its text is
 // capped and stripped of the characters that repaint a row: it reaches the session that offers it as a menu, which is a
@@ -29,6 +30,7 @@ import type { Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { CONTROL } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
+import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 
 /** The stream the owner's asks live in, in the crew's row streams. */
 export const OWNER_ASKS_STREAM = 'owner_asks'
@@ -64,12 +66,6 @@ export const ASK_CLAIM_MS = 30 * MINUTE_MS
 
 /** How long an ask may be, in characters: what the owner reads in a menu option, and what the queue keeps. */
 export const MAX_ASK = 300
-
-/**
- * The host's own menu tool: the one call whose answer means the owner was shown a menu. Claude Code names it
- * `AskUserQuestion`, and the relay hands its called name here unchanged, since it is a tool of the host's own.
- */
-export const THE_MENUS_TOOL = 'AskUserQuestion'
 
 /** The claim window as the words that quote it. */
 export const THE_WINDOW = `${String(ASK_CLAIM_MS / MINUTE_MS)} minutes`
@@ -402,7 +398,7 @@ export function menusTheLauncherKeeps(clock: { now(): number }): TheOwnersMenus 
   return {
     closedAt: (session) => closed.get(session) ?? null,
     noteTheCallsAnswer: (call, session) => {
-      if (call.tool === THE_MENUS_TOOL) closed.set(session, clock.now())
+      if (call.tool === MENU_TOOL) closed.set(session, clock.now())
     },
   }
 }
