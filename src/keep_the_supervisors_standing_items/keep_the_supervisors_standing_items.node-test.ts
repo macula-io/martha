@@ -21,6 +21,7 @@ import {
   NOTHING_STANDS,
   STANDING,
   STANDING_ADD_DESCRIPTION,
+  STANDING_CLOSE,
   STANDING_KINDS,
   STANDING_STREAM,
   closeAStandingItem,
@@ -30,6 +31,7 @@ import {
   theItemAsked,
   theStandingItems,
   theStandingList,
+  theHeldPackageOf,
   theStandingPartOfTheStart,
   type StandingItem,
   type StandingKind,
@@ -233,4 +235,48 @@ test('a start with the cap or fewer hands them all and no tail; with none, nothi
   assert.equal(part.split('\n').filter((line) => line.startsWith('- HELD')).length, ITEMS_HANDED_AT_START)
   assert.ok(!part.includes('more: call'))
   assert.equal(theStandingPartOfTheStart([], TODAY), null)
+})
+
+// --- a hold that names the package it holds (martha#364) ---------------------------------------------------------
+
+const A_HOLD_ON_A_PACKAGE = { ...A_CALL.held, package: 'macula-io/martha#364' }
+
+test('#364: a hold may name the package it holds, and is drawn with it; a hold without one still records', async () => {
+  const host = aHost()
+  told(await recordAStandingItem(host, A_HOLD_ON_A_PACKAGE, 'Supervisor'))
+  told(await recordAStandingItem(host, { ...A_CALL.held, id: 'no-package' }, 'Supervisor'))
+  const standing = theStandingItems(await host.stores.rows.read(STANDING_STREAM))
+  assert.deepEqual(standing.map((item) => theHeldPackageOf(item)), ['macula-io/martha#364', undefined])
+  assert.match(theStandingList(standing, TODAY)[0] ?? '', /^- HELD martha-353 \(macula-io\/martha#364\): /)
+  assert.ok(STANDING_ADD_DESCRIPTION.includes('package: the package it holds'), 'standing_add does not say a hold may name its package')
+})
+
+test('#364: a package that is not owner/repo#n is refused by name, and nothing is written (test 9)', async () => {
+  const host = aHost()
+  for (const bad of ['martha-364', 'macula-io/martha', 'macula-io/martha#0', 'macula-io/martha#364\n', 'macula-io/martha #1']) {
+    assert.match(refused(await recordAStandingItem(host, { ...A_CALL.held, package: bad }, 'Supervisor')), /^a held item: package /)
+  }
+  assert.deepEqual(await host.stores.rows.read(STANDING_STREAM), [])
+})
+
+test('#364: moving a hold\'s day must keep its package: dropping or changing it is refused, and the hold still names it (test 10; mutant: let the re-record through)', async () => {
+  const host = aHost()
+  told(await recordAStandingItem(host, A_HOLD_ON_A_PACKAGE, 'Supervisor'))
+  const dropped = refused(await recordAStandingItem(host, { ...A_CALL.held, until: '2026-11-27' }, 'Supervisor'))
+  assert.match(dropped, /martha-353 is held on macula-io\/martha#364: name the same package to move its day, or close it first/)
+  assert.ok(dropped.includes(STANDING_CLOSE))
+  refused(await recordAStandingItem(host, { ...A_HOLD_ON_A_PACKAGE, package: 'macula-io/martha#365' }, 'Supervisor'))
+  const kept = theStandingItems(await host.stores.rows.read(STANDING_STREAM))
+  assert.deepEqual(kept.map((item) => [theHeldPackageOf(item), item.fields['until']]), [['macula-io/martha#364', A_CALL.held['until']]])
+
+  told(await recordAStandingItem(host, { ...A_HOLD_ON_A_PACKAGE, package: 'Macula-IO/Martha#364', until: '2026-11-27' }, 'Supervisor'))
+  const moved = theStandingItems(await host.stores.rows.read(STANDING_STREAM))
+  assert.deepEqual(moved.map((item) => item.fields['until']), ['2026-11-27'], 'the same package, in another case, did not move the day')
+})
+
+test('#364: a hold that named no package may be given one when its day moves', async () => {
+  const host = aHost()
+  told(await recordAStandingItem(host, A_CALL.held, 'Supervisor'))
+  told(await recordAStandingItem(host, A_HOLD_ON_A_PACKAGE, 'Supervisor'))
+  assert.deepEqual(theStandingItems(await host.stores.rows.read(STANDING_STREAM)).map((item) => theHeldPackageOf(item)), ['macula-io/martha#364'])
 })
