@@ -157,6 +157,25 @@ test('#316: the sweep runs once per SWEEP_INTERVAL_MS, and takes off the act its
   assert.equal((await theStream(place)).filter((stored) => stored.row['kind'] === ACT_ASKED_OF_OWNER).length, 1, 'the sweep wrote a second act')
 })
 
+test('#316 r2: a member the table does not let keep the list runs no check when it sweeps', async () => {
+  const place = aPlace(A_TEAM)
+  const added = await toolsOf(place, 'Lead').answer(OWNER_TODO_ADD, { ...AN_ACT, check: { pr_merged: { repo: 'macula-io/martha', number: 400 } } }, 'a-session')
+  assert.ok('answer' in added, `the lead could not add the act: ${'refused' in added ? added.refused : ''}`)
+  const runs: ProcessRequest[] = []
+  const builder = toolsOf(place, 'Pallas', async (request) => (runs.push(request), { exit_code: 0, stdout: 'true\n', stderr: '' }))
+  mock.timers.enable({ apis: ['setInterval'] })
+  const stop = builder.startSweeping()
+  try {
+    mock.timers.tick(SWEEP_INTERVAL_MS)
+    await settle()
+  } finally {
+    stop()
+    mock.timers.reset()
+  }
+  assert.equal(runs.length, 0, 'a member the table refuses ran the list\'s check')
+  assert.equal(theOpenRows(await theStream(place)).length, 1, 'a member the table refuses took an act off the list')
+})
+
 /** How many turns of the event loop a wait gives the sweep: far more than a sweep over one row takes. */
 const TURNS = 100
 
