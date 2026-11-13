@@ -22,6 +22,7 @@
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
     "lint": "eslint . --max-warnings=0",
+    "redo:generated": "node src/redo_the_generated_files_of_a_merge/main.ts",
     "record:ring-results": "node src/record_ring_results/record_ring_results.ts",
     "record:mesh-answers": "node src/record_mesh_answers/record_mesh_answers.ts",
     "watch:shell": "./watch_a_live_launch/watch_a_member_keep_its_shell.sh",
