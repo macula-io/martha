@@ -44,7 +44,7 @@ import { homedir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { isatty } from 'node:tty'
 
-import { CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 
 /**
  * How long one question to the host may take. The load check reads the relay's
@@ -83,9 +83,6 @@ export const ownerCanAnswerTheHost = (stdio: StdioOptions): boolean => stdio ===
  */
 export const HOST_TRUST_RECORD_FILE = '.claude.json'
 
-/** The variable that makes the host ask again whatever its record says (named in the host's own message). */
-export const HOST_IGNORES_ITS_TRUST_RECORD = 'CLAUDE_CODE_IGNORE_PERSISTED_TRUST'
-
 /**
  * Whether the host's own record says it trusts `folder` already, so it will not
  * ask. Read one way only: true only for the exact folder, by its path or its
@@ -93,10 +90,19 @@ export const HOST_IGNORES_ITS_TRUST_RECORD = 'CLAUDE_CODE_IGNORE_PERSISTED_TRUST
  * does not parse, trusts only a folder above, or a host told to ignore its
  * record, is false: the owner may still be asked, and keeps the long deadline.
  * A wrong true only stops a member sooner.
+ *
+ * "Told to ignore its record" is both ways the recorded host's own trust
+ * predicate takes (`Hde(){return RUo()}`, the same function as the hook exit):
+ * the variable of its environment, or, from 2.1.323, one of the arguments the
+ * owner passes to it — read as the exact token the host tests, so a longer
+ * argument is not it. Both names come from the recording (martha#332 r=3).
  */
-export function hostTrustsTheFolder(env: Readonly<Record<string, string | undefined>>, folder: string): boolean {
-  const ignored = env[HOST_IGNORES_ITS_TRUST_RECORD]
-  if (ignored !== undefined && ignored !== '') return false
+export function hostTrustsTheFolder(
+  env: Readonly<Record<string, string | undefined>>,
+  folder: string,
+  ownersArguments: readonly string[],
+): boolean {
+  if (toldToIgnoreItsRecord(env, ownersArguments)) return false
   const configDir = env.CLAUDE_CONFIG_DIR ?? env.HOME ?? homedir()
   if (!isAbsolute(configDir)) return false
   try {
@@ -105,6 +111,20 @@ export function hostTrustsTheFolder(env: Readonly<Record<string, string | undefi
   } catch {
     return false
   }
+}
+
+/**
+ * Whether the host was told to ignore its record: a variable of its environment that the recording names is set, or
+ * one of its arguments is an argument the recording names. Both lists are the recorded host's own, never a name typed
+ * here, so a host that adds or renames a way in is read from the recording that passed the drift check.
+ */
+function toldToIgnoreItsRecord(env: Readonly<Record<string, string | undefined>>, ownersArguments: readonly string[]): boolean {
+  const { variables, flags } = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal
+  const set = variables.some((name) => {
+    const value = env[name]
+    return value !== undefined && value !== ''
+  })
+  return set || flags.some((flag) => ownersArguments.includes(flag))
 }
 
 /** The `projects` of the host's record; none when the record has no such object. */

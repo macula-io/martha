@@ -7,13 +7,12 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_SERVERS, HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   firstValidatorError,
   initQuestionArgs,
   MCP_CONFIG_SWITCH,
   SESSION_INIT_ARGS,
-  HOST_IGNORES_ITS_TRUST_RECORD,
   HOST_TRUST_RECORD_FILE,
   hostTrustsTheFolder,
   hostVersionLine,
@@ -128,15 +127,37 @@ test('the host\'s trust record is read from CLAUDE_CONFIG_DIR before HOME, only 
   const home = placeFor(t)
   const configDir = placeFor(t)
   writeFileSync(join(home, HOST_TRUST_RECORD_FILE), trusting)
-  assert.equal(hostTrustsTheFolder({ HOME: home }, folder), true)
-  assert.equal(hostTrustsTheFolder({ HOME: home, CLAUDE_CONFIG_DIR: configDir }, folder), false, 'CLAUDE_CONFIG_DIR names the record, and it has none')
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder, []), true)
+  assert.equal(hostTrustsTheFolder({ HOME: home, CLAUDE_CONFIG_DIR: configDir }, folder, []), false, 'CLAUDE_CONFIG_DIR names the record, and it has none')
   writeFileSync(join(configDir, HOST_TRUST_RECORD_FILE), trusting)
-  assert.equal(hostTrustsTheFolder({ HOME: placeFor(t), CLAUDE_CONFIG_DIR: configDir }, folder), true)
-  assert.equal(hostTrustsTheFolder({ HOME: home, CLAUDE_CONFIG_DIR: 'relative' }, folder), false)
-  assert.equal(hostTrustsTheFolder({ HOME: home, [HOST_IGNORES_ITS_TRUST_RECORD]: '1' }, folder), false)
+  assert.equal(hostTrustsTheFolder({ HOME: placeFor(t), CLAUDE_CONFIG_DIR: configDir }, folder, []), true)
+  assert.equal(hostTrustsTheFolder({ HOME: home, CLAUDE_CONFIG_DIR: 'relative' }, folder, []), false)
+  const [variable] = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal.variables
+  assert.ok(variable !== undefined, 'the recording names no variable for the exit')
+  assert.equal(hostTrustsTheFolder({ HOME: home, [variable]: '1' }, folder, []), false)
   const linked = join(placeFor(t), 'linked')
   symlinkSync(folder, linked)
-  assert.equal(hostTrustsTheFolder({ HOME: home }, linked), true, 'the record names the real path')
+  assert.equal(hostTrustsTheFolder({ HOME: home }, linked, []), true, 'the record names the real path')
+})
+
+test('an owner who passes the host its ignore-persisted-trust argument is read as a host that trusts no record (r=1 R1)', (t) => {
+  // The host's trust predicate is the very function behind the hook exit (`Hde(){return RUo()}`): with that argument
+  // among the owner's own, the host reads no trust record, so the member may be asked and keeps the long deadline. The
+  // argument and the variable are the recording's, not names typed here.
+  const folder = realpathSync(placeFor(t))
+  const home = placeFor(t)
+  writeFileSync(join(home, HOST_TRUST_RECORD_FILE), JSON.stringify({ projects: { [folder]: { hasTrustDialogAccepted: true } } }))
+  const { flags, variables } = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal
+  const flag = flags[0]
+  const variable = variables[0]
+  assert.ok(flag !== undefined && variable !== undefined, 'the recording names no way into the exit')
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder, []), true, 'the record trusts the folder and the owner passed nothing')
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder, [flag]), false, 'the owner passed the argument the host reads')
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder, ['--other', flag]), false)
+  // The host tests its arguments by exact token, so a longer argument that merely contains it is not the same thing.
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder, [`${flag}=1`]), true)
+  assert.equal(hostTrustsTheFolder({ HOME: home }, folder, [`${flag}-and-more`]), true)
+  assert.equal(hostTrustsTheFolder({ HOME: home, [variable]: '1' }, folder, []), false, 'the variable the host reads is honoured')
 })
 
 // What the question is asked with (martha#154 r=2): the member's own settings, so the `env` block that moves the

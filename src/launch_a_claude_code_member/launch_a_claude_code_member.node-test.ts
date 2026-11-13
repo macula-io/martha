@@ -2804,6 +2804,22 @@ test('a member on the owner\'s terminal in a folder the host\'s record already t
   assert.ok(!why.includes('trust'), why)
 })
 
+test('a member on the owner\'s terminal whose owner passes the host its ignore-persisted-trust argument keeps the trust answer deadline (#332 r=4)', async (t) => {
+  // The record trusts the folder, so a launch whose arguments the trust reader never saw is stopped at the short
+  // deadline (the test above). The owner's own argument says the host reads no record, so the host may ask after all:
+  // the member keeps the long deadline and runs. This is the call site, not the reader: the arguments must be passed.
+  const place = placeFor(t)
+  hostTrustRecord(place, JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
+  const session_start_deadline_ms = 300
+  const flag = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal.flags[0]
+  assert.ok(flag !== undefined, 'the recording names no argument for the exit')
+  const terminal = await ownersTerminal(t, place, { args: [flag], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+  const member = Number(textIn(terminal.fake.readyFile))
+  await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
+  assert.equal(isAlive(member), true, 'the member still runs: the host was told to ignore its record, so it may ask')
+  assert.ok(!terminal.shown().includes('stopped'), terminal.shown())
+})
+
 for (const [what, record] of [
   ['no record at all', undefined],
   ['a record that does not parse', '{"projects": {'],
