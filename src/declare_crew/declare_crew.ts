@@ -28,8 +28,14 @@ export const DECLARATION_FILE = 'crew.json'
 /** The one declaration version this slice reads. */
 export const DECLARATION_VERSION = 1
 
+/**
+ * The act that lets a role's members end another member's session and start it again (martha#312): ending a session
+ * mid-turn is a stronger act than unparking one, so it is granted on its own.
+ */
+export const RESTART_MEMBER = 'restart_member'
+
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work'] as const
+export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work', RESTART_MEMBER] as const
 export type Act = (typeof ACTS)[number]
 
 /**
@@ -278,6 +284,9 @@ function mayOf(refuse: Refuse, value: unknown, roles: readonly string[]): Record
   refuse.unknownKeys(value, ACTS, 'mode.may.')
   const allowed = [OWNER, ...roles]
   const whoMay = (act: Act): string[] => {
+    // A table written before the act existed (v0.1.0's `martha init` wrote three) reads it as the owner's alone, which
+    // is what init grants it now; a table that names the act and names nobody is still refused (martha#312 r=1 R1).
+    if (act === RESTART_MEMBER && !(act in value)) return [OWNER]
     const who = value[act]
     if (!Array.isArray(who) || who.length === 0) return refuse.at(`mode.may.${act}`, 'names nobody')
     who.forEach((name: unknown, i) => {
