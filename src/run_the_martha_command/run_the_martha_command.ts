@@ -1,5 +1,5 @@
 // The `martha` command a stranger types (martha#98): `martha init`, `martha approve`, `martha start <member>`,
-// `martha install`, and `martha --version`.
+// `martha todo` (martha#316), `martha install`, and `martha --version`.
 //
 // This exists so a person who installed Martha gets a solo crew running without writing code or knowing its
 // internals. It is the one place that reads the machine's environment, and only to find places: the project
@@ -28,7 +28,9 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { crewStateDirectory, openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { crewRowsDirectory, crewStateDirectory, openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { wakeAMember } from '../wake_a_member/wake_a_member.ts'
@@ -49,7 +51,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha start <member> [-- <claude arguments>] | martha wake <member> | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -130,6 +132,18 @@ async function approve(io: CommandIo, places: Places): Promise<number> {
   const outcome = await approveConfig({ ...places, terminal: io.terminal, tellOwner, now: () => new Date() })
   if (outcome.kind === 'refused') return refused(io, outcome.refusal)
   io.out(outcome.kind === 'nothing' ? NOTHING_TO_APPROVE : `Approved: fingerprint ${outcome.fingerprint}.`)
+  return EXIT_DONE
+}
+
+/**
+ * `martha todo` (martha#316): the owner's to-do list, every command in full under what it does, for a crew that never
+ * turned the pane on. It reads the crew's rows and writes nothing.
+ */
+async function todo(io: CommandIo, places: Places): Promise<number> {
+  const rows = crewRowsDirectory(places.state.state_root, places.root)
+  if ('refusal' in rows) return refused(io, rows.refusal)
+  const open = theOpenRows(await rowStreamsDirectory(rows.path).read(OWNER_TODO_STREAM))
+  for (const line of theListForTheTerminal(open, Date.now())) io.out(line)
   return EXIT_DONE
 }
 
@@ -266,7 +280,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 }
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
-const ACTS_ALONE: readonly string[] = ['init', 'approve', '--version']
+const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', '--version']
 /** The acts that take exactly one argument (martha#129). */
 const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake']
 /** The switches `martha install` passes through to the installer; any other is no way the command is used. */
@@ -373,6 +387,7 @@ async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<numbe
   if (asked.act === 'keep-shapes') return keepShapes(io, places, asked.args[0]!)
   if (asked.act === 'init') return init(io, places)
   if (asked.act === 'approve') return approve(io, places)
+  if (asked.act === 'todo') return todo(io, places)
   if (asked.act === 'wake') return wake(io, places, asked.args[0]!)
   return start(io, places, asked.member!, asked.args)
 }

@@ -55,6 +55,23 @@ import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import {
+  OWNER_TODO_ADD,
+  OWNER_TODO_ADD_DESCRIPTION,
+  OWNER_TODO_DONE,
+  OWNER_TODO_DONE_DESCRIPTION,
+  OWNER_TODO_STREAM,
+  SWEEP_INTERVAL_MS,
+  THE_OWNERS_TODO_ASK,
+  addAnAct,
+  closeAnAct,
+  mayKeepTheOwnersList,
+  sweepTheList,
+  theListForThePane,
+  theOpenRows,
+  whoMayKeepTheList,
+  type TodoAnswer,
+} from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 
 /** The name a member parks with (martha#343): one act, and it says which by being this tool. */
 export const PARK_A_MEMBER = 'park_a_member'
@@ -87,6 +104,8 @@ export const CREW_TOOL_NAMES = [
   FAST_FORWARD_AFTER_THE_OWNERS_YES,
   WORKTREE_OPEN,
   WORKTREE_FINISH,
+  OWNER_TODO_ADD,
+  OWNER_TODO_DONE,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -150,6 +169,11 @@ export interface CrewTools {
   answer(name: string, args: Readonly<Record<string, unknown>>, session: string): Promise<CoreToolAnswer>
   /** Starts the heartbeat, which keeps this member's row fresh; returns the stop. */
   startBeating(): () => void
+  /**
+   * Starts the sweep of the owner's list (martha#316): once every SWEEP_INTERVAL_MS, while this member may keep the
+   * list, every open row's check is asked whether its act is done. Returns the stop.
+   */
+  startSweeping(): () => void
   /**
    * The line a session starting on a package is handed, once, at its start (martha#254 design, test 10): every act of
    * the package this member holds that was sent with no outcome recorded, oldest first, or null when it holds no
@@ -379,6 +403,41 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       required: ['repo', 'slug', 'package'],
     },
   },
+  {
+    name: OWNER_TODO_ADD,
+    description: OWNER_TODO_ADD_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'A short id for the act: a package ref or a slug of letters, digits, ".", "_" or "-"' },
+        title: { type: 'string', description: 'What the owner is asked to do, in one line' },
+        goal: { type: 'string', description: 'The end goal the act serves, in one line' },
+        waiting_on: { type: 'string', description: 'Who waits on it, so the owner knows who to tell when it is done' },
+        commands: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              command: { type: 'string', description: 'The exact command the owner runs; variable names only, never a secret' },
+              does: { type: 'string', description: 'What the command does and what success looks like, in one line' },
+            },
+            required: ['command', 'does'],
+          },
+        },
+        check: {
+          type: 'object',
+          description: 'Optional: how Martha can tell the act is done by itself — { pr_merged: { repo, number } } or { tag_exists: { repo, tag } }',
+        },
+      },
+      required: ['id', 'title', 'commands'],
+    },
+  },
+  {
+    name: OWNER_TODO_DONE,
+    description: OWNER_TODO_DONE_DESCRIPTION,
+    inputSchema: { type: 'object', properties: { id: { type: 'string', description: "The act's id, as it was added" } }, required: ['id'] },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -417,6 +476,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       timer.unref()
       return () => clearInterval(timer)
     },
+    startSweeping: () => startSweeping(places),
     theLineToHandAtStart: () => theLineToHandAtStart(places, state),
     thePredecessorOf: (session_id) => thePredecessorOf(places, session_id),
   }
@@ -438,7 +498,52 @@ async function answerAnAskOfTheMods(
   if (name === THE_CHANNEL_READ_ASK) return await theChannelReadAsk(places)
   if (name === THE_NEXT_MESSAGE_ASK) return await theNextMessageAsk(places)
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
+  if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoAsk(places, args)
   return undefined
+}
+
+/** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
+async function theOwnersTodoAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const rows = theOpenRows(await places.ledger.stores.rows.read(OWNER_TODO_STREAM))
+  return { answer: JSON.stringify(theListForThePane(rows, args['focus'], places.ledger.clock.now())) }
+}
+
+/**
+ * `owner_todo_add` and `owner_todo_done` (martha#316): the declaration's table says whether this launch's member may
+ * keep the owner's list, and the row is written as this launch's member, never as a name the call carries.
+ */
+async function keepTheOwnersList(places: CrewToolPlaces, act: () => Promise<TodoAnswer>): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  const declaration = theDeclarationOf(declared.settings)
+  if (!mayKeepTheOwnersList(declaration, places.member)) return { refused: whoMayKeepTheList(declaration, places.member) }
+  return asAnAnswer(await act())
+}
+
+/**
+ * The sweep of the owner's list: at most once per SWEEP_INTERVAL_MS, and never two at once. A launch that holds no
+ * processes runs no check, and a member the table does not let keep the list sweeps nothing.
+ */
+function startSweeping(places: CrewToolPlaces): () => void {
+  const processes = places.processes
+  if (processes === undefined) return () => undefined
+  let sweeping = false
+  const timer = setInterval(() => {
+    if (sweeping) return
+    sweeping = true
+    void sweepOnce(places, processes).finally(() => {
+      sweeping = false
+    })
+  }, SWEEP_INTERVAL_MS)
+  timer.unref()
+  return () => clearInterval(timer)
+}
+
+/** One sweep, when this member may keep the list; a declaration that cannot be read sweeps nothing. */
+async function sweepOnce(places: CrewToolPlaces, processes: HostContract['processes']): Promise<void> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared || !mayKeepTheOwnersList(theDeclarationOf(declared.settings), places.member)) return
+  await sweepTheList({ ...places.ledger, processes }, places.root).catch(() => undefined)
 }
 
 /** How often the mod is to read the crew channel, as the declaration gives it. */
@@ -529,6 +634,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [FAST_FORWARD_AFTER_THE_OWNERS_YES]: (args) => fastForwardOntoTheApprovedTip(places, args),
     [WORKTREE_OPEN]: (args) => aWorktreeTool(places, openAWorktree, args),
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
+    [OWNER_TODO_ADD]: (args) => keepTheOwnersList(places, () => addAnAct(places.ledger, args, places.member)),
+    [OWNER_TODO_DONE]: (args) => keepTheOwnersList(places, () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member })),
   }
 }
 
