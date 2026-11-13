@@ -615,6 +615,29 @@ function inRows(
   return y - gap
 }
 
+/**
+ * A count written out in words, for the one place a box's prose says how many things it holds
+ * (martha#407). Past twelve the count is the number itself, so a word never has to be invented.
+ */
+export function aCountInWords(count: number): string {
+  const words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
+  return words[count] ?? String(count)
+}
+
+/** Where a box's description says how many things it holds, in place of writing the number itself. */
+const THE_COUNT_ITS_LIST_DECIDES = '{count}'
+
+/**
+ * A box with the count it states drawn from the names it holds (martha#407), as the note drawn from
+ * LEFT_OUT already does for its own count: a tool added to a box's names says the new number without
+ * anyone remembering to edit the prose beside it.
+ */
+function withItsCountDrawn(b: LooseBox): LooseBox {
+  if (!b.names || !b.desc.some((line) => line.includes(THE_COUNT_ITS_LIST_DECIDES))) return b
+  const count = aCountInWords(b.names.length)
+  return { ...b, desc: b.desc.map((line) => line.replaceAll(THE_COUNT_ITS_LIST_DECIDES, count)) }
+}
+
 /** The Component page's boxes, row by row and column by column: inRows places them. */
 const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
@@ -667,7 +690,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'check_a_range_before_the_owner_says_yes', names: ['check_a_range_before_the_owner_says_yes', 'land_passed_work_as_one_batch', 'find_the_work_a_verdict_passed', 'open_and_finish_a_worktree', 'read_the_origin_a_clone_has', 'hold_a_package_back_from_a_batch'], type: '[the crew\'s tools that act]', code: true,
-      desc: ['The five tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of;', 'hold_a_package_back_from_a_', 'batch stops a held package', '(martha#364)'] },
+      desc: ['The {count} tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of;', 'hold_a_package_back_from_a_', 'batch stops a held package', '(martha#364)'] },
     { col: 1, kind: 'b-cmp', name: 'keep_the_owners_todo_list, queue_the_owners_asks', names: ['keep_the_owners_todo_list', 'queue_the_owners_asks'], type: '[what waits on the owner]', code: true,
       desc: ['The owner\'s to-do list (martha#316):', 'the acts only the owner can do, each', 'command shown in full under what it', 'does. A member the table lets assign', 'work adds one; its own check or the', 'member takes it off. The pane and', 'martha todo show it. queue_the_owners_', 'asks is the ask queue (martha#313):', 'a routine ask waits instead of a menu,', 'and the session the table names hands', 'the whole batch over as one menu'] },
     { col: 2, kind: 'b-cmp', name: 'keep_the_supervisors_standing_items', names: ['keep_the_supervisors_standing_items'], type: '[what the Supervisor holds back]', code: true,
@@ -704,7 +727,7 @@ export function components(): Diagram {
   const TOP = 70
 
 
-  const lastRowBottom = inRows(d, COMPONENT_ROWS, COLUMNS, WIDE, TOP, GAP)
+  const lastRowBottom = inRows(d, COMPONENT_ROWS.map((row) => row.map(withItsCountDrawn)), COLUMNS, WIDE, TOP, GAP)
   const boundaryBottom = lastRowBottom + 24
   d.bound(16, 40, 968, boundaryBottom - 40, 'Martha [the code in src/, one directory per capability]')
 

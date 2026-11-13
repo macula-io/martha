@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join, relative } from 'node:path'
 import {
+  aCountInWords,
   ASSETS, components, containers, DIAGRAMS, LEFT_OUT, PACKAGE_BOXES, ROOM_SLICES_WHICH_LOAD,
 } from './c4_diagrams.ts'
 import type { DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
@@ -306,6 +307,22 @@ test('a component box stands for directories that are in src/, and names each on
     }
   }
 })
+
+/** `The five `, say, for every count up to twelve except the one a box already holds, and the digits. */
+const theCountsABoxDoesNotHold = (held: number): readonly string[] => {
+  const upToTwelve = Array.from({ length: 13 }, (_, stated) => stated)
+  const inWords = upToTwelve.filter((stated) => stated !== held).map((stated) => `The ${aCountInWords(stated)} `)
+  return [...inWords, ...upToTwelve.map((stated) => `The ${String(stated)} `)]
+}
+
+test('a box that says how many things it holds says the count it holds', () => {
+  for (const box of components().coverage) {
+    assert.ok(!box.text.includes('{count}'), `${box.name} draws the placeholder where a count belongs`)
+    const wrong = theCountsABoxDoesNotHold(box.names.length).filter((said) => box.text.includes(said))
+    assert.equal(wrong.length, 0, `${box.name} holds ${box.names.length} names and says ${wrong.join(', ')}`)
+  }
+})
+
 
 test('what is left out says why, is a directory in src/, and is said on the page', () => {
   const slices = new Set(slicesInSrc())
