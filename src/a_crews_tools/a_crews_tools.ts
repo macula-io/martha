@@ -10,6 +10,22 @@
 // launcher, and writes the same row the report wrote, so nothing but this slice ever folds a beat in.
 
 import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import {
+  LIST_ASKS,
+  LIST_ASKS_DESCRIPTION,
+  QUEUE_ASK,
+  QUEUE_ASK_DESCRIPTION,
+  SETTLE_ASKS,
+  SETTLE_ASKS_DESCRIPTION,
+  TAKE_ASKS,
+  TAKE_ASKS_DESCRIPTION,
+  listTheAsks,
+  menusTheLauncherKeeps,
+  queueAnAsk,
+  settleTheAsks,
+  takeTheAsks,
+  type TheOwnersMenus,
+} from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import {
@@ -135,6 +151,10 @@ export const CREW_TOOL_NAMES = [
   WORKTREE_FINISH,
   OWNER_TODO_ADD,
   OWNER_TODO_DONE,
+  QUEUE_ASK,
+  LIST_ASKS,
+  TAKE_ASKS,
+  SETTLE_ASKS,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -197,6 +217,11 @@ export interface CrewToolPlaces {
   readonly stamps?: HandoverStampStore
   /** The sessions this launch took in, by id: what a handover is stamped with, and the predecessor a refresh inherits. */
   readonly sessions?: { readonly of: (session_id: string) => HostSession | undefined }
+  /**
+   * What this launcher keeps of the menus its host closed (martha#313): a settle of the owner's asks is refused unless a
+   * menu closed in the session that took the batch. A launch given none settles no batch, and says so.
+   */
+  readonly menus?: TheOwnersMenus
   /** The share each session began at, by session id: kept here, so every threshold is measured from where it started. */
   readonly began_at?: Map<string, number>
 }
@@ -233,6 +258,11 @@ export interface CrewTools {
    * names it first. Null when no clear is in flight, or when this id is the session the clear was told in.
    */
   thePredecessorOf(session_id: string): Promise<string | null>
+  /**
+   * The launcher saw the host answer one of this session's calls (martha#313): the menu tool's answer is what a settle
+   * of the owner's asks stands on, so the relay hands every answer here and the queue decides which one is a menu.
+   */
+  noteTheCallsAnswer(call: { readonly tool: string }, session: string): void
 }
 
 /** The schema shared by the tools that name a package, which every one of the ledger's tools does. */
@@ -533,6 +563,37 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: OWNER_TODO_DONE_DESCRIPTION,
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: "The act's id, as it was added" } }, required: ['id'] },
   },
+  {
+    name: QUEUE_ASK,
+    description: QUEUE_ASK_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: { ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' } },
+      required: ['ask'],
+    },
+  },
+  {
+    name: LIST_ASKS,
+    description: LIST_ASKS_DESCRIPTION,
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: TAKE_ASKS,
+    description: TAKE_ASKS_DESCRIPTION,
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: SETTLE_ASKS,
+    description: SETTLE_ASKS_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        batch: { type: 'integer', minimum: 0, description: "The batch's id, as take_asks answered it" },
+        yes: { type: 'array', items: { type: 'integer', minimum: 0 }, description: 'The ids of the asks the owner ticked' },
+      },
+      required: ['batch', 'yes'],
+    },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -551,19 +612,22 @@ interface SessionState {
 
 /** The tools a member can call, over the place its launcher gave it. */
 export function crewToolsOver(places: CrewToolPlaces): CrewTools {
+  // The menus this launch's host closes, heard by its relay through noteTheCallsAnswer (martha#313): a settle of the
+  // owner's asks stands on one, and a launch handed none keeps its own over the same clock.
+  const held: CrewToolPlaces = { ...places, menus: places.menus ?? menusTheLauncherKeeps(places.ledger.clock) }
   const state: SessionState = {
     held: null,
     session: '',
-    row_model: places.launched_on ?? '',
-    began_at: places.began_at ?? new Map<string, number>(),
+    row_model: held.launched_on ?? '',
+    began_at: held.began_at ?? new Map<string, number>(),
   }
-  const handlers = handlersOver(places, state)
+  const handlers = handlersOver(held, state)
 
   return {
     tools: CREW_TOOLS,
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
-      const asked = await answerAnAskOfTheMods(places, state, name, args, from)
+      const asked = await answerAnAskOfTheMods(held, state, name, args, from)
       if (asked !== undefined) return asked
       const handle = handlers[name as CrewToolName]
       if (handle === undefined) {
@@ -574,7 +638,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startBeating(): () => void {
       const timer = setInterval(() => {
         try {
-          writeRow(places, state, rowNow(places, state))
+          writeRow(held, state, rowNow(held, state))
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }
@@ -582,10 +646,11 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       timer.unref()
       return () => clearInterval(timer)
     },
-    startSweeping: () => startSweeping(places),
-    theLineToHandAtStart: () => theLineToHandAtStart(places, state),
-    thePredecessorOf: (session_id) => thePredecessorOf(places, session_id),
-    refusesTheSubagent: (call) => refusesTheSubagent(places, call),
+    startSweeping: () => startSweeping(held),
+    theLineToHandAtStart: () => theLineToHandAtStart(held, state),
+    thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
+    refusesTheSubagent: (call) => refusesTheSubagent(held, call),
+    noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
   }
 }
 
@@ -755,7 +820,38 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD]: (args) => keepTheOwnersList(places, () => addAnAct(places.ledger, args, places.member)),
     [OWNER_TODO_DONE]: (args) => keepTheOwnersList(places, () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member })),
+    [QUEUE_ASK]: async (args) => asAnAnswer(await queueAnAsk(places.ledger, args, places.member)),
+    [LIST_ASKS]: async () => asAnAnswer(await listTheAsks(places.ledger)),
+    [TAKE_ASKS]: () => theTakeOfTheAsks(places, state),
+    [SETTLE_ASKS]: (args) => theSettlingOfTheAsks(places, state, args),
   }
+}
+
+/**
+ * What the two tools that take and settle the owner's asks need (martha#313): this crew's declaration, which answers who
+ * may offer them, this session's id, which a batch is taken in and a menu closes in, and the menus the launcher keeps.
+ */
+async function theOfferingPlace(
+  places: CrewToolPlaces,
+  state: SessionState,
+): Promise<{ readonly declaration: TheDeclaration; readonly member: string; readonly session: string; readonly menus: TheOwnersMenus | undefined } | { readonly refused: string }> {
+  const declared = await crewOrRefusal(places)
+  if ('refused' in declared) return declared
+  return { declaration: theDeclarationOf(declared.settings), member: places.member, session: state.session, menus: places.menus }
+}
+
+/** `take_asks`: every waiting ask claimed for one menu, or why nothing was (martha#313). */
+async function theTakeOfTheAsks(places: CrewToolPlaces, state: SessionState): Promise<CoreToolAnswer> {
+  const offering = await theOfferingPlace(places, state)
+  if ('refused' in offering) return offering
+  return asAnAnswer(await takeTheAsks(places.ledger, offering))
+}
+
+/** `settle_asks`: the batch off, with the ids the owner ticked, or why not (martha#313). */
+async function theSettlingOfTheAsks(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const offering = await theOfferingPlace(places, state)
+  if ('refused' in offering) return offering
+  return asAnAnswer(await settleTheAsks(places.ledger, offering, args))
 }
 
 /**

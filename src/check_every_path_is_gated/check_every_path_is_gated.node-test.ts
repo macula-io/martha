@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { ARGUMENT_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   admitsLaunch,
@@ -54,11 +54,12 @@ const coverageOf = (
   launch: Parameters<typeof gapsInGateCoverage>[3] = LAUNCH_GATES,
   argument: Parameters<typeof gapsInGateCoverage>[4] = ARGUMENT_GATES,
   path: Readonly<Record<string, PathGate>> = PATH_GATES,
-) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path)
+  ask: Parameters<typeof gapsInGateCoverage>[7] = ASK_GATES,
+) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path, undefined, ask)
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 18 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 19 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
@@ -180,6 +181,54 @@ test('a gate that answers only the roster question is caught: one question right
     ['A1', 'A2', 'A3'],
   )
   assert.match(gaps[0]?.why ?? '', /admits a message nobody attested/)
+})
+
+// --- the ask a member queued, handed to the session that offers it (martha#313) ---
+
+test('an ask gate that admits every ask is not a control', () => {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, { 'a-crews-own-asker': () => true })
+  assert.deepEqual(
+    gaps.map((gap) => gap.path),
+    ['A19'],
+  )
+  assert.match(gaps[0]?.why ?? '', /admits an ask whose asker is not a member this crew started/)
+})
+
+test('an ask gate that refuses every ask is caught too', () => {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, { 'a-crews-own-asker': () => false })
+  assert.deepEqual(
+    gaps.map((gap) => gap.path),
+    ['A19'],
+  )
+  assert.match(gaps[0]?.why ?? '', /refuses an ask from a member this crew started/)
+})
+
+test('a row naming an ask gate nobody has built is named', () => {
+  const invented: InboundPath = {
+    id: 'A98',
+    what: 'an ask gate someone will write later',
+    klass: 'delivered',
+    control: { kind: 'ask-gate', gate: 'a-gate-someone-will-write-later' },
+    attestation: 'none',
+  } as unknown as InboundPath
+  assert.deepEqual(
+    coverageOf([...INBOUND_PATHS, invented], gateRefuses).map((gap) => gap.path),
+    ['A98'],
+  )
+})
+
+test('an ask gate on the wrong kind of row is a gap, since an ask is text put into a turn', () => {
+  const fetched: InboundPath = {
+    id: 'B98',
+    what: 'an ask gate where nothing is delivered',
+    klass: 'fetched',
+    control: { kind: 'ask-gate', gate: 'a-crews-own-asker' },
+    attestation: 'none',
+  }
+  assert.deepEqual(
+    coverageOf([...INBOUND_PATHS, fetched], gateRefuses).map((gap) => gap.path),
+    ['B98'],
+  )
 })
 
 // --- code the host starts by itself (issue #16) --------------------------------

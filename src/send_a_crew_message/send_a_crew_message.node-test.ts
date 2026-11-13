@@ -137,7 +137,7 @@ const DECLARATION = {
     { name: 'Builder', role: 'builder' },
     { name: 'Reviewer', role: 'reviewer' },
   ],
-  mode: { name: 'solo', roles: ['builder', 'reviewer'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+  mode: { name: 'solo', roles: ['builder', 'reviewer'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'] } },
   channel_read_seconds: 30,
 }
 

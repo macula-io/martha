@@ -28,8 +28,14 @@ export const DECLARATION_FILE = 'crew.json'
 /** The one declaration version this slice reads. */
 export const DECLARATION_VERSION = 1
 
+/**
+ * The act that lets a member take the owner's queued asks and settle a batch of them (martha#313): one act for both
+ * tools, so a crew cannot let a session take asks it may not settle.
+ */
+export const OFFER_OWNER_ASKS = 'offer_owner_asks'
+
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work'] as const
+export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work', OFFER_OWNER_ASKS] as const
 export type Act = (typeof ACTS)[number]
 
 /**

@@ -9,6 +9,7 @@ import {
   type Roster,
   type SupervisorOnlyAction,
 } from './who_may_act.ts'
+import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const supervisor_node = 'a'.repeat(64)
@@ -83,15 +84,19 @@ test('a session the harness cannot identify is nobody, whatever it calls itself'
 // --- the list is complete and closed ------------------------------------------
 
 test('the tools with no caller check at all are on the list', () => {
-  for (const action of ['restart_member', 'take_asks', 'complete_todo']) {
+  for (const action of ['restart_member', 'complete_todo']) {
     assert.equal((SUPERVISOR_ONLY_ACTIONS as readonly string[]).includes(action), true, action)
   }
 })
 
-test('the list is exactly the seven supervisor-only tools the crew has today', () => {
+test('taking the owner\'s asks is not on the list: the declaration\'s table decides it, not a node id (martha#313)', () => {
+  assert.equal((SUPERVISOR_ONLY_ACTIONS as readonly string[]).includes(TAKE_ASKS), false)
+})
+
+test('the list is exactly the six supervisor-only tools the crew has today', () => {
   assert.deepEqual(
     [...SUPERVISOR_ONLY_ACTIONS].sort(),
-    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', 'restart_member', 'take_asks', 'verify_range'],
+    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', 'restart_member', 'verify_range'],
   )
 })
 

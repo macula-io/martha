@@ -656,6 +656,8 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
+  // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears.
+  place.crew?.noteTheCallsAnswer({ tool: call.tool }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
   const answering = noteAnAgentsAnswer(state, body)
   // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).

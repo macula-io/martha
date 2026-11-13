@@ -46,7 +46,7 @@ function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout:
     version: 1,
     owner: 'the-owner',
     members: [{ name: MEMBER, role: 'builder' }],
-    mode: { name: 'solo', roles: ['builder'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'] } },
+    mode: { name: 'solo', roles: ['builder'], may: { assign_work: ['owner'], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'] } },
     channel_read_seconds: 30,
   }))
   const rows = join(home, 'crews', 'a-key', 'rows')

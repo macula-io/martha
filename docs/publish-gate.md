@@ -116,6 +116,10 @@ control:
 - **delivery gate** — the sender is checked before the text is in a turn, and the
   gate is a function this repository implements and the check drives (see *The
   room's acceptance rule* below);
+- **ask gate** — the text is an ask a member queued for the owner, and the
+  question before it is handed to the session that offers it is about the asker
+  the launcher holds and the text itself: a member this crew started, and text
+  the queue capped and stripped (`src/queue_the_owners_asks/`, martha#313);
 - **shell gate** — nothing checks at delivery, and the rule above stops the
   session executing while the text is readable;
 - **no text reaches the model** — the path is listed so it is not forgotten,
@@ -1410,6 +1414,11 @@ kind that is not talk, a sender the roster does not name and a sender that is no
 a node id — and it must admit a rostered member. A name with no implementation, a
 gate that admits everyone, a gate that refuses everyone and a gate that answers
 only the roster question are all caught.
+
+An ask gate is driven once per question it has to answer: it must admit an ask a
+member this crew started queued, and refuse one whose asker the launcher never
+started, one whose text carries a control or hidden character, one longer than
+the queue's cap and one with no text.
 
 A launched row may only declare the launch gate, and must say what happens where
 Martha does not start the host. The launch gate is driven once per question: it
