@@ -29,6 +29,7 @@ import {
   WORKTREE_OPEN_DESCRIPTION,
   finishAWorktree,
   openAWorktree,
+  type WorktreeAnswer,
   type WorktreesRequest,
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -453,14 +454,18 @@ async function fastForwardOntoTheApprovedTip(places: CrewToolPlaces, args: Reado
   return asAnAnswer(await fastForwardAfterTheOwnersYes(actingHost({ ...places, processes: places.processes }), places.member, asked.ok))
 }
 
-/** `worktree_open` and `worktree_finish`, or the refusal of a place that can act in none (martha#256). */
+/**
+ * `worktree_open` and `worktree_finish`, or the refusal of a place that can act in none (martha#256). The slice's
+ * own answer keeps the told/refused split, and it is carried through as it is: wrapping every string as `{ answer }`
+ * would hand a member a refusal — a dirty worktree, an unpushed commit, another member's branch — as a success.
+ */
 async function aWorktreeTool(
   places: CrewToolPlaces,
-  act: (request: WorktreesRequest, args: Readonly<Record<string, unknown>>) => Promise<string>,
+  act: (request: WorktreesRequest, args: Readonly<Record<string, unknown>>) => Promise<WorktreeAnswer>,
   args: Readonly<Record<string, unknown>>,
 ): Promise<CoreToolAnswer> {
   const request = worktreesOf(places)
-  return request === null ? { refused: NO_ACTING_PLACE } : { answer: await act(request, args) }
+  return request === null ? { refused: NO_ACTING_PLACE } : asAnAnswer(await act(request, args))
 }
 
 /**

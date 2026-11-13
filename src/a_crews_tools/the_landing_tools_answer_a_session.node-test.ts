@@ -227,7 +227,7 @@ const wordsOf = (said: { readonly told: string } | { readonly refused: string })
 /** What the launcher said, whether it answered or refused. */
 const wordsFor = (said: { readonly answered?: string; readonly refused?: string }): string => said.refused ?? said.answered ?? ''
 
-test('a worktree is opened and finished through the launcher answer (martha#256)', async (t) => {
+test('a worktree is opened and finished through the launcher answer, and both come back as answers (martha#256)', async (t) => {
   const place = aPlaceOf(t)
   const settings = place.settings
   assert.ok(settings.house_rules.clones !== null && settings.house_rules.worktrees !== null)
@@ -235,9 +235,30 @@ test('a worktree is opened and finished through the launcher answer (martha#256)
 
   const opened = await answerTo(place, WORKTREE_OPEN, { repo: REPO, slug: SLUG })
 
-  assert.match(opened.answered ?? opened.refused ?? '', /^opened /)
+  // As an answer, not as the refusal: a call that opened a worktree and one that refused to are two different
+  // endings, and a member reads them off this field (martha#256 r=3).
+  assert.equal(opened.refused, undefined, `opening is not refused: ${opened.refused ?? ''}`)
+  assert.match(opened.answered ?? '', /^opened /)
   const finished = await answerTo(place, WORKTREE_FINISH, { repo: REPO, slug: SLUG, package: PACKAGE })
-  assert.match(finished.answered ?? finished.refused ?? '', /^removed /)
+  assert.equal(finished.refused, undefined, `finishing is not refused: ${finished.refused ?? ''}`)
+  assert.match(finished.answered ?? '', /^removed /)
+})
+
+test('a worktree finish the slice refuses comes back refused, not as an answer (martha#256 r=3)', async (t) => {
+  const place = aPlaceOf(t)
+  const settings = place.settings
+  assert.ok(settings.house_rules.clones !== null && settings.house_rules.worktrees !== null)
+  aBareOrigin(settings.house_rules.clones, settings.house_rules.worktrees)
+  const opened = await answerTo(place, WORKTREE_OPEN, { repo: REPO, slug: SLUG })
+  assert.equal(opened.refused, undefined, `the worktree is opened first: ${opened.refused ?? ''}`)
+
+  // A change nobody committed: the slice refuses to remove the worktree, because the work would go with its branch.
+  // The refusal is decided in the slice, so the launcher has to carry it out as a refusal and not wrap it as success.
+  writeFileSync(join(settings.house_rules.worktrees, `widget-${SLUG}`, 'work.txt'), 'not committed yet\n')
+  const refused = await answerTo(place, WORKTREE_FINISH, { repo: REPO, slug: SLUG, package: PACKAGE })
+
+  assert.equal(refused.answered, undefined, `a refused finish is not an answer: ${refused.answered ?? ''}`)
+  assert.match(refused.refused ?? '', /has uncommitted changes/)
 })
 
 /** A bare origin holding one commit on main, and a clone of it under `<clones>/<the repository>`. */
