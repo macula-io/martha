@@ -693,11 +693,14 @@ function launchDirectories(
   return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir }
 }
 
-/** The relay server, with the member's row kept fresh while it runs and left alone once its launcher closes it. */
+/**
+ * The relay server, with the member's row kept fresh and the owner's list swept while it runs (martha#316), both left
+ * alone once its launcher closes it.
+ */
 function beatingWhileItRuns(crew: CrewTools | undefined, server: RelayServer): RelayServer {
-  const stopBeating = crew?.startBeating()
-  if (stopBeating === undefined) return server
-  return { close: async () => { stopBeating(); await server.close() } }
+  if (crew === undefined) return server
+  const stops = [crew.startBeating(), crew.startSweeping()]
+  return { close: async () => { for (const stop of stops) stop(); await server.close() } }
 }
 
 /**

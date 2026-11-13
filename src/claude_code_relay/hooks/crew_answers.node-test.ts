@@ -9,7 +9,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { orderIn, PANE_CHROME_ROWS, paneIn } from './crew_answers.ts'
+import { orderIn, PANE_CHROME_ROWS, paneIn, theOwnersListIn } from './crew_answers.ts'
+import { theActAsked, theListForThePane } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
 
@@ -59,4 +60,12 @@ test('an answer that does not say how many rows is drawn in the pane\'s own chro
 test('an answer that is not a pane at all is not drawn (martha#255 r=2 R2)', () => {
   assert.equal(paneIn('not an answer'), null, 'text the mod cannot parse is a read that failed, not an empty crew')
   assert.equal(paneIn(JSON.stringify({ lines: [] })), null, 'an answer with no header is not one the mod can draw')
+})
+
+test('the owner\'s list the launcher answers is the list the pane draws, its copy only on the revealed row (martha#316)', () => {
+  const row = theActAsked({ id: 'an-act', title: 'Do a thing', commands: [{ command: 'make release', does: 'cuts the release' }] }, 'Pallas', 0)
+  assert.ok(!('refused' in row), 'the test could not build its row')
+  const launchers = theListForThePane([row], '', 0)
+  assert.deepEqual(theOwnersListIn(JSON.stringify(launchers)), launchers, 'the pane reads the launcher\'s own list answer differently')
+  assert.equal(theOwnersListIn('{"heading":"x"}'), null, 'the pane drew an answer that is not a list')
 })
