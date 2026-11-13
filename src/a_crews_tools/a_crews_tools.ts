@@ -71,7 +71,7 @@ import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/s
 import { restartByTool } from '../stop_and_restart_a_member/restart_a_member.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { WHO_IS_FREE, WHO_IS_FREE_DESCRIPTION, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
-import { BEAT_INTERVAL_MS, OWNER_DIALOGS_FIELD, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, beatAfter, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   homeModelOf,
   modelPlace,
@@ -685,7 +685,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startBeating(): () => void {
       const timer = setInterval(() => {
         try {
-          writeRow(places, state, rowNow(places, state))
+          // A heartbeat says nothing of its own: it is the row as this session last left it, at this moment's beat.
+          writeRow(places, state, (row) => row)
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }
@@ -987,45 +988,51 @@ async function aWorktreeTool(
 }
 
 /**
- * The row as this session last left it: what a report moves and the heartbeat rewrites. The model is this session's
- * own (martha#315): the one the launch gave it, and then the one a confirmed switch put it on, never the one a
- * heartbeat guessed.
+ * Changes the member's row by this session's own fields, applied to the row the store holds at the door: the model is
+ * this session's (martha#315), the state, task and figures are the member's, and everything else — the dialogs the
+ * launcher wrote, above all — is the row's, never a copy this session read earlier (martha#363, martha#380).
+ *
+ * The beat rule lives here, with the one writer that owns the row's `at`: a change whose beat is not newer than the row
+ * held is dropped whole, so a beat landing late never takes back a newer row (r=1, O1). A dialog is not a beat, so this
+ * rule can never refuse one.
  */
-function rowNow(places: CrewToolPlaces, state: SessionState): DashboardRow {
-  const stored = places.beats.read(places.member)
-  const kept = state.held ?? stored
+function writeRow(places: CrewToolPlaces, state: SessionState, change: (row: DashboardRow) => DashboardRow): void {
   const nothing_said = theRowWithNothingSaid()
-  const host = { ...nothing_said.host, ...(kept?.host ?? {}), model: state.row_model }
-  // The dialogs are the launcher's word, written into the same row from its own process (martha#313): this session's
-  // copy never says them, so a report neither drops one the owner has not answered nor brings back one that closed
-  // (martha#363).
-  const { [OWNER_DIALOGS_FIELD]: _held, ...own } = kept ?? {}
-  const dialogs = stored?.[OWNER_DIALOGS_FIELD]
-  return { ...nothing_said, ...own, ...(dialogs === undefined ? {} : { [OWNER_DIALOGS_FIELD]: dialogs }), member: places.member, session: state.session, at: places.ledger.clock.now(), host }
-}
-
-/** Keeps the row, in this process and on disk. */
-function writeRow(places: CrewToolPlaces, state: SessionState, row: DashboardRow): void {
-  state.held = row
-  places.beats.keep(row)
+  let changed: DashboardRow | null = null
+  places.beats.change(places.member, (held) => {
+    const row: DashboardRow = {
+      ...nothing_said,
+      ...(held ?? {}),
+      member: places.member,
+      session: state.session,
+      at: places.ledger.clock.now(),
+      host: { ...nothing_said.host, ...(held?.host ?? {}), model: state.row_model },
+    }
+    changed = change(row)
+    return beatAfter(held, changed)
+  })
+  // The row this session last had, whether the store kept it or dropped a beat that was not newer: it is what this
+  // session's own report is written over, as it was before (martha#255).
+  if (changed !== null) state.held = changed
 }
 
 /** `report_progress`: the report's own rules move the row, and the member is told what landed. */
 async function reportProgress(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
   const declared = await crewOrRefusal(places)
   if ('refused' in declared) return declared
-  const before = rowNow(places, state)
+  // What a report carries over — the waits and what it holds — is this session's own, read from the row it last had;
+  // the report itself is applied to the row the store holds at the door (martha#380).
+  const before = state.held ?? places.beats.read(places.member) ?? theRowWithNothingSaid()
   const report = takeProgress(args, declared.crew, { waits: before.waits, holds: before.holds }, places.ledger.clock.now())
-  writeRow(places, state, {
-    ...before,
-    at: places.ledger.clock.now(),
+  writeRow(places, state, (row) => ({
+    ...row,
     state: report.taken.state,
     task: report.taken.task,
     progress: report.taken.progress,
     waits: report.taken.waits,
     holds: report.taken.holds,
     reported_at: report.taken.reported_at,
-  })
+  }))
   const home = await returnedForAnotherPackage(places, report.taken.holds)
   return { answer: home === null ? report.told : `${report.told} ${home}` }
 }
@@ -1204,14 +1211,12 @@ function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: stri
  * keeps the newest beat and refuses one that is not newer, so two writes in the same millisecond would lose the second.
  */
 function keepWhatTheSessionSaid(places: CrewToolPlaces, state: SessionState, question: TheSessionsQuestion, act: TheAct): void {
-  const before = rowNow(places, state)
-  writeRow(places, state, {
-    ...before,
+  writeRow(places, state, (row) => ({
+    ...row,
     session: question.session_id,
-    at: places.ledger.clock.now(),
-    host: { ...before.host, contextPercent: question.percent, costUsd: question.cost_usd },
+    host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd },
     ...(act.refresh === undefined ? {} : { refresh: act.refresh }),
-  })
+  }))
 }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
@@ -1398,7 +1403,7 @@ function theModelReported(places: CrewToolPlaces, state: SessionState, args: Rea
   const model = textOf(args['model'])
   if (model === '') return { refused: 'a session reporting its model names it, and this one named none' }
   state.row_model = model
-  writeRow(places, state, rowNow(places, state))
+  writeRow(places, state, (row) => row)
   return { answer: `Noted: this row says ${model}.` }
 }
 
