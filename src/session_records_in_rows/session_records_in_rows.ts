@@ -77,7 +77,7 @@ interface Release {
 }
 
 type Loaded =
-  | { readonly readable: true; length: number; last: Session | undefined; release: Release | undefined; readonly handed: Session | undefined }
+  | { readonly readable: true; length: number; last: Session | undefined; release: Release | undefined; handed: Session | undefined }
   | { readonly readable: false }
 
 /** The owner's releases of this record, read now; none when no release is asked for or nothing is kept yet. */
@@ -95,12 +95,15 @@ async function releaseOf(
  * What the stream keeps for the record the core wrote: the raw record it held, with only what the session took in
  * after the view it was handed appended to it (martha#321 rule 1).
  *
- * WHICH VIEW THE CORE WAS HANDED IS THE ONE THIS STORE HANDED WHEN THE SESSION WAS LOADED, and it is never guessed
- * from the written record (martha#321 r=2). Two views of one stream reach the core — the raw record, which a session
- * taken up before the owner released it goes on extending, and the released one, which a session taken up after it
- * begins from — and the arrivals after a release can be structurally identical to the prefix it cleared (two
- * auto-continuations are both one B7), so what the written record begins with cannot tell the two apart. The release
- * is read again at every check, but the view the core holds dates from the load and does not move.
+ * WHICH VIEW THE CORE WAS HANDED IS THE ONE THIS STORE HANDED LAST, and it is never guessed from the written record
+ * (martha#321 r=2). Two views of one stream reach the core — the raw record, which a session taken up before the owner
+ * released it goes on extending, and the released one, which a session taken up after it begins from — and the arrivals
+ * after a release can be structurally identical to the prefix it cleared (two auto-continuations are both one B7), so
+ * what the written record begins with cannot tell the two apart. The view is taken at load and it moves at every flush
+ * to the record the core wrote, which is what the core goes on extending from then on (martha#321 r=3): a view left at
+ * its load value would make each flush append again everything the core took in since the load, putting text the owner
+ * cleared back after the prefix. The release is read again at every check, but the view the core holds never comes
+ * from it.
  */
 function keptRawOf(last: Session | undefined, written: Session, release: Release | undefined, handed: Session | undefined): Session {
   // A session this store handed no view of its own stream began from nothing (a fresh start) or from another
@@ -137,8 +140,9 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
         const last = stored.at(-1)
         const record = last === undefined ? undefined : recordOf(last.row)
         const release = await releaseOf(released, session_id, record)
-        // The view this load answers, and so the one the core begins from: it is taken here, once, because a release
-        // typed later changes what `read` answers while the core goes on extending the record it was handed.
+        // The view this load answers, and so the one the core begins from: it is taken here because a release typed
+        // later changes what `read` answers while the core goes on extending the record it was handed. It moves only
+        // when the core writes, in `flush`.
         loaded.set(session_id, { readable: true, length: stored.length, last: record, release, handed: release?.record ?? record })
       } catch {
         loaded.set(session_id, { readable: false })
@@ -166,6 +170,9 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
       await rows.append(streamOf(session_id), kept as unknown as Row, state.length)
       state.length += 1
       state.last = kept
+      // The core wrote `session`, so from here on that is the view it goes on extending; the next flush appends only
+      // what it adds past it (martha#321 r=3).
+      state.handed = session
       // The view handed out from here on is the owner's release applied to the record the stream now holds. Appending
       // never changes the raw prefix a mark cleared, so the mark still holds, and the view it leaves is what follows
       // that prefix: the record the core wrote is not the raw, and reading it as one would hand the next session the

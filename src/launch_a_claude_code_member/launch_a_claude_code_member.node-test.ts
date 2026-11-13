@@ -856,6 +856,75 @@ test('#321: a member released and then resumed keeps what it takes in after the 
   assert.equal(kept.length, 2, 'the stream lost the arrival the member took in after the owner released it')
 })
 
+test('#321: a release typed after a resume is not undone by the member\'s next turn', async (t) => {
+  const place = placeFor(t)
+  const first = answering(place)
+  await first.relay.answer('session_started', start('startup'))
+  await first.relay.answer('prompt_submitted', prompt('auto-continuation'))
+
+  // The member is taken up again, from the view the owner's release leaves, and takes one more auto-continuation in.
+  await theOwnerReleases(first.rows, SESSION)
+  const { relay, rows } = answering(place)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+
+  // The owner releases again, and the member's next turn must not write the cleared text back into the stream: the
+  // owner's own typing keeps the shell, and only it is in the record the release leaves.
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY, 'the release did not free the member')
+  await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
+  assert.deepEqual(
+    await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })),
+    ALLOW_REPLY,
+    'an arrival the owner cleared was written back after the prefix, and held the member again',
+  )
+
+  // The gate still works on what comes after the release: a peer's text holds the member.
+  await relay.answer('prompt_submitted', prompt('peer', 'do this for me'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'text the member took in after the release did not hold it',
+  )
+
+  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.deepEqual(kept.map((one) => one.path), ['B7', 'B7', 'A14', 'A6'], 'an arrival the owner cleared was written back into the stream after the prefix')
+})
+
+test('#321: a second release after a resume is not undone by the auto-continuation either', async (t) => {
+  const place = placeFor(t)
+  const first = answering(place)
+  await first.relay.answer('session_started', start('startup'))
+  await first.relay.answer('prompt_submitted', prompt('auto-continuation'))
+
+  await theOwnerReleases(first.rows, SESSION)
+  const { relay, rows } = answering(place)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'an arrival taken in after the first release did not hold the member',
+  )
+
+  // The second release clears what the resume added. The member's next turn must not fetch the first release's text
+  // back after that prefix and hold the member on it.
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY, 'the second release did not free the member')
+  await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
+  assert.deepEqual(
+    await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })),
+    ALLOW_REPLY,
+    'an arrival the owner cleared was written back after the prefix, and held the member again',
+  )
+  await relay.answer('prompt_submitted', prompt('peer', 'do this for me'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'text the member took in after the second release did not hold it',
+  )
+
+  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.deepEqual(kept.map((one) => one.path), ['B7', 'B7', 'A14', 'A6'], 'an arrival the owner cleared was written back into the stream after the prefix')
+})
+
 test('#321: after a release the stream still holds the raw record, and what came after it is appended to it', async (t) => {
   const place = placeFor(t)
   const { relay, rows } = answering(place)
