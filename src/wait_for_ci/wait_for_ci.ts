@@ -2,7 +2,8 @@
 //
 // A member's turn is not held for the half hour a CI run can take, so a wait is asked for and answered as it stands
 // now: green, red, still running, or the wait has spent its reads. Reading again is the member asking again, and the
-// budget decides whether that read may be spent and when the next one may be: a minute, then two, then four, to five.
+// budget decides whether that read may be spent and when the next one may be: a minute, then two, then four, to five,
+// measured on this sha's own wait, so a wait on another sha or a package's head does not hold it.
 //
 // Two things this gives the crew that one member's script cannot. A green on a sha is kept in the crew's store, so a
 // second member's wait on the same sha costs no call at all. And a green is never asked for twice: what is green on a
@@ -23,6 +24,7 @@ import {
   theEndOfTheWait,
   theGreenRecorded,
   theReadsOn,
+  theWaitOn,
   type ARun,
   type TheBudget,
   type TheGithubSpender,
@@ -60,7 +62,12 @@ export type CiOutcome =
 /**
  * Reads the CI on one sha through the crew's budget, and answers as it stands. A green already kept for that sha is
  * answered without a call; a wait that has spent its reads answers so, naming the count; and every other read is
- * spent, counted and backed off by the budget, so another member's read waits its turn.
+ * spent and spaced by the budget under that sha's own wait, so a member's read waits its turn but does not take another
+ * reader's.
+ *
+ * A read the budget refuses makes no call, so it costs this wait none of its reads: the wait is spent only by the reads
+ * GitHub was actually asked for. Counting it before the call would spend the wait's reads on the crew's spacing, and a
+ * member calling again — which is what a wait is — would be told its wait was over without one call being made.
  */
 export async function waitForCi(spender: TheGithubSpender, wait: TheCiWait): Promise<CiOutcome> {
   const place = spender.place
@@ -70,12 +77,12 @@ export async function waitForCi(spender: TheGithubSpender, wait: TheCiWait): Pro
   const green = theGreenRecorded(held, wait.sha)
   if (green !== undefined) return { kind: 'green', run_ids: green.run_ids, reused: true }
   if (theReadsOn(held, wait.sha) >= CALLS_PER_WAIT) return { kind: 'over_its_reads', refusal: overItsReads(wait.sha) }
-  // The read is counted before it is made, so a turn that ends inside it still leaves the crew's count whole.
-  keepTheBudget(place, afterAReadOf(held, wait.sha))
   const read = await readTheRunsOn(spender, { repo: wait.repo, sha: wait.sha })
-  if (read.kind !== 'read') return read
-  const after = theBudgetIn(place)
-  return theAnswerTo(place, 'refusal' in after ? held : after, wait.sha, read.runs, spender.clock.now())
+  if (read.kind === 'out_of_budget') return read
+  const made = theBudgetIn(place)
+  const counted = afterAReadOf('refusal' in made ? held : made, wait.sha)
+  keepTheBudget(place, counted)
+  return read.kind === 'cannot_tell' ? read : theAnswerTo(place, counted, wait.sha, read.runs, spender.clock.now())
 }
 
 /** The answer one read leaves: green kept for the crew, the wait over in either case, or the moment to read again. */
@@ -88,7 +95,8 @@ function theAnswerTo(
 ): CiOutcome {
   const notEnded = runs.filter((run) => run.status !== 'completed')
   if (runs.length === 0 || notEnded.length > 0) {
-    return { kind: 'still_running', ended: runs, read_again_at: budget.last_call_at + budget.backoff_ms }
+    const wait = theWaitOn(budget, sha)
+    return { kind: 'still_running', ended: runs, read_again_at: wait.last_at + wait.wait_ms }
   }
   const notGreen = runs.filter((run) => run.conclusion !== 'success')
   if (notGreen.length > 0) {

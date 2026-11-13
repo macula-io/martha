@@ -1,9 +1,11 @@
 // Waiting on CI through the crew's one GitHub budget (martha#320, package B).
 //
-// What is pinned here: that a read of the runs on a sha answers green, red or still running as they stand; that a green
-// the crew already holds is answered without a call at all, which is the whole point of one result kept for the crew;
-// that a wait which will not end stops at its reads; and that a crew at its GitHub floor is told so rather than read
-// into the floor.
+// What is pinned here: that a read of the runs on a sha answers green, red or still running as they stand; that a run
+// which ended without succeeding — failed, cancelled, timed out — is red and never a green kept for the crew; that a
+// green the crew already holds is answered without a call at all, which is the whole point of one result kept for the
+// crew; that a wait which will not end stops at its reads, and that a read the crew's wait refuses spends none of them;
+// that a sha is read while another reader waits; and that a crew at its GitHub floor is told so rather than read into
+// the floor.
 
 import assert from 'node:assert/strict'
 import { mkdtempSync } from 'node:fs'
@@ -17,12 +19,14 @@ import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.t
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   A_FRESH_BUDGET,
+  BACKOFF_MAX_MS,
   BACKOFF_MIN_MS,
   CALLS_PER_WAIT,
   GITHUB_BUDGET_PLACE,
   THE_BUDGET_FILE,
   THE_FLOOR,
   theBudgetIn,
+  theHeadsOfTheWaits,
   theTextOf,
   type TheGithubSpender,
 } from '../spend_the_github_budget/spend_the_github_budget.ts'
@@ -112,6 +116,7 @@ test('#320 B: a run that failed answers red, naming it, and its wait is over', a
   const held = theBudgetIn(place)
   assert.ok(!('refusal' in held), 'the budget could not be read back')
   assert.equal(held.reads[A_SHA], undefined, 'a wait that ended kept its reads counted against it')
+  assert.equal(held.waits[A_SHA], undefined, 'a wait that ended kept its own wait, so the sha is not read from the start')
 })
 
 test('#320 B: a run that has not ended answers still running, with the moment another read may be spent', async () => {
@@ -152,4 +157,67 @@ test('#320 B: a read GitHub cannot answer says so, rather than answering red', a
   const runner = aRunner([{ exit_code: 1, stdout: '', stderr: 'gh: could not resolve host' }])
   const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, sha: A_SHA })
   assert.equal(outcome.kind, 'cannot_tell', 'a read that could not be made was answered as a red')
+})
+
+test('#320 B: a read the crew\'s wait refuses spends none of the wait\'s reads', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), last_call_at: clock.now(), backoff_ms: BACKOFF_MAX_MS }))
+  const runner = aRunner([])
+  const spender = aSpender(place, clock, runner.run)
+  for (let i = 0; i < CALLS_PER_WAIT + 1; i += 1) await waitForCi(spender, { repo: A_REPO, sha: A_SHA })
+  const outcome = await waitForCi(spender, { repo: A_REPO, sha: A_SHA })
+  assert.deepEqual(runner.asked, [], 'a call was made inside the crew\'s wait')
+  assert.equal(outcome.kind, 'out_of_budget', 'a wait that was refused every time was answered as over its reads')
+  const held = theBudgetIn(place)
+  assert.ok(!('refusal' in held), 'the budget could not be read back')
+  assert.equal(held.reads[A_SHA], undefined, 'a read that was never made was counted against the wait')
+})
+
+test('#320 B: two shas waiting are both read, so one member\'s wait does not hold another\'s', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const another = 'f'.repeat(40)
+  const asked: string[] = []
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push(args[args.length - 1] ?? '')
+    return theRuns(aRun(1, 'completed', 'success'))
+  }
+  const spender = aSpender(place, clock, run)
+  await waitForCi(spender, { repo: A_REPO, sha: A_SHA })
+  await waitForCi(spender, { repo: A_REPO, sha: another })
+  assert.equal(asked.length, 2, 'the second sha was held out by the wait the first one began')
+})
+
+test('#320 B: a sha is read while a package\'s head is backing off', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const asked: string[][] = []
+  const head = 'a'.repeat(40)
+  const listed = JSON.stringify([{ number: 1, headRefOid: head, state: 'OPEN', title: 'feat(#143): a thing', body: '' }])
+  const run = async (args: readonly string[]): Promise<ProcessOutcome> => {
+    asked.push([...args])
+    return args[0] === 'pr' ? { exit_code: 0, stdout: listed, stderr: '' } : theRuns(aRun(1, 'completed', 'success'))
+  }
+  const spender = aSpender(place, clock, run)
+  await theHeadsOfTheWaits(spender, ['macula-io/martha#143'])
+  const outcome = await waitForCi(spender, { repo: A_REPO, sha: A_SHA })
+  assert.equal(outcome.kind, 'green', 'the wait on this sha was held by the wait on a package\'s head')
+  assert.ok(asked.some((args) => args[0] === 'api'), 'no read of the runs was made while a head was backing off')
+})
+
+test('#320 B: a run that was cancelled or timed out answers red, never green', async () => {
+  for (const conclusion of ['cancelled', 'timed_out']) {
+    const place = aPlace()
+    const clock = aClock(Date.now())
+    place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+    const runner = aRunner([theRuns(aRun(1, 'completed', 'success'), aRun(2, 'completed', conclusion))])
+    const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, sha: A_SHA })
+    assert.equal(outcome.kind, 'red', `a ${conclusion} run was not answered as red`)
+    const held = theBudgetIn(place)
+    assert.ok(!('refusal' in held), 'the budget could not be read back')
+    assert.equal(held.greens[A_SHA], undefined, `a ${conclusion} run was kept as a green for the whole crew`)
+  }
 })

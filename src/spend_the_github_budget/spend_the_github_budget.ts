@@ -7,9 +7,15 @@
 //
 // One record, kept in the crew's own store, and what it holds:
 //
-//   - the calls the crew has spent, and the moment of the last one, so the backoff below is measured from it;
-//   - what GitHub itself says is left of the token's allowance and when that window resets, so the floor is a number
-//     GitHub gave rather than one this counted;
+//   - the calls the crew has spent;
+//   - what GitHub itself says is left of the token's allowance and when that window resets, lowered by one for every
+//     call the crew makes, so the floor is GitHub's answer brought down to now rather than one number held for an hour;
+//   - the wait in force for each thing the crew reads — a sha's runs, a package's head — so two readers do not hold
+//     each other: a package backing off no longer stops a sha from being read. The wait grows per thing, from a minute
+//     to five, and a thing's wait is over when the wait that held it ends;
+//   - the crew's own spacing, which is what a thing the record has not read yet waits: it is left by the reads that name
+//     nothing, so an old record's spacing is honoured instead of lost, and a read that says what it reads is never held
+//     by the crew's last call of any kind;
 //   - the green a wait found on a sha, so the next member's wait on that sha makes no call at all;
 //   - the head last seen on a package's pull request, so a read GitHub did not answer keeps the last flag rather than
 //     clearing it (../nudge_the_supervisor reads it as its head kind);
@@ -63,16 +69,26 @@ export interface AHead {
   readonly at: number
 }
 
+/** The wait in force for one thing the crew reads: when it was last read, and how long the next read of it waits. */
+export interface AWait {
+  readonly last_at: number
+  readonly wait_ms: number
+}
+
 /** What the crew's store keeps, whole: one record every member of one crew spends from. */
 export interface TheBudget {
   /** How many calls the crew has spent since the record began. */
   readonly calls: number
-  /** What GitHub said is left of the allowance; null until GitHub has said. */
+  /** What GitHub said is left of the allowance, less the crew's own calls since it said so; null until GitHub has said. */
   readonly remaining: number | null
   /** When that window resets, in milliseconds since the epoch; null until GitHub has said. */
   readonly resets_at: number | null
+  /** When the crew's own spacing was last begun: the last call a read that named nothing made, 0 until one does. */
   readonly last_call_at: number
+  /** The crew's spacing: the wait a thing the record has not read yet is given. */
   readonly backoff_ms: number
+  /** The wait in force for each thing the crew reads, keyed by the sha or the work package named. */
+  readonly waits: Readonly<Record<string, AWait>>
   readonly greens: Readonly<Record<string, GreenRun>>
   readonly heads: Readonly<Record<string, AHead>>
   readonly reads: Readonly<Record<string, number>>
@@ -85,6 +101,7 @@ export const A_FRESH_BUDGET: TheBudget = {
   resets_at: null,
   last_call_at: 0,
   backoff_ms: 0,
+  waits: {},
   greens: {},
   heads: {},
   reads: {},
@@ -93,14 +110,28 @@ export const A_FRESH_BUDGET: TheBudget = {
 /** What the budget says about one call, before any is made. */
 export type TheWord = { readonly may: true } | { readonly may: false; readonly refusal: string }
 
-/** Whether the crew may spend one call now, or why it may not. */
-export function theBudgetsWord(budget: TheBudget, now: number): TheWord {
+/**
+ * The wait in force for what a read reads: a sha's own wait, or a package's, or the crew's spacing when the record has
+ * not read that thing yet. A read that names nothing — `of` left out — waits the crew's spacing itself.
+ *
+ * A thing the record has not read takes the crew's spacing as it stands, so a record written before a thing had a wait
+ * of its own is honoured rather than lost; and because nothing a read that names what it reads does renews the crew's
+ * spacing, that wait runs out in minutes at the latest, never once per read.
+ */
+export function theWaitOn(budget: TheBudget, of: string | undefined): AWait {
+  const crews = { last_at: budget.last_call_at, wait_ms: budget.backoff_ms }
+  return of === undefined ? crews : (budget.waits[of] ?? crews)
+}
+
+/** Whether the crew may spend one call now, or why it may not: its floor, or the wait on what `of` names. */
+export function theBudgetsWord(budget: TheBudget, now: number, of?: string): TheWord {
   if (budget.remaining !== null && budget.remaining <= THE_FLOOR) {
     const when = budget.resets_at === null ? '' : `, which resets at ${clockOf(budget.resets_at)}`
     return { may: false, refusal: `the crew's GitHub budget is at its floor: ${String(budget.remaining)} calls left${when}.` }
   }
-  const free_at = budget.last_call_at + budget.backoff_ms
-  if (budget.backoff_ms > 0 && now < free_at) {
+  const wait = theWaitOn(budget, of)
+  const free_at = wait.last_at + wait.wait_ms
+  if (wait.wait_ms > 0 && now < free_at) {
     return { may: false, refusal: `the crew's GitHub budget is backing off until ${clockOf(free_at)}.` }
   }
   return { may: true }
@@ -113,21 +144,33 @@ export const theNextBackoff = (backoff_ms: number): number =>
 /**
  * The budget after one call was made at `now`, whatever GitHub answered. A call that could not be made at all is not
  * counted, so a machine with no `gh` never spends the crew's allowance.
+ *
+ * The call is one this crew spent, so what GitHub said is left comes down by it. The wait it begins belongs to what was
+ * read, and grows from the shortest to the longest by that thing's own calls, so a reader cannot hold another. Only a
+ * read that names nothing moves the crew's own spacing on, and the crew's spacing is never renewed by a read that names
+ * what it reads: were it otherwise, every read would push back the first read of everything else until nothing new
+ * could be read at all.
  */
-export const afterACall = (budget: TheBudget, now: number): TheBudget => ({
-  ...budget,
-  calls: budget.calls + 1,
-  last_call_at: now,
-  backoff_ms: theNextBackoff(budget.backoff_ms),
-})
+export function afterACall(budget: TheBudget, now: number, of?: string): TheBudget {
+  const spent: TheBudget = {
+    ...budget,
+    calls: budget.calls + 1,
+    remaining: budget.remaining === null ? null : Math.max(budget.remaining - 1, 0),
+  }
+  if (of !== undefined) {
+    return { ...spent, waits: { ...budget.waits, [of]: { last_at: now, wait_ms: theNextBackoff(budget.waits[of]?.wait_ms ?? 0) } } }
+  }
+  return { ...spent, last_call_at: now, backoff_ms: theNextBackoff(budget.backoff_ms) }
+}
 
 /** The green kept for `sha`, or undefined when the crew has not seen one. */
 export const theGreenRecorded = (budget: TheBudget, sha: string): GreenRun | undefined => budget.greens[sha]
 
-/** The budget with a green kept on `sha`, and that sha's wait over: its reads go with it. */
+/** The budget with a green kept on `sha`, and that sha's wait over: its reads and its wait go with it. */
 export function keepTheGreen(budget: TheBudget, sha: string, run_ids: readonly number[], at: number): TheBudget {
+  const waits = Object.fromEntries(Object.entries(budget.waits).filter(([read]) => read !== sha))
   const reads = Object.fromEntries(Object.entries(budget.reads).filter(([read]) => read !== sha))
-  return { ...budget, greens: { ...budget.greens, [sha]: { run_ids, at } }, reads }
+  return { ...budget, greens: { ...budget.greens, [sha]: { run_ids, at } }, waits, reads }
 }
 
 /** The budget with a head kept for `package` at `now`, the moment it was first seen being that head. */
@@ -148,8 +191,9 @@ export const afterAReadOf = (budget: TheBudget, sha: string): TheBudget => ({
 
 /** The budget with this sha's wait over, whatever it ended as: a red sha is read again from the start. */
 export function theEndOfTheWait(budget: TheBudget, sha: string): TheBudget {
+  const waits = Object.fromEntries(Object.entries(budget.waits).filter(([read]) => read !== sha))
   const reads = Object.fromEntries(Object.entries(budget.reads).filter(([read]) => read !== sha))
-  return { ...budget, reads }
+  return { ...budget, waits, reads }
 }
 
 /** Whether the record has to ask GitHub what is left before it can decide anything. */
@@ -191,20 +235,22 @@ export function theBudgetIn(place: CrewPlace | Refused): TheBudget | Refused {
 }
 
 /**
- * The budget `text` holds, or undefined when it holds none: every field of it, or it is nobody's budget.
+ * The budget `text` holds, or undefined when it holds none: every field of it, or it is nobody's budget. A record
+ * written before a thing had a wait of its own holds no waits table, and reads as a crew that has not read anything yet.
  */
 function aBudgetFrom(text: string): TheBudget | undefined {
   const held = aRecordIn(text)
   if (held === undefined) return undefined
   const counts = theCountsIn(held)
   if (counts === undefined) return undefined
-  const { greens, heads, reads } = held
+  const { greens, heads, reads, waits } = held
   if (!isAGreenTable(greens) || !isAHeadTable(heads) || !isAReadTable(reads)) return undefined
-  return { ...counts, greens, heads, reads }
+  if (waits !== undefined && !isAWaitTable(waits)) return undefined
+  return { ...counts, waits: waits ?? {}, greens, heads, reads }
 }
 
 /** The budget's five numbers, apart from the tables it holds. */
-type TheCounts = Omit<TheBudget, 'greens' | 'heads' | 'reads'>
+type TheCounts = Omit<TheBudget, 'waits' | 'greens' | 'heads' | 'reads'>
 
 /** Those five numbers as a record holds them, or undefined when one of them is not a count it could hold. */
 function theCountsIn(held: Record<string, unknown>): TheCounts | undefined {
@@ -222,6 +268,9 @@ const isAGreenTable = (value: unknown): value is Record<string, GreenRun> =>
 
 const isAHeadTable = (value: unknown): value is Record<string, AHead> =>
   isATable(value, (one) => typeof one['head'] === 'string' && isACount(one['at']))
+
+const isAWaitTable = (value: unknown): value is Record<string, AWait> =>
+  isATable(value, (one) => isACount(one['last_at']) && isACount(one['wait_ms']))
 
 const isAReadTable = (value: unknown): value is Record<string, number> => {
   const table = asARecord(value)
@@ -258,9 +307,10 @@ export type Spent = { readonly said: ProcessOutcome; readonly budget: TheBudget 
 /**
  * Spends one GitHub call through the crew's budget: the rate limit first when the record does not say what is left,
  * then the call itself, with the record kept after each. A crew whose store will not keep its count spends nothing —
- * the count is the only thing that bounds it — and a crew at its floor or inside its backoff is refused in words.
+ * the count is the only thing that bounds it — and a crew at its floor or inside the wait on what `of` names is refused
+ * in words. `of` is what the call reads — a sha, or a work package — and is left out by a read that names nothing.
  */
-export async function spendTheGithubBudget(spender: TheGithubSpender, args: readonly string[]): Promise<Spent> {
+export async function spendTheGithubBudget(spender: TheGithubSpender, args: readonly string[], of?: string): Promise<Spent> {
   const place = spender.place
   if ('refusal' in place) return place
   const held = theBudgetIn(place)
@@ -269,7 +319,7 @@ export async function spendTheGithubBudget(spender: TheGithubSpender, args: read
   if (writable !== undefined) return writable
   const learned = await theBudgetWithWhatIsLeft(spender, held)
   if ('refusal' in learned) return learned
-  return await theCall(spender, place, learned.budget, args)
+  return await theCall(spender, place, learned.budget, args, of)
 }
 
 /** The budget once GitHub has been asked what is left, when the record does not say or its window has passed. */
@@ -290,12 +340,12 @@ async function theBudgetWithWhatIsLeft(
 }
 
 /** One GitHub call, once the budget allows it, with the record kept afterwards. */
-async function theCall(spender: TheGithubSpender, place: CrewPlace, budget: TheBudget, args: readonly string[]): Promise<Spent> {
+async function theCall(spender: TheGithubSpender, place: CrewPlace, budget: TheBudget, args: readonly string[], of?: string): Promise<Spent> {
   const now = spender.clock.now()
-  const word = theBudgetsWord(budget, now)
+  const word = theBudgetsWord(budget, now, of)
   if (!word.may) return { refusal: word.refusal }
   const said = await spender.run(args)
-  const after = afterACall(budget, now)
+  const after = afterACall(budget, now, of)
   // A store that will not keep this leaves the count short; the answer GitHub gave is real either way, and is returned.
   keepTheBudget(place, after)
   return { said, budget: after }
@@ -321,13 +371,13 @@ export type RunsRead =
   | { readonly kind: 'out_of_budget'; readonly refusal: string }
   | { readonly kind: 'cannot_tell'; readonly refusal: string }
 
-/** The runs GitHub holds on a sha, spent through the crew's budget. */
+/** The runs GitHub holds on a sha, spent through the crew's budget, spaced by that sha's own wait. */
 export async function readTheRunsOn(
   spender: TheGithubSpender,
   ask: { readonly repo: string; readonly sha: string },
 ): Promise<RunsRead> {
   const args = ['api', `repos/${ask.repo}/actions/runs?head_sha=${ask.sha}&per_page=${String(A_PAGE)}`]
-  const spent = await spendTheGithubBudget(spender, args)
+  const spent = await spendTheGithubBudget(spender, args, ask.sha)
   if ('refusal' in spent) return { kind: 'out_of_budget', refusal: spent.refusal }
   const runs = theRunsIn(spent.said)
   if (runs === undefined) return { kind: 'cannot_tell', refusal: `GitHub answered for the runs on ${ask.sha} with something this cannot read.` }
@@ -357,16 +407,20 @@ export type HeadRead =
   | { readonly kind: 'cannot_tell'; readonly refusal: string }
 
 /**
- * The head GitHub shows on the pull request that names `number`, spent through the crew's budget. The number is
- * matched as a whole one — `#1434` is not `#143` — in the title first and then in the body, and the newest such pull
- * request is the one read, since a package fixed after a review gets a second one.
+ * The head GitHub shows on the pull request that names `number`, spent through the crew's budget and spaced by that
+ * package's own wait. The number is matched as a whole one — `#1434` is not `#143` — in the title first and then in the
+ * body, and the newest such pull request is the one read, since a package fixed after a review gets a second one.
+ *
+ * The reading of the design this departs from, said plainly: #256 of this crew has no pull-request reader, so this
+ * matcher is new rather than reused, and the design's "rather than a second matcher" does not hold. It lives here, in
+ * the one place that asks GitHub, so there is still one place to look.
  */
 export async function readTheHeadOfAPackagesPullRequest(
   spender: TheGithubSpender,
   ask: { readonly repo: string; readonly number: number },
 ): Promise<HeadRead> {
   const args = ['pr', 'list', '--repo', ask.repo, '--state', 'all', '--json', 'number,headRefOid,state,title,body', '--limit', String(A_PAGE)]
-  const spent = await spendTheGithubBudget(spender, args)
+  const spent = await spendTheGithubBudget(spender, args, `${ask.repo}#${String(ask.number)}`)
   if ('refusal' in spent) return { kind: 'cannot_tell', refusal: spent.refusal }
   const head = thePullRequestIn(spent.said, ask.number)
   if (head === 'unreadable') return { kind: 'cannot_tell', refusal: `GitHub answered for the pull requests of ${ask.repo} with something this cannot read.` }
