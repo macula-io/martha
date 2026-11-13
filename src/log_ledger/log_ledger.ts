@@ -31,14 +31,16 @@
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
-/** The milestones a member keeps on a package, and the one a landing keeps: a package reaching the default branch is a
- * fact about the package, and it is what ends a review wait that no verdict answered (martha#320). */
+/** The milestones a member keeps on a package, and the one only a landing keeps (martha#320's ruling): a package
+ * reaching the default branch is a fact about the package, and it is what ends a package's waits. A member never writes
+ * it: the tool a member logs with maps the leader's own events (../keep_the_ledger), and this name is not among them, so
+ * a member cannot close every wait on a package with one call. */
 export const MILESTONES = [
   'checkpoint_reached',
   'review_round_closed',
   'release_shipped',
   'fix_shipped_after_release',
-  'landed',
+  'package_landed',
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
 

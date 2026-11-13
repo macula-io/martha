@@ -212,6 +212,11 @@ test('#256: three passed packages land as one batch, one --no-ff merge each, on 
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: passed.packages })
   assert.ok('told' in landed, `a batch of three passed packages was refused: ${wordsOf(landed)}`)
+  // The batch's own push is no landing: it pushes the integration branch, and the owner has not said yes (martha#320).
+  for (const work_package of passed.packages) {
+    const rows = await readLedger(tests.host, work_package)
+    assert.deepEqual(rows.filter((row) => row.kind === 'package_landed'), [], `the batch wrote a landing for ${work_package}, which the default branch does not hold`)
+  }
   const branches = theLandBranchesOnOrigin(fixture)
   assert.equal(branches.length, 1, `the batch was not pushed as one ${LAND}/ branch: ${branches.join(', ')}`)
   const branch = branches[0] ?? ''
@@ -404,7 +409,9 @@ test('#320: a package that reached the default branch is noted as landed, and re
   assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
 
   const rows = await readLedger(tests.host, landed_package)
-  assert.equal(rows.filter((row) => row.kind === 'landed').length, 1, 'the landing was not noted once in the ledger')
+  const landings = rows.filter((row) => row.kind === 'package_landed')
+  assert.equal(landings.length, 1, 'the landing was not noted once in the ledger')
+  assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip}`, 'the note holds the range that landed, as the two shas')
   assert.deepEqual([...(await landedPackagesOf(tests.host, [landed_package]))], [landed_package], 'the package did not read back as landed')
 })
 
@@ -430,6 +437,7 @@ test('#256: the fast-forward is refused when the default branch moved after the 
   const concluded = rows.filter((row) => row.kind === 'act_concluded')
   assert.equal(concluded.length, 1, 'the refused push was not kept in the ledger')
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : true, false, 'a refused push was kept as succeeded')
+  assert.deepEqual(rows.filter((row) => row.kind === 'package_landed'), [], 'a fast-forward that was refused wrote a landing')
 })
 
 test('#256: a push git refuses is answered with what git said, and kept in the ledger as failed', async (t) => {
