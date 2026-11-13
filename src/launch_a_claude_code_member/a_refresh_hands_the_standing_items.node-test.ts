@@ -95,7 +95,7 @@ async function aSessionStarts(place: ReturnType<typeof aCrewPlace>, crew: CrewTo
       home: place.home,
       launch_dir: place.checkout,
       settings_files: [],
-      user_scope: { markdown_kinds: RECORDED_HOST.markdown_kinds, output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER, reported_output_styles_dir: join(place.home, 'config', CLAUDE_CODE_OUTPUT_STYLES_FOLDER) },
+      user_scope: { markdown_kinds: RECORDED_HOST.markdown_kinds, output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER, reported_output_styles_dir: join(place.home, 'host-config-dir', CLAUDE_CODE_OUTPUT_STYLES_FOLDER) },
     }),
     crew,
     stopMember: () => {},
