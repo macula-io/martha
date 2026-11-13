@@ -18,6 +18,7 @@ import {
   nudgesOf,
   reviewWaitsIn,
   theNudgeLine,
+  headNudges,
   theNudgesGoTo,
   theNudgesPart,
   windowsOf,
@@ -299,4 +300,25 @@ test('a parked member\'s wait on a person is no nudge either: it is not expected
 
   const unparked = row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON * 2 } })
   assert.deepEqual(nudgesOf(input([unparked])).map((one) => one.kind), ['person'], 'the same wait outside a park is the one that is told')
+})
+
+// --- package B: the head of a package's pull request -------------------------
+
+test('#320 B: a hand-off whose pull request stands off its tip is a head nudge, and one still at its tip is none', () => {
+  const waits = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW)], [], RECEIVERS)
+  const tip = waits[0]?.tip
+  assert.equal(tip, 'b'.repeat(40), 'the wait did not carry the tip the hand-off named')
+  assert.deepEqual(headNudges(waits, {}), [], 'a package GitHub says nothing about was nudged')
+  assert.deepEqual(headNudges(waits, { 'macula-io/martha#320': { head: tip ?? '', at: NOW - MINUTE_MS } }), [], 'a pull request still at the tip, merged or not, was nudged')
+
+  const moved = headNudges(waits, { 'macula-io/martha#320': { head: 'c'.repeat(40), at: NOW - MINUTE_MS } })
+  assert.deepEqual(moved.map((one) => [one.kind, one.member, one.package, one.since]), [['head', 'Vesta', 'macula-io/martha#320', NOW - MINUTE_MS]], 'a moved head was not the nudge it is')
+  assert.equal(theNudgeLine(moved[0]!, CREW), `- head: Vesta on macula-io/martha#320, since ${clockOf(NOW - MINUTE_MS)}`, 'the head line carries more than the fields a prompt may hold')
+})
+
+test('#320 B: a hand-off of a design names no tip, so no head is compared for it', () => {
+  const design = 'HANDOFF macula-io/martha#320 doc=https://example.invalid/a-design r=1'
+  const waits = reviewWaitsIn([sent('Vesta', ['Mars'], design, NOW - REVIEW)], [], RECEIVERS)
+  assert.equal(waits[0]?.tip, '', 'a design hand-off carried a tip it never named')
+  assert.deepEqual(headNudges(waits, { 'macula-io/martha#320': { head: 'c'.repeat(40), at: NOW } }), [], 'a design hand-off was nudged for a head it has none of')
 })
