@@ -56,7 +56,7 @@ export const ITEMS_HANDED_AT_START = 20
 
 /** What `standing_add` says it is for. */
 export const STANDING_ADD_DESCRIPTION =
-  'Record one of the Supervisor\'s standing items, so the next Supervisor session is handed it after a refresh: held (item, reason, until: a YYYY-MM-DD day first, or the condition that ends the hold), awaiting (owes: who owes it, what: what they owe; the id is the package) or decided (rule, date: YYYY-MM-DD, words: the owner\'s own). Recording the same kind and id again replaces it, which is how a hold\'s day moves. A ruling is your record of the owner\'s words, never the owner\'s yes.'
+  'Record one of the Supervisor\'s standing items, so the next Supervisor session is handed it after a refresh: held (item, reason, until: a YYYY-MM-DD day first, or the condition that ends the hold), awaiting (owes: who owes it, what: what they owe; the id is a slug naming the package, such as martha-317) or decided (rule, date: YYYY-MM-DD, words: the owner\'s own). Recording the same kind and id again replaces it, which is how a hold\'s day moves. A ruling is your record of the owner\'s words, never the owner\'s yes.'
 
 /** What `standing_close` says it is for. */
 export const STANDING_CLOSE_DESCRIPTION =
@@ -104,7 +104,7 @@ function fieldRefusal(field: string, value: unknown): string | undefined {
 
 /** Why an id is refused, or undefined when it names an item. */
 const idRefusal = (id: unknown): string | undefined =>
-  typeof id === 'string' && SAFE_ID.test(id) ? undefined : 'id is a package ref or a slug: letters, digits, ".", "_" or "-", at most 80 of them'
+  typeof id === 'string' && SAFE_ID.test(id) ? undefined : 'id is a slug such as martha-317, never a package ref (its "/" and "#" are refused): letters, digits, ".", "_" or "-", at most 80 of them'
 
 /** The kind a call names, or undefined when it names none of the three. */
 const kindIn = (raw: unknown): StandingKind | undefined => STANDING_KINDS.find((kind) => kind === raw)

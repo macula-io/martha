@@ -20,6 +20,7 @@ import {
   MAX_STANDING_FIELD,
   NOTHING_STANDS,
   STANDING,
+  STANDING_ADD_DESCRIPTION,
   STANDING_KINDS,
   STANDING_STREAM,
   closeAStandingItem,
@@ -97,7 +98,15 @@ test('a call of no kind, or with an id that is a path, is refused by name', () =
   const kind = theItemAsked({ ...A_CALL.held, kind: 'maybe' }, 'Supervisor', NOW)
   assert.ok('refused' in kind && kind.refused.startsWith('kind is one of held, awaiting, decided'))
   const id = theItemAsked({ ...A_CALL.held, id: '../escape' }, 'Supervisor', NOW)
-  assert.ok('refused' in id && id.refused.startsWith('id is a package ref'))
+  assert.ok('refused' in id && id.refused.startsWith('id is a slug'))
+})
+
+test('a package ref as an id is refused by name, the refusal shows the slug form, and the tool says slug', () => {
+  const asked = theItemAsked({ ...A_CALL.awaiting, id: 'macula-io/martha#317' }, 'Supervisor', NOW)
+  assert.ok('refused' in asked && asked.refused.startsWith('id is a slug such as martha-317, never a package ref'))
+  assert.ok(!('refused' in theItemAsked({ ...A_CALL.awaiting, id: 'martha-317' }, 'Supervisor', NOW)))
+  assert.match(STANDING_ADD_DESCRIPTION, /the id is a slug naming the package, such as martha-317\)/)
+  assert.doesNotMatch(STANDING_ADD_DESCRIPTION, /the id is the package\)/)
 })
 
 test('a refused item writes nothing to the stream', async () => {

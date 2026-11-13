@@ -571,7 +571,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       type: 'object',
       properties: {
         kind: { type: 'string', enum: [...STANDING_KINDS], description: 'held, awaiting or decided' },
-        id: { type: 'string', description: 'The package or a short slug: letters, digits, ".", "_" or "-"' },
+        id: { type: 'string', description: 'A slug naming the item, such as martha-317 (a package ref is refused): letters, digits, ".", "_" or "-"' },
         item: { type: 'string', description: 'held: what is held back, in one line' },
         reason: { type: 'string', description: 'held: why, in one line' },
         until: { type: 'string', description: 'held: a YYYY-MM-DD day first, or the condition that ends the hold' },
