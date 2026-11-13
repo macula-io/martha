@@ -70,6 +70,13 @@ test('a report\'s time belongs to the row only as a position, and a row written 
   assert.equal(isDashboardRow({ ...beat('Vesta', 1), reported_at: -1 }), false, 'a report time before the epoch is a row')
 })
 
+test('r=2 R3: the moment a report was taken is the shape of a position, or the row is not a row', () => {
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), progress: { step: 1, of: 4, at: 1_700_000_000_000 } }), true, 'a report taken at a moment reads as one')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), progress: { step: 1, of: 4, at: 'a while ago' } }), false, 'a report moment that is not a position is not a row')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), progress: { step: 1, of: 4, at: -1 } }), false, 'a report moment before the epoch is not a row')
+  assert.equal(isDashboardRow({ ...beat('Vesta', 1), progress: { step: 1, of: 4, at: 1.5 } }), false, 'a report moment that is not a whole millisecond is not a row')
+})
+
 test('the beat interval and its offline threshold are named once, and the threshold is a whole multiple of it (test 3, the constants)', () => {
   assert.ok(OFFLINE_AFTER_MS > BEAT_INTERVAL_MS, 'a row must miss more than one beat to read offline')
   assert.equal(OFFLINE_AFTER_MS % BEAT_INTERVAL_MS, 0, 'the threshold counts beats')

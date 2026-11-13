@@ -16,7 +16,7 @@
 // The task's own limit is defined once, here, and read by the tool's description, by the cut, and by the test: the
 // number the model is told is exactly the number its words are cut at (martha#254 r=1 R2).
 
-import { STATES, type State, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { STATES, type Progress, type State, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The longest a task is kept: the number the tool's own description quotes, and the number its words are cut at. */
 export const TASK_CHARACTERS = 80
@@ -64,7 +64,7 @@ export interface ProgressBefore {
 export interface ProgressTaken {
   readonly state: State
   readonly task: string
-  readonly progress: { readonly step: number; readonly of: number }
+  readonly progress: Progress
   readonly waits: Waits | null
   readonly holds: string
   /** When this report was taken (martha#319): the one writer of the row's `reported_at`. */
@@ -114,7 +114,9 @@ export function takeProgress(
   const taken: ProgressTaken = {
     state: wait.waits !== null ? 'waiting' : STATE_OF_PHASE[phase],
     task,
-    progress: { step, of },
+    // `at` is when the member moved itself, not when the launcher last beat (martha#320): the heartbeat rewrites the row
+    // every few seconds, so a rule that looks for a member that has stopped would never see one.
+    progress: { step, of, at: now },
     waits: wait.waits,
     holds,
     reported_at: now,
