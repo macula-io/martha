@@ -3,10 +3,13 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { mkdtempSync, readdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../src/launch_a_claude_code_member/relay_copy.ts'
 import { manifestOf, PACKAGES } from './declared_in_package_json.ts'
 import { TEST_SCRIPT, testRunFlagsOf } from './every_test_run_ends.ts'
 import {
@@ -35,10 +38,15 @@ type Run = { readonly code: number | null | 'hung'; readonly output: string }
  * own that `t` kills after itself. The environment is PATH alone: this run's own
  * planted value, and whatever else this process holds, never reach the nested run.
  */
-async function throughTheRunner(t: TestContext, command: readonly string[]): Promise<Run> {
-  const runner = spawn(process.execPath, [RUNNER, ...command], {
+const throughTheRunner = (t: TestContext, command: readonly string[]): Promise<Run> =>
+  throughTheRunnerVia(t, [process.execPath, RUNNER, ...command])
+
+/** Runs `argv` as throughTheRunner describes, with `env` added to the nested run's PATH. */
+async function throughTheRunnerVia(t: TestContext, [program, ...args]: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<Run> {
+  assert.ok(program !== undefined, 'a program to run')
+  const runner = spawn(program, args, {
     cwd: repository,
-    env: { PATH: process.env.PATH },
+    env: { PATH: process.env.PATH, ...env },
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -73,6 +81,22 @@ const aRunSummary = RUN_SUMMARY_LABELS.map((label) => `${RUN_SUMMARY_MARK} ${lab
 const writesThenExits = (text: string, code: number): string[] => [process.execPath, '-e', `process.stdout.write(${JSON.stringify(text)}); process.exit(${code})`]
 /** What the runner says when the command's output did not end with the summary. */
 const CUT_RUN_REPORT = /a run ends with its summary \(martha#325\): the command's output did not end with node --test's summary/
+
+/** How many result lines the command below writes: megabytes, many times what a pipe or socket holds. */
+const MANY_LINES = 400_000
+/** One line of them. */
+const A_RESULT_LINE = '✔ a result\n'
+
+/**
+ * A node -e program that writes MANY_LINES result lines and the summary, then
+ * ends at once through process.exit, as node --test --test-force-exit ends:
+ * whatever the runner has not yet taken from it is what process.exit drops.
+ */
+const writesALotThenExits = (): string[] => [
+  process.execPath,
+  '-e',
+  `process.stdout.write(${JSON.stringify(A_RESULT_LINE)}.repeat(${MANY_LINES}) + ${JSON.stringify(aRunSummary)}); process.exit(0)`,
+]
 
 /** node --test with the test script's own flags, on the planted `file`. */
 const nodeTestOn = (file: string): string[] => [process.execPath, '--test', ...testRunFlagsOf(manifestOf(repository)), plantedPath(file)]
@@ -145,6 +169,22 @@ test('a real node --test run on a failing file keeps its own report and is not c
   assert.equal(run.code, 1, run.output)
   assert.match(run.output, new RegExp(`${RUN_SUMMARY_MARK} fail 1`))
   assert.doesNotMatch(run.output, /martha#325/)
+})
+
+test('a command that ends through process.exit right after writing megabytes reaches the reader whole, the summary last', async (t) => {
+  const run = await throughTheRunner(t, writesALotThenExits())
+  assert.notEqual(run.code, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms`)
+  assert.equal(run.output.split(A_RESULT_LINE).length - 1, MANY_LINES, 'every line reached the reader')
+  assert.ok(run.output.endsWith(aRunSummary), 'the summary is the end of the output')
+  assert.equal(run.code, 0)
+})
+
+test('the runner removes the files the command wrote into once the run ends', async (t) => {
+  const temporary = mkdtempSync(join(tmpdir(), 'martha-runner-tmpdir-'))
+  t.after(() => removeTheTree(temporary))
+  const run = await throughTheRunnerVia(t, [process.execPath, RUNNER, ...writesThenExits(aRunSummary, 0)], { TMPDIR: temporary })
+  assert.equal(run.code, 0, run.output)
+  assert.deepEqual(readdirSync(temporary), [])
 })
 
 test('the summary is found at the end of stdout wherever the stream splits it, colours and blank lines included', () => {

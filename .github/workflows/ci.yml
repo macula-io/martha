@@ -201,25 +201,6 @@ jobs:
       # holds the files no tsconfig includes, such as eslint.config.mjs, and the
       # catch binding the compiler never looks at.
       - run: npx tsc --noEmit
-      # DIAGNOSTIC for martha#325, removed before hand-off: the same node --test
-      # run without the runner, its stdout once to a file and once through a pipe.
-      - name: DIAG node --test straight to a file, and through a pipe
-        continue-on-error: true
-        run: |
-          set +e
-          for how in file pipe; do
-            start=$(date +%s)
-            if [ "$how" = file ]; then
-              node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs' > "$RUNNER_TEMP/diag_$how.out" 2> "$RUNNER_TEMP/diag_$how.err"
-              rc=$?
-            else
-              node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs' 2> "$RUNNER_TEMP/diag_$how.err" | cat > "$RUNNER_TEMP/diag_$how.out"
-              rc=${PIPESTATUS[0]}
-            fi
-            echo "DIAG $how node=$(node --version) rc=$rc seconds=$(( $(date +%s) - start )) bytes=$(wc -c < "$RUNNER_TEMP/diag_$how.out") results=$(grep -c '^✔' "$RUNNER_TEMP/diag_$how.out") summary=$(grep -c '^ℹ tests ' "$RUNNER_TEMP/diag_$how.out") stderr_bytes=$(wc -c < "$RUNNER_TEMP/diag_$how.err")"
-            echo "DIAG $how last lines:"; tail -n 12 "$RUNNER_TEMP/diag_$how.out"
-            echo "DIAG $how stderr tail:"; tail -n 12 "$RUNNER_TEMP/diag_$how.err"
-          done
       - run: npm test
       # macOS's default TMPDIR is long and is reached through a link
       # (/var -> /private/var), martha#79. The suite runs again under that shape,
