@@ -3,8 +3,9 @@
 //
 // `--record` is the one command that writes the map, and it only ever brings a
 // number down (martha#322). The check fails any ceiling it would bring down
-// (martha#341), so a shrink records its new ceiling in the change that made it. A raise is a hand edit to package.json, which the
-// diff and the review show, and so is a new directory's first ceiling: a command
+// (martha#341), so a shrink records its new ceiling in the change that made it.
+// A raise is a hand edit to package.json, which the diff and the review show,
+// and so is a new directory's first ceiling: a command
 // that invented one would let a new adapter be born at any size. package.json is
 // written back as the JSON it already is, with every other key where it was, so a
 // record run reads as the numbers it changed.

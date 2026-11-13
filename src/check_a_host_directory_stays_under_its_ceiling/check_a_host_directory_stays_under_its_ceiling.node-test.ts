@@ -154,12 +154,12 @@ test('a ceiling above its directory fails naming the headroom and the command th
 
 test('after recording, a tree with headroom passes: the check fails exactly when recording would write (#341)', async (t) => {
   const files = { 'src/shrunk/a.ts': TWO_LINES, 'src/held/h.ts': TWO_LINES }
-  const root = craft(t, { adapters: ['src/shrunk', 'src/held'], ceilings: { 'src/shrunk': 30, 'src/held': 2 }, files })
+  const root = craft(t, { adapters: ['src/shrunk', 'src/held'], ceilings: { 'src/shrunk': 3, 'src/held': 2 }, files })
   assert.equal((await findingsIn(root)).length, 1, 'the shrunk directory fails before it is recorded')
 
   const judged = await judgeTheTree(root)
   const recorded = withLoweredCeilings(readFileSync(manifestPathOf(root), 'utf8'), judged.code)
-  assert.deepEqual(recorded.lowered, [{ directory: 'src/shrunk', from: 30, to: 2 }])
+  assert.deepEqual(recorded.lowered, [{ directory: 'src/shrunk', from: 3, to: 2 }])
   writeFileSync(manifestPathOf(root), recorded.text)
   assert.deepEqual(await findingsIn(root), [], 'and nothing fails once the ceiling follows the code down')
 })
