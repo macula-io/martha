@@ -90,7 +90,8 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     strict_gate: false,
     // Off unless the declaration names it true, as every switch is (martha#254 added the crew's dashboard).
     dashboard: false,
-  refresh_between_tasks: false,
+    owner_bell: false,
+    refresh_between_tasks: false,
     nudges: false,
     stalled_minutes: null,
     review_minutes: null,

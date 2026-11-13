@@ -12,7 +12,7 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
-import { orderIn, paneIn, PANE_CHROME_ROWS, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
 
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
@@ -29,27 +29,22 @@ type CrewTool = ALaunchersTool
 /** The engine calls this module makes, typed by shape as the relay's own module types them. */
 interface CrewEngine {
   readonly env: { get(name: string): Promise<string | undefined> }
-  readonly http: {
-    fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }>
-  }
+  readonly http: { fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; socketPath: string }): Promise<{ status: number; text: string }> }
   /** The session's id, and the host's own reading of it: its usage, taken as it comes and read by the core. */
   readonly session: { id(): Promise<string>; usage(): Promise<unknown> }
-  readonly clock: {
-    after(ms: number, fn: () => void): { cancel(): void }
-    every(ms: number, fn: () => void): { cancel(): void }
-  }
+  readonly clock: { after(ms: number, fn: () => void): { cancel(): void }; every(ms: number, fn: () => void): { cancel(): void } }
   /** Submits a prompt into this session (martha#253): the text a message is handed in. */
   readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
-  readonly command: {
-    register(command: { name: string; description: string }): Promise<unknown>
-    /** Runs one of the host's own commands in this session: the refresh flow's clear is this one (martha#255). */
-    run(command: { command: string; args?: string }): Promise<unknown>
-  }
+  /** `run` runs one of the host's own commands in this session: the refresh flow's clear is that one (martha#255). */
+  readonly command: { register(command: { name: string; description: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
+  /**
+   * `invalidate` asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it
+   * (martha#254).
+   */
   readonly ui: {
     open(view: { id: string; title: string; rows: number }): Promise<unknown>
     close(view: { id: string }): Promise<unknown>
-    /** Asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it (martha#254). */
     invalidate(event: string): Promise<unknown>
     toast(text: string): unknown
     /** Puts text on the clipboard of the session whose button was pressed: the surface is the press's own handle. */
@@ -71,6 +66,15 @@ const THE_CHANNEL_READ = 'channel_read_seconds'
 
 /** What the mod asks the launcher for: what this session should do now, if a refresh is due (martha#255). */
 const THE_REFRESH_QUESTION = 'the_refresh_of_this_session'
+
+/** What the mod says once a model switch resolved, so the row says the model this session really runs (martha#315). */
+const THE_MODEL_REPORT = 'note_the_model_the_session_runs'
+
+/**
+ * The host's own command that switches this session's model (martha#315), run once the turn has ended. It is spelled
+ * out as the host's command name, the way `clear` is above: a hooks module imports only its own files.
+ */
+const THE_MODEL_COMMAND = 'model'
 
 /** What the mod asks the launcher for: the owner's to-do list, as the pane draws it (martha#316). */
 const THE_OWNERS_TODO = 'the_owners_todo'
@@ -144,12 +148,34 @@ async function whatTheSessionSays($: CrewEngine, e: unknown): Promise<Readonly<R
   return { usage: await $.session.usage().catch(() => undefined), turn_id: textIn(e, 'turnId'), answer: textIn(e, 'answer') }
 }
 
-/** The one order the launcher gave: a text submitted, or the clear run out of the turn's own hook. */
+/** The one order the launcher gave: a text submitted, the clear, or the model this session is to run on. */
 async function carryOutTheAct($: CrewEngine, order: TheOrder): Promise<void> {
   if (order.carry === 'submit') return await $.prompt.submit({ text: order.text })
+  if (order.carry === 'model') await switchTheModel($, order.model)
   if (order.carry !== 'clear') return
   // Out of the turn's hook: /clear cannot run inside a hook the turn waits on.
   $.clock.after(CLEAR_DELAY_MS, () => void $.command.run({ command: 'clear' }).catch(() => undefined))
+}
+
+/**
+ * Runs the host's own model command with the model the launcher named, and tells the launcher what this session now
+ * runs on (martha#315). Both acts are the host's, so they are bound here; what a failed command means for the report is
+ * the slice's, where ./crew_answers.node-test.ts can reach it.
+ */
+async function switchTheModel($: CrewEngine, model: string): Promise<void> {
+  return await switchTheModelOnTheHost(
+    {
+      runTheModelCommand: (one) => $.command.run({ command: THE_MODEL_COMMAND, args: one }),
+      noteTheModel: (one) => askTheLauncherQuietly($, THE_MODEL_REPORT, { model: one }),
+    },
+    model,
+  )
+}
+
+/** Asks the launcher for one thing and says nothing when it cannot be heard: a report that failed changes no decision. */
+async function askTheLauncherQuietly($: CrewEngine, tool: string, args: Readonly<Record<string, unknown>>): Promise<void> {
+  const heard = await hearTheLauncher($, tool, args)
+  if (!('said' in heard)) $.ui.toast(`Martha did not note this session's model: ${heard.why}`)
 }
 
 /** How long after the turn the clear is run: out of the hook, so the host is not holding a turn while it clears. */
@@ -194,20 +220,15 @@ async function askTheLauncher($: CrewEngine, tool: string, args: Readonly<Record
   return 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}`
 }
 
-/** What the launcher gives the relay when it asks for the tools to register. */
-interface FromTheLauncher {
-  readonly tools: readonly CrewTool[]
-}
-
 /** Asks the launcher for the tools to register, which it alone names and describes. */
-async function toolsFromTheLauncher($: CrewEngine): Promise<FromTheLauncher> {
+async function toolsFromTheLauncher($: CrewEngine): Promise<readonly CrewTool[]> {
   const heard = await hearTheLauncher($, 'the_crews_tools', {})
   const tools = 'said' in heard ? crewToolsIn(heard.said) : null
-  if (tools !== null) return { tools }
+  if (tools !== null) return tools
   // A launcher that could not answer is not a crew with no tools: registering nothing in silence would leave the
   // member calling tools that were never registered, and nothing would say why (martha#254 part 2 r=2 R2).
   $.ui.toast(`Martha did not give the crew's tools: ${'said' in heard ? 'its answer is not a list of them' : heard.why}`)
-  return { tools: [] }
+  return []
 }
 
 /** The pane's redraw timer while a pane is open: the host draws a `ui.render` once and caches it until invalidated. */
@@ -322,6 +343,8 @@ const answerWriteMyHandover = ($: CrewEngine, e: Record<string, unknown>): Promi
 const answerRefreshThisSession = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'refresh_this_session')
 const answerParkAMember = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'park_a_member')
 const answerWakeAMember = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wake_a_member')
+const answerSwitchYourModel = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'switch_your_model')
+const answerReturnToYourOwnModel = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'return_to_your_own_model')
 const answerVerifyRange = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'verify_range')
 const answerLandBatch = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'land_batch')
 const answerFastForward = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'fast_forward_after_the_owners_yes')
@@ -370,6 +393,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__refresh_this_session' }, answerRefreshThisSession)
   on('tool.call', { tool: 'mcp__martha__park_a_member' }, answerParkAMember)
   on('tool.call', { tool: 'mcp__martha__wake_a_member' }, answerWakeAMember)
+  on('tool.call', { tool: 'mcp__martha__switch_your_model' }, answerSwitchYourModel)
+  on('tool.call', { tool: 'mcp__martha__return_to_your_own_model' }, answerReturnToYourOwnModel)
   on('tool.call', { tool: 'mcp__martha__verify_range' }, answerVerifyRange)
   on('tool.call', { tool: 'mcp__martha__land_batch' }, answerLandBatch)
   on('tool.call', { tool: 'mcp__martha__fast_forward_after_the_owners_yes' }, answerFastForward)
@@ -388,8 +413,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
   on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
-    const fromTheLauncher = await toolsFromTheLauncher($)
-    for (const tool of fromTheLauncher.tools) await $.tool.register(tool)
+    for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (paneIn(first)?.open_at_start === true) await openThePane($)
     await startReadingTheChannel($)

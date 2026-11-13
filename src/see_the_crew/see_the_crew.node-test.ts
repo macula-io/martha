@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, seeTheCrew, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
 
 const CREW = { members: [{ name: 'Vesta' }, { name: 'Uranus' }, { name: 'Terra' }] }
@@ -99,6 +99,23 @@ test('the pane opens by itself only when the declaration switched the dashboard 
   assert.equal(answered(false), false, 'a crew that did not switch it on opens nothing')
 })
 
+test('a row whose host is asking the owner something reads needs you, and is counted (martha#313)', () => {
+  const asking = beat('Vesta', NOW, {
+    dialogs: [{ key: 'permission::Bash:0', kind: 'permission', reads: 'permission for Bash' }],
+  })
+  const seen = seeTheCrew(CREW, { Vesta: asking }, NOW)
+  const vesta = seen.rows[0]!
+  assert.equal(vesta.state, 'needs-you', 'the host is what holds the session up, and the row says so')
+  assert.equal(vesta.needs, 'permission for Bash', 'and says what for, in the host\'s own words')
+  assert.equal(seen.counts.needs_you, 1, 'the header counts it')
+  assert.equal(seen.counts.working, 0, 'a member being asked is not working')
+
+  const opened_but_quiet = beat('Vesta', NOW - OFFLINE_AFTER_MS - 1, {
+    dialogs: [{ key: 'permission::Bash:0', kind: 'permission', reads: 'permission for Bash' }],
+  })
+  assert.equal(seeTheCrew(CREW, { Vesta: opened_but_quiet }, NOW).rows[0]!.state, OFFLINE, 'a row gone quiet says so: nothing is left to answer the prompt')
+})
+
 test('#320: a part another slice composed is drawn under the members, and the rows the pane asks for count it', () => {
   const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 500) }, NOW)
   const without = thePaneAnsweredBy(seen, true, 1_000)
@@ -110,3 +127,4 @@ test('#320: a part another slice composed is drawn under the members, and the ro
   assert.equal(withBlock.rows, without.rows + block.length, 'the rows the pane asks for count the part')
   assert.equal(withBlock.header, without.header, 'the part is no member, so the header counts none of it')
 })
+

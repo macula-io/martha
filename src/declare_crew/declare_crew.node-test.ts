@@ -63,9 +63,15 @@ const team = {
   channel_read_seconds: 30,
 }
 
+/**
+ * The models this test's host runs (martha#315): what a declaration's `review_model` is read against. The fixture
+ * names its own three, so a refusal below is about the declaration and never about a model list typed here.
+ */
+const HOST_MODELS = ['model-a', 'model-b', 'model-r']
+
 const declare = (declaration: unknown) => {
   const { store, documentsRead } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
-  return { settings: declareCrew(store, root), documentsRead }
+  return { settings: declareCrew(store, root, HOST_MODELS), documentsRead }
 }
 
 const refusedWith = async (declaration: unknown, field: string | null) => {
@@ -148,7 +154,7 @@ test('the declaration is read exactly once, and using the settings reads nothing
 
 test('a missing declaration is refused by its file, never replaced by a default', async () => {
   const { store } = storeOf({})
-  await assert.rejects(declareCrew(store, root), (error: unknown) => {
+  await assert.rejects(declareCrew(store, root, HOST_MODELS), (error: unknown) => {
     assert.ok(error instanceof DeclarationRefused)
     assert.equal(error.file, declaration_path)
     assert.equal(error.field, null)
@@ -163,7 +169,7 @@ test('an unreadable declaration is refused, and the store\'s own code is kept', 
       throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
     },
   }
-  await assert.rejects(declareCrew(store, root), (error: unknown) => {
+  await assert.rejects(declareCrew(store, root, HOST_MODELS), (error: unknown) => {
     assert.ok(error instanceof DeclarationRefused)
     assert.equal(error.file, declaration_path)
     assert.match(error.message, /EACCES/)
@@ -173,7 +179,7 @@ test('an unreadable declaration is refused, and the store\'s own code is kept', 
 
 test('a declaration that is not JSON is refused by its file', async () => {
   const { store } = storeOf({ [declaration_path]: '{ "version": ' })
-  await assert.rejects(declareCrew(store, root), (error: unknown) => {
+  await assert.rejects(declareCrew(store, root, HOST_MODELS), (error: unknown) => {
     assert.ok(error instanceof DeclarationRefused)
     assert.equal(error.file, declaration_path)
     assert.equal(error.field, null)
@@ -183,7 +189,7 @@ test('a declaration that is not JSON is refused by its file', async () => {
 
 test('a root that is not an absolute path is refused before anything is read', async () => {
   const { store, documentsRead } = storeOf({})
-  await assert.rejects(declareCrew(store, 'relative/root'), DeclarationRefused)
+  await assert.rejects(declareCrew(store, 'relative/root', HOST_MODELS), DeclarationRefused)
   assert.deepEqual(documentsRead(), [])
 })
 
@@ -211,6 +217,8 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, conventions: '../outside.md' }, 'conventions'],
     [{ ...team, house_rules: { practice: 'yes' } }, 'house_rules.practice'],
     [{ ...team, house_rules: { review_model: '' } }, 'house_rules.review_model'],
+    // A model the host does not run is refused here, by name, rather than read as a rule that can never match (#315).
+    [{ ...team, house_rules: { review_model: 'model-the-host-cannot-spell' } }, 'house_rules.review_model'],
     [{ ...team, house_rules: [] }, 'house_rules'],
     [{ ...team, extra: 1 }, 'extra'],
   ]

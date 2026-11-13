@@ -224,6 +224,36 @@ and the refresh flow are the second half of this work package, so today a wake
 finds a handover only where the host wrote one — a file you put in
 `handovers/` yourself is not one, because nothing stamped it.
 
+## Seeing who runs, and stopping a member
+
+From any terminal in the checkout, `martha ls` shows one line per member of the
+crew, in the order the declaration names them: whether it is running, stopped,
+parked or offline (running, but its row has gone quiet), and for a running
+member the checkout it runs in, since when, its model and its task.
+
+```sh
+martha ls
+```
+
+```text
+supervisor  stopped
+builder  running  ~/project  since 2026-11-13T09:00:00.000Z  opus  the parser fix
+reviewer  parked
+```
+
+`martha stop builder` ends that member's session: the terminal it was started
+in gets its prompt back, and the crew's lifecycle record keeps who stopped it
+and why. `martha stop` with no name stops every member that is running, one
+after the other. Stopping a member that is not running says so and does
+nothing.
+
+A stop is asked of the `martha start` or `martha wake` holding the member, which
+looks for it every second, asks the member to end and, after ten seconds, makes
+it. If that terminal's Martha is gone and the member outlived it, `martha stop`
+waits twenty seconds for an answer and then ends the member itself, but only
+while the process it recorded is still the one at that pid; a pid since handed
+to another process is never signalled, and the line says so.
+
 ## If you want the strict shell gate
 
 Martha can be told that text it cannot trace stops every later shell command in

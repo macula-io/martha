@@ -18,10 +18,13 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { parkedPlace, theParkMarker, theParkOf } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { THE_TOOLS_ASK, PARK_A_MEMBER, WAKE_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+
+/** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
+const HOST_MODELS = ['opus', 'fable']
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-park-tool-'))
 after(() => removeTheTree(homeOfAll))
@@ -44,7 +47,7 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
   mkdirSync(root, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   const tools = crewToolsOver({
     member,

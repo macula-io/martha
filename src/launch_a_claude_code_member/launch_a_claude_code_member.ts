@@ -145,6 +145,9 @@ import {
 } from './host_runs_the_relay.ts'
 import { makeEmptyDirectory } from './empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { NO_BELLS, theBellsTheOwnerDeclared } from '../ring_the_owner/ring_the_owner.ts'
 import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
 import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
@@ -188,6 +191,12 @@ export interface ClaudeCodeMemberLaunch {
    * `martha start`. Absent means on, so a launcher built by a caller that has not heard of the setting keeps the guard.
    */
   readonly strict_gate?: boolean
+  /**
+   * Whether this member's bells ring when its host asks the owner something (`house_rules.owner_bell`, less the owner's
+   * own mute of this member, martha#313), read once by `martha start`. Absent means none ring, as every switch in the
+   * declaration is off unasked.
+   */
+  readonly owner_bell?: boolean
   readonly places: LauncherPlaces
   /** The recorded mesh server trees; the reviewed recording unless a test gives its own. */
   readonly mesh_trees?: MeshTreeRecording
@@ -745,6 +754,24 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
   return launch.turns === undefined ? {} : { turns: launch.turns }
 }
 
+/**
+ * The two places this launch keeps of its own: its relay's journal, one file named by the approval it runs on (a launch
+ * started on no approval names itself, martha#240), and the owner's screen (martha#313) — the member's own row, moved
+ * by what the host asks, and the bell that change is worth, rung on the terminal this launcher was started on.
+ */
+function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen'> {
+  return {
+    journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
+    screen: theOwnersScreen({
+      beats: dashboardRowsIn(launch.places.dashboard),
+      member: launch.member_name,
+      bells: launch.owner_bell === undefined ? NO_BELLS : theBellsTheOwnerDeclared(launch.owner_bell),
+      onTheOwnersTerminal: isOnTheOwnersTerminal(launch.stdio),
+      write: (bytes) => void process.stdout.write(bytes),
+    }),
+  }
+}
+
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
@@ -780,9 +807,7 @@ async function servedRelay(
     ...crewOf(launch, sessions),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
-    // One file of this launch's own, named by the approval it runs on; a launch started on no approval names itself
-    // (martha#240).
-    journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
+    ...thePlacesOfItsOwn(launch),
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)
@@ -859,7 +884,13 @@ async function startedMember(
   }
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
-    recordMemberLaunch(launchRecords, linuxProcessIdentities, { member_name: launch.member_name, node_id: launch.node_id, pid })
+    recordMemberLaunch(launchRecords, linuxProcessIdentities, {
+      member_name: launch.member_name,
+      node_id: launch.node_id,
+      pid,
+      checkout: launch.place.launch_dir,
+      started_at: new Date().toISOString(),
+    })
   // The member is held until its callback says yes, so its place in the launch
   // directory's record is written inside the same hold: a launcher killed in
   // between then leaves a record that already names its member (#124).

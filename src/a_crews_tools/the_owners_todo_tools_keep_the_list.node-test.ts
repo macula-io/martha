@@ -25,7 +25,7 @@ import {
   theOpenRows,
 } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { dashboardRowsIn } from '../launch_a_claude_code_member/dashboard_rows_in_state.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { recordIngestion, refuseExecutionAfterUngatedText, startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
@@ -82,7 +82,7 @@ function toolsOf(place: APlace, member: string, run?: (request: ProcessRequest) 
     root: place.root,
     documents: place.documents,
     stores: { crew: crewFilesDirectory(join(place.rows, '..', 'crew-store')) },
-    ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null } }),
+    ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null, signalGroup: () => ({ signalled: false, refusal: 'the to-do tools signal no process' }) } }),
   })
 }
 

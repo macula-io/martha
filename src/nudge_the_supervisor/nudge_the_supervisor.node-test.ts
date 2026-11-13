@@ -10,6 +10,7 @@ import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { MENU } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import {
   BUSY,
   clockOf,
@@ -114,7 +115,7 @@ test('a wait on the owner is the owner\'s nudge, and it keeps what the member sa
 
 test('r=2 R3: zero turns a kind of nudge off, and every kind is checked, not only the stalled one', () => {
   const stalled = row('Vesta', { progress: { step: 1, of: 4, at: NOW - 10 * STALLED } })
-  const held = row('Mars', { state: 'waiting', waits: { on: 'Uranus', for: 'a menu', since: NOW - 10 * PERSON }, progress: { step: 1, of: 4, at: NOW - 1_000 } })
+  const held = row('Mars', { state: 'waiting', waits: { on: 'Uranus', for: MENU, since: NOW - 10 * PERSON }, progress: { step: 1, of: 4, at: NOW - 1_000 } })
   const waits = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - 10 * REVIEW)], [], RECEIVERS)
   const turnedOff = { stalled_ms: 0, review_ms: 0, person_ms: 0 }
 

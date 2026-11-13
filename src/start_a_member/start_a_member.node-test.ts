@@ -41,8 +41,15 @@ import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_ev
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
+import { declareCrew } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
+import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { stopTheCrew } from '../run_the_martha_command/list_and_stop_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
+
+/** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
+const HOST_MODELS = ['opus', 'fable']
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 const documents = { read: (path: string) => readFile(path, 'utf8') }
@@ -235,7 +242,7 @@ function requestFor(place: Place, command: string, member: string, lines: string
 }
 
 const declared = async (place: Place): Promise<void> => {
-  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', state: place.state, documents })
+  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', state: place.state, documents, models: HOST_MODELS })
   assert.ok(outcome.declared, outcome.declared ? '' : outcome.refusal)
 }
 
@@ -606,4 +613,24 @@ test('a member started from the crew answers the crew\'s tools over its relay (m
     assert.notEqual(words, NO_ACTING_PLACE, `${tool} is answered by its slice in a launch Martha started, not refused as a place that cannot act`)
     assert.notEqual(words.trim(), '', `${tool} says something`)
   }
+})
+
+test('#312: a member Martha started is stopped by its own launcher when the owner asks, not by the verb', async (t) => {
+  const place = placeFor(t, { '.mcp.json': SERVERS })
+  await declared(place)
+  await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, tellOwner: () => {}, now: () => new Date() })
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const request = requestFor(place, fake.command, BUILDER!.name, lines)
+  const started = await startedOn(place, request)
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  await until('the fake host to start', () => existsSync(fake.ran), t)
+  const crew = crewStateDirectory(place.state.state_root, place.root)
+  assert.ok('path' in crew, 'refusal' in crew ? crew.refusal : '')
+  // The launcher's watch answers within its tick and the member's end; without the watch, the verb waits out its
+  // deadline and ends the group itself, which says 'owner_verb'.
+  const stopped = await stopTheCrew({ launcher: request.places, crew: crew.path, settings: await declareCrew(documents, place.root, CLAUDE_CODE_MODELS) }, BUILDER!.name)
+  assert.deepEqual(stopped.map((one) => [one.kind, one.kind === 'stopped' ? one.ended_by : one.told]), [['stopped', 'launcher']])
+  await started.stopped
+  assert.ok(lines.some((line) => line.startsWith(`${BUILDER!.name} is being stopped, asked by `)), 'the launcher told its owner why the member is ending')
 })

@@ -13,7 +13,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
-import { env } from 'node:process'
+import process, { env } from 'node:process'
 
 import type {
   EnvironmentChange,
@@ -118,6 +118,20 @@ export const runAProcessOnThisMachine: Processes['run'] = (request) =>
     )
   })
 
+/**
+ * Signals a process group on this machine only while its leader is still the process recorded (martha#312): the
+ * identity is read, compared, and the signal sent in this one call, so no caller checks and signals apart.
+ */
+export const signalAGroupOnThisMachine: Processes['signalGroup'] = (pid, identity, signal) => {
+  if (linuxProcessIdentities.identityOf(pid) !== identity) return { signalled: false, refusal: `process ${pid} is no longer the process that was recorded, so it was not signalled.` }
+  try {
+    process.kill(-pid, signal)
+    return { signalled: true }
+  } catch (error) {
+    return { signalled: false, refusal: `the group of process ${pid} could not be signalled (${codeOf(error) ?? String(error)}).` }
+  }
+}
+
 /** This machine's files, scratch directories and processes, shaped as the host contract holds them. */
 export const thisMachine = {
   stores: { files: filesOnThisMachine, scratch: scratchOnThisMachine },
@@ -125,5 +139,6 @@ export const thisMachine = {
     run: runAProcessOnThisMachine,
     runNow: runNowOnThisMachine,
     identityOf: (pid: number) => linuxProcessIdentities.identityOf(pid),
+    signalGroup: signalAGroupOnThisMachine,
   } satisfies Processes,
 } as const

@@ -24,7 +24,7 @@ import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_BASH_RESULTS } from './claude_code_bash_results.ts'
-import { claudeCodeHost, ownNameOfCalledTool, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN, claudeCodeHost, ownNameOfCalledTool, RECORDED_MODELS, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
 import { promptOriginKindsOf, promptOriginRemapsOf, promptOriginsIn, type RecordedPromptOrigins } from './claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_session_events.ts'
 import {
@@ -82,7 +82,7 @@ test('the adapter implements the five parts of the host contract', (t) => {
   const { adapter } = adapterIn(t)
   assert.deepEqual(Object.keys(adapter.host).sort(), ['clock', 'delivery', 'processes', 'stores', 'tools'])
   assert.deepEqual(Object.keys(adapter.host.stores).sort(), ['crew', 'documents', 'files', 'launches', 'rows', 'scratch'])
-  assert.deepEqual(Object.keys(adapter.host.processes).sort(), ['identityOf', 'run', 'runNow'])
+  assert.deepEqual(Object.keys(adapter.host.processes).sort(), ['identityOf', 'run', 'runNow', 'signalGroup'])
   assert.equal(adapter.host.clock.now(), 1_700_000_000_000)
 })
 
@@ -358,6 +358,28 @@ test('the recording names the host version it was taken from', () => {
   const recorded = JSON.parse(readFileSync(new URL('./recorded_claude_code_host.json', import.meta.url), 'utf8')) as { host_version?: unknown }
   assert.match(String(recorded.host_version), /^\d+\.\d+\.\d+$/)
   assert.equal(RECORDED_HOST.host_version, recorded.host_version)
+})
+
+test('the models a crew may name are of the host this repository records (martha#315)', () => {
+  // The alias list is observed of the host's own Agent schema (`model?: "sonnet" | "opus" | "haiku" | "fable"`), not
+  // derived from the binary, so nothing else compares the two recordings: a host re-record leaves this one a version
+  // behind, and a crew would then declare a model the host has renamed or dropped. Re-take it, then record that
+  // version here.
+  assert.equal(
+    RECORDED_MODELS.host_version,
+    RECORDED_HOST.host_version,
+    `the model aliases were observed of ${RECORDED_MODELS.host_version}, and the host recording is ` +
+      `${RECORDED_HOST.host_version}. Re-read the Agent schema's model field on ${RECORDED_HOST.host_version} and ` +
+      'record that version with it.',
+  )
+  assert.ok(CLAUDE_CODE_MODELS.length > 0, 'the host runs no model this repository can name, so a crew could declare no reviewer model')
+  // The field names the reviewer-model rule reads are the host's own, as its Agent schema declares them.
+  assert.deepEqual(
+    [CLAUDE_CODE_SUBAGENT_SPAWN.type_field, CLAUDE_CODE_SUBAGENT_SPAWN.description_field, CLAUDE_CODE_SUBAGENT_SPAWN.model_field],
+    ['subagent_type', 'description', 'model'],
+    'the fields the review rule reads are not the ones the host\'s own Agent schema names',
+  )
+  assert.ok(CLAUDE_CODE_SUBAGENT_SPAWN.tools.includes('Agent'), 'the tool that spawns a subagent on this host is not among the tools the rule reads')
 })
 
 test('the Bash answers are of the host this repository records (martha#193)', () => {
