@@ -44,12 +44,12 @@ const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host 
 const THE_ARGUMENT_OF_A_WRITE = 'the host\'s own name for the argument that holds a whole file, which lives in the host glue a slice may not import'
 
 /**
- * Why the mod's command to clear a session is named by literal (martha#255 r=2):
- * `clear` there is the host's own command name, which the host chooses, not the
- * word an order carries — the same spelling, a different thing, and no constant of
- * ours may stand for it.
+ * Why the mod writes `clear` twice by literal (martha#255 r=2): it is the word an order carries the clear under, which
+ * the launcher holds as a constant a hooks module cannot import, and it is also the name of the host command the mod
+ * runs to clear a session — the same spelling twice, and only the first is the launcher's word. The list is keyed by
+ * value and file, so the two are one entry.
  */
-const THE_HOSTS_CLEAR_COMMAND = 'the name of the host command this mod runs to clear a session, which the host names and no constant of ours does'
+const THE_CLEAR_IN_THE_MOD = 'the word an order carries the clear under, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs to clear a session, which the host names'
 
 /**
  * Why three launch and refresh tests write `clear` as a literal (martha#255 r=2):
@@ -86,8 +86,7 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a text under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the clear under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod submits a prompt under; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod runs the clear under; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: `the host command this mod clears a session with; ${THE_HOSTS_CLEAR_COMMAND}` },
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_CLEAR_IN_THE_MOD },
   // The same spelling in recorded host data (martha#255 r=2): three tests replay what the host recorded, and its word
   // for a session that began with /clear is its own.
   { value: CARRY_THE_CLEAR, file: 'carry_taint_across_a_refresh/carry_taint_across_a_refresh.node-test.ts', reason: THE_HOSTS_WORD_FOR_A_CLEAR },
