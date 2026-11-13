@@ -25,7 +25,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
-import { sessionRecordsIn } from './session_records_in_rows.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { dashboardRowsIn } from './dashboard_rows_in_state.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { serveTheRelay } from './serve_the_relay.ts'

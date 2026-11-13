@@ -100,3 +100,55 @@ export const SHOWN_STATES: readonly ShownState[] = [...STATES, OFFLINE]
 
 /** The beat interval a reader counts a row's quiet against, as the writer's own constant. */
 export const READER_BEAT_MS = BEAT_INTERVAL_MS
+
+/** How many lines the pane's chrome takes: its status line, and the box's two borders (martha#254). */
+export const PANE_CHROME_ROWS = 3
+
+/**
+ * The pane's header line (martha#254): how many members are online, how many wait, and how many need the owner.
+ * It is answered here rather than drawn by the mod, so a count the owner reads is the one this slice counted.
+ */
+export function thePaneHeader(counts: CrewCounts): string {
+  return `${counts.online}/${counts.members} online · ${counts.waiting} waiting · ${counts.needs_you} need you`
+}
+
+/** One member's line in the pane (martha#254): who, how far, and what holds it up. */
+export function thePaneLine(row: CrewRow): string {
+  const bar = `${row.progress.step}/${row.progress.of}`
+  const waits = row.waits === null ? '' : ` · waits on ${row.waits.on} for ${row.waits.for}`
+  const needs = row.needs === '' ? '' : ` · needs you: ${row.needs}`
+  const holds = row.holds === '' ? '' : ` · ${row.holds}`
+  return `${row.member}: ${row.state} · ${row.task} ${bar}${holds}${waits}${needs}`
+}
+
+/**
+ * How many rows the pane asks the host for (martha#254): one per member, one more for each member that needs the
+ * owner (its own block), and the chrome.
+ */
+export function theRowsThePaneAsksFor(rows: readonly CrewRow[]): number {
+  return rows.length + rows.filter((row) => row.state === 'needs-you').length + PANE_CHROME_ROWS
+}
+
+/** What the pane draws when no member of the crew has a row at all (martha#254). */
+export const NO_MEMBER_HAS_REPORTED = 'No member of this crew has reported yet.'
+
+/** What the pane is answered (martha#254): the words it draws, whether it opens by itself, and how it is refreshed. */
+export interface ThePaneAnswered {
+  readonly header: string
+  readonly lines: readonly string[]
+  readonly open_at_start: boolean
+  readonly rows: number
+  readonly redraw_ms: number
+}
+
+/** The whole pane answer, from the crew as this slice sees it: what it draws, and how the host is asked to draw it. */
+export function thePaneAnsweredBy(seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts }, opens_at_start: boolean, redraw_ms: number): ThePaneAnswered {
+  const lines = seen.rows.map(thePaneLine)
+  return {
+    header: thePaneHeader(seen.counts),
+    lines: lines.length === 0 ? [NO_MEMBER_HAS_REPORTED] : lines,
+    open_at_start: opens_at_start,
+    rows: theRowsThePaneAsksFor(seen.rows),
+    redraw_ms,
+  }
+}

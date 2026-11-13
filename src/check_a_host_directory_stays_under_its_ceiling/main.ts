@@ -17,9 +17,8 @@
 // check could not be made. It never passes because it could not look.
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 
-import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree, type Judged } from './judge_the_tree.ts'
 import { withLoweredCeilings } from './record_the_ceilings.ts'
@@ -47,7 +46,7 @@ const measure = (judged: Judged): number => {
 
 /** Brings a ceiling down to its count: the map's only writer, and it never raises one. */
 const record = (repository: string, code: Readonly<Record<string, number>>): number => {
-  const path = join(repository, MANIFEST)
+  const path = manifestPathOf(repository)
   const text = readFileSync(path, 'utf8')
   const recorded = withLoweredCeilings(text, code)
   if (recorded.lowered.length === 0) {

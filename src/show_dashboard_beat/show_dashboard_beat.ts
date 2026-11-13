@@ -52,6 +52,13 @@ export interface HostFacts {
   readonly costUsd: number | null
 }
 
+/**
+ * The row's own field for the refresh flow it is in (martha#255): a spelling of the row, and nothing else. The flows
+ * themselves are kept in a folder of the crew store, whose name is the refresh slice's business (../refresh_a_member,
+ * REFRESHES_PLACE); the two share no meaning, so a reader here never borrows that name.
+ */
+export const REFRESH_FIELD = 'refresh'
+
 /** One member's row, whole. */
 export interface DashboardRow {
   readonly member: string
@@ -67,6 +74,11 @@ export interface DashboardRow {
   /** What needs the owner, in the member's own words; '' when nothing does. */
   readonly needs: string
   readonly host: HostFacts
+  /**
+   * The refresh flow this member is in, and why (martha#255): absent or null when none runs, so a row written before
+   * the flow existed still reads, and the owner sees a refresh in flight without asking anyone.
+   */
+  readonly refresh?: { readonly phase: string; readonly reason: string } | null
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -112,9 +124,14 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
     (STATES as readonly unknown[]).includes(value['state']) &&
     isProgress(value['progress']) &&
     isHostFacts(value['host']) &&
-    isWaits(value['waits'])
+    isWaits(value['waits']) &&
+    // Absent on every row written before the refresh flow existed, so it is optional and never demanded (martha#255).
+    (value[REFRESH_FIELD] === undefined || value[REFRESH_FIELD] === null || isARefreshsPhase(value[REFRESH_FIELD]))
   )
 }
+
+/** Whether a refresh phase is the shape this slice writes: what it is doing, and why, both in the owner's words. */
+const isARefreshsPhase = (value: unknown): boolean => isRecord(value) && isText(value['phase']) && isText(value['reason'])
 
 /** The row's fields that are plain text or a position, each checked by itself. */
 const KEPT_FIELDS: readonly ((row: Record<string, unknown>) => boolean)[] = [

@@ -42,7 +42,9 @@ export const RELAY_FILES = [
   'hooks/relay_protocol.ts',
   'hooks/crew.tsx',
   'hooks/crew_tools_answer.ts',
-  'hooks/pane_rule.ts',
+  // What the launcher answers are read with (martha#255 r=2): moved out of the hooks module so a test can drive the
+  // reading, which is the only way a word the two ends stopped agreeing on is caught.
+  'hooks/crew_answers.ts',
   // The one rule for when a session reads its crew's channel (martha#253 r=2): the host refused a launch whose copy
   // did not carry it.
   'hooks/crew_channel_reading.ts',

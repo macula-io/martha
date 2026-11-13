@@ -50,8 +50,11 @@ export const DASHBOARD = 'dashboard'
  */
 export const STRICT_GATE = 'strict_gate'
 
+/** Whether a member hands over after a finished task (martha#255): off unless the declaration says true. */
+export const REFRESH_BETWEEN_TASKS = 'refresh_between_tasks'
+
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD] as const
+export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */

@@ -271,6 +271,17 @@ export interface Stores {
   readonly crew: CrewStore
 }
 
+/**
+ * What a slice that keeps a crew's own files asks of the stores: the crew's store,
+ * and nothing else (martha#255). It is the `crew` of Stores, named once here so a
+ * slice writes the key as a type and not as a literal that only looks like the
+ * pane's command.
+ */
+export interface TheCrewFilesStores {
+  readonly crew: CrewStore
+}
+
+
 /** A process to run: the command, its arguments and the directory it runs in. */
 export interface ProcessRequest {
   readonly command: string
