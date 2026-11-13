@@ -199,6 +199,23 @@ test('r=2 R1: package B hands off after package A landed, and B\'s wait stands',
   assert.deepEqual(nudgesOf(input([], { waits })).map((one) => [one.kind, one.package]), [['review', 'macula-io/martha#320']], 'and B is nudged')
 })
 
+test('r=3: one package landing leaves every other package\'s unanswered hand-off standing', () => {
+  // A landing answers the package it names, and no other. Two packages of a crew wait at once all the time — a batch
+  // hands two of them to one reviewer — so a landing that ended the whole list would silence the hand-off nobody
+  // answered, which is the one thing this work exists to surface.
+  const aHanded = NOW - REVIEW * 6
+  const bHanded = NOW - REVIEW * 4
+  const aLanded = NOW - REVIEW * 2
+  const messages = [
+    sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), aHanded),
+    sent('Vesta', ['Mars'], handoff('macula-io/martha#321'), bHanded),
+  ]
+  const waits = reviewWaitsIn(messages, [{ package: 'macula-io/martha#320', at: aLanded }], RECEIVERS)
+
+  assert.deepEqual(waits.map((wait) => [wait.package, wait.at]), [['macula-io/martha#321', bHanded]], 'A\'s landing ended A\'s wait, and B\'s hand-off still stands')
+  assert.deepEqual(nudgesOf(input([], { waits })).map((one) => [one.kind, one.package]), [['review', 'macula-io/martha#321']], 'and B is the one nudged')
+})
+
 // --- 6. who receives a nudge ------------------------------------------------
 
 test('nudges go to whoever the table grants assign_work: the owner in a solo crew, the role\'s members in a team', () => {
