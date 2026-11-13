@@ -29,12 +29,15 @@ import {
   type TheOwnersMenus,
 } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
+import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import {
   FAST_FORWARD_AFTER_THE_OWNERS_YES,
   FAST_FORWARD_DESCRIPTION,
+  A_DRY_RUN,
   LAND_BATCH,
   LAND_BATCH_DESCRIPTION,
+  aDryRunIsAsked,
   fastForwardAfterTheOwnersYes,
   landPassedWorkAsOneBatch,
   theBatchACallNames,
@@ -596,7 +599,11 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: LAND_BATCH_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: { path: A_CLONE, packages: { ...THE_PACKAGES, minItems: 1 } },
+      properties: {
+        path: A_CLONE,
+        packages: { ...THE_PACKAGES, minItems: 1 },
+        [A_DRY_RUN]: { type: 'integer', enum: [0, 1], description: '1 for a dry run that merges in memory and writes nothing' },
+      },
       required: ['path', 'packages'],
     },
   },
@@ -1109,12 +1116,17 @@ async function verifyTheRange(places: CrewToolPlaces, args: Readonly<Record<stri
   return asAnAnswer(await verifyRange(actingHost({ ...places, processes: places.processes }), asked.ok))
 }
 
-/** `land_batch`: the batch a call names, landed as one integration branch by the slice that cuts it (martha#256). */
+/** `land_batch`: the batch a call names, landed as one integration branch by the slice that cuts it (martha#256), or its
+ * dry run with `check` 1, which writes nothing (martha#339). */
 async function landTheBatch(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
   const asked = theBatchACallNames(args)
   if ('refused' in asked) return { refused: asked.refused }
+  const dry_run = aDryRunIsAsked(args)
+  if ('refused' in dry_run) return { refused: dry_run.refused }
   if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
-  return asAnAnswer(await landPassedWorkAsOneBatch(actingHost({ ...places, processes: places.processes }), places.member, asked.ok))
+  const host = actingHost({ ...places, processes: places.processes })
+  if (dry_run.ok) return asAnAnswer(await forecastWhatABatchLands(host, asked.ok))
+  return asAnAnswer(await landPassedWorkAsOneBatch(host, places.member, asked.ok))
 }
 
 /** `fast_forward_after_the_owners_yes`: the default branch moved onto the approved tip (martha#256). */

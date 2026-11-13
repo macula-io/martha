@@ -19,6 +19,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
@@ -36,6 +37,7 @@ import {
   FAST_FORWARD_DESCRIPTION,
   LAND,
   LAND_BATCH_DESCRIPTION,
+  REDONE_GENERATED,
   THE_CHECK_PROGRAM,
   THE_REDO_PROGRAM,
   THE_REDO_SCRIPT,
@@ -182,14 +184,28 @@ function theProcessesALandingMeets(runs: TheRuns | undefined, under: (request: P
   return async (request: ProcessRequest): Promise<ProcessOutcome> => {
     if (request.command === NPM) {
       runs?.npm.push(request)
-      return { exit_code: 0, stdout: '', stderr: '' }
+      const redo = theRedoRunByNpm(request.args)
+      if (redo === undefined) return { exit_code: 0, stdout: '', stderr: '' }
+      const ran = spawnSync(process.execPath, [THE_REDO_IN_THIS_TREE, ...redo], { cwd: request.cwd, encoding: 'utf8' })
+      return { exit_code: ran.status, stdout: ran.stdout, stderr: ran.stderr }
     }
-    const here = request.command === NPM ? undefined : the_programs[request.args[0] ?? '']
+    const here = the_programs[request.args[0] ?? '']
     if (here === undefined) return under(request)
     runs?.programs.push(request)
     const ran = spawnSync(process.execPath, [here, ...request.args.slice(1)], { cwd: request.cwd, encoding: 'utf8' })
     return { exit_code: ran.status, stdout: ran.stdout, stderr: ran.stderr }
   }
+}
+
+/**
+ * The redo program's own arguments, when npm is asked to run it by its script (`run --silent redo:generated -- ...`), as
+ * the range gate and the batch's dry run do (martha#339); undefined for any other npm run, which answers at once.
+ */
+function theRedoRunByNpm(args: readonly string[]): readonly string[] | undefined {
+  const script = args.indexOf(THE_REDO_SCRIPT)
+  if (args[0] !== 'run' || script === -1) return undefined
+  const rest = args.slice(script + 1)
+  return rest[0] === '--' ? rest.slice(1) : rest
 }
 
 /** A package's PASS row, as the crew's own line writes one. */
@@ -322,6 +338,26 @@ const theMergesOf = (fixture: Fixture, branch: string, count: number): readonly 
     .reverse()
     .map((parents) => parents.trim().split(/\s+/)[1] ?? '')
 
+/**
+ * A batch that left one package out (martha#339): it was still pushed, as one land branch whose merges land exactly
+ * `landed`, in order; the default branch did not move; the clone is clean; and the answer names the package left out
+ * as the owner's menu carries it. Answers the words the answer gave.
+ */
+function aBatchLeftOneOut(fixture: Fixture, landing: Landing, base: string, landed: readonly string[], out: { readonly package: string; readonly pr: number }): string {
+  assert.ok('told' in landing, `a batch with a package left out did not land the rest: ${wordsOf(landing)}`)
+  assert.ok(landing.told.includes(`Left out: PR ${String(out.pr)} (${out.package}), `), `the answer did not name the package left out: ${landing.told}`)
+  const branches = theLandBranchesOnOrigin(fixture)
+  assert.equal(branches.length, 1, `the rest of the batch was not pushed as one ${LAND}/ branch: ${branches.join(', ')}`)
+  const branch = branches[0] ?? ''
+  const merges = inTheOrigin(fixture, 'rev-list', '--first-parent', '--count', `${base}..refs/heads/${branch}`)
+  assert.equal(merges, String(landed.length), 'the land branch holds a merge for the package left out')
+  assert.deepEqual(theMergesOf(fixture, branch, landed.length), landed, 'the land branch does not land the rest, in order')
+  assert.equal(theOriginMain(fixture), base, 'the default branch moved before the owner said yes')
+  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after a package was left out')
+  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'the batch kept its land branch in the clone')
+  return landing.told
+}
+
 test('#256: three passed packages land as one batch, one --no-ff merge each, on a land branch cut from the default branch', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
@@ -375,12 +411,12 @@ test('#256: a landing leaves the clone on the branch and commit it stood on, cle
   assert.equal(theLandBranchesOnOrigin(fixture).length, 1, 'the integration branch the landing made was not pushed')
 })
 
-test('#256: a stopped batch aborts its merge and leaves the clone where it stood, clean, with no land branch left', async (t) => {
+test('#339: a head left out aborts its merge and leaves the clone where it stood, clean, with no land branch left', async (t) => {
   const fixture = aRepository(t)
   const stood_on = gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD')
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   const packages = [1, 2, 3].map((entry) => `${fixture.repo}#${String(250 + entry)}`)
-  // The first two change the same line of one file, so the second is a conflict; the third is never reached.
+  // The first two change the same line of one file, so the second is a conflict and is left out; the third lands.
   const heads = [
     aBranchWithOneCommit(fixture, 'passed0', base, 'shared.txt', 'two\n'),
     aBranchWithOneCommit(fixture, 'passed1', base, 'shared.txt', 'three\n'),
@@ -393,13 +429,10 @@ test('#256: a stopped batch aborts its merge and leaves the clone where it stood
   for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.match(wordsOf(landed), /stopped at/)
-  assert.equal(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD'), stood_on, 'the clone was left on the integration branch a stopped batch cut')
-  assert.equal(gitIn(fixture.clone, 'rev-parse', 'HEAD'), base, 'the clone moved its HEAD, although the batch stopped before anything was pushed')
-  // Without the abort, git refuses the checkout back and the clone stands mid-merge on the branch, which this reads.
-  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left mid-merge after the batch stopped')
-  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'the stopped batch left its land branch in the clone, holding a merge never pushed')
-  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a stopped batch pushed something')
+  // Without the abort, the next merge is refused on a tree mid-merge, and the third head would be left out too.
+  aBatchLeftOneOut(fixture, landed, base, [at(heads, 0), at(heads, 2)], { package: at(packages, 1), pr: 282 })
+  assert.equal(gitIn(fixture.clone, 'rev-parse', '--abbrev-ref', 'HEAD'), stood_on, 'the clone was left on the integration branch the batch cut')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', 'HEAD'), base, 'the clone moved its HEAD, although a landing commits on its own branch')
 })
 
 test('#256: a clone on no branch is refused before a branch is cut, because a landing would have none to go back to', async (t) => {
@@ -472,11 +505,11 @@ test('#256: a package is landed as the pull request its verdict passed, whose nu
   assert.match(inTheOrigin(fixture, 'log', '-1', '--format=%s', `refs/heads/${branch}`), /Land #246 \(.*#243, PASS\)/)
 })
 
-test('#256: a pull request that does not merge cleanly stops the batch there and names the packages not tried', async (t) => {
+test('#339 T3: a pull request that clashes by hand with an earlier one is left out, naming the paths and that PR, and the rest land (mutants: stop on a hand clash; resolve it with ours)', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   const packages = [1, 2, 3].map((entry) => `${fixture.repo}#${String(250 + entry)}`)
-  // The first two change the same line of one file, so the second is a conflict; the third is never reached.
+  // The first two change the same line of one file, so the second clashes by hand with the first; the third lands.
   const heads = [
     aBranchWithOneCommit(fixture, 'passed0', base, 'shared.txt', 'two\n'),
     aBranchWithOneCommit(fixture, 'passed1', base, 'shared.txt', 'three\n'),
@@ -488,11 +521,15 @@ test('#256: a pull request that does not merge cleanly stops the batch there and
   for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.match(wordsOf(landed), /stopped at/)
-  assert.ok(wordsOf(landed).includes(at(packages, 1)), 'the answer did not name the package that would not merge')
-  assert.match(wordsOf(landed), /PR 282/, 'the answer did not name its pull request')
-  assert.ok(wordsOf(landed).includes(`Untried: ${at(packages, 2)}`), `the answer did not name the package not tried: ${wordsOf(landed)}`)
-  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that could not merge everything was pushed anyway')
+  const words = aBatchLeftOneOut(fixture, landed, base, [at(heads, 0), at(heads, 2)], { package: at(packages, 1), pr: 282 })
+  assert.match(words, /it clashes in shared\.txt with PR 281/, `the answer did not say what the package left out clashes with: ${words}`)
+  assert.match(words, /over [^.]*\(PR 281\), [^.]*\(PR 283\)\./, `the range is not said over the packages that landed: ${words}`)
+  assert.equal(inTheOrigin(fixture, 'show', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}:shared.txt`), 'two', 'the land branch holds the left-out head\'s side of the clash')
+  const ledger = await readLedger(tests.host, at(packages, 1))
+  assert.deepEqual(ledger.filter((row) => row.kind === 'act_announced'), [], 'the push was announced in the ledger of the package it left out')
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [at(packages, 0), at(packages, 2)] })
+  assert.ok('told' in checked, `the range over the packages that landed did not pass the check: ${wordsOf(checked)}`)
 })
 
 test('#256: the fast-forward puts the passed tip on the default branch, and its push is announced and concluded in the ledger', async (t) => {
@@ -761,7 +798,7 @@ test('#381: two heads that clash only in the picture and the ceilings land both,
   assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a redone landing kept its land branch in the clone')
 })
 
-test('#381: a clash that also touches a source file stops the batch, naming the path it will not settle', async (t) => {
+test('#381 #339: a clash that also touches a source file leaves that head out, naming the path it will not settle', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
@@ -784,18 +821,11 @@ test('#381: a clash that also touches a source file stops the batch, naming the 
   const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.match(wordsOf(landed), /stopped at/, 'a clash in a source file was settled by the landing')
-  assert.ok(wordsOf(landed).includes(`${AN_ADAPTER}/one.ts`), `the answer did not name the path a builder has to settle: ${wordsOf(landed)}`)
-  assert.equal(
-    inTheOrigin(fixture, 'rev-parse', '--verify', '--quiet', 'refs/heads/main'),
-    base,
-    'the default branch moved for a clash the landing refuses',
-  )
-  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that could not settle its clash was pushed anyway')
-  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left mid-merge after the batch stopped')
+  const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
+  assert.ok(words.includes(`clashes in ${AN_ADAPTER}/one.ts, which a landing does not redo`), `the answer did not name the path a builder has to settle: ${words}`)
 })
 
-test('#381: a package.json that differs outside the ceilings is not a generated file: the batch stops and names it', async (t) => {
+test('#381 #339: a package.json that differs outside the ceilings is not a generated file: that head is left out, named', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
@@ -812,12 +842,11 @@ test('#381: a package.json that differs outside the ceilings is not a generated 
   const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.match(wordsOf(landed), /stopped at/, 'a clash outside the ceilings was settled by the landing')
-  assert.match(wordsOf(landed), /package\.json differs outside/, `the answer did not say what the clash was: ${wordsOf(landed)}`)
-  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that could not settle its clash was pushed anyway')
+  const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
+  assert.match(words, /package\.json differs outside/, `the answer did not say what the clash was: ${words}`)
 })
 
-test('#381: two heads merge cleanly and leave the tree over a ceiling: the batch stops, naming the directory', async (t) => {
+test('#381 #339: two heads merge cleanly and leave the tree over a ceiling: the second is taken back off and left out, naming the directory', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
@@ -838,19 +867,8 @@ test('#381: two heads merge cleanly and leave the tree over a ceiling: the batch
   const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.match(wordsOf(landed), /stopped at/, `a merged tree over its ceiling was landed: ${wordsOf(landed)}`)
-  assert.ok(wordsOf(landed).includes(packages[1] ?? ''), `the answer did not name the head the batch stopped at: ${wordsOf(landed)}`)
-  assert.ok(
-    wordsOf(landed).includes(`${AN_ADAPTER}: 4 lines of code, ceiling 3`),
-    `the answer did not name the directory that is over its ceiling: ${wordsOf(landed)}`,
-  )
-  assert.equal(
-    inTheOrigin(fixture, 'rev-parse', '--verify', '--quiet', 'refs/heads/main'),
-    base,
-    'the default branch moved for a tree the landing refuses',
-  )
-  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch whose merged tree is over its ceiling was pushed anyway')
-  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after the batch stopped')
+  const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
+  assert.ok(words.includes(`${AN_ADAPTER}: 4 lines of code, ceiling 3`), `the answer did not name the directory that is over its ceiling: ${words}`)
 })
 
 test('#381: the programs the landing runs are the ones package.json runs them by, in the scripts it names', () => {
@@ -965,4 +983,201 @@ test('#364: the fast-forward of a held package is refused before its push is ann
 
 test('#364: both tools say an open hold on a listed package refuses the call', () => {
   for (const description of [LAND_BATCH_DESCRIPTION, FAST_FORWARD_DESCRIPTION]) assert.ok(description.includes(A_HOLD_REFUSES), `a landing tool does not say a hold refuses it: ${description}`)
+})
+
+// --- the range gate passes what the redo makes, and nothing more (martha#339, T4) ------------------------------------
+
+/**
+ * A batch of two heads that both moved the adapter's ceiling, landed by the tool: the second merge clashes in
+ * package.json alone and is redone, and the picture, which only the first head redrew, merges cleanly. So the tool's own
+ * merge is the one the gate has to pass, and a merge like it that does more is one it has to refuse.
+ */
+async function aBatchWithARedoneMerge(t: TestContext) {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+    [THE_PICTURE]: 'the picture as the base draws it\n',
+  })
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
+    [THE_PICTURE]: 'the picture as ours draws it\n',
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    [`${AN_ADAPTER}/three.ts`]: codeLines('d', 2),
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 4 } }),
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], { npm: [], programs: [] })
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('told' in landed, `a batch that clashes only in the ceilings was refused: ${wordsOf(landed)}`)
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  return { fixture, tests, base, tip, packages }
+}
+
+/** The message a merge carries, read in the clone. */
+const theMessageOf = (fixture: Fixture, merge: string): string => gitIn(fixture.clone, 'log', '-1', '--format=%B', merge)
+
+/**
+ * A merge with the same two parents as `merge`, made by hand: its tree with each of `files` written over it, and the
+ * message given. No ref names it; the range gate is asked about it as the range's tip.
+ */
+function aMergeMadeByHand(fixture: Fixture, merge: string, files: Readonly<Record<string, string>>, message: string): string {
+  const index = join(fixture.root, 'a-hand-made-index')
+  const env = { ...process.env, GIT_INDEX_FILE: index }
+  execFileSync(GIT, ['read-tree', `${merge}^{tree}`], { cwd: fixture.clone, env })
+  for (const [file, text] of Object.entries(files)) {
+    const blob = execFileSync(GIT, ['hash-object', '-w', '--stdin'], { cwd: fixture.clone, input: text, encoding: 'utf8' }).trim()
+    execFileSync(GIT, ['update-index', '--add', '--cacheinfo', `100644,${blob},${file}`], { cwd: fixture.clone, env })
+  }
+  const tree = execFileSync(GIT, ['write-tree'], { cwd: fixture.clone, env, encoding: 'utf8' }).trim()
+  const [into = '', landed = ''] = gitIn(fixture.clone, 'log', '-1', '--format=%P', merge).split(' ')
+  return gitIn(fixture.clone, ...withAnAuthor, 'commit-tree', tree, '-p', into, '-p', landed, '-m', message)
+}
+
+test('#339 T4: the range gate passes the merge the landing redid, which merging its parents does not write', async (t) => {
+  const { fixture, tests, base, tip, packages } = await aBatchWithARedoneMerge(t)
+  assert.match(theMessageOf(fixture, tip), new RegExp(`^${REDONE_GENERATED} package\\.json martha\\.hostCeilings \\(measured\\)$`, 'm'))
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages })
+  assert.ok('told' in checked, `the range gate refused the merge the landing redid: ${wordsOf(checked)}`)
+})
+
+test('#339 T4: a redone merge that also edits a source file is refused, naming the file (mutant: accept any merge with a redo line)', async (t) => {
+  const { fixture, tests, base, tip, packages } = await aBatchWithARedoneMerge(t)
+  const evil = aMergeMadeByHand(fixture, tip, { [`${AN_ADAPTER}/one.ts`]: `${codeLines('a', 2)}export const unreviewed = 1\n` }, theMessageOf(fixture, tip))
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip: evil, packages })
+  assert.match(wordsOf(checked), new RegExp(`it changes ${AN_ADAPTER}/one\\.ts, which merging its parents does not`))
+})
+
+test('#339 T4: a redo line naming a picture that merged cleanly is refused (mutant: take the redone paths from the trailer)', async (t) => {
+  const { fixture, tests, base, tip, packages } = await aBatchWithARedoneMerge(t)
+  const claimed = theMessageOf(fixture, tip).replace(`${REDONE_GENERATED} `, `${REDONE_GENERATED} ${THE_PICTURE} (picture); `)
+  const evil = aMergeMadeByHand(fixture, tip, {}, claimed)
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip: evil, packages })
+  assert.match(wordsOf(checked), new RegExp(`line names ${THE_PICTURE.replace('.', '\\.')} \\(picture\\); package\\.json .* and merging its parents clashes in package\\.json`))
+})
+
+test('#339 T4: a clashed merge with no redo line is refused, so a merge redone by hand does not pass (mutant: trust the tree alone)', async (t) => {
+  const { fixture, tests, base, tip, packages } = await aBatchWithARedoneMerge(t)
+  const evil = aMergeMadeByHand(fixture, tip, {}, theMessageOf(fixture, tip).split('\n')[0] ?? '')
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip: evil, packages })
+  assert.match(wordsOf(checked), new RegExp(`carries no ${REDONE_GENERATED} line`))
+})
+
+test('#339 T4: a redone package.json that also adds a dependency is refused (mutant: skip the manifest check)', async (t) => {
+  const { fixture, tests, base, tip, packages } = await aBatchWithARedoneMerge(t)
+  const landed = JSON.parse(gitIn(fixture.clone, 'show', `${tip}:package.json`)) as Record<string, unknown>
+  const widened = `${JSON.stringify({ ...landed, dependencies: { 'left-pad': '1.3.0' } }, null, 2)}\n`
+  const evil = aMergeMadeByHand(fixture, tip, { 'package.json': widened }, theMessageOf(fixture, tip))
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip: evil, packages })
+  assert.match(wordsOf(checked), /package\.json differs from both reviewed heads outside martha\.hostCeilings/)
+})
+
+// --- the dry run says what a batch would do, and writes nothing (martha#339, T1, T2, T5, T6) ----------------------
+
+/** What a dry run that refused said, or a failure naming what it told instead. */
+const refusedLanding = (landing: Landing): string => ('refused' in landing ? landing.refused : assert.fail(`the dry run was not refused: ${landing.told}`))
+
+/** Lands one branch on the default branch as a batch would, by a `--no-ff` merge whose subject names its pull request. */
+function aLandingOnMain(fixture: Fixture, base: string, pr: number, files: Readonly<Record<string, string>>): void {
+  const head = aBranchWriting(fixture, `landed${String(pr)}`, base, files)
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  gitIn(fixture.clone, ...withAnAuthor, 'merge', '--quiet', '--no-ff', '-m', `Land #${String(pr)} (${fixture.repo}#${String(pr)}, PASS)`, head)
+  gitIn(fixture.clone, 'push', '--quiet', 'origin', 'main')
+}
+
+/** What the clone holds that a dry run must leave alone: every ref, where HEAD stands, and its status. */
+const whatTheCloneHolds = (fixture: Fixture): string =>
+  [gitIn(fixture.clone, 'for-each-ref', '--format=%(refname) %(objectname)'), gitIn(fixture.clone, 'rev-parse', 'HEAD'), gitIn(fixture.clone, 'status', '--porcelain')].join('\n')
+
+const A_RELAY_SCRIPT = 'prove_the_relay_loads/prove_the_relay_loads.sh'
+const ONE_TOOL_FILE = 'src/a_crews_tools/a_crews_tools.ts'
+const ONE_EXCEPTIONS_FILE = 'src/check_no_literal_restates_a_value/exceptions.ts'
+
+test('#339 T1: a head that clashes with three landings on main is named, each path with the landing that brought it, and nothing is written (mutants: classify every path as generated; write the branch; attribute every clash to the last landing)', async (t) => {
+  // The shape of PR 382's head 760e5e6 against main 0c8802c: since it branched, main landed #392 (the picture only),
+  // #376 (two source files) and #396 (the relay script), and the head changed all four.
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, { [THE_PICTURE]: 'base\n', [ONE_TOOL_FILE]: 'base\n', [ONE_EXCEPTIONS_FILE]: 'base\n', [A_RELAY_SCRIPT]: 'base\n' })
+  const head = aBranchWriting(fixture, 'passed0', base, { [THE_PICTURE]: 'head\n', [ONE_TOOL_FILE]: 'head\n', [ONE_EXCEPTIONS_FILE]: 'head\n', [A_RELAY_SCRIPT]: 'head\n' })
+  aLandingOnMain(fixture, base, 392, { [THE_PICTURE]: 'main\n' })
+  aLandingOnMain(fixture, base, 376, { [ONE_TOOL_FILE]: 'main\n', [ONE_EXCEPTIONS_FILE]: 'main\n' })
+  aLandingOnMain(fixture, base, 396, { [A_RELAY_SCRIPT]: 'main\n' })
+  const { packages, tests } = await theBatchOfTwo(fixture, [head], { npm: [], programs: [] })
+  const before = whatTheCloneHolds(fixture)
+
+  const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  const words = refusedLanding(forecast)
+  assert.ok(words.includes(`- clashes by hand: ${at(packages, 0)} (PR 281): `), `the dry run did not name the head that clashes by hand: ${words}`)
+  assert.ok(words.includes(`${ONE_TOOL_FILE}, ${ONE_EXCEPTIONS_FILE} with PR 376`), `the two source files are not named with the landing that brought them: ${words}`)
+  assert.ok(words.includes(`${A_RELAY_SCRIPT} with PR 396`), `the relay script is not named with the landing that brought it: ${words}`)
+  assert.ok(words.includes(`(it would redo ${THE_PICTURE} (picture))`), `the picture is not said to be redone: ${words}`)
+  assert.ok(!words.includes(`${THE_PICTURE} with`), `the picture, which the redo redraws, was named as a clash by hand: ${words}`)
+  assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone')
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'the dry run pushed a land branch')
+})
+
+test('#339 T2: two heads that clash only in the picture are answered lands, picture redone (mutant: ignore the generated list)', async (t) => {
+  // The shape of PR 335 and PR 333 at 7283107: both redrew the picture, and nothing else of theirs clashes.
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, { [THE_PICTURE]: 'base\n' })
+  const ours = aBranchWriting(fixture, 'passed0', base, { [THE_PICTURE]: 'ours\n', 'ours.txt': 'ours\n' })
+  const theirs = aBranchWriting(fixture, 'passed1', base, { [THE_PICTURE]: 'theirs\n', 'theirs.txt': 'theirs\n' })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], { npm: [], programs: [] })
+
+  const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  assert.ok('told' in forecast, `a batch that clashes only in the picture was refused by the dry run: ${wordsOf(forecast)}`)
+  assert.ok(forecast.told.includes(`- lands: ${at(packages, 0)} (PR 281)`), `the first head is not answered lands: ${forecast.told}`)
+  assert.ok(forecast.told.includes(`- lands, redone: ${at(packages, 1)} (PR 282): ${THE_PICTURE} (picture) (a forecast:`), `the second head is not answered lands, redone, as a forecast: ${forecast.told}`)
+})
+
+/** Two heads whose package.json differ from the base in the ceilings, and in `scripts` when the test asks. */
+async function twoHeadsThatClashInTheManifest(t: TestContext, scripts: { readonly ours: Record<string, string>; readonly theirs: Record<string, string> }) {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, { 'package.json': aManifestWithScripts({}, { [AN_ADAPTER]: 2 }) })
+  const ours = aBranchWriting(fixture, 'passed0', base, { 'package.json': aManifestWithScripts(scripts.ours, { [AN_ADAPTER]: 3 }) })
+  const theirs = aBranchWriting(fixture, 'passed1', base, { 'package.json': aManifestWithScripts(scripts.theirs, { [AN_ADAPTER]: 4 }) })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], { npm: [], programs: [] })
+  return { packages, forecast: await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages }) }
+}
+
+test('#339 T5: two heads that clash only in the ceilings are answered lands, redone, in the redo\'s own words (mutant: treat the manifest as hand-written)', async (t) => {
+  const { packages, forecast } = await twoHeadsThatClashInTheManifest(t, { ours: {}, theirs: {} })
+  assert.ok('told' in forecast, `a clash in the ceilings alone was refused by the dry run: ${wordsOf(forecast)}`)
+  assert.ok(forecast.told.includes(`- lands, redone: ${at(packages, 1)} (PR 282): package.json martha.hostCeilings (measured)`), `the ceilings are not said to be redone: ${forecast.told}`)
+})
+
+test('#339 T6: two heads whose package.json also differ outside the ceilings clash by hand in it (mutant: treat the manifest as generated by its path)', async (t) => {
+  const { packages, forecast } = await twoHeadsThatClashInTheManifest(t, { ours: { ours: 'echo ours' }, theirs: { theirs: 'echo theirs' } })
+  const words = refusedLanding(forecast)
+  assert.ok(words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): package.json with PR 281`), `package.json is not named a clash by hand with the first head: ${words}`)
+})
+
+/** Three heads: the second clashes by hand with the first, and the third was cut from the second. */
+async function aHeadCutFromOneLeftOut(t: TestContext) {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const first = aBranchWithOneCommit(fixture, 'passed0', base, 'shared.txt', 'two\n')
+  const second = aBranchWithOneCommit(fixture, 'passed1', base, 'shared.txt', 'three\n')
+  const third = aBranchWithOneCommit(fixture, 'passed2', second, 'later.txt', 'later\n')
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const { packages, tests } = await theBatchOfTwo(fixture, [first, second, third], { npm: [], programs: [] })
+  return { fixture, base, first, packages, tests }
+}
+
+test('#339: a head cut from one that clashes by hand is answered left out with it in the dry run', async (t) => {
+  const { fixture, packages, tests } = await aHeadCutFromOneLeftOut(t)
+  const words = refusedLanding(await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages }))
+  assert.ok(words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): shared.txt with PR 281`), `the clash by hand is not named: ${words}`)
+  assert.ok(words.includes(`- left out with PR 282: ${at(packages, 2)} (PR 283)`), `the head cut from it is not left out with it: ${words}`)
+})
+
+test('#339: a head cut from one left out is left out of the landing with it, so its unreviewed side of the clash never lands', async (t) => {
+  const { fixture, base, first, packages, tests } = await aHeadCutFromOneLeftOut(t)
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  const words = aBatchLeftOneOut(fixture, landed, base, [first], { package: at(packages, 1), pr: 282 })
+  assert.ok(words.includes(`Left out: PR 283 (${at(packages, 2)}), its head holds the head of PR 282`), `the head cut from the one left out was not left out with it: ${words}`)
 })
