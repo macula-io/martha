@@ -16,33 +16,12 @@ import { test, type TestContext } from 'node:test'
 
 import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { LINTER_CONFIG, theManifestOfAPlantedTree, type Planted } from './a_tree_whose_ceilings_a_test_reads.ts'
 import { describe, RECORD_COMMAND } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree } from './judge_the_tree.ts'
 import { withLoweredCeilings } from './record_the_ceilings.ts'
 
-/** A tree to judge: the two lists, the ceilings, and the files under it. */
-interface Planted {
-  readonly adapters?: readonly string[]
-  readonly glue?: readonly string[]
-  readonly ceilings?: Readonly<Record<string, number>>
-  readonly files?: Readonly<Record<string, string>>
-}
-
-/** The linter's config the linter itself reads: code by extension, as the repository's own does. */
-const LINTER_CONFIG = "export default [{ files: ['**/*.{ts,tsx}'], rules: { 'max-depth': ['error', { max: 2 }] } }]\n"
-
-const plantedPackageJson = (planted: Planted): string =>
-  `${JSON.stringify(
-    {
-      martha: {
-        hostAdapters: planted.adapters ?? [],
-        hostGlue: planted.glue ?? [],
-        hostCeilings: planted.ceilings ?? {},
-      },
-    },
-    null,
-    2,
-  )}\n`
+const plantedPackageJson = theManifestOfAPlantedTree
 
 /** Writes the tree, and removes it when the test ends. */
 const craft = (t: TestContext, planted: Planted): string => {

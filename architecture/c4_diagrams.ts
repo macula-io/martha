@@ -576,6 +576,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
   {
+    name: 'redo_the_generated_files_of_a_merge',
+    why: 'a program land_batch runs over a clone when two passed heads clash only in a C4 picture or the host ceilings (martha#381); it is run over the tree, never loaded by the core',
+  },
+  {
     name: 'record_claude_code_host',
     why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
   },
@@ -664,8 +668,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'check_a_range_before_the_owner_says_yes', names: ['check_a_range_before_the_owner_says_yes', 'land_passed_work_as_one_batch', 'find_the_work_a_verdict_passed', 'open_and_finish_a_worktree', 'read_the_origin_a_clone_has', 'hold_a_package_back_from_a_batch'], type: '[the crew\'s tools that act]', code: true,
       desc: ['The five tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of;', 'hold_a_package_back_from_a_', 'batch stops a held package', '(martha#364)'] },
-    { col: 1, kind: 'b-cmp', name: 'keep_the_owners_todo_list', names: ['keep_the_owners_todo_list'], type: '[what waits on the owner]', code: true,
-      desc: ['The owner\'s to-do list (martha#316):', 'the acts only the owner can do, each', 'command shown in full under what it', 'does. A member the table lets assign', 'work adds one; its own check or the', 'member takes it off. The pane and', 'martha todo show it'] },
+    { col: 1, kind: 'b-cmp', name: 'keep_the_owners_todo_list, queue_the_owners_asks', names: ['keep_the_owners_todo_list', 'queue_the_owners_asks'], type: '[what waits on the owner]', code: true,
+      desc: ['The owner\'s to-do list (martha#316):', 'the acts only the owner can do, each', 'command shown in full under what it', 'does. A member the table lets assign', 'work adds one; its own check or the', 'member takes it off. The pane and', 'martha todo show it. queue_the_owners_', 'asks is the ask queue (martha#313):', 'a routine ask waits instead of a menu,', 'and the session the table names hands', 'the whole batch over as one menu'] },
     { col: 2, kind: 'b-cmp', name: 'keep_the_supervisors_standing_items', names: ['keep_the_supervisors_standing_items'], type: '[what the Supervisor holds back]', code: true,
       desc: ['The Supervisor\'s standing items', '(martha#317): what it holds back, who', 'owes what, and the rulings it recorded', 'as the owner\'s words. A hold closes', 'only on evidence; a fresh Supervisor', 'session is handed them at its start,', 'and the pane shows them'] },
   ],
@@ -732,7 +736,19 @@ export function components(): Diagram {
 
 export const DIAGRAMS = [context, containers, components] as const
 
-export const ASSETS = join(import.meta.dirname, '..', 'assets')
+/** Where the pictures stand, relative to the repository. */
+const PICTURES = 'assets'
+
+export const ASSETS = join(import.meta.dirname, '..', PICTURES)
+
+/**
+ * The pictures this program draws, relative to the repository: what a landing redraws when two passed heads clash in
+ * them (martha#381). Read from the diagrams themselves, so a picture renamed here needs nothing renamed elsewhere.
+ */
+export const THE_PICTURES_THE_C4_DRAWS: readonly string[] = DIAGRAMS.map((make) => join(PICTURES, make().file))
+
+/** This program, relative to the repository: what a landing runs again over the tree it is merging. */
+export const THE_C4_DIAGRAMS_PROGRAM = 'architecture/c4_diagrams.ts'
 
 if (import.meta.main) {
   for (const make of DIAGRAMS) {
