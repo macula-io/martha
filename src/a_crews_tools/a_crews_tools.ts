@@ -105,6 +105,8 @@ export const CREW_TOOL_NAMES = [
   READ_THE_RECEIPTS,
   PARK_A_MEMBER,
   WAKE_A_MEMBER,
+  SWITCH_YOUR_MODEL,
+  RETURN_TO_YOUR_OWN_MODEL,
   WRITE_MY_HANDOVER_TOOL,
   REFRESH_THIS_SESSION,
   VERIFY_RANGE,
@@ -112,8 +114,6 @@ export const CREW_TOOL_NAMES = [
   FAST_FORWARD_AFTER_THE_OWNERS_YES,
   WORKTREE_OPEN,
   WORKTREE_FINISH,
-  SWITCH_YOUR_MODEL,
-  RETURN_TO_YOUR_OWN_MODEL,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -962,7 +962,10 @@ async function returnTheModel(places: CrewToolPlaces, args: Readonly<Record<stri
   if ('refusal' in place) return { refused: place.refusal }
   const current = theModelOf(place, places.member)
   if (current.kind === 'unreadable') return { refused: current.refusal }
-  if (current.kind !== 'switched' || current.marker.directed === false) {
+  // A switch recorded and not yet directed is still a switch: the member asked for the other model and has changed its
+  // mind before the end of the turn, so the record goes home and no order follows it (the switch never moved the
+  // session). Reading this as "no switch is recorded" would keep the record switched and move the member anyway.
+  if (current.kind !== 'switched') {
     return { answer: `${places.member} is on its own model already: no switch is recorded, so there is nothing to direct.` }
   }
   return { answer: await returnedHome(places, current.marker, reason) }

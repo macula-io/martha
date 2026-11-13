@@ -18,8 +18,9 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
-import { stateHomeUnder, crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, RECORDED_HOST_VARIABLE, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
+import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
+import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, RECORDED_HOST_VARIABLE, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
 
@@ -87,21 +88,33 @@ function declareTheModels(checkout: string): void {
   writeFileSync(declaration, `${JSON.stringify(held, null, 2)}\n`)
 }
 
+/** The crew's own place, under which the launcher keeps this member's dashboard row and its model record. */
+function theCrewPlace(project: Project): string {
+  const crew = crewStateDirectory(join(stateHomeUnder(project.home), STATE_ROOT_NAME), project.checkout)
+  if ('refusal' in crew) throw new Error(crew.refusal)
+  return crew.path
+}
+
 /** This member's row, as the owner's pane reads it. */
 function theRowOf(project: Project): DashboardRow {
-  const rows = crewRowsDirectoryOf(stateHomeUnder(project.home), project.checkout)
-  return JSON.parse(readFileSync(join(rows, rowFileNameOf(MEMBER)), 'utf8')) as DashboardRow
+  return JSON.parse(readFileSync(join(theCrewPlace(project), CREW_ROW_PLACE, rowFileNameOf(MEMBER)), 'utf8')) as DashboardRow
 }
 
 /** This member's model record, as a later session reads it. */
 function theRecordOf(project: Project): ModelMarker {
-  const rows = crewRowsDirectoryOf(stateHomeUnder(project.home), project.checkout)
-  return JSON.parse(readFileSync(join(rows, 'model', theModelMarker(MEMBER)), 'utf8')) as ModelMarker
+  return JSON.parse(readFileSync(join(theCrewPlace(project), MODEL_PLACE, theModelMarker(MEMBER)), 'utf8')) as ModelMarker
 }
 
 /** The text the host sent the stand-in for one request, as the model would read it. */
 const whatTheModelSaw = (ran: { readonly requests: readonly { readonly body: Readonly<Record<string, unknown>> }[] }, at: number): string =>
   JSON.stringify(ran.requests[at]?.body['messages'] ?? null)
+
+/**
+ * What the host drew, with every space taken out: the terminal stream carries only the cells that changed, so a line
+ * the host draws over itself (`Set model to Opus 5.5`) arrives as the words it redrew, glued. A comparison that keeps
+ * the spaces fails on a screen the host really drew, which is a red the command never earned.
+ */
+const drawnWithoutGaps = (shown: string): string => plainTextOf(shown).replaceAll(/\s/g, '')
 
 const END = { text: 'Done.' }
 
@@ -147,8 +160,9 @@ test('a member switches its model with the tool, and the row says so once the ho
   // The tool answered the member, and the answer says when the switch happens.
   assert.match(whatTheModelSaw(seen, 1), new RegExp(`Switching to ${THE_REVIEWER_MODEL} for ${THE_PACKAGE}`), whatTheModelSaw(seen, 1).slice(-2000))
   // The host itself says it switched: this is `command.run({command, args})` running on the pinned host, which nothing
-  // in the tree had ever done.
-  assert.match(plainTextOf(seen.shown), new RegExp(`Set model to Opus`, 'i'), `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
+  // in the tree had ever done. The host adds that the model is now saved as this owner's default for new sessions,
+  // which is the host's business, not the crew's: the row below is what a member's own session runs on.
+  assert.match(drawnWithoutGaps(seen.shown), /SetmodeltoOpus/i, `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
   // The row says the model this session runs on, and only a command that resolved writes that.
   assert.equal(theRowOf(project).host.model, THE_REVIEWER_MODEL, 'the row does not say the model the member switched to, so the host command did not resolve')
   const record = theRecordOf(project)

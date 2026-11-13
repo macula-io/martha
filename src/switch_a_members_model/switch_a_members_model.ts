@@ -177,6 +177,11 @@ export function switchAMembersModel(host: SwitchingHost, switching: Switching): 
  * Returns a member to its home model — the record written whole with `switched: false`, never deleted, so what the
  * package ran on is still readable — or says why it would not. `why` is the trigger, in the owner's words, and the
  * package is the one the switch was for: a return is never about another package.
+ *
+ * The return's `directed` flag is the switch's, turned round, and that is the whole of "nothing to direct" (martha#315):
+ * a record's `directed` says the session has been told what that record says, so a return is owed an order exactly when
+ * the switch it undoes WAS told — a switch nothing told the session about never moved it, and its home is where the
+ * session already is. Told to come home without being told to leave, a host would run a command that changes nothing.
  */
 export function returnAMemberHome(host: SwitchingHost, returning: { readonly member: string; readonly marker: ModelMarker; readonly why: string; readonly at: Date }): ModelMarker | Refused {
   const { member, marker, why, at } = returning
@@ -187,7 +192,7 @@ export function returnAMemberHome(host: SwitchingHost, returning: { readonly mem
     package: marker.package,
     why,
     since: at.toISOString(),
-    directed: false,
+    directed: !marker.directed,
   })
 }
 

@@ -25,6 +25,7 @@ import {
   theModelMarker,
   theModelOf,
   theSwitchACallAsks,
+  theSwitchDirected,
   type ModelMarker,
 } from './switch_a_members_model.ts'
 
@@ -126,9 +127,22 @@ test('#315: a return writes the record with switched false, and keeps what the p
   assert.ok(!('refusal' in back), `the return was refused: ${'refusal' in back ? back.refusal : ''}`)
   const read = whatTheStoreSays(crew, 'builder')
   assert.equal(read.kind, 'home', 'a returned member still reads as switched, so the model it runs on is not the record\'s own')
+  // This switch was never directed, so the return carries that: no order goes out for a session that never moved.
   assert.deepEqual(read.kind === 'home' ? read.last_marker : null, {
-    switched: false, model: 'fable', home: 'opus', package: 'macula-io/martha#315', why: 'the package is done', since: new Date(2_000).toISOString(), directed: false,
+    switched: false, model: 'fable', home: 'opus', package: 'macula-io/martha#315', why: 'the package is done', since: new Date(2_000).toISOString(), directed: true,
   }, 'the return lost what the package ran on, or why it came back')
+})
+
+test('#315: a return from a switch the session was told about is itself not directed yet (mutant: the return always directed)', async () => {
+  const { crew } = await aDeclaredCrewOfModels()
+  const switched = switchAMembersModel(theStore(crew), { member: 'builder', model: 'fable', home: 'opus', package: 'macula-io/martha#315', why: 'a reason', at: new Date(1_000) })
+  assert.ok(!('refusal' in switched), 'the test could not switch the member first')
+  const directed = theSwitchDirected(theStore(crew), 'builder', switched as ModelMarker)
+  assert.ok(!('refusal' in directed), 'the test could not direct the switch')
+  const back = returnAMemberHome(theStore(crew), { member: 'builder', marker: directed as ModelMarker, why: 'the package is done', at: new Date(2_000) })
+  assert.ok(!('refusal' in back), `the return was refused: ${'refusal' in back ? back.refusal : ''}`)
+  const read = whatTheStoreSays(crew, 'builder')
+  assert.equal(read.kind === 'home' ? read.last_marker?.directed : null, false, 'the return of a switch the session was told about reads as already told, so the session is never brought home')
 })
 
 test('#315: a record the store cannot hand over is not read as "no switch"', async () => {

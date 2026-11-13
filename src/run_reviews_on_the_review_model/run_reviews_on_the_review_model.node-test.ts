@@ -72,8 +72,13 @@ test('#315: a tool that spawns no subagent is never held to the rule', () => {
 
 test('#315: with no review_model declared, nothing is refused (mutant: a model defaulted in code)', () => {
   const unset: TheReviewModelRule = { ...heldToFable, review_model: null }
-  const refused = reviewModelRefusal(aCall('Agent', { subagent_type: 'Explore', description: 'review the patch', model: 'opus' }), unset)
-  assert.equal(refused, undefined, 'a crew that declared no reviewer model refused a review, so a default was invented in code')
+  for (const input of [
+    { subagent_type: 'Explore', description: 'review the patch', model: 'opus' },
+    // A review naming NO model is refused by every default there could be — a crew that declared none cannot refuse it.
+    { subagent_type: 'Explore', description: 'review the patch' },
+  ]) {
+    assert.equal(reviewModelRefusal(aCall('Agent', input), unset), undefined, `a crew that declared no reviewer model refused a review (${JSON.stringify(input)}), so a default was invented in code`)
+  }
 })
 
 test('#315: a review is what the type or the description says it is, and an adversary counts', () => {
