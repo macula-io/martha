@@ -23,7 +23,7 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { addressedTo, readTheChannel, type PlacedMessage } from '../keep_the_crew_channel/crew_channel.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -59,7 +59,7 @@ const THE_APIS_ANSWER = {
 const THE_REVIEW = { subagent_type: 'general-purpose', description: 'review the patch', prompt: 'read the diff and judge it', model: THE_REVIEWER_MODEL }
 /** What the line about the failed review starts with: the model, and that it was a review. */
 const THE_LINE_STARTS = `review on ${THE_RESOLVED_REVIEW_MODEL}: `
-const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, 'Edit', CLAUDE_CODE_SHELL_TOOL] } })
+const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [WHOLE_FILE_TOOL, EDIT_TOOL, CLAUDE_CODE_SHELL_TOOL] } })
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
 

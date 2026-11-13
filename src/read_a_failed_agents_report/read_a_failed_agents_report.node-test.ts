@@ -35,7 +35,7 @@ test('the report a host writes for a failed agent is cut from the code that writ
     ],
     'the elements the report carries are not the ones the host writes, field by field',
   )
-  assert.deepEqual(report.task_statuses, ['working', 'failed', 'cancelled'], 'the words a task may end in were not read')
+  assert.deepEqual(report.task_statuses, ['working', THE_FAILED_TASK_STATUS, 'cancelled'], 'the words a task may end in were not read')
   assert.ok(report.task_statuses.includes(THE_FAILED_TASK_STATUS), 'the word this build decides on is not one the host writes')
 })
 
