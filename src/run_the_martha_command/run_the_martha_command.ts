@@ -42,7 +42,7 @@ import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_laun
 import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
-import { sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
+import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 
@@ -434,16 +434,6 @@ function startOf(act: string, argv: readonly string[]): Asked | undefined {
   if (member === undefined || member.startsWith('-')) return undefined
   if (separator === undefined) return { act, member, args: [] }
   return separator === '--' ? { act, member, args: rest } : undefined
-}
-
-/** The switch that names one member's audit lines for `martha gate`, and the field it is spelled by. */
-export const MEMBER_SWITCH = '--member'
-
-/** `gate [--member <name>]`: no member, or exactly that switch and a name. */
-function gateOf(act: string, argv: readonly string[]): Asked | undefined {
-  const [, switchWord, member] = argv
-  if (switchWord === undefined) return { act, args: [] }
-  return switchWord === MEMBER_SWITCH && member !== undefined && member !== '' ? { act, member, args: [] } : undefined
 }
 
 /** `stop [<member>]`: one member's name at most, and no switch. */

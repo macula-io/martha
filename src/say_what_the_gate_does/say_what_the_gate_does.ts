@@ -74,3 +74,24 @@ function theLinesOfOneMember(asked: GateAsked, asked_for: string): TheGate {
   if ('refusal' in lines) return { shown: false, refusal: lines.refusal }
   return { shown: true, lines: lines.map(oneLineShown) }
 }
+
+/** The switch that names one member's lines for `martha gate`. */
+export const MEMBER_SWITCH = '--member'
+
+/** `martha gate` as its words read: the act, and the one member whose lines were asked for, if any. */
+export interface TheAskOfTheGate {
+  readonly act: string
+  readonly member?: string
+  readonly args: readonly string[]
+}
+
+/**
+ * `gate [--member <name>]`: the act, and the member whose lines were asked for; undefined when the words are no way
+ * the command is used. The switch is this report's own vocabulary, so it is read here beside the report rather than
+ * in ../run_the_martha_command, an adapter that composes slices and has a ceiling.
+ */
+export function gateOf(act: string, argv: readonly string[]): TheAskOfTheGate | undefined {
+  const [, switchWord, member] = argv
+  if (switchWord === undefined) return { act, args: [] }
+  return switchWord === MEMBER_SWITCH && member !== undefined && member !== '' ? { act, member, args: [] } : undefined
+}
