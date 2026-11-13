@@ -354,7 +354,5 @@ export async function finishTheOwnersDefaultAtLaunch(at: TheOwnersDefaultAtLaunc
 
 /** The line that needs the owner, in the member's own row, so the dashboard says it rather than only the terminal. */
 function keepTheOwnerNeedInTheRow(at: TheOwnersDefaultAtLaunch, why: string): void {
-  const held = at.beats.read(at.member)
-  if (held === null) return
-  at.beats.keep({ ...held, at: Date.now(), needs: why })
+  at.beats.change(at.member, (held) => (held === null ? null : { ...held, at: Date.now(), needs: why }))
 }
