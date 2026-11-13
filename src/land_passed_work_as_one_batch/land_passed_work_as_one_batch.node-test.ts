@@ -1118,7 +1118,7 @@ test('#339 T1: a head that clashes with three landings on main is named, each pa
   assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'the dry run pushed a land branch')
 })
 
-test('#339 T2: two heads that clash only in the picture are answered lands, picture redone (mutant: ignore the generated list)', async (t) => {
+test('#339 T2: two heads that clash only in the picture are answered lands, picture redone, and nothing is written (mutants: ignore the generated list; write the branch)', async (t) => {
   // The shape of PR 335 and PR 333 at 7283107: both redrew the picture, and nothing else of theirs clashes.
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, { [THE_PICTURE]: 'base\n' })
@@ -1126,8 +1126,10 @@ test('#339 T2: two heads that clash only in the picture are answered lands, pict
   const theirs = aBranchWriting(fixture, 'passed1', base, { [THE_PICTURE]: 'theirs\n', 'theirs.txt': 'theirs\n' })
   gitIn(fixture.clone, 'checkout', '--quiet', 'main')
   const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], { npm: [], programs: [] })
+  const before = whatTheCloneHolds(fixture)
 
   const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone while it chained a merge')
   assert.ok('told' in forecast, `a batch that clashes only in the picture was refused by the dry run: ${wordsOf(forecast)}`)
   assert.ok(forecast.told.includes(`- lands: ${at(packages, 0)} (PR 281)`), `the first head is not answered lands: ${forecast.told}`)
   assert.ok(forecast.told.includes(`- lands, redone: ${at(packages, 1)} (PR 282): ${THE_PICTURE} (picture) (a forecast:`), `the second head is not answered lands, redone, as a forecast: ${forecast.told}`)
@@ -1180,4 +1182,16 @@ test('#339: a head cut from one left out is left out of the landing with it, so 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
   const words = aBatchLeftOneOut(fixture, landed, base, [first], { package: at(packages, 1), pr: 282 })
   assert.ok(words.includes(`Left out: PR 283 (${at(packages, 2)}), its head holds the head of PR 282`), `the head cut from the one left out was not left out with it: ${words}`)
+})
+
+test('#339 T4: an answer from a redo program that cannot judge is no pass, so a clone whose program predates the judge refuses (mutant: take any exit 0 for a pass)', async (t) => {
+  const { fixture, tests, base, tip, packages } = await aBatchWithARedoneMerge(t)
+  // A program that does not know --judge ends 0 and says nothing, as the redo does over a tree with no clash in it.
+  const unjudged = hostForTests({
+    run: async (request) => (request.command === NPM ? { exit_code: 0, stdout: '', stderr: '' } : tests.host.processes.run(request)),
+    now: THE_DAY,
+    rows: tests.host.stores.rows,
+  })
+  const checked = await verifyRange(unjudged.host, { path: fixture.clone, base, tip, packages })
+  assert.match(wordsOf(checked), new RegExp(`${THE_REDO_SCRIPT} did not judge it`))
 })
