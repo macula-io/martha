@@ -5,6 +5,7 @@
 // run end 2, "could not look", where a range test required a finding. The list is about this checkout.
 
 import assert from 'node:assert/strict'
+import { sep } from 'node:path'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
@@ -26,6 +27,10 @@ test('an exception declared in the checkout applies to the checkout itself (mart
 })
 
 test('the checkout is recognised however its path is spelled (martha#256)', () => {
-  assert.deepEqual(exceptionsThatApply(join(CHECKOUT, '.'), CHECKOUT, DECLARED), DECLARED)
-  assert.deepEqual(exceptionsThatApply(CHECKOUT, join(CHECKOUT, '.'), DECLARED), DECLARED)
+  // A trailing separator is a spelling `join` does not normalise away, so a comparison of the plain strings would
+  // call this another tree (r=2 P2, Pluto): `join(CHECKOUT, '.')` reads as CHECKOUT itself and proved nothing.
+  const spelledDifferently = `${CHECKOUT}${sep}`
+  assert.notEqual(spelledDifferently, CHECKOUT, 'the two spellings really differ')
+  assert.deepEqual(exceptionsThatApply(spelledDifferently, CHECKOUT, DECLARED), DECLARED)
+  assert.deepEqual(exceptionsThatApply(CHECKOUT, spelledDifferently, DECLARED), DECLARED)
 })

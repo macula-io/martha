@@ -15,8 +15,6 @@
 // The row is never removed. A member that stops beating reads `offline` once OFFLINE_AFTER_MS has passed, which is
 // the reader's word about a row that has gone quiet, not a state anyone writes.
 
-import { REFRESHES_PLACE } from '../refresh_a_member/refresh_a_member.ts'
-
 /** The states a row can be in, as the owner reads them. */
 export const STATES = ['working', 'reviewing', 'waiting', 'needs-you', 'idle', 'parked'] as const
 export type State = (typeof STATES)[number]
@@ -53,6 +51,13 @@ export interface HostFacts {
   readonly contextPercent: number | null
   readonly costUsd: number | null
 }
+
+/**
+ * The row's own field for the refresh flow it is in (martha#255): a spelling of the row, and nothing else. The flows
+ * themselves are kept in a folder of the crew store, whose name is the refresh slice's business (../refresh_a_member,
+ * REFRESHES_PLACE); the two share no meaning, so a reader here never borrows that name.
+ */
+export const REFRESH_FIELD = 'refresh'
 
 /** One member's row, whole. */
 export interface DashboardRow {
@@ -121,7 +126,7 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
     isHostFacts(value['host']) &&
     isWaits(value['waits']) &&
     // Absent on every row written before the refresh flow existed, so it is optional and never demanded (martha#255).
-    (value[REFRESHES_PLACE] === undefined || value[REFRESHES_PLACE] === null || isARefreshsPhase(value[REFRESHES_PLACE]))
+    (value[REFRESH_FIELD] === undefined || value[REFRESH_FIELD] === null || isARefreshsPhase(value[REFRESH_FIELD]))
   )
 }
 
