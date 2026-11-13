@@ -23,11 +23,11 @@ import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, RECORDED_HOST_VARIABLE, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
+import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
+import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { removeTheTree } from './relay_copy.ts'
 
-const recordedHost = process.env[RECORDED_HOST_VARIABLE]
-const skip = recordedHost === undefined && `needs ${RECORDED_HOST_VARIABLE}, the recorded host's binary, which the relay CI job sets`
+
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -70,7 +70,7 @@ function approvedProjectWithModels(t: TestContext, ownersSettings: Record<string
   git(checkout, 'config', 'user.email', GIT_EMAIL)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
-  const place = { claude: recordedHost ?? '', home, checkout }
+  const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
   writeTheOwnersSettings(home, ownersSettings)
   const declared = marthaOnATerminal(place, ['init'])
@@ -143,13 +143,13 @@ const SWITCH_SILENCE_MS = 20_000
 /** The one switch this file drives: the member moves to the crew's reviewer model, with the tool. */
 const theSwitch = { tool: 'mcp__martha__switch_your_model', input: { model: THE_REVIEWER_MODEL, package: THE_PACKAGE, reason: 'the review needs it' } }
 
-test('on the recorded host a switch leaves a settings file that held a model byte for byte as the owner wrote it (martha#359)', { skip }, async (t) => {
+test('on the recorded host a switch leaves a settings file that held a model byte for byte as the owner wrote it (martha#359)', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const owners = { ...AN_OWNERS_SETTING, model: LAUNCHED_ON }
   const project = approvedProjectWithModels(t, owners)
   const before = theOwnersSettingsNow(project)
   const seen = await whatTheRunSaw(() =>
     driveTheRecordedHost({
-      claude: recordedHost ?? '',
+      claude: recordedHost(),
       ...project,
       member: MEMBER,
       owner_turn: OWNER_TURN,
@@ -166,12 +166,12 @@ test('on the recorded host a switch leaves a settings file that held a model byt
   assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did to the owner\'s default outlived the restore')
 })
 
-test('on the recorded host a switch leaves an owner with no model where they were: no file key appears (martha#359)', { skip }, async (t) => {
+test('on the recorded host a switch leaves an owner with no model where they were: no file key appears (martha#359)', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProjectWithModels(t, AN_OWNERS_SETTING)
   const before = theOwnersSettingsNow(project)
   await whatTheRunSaw(() =>
     driveTheRecordedHost({
-      claude: recordedHost ?? '',
+      claude: recordedHost(),
       ...project,
       member: MEMBER,
       owner_turn: OWNER_TURN,

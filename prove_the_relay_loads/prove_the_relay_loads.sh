@@ -10,22 +10,20 @@
 #
 # Then a launch leaves the installed relay folder as it was (martha#117): the host writes its generated types into the
 # folder --plugin-dir names on an interactive start, so the launcher hands it a read-only copy instead. First the check
-# bites: this host, started interactively on a writable copy of the relay, writes its types there. Then the launcher's
-# test that starts this host on an owner's terminal must run and pass, comparing the installed folder before and after.
-# The host runs with no account and no key, in a home that says onboarding is done and the folder is trusted.
+# bites: this host, started interactively on a writable copy of the relay, writes its types there. The host runs with no
+# account and no key, in a home that says onboarding is done and the folder is trusted.
 #
-# Last, a member's own writes do not stop it and an outsider's change does (martha#132): the real martha command, this
-# host, the relay and the launcher, with only the model a stand-in. Those four cases must all run and pass.
+# Then every test case that drives the recorded host runs here, with this binary in MARTHA_RECORDED_HOST, and nowhere
+# else: each skips on RECORDED_HOST_SKIP wherever the variable is unset. recorded_host_runs.json lists them, one entry
+# per file (and name pattern), with how many cases must pass; check_every_recorded_host_test_is_run holds that count to
+# the cases in the file, so a case the list misses fails CI by name (martha#385). Among them: a launch leaves the
+# installed relay folder as it was (martha#117); a member's own writes do not stop it and an outsider's change does
+# (martha#132); every rule the launch writes is one this host matches (martha#226); a member's model switch runs in this
+# host (martha#315); a permission prompt this host draws reaches the owner's row and clears once answered (martha#363).
 #
-# Then every rule the launch writes is one this host's file permission checks match, and the same run names an inert
-# twin of one (martha#226): the question the launch now asks before it starts a member, put to this host's own binary.
-#
-# And a member's model switch is run in this host, not only against a stand-in (martha#315, design test 8): the host's
-# own model command answers "Set model to ...", the row then says that model, and a review off the crew's reviewer model
-# is refused with the model named. Those two cases need this binary too, so they run here or nowhere (r=2, 3a).
-#
-# And a permission prompt this host really draws for a member Martha launched reaches the owner's row and clears once
-# the owner answers it at the terminal (martha#363, design test 12 of martha#313). It needs this binary too.
+# One function decides whether a run counts, the_run_is_whole: exactly the listed number of passes, none skipped, none
+# failed. It is proved on three planted summaries before any run, one for each condition, so a guard that stopped
+# checking one of them fails here by name rather than passing every run.
 #
 # And that switch leaves the owner's own default for new sessions alone (martha#359): the file the host really wrote is
 # the one Martha puts back, which the mechanism's own tests could agree with a mistake about. These cases read the same
@@ -40,15 +38,9 @@ REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 RECORDING="${REPO}/src/claude_code_host/recorded_claude_code_host.json"
 RELAY="${REPO}/src/claude_code_relay"
 REGISTER="hooks/register.ts"
-LAUNCH_TESTS="${REPO}/src/launch_a_claude_code_member/launch_a_claude_code_member.node-test.ts"
-LAUNCH_TEST="a launch leaves the installed relay folder as it was"
 HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
-OWN_WRITES_TESTS="${REPO}/src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts"
-RULES_TESTS="${REPO}/src/refuse_a_member_writing_owner_memory/the_rules_the_host_matches.node-test.ts"
-SWITCH_TESTS="${REPO}/src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts"
-PROMPT_TESTS="${REPO}/src/launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts"
-SWITCH_DEFAULT_TESTS="${REPO}/src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts"
 HOST_TYPES_FILE="tsconfig.json"
+RUN_TIMEOUT_MS=300000
 HOST_WRITES_WITHIN_S=60
 VARIABLE_CONSTANT="RELAY_SOCKET_VARIABLE"
 WORK="${1:-$(mktemp -d)}"
@@ -63,6 +55,30 @@ defined_in_harness() { sed -n "s/^export const $1 = '\([^']*\)'$/\1/p" "${HARNES
 HOST_VARIABLE="$(defined_in_harness RECORDED_HOST_VARIABLE)"
 HOST_TERMINAL="$(defined_in_harness HOST_TERMINAL)"
 [[ -n "${HOST_VARIABLE}" && -n "${HOST_TERMINAL}" ]] || { echo "prove_the_relay_loads: ${HARNESS} defines no RECORDED_HOST_VARIABLE or HOST_TERMINAL" >&2; exit 2; }
+
+MARKER_FILE="${REPO}/src/check_every_recorded_host_test_is_run/recorded_host_skip.ts"
+RUNS="${REPO}/$(sed -n "s/^export const RECORDED_HOST_RUNS = '\([^']*\)'$/\1/p" "${MARKER_FILE}")"
+[[ -f "${RUNS}" ]] || { echo "prove_the_relay_loads: ${MARKER_FILE} names no RECORDED_HOST_RUNS list there is" >&2; exit 2; }
+jq -e 'type == "array" and length > 0 and all(.[]; (.file | type == "string") and (.cases | type == "number" and . >= 1 and floor == .) and (.proves | type == "string"))' "${RUNS}" > /dev/null \
+  || { echo "prove_the_relay_loads: ${RUNS} is not a list of {file, name_pattern?, cases >= 1, proves}" >&2; exit 2; }
+
+# the_run_is_whole <summary-file> <cases>: the one test of a run (martha#385). Exactly <cases> passed, none was skipped
+# and none failed; anything else, a case filtered out, skipped for want of the host or failed, is a run that proves
+# nothing.
+the_run_is_whole() {
+  grep -qx "ℹ pass $2" "$1" && grep -qx 'ℹ skipped 0' "$1" && grep -qx 'ℹ fail 0' "$1"
+}
+
+# The guard bites, on each of its three conditions: each planted summary meets the other two, so only the one it plants
+# can refuse it. Plain text, so this needs no host.
+planted_cases="$(jq -r '.[0].cases' "${RUNS}")"
+plant() { printf 'ℹ pass %s\nℹ fail %s\nℹ skipped %s\n' "$2" "$3" "$4" > "${WORK}/planted_$1.txt"; }
+plant skipped "${planted_cases}" 0 1
+plant short "$((planted_cases - 1))" 0 0
+plant failed "${planted_cases}" 1 0
+the_run_is_whole "${WORK}/planted_skipped.txt" "${planted_cases}" && { echo "prove_the_relay_loads: the run guard accepts a run with a skipped case; it would not bite" >&2; exit 1; }
+the_run_is_whole "${WORK}/planted_short.txt" "${planted_cases}" && { echo "prove_the_relay_loads: the run guard accepts a run one case short; it would not bite" >&2; exit 1; }
+the_run_is_whole "${WORK}/planted_failed.txt" "${planted_cases}" && { echo "prove_the_relay_loads: the run guard accepts a run with a failed case; it would not bite" >&2; exit 1; }
 
 npm install --prefix "${WORK}/host" --no-save --no-package-lock --no-audit --no-fund "@anthropic-ai/claude-code@${version}" > /dev/null \
   || { echo "prove_the_relay_loads: Claude Code ${version} could not be installed" >&2; exit 2; }
@@ -104,78 +120,23 @@ kill -KILL "${started}" 2> /dev/null || true
 wait "${started}" 2> /dev/null || true
 [[ -f "${writes}/relay/${HOST_TYPES_FILE}" ]] || { echo "prove_the_relay_loads: Claude Code ${version} wrote no ${HOST_TYPES_FILE} into a writable relay folder within ${HOST_WRITES_WITHIN_S} s; the launch check would not bite" >&2; exit 1; }
 
-# A launch on the owner's terminal leaves the installed relay folder as it was (martha#117).
-if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-name-pattern="${LAUNCH_TEST}" "${LAUNCH_TESTS}" > "${WORK}/launch.txt" 2>&1; then
-  echo "prove_the_relay_loads: a launch with Claude Code ${version} changed the installed relay folder, or its test failed:" >&2
-  cat "${WORK}/launch.txt" >&2
-  exit 1
-fi
-grep -q '^ℹ pass 1$' "${WORK}/launch.txt" && grep -q '^ℹ skipped 0$' "${WORK}/launch.txt" \
-  || { echo "prove_the_relay_loads: the launch test did not run exactly once:" >&2; cat "${WORK}/launch.txt" >&2; exit 1; }
+echo "prove_the_relay_loads: with Claude Code ${version}, the host writes its types into a writable relay folder"
 
-echo "prove_the_relay_loads: with Claude Code ${version}, a launch leaves the installed relay folder as it was, and the host writes into a writable one"
-
-# A member's own writes do not stop it, and an outsider's change does (martha#132).
-own_writes_cases="$(grep -c '^test(' "${OWN_WRITES_TESTS}")"
-if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${OWN_WRITES_TESTS}" > "${WORK}/own_writes.txt" 2>&1; then
-  echo "prove_the_relay_loads: with Claude Code ${version}, a member's own writes stopped it, an outsider's change did not, or a run failed:" >&2
-  cat "${WORK}/own_writes.txt" >&2
-  exit 1
-fi
-grep -q "^ℹ pass ${own_writes_cases}$" "${WORK}/own_writes.txt" && grep -q '^ℹ skipped 0$' "${WORK}/own_writes.txt" \
-  || { echo "prove_the_relay_loads: the own-writes cases did not all run:" >&2; cat "${WORK}/own_writes.txt" >&2; exit 1; }
-
-echo "prove_the_relay_loads: with Claude Code ${version}, a member's own writes do not stop it and an outsider's change does"
-
-# Every rule the launch writes is one this host's file permission checks match, and an inert twin of one is named in
-# the same run (martha#226): the question the launch asks before it starts a member, put to this host itself.
-if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${RULES_TESTS}" > "${WORK}/rules.txt" 2>&1; then
-  echo "prove_the_relay_loads: with Claude Code ${version}, the host names a rule the launch writes as one it can never match, or the reading sees nothing:" >&2
-  cat "${WORK}/rules.txt" >&2
-  exit 1
-fi
-grep -q '^ℹ pass 1$' "${WORK}/rules.txt" && grep -q '^ℹ skipped 0$' "${WORK}/rules.txt" \
-  || { echo "prove_the_relay_loads: the rule case did not run exactly once:" >&2; cat "${WORK}/rules.txt" >&2; exit 1; }
-
-echo "prove_the_relay_loads: with Claude Code ${version}, the host matches every rule the launch writes, and names an inert twin of one"
-
-# A member's model switch is run in this host (martha#315, design test 8): the whole way round — the tool, the record,
-# the order, and the host's own model command — and a review off the crew's reviewer model refused by name. The ordinary
-# gate skips both tests for want of this binary, so a run that skipped them proves nothing and is a failure here.
-switch_cases="$(grep -c '^test(' "${SWITCH_TESTS}")"
-if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${SWITCH_TESTS}" > "${WORK}/switch.txt" 2>&1; then
-  echo "prove_the_relay_loads: with Claude Code ${version}, a member's model switch did not reach this host, a review off the reviewer model ran, or a case failed:" >&2
-  cat "${WORK}/switch.txt" >&2
-  exit 1
-fi
-grep -q "^ℹ pass ${switch_cases}$" "${WORK}/switch.txt" && grep -q '^ℹ skipped 0$' "${WORK}/switch.txt" \
-  || { echo "prove_the_relay_loads: the model-switch cases did not all run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/switch.txt" >&2; exit 1; }
-
-echo "prove_the_relay_loads: with Claude Code ${version}, a member switches its model in this host and a review off the reviewer model is refused"
-
-# A permission prompt this host draws reaches the owner's row and clears once answered (martha#363, design test 12 of
-# martha#313): the seam between the dialog order prove_the_order_of_the_dialogs.mjs measures and the row the relay test
-# moves. The ordinary gate skips it for want of this binary, so a run that skipped it proves nothing and is a failure.
-prompt_cases="$(grep -c '^test(' "${PROMPT_TESTS}")"
-if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${PROMPT_TESTS}" > "${WORK}/prompt.txt" 2>&1; then
-  echo "prove_the_relay_loads: with Claude Code ${version}, a permission prompt did not reach the owner's row, did not clear once answered, or a case failed:" >&2
-  cat "${WORK}/prompt.txt" >&2
-  exit 1
-fi
-grep -q "^ℹ pass ${prompt_cases}$" "${WORK}/prompt.txt" && grep -q '^ℹ skipped 0$' "${WORK}/prompt.txt" \
-  || { echo "prove_the_relay_loads: the permission-prompt case did not run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/prompt.txt" >&2; exit 1; }
-
-echo "prove_the_relay_loads: with Claude Code ${version}, a permission prompt reaches the owner's row and clears once the owner answers it"
-
-# That switch leaves the owner's own default for new sessions alone (martha#359): the host's own save is the file Martha
-# puts back. Like the cases above these need this binary, so a run that skipped them proves nothing and fails here.
-switch_default_cases="$(grep -c '^test(' "${SWITCH_DEFAULT_TESTS}")"
-if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout=300000 "${SWITCH_DEFAULT_TESTS}" > "${WORK}/switch_default.txt" 2>&1; then
-  echo "prove_the_relay_loads: with Claude Code ${version}, a member's switch moved the owner's default, the file put back was not the host's own save, or a case failed:" >&2
-  cat "${WORK}/switch_default.txt" >&2
-  exit 1
-fi
-grep -q "^ℹ pass ${switch_default_cases}$" "${WORK}/switch_default.txt" && grep -q '^ℹ skipped 0$' "${WORK}/switch_default.txt" \
-  || { echo "prove_the_relay_loads: the owner's-default cases did not all run in this host; a skipped case proves nothing:" >&2; cat "${WORK}/switch_default.txt" >&2; exit 1; }
-
-echo "prove_the_relay_loads: with Claude Code ${version}, a member's switch in this host leaves the owner's own default alone"
+# Every listed run, in this host, each held to the_run_is_whole.
+while IFS= read -r run; do
+  file="$(jq -r '.file' <<< "${run}")"
+  pattern="$(jq -r '.name_pattern // empty' <<< "${run}")"
+  cases="$(jq -r '.cases' <<< "${run}")"
+  proves="$(jq -r '.proves' <<< "${run}")"
+  narrowed=()
+  [[ -n "${pattern}" ]] && narrowed=(--test-name-pattern="${pattern}")
+  log="${WORK}/run_$(basename "${file}").txt"
+  if ! env "${HOST_VARIABLE}=${claude}" node --test --test-reporter=spec --test-timeout="${RUN_TIMEOUT_MS}" "${narrowed[@]}" "${REPO}/${file}" > "${log}" 2>&1; then
+    echo "prove_the_relay_loads: with Claude Code ${version}, a case of ${file} failed:" >&2
+    cat "${log}" >&2
+    exit 1
+  fi
+  the_run_is_whole "${log}" "${cases}" \
+    || { echo "prove_the_relay_loads: ${file} did not run its ${cases} listed case(s) whole in this host; a skipped or missing case proves nothing:" >&2; cat "${log}" >&2; exit 1; }
+  echo "prove_the_relay_loads: with Claude Code ${version}, ${proves}"
+done < <(jq -c '.[]' "${RUNS}")

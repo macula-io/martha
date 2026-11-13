@@ -46,7 +46,7 @@ import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/sett
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { stopTheCrew } from '../run_the_martha_command/list_and_stop_the_crew.ts'
+import { stopTheCrew } from '../run_the_martha_command/list_stop_and_restart_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
