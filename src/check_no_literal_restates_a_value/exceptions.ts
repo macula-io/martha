@@ -28,6 +28,7 @@ import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { PARK_A_MEMBER, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -107,5 +108,9 @@ export const EXCEPTIONS: readonly Exception[] = [
   // The park test reads back the state a marker holds, and checks that the old single tool's argument is gone
   // (martha#343). Both spell the word the crew's park place is named with, and neither is that place.
   { value: PARKED_PLACE, file: 'a_crews_tools/the_park_tool_keeps_the_marker.node-test.ts', reason: 'the state a park marker reads back as, and the argument the one tool used to take; the crew\'s park place is named the same word and is not this' },
+  // A host sends the calling plugin's own name as an origin's name (martha#343), and the relay's plugin is called
+  // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
+  // real host's event, and the test reads only the origin's kind.
+  { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
 ]
 
