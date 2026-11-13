@@ -14,7 +14,7 @@ import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { CREW_TOOL_NAMES, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
+import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -27,6 +27,8 @@ import {
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
@@ -585,4 +587,23 @@ test('a member started from the crew answers the crew\'s tools over its relay (m
   assert.equal(shown.status, 200, shown.text)
   const crew = JSON.parse((JSON.parse(shown.text) as { answer: string }).answer) as { pane_redraw_ms: number }
   assert.equal(crew.pane_redraw_ms, BEAT_INTERVAL_MS, 'the pane redraws on the beat\'s own interval')
+
+  // The five tools that act are handed the host's own processes and the crew's declaration (martha#256 r=2 R2): a
+  // member Martha started calls them and is answered by the slice, not told that its launch can act in nothing. The
+  // worktree tool needs both, so it is the one that would be refused if the launch dropped either.
+  // A folder beside the project that is there and is no clone: git runs in it and refuses, which is the slice's
+  // answer to give. A folder that is not there at all would make the run itself throw, which is no answer.
+  const notAClone = join(place.home, 'not-a-clone')
+  mkdirSync(notAClone)
+  for (const [tool, args] of [
+    [VERIFY_RANGE, { path: notAClone, base: 'a', tip: 'b' }],
+    [WORKTREE_OPEN, { repo: 'synthetic-owner/widget', slug: '256-started' }],
+  ] as const) {
+    const acting = await postOverSocket(socket_path, TOOL_ANSWER_PATH, toolCallBody('session-254', tool, args))
+    assert.equal(acting.status, 200, acting.text)
+    const value = JSON.parse(acting.text) as { answer?: string; refused?: string }
+    const words = value.answer ?? value.refused ?? ''
+    assert.notEqual(words, NO_ACTING_PLACE, `${tool} is answered by its slice in a launch Martha started, not refused as a place that cannot act`)
+    assert.notEqual(words.trim(), '', `${tool} says something`)
+  }
 })
