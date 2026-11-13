@@ -227,7 +227,7 @@ const wordsOf = (said: { readonly told: string } | { readonly refused: string })
 /** What the launcher said, whether it answered or refused. */
 const wordsFor = (said: { readonly answered?: string; readonly refused?: string }): string => said.refused ?? said.answered ?? ''
 
-test('a worktree is opened and finished through the launcher answer, and both come back as answers (martha#256)', async (t) => {
+test('a worktree is opened and finished through the launcher answer (martha#256)', async (t) => {
   const place = aPlaceOf(t)
   const settings = place.settings
   assert.ok(settings.house_rules.clones !== null && settings.house_rules.worktrees !== null)

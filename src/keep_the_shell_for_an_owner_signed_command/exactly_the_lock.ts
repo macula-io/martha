@@ -22,17 +22,10 @@
 
 import { posix } from 'node:path'
 
-import { MANIFEST } from '../../prove_the_core/declared_in_package_json.ts'
-
-/**
- * The manifest's name, handed on from the one place that defines it (martha#256 r=3): this slice compares the live
- * manifest with the base's, and the checks that read or write one import it from here with the lock's other names.
- */
-export { MANIFEST }
-
 /** The one lock format whose installed tree can be compared entry for entry with the lock. */
 export const LOCKFILE_VERSION = 3
 export const LOCK = 'package-lock.json'
+export const MANIFEST = 'package.json'
 export const DEPENDENCIES = 'node_modules'
 export const INSTALLED_LOCK = `${DEPENDENCIES}/.package-lock.json`
 const ROOT_ENTRY = ''

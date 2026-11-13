@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { MANIFEST } from '../../prove_the_core/declared_in_package_json.ts'
+import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree } from './judge_the_tree.ts'
@@ -53,7 +53,7 @@ const craft = (t: TestContext, planted: Planted): string => {
     writeFileSync(join(root, path), text)
   }
   write('eslint.config.mjs', LINTER_CONFIG)
-  write(MANIFEST, plantedPackageJson(planted))
+  writeFileSync(manifestPathOf(root), plantedPackageJson(planted))
   for (const [path, text] of Object.entries(planted.files ?? {})) write(path, text)
   return root
 }
