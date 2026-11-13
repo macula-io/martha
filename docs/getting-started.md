@@ -207,8 +207,8 @@ builder woken from ~/.local/state/martha/crews/6f2c…/handovers/HANDOVER_2026-1
 ```
 
 A member whose role the declaration grants `resume_parked_work` can also bring
-another member back from inside the crew, with the `wake_a_member` tool and a
-reason; both tools mark the reason on the same marker file.
+another member out of a park from inside the crew, with the `wake_a_member` tool
+and a reason; both tools mark the reason on the same marker file.
 
 `martha wake` starts the member from the newest handover the host wrote and
 stamped for it, on a prompt that names that file and nothing else of it, and it

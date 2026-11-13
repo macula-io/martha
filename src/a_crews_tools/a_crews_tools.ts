@@ -192,7 +192,7 @@ export const PARK_A_MEMBER_DESCRIPTION =
 
 /** What `wake_a_member` says it is for: the other half, and what a wake does with the marker it finds. */
 export const WAKE_A_MEMBER_DESCRIPTION =
-  'Bring a member out of a park, so it is refreshed and started again from its newest handover. The marker is written, not removed, so the reason stays readable. A member may always wake itself; waking another needs the declaration\'s table, and a refusal names the act that would have allowed it. Leave `member` out to wake yourself.'
+  'Bring a member out of a park, so it is refreshed between tasks again. The marker is written, not removed, so the reason stays readable. A member may always wake itself; waking another needs the declaration\'s table, and a refusal names the act that would have allowed it. Leave `member` out to wake yourself.'
 
 /** What `write_my_handover` says it is for: the host writes the file, at the path the host chose, and stamps it. */
 export const WRITE_MY_HANDOVER_DESCRIPTION =
