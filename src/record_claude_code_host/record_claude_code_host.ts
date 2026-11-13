@@ -28,7 +28,7 @@ import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules
 import { markdownTheHostLoadsIn } from '../claude_code_host/markdown_the_host_loads.ts'
 import { protectedConfigPlacesIn } from '../claude_code_host/protected_config_places.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { failedAgentsReportIn } from '../claude_code_host/the_hosts_failed_agents_report.ts'
+import { failedAgentsReportIn } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 import { CARRIED, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)

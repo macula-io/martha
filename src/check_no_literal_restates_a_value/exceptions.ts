@@ -25,6 +25,7 @@ import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/op
 import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
+import { THE_CREWS_OWN_NAME } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, STANDING_ITEMS_SOURCE, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
@@ -92,6 +93,13 @@ const THE_HOST_NAMES_ITS_HOOKS = 'the host\'s plugin validator refuses an on(...
  * schema names its own argument; the request body the stand-in host reads carries the model under its own key.
  */
 const THE_HOSTS_OWN_MODEL_FIELD = 'the host\'s own name for the argument that carries a model, in the Agent schema it declares and in the request body it sends: recorded host data, not the word an order carries a model under'
+
+/**
+ * Why `martha` is written by literal in nine files that are not about the crew channel (martha#390): it is this program's
+ * own name, and each of those places spells it for something else — the repository this one is, the state directory
+ * Martha keeps, the binary a launch drives, a word typed at a command line in a test.
+ */
+const THE_PROGRAMS_OWN_NAME = 'martha is this program\'s own name, spelled the same in a repository\'s name, a state directory, an installed binary and a command typed in a test; the crew channel\'s sender is that word and is none of those places'
 
 /** Why `model` is written by literal for the dashboard (martha#315): it is the row's own field, read and written by it. */
 const THE_ROWS_MODEL_FIELD = 'the row\'s own field for the model a session runs on, which the dashboard reads back and writes'
@@ -219,5 +227,22 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: THE_ROWS_MODEL_FIELD },
+  { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/a_review_at_its_limit_on_the_recorded_host.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
+  // The same git subcommand, in the refused review's throwaway repository (martha#390).
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_review_at_its_limit_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
+  // The word `martha` in every place that spells it (martha#390): the crew's channel carries Martha's own name as a
+  // sender, and a repository's name, a state directory, an installed binary and a test's command word are that same word
+  // with nothing to do with a sender.
+  { value: THE_CREWS_OWN_NAME, file: 'check_nothing_private_gets_in/check_nothing_private_gets_in.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'check_nothing_private_gets_in/declared.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'check_posted_text_carries_nothing_private/check_posted_text_carries_nothing_private.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'install_the_pinned_installer/install_the_pinned_installer.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'start_a_member/a_message_crosses_a_worktree_and_its_clone.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
+  { value: THE_CREWS_OWN_NAME, file: 'start_a_member/start_a_member.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
 ]
 

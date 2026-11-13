@@ -2,7 +2,7 @@
 //
 // Two recordings, held together here and never in the slice that decides on them. The NAMES — the notification's own
 // name, the status, tool-use and summary elements, and the word that says an agent failed — are cut from the recorded
-// host binary (./the_hosts_failed_agents_report.ts): a host that renames one fails the drift job by name. The SAMPLE is
+// host binary (../read_a_failed_agents_report/read_a_failed_agents_report.ts): a host that renames one fails the drift job by name. The SAMPLE is
 // the text one run produced at a named host version (recorded_failed_review.json), and it is what says the names the
 // binary gives are the ones the envelope really carries.
 //
@@ -13,23 +13,10 @@ import { readFileSync } from 'node:fs'
 
 import { whatTheEnvelopeNoLongerHolds, theElementIn, type TheReportTheHostWrites } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { CLAUDE_CODE_FAILED_AGENTS_REPORT } from './recorded_claude_code_host.ts'
-import { THE_FAILED_TASK_STATUS } from './the_hosts_failed_agents_report.ts'
-
-/** The element one field of the agent is reported in, as the recorded host binary names it. */
-function theElementHolding(field: string): string {
-  const element = CLAUDE_CODE_FAILED_AGENTS_REPORT.elements.find((one) => one.field === field)?.element
-  if (element === undefined) throw new Error(`The recorded host's report of a failed agent holds no element for ${field}, so what it says cannot be read (martha#390)`)
-  return element
-}
+import { theReportToRead } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 
 /** The report this host writes for a failed agent, in the names and the word its own binary gives them. */
-export const THE_HOSTS_FAILED_REVIEW: TheReportTheHostWrites = {
-  notification: CLAUDE_CODE_FAILED_AGENTS_REPORT.notification,
-  status: theElementHolding('status'),
-  tool_use: theElementHolding('toolUseId'),
-  summary: theElementHolding('summary'),
-  failed: THE_FAILED_TASK_STATUS,
-}
+export const THE_HOSTS_FAILED_REVIEW: TheReportTheHostWrites = theReportToRead(CLAUDE_CODE_FAILED_AGENTS_REPORT)
 
 /** The sample envelope this tree carries, as it was recorded: the host's own text, and the version that wrote it. */
 interface RecordedFailedReview {

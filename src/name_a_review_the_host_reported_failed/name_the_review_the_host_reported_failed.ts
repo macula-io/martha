@@ -15,8 +15,8 @@
 //   - the REASON is the envelope's summary element, repeated verbatim. Martha adds no reading of its own to it.
 //
 // WHICH NAMES those elements have is not this slice's to say: a host renames them, and a name typed here would go stale
-// silently. The report the host writes is cut from the recorded host binary (../claude_code_host/
-// the_hosts_failed_agents_report.ts) and handed in, the way the review-model rule is handed the host's spawn description
+// silently. The report the host writes is cut from the recorded host binary (../read_a_failed_agents_report/
+// read_a_failed_agents_report.ts) and handed in, the way the review-model rule is handed the host's spawn description
 // (../run_reviews_on_the_review_model). This slice reads no disk and knows no host: it decides on what it is given.
 
 /** The envelope one host writes when an agent it started fails: its own names for the turn, its fields and its failure. */

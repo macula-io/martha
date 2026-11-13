@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { THE_FAILED_TASK_STATUS } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 import {
   reviewSpawnsRemembered,
   theFailedReviewIn,
@@ -28,8 +29,8 @@ const THE_REVIEWER_MODEL = 'opus'
 const ANOTHER_MODEL = 'sonnet'
 const RESOLVED = 'claude-opus-5-5'
 
-/** The host's own names for the envelope, as its binary gives them (../claude_code_host/the_hosts_failed_agents_report). */
-const THE_REPORT: TheReportTheHostWrites = { notification: 'task-notification', status: 'status', tool_use: 'tool-use-id', summary: 'summary', failed: 'failed' }
+/** The host's own names for the envelope, as its binary gives them (../read_a_failed_agents_report/read_a_failed_agents_report). */
+const THE_REPORT: TheReportTheHostWrites = { notification: 'task-notification', status: 'status', tool_use: 'tool-use-id', summary: 'summary', failed: THE_FAILED_TASK_STATUS }
 
 /** The id of the Agent call the envelope names: the review that failed. */
 const THE_CALLS_ID = 'toolu_standin_1'

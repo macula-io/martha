@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import { RECORDED_HOST } from './recorded_claude_code_host.ts'
 import { theElementIn } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { THE_FAILED_REVIEW_RECORDING, THE_HOSTS_FAILED_REVIEW, THE_RECORDED_CALLS_ID, theEnvelopeIsStillTheOneRecorded } from './the_failed_reviews_envelope.ts'
-import { THE_FAILED_TASK_STATUS } from './the_hosts_failed_agents_report.ts'
+import { THE_FAILED_TASK_STATUS } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 
 test('the sample envelope names what the recorded host binary says it names, at the version it was recorded on (martha#390)', () => {
   const report = THE_HOSTS_FAILED_REVIEW

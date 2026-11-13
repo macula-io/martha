@@ -18,7 +18,7 @@ import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 import type { ProtectedConfigPlaces } from './protected_config_places.ts'
 import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
-import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from './the_hosts_failed_agents_report.ts'
+import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 
 export { CREW_REFRESH }
 

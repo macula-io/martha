@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { failedAgentsReportIn, THE_FAILED_TASK_STATUS } from './the_hosts_failed_agents_report.ts'
+import { failedAgentsReportIn, THE_FAILED_TASK_STATUS } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 
 /** The declarations the builder reads, as the host writes them: one run, just before the builder. */
 const DECLARED = 'var hf="task-notification",FC="task-id",QY="tool-use-id",I2="task-type",R8e="output-file",oE="status",u_="summary"'

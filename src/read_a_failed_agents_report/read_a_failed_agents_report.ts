@@ -12,6 +12,8 @@
 // constants the bundle declares beside it. The words its tasks end in are cut from the switch that gives a task its
 // status, which is where the `failed` this build decides on comes from.
 //
+import type { TheReportTheHostWrites } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+
 // A name is read from the declaration NEAREST BEFORE the place that uses it, never from the bundle at large: a bundle of
 // chunks reuses a minifier's names, and `FC` is `task-id` in one chunk and a help text in another.
 
@@ -27,6 +29,20 @@ export interface ARecordedFailedAgentsReport {
 
 /** The one word of `task_statuses` that says an agent failed: the status this build decides on, and no other. */
 export const THE_FAILED_TASK_STATUS = 'failed'
+
+/**
+ * The report to read a turn with, from what this host's own text says it writes (martha#390): the notification's name,
+ * the elements the fields this build decides on are carried in, and the word that says an agent failed. A record missing
+ * one of them is refused here rather than read as a host that reports nothing.
+ */
+export function theReportToRead(recorded: ARecordedFailedAgentsReport): TheReportTheHostWrites {
+  const element = (field: string): string => {
+    const found = recorded.elements.find((one) => one.field === field)?.element
+    if (found === undefined) throw new Error(`The recorded host's report of a failed agent holds no element for ${field}, so what it says cannot be read (martha#390)`)
+    return found
+  }
+  return { notification: recorded.notification, status: element('status'), tool_use: element('toolUseId'), summary: element('summary'), failed: THE_FAILED_TASK_STATUS }
+}
 
 /** The fields of the builder's own argument that this record is cut by, in the order the host writes them. */
 const THE_FIELDS: readonly string[] = ['taskId', 'toolUseId', 'taskType', 'outputFile', 'status', 'summary']
