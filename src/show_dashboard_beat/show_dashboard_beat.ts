@@ -55,6 +55,19 @@ export interface HostFacts {
 }
 
 /**
+ * How far a member is, and when it last said so (martha#320). The heartbeat rewrites the row every BEAT_INTERVAL_MS and
+ * the row's own `at` is the heartbeat's, so a rule about a member that has stopped needs the moment the member last
+ * moved itself. A row written before this field existed has none, and a reader takes the row's `at` for it: such a row
+ * has not moved since it was written, which is what the beat already says.
+ */
+export interface Progress {
+  readonly step: number
+  readonly of: number
+  /** Milliseconds since the epoch, when the member last reported progress; absent on a row written before this field. */
+  readonly at?: number
+}
+
+/**
  * The row's own field for the refresh flow it is in (martha#255): a spelling of the row, and nothing else. The flows
  * themselves are kept in a folder of the crew store, whose name is the refresh slice's business (../refresh_a_member,
  * REFRESHES_PLACE); the two share no meaning, so a reader here never borrows that name.
@@ -88,7 +101,7 @@ export interface DashboardRow {
   /** The package it holds, owner/repo#n, or '' when it holds none. */
   readonly holds: string
   readonly task: string
-  readonly progress: { readonly step: number; readonly of: number }
+  readonly progress: Progress
   readonly waits: Waits | null
   /** What needs the owner, in the member's own words; '' when nothing does. */
   readonly needs: string
@@ -213,9 +226,14 @@ const KEPT_FIELDS: readonly ((row: Record<string, unknown>) => boolean)[] = [
   (row) => row['reported_at'] === undefined || isPosition(row['reported_at']),
 ]
 
-/** Whether a progress is one this slice writes: a step at or above zero, of a total of at least one. */
-const isProgress = (value: unknown): boolean =>
-  isRecord(value) && isPosition(value['step']) && isPosition(value['of']) && value['of'] >= 1
+/** Whether a progress is one this slice writes: a step at or above zero, of a total of at least one, and — when the row
+ * says when it was reported — a moment that is one (martha#320). */
+const isProgress = (value: unknown): value is Progress =>
+  isRecord(value) &&
+  isPosition(value['step']) &&
+  isPosition(value['of']) &&
+  value['of'] >= 1 &&
+  (value['at'] === undefined || isPosition(value['at']))
 
 /** Whether host facts are the shape this slice writes. */
 const isHostFacts = (value: unknown): boolean =>
