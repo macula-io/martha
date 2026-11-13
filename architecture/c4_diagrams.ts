@@ -576,6 +576,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
   {
+    name: 'redo_the_generated_files_of_a_merge',
+    why: 'a program land_batch runs over a clone when two passed heads clash only in a C4 picture or the host ceilings (martha#381); it is run over the tree, never loaded by the core',
+  },
+  {
     name: 'record_claude_code_host',
     why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
   },

@@ -10,6 +10,9 @@
 // written back as the JSON it already is, with every other key where it was, so a
 // record run reads as the numbers it changed.
 
+import type { Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { ceilingsOf, withCeilings } from '../../prove_the_core/the_host_ceilings.ts'
+
 /** One ceiling the run brought down. */
 export interface Lowering {
   readonly directory: string
@@ -21,11 +24,6 @@ export interface Lowering {
 export interface Recorded {
   readonly text: string
   readonly lowered: readonly Lowering[]
-}
-
-/** The part of package.json this reads and writes. */
-interface WithCeilings {
-  readonly martha?: Readonly<Record<string, unknown>> & { readonly hostCeilings?: Record<string, number> }
 }
 
 /**
@@ -41,16 +39,9 @@ const loweredOf = (held: Record<string, number>, code: Readonly<Record<string, n
     .filter(([directory, ceiling]) => code[directory] !== undefined && standsAbove(ceiling, code[directory]))
     .map(([directory, ceiling]) => ({ directory, from: ceiling, to: code[directory] ?? ceiling }))
 
-/** `text` with `hostCeilings` replaced by `next`, every other key where it was. */
-export function withCeilings(text: string, next: Record<string, number>): string {
-  const manifest = JSON.parse(text) as WithCeilings
-  const martha = { ...(manifest.martha ?? {}), hostCeilings: next }
-  return `${JSON.stringify({ ...manifest, martha }, null, 2)}\n`
-}
-
 /** `package.json`'s text with every ceiling brought down to `code`, and nothing else changed. */
 export function withLoweredCeilings(text: string, code: Readonly<Record<string, number>>): Recorded {
-  const held = (JSON.parse(text) as WithCeilings).martha?.hostCeilings ?? {}
+  const held = ceilingsOf(JSON.parse(text) as Manifest)
   const lowered = loweredOf(held, code)
   if (lowered.length === 0) return { text, lowered }
   const next: Record<string, number> = {}

@@ -11,7 +11,7 @@
 // than passing quietly; a ceiling left behind for a directory no list names is a
 // number nobody holds anything to, and says the map and the lists have drifted.
 
-import { NPM } from '../../prove_the_core/declared_in_package_json.ts'
+import { HOST_CEILINGS_SCRIPT, NPM } from '../../prove_the_core/declared_in_package_json.ts'
 import type { DeclaredDirectory, HostList } from './declared_host_directories.ts'
 import { standsAbove } from './record_the_ceilings.ts'
 
@@ -33,9 +33,6 @@ export type Finding =
     }
   | { readonly kind: 'no_ceiling'; readonly list: HostList; readonly directory: string }
   | { readonly kind: 'stale_ceiling'; readonly directory: string }
-
-/** The script package.json runs the check by: the words a landing runs and a failure prints come from here. */
-export const HOST_CEILINGS_SCRIPT = 'check:host-ceilings'
 
 /** The command that brings every ceiling down to its directory's count. */
 export const RECORD_COMMAND = `${NPM} run ${HOST_CEILINGS_SCRIPT} -- --record`

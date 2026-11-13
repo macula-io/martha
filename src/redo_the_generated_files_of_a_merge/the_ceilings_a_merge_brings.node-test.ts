@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { theManifestOfAPlantedTree } from './a_tree_whose_ceilings_a_test_reads.ts'
+import { theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import { thePackageJsonOfAMerge } from './the_ceilings_a_merge_brings.ts'
 
 /** Where the tests stand a manifest: the name the recorded words carry. */

@@ -17,10 +17,11 @@ export interface Planted {
 /** The linter's config the linter itself reads: code by extension, as the repository's own does. */
 export const LINTER_CONFIG = "export default [{ files: ['**/*.{ts,tsx}'], rules: { 'max-depth': ['error', { max: 2 }] } }]\n"
 
-/** The package.json of a planted tree: the lists, and the ceiling each declared directory carries. */
+/** The package.json of a planted tree: what a package that runs its own .ts files declares, its lists and its ceilings. */
 export const theManifestOfAPlantedTree = (planted: Planted): string =>
   `${JSON.stringify(
     {
+      type: 'module',
       martha: {
         hostAdapters: planted.adapters ?? [],
         hostGlue: planted.glue ?? [],

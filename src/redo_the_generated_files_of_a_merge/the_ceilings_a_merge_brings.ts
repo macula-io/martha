@@ -7,7 +7,7 @@
 // here rather than taken from one side — each ceiling stands at the base plus what
 // each review added to it, `base + (ours - base) + (theirs - base)`, read from the
 // three stages a conflicted merge keeps. A ceiling equals its own directory's count
-// exactly (`record_the_ceilings.ts`), so the sum is what the two reviewed changes
+// exactly (../check_a_host_directory_stays_under_its_ceiling/record_the_ceilings.ts), so the sum is what the two reviewed changes
 // amount to, and no number a review did not see is ever written.
 //
 // A key that is not a number on all three stages has no sum, and a file the two
@@ -17,8 +17,7 @@
 import { basename } from 'node:path'
 
 import { manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
-import { ceilingsOf, CEILINGS_NAME } from './declared_host_directories.ts'
-import { withCeilings } from './record_the_ceilings.ts'
+import { ceilingsOf, CEILINGS_NAME, THE_CEILINGS_KEY, withCeilings } from '../../prove_the_core/the_host_ceilings.ts'
 
 /** What a merge's ceilings come to: the package.json to write, and the words a landing's commit records of it. */
 export interface ThePackageJsonAMergeBrings {
@@ -28,12 +27,9 @@ export interface ThePackageJsonAMergeBrings {
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
-/** The key the ceilings stand under, inside `martha`: the one thing in package.json a landing redoes. */
-const HOST_CEILINGS = 'hostCeilings'
-
 /** The manifest with its ceilings map taken out, as one text: what the two sides agree on when only the map clashed. */
 function withoutTheCeilings(manifest: Manifest): string {
-  const martha = Object.fromEntries(Object.entries(manifest.martha ?? {}).filter(([key]) => key !== HOST_CEILINGS))
+  const martha = Object.fromEntries(Object.entries(manifest.martha ?? {}).filter(([key]) => key !== THE_CEILINGS_KEY))
   return JSON.stringify({ ...manifest, martha })
 }
 
