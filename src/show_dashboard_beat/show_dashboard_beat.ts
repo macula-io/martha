@@ -59,6 +59,23 @@ export interface HostFacts {
  */
 export const REFRESH_FIELD = 'refresh'
 
+/**
+ * The row's own field for the dialogs the host says are open on the owner's screen (martha#313): a spelling of the
+ * row, and nothing else. The words a dialog reads, and the rule that a dialog is what raises the row's need, are the
+ * dialogs slice's business (../tell_the_owner_a_session_waits); the row only keeps them.
+ */
+export const OWNER_DIALOGS_FIELD = 'dialogs'
+
+/** A dialog the row holds, as this slice keeps one: what raised it, what kind it is, and what the owner reads for it. */
+export interface AnOwnerDialogOnARow {
+  /** What raised it: the key its opening and its closing meet on, never its text. */
+  readonly key: string
+  /** The kind of dialog it is, in the dialogs slice's own words. */
+  readonly kind: string
+  /** What the owner reads for it, already stripped and cut by the dialogs slice. */
+  readonly reads: string
+}
+
 /** One member's row, whole. */
 export interface DashboardRow {
   readonly member: string
@@ -79,6 +96,12 @@ export interface DashboardRow {
    * the flow existed still reads, and the owner sees a refresh in flight without asking anyone.
    */
   readonly refresh?: { readonly phase: string; readonly reason: string } | null
+  /**
+   * The dialogs the host says are open on the owner's screen, oldest first (martha#313): absent or empty when the host
+   * is asking the owner nothing, so a row written before they existed still reads, and a reader can say "needs you"
+   * without a writer having to put back what the member said before.
+   */
+  readonly dialogs?: readonly AnOwnerDialogOnARow[]
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -125,10 +148,26 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
     isProgress(value['progress']) &&
     isHostFacts(value['host']) &&
     isWaits(value['waits']) &&
-    // Absent on every row written before the refresh flow existed, so it is optional and never demanded (martha#255).
-    (value[REFRESH_FIELD] === undefined || value[REFRESH_FIELD] === null || isARefreshsPhase(value[REFRESH_FIELD]))
+    isTheOptionalFields(value)
   )
 }
+
+/**
+ * The fields a row carries only when it has something to say, each optional and never demanded of a row written
+ * before it existed: the refresh flow the member is in (martha#255), and the dialogs the host has open for the owner
+ * (martha#313).
+ */
+const isTheOptionalFields = (row: Record<string, unknown>): boolean =>
+  (row[REFRESH_FIELD] === undefined || row[REFRESH_FIELD] === null || isARefreshsPhase(row[REFRESH_FIELD])) &&
+  (row[OWNER_DIALOGS_FIELD] === undefined || isOwnerDialogs(row[OWNER_DIALOGS_FIELD]))
+
+/** Whether a field is the dialogs a row holds: a list of whole dialogs, each with its key, its kind and its words. */
+const isOwnerDialogs = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every(
+    (dialog: unknown) =>
+      isRecord(dialog) && isText(dialog['key']) && isText(dialog['kind']) && isText(dialog['reads']),
+  )
 
 /** Whether a refresh phase is the shape this slice writes: what it is doing, and why, both in the owner's words. */
 const isARefreshsPhase = (value: unknown): boolean => isRecord(value) && isText(value['phase']) && isText(value['reason'])

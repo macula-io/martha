@@ -8,6 +8,7 @@
 // claiming work it is not doing.
 
 import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type DashboardRow, type HostFacts, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
 /** One member's row as a reader is shown it. */
 export interface CrewRow {
@@ -65,7 +66,10 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
     }
   }
   const quiet_for = Math.max(0, now - beat.at)
-  const state: ShownState = quiet_for > OFFLINE_AFTER_MS ? OFFLINE : beat.state
+  // What the owner reads: the host's own question first (martha#313), then the member's word, and a row that has gone
+  // quiet says so whatever either of them said, because nothing is left to answer it.
+  const shown = whatTheOwnerIsShown(beat)
+  const state: ShownState = quiet_for > OFFLINE_AFTER_MS ? OFFLINE : shown.state
   return {
     member,
     session: beat.session,
@@ -74,7 +78,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
     task: beat.task,
     progress: beat.progress,
     waits: beat.waits,
-    needs: beat.needs,
+    needs: shown.needs,
     host: beat.host,
     at: beat.at,
     quiet_for,
