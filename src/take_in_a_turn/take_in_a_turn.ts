@@ -56,7 +56,7 @@ import type { Arrival, AttestedSender, TurnSource } from '../host_contract/host_
 
 /** The inbound path each source is recorded on, so the registry and the host agree. */
 export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
-  crew_room: 'A1',
+  channel_message: 'A1',
   shared_room: 'A2',
   backlog_digest: 'A3',
   ring: 'A4',

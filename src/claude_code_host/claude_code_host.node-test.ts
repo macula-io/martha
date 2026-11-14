@@ -139,11 +139,11 @@ const tool = (name: string, answer = 'answered'): Tool => ({ name, description: 
 
 test('a second tool with a registered name is refused before the engine sees it', async (t) => {
   const { adapter, registered } = adapterIn(t)
-  adapter.host.tools.register(tool('crew_land'))
-  assert.throws(() => adapter.host.tools.register(tool('crew_land', 'shadow')), /already registered/)
+  adapter.host.tools.register(tool('land_a_branch'))
+  assert.throws(() => adapter.host.tools.register(tool('land_a_branch', 'shadow')), /already registered/)
   await adapter.toolsRegistered()
-  assert.deepEqual(registered, ['crew_land'])
-  assert.equal(await adapter.answerToolCall('crew_land', {}), 'answered')
+  assert.deepEqual(registered, ['land_a_branch'])
+  assert.equal(await adapter.answerToolCall('land_a_branch', {}), 'answered')
   await assert.rejects(adapter.answerToolCall('never_registered', {}), /no tool/)
 })
 
@@ -154,7 +154,7 @@ test('a registration the engine refuses is not lost: toolsRegistered rejects wit
     tool: { register: async () => Promise.reject(new Error('the session is not bound yet')) },
   }
   const adapter = claudeCodeHost(engine, places)
-  adapter.host.tools.register(tool('crew_land'))
+  adapter.host.tools.register(tool('land_a_branch'))
   await assert.rejects(adapter.toolsRegistered(), /not bound/)
 })
 

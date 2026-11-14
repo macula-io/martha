@@ -1,10 +1,10 @@
 // Where a crew's messages live, and the only way one is written or read back (martha#253, slice 1).
 //
 // This exists so every slice of the crew channel reads one shape and one set of stream names. A message is one row
-// of `crew_channel`, in the crew's one rows store: who sent it, who it is for, its text, and when it was sent. Its
+// of `martha_channel`, in the crew's one rows store: who sent it, who it is for, its text, and when it was sent. Its
 // position in the stream is its message id, so a reader can name one message without a second index.
 //
-// What a member took in is a row of that member's own stream, `crew_channel_taken/<member>`, holding the position of
+// What a member took in is a row of that member's own stream, `martha_channel_taken/<member>`, holding the position of
 // the message it took in. Both are append-only, as every stream here is: nothing is rewritten, so a member refreshed
 // mid-read finds the same channel its predecessor read.
 //
@@ -16,10 +16,11 @@ import type { HostContract, Row, StoredRow } from '../host_contract/host_contrac
 import { ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
 /** The stream the crew's messages live in, in the crew's one rows store. */
-export const CHANNEL_STREAM = 'crew_channel'
+export const CHANNEL_STREAM = 'martha_channel'
 
-/** The stream that records what one member took in. Keyed by the member's name, never by a session's. */
-export const takenStreamOf = (member: string): string => `crew_channel_taken/${member}`
+/** The stream that records what one member took in. Keyed by the member's name, never by a session's. Built from
+ * the channel's own stream, so the two names cannot drift apart (martha#468). */
+export const takenStreamOf = (member: string): string => `${CHANNEL_STREAM}_taken/${member}`
 
 /** Who a message is for: the members it names, or the whole crew. */
 export type Addressee = readonly string[] | 'crew'

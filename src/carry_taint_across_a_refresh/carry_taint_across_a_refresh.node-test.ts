@@ -339,7 +339,7 @@ test('a predecessor record rewritten to a clean one of the same length still tai
   const stamps = stampStore()
   const predecessor = taintedPredecessor(store, stamps)
   const rewritten = takeInTurn(beginSession(sessions(), 'scratch'), {
-    source: 'crew_room',
+    source: 'channel_message',
     from_identity: supervisor_identity,
   }, bindNothing)
   assert.equal(rewritten.gate.ingested.length, predecessor.gate.ingested.length)

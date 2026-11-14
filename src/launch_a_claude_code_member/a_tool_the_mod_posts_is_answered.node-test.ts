@@ -5,7 +5,7 @@
 // does, and reads what came back: the slice's own words for a tool it registers, and a refusal naming any name it
 // does not.
 
-import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -43,8 +43,8 @@ function aCrewPlace(t: TestContext): { readonly home: string; readonly checkout:
   const home = mkdtempSync(join(tmpdir(), 'martha-254-tools-'))
   t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
-  mkdirSync(join(checkout, '.crew'), { recursive: true })
-  writeFileSync(join(checkout, '.crew', 'crew.json'), JSON.stringify({
+  mkdirSync(join(checkout, DECLARATION_DIRECTORY), { recursive: true })
+  writeFileSync(join(checkout, DECLARATION_DIRECTORY, DECLARATION_FILE), JSON.stringify({
     version: 1,
     owner: 'the-owner',
     members: [{ name: MEMBER, role: 'builder' }],

@@ -5,7 +5,7 @@
 // `launcherPlacesOf`, as a real launch does, and drive the channel, the carrier and the receipts through those places:
 // A says something to B from the worktree, B is handed it in the clone, and A reads that B took it in.
 
-import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -43,8 +43,8 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const home = mkdtempSync(join(tmpdir(), 'martha-253-roots-'))
   t.after(() => removeTheTree(home))
   const clone = join(home, 'project')
-  mkdirSync(join(clone, '.crew'), { recursive: true })
-  writeFileSync(join(clone, '.crew', 'crew.json'), DECLARATION)
+  mkdirSync(join(clone, DECLARATION_DIRECTORY), { recursive: true })
+  writeFileSync(join(clone, DECLARATION_DIRECTORY, DECLARATION_FILE), DECLARATION)
   writeFileSync(join(clone, 'README.md'), 'a project\n')
   git(clone, 'init', '-q', '.')
   git(clone, 'add', '--all')
@@ -60,7 +60,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   assert.equal(inTheWorktree.rows, inTheClone.rows, 'a worktree and its clone were given different row stores, so no message can cross them')
 
   // Both members read and write the one store the two places name, as their launchers do.
-  const declaredAt = (root: string): string => join(root, '.crew', 'crew.json')
+  const declaredAt = (root: string): string => join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const { host } = hostForTests({ now: 1_000, documents: { [declaredAt(clone)]: DECLARATION, [declaredAt(worktree)]: DECLARATION } })
   const channel = { clock: host.clock, stores: { rows: rowStreamsDirectory(inTheClone.rows) } }
   // One carrier per member, as one launch holds one: the turn start the mod reports reaches the carrier that handed.

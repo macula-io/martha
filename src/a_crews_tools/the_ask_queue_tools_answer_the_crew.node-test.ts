@@ -51,7 +51,7 @@ mkdirSync(join(home, CREW_ROWS_PLACE), { mode: STREAM_DIRECTORY_MODE })
 mkdirSync(join(home, 'rows-without-menus'), { mode: STREAM_DIRECTORY_MODE })
 
 // A made-up project root: this repository is public, so no real path appears here.
-const root = '/crew-project'
+const root = '/martha-project'
 const LEAD = 'Lead'
 const BUILDER = 'Builder1'
 const team = {

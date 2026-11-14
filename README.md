@@ -74,7 +74,7 @@ review plus your yes on every push and release.
 
 If you want the strict rule instead — text Martha cannot trace stops every later
 shell command in that session until the session is replaced — turn it on in the
-crew's declaration, `.crew/crew.json`, with `"house_rules": { "strict_gate": true }`.
+crew's declaration, `.martha/martha.json`, with `"house_rules": { "strict_gate": true }`.
 Reading stays allowed under it, and the launch gate, the refused writes to your
 memory and the rule against a member widening its own reach stand either way.
 [Getting started](docs/getting-started.md#if-you-want-the-strict-shell-gate) walks

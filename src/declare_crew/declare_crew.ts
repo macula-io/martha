@@ -1,6 +1,6 @@
 // Declare the crew.
 //
-// A crew is declared as data, in the project's `.crew/crew.json`: who is on it,
+// A crew is declared as data, in the project's `.martha/martha.json`: who is on it,
 // the mode's table of who may do what, and the house rules as switches. This
 // slice reads that declaration once, checks every field, and returns one frozen
 // CrewSettings. Every later slice takes CrewSettings, or the part it needs, as an
@@ -26,9 +26,16 @@ import { isAbsolute, join, normalize, sep } from 'node:path'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { GATE_AUDITS, GATE_ENFORCES, gateSettingOf, type GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
 
-/** Where a crew's declaration lives, relative to the project root. */
-export const DECLARATION_DIRECTORY = '.crew'
-export const DECLARATION_FILE = 'crew.json'
+/** Where a crew's declaration lives, relative to the project root (martha#468: the folder is Martha's own). */
+export const DECLARATION_DIRECTORY = '.martha'
+export const DECLARATION_FILE = 'martha.json'
+
+/**
+ * The declaration crew-code reads, which an older checkout of Martha's may still hold in place of Martha's own
+ * (martha#468). Named only so a refusal can say which file it found: nothing here reads one of its fields.
+ */
+export const CREW_CODE_DECLARATION_DIRECTORY = '.crew'
+export const CREW_CODE_DECLARATION_FILE = 'crew.json'
 
 /** The one declaration version this slice reads. */
 export const DECLARATION_VERSION = 1
@@ -254,19 +261,30 @@ export async function declareCrew(documents: DocumentStore, root: string, models
   const crew = join(root, DECLARATION_DIRECTORY)
   const declaration = join(crew, DECLARATION_FILE)
   if (!isAbsolute(root)) throw new DeclarationRefused(declaration, null, 'is not under an absolute project root')
-  const text = await readDeclaration(documents, declaration)
+  const text = await readDeclaration(documents, declaration, join(root, CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE))
   const parsed = parseDeclaration(declaration, text)
   return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, models))
 }
 
-async function readDeclaration(documents: DocumentStore, declaration: string): Promise<string> {
+/**
+ * The declaration's text, or a refusal saying why there is none. A checkout still holding crew-code's declaration is
+ * refused by name (martha#468): its file is not read, only told apart from an empty one, so a person who finds their
+ * crew stopped learns which file Martha looked for instead.
+ */
+async function readDeclaration(documents: DocumentStore, declaration: string, crewCodeDeclaration: string): Promise<string> {
   try {
     return await documents.read(declaration)
   } catch (error) {
     const code = (error as { code?: unknown }).code
-    if (code === 'ENOENT') throw new DeclarationRefused(declaration, null, 'is missing')
+    if (code === 'ENOENT') throw new DeclarationRefused(declaration, null, await whyMissing(documents, crewCodeDeclaration))
     throw new DeclarationRefused(declaration, null, `could not be read (${String(code ?? error)})`)
   }
+}
+
+/** `is missing`, or, when the checkout holds crew-code's declaration, that file named as the one in its place. */
+async function whyMissing(documents: DocumentStore, crewCodeDeclaration: string): Promise<string> {
+  const held = await documents.read(crewCodeDeclaration).then(() => true, () => false)
+  return held ? `is missing, and ${crewCodeDeclaration} is crew-code's declaration, which Martha does not read` : 'is missing'
 }
 
 function parseDeclaration(declaration: string, text: string): unknown {

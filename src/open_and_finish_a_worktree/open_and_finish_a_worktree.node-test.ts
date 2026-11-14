@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { type CrewSettings, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewSettings, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -79,7 +79,7 @@ function aCrew(t: TestContext): Fixture {
 }
 
 const settingsFor = (fixture: Fixture, places: { readonly clones: string | null; readonly worktrees: string | null }): CrewSettings => ({
-  paths: { root: fixture.clone, crew: join(fixture.clone, '.crew'), declaration: join(fixture.clone, '.crew', 'crew.json'), conventions: null },
+  paths: { root: fixture.clone, crew: join(fixture.clone, DECLARATION_DIRECTORY), declaration: join(fixture.clone, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
   owner: 'Ann',
   members: [{ name: MEMBER, role: 'builder', model: null }],
   mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
