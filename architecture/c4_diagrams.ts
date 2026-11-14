@@ -194,6 +194,11 @@ export interface BoxCoverage {
   readonly names: readonly string[]
   /** The title, the type and every description line, joined, so a name split over two lines is still found. */
   readonly text: string
+  /**
+   * The same pieces as a reader reads them, one space between: a name split over two lines and a count
+   * split over two lines both stay whole here, which joining them shut together would hide.
+   */
+  readonly said: string
 }
 
 /** A text as it was drawn: its baseline, and the width the estimate above gives it. */
@@ -362,7 +367,12 @@ class Diagram {
     this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${h}" rx="10"/>`)
     const tx = b.person ? b.x + 44 : b.x + 16
     if (b.person) this.parts.push(`<circle class="head" cx="${b.x + 26}" cy="${b.y + 24}" r="9"/>`)
-    if (b.names) this.coverage.push({ name: b.name, names: b.names, text: [b.name, b.type, ...b.desc].join('') })
+    if (b.names) this.coverage.push({
+      name: b.name,
+      names: b.names,
+      text: [b.name, b.type, ...b.desc].join(''),
+      said: [b.name, b.type, ...b.desc].join(' '),
+    })
     // A slice name longer than its box is broken at the underscore nearest its middle, so the name stays
     // readable as the directory it is: keep_martha_state_outside_ / the_checkout.
     const lines = nameLines(b.name, b.code === true, b.w - 32)
@@ -615,6 +625,34 @@ function inRows(
   return y - gap
 }
 
+/**
+ * Every count the page writes out, in order from none: the range a box may state is this list's own,
+ * never a number written beside it (martha#407). Past its end the count is the number itself, so no
+ * word has to be invented.
+ */
+export const THE_COUNTS_IN_WORDS = [
+  'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+] as const
+
+/** A count written out in words, for the one place a box's prose says how many things it holds. */
+export function aCountInWords(count: number): string {
+  return THE_COUNTS_IN_WORDS[count] ?? String(count)
+}
+
+/** Where a box's description says how many things it holds, in place of writing the number itself. */
+const THE_COUNT_ITS_LIST_DECIDES = '{count}'
+
+/**
+ * A box with the count it states drawn from the names it holds (martha#407), as the note drawn from
+ * LEFT_OUT already does for its own count: a tool added to a box's names says the new number without
+ * anyone remembering to edit the prose beside it.
+ */
+function withItsCountDrawn(b: LooseBox): LooseBox {
+  if (!b.names || !b.desc.some((line) => line.includes(THE_COUNT_ITS_LIST_DECIDES))) return b
+  const count = aCountInWords(b.names.length)
+  return { ...b, desc: b.desc.map((line) => line.replaceAll(THE_COUNT_ITS_LIST_DECIDES, count)) }
+}
+
 /** The Component page's boxes, row by row and column by column: inRows places them. */
 const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
@@ -667,7 +705,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'check_a_range_before_the_owner_says_yes', names: ['check_a_range_before_the_owner_says_yes', 'land_passed_work_as_one_batch', 'find_the_work_a_verdict_passed', 'open_and_finish_a_worktree', 'read_the_origin_a_clone_has', 'hold_a_package_back_from_a_batch'], type: '[the crew\'s tools that act]', code: true,
-      desc: ['The five tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of;', 'hold_a_package_back_from_a_', 'batch stops a held package', '(martha#364)'] },
+      desc: ['The {count} tools a member', 'calls (martha#256): the range', 'check reads a clone and the', 'CI on its tip; land_passed_', 'work_as_one_batch cuts the', 'batch, find_the_work_a_', 'verdict_passed says which head', 'a verdict passed, and fast_', 'forward_after_the_owners_yes', 'moves the default branch;', 'open_and_finish_a_worktree', 'opens and finishes one;', 'read_the_origin_a_clone_has', 'says what a clone is of;', 'hold_a_package_back_from_a_', 'batch stops a held package', '(martha#364)'] },
     { col: 1, kind: 'b-cmp', name: 'keep_the_owners_todo_list, queue_the_owners_asks', names: ['keep_the_owners_todo_list', 'queue_the_owners_asks', 'read_the_tips_a_removal_covers'], type: '[what waits on the owner]', code: true,
       desc: ['The owner\'s to-do list (martha#316):', 'the acts only the owner can do, each', 'command shown in full under what it', 'does. A member the table lets assign', 'work adds one; its own check or the', 'member takes it off. The pane and', 'martha todo show it. queue_the_owners_', 'asks is the ask queue (martha#313):', 'a routine ask waits instead of a menu,', 'and the session the table names hands', 'the whole batch over as one menu;', 'read_the_tips_a_removal_covers reads', 'both copies a branch deletion covers,', 'so one yes removes them both (martha#391)'] },
     { col: 2, kind: 'b-cmp', name: 'keep_the_supervisors_standing_items', names: ['keep_the_supervisors_standing_items'], type: '[what the Supervisor holds back]', code: true,
@@ -683,7 +721,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model'], type: '[a member\'s model, and the owner\'s]', code: true,
-      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the three ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
+      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
   ],
 ]
 
@@ -704,7 +742,7 @@ export function components(): Diagram {
   const TOP = 70
 
 
-  const lastRowBottom = inRows(d, COMPONENT_ROWS, COLUMNS, WIDE, TOP, GAP)
+  const lastRowBottom = inRows(d, COMPONENT_ROWS.map((row) => row.map(withItsCountDrawn)), COLUMNS, WIDE, TOP, GAP)
   const boundaryBottom = lastRowBottom + 24
   d.bound(16, 40, 968, boundaryBottom - 40, 'Martha [the code in src/, one directory per capability]')
 

@@ -271,7 +271,7 @@
 <text class="t-code" x="48" y="2164">check_a_range_before_</text>
 <text class="t-code" x="48" y="2182">the_owner_says_yes</text>
 <text class="t-type" x="48" y="2200">[the crew's tools that act]</text>
-<text class="t-desc" x="48" y="2224">The five tools a member</text>
+<text class="t-desc" x="48" y="2224">The six tools a member</text>
 <text class="t-desc" x="48" y="2240">calls (martha#256): the range</text>
 <text class="t-desc" x="48" y="2256">check reads a clone and the</text>
 <text class="t-desc" x="48" y="2272">CI on its tip; land_passed_</text>
@@ -359,7 +359,7 @@
 <text class="t-type" x="48" y="2850">[a member's model, and the owner's]</text>
 <text class="t-desc" x="48" y="2874">switch_a_members_model keeps the model a</text>
 <text class="t-desc" x="48" y="2890">member runs on for one package, in the</text>
-<text class="t-desc" x="48" y="2906">crew's own store, and the three ways back;</text>
+<text class="t-desc" x="48" y="2906">crew's own store, and the ways back;</text>
 <text class="t-desc" x="48" y="2922">put_the_owners_model_back undoes what a</text>
 <text class="t-desc" x="48" y="2938">switch does to the owner's own default:</text>
 <text class="t-desc" x="48" y="2954">the lock, the snapshot, the wait on the</text>
