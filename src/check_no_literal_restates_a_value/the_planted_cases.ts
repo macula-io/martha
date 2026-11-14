@@ -233,6 +233,30 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: [`a_tool/tools.ts:1: TOOLS ${MARKER} holds a value that is not a string at 'Edit', which the check cannot read`],
   },
   {
+    what: 'a literal in a type position, beside the same word as a value (part b, rule 1)',
+    base: TOOL,
+    head: { 'a_user/a_user.ts': "type T = 'the-tool' | 'other-word'\ncall('the-tool')\n" },
+    prints: ["a_user/a_user.ts:2: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a property named at the use site, beside the same word as a value (part b, rule 2)',
+    base: TOOL,
+    head: { 'a_user/a_user.ts': "const has = 'the-tool' in record\nconst got = record['the-tool']\ncall('the-tool')\n" },
+    prints: ["a_user/a_user.ts:3: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'an alias the change adds, with an old use of its member elsewhere (part b, rule 3)',
+    base: { 'a_old/a_old.ts': "send({ tag: 'the-tag' })\n" },
+    head: { 'a_tag/a_tag.ts': "export const THE_TAG: Tag = 'the-tag'\n", 'a_new/a_new.ts': "send({ tag: 'the-tag' })\n" },
+    prints: [],
+  },
+  {
+    what: 'a constant the change turns into an alias, with a copy left (part b, rule 3 is no way out)',
+    base: { ...TOOL, 'a_user/a_user.ts': "call('the-tool')\n" },
+    head: { 'a_tool/a_tool.ts': "export const TOOL: Tool = 'the-tool'\n" },
+    prints: [`a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL ${GONE}`],
+  },
+  {
     what: 'a marker imported under a second name',
     base: {},
     head: { 'a_tool/tools.ts': "import type { DefinesItsValues as D } from './marker.ts'\nexport const TOOLS = Object.freeze({ Edit: 'file_path' }) satisfies D\n" },

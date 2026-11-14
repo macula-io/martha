@@ -50,7 +50,7 @@ const escaped = (name: string): string => name.replaceAll('$', '\\$')
 const sortedUnique = (names: readonly string[]): string[] => [...new Set(names)].sort()
 
 /** Where one module of the host's bundle starts; a name it closes over is looked up inside it. */
-const CHUNK = '// @bun @bytecode'
+export const CHUNK = '// @bun @bytecode'
 
 /** The text of the one module that holds `at`: names minified small are reused by other modules. */
 function moduleHolding(text: string, at: number): string {

@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CHUNK } from '../claude_code_host/protected_config_places.ts'
+import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
+import type { ManagedFolderGuardCalls } from './what_the_managed_folder_guard_calls.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
@@ -137,6 +140,29 @@ const REPORT_PARTS: Readonly<Record<string, string>> = {
   ].join(';'),
 }
 
+/** The functions the managed-folder guard reaches, as recorded (martha#412). */
+const GUARD = (JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed).managed_folder_guard_calls
+const exportedAs = (index: number): string => `guardFunction${String(index)}`
+const importing = (calls: Readonly<Record<string, number>>): string =>
+  `import{${Object.entries(calls).map(([name, index]) => `${exportedAs(index)} as ${name}`).join(',')}}from"/$bunfs/root/a-module.js";`
+
+/**
+ * The guard's callees as a bundle holds them (martha#412): the loader's module imports what the guard calls, and each
+ * function sits in a module of its own that imports what it calls and exports itself under a name of the module's.
+ */
+function guardModules(guard: ManagedFolderGuardCalls): string {
+  const modules = guard.functions.map((entry, index) => {
+    const name = /^function\*? ?([\w$]+)\(/.exec(entry.function)?.[1] ?? ''
+    return `\n${CHUNK}\n${importing(entry.calls)}${entry.function}export{${name} as ${exportedAs(index)}};`
+  })
+  return [importing(guard.guard_calls), ...modules].join('')
+}
+
+/** The memory guard restated by hand (martha#136): the texts it quotes, as the host holds them (martha#412). */
+const MEMORY_PARTS: Readonly<Record<string, string>> = {
+  memory_off: `${RECORDED_HOST.memory_off.file_mode_guard};${RECORDED_HOST.memory_off.on_check};var Mq=process.env.${RECORDED_HOST.memory_off.hosted_mode_variable}`,
+}
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
   prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback,
@@ -153,6 +179,9 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...RULE_PARTS,
   ...DIALOG_PARTS,
   ...REPORT_PARTS,
+  ...MEMORY_PARTS,
+  // Last, so the import of what the guard calls is in the loader's module, before the first module of its own.
+  managed_folder_guard_calls: guardModules(GUARD),
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
@@ -359,4 +388,82 @@ test('a host that no longer builds the report cannot be read, naming the part (m
   const run = check(hostHolding(t, { ...RECORDED_PARTS, failed_agents_report: 'var unrelated=1' }), RECORDED_HOST.host_version)
   assert.equal(run.status, 1, run.stdout)
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: a failed agent's report\n`)
+})
+
+/** The recorded guard with the one function `name` declares changed by `change` (martha#412). */
+function withChangedFunction(name: string, change: (source: string) => string): ManagedFolderGuardCalls {
+  const at = GUARD.functions.findIndex((entry) => entry.function.startsWith(`function ${name}(`))
+  assert.ok(at >= 0, `the recording holds a function ${name} the guard reaches`)
+  return { ...GUARD, functions: GUARD.functions.map((entry, index) => (index === at ? { ...entry, function: change(entry.function) } : entry)) }
+}
+
+/** The name the recorded guard's first call reaches, past the guard, by its own first call: the deepest a loader byte cannot show. */
+const SECOND_STEP = Object.keys(GUARD.functions[Object.values(GUARD.guard_calls)[0] ?? 0]?.calls ?? {}).at(-1) ?? ''
+
+// The gap #401's review named (martha#412): the loader stays byte-equal while a function its managed-folder guard calls
+// two steps down changes what it returns, or a name the guard calls binds to another function. Both fail by the field.
+test('a host whose managed-folder guard reaches a changed function, or binds a name to another, fails the check naming the field (martha#412)', (t) => {
+  assert.notEqual(SECOND_STEP, '', 'the recorded guard reaches a function two steps down')
+  const changed = withChangedFunction(SECOND_STEP, (source) => source.replace(/\{return(.*)\}$/, '{return!($1)}'))
+  const [firstCall = '', firstEntry = 0] = Object.entries(GUARD.guard_calls)[0] ?? []
+  const rebound = { ...GUARD, guard_calls: { ...GUARD.guard_calls, [firstCall]: GUARD.functions.length - 1 - firstEntry } }
+  for (const planted of [changed, rebound]) {
+    assert.notDeepEqual(planted, GUARD, 'the planted guard differs')
+    assert.equal(RECORDED_PARTS.markdown_loader, MARKDOWN_PARTS.markdown_loader, 'the loader itself is byte-equal')
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, managed_folder_guard_calls: guardModules(planted) }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, run.stdout)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: managed_folder_guard_calls\n`)
+  }
+})
+
+test('a host whose bundle exports a name the guard calls from two modules cannot be read, naming the part (martha#412)', (t) => {
+  const twice = `${guardModules(GUARD)}\n${CHUNK}\nfunction aSecondOne(){return!0}export{aSecondOne as ${exportedAs(0)}};`
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, managed_folder_guard_calls: twice }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+})
+
+test('a host whose module declares a function the guard reaches two ways cannot be read, naming the part (martha#412 r=2)', (t) => {
+  const last = GUARD.functions.at(-1)?.function ?? ''
+  const name = /^function\*? ?([\w$]+)\(/.exec(last)?.[1] ?? ''
+  assert.notEqual(name, '', 'the recorded guard reaches a function')
+  // The last function's module is the bundle's last, so a second, different declaration of it lands in that module.
+  const twice = `${guardModules(GUARD)}function ${name}(){return!(${String(GUARD.functions.length)})}`
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, managed_folder_guard_calls: twice }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+})
+
+test('a host whose loader assigns a name its managed-folder guard reads two ways cannot be read, naming the part (martha#412 r=2)', (t) => {
+  const loader = RECORDED_HOST.markdown_loader
+  const guard = /\[\(([^?]+)\?Promise\.resolve\(\[\]\)/.exec(loader)?.[1] ?? ''
+  const read = [...guard.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$(])/g)].map((match) => match[1] ?? '')
+  const assigned = read.map((name) => new RegExp(`,${name.replaceAll('$', '\\$')}=(?![=>])([^,;]+)`).exec(loader)).find((match) => match !== null)
+  assert.ok(assigned !== undefined && assigned !== null, 'the recorded guard reads a name its loader assigns')
+  const [assignment, expression = ''] = assigned
+  const name = assignment.slice(1, assignment.indexOf('='))
+  const twoWays = loader.replace(assignment, `${assignment},${name}=!(${expression})`)
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, markdown_loader: twoWays }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+})
+
+// memory_off is restated by hand, so nothing derives it (martha#136); --check holds it to the host's code instead
+// (martha#412), so a host that changed the guard it quotes fails by the field rather than only by a test elsewhere.
+test('a host whose memory guard, on check or hosted-mode variable is not the one restated fails the check naming memory_off (martha#412)', (t) => {
+  const { file_mode_guard, on_check, hosted_mode_variable } = RECORDED_HOST.memory_off
+  // The on check is a function the managed-folder guard reaches too, so a host that changes it changes both.
+  const reached = GUARD.functions.some((entry) => entry.function === on_check)
+  for (const [quoted, planted, fields] of [
+    [file_mode_guard, file_mode_guard.replace('return"off";', 'return"on";'), [MEMORY_OFF]],
+    [on_check, on_check.replace('"on"', '"enabled"'), reached ? ['managed_folder_guard_calls', MEMORY_OFF] : [MEMORY_OFF]],
+    [hosted_mode_variable, [...`${hosted_mode_variable}_RENAMED`].reverse().join(''), [MEMORY_OFF]],
+  ] as const) {
+    assert.notEqual(planted, quoted, 'the planted text differs')
+    const memory_off = MEMORY_PARTS.memory_off?.replace(quoted, planted) ?? ''
+    const guard = GUARD.functions.map((entry) => (entry.function === quoted ? { ...entry, function: planted } : entry))
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, memory_off, managed_folder_guard_calls: guardModules({ ...GUARD, functions: guard }) }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, quoted.slice(0, 40))
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${fields.join(', ')}\n`)
+  }
 })

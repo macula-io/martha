@@ -49,9 +49,9 @@ function pathOf(answer: { readonly path: string } | { readonly refusal: string }
 test('two worktrees of one repository share one crew place, and a separate clone gets its own (R1)', (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
-  const worktree = join(aDirectory(t, 'worktrees'), 'a-worktree')
+  const worktree = join(aDirectory(t, 'some-worktrees'), 'a-worktree')
   git(repo, 'worktree', 'add', '-q', '-b', 'a-branch', worktree)
-  const clone = join(aDirectory(t, 'clones'), 'a-clone')
+  const clone = join(aDirectory(t, 'some-clones'), 'a-clone')
   git(repo, 'clone', '-q', repo, clone)
 
   const inTheRepository = pathOf(crewStateDirectory(state_root, repo))
@@ -144,7 +144,7 @@ test('a crew place others may write into is refused (R1)', (t) => {
 test('everything else stays keyed by the checkout: two worktrees of one repository keep their own state (R1)', (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
-  const worktree = join(aDirectory(t, 'worktrees'), 'a-worktree')
+  const worktree = join(aDirectory(t, 'some-worktrees'), 'a-worktree')
   git(repo, 'worktree', 'add', '-q', '-b', 'a-branch', worktree)
 
   const inTheRepository = openState(state_root, repo)

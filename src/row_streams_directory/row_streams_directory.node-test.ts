@@ -23,7 +23,7 @@ const scratch = (t: TestContext): string => {
 
 /** A rows directory that exists, as the host would make it: this user's, closed. */
 const rowsDirectory = (t: TestContext): string => {
-  const directory = join(scratch(t), 'rows')
+  const directory = join(scratch(t), 'row-streams')
   fs.mkdirSync(directory, { mode: 0o700 })
   return directory
 }
@@ -60,7 +60,7 @@ test('stream names holding .., /, NUL or a leading dot never leave the stream di
     assert.match(entry, /^[A-Za-z0-9_-]+$/)
     assert.equal(relative(directory, join(directory, entry)), entry)
   }
-  assert.deepEqual(readdirSync(join(directory, '..')).sort(), ['rows'])
+  assert.deepEqual(readdirSync(join(directory, '..')).sort(), ['row-streams'])
 })
 
 test('two appends at the same expected length: one is kept, the other rejects with ROW_STREAM_MOVED', async (t) => {

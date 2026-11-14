@@ -37,7 +37,7 @@ const NOT_THE_PROBES = projectKeyOf('/srv/git/martha/checkout')
 /** A config dir of the test's own, holding the folders named: what the host reads and writes. */
 function aConfigDirHolding(...names: readonly string[]): { readonly env: Record<string, string>; readonly root: string; at: (name: string) => string } {
   const scratch = mkdtempSync(join(tmpdir(), 'martha-probe-test-'))
-  const config = join(scratch, 'config')
+  const config = join(scratch, 'conf-dir')
   const root = join(config, 'projects')
   mkdirSync(root, { recursive: true })
   writeFileSync(join(config, 'settings.json'), '{}\n')
