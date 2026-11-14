@@ -533,20 +533,20 @@ jobs:
 
   # No literal restates a value the tree defines (martha#289, the rule decided
   # 2026-11-05: no literal restating a value the code already defines, tests
-  # included). The gate judges the lines the change ADDS — net, against the merge
-  # base, so a branch that has merged main is not blamed for main's own lines —
-  # and, over the whole tree, every literal equal to a value the change defines or
-  # revalues: a constant added today makes every old copy of its value stale at
-  # once, and a revalued one leaves every literal holding the old value behind.
+  # included). Two gates, both required:
   #
-  # The self-test plants one case per rule and requires each to be named. The
-  # planted repository below proves the range GitHub passes reaches the
-  # comparison, so the live step is not the only evidence: a literal planted in a
-  # second commit must turn the check red, by file and by constant name.
+  # - The whole tree: every literal equal to a value an exported constant holds,
+  #   anywhere in the tree, fails the job by file, line and constant name.
+  # - The range: the lines the change ADDS, net against the merge base, and over
+  #   the whole tree every literal equal to a value the change defines, revalues
+  #   or takes away. Only this run sees a value taken away: once a constant is
+  #   gone, no constant holds its value for the whole-tree run to compare against,
+  #   and every literal still holding it would pass there.
   #
-  # The whole-tree count is printed as a report and never gates: the cleanup of
-  # the copies already on main is its own package, cut by slice, and the gate
-  # turns whole-tree when that count reaches zero.
+  # The self-test plants one case per rule and requires each to be named. The two
+  # planted repositories below prove each gate bites as the job runs it, so the
+  # live steps are not the only evidence: a literal planted beside the constant it
+  # restates must turn each run red, by file and by constant name.
   restated-values:
     name: no literal restates a defined value
     runs-on: ubuntu-latest
@@ -586,7 +586,25 @@ jobs:
             > "$repo/verdict.txt" 2>&1 || status=$?
           if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
           grep -q "planted/b.ts:1: 'a-planted-value' restates planted/a.ts PLANTED" "$repo/verdict.txt"
+      - name: the check bites on a literal anywhere in the tree, with no range
+        # The same planted pair, in one commit, judged as the whole-tree step
+        # below runs: no range, so no line counts as new and only the tree is read.
+        run: |
+          repo="${{ runner.temp }}/restated-value-whole-tree"
+          mkdir -p "$repo/src/planted"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email planted@example.invalid
+          git -C "$repo" config user.name planted
+          printf "export const PLANTED = 'a-planted-value'\n" > "$repo/src/planted/a.ts"
+          printf "const name = 'a-planted-value'\n" > "$repo/src/planted/b.ts"
+          git -C "$repo" add -A
+          git -C "$repo" commit -q -m tree
+          status=0
+          npm run --silent check:restated-values -- --root "$repo" \
+            > "$repo/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
+          grep -q "planted/b.ts:1: 'a-planted-value' restates planted/a.ts PLANTED" "$repo/verdict.txt"
+      - name: no literal anywhere in the tree restates a defined value
+        run: npm run --silent check:restated-values
       - name: no literal restates a defined value, in the range or a value it defines
         run: npm run --silent check:restated-values -- --range "$BASE_SHA..$HEAD_SHA"
-      - name: what the whole tree still holds, as a report
-        run: npm run --silent check:restated-values -- --report

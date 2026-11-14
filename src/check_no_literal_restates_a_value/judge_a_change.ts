@@ -177,8 +177,12 @@ export function verdictOf<Entry extends Exception>(root: string, range: string |
   return { sources, stale, markers, judged, defined, findings }
 }
 
-/** The line a gate prints to prove it looked: the range, the literal sites on its lines, and the values judged over the whole tree. */
-export const summaryOf = (name: string, verdict: Verdict): string | null =>
+/**
+ * The line a gate prints to prove it looked: over the whole tree, the literal sites
+ * it holds; over a range, the range, the literal sites on its lines, and the values
+ * judged over the whole tree.
+ */
+export const summaryOf = (name: string, verdict: Verdict): string =>
   verdict.judged === null
-    ? null
+    ? `${name}: the whole tree, ${literalSitesJudged(verdict.sources, null)} literal site(s) judged`
     : `${name}: range ${verdict.judged.merge_base}..${verdict.judged.head} (asked ${verdict.judged.asked}), ${literalSitesJudged(verdict.sources, verdict.judged.added)} literal site(s) judged, ${verdict.defined.length} value(s) judged over the whole tree`
