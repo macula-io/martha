@@ -263,6 +263,18 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: [`a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL ${GONE}`],
   },
   {
+    what: 'a constant written as a whole segment of a path literal the change adds (martha#437)',
+    base: { 'a_config/a_config.ts': "export const CONFIG = 'config'\n" },
+    head: { 'a_user/a_user.ts': "const at = join(checkout, '.git/config')\n" },
+    prints: ["a_user/a_user.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG"],
+  },
+  {
+    what: 'a constant inside prose the change adds, which only a path separator would split out (martha#437)',
+    base: { 'a_config/a_config.ts': "export const CONFIG = 'config'\n" },
+    head: { 'a_user/a_user.ts': "say('read the config before the run')\n" },
+    prints: [],
+  },
+  {
     what: 'a marker imported under a second name',
     base: {},
     head: { 'a_tool/tools.ts': "import type { DefinesItsValues as D } from './marker.ts'\nexport const TOOLS = Object.freeze({ Edit: 'file_path' }) satisfies D\n" },
