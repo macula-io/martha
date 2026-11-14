@@ -47,6 +47,7 @@ import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The command ended as asked. */
 export const EXIT_DONE = 0
@@ -130,7 +131,7 @@ function belowTheFloor(): string | undefined {
 
 /** The version of the release this command is part of. */
 function version(): string {
-  const manifest = JSON.parse(readFileSync(join(releaseTree(), 'package.json'), 'utf8')) as { version?: unknown }
+  const manifest = JSON.parse(readFileSync(join(releaseTree(), MANIFEST), 'utf8')) as { version?: unknown }
   return String(manifest.version)
 }
 

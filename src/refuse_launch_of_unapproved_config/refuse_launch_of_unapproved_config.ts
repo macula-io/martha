@@ -52,6 +52,8 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { REMOTE_MEMORY_ROOT, MEMORY_FOLDER_OVERRIDE } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 
 export type { LaunchHost }
@@ -161,8 +163,8 @@ export const CLAUDE_MEMORY_OFF: Readonly<Record<string, string>> = { CLAUDE_CODE
 export const CLAUDE_MEMORY_ELSEWHERE = [
   'CLAUDE_CODE_POST_TURN_MEMORY',
   'CLAUDE_MEMORY_STORES',
-  'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE',
-  'CLAUDE_CODE_REMOTE_MEMORY_DIR',
+  MEMORY_FOLDER_OVERRIDE,
+  REMOTE_MEMORY_ROOT,
 ] as const
 
 export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]
@@ -180,7 +182,7 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
       env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
     },
     carried: {
-      [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
+      [CLAUDE_SERVERS]: (path) => ({ args: [MCP_CONFIG_SWITCH, path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
       [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
   },

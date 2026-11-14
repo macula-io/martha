@@ -14,9 +14,10 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** Where npm's own program sits beside the node that runs this: `<prefix>/bin/node` and `<prefix>/lib/node_modules/npm`. */
-const NPM_CLI_FROM_PREFIX = ['lib', 'node_modules', 'npm', 'bin', 'npm-cli.js']
+const NPM_CLI_FROM_PREFIX = ['lib', DEPENDENCIES, 'npm', 'bin', 'npm-cli.js']
 
 /**
  * The variables npm is given: HOME, where it keeps its config and cache, and PATH, which it looks for git and tar

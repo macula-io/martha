@@ -23,6 +23,7 @@ import {
   npmSettingOf,
   switchesThatRunNothingFromACheckout,
 } from './refuse_code_a_checkout_runs_itself.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-runs-nothing-'))
@@ -60,7 +61,7 @@ test('the owner\'s own command-scope git settings are kept, and ours come after 
 
 test('npm sees scripts off: every inherited spelling is dropped, and a checkout\'s .npmrc loses', (t) => {
   const dir = scratch(t)
-  writeFileSync(join(dir, 'package.json'), '{"name":"fixture","version":"0.0.0","private":true}')
+  writeFileSync(join(dir, MANIFEST), '{"name":"fixture","version":"0.0.0","private":true}')
   writeFileSync(join(dir, '.npmrc'), 'ignore-scripts=false\n')
   const inherited = {
     ...process.env,
@@ -82,7 +83,7 @@ test('npm sees scripts off: every inherited spelling is dropped, and a checkout\
 
 test("npm runs the member's own git: every inherited spelling is dropped, and a checkout's .npmrc git= loses", (t) => {
   const dir = scratch(t)
-  writeFileSync(join(dir, 'package.json'), '{"name":"fixture","version":"0.0.0","private":true}')
+  writeFileSync(join(dir, MANIFEST), '{"name":"fixture","version":"0.0.0","private":true}')
   writeFileSync(join(dir, '.npmrc'), 'git=./planted-git\n')
   const inherited = {
     ...process.env,

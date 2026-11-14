@@ -132,7 +132,7 @@ const reported = (out: string): { readonly args: string[]; readonly bundle: bool
 
 test('a release with no pin is refused by name, before anything is fetched', (t) => {
   const tree = scratch(t, 'no-pin')
-  writeFileSync(join(tree, 'package.json'), JSON.stringify({ martha: { installerPackage: NAME } }))
+  writeFileSync(join(tree, MANIFEST), JSON.stringify({ martha: { installerPackage: NAME } }))
   const npm = standInNpm(t)
   const refusal = refusalOf(installThePinnedInstaller(requestFor(tree, { npm: npm.npm })))
   assert.ok(refusal.includes(PIN_FILE), refusal)

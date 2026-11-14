@@ -15,6 +15,7 @@ import { test } from 'node:test'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { projectKeyOf, theProjectFoldersThere } from './the_project_folders_a_run_wrote.ts'
 import { aScratchThisRunMade, whatThisRunLeftAtTheEnd } from './the_scratches_this_run_made.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 // Made-up scratch paths, keyed by the host's own rule rather than read from this machine's
 // TMPDIR: the CI runs under a link (a long path reached through a symlink), which would key
@@ -30,7 +31,7 @@ function aConfigDir(): { readonly env: Record<string, string>; readonly root: st
   const config = join(scratch, 'conf-dir')
   const root = join(config, 'projects')
   mkdirSync(root, { recursive: true })
-  writeFileSync(join(config, 'settings.json'), '{}\n')
+  writeFileSync(join(config, USER_SETTINGS_FILE), '{}\n')
   return { env: { HOME: scratch, CLAUDE_CONFIG_DIR: config }, root, at: (name) => join(root, name), scratch }
 }
 

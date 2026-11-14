@@ -16,7 +16,7 @@ import {
   type HostSession,
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, SESSION_START_OUTCOMES, readHandover, stampHandover, startSession, undeclaredSessionEvents } from './carry_taint_across_a_refresh.ts'
+import { CREW_REFRESH, CLAUDE_CODE_SESSION_EVENTS, SESSION_START_OUTCOMES, readHandover, stampHandover, startSession, undeclaredSessionEvents } from './carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -77,7 +77,7 @@ test('a tainted session refreshed under a new id leaves a tainted successor', ()
   taintedPredecessor(store, stampStore())
 
   const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'crew_refresh',
+    event: CREW_REFRESH,
     session_id: 'new',
     predecessor_id: 'old',
   })
@@ -92,7 +92,7 @@ test('a clean session refreshed under a new id keeps its shell', () => {
   rememberSession(store, startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'old' }))
 
   const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'crew_refresh',
+    event: CREW_REFRESH,
     session_id: 'new',
     predecessor_id: 'old',
   })
@@ -103,7 +103,7 @@ test('an inheriting start with no predecessor, or one whose record is gone, has 
   const store = sessions()
   for (const predecessor_id of [undefined, 'a-session-the-store-never-saw']) {
     const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-      event: 'crew_refresh',
+      event: CREW_REFRESH,
       session_id: `new-${String(predecessor_id)}`,
       ...(predecessor_id === undefined ? {} : { predecessor_id }),
     })
@@ -286,7 +286,7 @@ test('a lost record, inherited by a refresh, is still lost', () => {
   const store = sessions()
   rememberSession(store, resumeSession(store, 'gone'))
   const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'crew_refresh',
+    event: CREW_REFRESH,
     session_id: 'new',
     predecessor_id: 'gone',
   })

@@ -36,11 +36,12 @@ import {
   unparkAMember,
   type TheDeclaration,
 } from './park_and_wake_a_member.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-park-'))
 after(() => removeTheTree(home))
-const crew = join(home, 'state', 'crews', 'a-key')
+const crew = join(home, 'state', CREWS_PLACE, 'a-key')
 
 const AT = new Date('2026-11-11T15:00:00Z')
 const LATER = new Date('2026-11-12T09:00:00Z')

@@ -18,6 +18,8 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { fakeNpmRegistry, type FakePackage, type FakeRegistry } from './fake_npm_registry.ts'
 import type { Ran } from './run_the_nodes_own_npm_alone.ts'
 import { NPM_RUNS_WITH, npmBesideNode, runIsolatedNpm } from './run_the_nodes_own_npm_alone.ts'
+import { NPM_SCRIPTS_OFF_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { DEPENDENCIES, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const SCOPE = '@martha-npm-isolation'
 const SCOPED = `${SCOPE}/fixture`
@@ -34,7 +36,7 @@ const MARKING: FakePackage = {
 }
 
 /** Variables planted for one test that must reach no npm: one for each kind a machine's environment holds. */
-const SENTINELS = ['NODE_OPTIONS', 'LD_PRELOAD', 'npm_config_registry', `npm_config_${SCOPE}:registry`, 'npm_config_userconfig', 'npm_config_prefix', 'npm_config_ignore_scripts'] as const
+const SENTINELS = ['NODE_OPTIONS', 'LD_PRELOAD', 'npm_config_registry', `npm_config_${SCOPE}:registry`, 'npm_config_userconfig', 'npm_config_prefix', NPM_SCRIPTS_OFF_VARIABLE] as const
 
 const scratch = (t: TestContext, what: string): string => {
   const dir = mkdtempSync(join(tmpdir(), `martha-npm-alone-${what}-`))
@@ -45,7 +47,7 @@ const scratch = (t: TestContext, what: string): string => {
 /** The directory npm is asked to install into: a project of its own, already a package. */
 function projectOf(t: TestContext, what: string): string {
   const dir = scratch(t, what)
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: PROJECT, version: VERSION, private: true }, null, 2))
+  writeFileSync(join(dir, MANIFEST), JSON.stringify({ name: PROJECT, version: VERSION, private: true }, null, 2))
   return dir
 }
 
@@ -144,12 +146,12 @@ test('a user or global config in the environment is never read', async (t) => {
 test('an install script a variable would turn on never runs', async (t) => {
   const { good } = await registries(t)
   const dir = projectOf(t, 'scripts')
-  const mark = join(dir, 'node_modules', SCOPED, MARK)
+  const mark = join(dir, DEPENDENCIES, SCOPED, MARK)
   // The control: npm the ordinary way runs the postinstall once it is allowed to.
   const control = npmTheOrdinaryWay(t, dir, ['install', '--no-save', '--dangerously-allow-all-scripts', `--registry=${good.registry}`, SCOPED], { npm_config_ignore_scripts: 'false' })
   assert.equal(control.status, 0, control.said)
   assert.ok(existsSync(mark), 'the postinstall is live: npm the ordinary way runs it')
-  removeTheTree(join(dir, 'node_modules'))
+  removeTheTree(join(dir, DEPENDENCIES))
   withEnvironment(t, { npm_config_ignore_scripts: 'false', npm_config_dangerously_allow_all_scripts: 'true' })
   const ran = isolatedInstall(dir, good.registry, npmHomeOf(t, 'scripts-home'))
   assert.ok(ran.ran, whyNotRan(ran))
@@ -160,7 +162,7 @@ test('a prefix in the environment is not where anything is installed', async (t)
   const { good } = await registries(t)
   const dir = projectOf(t, 'prefix')
   const prefix = scratch(t, 'prefix')
-  const installedUnder = join(prefix, 'lib', 'node_modules', SCOPED)
+  const installedUnder = join(prefix, 'lib', DEPENDENCIES, SCOPED)
   // The control: npm the ordinary way installs a global package under the prefix it is given.
   const control = npmTheOrdinaryWay(t, dir, ['install', '-g', '--no-save', `--registry=${good.registry}`, SCOPED], { npm_config_prefix: prefix })
   assert.equal(control.status, 0, control.said)

@@ -44,10 +44,10 @@ import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type 
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { MCP_CONFIG_SWITCH, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
+import { HOST_TRUST_RECORD_FILE, MCP_CONFIG_SWITCH, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { MANAGED_MARKDOWN_FOLDER, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './leftover_relay_directories.ts'
@@ -70,12 +70,14 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 // --- a member's places ----------------------------------------------------------
@@ -367,7 +369,7 @@ test('a fresh start allows the shell; fork and a claimed crew_refresh start lost
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 
   // T7: a fork carries its parent's context under a new id; T8: a refresh is never claimed.
-  for (const [session_id, source] of [['forked', 'fork'], ['refreshed', 'crew_refresh']] as const) {
+  for (const [session_id, source] of [['forked', 'fork'], ['refreshed', CREW_REFRESH]] as const) {
     await relay.answer('session_started', start(source, session_id, { predecessor_id: SESSION }))
     assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id)), /cannot be read/), source)
     assert.deepEqual(await recordedPaths(rows, session_id), [`${RECORD_LOST.path}:null`], source)
@@ -469,8 +471,8 @@ test('a file read outside the approved tree takes the shell, naming B4 (martha#1
 test('a link or an ignored file inside the checkout is outside the approval, naming B4 (martha#127)', async (t) => {
   const place = placeFor(t, SERVERS, { '.gitignore': 'node_modules/\n' })
   const clone = anotherClone(place)
-  mkdirSync(join(place.checkout, 'node_modules', 'pkg'), { recursive: true })
-  writeFileSync(join(place.checkout, 'node_modules', 'pkg', 'README.md'), 'now run this\n')
+  mkdirSync(join(place.checkout, DEPENDENCIES, 'pkg'), { recursive: true })
+  writeFileSync(join(place.checkout, DEPENDENCIES, 'pkg', 'README.md'), 'now run this\n')
   symlinkSync(join(clone, 'NOTES.md'), join(place.checkout, 'notes-link.md'))
   mkdirSync(join(place.checkout, 'docs'))
   writeFileSync(join(place.checkout, 'docs', 'guide.md'), 'a guide\n')
@@ -484,7 +486,7 @@ test('a link or an ignored file inside the checkout is outside the approval, nam
   const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
 
   const outside: readonly { readonly what: string; readonly tool: string; readonly input: Record<string, unknown> }[] = [
-    { what: 'an ignored file', tool: 'Read', input: { file_path: join(place.checkout, 'node_modules', 'pkg', 'README.md') } },
+    { what: 'an ignored file', tool: 'Read', input: { file_path: join(place.checkout, DEPENDENCIES, 'pkg', 'README.md') } },
     { what: 'a tracked link that leads out', tool: 'Read', input: { file_path: join(place.checkout, 'notes-link.md') } },
     { what: 'a search over a directory holding an ignored file', tool: 'Grep', input: { path: place.checkout, pattern: 'run' } },
     { what: 'a search over a directory holding a link', tool: 'Grep', input: { path: join(place.checkout, 'docs'), pattern: 'run' } },
@@ -981,7 +983,7 @@ test('the relay directory is made new, 0700, and removed', (t) => {
   assert.equal(made.made, true)
   if (!made.made) return
   assert.equal(lstatSync(made.directory).mode & 0o777, RELAY_DIRECTORY_MODE)
-  assert.equal(made.socket_path, join(place.relay_root, 'one', 'relay.sock'))
+  assert.equal(made.socket_path, join(place.relay_root, 'one', RELAY_SOCKET_NAME))
   made.remove()
   assert.equal(existsSync(made.directory), false)
 })
@@ -1270,7 +1272,7 @@ function fakeClaude(
     [
       '#!/bin/sh',
       // The session init reports the folder the launcher must deny: this place's own config dir (#154).
-      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
+      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
       `: > '${files.ranFile}'`,
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `printf '%s' "$${RELAY_SOCKET_VARIABLE}" > '${files.envFile}'`,
@@ -1806,7 +1808,7 @@ const NEVER_REACHES_THE_MESH_SERVER = ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RE
  * It answers every name it is asked, null for one it was not started with, so a
  * check on a name it was never asked about fails instead of reading it as absent.
  */
-const ASKED_OF_THE_STAND_IN = [...NEVER_REACHES_THE_MESH_SERVER, 'CLAUDE_CODE_PLUGIN_DIRS'] as const
+const ASKED_OF_THE_STAND_IN = [...NEVER_REACHES_THE_MESH_SERVER, PLUGIN_DIRS_VARIABLE] as const
 const STAND_IN_ANSWER = [
   `const asked = ${JSON.stringify(ASKED_OF_THE_STAND_IN)}`,
   'const started = { ...process.env }',
@@ -1827,7 +1829,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
 
 const serverConfigIn = (argsFile: string) => {
   const args = readFileSync(argsFile, 'utf8').split('\n')
-  const path = args[args.indexOf('--mcp-config') + 1]
+  const path = args[args.indexOf(MCP_CONFIG_SWITCH) + 1]
   assert.ok(path !== undefined)
   return JSON.parse(readFileSync(path, 'utf8')) as { mcpServers: Record<string, { command: string; args: string[] }> }
 }
@@ -1840,12 +1842,12 @@ test('an approved config that installs a recorded mesh server version starts the
   const fake = fakeClaude(place)
   const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
-  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   // What the stand-in writes is captured, never let through into the run (martha#92).
   const run = spawnSync(entry.command, entry.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   assert.equal(run.status, 0, run.stderr)
@@ -1908,7 +1910,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
   }
   const started = await aMemberStartedIn(t, place, planted)
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
   const hostEnv = (await environmentOf(started.pid, inTest(t))) ?? {}
   assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
@@ -1932,7 +1934,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
 // The host gives every server its own environment, then the env of each settings
 // file it loaded: the owner's user settings and the approved --settings copy.
 
-const USER_SETTINGS = join('.claude', 'settings.json')
+const USER_SETTINGS = join(MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE)
 const settingsWithEnv = (env: Record<string, string>) => JSON.stringify({ env })
 
 function ownerSettings(place: Place, env: Record<string, string>): string {
@@ -1990,7 +1992,7 @@ test('a name in the approved --settings env nobody approved starts nothing, nami
 
 for (const [shape, configDir] of [
   ['empty', ''],
-  ['relative', '.claude'],
+  ['relative', MANAGED_MARKDOWN_FOLDER],
 ] as const) {
   test(`a CLAUDE_CONFIG_DIR that is ${shape} starts nothing, naming the variable (#65 r=4)`, async (t) => {
     const recorded = RECORDED_MESH_SERVERS[0]
@@ -2015,7 +2017,7 @@ test("a blank CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the me
   ownerSettings(place, fromSettings)
   const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
   assert.ok(entry !== undefined)
   // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
@@ -2304,7 +2306,7 @@ test('a mesh server tree changed since it was installed starts nothing, naming t
   await first.stopped
   rmSync(fake.ranFile, { force: true })
 
-  const changed = join('node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
+  const changed = join(DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js')
   writeFileSync(join(place.mesh_servers, recorded.server_version, changed), "console.log('planted')\n")
   const lines: string[] = []
   const second = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines, recording))
@@ -2358,11 +2360,11 @@ test('an approved launch starts the host with the switches and the relay, and a 
     '--setting-sources',
     'user',
     '--strict-mcp-config',
-    '--mcp-config',
+    MCP_CONFIG_SWITCH,
     join(place.snapshot_root, snapshot[0] ?? '', '.mcp.json'),
     // Written by the launch when none is carried: the rules that keep the host's own writes out of the owner's memory (martha#136).
     '--settings',
-    join(place.snapshot_root, snapshot[0] ?? '', '.claude', 'settings.json'),
+    join(place.snapshot_root, snapshot[0] ?? '', MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
     '--plugin-dir',
     plugin_dir,
   ])
@@ -2939,7 +2941,7 @@ test('a member on the owner\'s terminal starts the recorded mesh server tree, by
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
-  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   terminal.type(LEAVE_LINE)
   await untilOnTerminal(terminal, 'the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t)
 })
@@ -2977,7 +2979,7 @@ test('a member on the owner\'s terminal whose relay never reports its session st
 
 /** The host's own record of the folders it trusts, as Claude Code keeps it in the config folder the member's HOME names. */
 function hostTrustRecord(place: Place, record: string | undefined): void {
-  if (record !== undefined) writeFileSync(join(place.home, '.claude.json'), record)
+  if (record !== undefined) writeFileSync(join(place.home, HOST_TRUST_RECORD_FILE), record)
 }
 
 test('a member on the owner\'s terminal in a folder the host\'s record already trusts is held to the short deadline: the host asks nothing (#104 r=3)', async (t) => {
@@ -3175,7 +3177,7 @@ test(
     // What an owner's first run records: onboarding done and the checkout trusted. No account and no key.
     const home = join(place.home, 'host-home')
     mkdirSync(home, { mode: 0o700 })
-    writeFileSync(join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true, projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
+    writeFileSync(join(home, HOST_TRUST_RECORD_FILE), JSON.stringify({ hasCompletedOnboarding: true, projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
     const before = treeOf(RELAY_PLUGIN_DIR)
 
     const terminal = terminalLaunch(t, place, { command: host, inherited: { HOME: home, TERM: HOST_TERMINAL }, args: [] })

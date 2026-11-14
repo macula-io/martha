@@ -27,8 +27,9 @@ import {
   theParkOf,
   type TheDeclaration,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
-import { theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
+import { CREW_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_WAKE_CLEARS_THE_PARK, theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-wake-'))
 after(() => removeTheTree(home))
@@ -52,7 +53,7 @@ const THE_CREW: TheDeclaration = {
 let crewsSoFar = 0
 const aWakeHost = () => {
   crewsSoFar += 1
-  const itsOwn = join(home, 'state', 'crews', `a-key-${crewsSoFar}`)
+  const itsOwn = join(home, 'state', CREWS_PLACE, `a-key-${crewsSoFar}`)
   return { stores: hostForTests({ crew: keepTheCrewsFilesAsDirectories(itsOwn) }).host.stores, stamps: handoverStampsIn(itsOwn) }
 }
 
@@ -70,7 +71,7 @@ function aStartSaying(started: boolean, refusal?: string) {
 function handedOver(host: ReturnType<typeof aWakeHost>, member = 'builder', content = 'What stands: the package, its branch, its tip.') {
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
   const written = writeMyHandover(host, { member, content, at: AT, stamps: host.stamps, session })
-  assert.equal(written, 'CREW-HANDOVER-WRITTEN', `the host did not write the handover the test needed: ${written}`)
+  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
   return theHandoverFile(member, AT)
 }
 
@@ -102,7 +103,7 @@ test('#255 part 2: a parked member with a handover is started on it, and its par
   assert.ok(!('refusal' in place), 'the host refused the park place')
   const park = theParkOf(place, 'builder')
   assert.equal(park.kind, 'not_parked', 'a woken member is still parked')
-  assert.equal(park.kind === 'not_parked' ? park.last_marker?.reason : '', 'woken from its handover by the owner', 'the marker does not say the member was woken')
+  assert.equal(park.kind === 'not_parked' ? park.last_marker?.reason : '', THE_WAKE_CLEARS_THE_PARK, 'the marker does not say the member was woken')
 })
 
 test('#255 part 2: the prompt names the handover\'s file and does not carry its text', () => {

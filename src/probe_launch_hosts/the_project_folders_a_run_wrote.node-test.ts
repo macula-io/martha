@@ -21,6 +21,7 @@ import {
   theProjectFoldersThere,
   whatIsStillLeftAtTheEnd,
 } from './the_project_folders_a_run_wrote.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 // The names are the host's keys for paths under /tmp, written out as its own rule makes
 // them -- not read from this machine's TMPDIR, which the CI runs under a link (a long
@@ -40,7 +41,7 @@ function aConfigDirHolding(...names: readonly string[]): { readonly env: Record<
   const config = join(scratch, 'conf-dir')
   const root = join(config, 'projects')
   mkdirSync(root, { recursive: true })
-  writeFileSync(join(config, 'settings.json'), '{}\n')
+  writeFileSync(join(config, USER_SETTINGS_FILE), '{}\n')
   for (const name of names) mkdirSync(join(root, name, 'memory'), { recursive: true })
   return { env: { HOME: scratch, CLAUDE_CONFIG_DIR: config }, root, at: (name) => join(root, name) }
 }

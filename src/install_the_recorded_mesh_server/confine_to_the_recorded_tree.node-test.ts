@@ -7,8 +7,9 @@ import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 
 import { heldByTheTree } from './confine_to_the_recorded_tree.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
-const TREE = join('/', 'launcher', 'servers', '7.8.9', 'node_modules')
+const TREE = join('/', 'launcher', 'servers', '7.8.9', DEPENDENCIES)
 const inTree = (...parts: string[]): string => pathToFileURL(join(TREE, ...parts)).href
 
 test('node\'s own modules and the files of the tree are held by it', () => {
@@ -18,7 +19,7 @@ test('node\'s own modules and the files of the tree are held by it', () => {
 test('a file above the tree, beside it, under a name that only starts like it, or no file at all is not held', () => {
   for (const url of [
     pathToFileURL(join(TREE, '..', 'node_modules-x', 'dep', 'index.js')).href,
-    pathToFileURL(join(TREE, '..', '..', 'node_modules', 'dep', 'index.js')).href,
+    pathToFileURL(join(TREE, '..', '..', DEPENDENCIES, 'dep', 'index.js')).href,
     pathToFileURL(`${TREE}-planted/dep/index.js`).href,
     pathToFileURL(join('/', 'home', 'member', '.node_modules', 'dep', 'index.js')).href,
     pathToFileURL(TREE).href,

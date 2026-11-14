@@ -34,6 +34,7 @@ import { removeTheTree } from './relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
 import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
 const CONFIG_HOOKS_SINCE: readonly [number, number] = [2, 54]
@@ -116,7 +117,7 @@ function plantedCheckout(home: string, marker: (door: Door) => string): string {
   // A git dependency, so that npm install runs git.
   const dependency = join(home, 'dependency')
   repo(dependency)
-  writeFileSync(join(dependency, 'package.json'), JSON.stringify({ name: 'dependency', version: '1.0.0' }))
+  writeFileSync(join(dependency, MANIFEST), JSON.stringify({ name: 'dependency', version: '1.0.0' }))
   git(dependency, 'add', '--all')
   git(dependency, 'commit', '-q', '-m', 'a dependency')
 
@@ -127,7 +128,7 @@ function plantedCheckout(home: string, marker: (door: Door) => string): string {
   const checkout = join(home, 'checkout')
   repo(checkout)
   writeFileSync(
-    join(checkout, 'package.json'),
+    join(checkout, MANIFEST),
     JSON.stringify({
       name: 'fixture',
       version: '0.0.0',

@@ -25,6 +25,7 @@ import {
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fakeNpmRegistry, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { placeRecordedMeshServers, recordMeshTree, SERVER_NEEDS } from './install_the_recorded_mesh_server.ts'
+import { MANIFEST, DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const VERSION = '7.8.9'
 const DEPENDENCY = 'mesh-dependency'
@@ -289,7 +290,7 @@ test('a recorded version is installed from its lock and started by path, with th
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(undefined, { [SETTING]: 'x' }), root, recording: recorded(t, good) }))
   assert.equal(entry.command, process.execPath)
   // The tree sits under the root's real path (a tmpdir may be a symlink, as /var is on macOS).
-  assert.equal(entry.args.at(-1), join(realpathSync(root), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(root), VERSION, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   assert.deepEqual(entry.env, { ...HOST, [SETTING]: 'x' }, 'the entry keeps its own settings, and HOME and PATH from the host')
   assert.equal(runPlaced(entry, root), `${RECORDED_MARK} ${RECORDED_MARK}`)
 })
@@ -298,7 +299,7 @@ test('the bin started is the server bin the version\'s record names, and an entr
   const { good } = await registries(t)
   const recording = recorded(t, good)
   const root = scratch(t, 'servers')
-  const server = join(realpathSync(root), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
+  const server = join(realpathSync(root), VERSION, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js')
   // The launch gate decides which shapes may start; whichever passed, the server bin is what runs.
   const withoutBin = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(['-y', `${MESH_SERVER_PACKAGE}@${VERSION}`]), root, recording }))
   assert.equal(withoutBin.args.at(-1), server)
@@ -361,8 +362,8 @@ test('the server is started with the launcher\'s own confining hook, naming its 
   const hookFile = fileURLToPath(new URL(hookUrl.pathname, hookUrl))
   assert.equal(hookFile, CONFINING_HOOK)
   for (const outside of [root, home]) assert.ok(relative(outside, hookFile).startsWith('..'), `the hook ${hookFile} sits under ${outside}`)
-  assert.ok(decodeURIComponent(hookUrl.search).includes(pathToFileURL(join(realpathSync(root), VERSION, 'node_modules')).href), hookUrl.search)
-  assert.equal(server, join(realpathSync(root), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.ok(decodeURIComponent(hookUrl.search).includes(pathToFileURL(join(realpathSync(root), VERSION, DEPENDENCIES)).href), hookUrl.search)
+  assert.equal(server, join(realpathSync(root), VERSION, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
 })
 
 test('a module the tree lacks is not loaded from a node_modules above it or from HOME, by require or by import (martha#73)', async (t) => {
@@ -371,8 +372,8 @@ test('a module the tree lacks is not loaded from a node_modules above it or from
   const root = scratch(t, 'servers')
   const home = scratch(t, 'home')
   const loaded = join(home, 'loaded')
-  plantModule(join(root, 'node_modules', ABOVE_THE_TREE), loaded)
-  plantModule(join(root, 'node_modules', IMPORTED_ABOVE_THE_TREE), loaded)
+  plantModule(join(root, DEPENDENCIES, ABOVE_THE_TREE), loaded)
+  plantModule(join(root, DEPENDENCIES, IMPORTED_ABOVE_THE_TREE), loaded)
   plantModule(join(home, '.node_modules', UNDER_HOME), loaded)
   const host = { HOME: home, PATH: process.env.PATH }
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: host, serverConfig: pinnedConfig(), root, recording }))
@@ -398,8 +399,8 @@ test('a root reached through a symlink still starts the confined server: the tre
   symlinkSync(real, link)
   const entry = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root: link, recording }))
   // The bin and the confined tree are named by the real path, as a test's expectations must name them.
-  assert.equal(entry.args.at(-1), join(realpathSync(link), VERSION, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
-  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(realpathSync(real), VERSION, 'node_modules')).href), String(entry.args[1]))
+  assert.equal(entry.args.at(-1), join(realpathSync(link), VERSION, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.ok(decodeURIComponent(entry.args[1] ?? '').includes(pathToFileURL(join(realpathSync(real), VERSION, DEPENDENCIES)).href), String(entry.args[1]))
   const run = spawnSync(entry.command, entry.args, { cwd: real, env: { ...HOST, ...entry.env }, encoding: 'utf8' })
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout.trim(), `${RECORDED_MARK} ${RECORDED_MARK}`, run.stderr)
@@ -464,9 +465,9 @@ test('a planted install in the checkout\'s node_modules or under the global pref
   const recording = recorded(t, good)
   const checkout = scratch(t, 'checkout')
   const prefix = scratch(t, 'prefix')
-  for (const dir of [join(checkout, 'node_modules', MESH_SERVER_PACKAGE), join(prefix, 'lib', 'node_modules', MESH_SERVER_PACKAGE)]) {
+  for (const dir of [join(checkout, DEPENDENCIES, MESH_SERVER_PACKAGE), join(prefix, 'lib', DEPENDENCIES, MESH_SERVER_PACKAGE)]) {
     mkdirSync(join(dir, 'dist'), { recursive: true })
-    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: MESH_SERVER_PACKAGE, version: VERSION, bin: { [BIN]: 'dist/index.js' } }))
+    writeFileSync(join(dir, MANIFEST), JSON.stringify({ name: MESH_SERVER_PACKAGE, version: VERSION, bin: { [BIN]: 'dist/index.js' } }))
     writeFileSync(join(dir, 'dist', 'index.js'), `console.log('${PLANTED_MARK}')\n`)
   }
   withEnvironment(t, { npm_config_prefix: prefix, NPM_CONFIG_PREFIX: prefix })
@@ -490,7 +491,7 @@ test('an installed file changed, removed or added since the install refuses the 
   const recording = recorded(t, good)
   const root = scratch(t, 'servers')
   placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
-  const installed = join(root, VERSION, 'node_modules')
+  const installed = join(root, VERSION, DEPENDENCIES)
 
   const changed = join(installed, DEPENDENCY, MARK_FILE)
   appendFileSync(changed, '// edited\n')

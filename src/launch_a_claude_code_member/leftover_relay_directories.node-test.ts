@@ -32,7 +32,8 @@ import {
   recordTheMember,
   sweepLeftoverLaunchDirectories,
 } from './leftover_relay_directories.ts'
-import { removeTheTree } from './relay_copy.ts'
+import { RELAY_COPY_NAME, removeTheTree } from './relay_copy.ts'
+import { EMPTY_DIRECTORY_NAME } from './launch_a_claude_code_member.ts'
 
 /** A relay root of this test's own, removed after it whatever its folders' modes. */
 function relayRoot(t: TestContext): string {
@@ -50,9 +51,9 @@ function relayRoot(t: TestContext): string {
 function launchShapedDirectory(root: string, name: string, record: LaunchRecord | undefined): string {
   const directory = join(root, name)
   mkdirSync(directory, { mode: 0o700 })
-  mkdirSync(join(directory, 'nothing'), { mode: 0o500 })
+  mkdirSync(join(directory, EMPTY_DIRECTORY_NAME), { mode: 0o500 })
 
-  const relay = join(directory, 'relay')
+  const relay = join(directory, RELAY_COPY_NAME)
   const hooks = join(relay, 'hooks')
   mkdirSync(hooks, { recursive: true, mode: 0o700 })
   writeFileSync(join(hooks, 'hooks.json'), '{}', { mode: 0o400 })

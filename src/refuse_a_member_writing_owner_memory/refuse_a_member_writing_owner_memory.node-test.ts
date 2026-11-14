@@ -11,8 +11,12 @@ import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { CONFIG, SHELL_DEPTH_CAP } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { CONFIG_WORKTREE, CONFIG, SHELL_DEPTH_CAP } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import {
+  GIT_COMMON_DIR_VARIABLE,
+  GIT_DIR_VARIABLE,
+  GIT_CONFIG_SYSTEM_VARIABLE,
+  GIT_CONFIG_GLOBAL_VARIABLE,
   FILE_WRITING_TOOLS,
   gapsInTheNameMap,
   hostLinesNamingARule,
@@ -30,13 +34,14 @@ import {
   type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { SKILLS_KIND, MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
 function placeFor(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'martha-136-'))
   t.after(() => removeTheTree(root))
   const home = join(root, 'home')
-  const config = join(home, '.claude')
+  const config = join(home, MANAGED_MARKDOWN_FOLDER)
   const mainMemory = join(config, 'projects', '-work-main-clone', 'memory')
   const otherMemory = join(config, 'projects', '-work-other', 'memory')
   const worktree = join(root, 'some-worktrees', 'main-clone-feature')
@@ -292,7 +297,7 @@ test('the folders the launcher\'s environment moves memory to, and a settings fi
   const override = join(place.root, 'cowork-memory')
   const remote = join(place.root, 'remote')
   const named = join(place.root, 'named-memory')
-  const settings = join(place.root, 'settings.json')
+  const settings = join(place.root, USER_SETTINGS_FILE)
   writeFileSync(settings, JSON.stringify({ [MEMORY_DIRECTORY_KEY]: named }))
   const places = placesFor(place, { [MEMORY_FOLDER_OVERRIDE]: override, [REMOTE_MEMORY_ROOT]: remote }, [settings])
   assertDenied(places, place.worktree, place.home, join(override, 'MEMORY.md'), MEMORY_FOLDER_OVERRIDE)
@@ -319,7 +324,7 @@ test('a member may not write a skill, an agent or a command under either config 
     }
   }
   // A skill is a folder with a SKILL.md inside it: the folder is denied whole, not only the file the loader reads.
-  assertDeniedBy(both, place.worktree, place.home, join(place.config, 'skills', 'deploy', 'SKILL.md'), 'martha#154', 'a skill\'s SKILL.md')
+  assertDeniedBy(both, place.worktree, place.home, join(place.config, SKILLS_KIND, 'deploy', 'SKILL.md'), 'martha#154', 'a skill\'s SKILL.md')
 })
 
 test('a member may not write an output style in the launcher\'s config dir, the member\'s, or the folder its init reported (martha#154)', (t) => {
@@ -820,8 +825,8 @@ test('the git configuration files of the owner\'s own runs are refused, and the 
   const system = join(place.root, 'system-gitconfig')
   const xdg = join(place.root, 'an-xdg-config-home')
   const places = placesFor(place, { GIT_CONFIG_GLOBAL: moved, GIT_CONFIG_SYSTEM: system, XDG_CONFIG_HOME: xdg })
-  assertRefusedAsGit(places, place.worktree, place.home, moved, 'GIT_CONFIG_GLOBAL')
-  assertRefusedAsGit(places, place.worktree, place.home, system, 'GIT_CONFIG_SYSTEM')
+  assertRefusedAsGit(places, place.worktree, place.home, moved, GIT_CONFIG_GLOBAL_VARIABLE)
+  assertRefusedAsGit(places, place.worktree, place.home, system, GIT_CONFIG_SYSTEM_VARIABLE)
   assertRefusedAsGit(places, place.worktree, place.home, join(xdg, 'git', CONFIG), 'the XDG file the launcher\'s environment moves')
   assertRefusedAsGit(places, place.worktree, place.home, join(place.home, '.gitconfig'), 'the owner\'s ~/.gitconfig')
   assertRefusedAsGit(places, place.worktree, place.home, join(place.home, '.config', 'git', CONFIG), 'the XDG file\'s own default under ~/.config')
@@ -841,8 +846,8 @@ test('GIT_DIR and GIT_COMMON_DIR the launcher\'s environment names are refused w
   mkdirSync(join(gitDir, 'refs', 'heads'), { recursive: true })
   mkdirSync(join(shared, 'hooks'), { recursive: true })
   const places = placesFor(place, { GIT_DIR: gitDir, GIT_COMMON_DIR: shared })
-  assertRefusedAsGit(places, place.worktree, place.home, join(gitDir, 'refs', 'heads', 'main'), 'GIT_DIR')
-  assertRefusedAsGit(places, place.worktree, place.home, join(shared, 'hooks', 'pre-commit'), 'GIT_COMMON_DIR')
+  assertRefusedAsGit(places, place.worktree, place.home, join(gitDir, 'refs', 'heads', 'main'), GIT_DIR_VARIABLE)
+  assertRefusedAsGit(places, place.worktree, place.home, join(shared, 'hooks', 'pre-commit'), GIT_COMMON_DIR_VARIABLE)
   assertAdmitted(places, place.worktree, place.home, join(place.worktree, 'src', 'x.ts'), 'an ordinary file')
 })
 
@@ -1017,7 +1022,7 @@ test('the owner\'s own global config is read too, and the second file a git dire
   // `config.worktree`, which git reads when `extensions.worktreeConfig` is on.
   writeFileSync(join(place.home, '.gitconfig'), '')
   writeFileSync(join(checkout, '.git', CONFIG), '[extensions]\n\tworktreeConfig = true\n')
-  writeFileSync(join(checkout, '.git', 'config.worktree'), '[core]\n\thooksPath = .wt-hooks\n')
+  writeFileSync(join(checkout, '.git', CONFIG_WORKTREE), '[core]\n\thooksPath = .wt-hooks\n')
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.wt-hooks', 'pre-commit'), 'a hooks folder named in config.worktree')
 
   // git's other spellings of a boolean, which it reads as one too (r=2, R2).
@@ -1040,7 +1045,7 @@ test('the owner\'s own global config is read too, and the second file a git dire
   writeFileSync(join(main, '.git', 'HEAD'), 'ref: refs/heads/main\n')
   writeFileSync(join(main, '.git', CONFIG), '[extensions]\n\tworktreeConfig = true\n')
   writeFileSync(join(worktrees, 'commondir'), '../..\n')
-  writeFileSync(join(worktrees, 'config.worktree'), '[core]\n\thooksPath = .wt\n')
+  writeFileSync(join(worktrees, CONFIG_WORKTREE), '[core]\n\thooksPath = .wt\n')
   writeFileSync(join(linked, '.git'), `gitdir: ${worktrees}\n`)
   assertRefusedAs192(placesFor(place), linked, place.home, join(linked, '.wt', 'pre-commit'), 'a hooks folder a linked worktree\'s own config.worktree names')
 
@@ -1063,7 +1068,7 @@ test('a config written as git writes it is read as git reads it: any case, and a
   // reads that name whatever case it is written in. A guard that kept the case would
   // not open the file, and the hooks folder it names would be a member's to write.
   writeFileSync(join(checkout, '.git', CONFIG), '[Extensions]\n\tworktreeConfig = true\n')
-  writeFileSync(join(checkout, '.git', 'config.worktree'), '[core]\n\thooksPath = .wt-hk\n')
+  writeFileSync(join(checkout, '.git', CONFIG_WORKTREE), '[core]\n\thooksPath = .wt-hk\n')
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, '.wt-hk', 'pre-commit'), 'a section in another case, deciding which file git reads')
 })
 

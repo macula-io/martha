@@ -23,6 +23,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import {
+  HANDOVERS_PLACE,
   CREW_HANDOVER_WRITTEN,
   handoversPlace,
   theHandoverFile,
@@ -32,11 +33,12 @@ import {
   WRITE_MY_HANDOVER_TOOL,
   writeMyHandover,
 } from './write_my_handover.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-handover-'))
 after(() => removeTheTree(home))
-const crew = join(home, 'state', 'crews', 'a-key')
+const crew = join(home, 'state', CREWS_PLACE, 'a-key')
 
 const MEMBER = 'builder'
 const AT = new Date('2026-11-11T15:00:00Z')
@@ -182,7 +184,7 @@ test('#255: a crew store the host will not write into refuses the handover, and 
   // A crew whose handovers place cannot be made: a file is already there under the place's name.
   const blocked = join(home, 'a-crew-that-cannot-write')
   mkdirSync(blocked, { recursive: true, mode: 0o700 })
-  writeFileSync(join(blocked, 'handovers'), 'not a directory', { mode: 0o600 })
+  writeFileSync(join(blocked, HANDOVERS_PLACE), 'not a directory', { mode: 0o600 })
   const host = aHost(blocked)
   const store = sessions()
   const stamps = stampStore()

@@ -20,6 +20,7 @@ import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
+  STATE_ROOT_NAME,
   nodeIdsFor,
   openState,
   OWN_WRITES_LAUNCHES_KEPT,
@@ -54,6 +55,7 @@ import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_bac
 import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS = ['opus', 'fable']
@@ -314,7 +316,7 @@ test('init, approve and start bring a member up on the approved config, recorded
   assert.deepEqual(records.map((record) => [record.key, record.row['node_id']]), [[BUILDER!.name, ids.ids[BUILDER!.name]]])
   assert.ok(lines.some((line) => approved.kind === 'approved' && line.includes(approved.fingerprint)), 'the owner is shown the approval in use')
   await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
-  assert.ok(readFileSync(fake.args, 'utf8').includes('--mcp-config'), 'the approved copy is passed')
+  assert.ok(readFileSync(fake.args, 'utf8').includes(MCP_CONFIG_SWITCH), 'the approved copy is passed')
 })
 
 test('a place ends the member it started before it removes the home, while a child of it is still writing there (#272)', async (t) => {
@@ -378,7 +380,7 @@ test('start whose input is no terminal starts nothing, so a member\'s shell cann
 const REFUSED_ARGUMENTS: readonly (readonly string[])[] = [
   ['--settings', '{"hooks":{}}'],
   ['--setting-sources', 'user,project'],
-  ['--mcp-config', '/elsewhere/servers.json'],
+  [MCP_CONFIG_SWITCH, '/elsewhere/servers.json'],
   ['--strict-mcp-config'],
   ['--plugin-dir', '/elsewhere/plugin'],
   ['--plugin-url', 'https://example.invalid/plugin.zip'],
@@ -573,7 +575,7 @@ test("a run reading a member's rows derives the same place the launcher writes t
   mkdirSync(checkout, { recursive: true })
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
   try {
-    const state = openState(join(state_home, '.local', 'state', 'martha'), checkout)
+    const state = openState(join(state_home, '.local', 'state', STATE_ROOT_NAME), checkout)
     assert.ok('directory' in state, 'the state opens')
     const places = launcherPlacesOf(state, join(state_home, 'relay-places'), checkout)
     assert.ok('rows' in places, 'the launcher places are made')

@@ -19,6 +19,9 @@ import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { whatTheHostSaysWithTheseSettings } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
+import { HOST_TERMINAL } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
+import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 /** The rule written under the same place as `rule`, but under a tool the file permission checks never use. */
 const anInertTwinOf = (rule: string): string => rule.replace(/^\w+\(/, 'Write(')
@@ -26,7 +29,7 @@ const anInertTwinOf = (rule: string): string => rule.replace(/^\w+\(/, 'Write(')
 test('the recorded host matches every rule the launch writes, and names an inert twin of one in the same run (#226)', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-rules-')))
   t.after(() => removeTheTree(home))
-  const env = { HOME: home, PATH: [join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color' }
+  const env = { HOME: home, PATH: [join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: HOST_TERMINAL }
   const written = memoryDenyRules(ownerMemoryPlaces({ launcher_env: env, member_env: env, home, launch_dir: home, settings_files: [], user_scope: userScopeUnder(home) }))
   assert.ok(written.length > 0, 'the launch writes rules for an ordinary home')
   const settings = join(home, 'rules.json')
@@ -58,8 +61,8 @@ test('the recorded host matches every rule the launch writes, and names an inert
   // The owner's own settings are read in the same run, and their dead rule on a place this launch denies makes the host
   // quote the launch's own rule as the one to write instead. That is the owner's rule: a launch that read it as ours
   // would leave an owner who protects the place the old way unable to start a member at all (martha#226 r=1).
-  mkdirSync(join(home, '.claude'), { recursive: true })
-  writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify({ permissions: { deny: [anInertTwinOf(written[0] ?? '')] } }))
+  mkdirSync(join(home, MANAGED_MARKDOWN_FOLDER), { recursive: true })
+  writeFileSync(join(home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE), JSON.stringify({ permissions: { deny: [anInertTwinOf(written[0] ?? '')] } }))
   const ownersSaid = await whatItSaysAbout(written)
   assert.match(ownersSaid, new RegExp(NOT_MATCHED_MARK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `the host said nothing about the owner's own dead rule, so this proves nothing: ${ownersSaid.slice(-800)}`)
   assert.deepEqual(hostLinesNamingARule(ownersSaid, written), [], `the owner's own rule is read as one of ours: ${hostLinesNamingARule(ownersSaid, written).join(' | ')}`)

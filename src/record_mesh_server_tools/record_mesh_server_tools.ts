@@ -32,6 +32,7 @@ import { argv, exit, stderr } from 'node:process'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { MESH_TREE_RECORDING, withRecordedTree } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { registeredToolsIn, withRecordedVersion, type MeshServerRecording } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const TOOLS = new URL('../read_a_room_through_its_gate/recorded_mesh_server_tools.json', import.meta.url)
 const TREES = new URL('../prove_the_mesh_server_bytes/recorded_mesh_server_trees.json', import.meta.url)
@@ -48,7 +49,7 @@ try {
   const tree = recordMeshTree({ tarball: readFileSync(tarballPath), recording: MESH_TREE_RECORDING, scratch })
 
   const directory = join(scratch, 'extracted', 'package')
-  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { name: string; version: string; bin?: string | Record<string, string> }
+  const manifest = JSON.parse(readFileSync(join(directory, MANIFEST), 'utf8')) as { name: string; version: string; bin?: string | Record<string, string> }
   const files = (readdirSync(directory, { recursive: true, encoding: 'utf8' }) as string[])
     .filter((file) => file.endsWith(CODE))
     .sort()

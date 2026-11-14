@@ -15,6 +15,8 @@ import {
   signalAGroupOnThisMachine as signalGroup,
 } from './files_and_processes_on_this_machine.ts'
 import { linuxProcessIdentities } from './process_identity_from_proc.ts'
+import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 function place(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-machine-'))
@@ -74,8 +76,8 @@ test('a scratch directory is made under its root, written inside, and removed', 
   const made = scratch.make(root, 'launch-')
   assert.ok(made.path.startsWith(join(root, 'launch-')), made.path)
 
-  const written = made.write(join('.claude', 'settings.json'), Buffer.from('{}'))
-  assert.equal(written, join(made.path, '.claude', 'settings.json'))
+  const written = made.write(join(MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE), Buffer.from('{}'))
+  assert.equal(written, join(made.path, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE))
   assert.equal(readFileSync(written, 'utf8'), '{}')
 
   made.remove()

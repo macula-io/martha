@@ -60,6 +60,7 @@ import {
   WORDLESS_TOOLS,
   type RecordedMeshAnswerShape,
 } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 export interface Gap {
   readonly path: string
@@ -353,7 +354,7 @@ export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
   { passes: false, what: 'a prompt on the command line', args: ['a prompt'] },
   { passes: false, what: 'a settings file or JSON', args: ['--settings', '{}'] },
   { passes: false, what: 'which settings sources load', args: ['--setting-sources', 'user,project'] },
-  { passes: false, what: 'a tool-server config', args: ['--mcp-config', 'servers.json'] },
+  { passes: false, what: 'a tool-server config', args: [MCP_CONFIG_SWITCH, 'servers.json'] },
   { passes: false, what: 'a plugin directory', args: ['--plugin-dir', 'plugin'] },
   { passes: false, what: 'skipping every permission check', args: ['--dangerously-skip-permissions'] },
   { passes: false, what: 'a permission mode', args: ['--permission-mode', 'bypassPermissions'] },

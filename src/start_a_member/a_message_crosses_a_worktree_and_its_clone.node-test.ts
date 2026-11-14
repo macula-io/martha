@@ -17,7 +17,7 @@ import { test } from 'node:test'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { carryingTo, THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { STATE_ROOT_NAME, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -52,7 +52,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const worktree = join(home, 'worktree')
   git(clone, 'worktree', 'add', '-q', '--detach', worktree)
 
-  const state = openState(join(home, '.local', 'state', 'martha'), clone)
+  const state = openState(join(home, '.local', 'state', STATE_ROOT_NAME), clone)
   assert.ok('directory' in state, 'the state opens')
   const inTheClone = launcherPlacesOf(state, join(home, 'relay-places'), clone)
   const inTheWorktree = launcherPlacesOf(state, join(home, 'relay-places'), worktree)

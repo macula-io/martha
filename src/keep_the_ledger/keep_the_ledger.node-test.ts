@@ -16,6 +16,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { ledgerStreamOf, readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { keepTheMilestone, CREW_LOG_EVENTS, MILESTONE_OF_EVENT, theLineAStartingSessionIsHanded, whatWasSent, noteWhatBecameOfAnAct } from './keep_the_ledger.ts'
+import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 const PACKAGE = 'synthetic-owner/repo#7'
 
@@ -23,7 +24,7 @@ const PACKAGE = 'synthetic-owner/repo#7'
 function aCrewPlace(t: TestContext): { readonly streams: string; readonly checkout: string; readonly host: (now: number) => HostForTests } {
   const root = mkdtempSync(join(tmpdir(), 'martha-254-ledger-'))
   t.after(() => removeTheTree(root))
-  const streams = join(root, 'crews', 'a-key', 'rows')
+  const streams = join(root, CREWS_PLACE, 'a-key', CREW_ROWS_PLACE)
   const checkout = join(root, 'checkout')
   mkdirSync(streams, { recursive: true, mode: 0o700 })
   mkdirSync(checkout, { recursive: true })

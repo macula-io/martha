@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
+import { SYNC_OFF_SETTING, HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from './recorded_claude_code_host.ts'
 import { hookSettingsWatch, markdownFolders } from './settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
@@ -73,7 +73,7 @@ test('the watch refuses a hook or plugin in the user file, the managed file and 
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
   mkdirSync(join(managed.dir, managed.drop_in), { recursive: true })
-  const user = join(root, 'settings.json')
+  const user = join(root, USER_SETTINGS_FILE)
   const approved = join(root, 'approved.json')
   const watch = hookSettingsWatch({ user, home: root, approved, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
   const declaring = JSON.stringify({ hooks: { SessionStart: [HOOK] }, enabledPlugins: { [PLUGIN]: true } })
@@ -249,11 +249,11 @@ test('a double-quoted value that never closes is refused as cannot-be-told (mart
 test('a synced skill is refused with the remedy its owner can carry out, and any other file with the one it can edit (martha#243)', () => {
   const synced = hooksInFrontmatterOf({ path: '/owner/.claude/skills/synced/acct-1/xlsx/SKILL.md', text: HOOKED, managed: false, synced: true }, PATTERN) ?? ''
   assert.ok(synced.includes('claude.ai'), synced === '' ? 'not refused' : synced)
-  assert.ok(synced.includes('syncClaudeAiSkills'), synced)
+  assert.ok(synced.includes(SYNC_OFF_SETTING), synced)
   assert.ok(!synced.includes('move the hooks out of that file'), synced)
   const own = hooksInFrontmatterOf(md(HOOKED), PATTERN) ?? ''
   assert.ok(own.includes('move the hooks out of that file'), own === '' ? 'not refused' : own)
-  assert.ok(!own.includes('syncClaudeAiSkills'), own)
+  assert.ok(!own.includes(SYNC_OFF_SETTING), own)
 })
 
 test('the watch refuses a hooked agent, skill or command in each user and managed folder the host loads, a synced skill included, and lets it go once removed', (t) => {
@@ -265,7 +265,7 @@ test('the watch refuses a hooked agent, skill or command in each user and manage
   assert.equal(folders.length, 2 * CLAUDE_CODE_OWNERS_MARKDOWN.kinds.length)
   assert.equal(watch.check(), undefined)
   for (const folder of folders) {
-    for (const path of [join(folder, 'helper.md'), join(folder, 'synced', 'id-1', 'deep', 'SKILL.md')]) {
+    for (const path of [join(folder, 'helper.md'), join(folder, SYNCED_SKILLS_FOLDER, 'id-1', 'deep', 'SKILL.md')]) {
       mkdirSync(dirname(path), { recursive: true })
       writeFileSync(path, HOOKED)
       const refusal = watch.check()

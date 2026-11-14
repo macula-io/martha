@@ -24,7 +24,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { StringDecoder } from 'node:string_decoder'
 
-import { isRunnableFile } from './host_runs_the_relay.ts'
+import { HOST_TRUST_RECORD_FILE, isRunnableFile } from './host_runs_the_relay.ts'
 import { anyJournalHasALine, readTheNewestRelayJournal, relayJournalDirectory } from './keep_the_relays_journal.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
@@ -249,7 +249,7 @@ export function firstRunDone(home: string, checkout: string): void {
     customApiKeyResponses: { approved: [STAND_IN_KEY.slice(-KEY_TAIL_LENGTH)], rejected: [] },
     projects: { [checkout]: { hasTrustDialogAccepted: true } },
   }
-  writeFileSync(join(home, '.claude.json'), `${JSON.stringify(record)}\n`, { mode: 0o600 })
+  writeFileSync(join(home, HOST_TRUST_RECORD_FILE), `${JSON.stringify(record)}\n`, { mode: 0o600 })
 }
 
 /** Runs `martha <args>` in `checkout` under a pseudo-terminal, typing `input`; its exit code and what it showed. */

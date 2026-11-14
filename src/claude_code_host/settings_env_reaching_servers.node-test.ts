@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { CLAUDE_CODE_OWN_VARIABLES, environmentFromSettings, userSettingsPath, USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
+import { MANAGED_MARKDOWN_FOLDER, PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
 
 const ALLOWED = ['HOME', 'PATH', 'MACULA_MESH_REALMS']
 const USER = '/owner/.claude/settings.json'
@@ -24,7 +25,7 @@ test('the approved --settings copy is read too: a name it sets is refused, namin
 })
 
 test("CLAUDE_CODE_PLUGIN_DIRS, Claude Code's own variable, passes so the caller can empty it, not refuse the launch", () => {
-  assert.ok(CLAUDE_CODE_OWN_VARIABLES.some((variable) => variable.name === 'CLAUDE_CODE_PLUGIN_DIRS'))
+  assert.ok(CLAUDE_CODE_OWN_VARIABLES.some((variable) => variable.name === PLUGIN_DIRS_VARIABLE))
   const read = environmentFromSettings([{ path: USER, text: withEnv({ CLAUDE_CODE_PLUGIN_DIRS: '/plugins' }) }], ALLOWED)
   assert.deepEqual(read, { env: { CLAUDE_CODE_PLUGIN_DIRS: '/plugins' } })
 })
@@ -59,7 +60,7 @@ for (const [shape, text] of [
 }
 
 test('the user settings file is under CLAUDE_CONFIG_DIR when it is set, else under HOME/.claude', () => {
-  assert.deepEqual(userSettingsPath({ HOME: '/owner' }), { path: join('/owner', '.claude', USER_SETTINGS_FILE) })
+  assert.deepEqual(userSettingsPath({ HOME: '/owner' }), { path: join('/owner', MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE) })
   assert.deepEqual(userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: '/config' }), { path: join('/config', USER_SETTINGS_FILE) })
 })
 

@@ -29,6 +29,7 @@ import {
   declareCrew,
   type CrewSettings,
 } from './declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
 const root = '/martha-project'
@@ -49,7 +50,7 @@ const solo = {
   version: DECLARATION_VERSION,
   owner: 'Ann',
   members: [{ name: 'Builder', role: 'builder' }],
-  mode: { name: 'solo', roles: ['builder'], may: allActsTo([OWNER]) },
+  mode: { name: SOLO_MODE, roles: ['builder'], may: allActsTo([OWNER]) },
   channel_read_seconds: 30,
 }
 
@@ -102,7 +103,7 @@ test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
   assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null }])
-  assert.equal(settings.mode.name, 'solo')
+  assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
     root,

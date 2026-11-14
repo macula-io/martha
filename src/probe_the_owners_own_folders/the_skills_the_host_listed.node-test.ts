@@ -6,12 +6,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
+import { TRASH_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 
 const init = (skills: unknown) => JSON.stringify({ type: 'system', subtype: 'init', skills })
 
 test('the skills the host listed are read by the folder each SKILL.md sits in, not by the name its frontmatter carries', () => {
-  const printed = [`{"type":"system","subtype":"hook_started"}`, init(['.trash', 'control-skill', 'xlsx'])].join('\n')
-  assert.deepEqual(skillsListedIn(printed), ['.trash', 'control-skill', 'xlsx'])
+  const printed = [`{"type":"system","subtype":"hook_started"}`, init([TRASH_FOLDER, 'control-skill', 'xlsx'])].join('\n')
+  assert.deepEqual(skillsListedIn(printed), [TRASH_FOLDER, 'control-skill', 'xlsx'])
 })
 
 test('a list that holds something other than names keeps the names, and no init event, no list or no json names none', () => {

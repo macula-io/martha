@@ -166,7 +166,7 @@ test('the session-init question is asked with no server file and with hooks off 
   const serversSwitch = HOSTS['claude-code'].carried[CLAUDE_SERVERS]
   assert.ok(serversSwitch !== undefined, 'the adapter names the switch that hands the host its server file')
   const launchSwitches = [...HOSTS['claude-code'].project_config_off.args, ...serversSwitch(join(tmpdir(), 'servers.json')).args]
-  assert.ok(launchSwitches.includes('--mcp-config'), 'the member itself is started with the servers file')
+  assert.ok(launchSwitches.includes(MCP_CONFIG_SWITCH), 'the member itself is started with the servers file')
   const asked = initQuestionArgs(launchSwitches, '/tmp/hooks-off.json')
   assert.deepEqual(asked.filter((arg) => arg.startsWith(MCP_CONFIG_SWITCH)), [], 'no switch that names a server')
   assert.ok(asked.includes('--strict-mcp-config'), 'strict stays, so settings-named servers start nothing either')

@@ -43,7 +43,7 @@ test('a row older than OFFLINE_AFTER_MS reads offline, and one younger does not 
   assert.equal(atThreshold.rows[0]!.state, 'working', 'exactly at the threshold a row is still the member\'s own state')
 
   const past = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - OFFLINE_AFTER_MS - 1) }, NOW)
-  assert.equal(past.rows[0]!.state, 'offline', 'one millisecond past it, the row has gone quiet')
+  assert.equal(past.rows[0]!.state, OFFLINE, 'one millisecond past it, the row has gone quiet')
   assert.equal(past.rows[0]!.quiet_for, OFFLINE_AFTER_MS + 1, 'and says how long it has been quiet')
   assert.equal(past.counts.online, 0, 'an offline member is not counted online')
 })

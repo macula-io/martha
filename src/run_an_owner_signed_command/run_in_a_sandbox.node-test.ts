@@ -9,6 +9,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type RunCopy } from './run_in_a_sandbox.ts'
 import { SANDBOX_REQUIRED_VARIABLE, skipWithoutTheSandbox } from './sandbox_under_test.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const [REGULAR] = OWN_WRITE_MODES
 const MARKER = 'stranger-marker-129'
@@ -70,7 +71,7 @@ test('the network, the real home, /tmp, the launcher environment and anything no
 test('a .npmrc in the tree does not choose the shell npm runs scripts with', { skip: unavailable }, async (t) => {
   const run = runDirectory(t, {
     files: [
-      file('package.json', JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: 'echo tested' } })),
+      file(MANIFEST, JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: 'echo tested' } })),
       file('.npmrc', 'script-shell=./evil.sh\n'),
       { path: 'evil.sh', mode: OWN_WRITE_MODES[1], bytes: Buffer.from(`#!/bin/sh\necho ${MARKER}\n`) },
     ],

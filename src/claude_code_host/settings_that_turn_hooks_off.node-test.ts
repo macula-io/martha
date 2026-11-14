@@ -18,6 +18,8 @@ import {
   settingsTurningHooksOff,
   type HookSwitches,
 } from './settings_that_turn_hooks_off.ts'
+import { USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
+import { MANAGED_MARKDOWN_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 
 const USER = '/owner/.claude/settings.json'
 const MANAGED = '/etc/claude-code/managed-settings.json'
@@ -268,7 +270,7 @@ test('the watch reads the user file, the approved copy, the managed file and eac
   const root = scratch(t)
   const managedDir = join(root, 'managed')
   mkdirSync(join(managedDir, 'drop-in'), { recursive: true })
-  const user = join(root, 'settings.json')
+  const user = join(root, USER_SETTINGS_FILE)
   const approved = join(root, 'approved.json')
   const watch = hookSettingsWatch({
     user,
@@ -295,13 +297,13 @@ test("a file tool call naming the owner's user settings file is named, directly,
   const root = scratch(t)
   const config = join(root, 'conf-dir')
   mkdirSync(config)
-  const owners = join(config, 'settings.json')
+  const owners = join(config, USER_SETTINGS_FILE)
   symlinkSync(config, join(root, 'linked'))
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)
   assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', 'settings.json') }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', 'settings.json') }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root))
   assert.ok(namesTheOwnersSettings({ file_path: '../conf-dir/settings.json' }, owners, cwd, root))
   writeFileSync(owners, '{}')
   symlinkSync(owners, join(cwd, 'innocent.json'))
@@ -313,7 +315,7 @@ test("a file tool call naming the owner's user settings file is named, directly,
 test("a file tool call naming the owner's file the way the host spells it is named: ~/ against the host's home, and white space around the path", (t) => {
   const root = scratch(t)
   const home = join(root, 'home')
-  const owners = join(home, '.claude', 'settings.json')
+  const owners = join(home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE)
   mkdirSync(dirname(owners), { recursive: true })
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)

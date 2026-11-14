@@ -30,6 +30,9 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { DECLARATION_DIRECTORY } from '../declare_crew/declare_crew.ts'
+import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -278,7 +281,7 @@ test('a symlink is refused, even when the owner approved its fingerprint', (t) =
 test('a symlinked config directory is refused, not followed', (t) => {
   const place = scratch(t)
   const [parent = ''] = SETTINGS.split('/')
-  put(place.home, join('shared', 'settings.json'), '{}')
+  put(place.home, join('shared', USER_SETTINGS_FILE), '{}')
   symlinkSync(join(place.home, 'shared'), join(place.checkout, parent))
 
   const { state, decision } = decide(CLAUDE_CODE, place)
@@ -307,14 +310,14 @@ test("everything inside a host's config directory is fingerprinted, except insta
   const place = scratch(t)
   put(place.checkout, '.gitignore', 'node_modules\n')
   put(place.checkout, join(OPENCODE_DIR, 'plugin', 'probe.ts'), 'export const Probe = async () => ({})')
-  put(place.checkout, join(OPENCODE_DIR, 'node_modules', 'dep', 'index.js'), 'one')
+  put(place.checkout, join(OPENCODE_DIR, DEPENDENCIES, 'dep', 'index.js'), 'one')
   commitAll(place.checkout, 'a plugin')
   const read = () => readLaunchConfig({ host: 'opencode', launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
   const before = read()
   assert.ok(before.some((entry) => entry.path === `${OPENCODE_DIR}/node_modules` && entry.kind === 'directory'))
   assert.ok(!before.some((entry) => entry.path.startsWith(`${OPENCODE_DIR}/node_modules/`)))
 
-  put(place.checkout, join(OPENCODE_DIR, 'node_modules', 'dep', 'index.js'), 'two')
+  put(place.checkout, join(OPENCODE_DIR, DEPENDENCIES, 'dep', 'index.js'), 'two')
   assert.deepEqual(read(), before)
 
   const approved = approve('opencode', place)
@@ -465,7 +468,7 @@ test('a planned Claude Code launch turns project config off and passes the appro
   const { args } = prepared.switches
   for (const arg of HOSTS['claude-code'].project_config_off.args) assert.ok(args.includes(arg), arg)
 
-  const servers_copy = args[args.indexOf('--mcp-config') + 1] ?? ''
+  const servers_copy = args[args.indexOf(MCP_CONFIG_SWITCH) + 1] ?? ''
   const settings_copy = args[args.indexOf('--settings') + 1] ?? ''
   assert.ok(servers_copy.startsWith(prepared.snapshot_dir) && settings_copy.startsWith(prepared.snapshot_dir))
   assert.equal(readFileSync(servers_copy, 'utf8'), readFileSync(join(place.checkout, SERVERS), 'utf8'))

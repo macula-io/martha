@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { MESH_SERVER_PACKAGE } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { meshServerInstallsIn } from './mesh_server_install.ts'
+import { PINNED_TRANSPORT, meshServerInstallsIn } from './mesh_server_install.ts'
 
 const VERSION = '0.51.0'
 const OTHER_PACKAGE = 'another-tool-server'
@@ -129,7 +129,7 @@ for (const args of [
 }
 
 test('a pin may name the stdio transport and an env that leaves the install alone', () => {
-  const entry = { type: 'stdio', ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r' } }
+  const entry = { type: PINNED_TRANSPORT, ...npx(`${MESH_SERVER_PACKAGE}@${VERSION}`), env: { MACULA_MESH_REALMS: 'r' } }
   assert.deepEqual(meshServerInstallsIn(config({ macula: entry }), MESH_SERVER_PACKAGE), { installs: [{ server: 'macula', version: VERSION }] })
 })
 

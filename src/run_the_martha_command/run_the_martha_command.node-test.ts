@@ -36,6 +36,7 @@ import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/sho
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -188,7 +189,7 @@ test('martha approve whose input is no terminal refuses, so a member\'s shell ca
 test('martha --version prints the version package.json carries, and nothing else', (t) => {
   const run = martha(placeFor(t, { checkout: false }), '--version')
   assert.equal(run.status, 0)
-  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as { version: string }
+  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', MANIFEST), 'utf8')) as { version: string }
   assert.equal(run.out, `${manifest.version}\n`)
 })
 

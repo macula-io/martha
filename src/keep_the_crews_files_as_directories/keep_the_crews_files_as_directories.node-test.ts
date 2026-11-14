@@ -18,6 +18,9 @@ import {
 } from './keep_the_crews_files_as_directories.ts'
 import type { CrewPlace, HandoverStamp } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
+import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-crew-files-'))
 after(() => removeTheTree(home))
@@ -26,8 +29,8 @@ const PERMISSIONS = 0o777
 
 /** A crew's own directory under a fresh home, as the launcher resolves one. */
 function aCrew(name: string): string {
-  const crew = join(home, name, 'crews', `a-key-of-${name}`)
-  mkdirSync(join(home, name, 'crews'), { recursive: true, mode: CREW_DIRECTORY_MODE })
+  const crew = join(home, name, CREWS_PLACE, `a-key-of-${name}`)
+  mkdirSync(join(home, name, CREWS_PLACE), { recursive: true, mode: CREW_DIRECTORY_MODE })
   return crew
 }
 
@@ -38,10 +41,10 @@ const placeOf = (crew: string, name: string): CrewPlace => {
 }
 
 test('#255: a place is made inside the crew\'s directory, and a file kept there is whole, 0600 and read back', () => {
-  const crew = aCrew('handovers')
-  const place = placeOf(crew, 'handovers')
+  const crew = aCrew(HANDOVERS_PLACE)
+  const place = placeOf(crew, HANDOVERS_PLACE)
 
-  assert.equal(place.path, join(crew, 'handovers'), 'a place is not the directory the crew\'s store makes for it')
+  assert.equal(place.path, join(crew, HANDOVERS_PLACE), 'a place is not the directory the crew\'s store makes for it')
   assert.equal(lstatSync(crew).mode & PERMISSIONS, CREW_DIRECTORY_MODE, 'the crew directory is not this user\'s alone')
   assert.equal(lstatSync(place.path).mode & PERMISSIONS, CREW_DIRECTORY_MODE, 'a place is not this user\'s alone')
 
@@ -54,7 +57,7 @@ test('#255: a place is made inside the crew\'s directory, and a file kept there 
 })
 
 test('#255: a name kept twice holds the second text, so a reader never sees half of it', () => {
-  const place = placeOf(aCrew('replaced'), 'parked')
+  const place = placeOf(aCrew('replaced'), PARKED_PLACE)
   place.keep('builder.parked.json', '{"reason":"a","since":"a"}\n')
   assert.equal(place.keep('builder.parked.json', '{"reason":"b","since":"b"}\n'), undefined)
   assert.deepEqual(place.read('builder.parked.json'), { text: '{"reason":"b","since":"b"}\n' })
@@ -62,7 +65,7 @@ test('#255: a name kept twice holds the second text, so a reader never sees half
 })
 
 test('#255: a name this place does not hold reads as absent, and a half-written file is not a name in it', () => {
-  const place = placeOf(aCrew('absent'), 'handovers')
+  const place = placeOf(aCrew('absent'), HANDOVERS_PLACE)
   assert.equal(place.read('nobody-handed-over.md'), undefined, 'a file that is not there did not read as absent')
   writeFileSync(join(place.path, `${STAGING_PREFIX}a-file-being-written`), 'half', { mode: CREW_FILE_MODE })
   assert.deepEqual(place.names(), [], 'a half-written file was offered as one of the place\'s files')
@@ -90,7 +93,7 @@ test('#255: a place that is a link to somewhere else is refused', () => {
 })
 
 test('#255: a file anyone else may read is not trusted, and neither is one that is a link', () => {
-  const place = placeOf(aCrew('untrusted'), 'handovers')
+  const place = placeOf(aCrew('untrusted'), HANDOVERS_PLACE)
   place.keep('builder.md', 'the member\'s own\n')
   chmodSync(join(place.path, 'builder.md'), 0o644)
   const read = place.read('builder.md')
@@ -105,7 +108,7 @@ test('#255: a file anyone else may read is not trusted, and neither is one that 
 })
 
 test('#255: a name a directory already holds is refused, and the place is left as it was', () => {
-  const place = placeOf(aCrew('taken'), 'handovers')
+  const place = placeOf(aCrew('taken'), HANDOVERS_PLACE)
   mkdirSync(join(place.path, 'builder.md'), { mode: CREW_DIRECTORY_MODE })
   const refused = place.keep('builder.md', 'the handover\n')
   assert.ok(refused !== undefined, 'a write over a directory of the same name neither happened nor said why')
@@ -116,7 +119,7 @@ test('#255: a name a directory already holds is refused, and the place is left a
 // A disk can take fewer bytes than it was given. The count is checked against what the text needs, so a half-written
 // handover is refused rather than renamed over the whole one it was meant to replace (martha#255 r=2).
 test('#255: a file the disk kept only part of is refused, and none of it is left behind', (t) => {
-  const place = placeOf(aCrew('short'), 'handovers')
+  const place = placeOf(aCrew('short'), HANDOVERS_PLACE)
   const text = 'a handover longer than the four bytes this disk will take\n'
   t.mock.method(fs, 'writeSync', () => 4)
 
@@ -133,7 +136,7 @@ test('#255: a file the disk kept only part of is refused, and none of it is left
 test('#255 part 2: a stamp the store will not read is a refusal, never a handover that was never stamped', () => {
   const crew = aCrew('stamps')
   const stamps = handoverStampsIn(crew)
-  const handover = join(crew, 'handovers', 'HANDOVER_2026-11-12_builder.md')
+  const handover = join(crew, HANDOVERS_PLACE, 'HANDOVER_2026-11-12_builder.md')
   const stamp: HandoverStamp = {
     member: 'builder',
     predecessor_id: 'a-session',
@@ -161,7 +164,7 @@ test('#255: a place or a file name that is a path is refused, never translated i
     assert.equal(isAPlainName(name), false, `${JSON.stringify(name)} was accepted as a name`)
     assert.ok('refusal' in store.place(name), `${JSON.stringify(name)} was accepted as a place`)
   }
-  const place = placeOf(crew, 'handovers')
+  const place = placeOf(crew, HANDOVERS_PLACE)
   for (const name of ['../outside.md', 'a/b.md']) {
     assert.ok(place.keep(name, 'x') !== undefined, `${JSON.stringify(name)} was kept as a file`)
     assert.ok(place.read(name) !== undefined && 'refusal' in (place.read(name) ?? {}), `${JSON.stringify(name)} was read as a file`)
