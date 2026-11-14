@@ -69,7 +69,7 @@ import {
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
-import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
 import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
