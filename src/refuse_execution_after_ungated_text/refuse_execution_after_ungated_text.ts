@@ -73,7 +73,11 @@ export interface Session {
 
 export type Decision =
   | { readonly allow: true }
-  | { readonly allow: false; readonly refusal: string }
+  /**
+   * The refusal, and the arrival it stands on: the audit writes which path and which sender the gate refused for
+   * (martha#321), so a refusal never has to be taken apart to find them again.
+   */
+  | { readonly allow: false; readonly refusal: string; readonly arrival: Ingestion }
 
 export interface GateInput {
   readonly tool: string
@@ -124,7 +128,7 @@ export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_
 
   for (const ingest of session.ingested) {
     const refusal = refusalFor(ingest, PATHS_BY_ID.get(ingest.path), policy)
-    if (refusal !== undefined) return { allow: false, refusal }
+    if (refusal !== undefined) return { allow: false, refusal, arrival: ingest }
   }
 
   return { allow: true }

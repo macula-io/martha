@@ -21,6 +21,8 @@ import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { releaseMarkFor } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 
 const names = claudeCodeToolNames
 
@@ -344,4 +346,33 @@ test('a predecessor record rewritten to a clean one of the same length still tai
 
   const cleared = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'clear', session_id: 'new' })
   assert.equal(executes(readHandover(store, stamps, { member, session: cleared }, handover)), false)
+})
+
+// --- the owner's release, at inheritance (martha#321) -------------------------
+
+test('#321: a handover stamped before the owner released it is read after it as released, neither lost nor held', () => {
+  const store = sessions()
+  const stamps = stampStore()
+  // The stamp is taken over the whole, held record: this is a handover written before the release.
+  const predecessor = taintedPredecessor(store, stamps)
+  const mark = releaseMarkFor(predecessor.gate.ingested, OWNER_AT_THE_TERMINAL, () => Date.UTC(2026, 10, 13, 21, 0, 0))
+
+  const reader = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'new' })
+  const successor = readHandover(store, stamps, { member, session: reader }, handover, [mark])
+
+  assert.equal(successor.record_missing, false, 'the successor is not lost: the release is the owner\'s own succession')
+  assert.equal(executes(successor), true, 'the successor is released: its shell runs')
+})
+
+test('#321: a release stream that cannot be read leaves the member held exactly as before', () => {
+  const store = sessions()
+  const stamps = stampStore()
+  taintedPredecessor(store, stamps)
+
+  const reader = startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'new' })
+  // An unreadable stream gives no marks, which is the same reading: nothing is released and nothing is lost.
+  const successor = readHandover(store, stamps, { member, session: reader }, handover, [])
+
+  assert.equal(successor.record_missing, false)
+  assert.equal(executes(successor), false, 'still held')
 })
