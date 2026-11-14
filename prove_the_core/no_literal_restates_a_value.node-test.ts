@@ -148,9 +148,12 @@ test('a literal in a type position names a type, not a value, and a value beside
 })
 
 test('a literal that names a property at the use site is skipped like a declared name (rule 2 of part b)', () => {
-  const used = source('a_user/a_user.ts', "const has = 'the-tool' in record\nconst got = record['the-tool']\ncall('the-tool')\n")
+  const used = source('a_user/a_user.ts', "const has = 'the-tool' in record\nconst got = record['the-tool']\ncall('the-tool')\nconst odd = key in 'the-tool'\n")
 
-  assert.deepEqual(restatementsIn([EXPORTER, used], { judged: null }).map(lineOfAFinding), ["a_user/a_user.ts:3: 'the-tool' restates a_tool/a_tool.ts TOOL"])
+  assert.deepEqual(restatementsIn([EXPORTER, used], { judged: null }).map(lineOfAFinding), [
+    "a_user/a_user.ts:3: 'the-tool' restates a_tool/a_tool.ts TOOL",
+    "a_user/a_user.ts:4: 'the-tool' restates a_tool/a_tool.ts TOOL",
+  ], 'only the left side of `in` names a property')
 })
 
 test('a constant annotated with a named type is an alias of that type\'s member, not a value to import (rule 3 of part b)', () => {
@@ -160,6 +163,8 @@ test('a constant annotated with a named type is an alias of that type\'s member,
 
   assert.deepEqual(restatementsIn([alias, user], { judged: null }), [])
   assert.deepEqual(restatementsIn([plain, user], { judged: null }).map(lineOfAFinding), ["a_user/a_user.ts:1: 'the-tag' restates a_tool/a_tool.ts THE_TAG"])
+  const keyword = source('a_tool/a_tool.ts', "export const THE_TAG: string = 'the-tag'\n")
+  assert.deepEqual(restatementsIn([keyword, user], { judged: null }).map(lineOfAFinding), ["a_user/a_user.ts:1: 'the-tag' restates a_tool/a_tool.ts THE_TAG"], 'a keyword type names no member, so the constant still holds the value')
 })
 
 test('an alias that copies another module\'s exported value is still a copy (rule 3 keeps R2)', () => {
