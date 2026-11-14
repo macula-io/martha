@@ -43,8 +43,14 @@ const SESSION = 'the-session'
 const THE_REVIEWER_MODEL = 'opus'
 /** The line the launcher puts in the row when a review stops at the reviewer model's limit, in its own words. */
 const THE_LINE = `review on claude-opus-5-5: ${THE_REVIEWER_MODEL} is at its limit`
+/** The line a second stopped review puts in the same slot: the member ran it again, and it stopped again (martha#390 r=2). */
+const THE_SECOND_LINE = `review on claude-opus-5-5: ${THE_REVIEWER_MODEL} is at its limit, on the second try`
 /** A line another owner wrote in the same slot: the model switch's, which only the switch takes away (martha#359). */
 const THE_OTHER_OWNERS_LINE = 'the owner’s default could not be put back; it is kept under the launch’s name'
+/** The moment the test's clock starts at, so a beat a write takes and one it never takes are told apart exactly. */
+const THE_MOMENT_TOLD = 1_700_000_000_000
+/** How long the member takes to report back, in the clock the test holds: no real time passes. */
+const THE_MEMBER_GOT_ROUND_TO_IT = 60_000
 
 interface Places {
   readonly member: string
@@ -147,7 +153,9 @@ const theReview = () => ({
   },
 })
 
-test('#390 r=1: a line the launcher wrote leaves the row once the member takes its review up again', async (t) => {
+test('#390 r=1: a line the launcher wrote leaves the row once the member takes its review up again, and is not a beat', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: THE_MOMENT_TOLD })
+  t.after(() => t.mock.timers.reset())
   const places = placesOf(t)
   aRowSaying(places, '')
   const telling = theMembersTelling(places)
@@ -155,10 +163,34 @@ test('#390 r=1: a line the launcher wrote leaves the row once the member takes i
   await relay.answer('session_started', { session_id: SESSION, source: 'startup', hook_event_name: 'SessionStart', transcript_path: '/nowhere' })
 
   telling.theRow(THE_LINE)
-  assert.equal(theRowNow(places)?.needs, THE_LINE, 'the line about the stopped review never reached the row, so this test could not see it leave')
+  const told = theRowNow(places)
+  assert.equal(told?.needs, THE_LINE, 'the line about the stopped review never reached the row, so this test could not see it leave')
+  assert.equal(told?.at, THE_MOMENT_TOLD, 'telling the owner a line did not stamp the row with the moment it was told')
 
+  // The member reports back before it takes the review up again: the row's `at` is the beat the telling took, and taking
+  // the line back must leave it there, or the owner reads the member as having moved when it has not (martha#380).
+  t.mock.timers.tick(THE_MEMBER_GOT_ROUND_TO_IT)
   await relay.answer('tool_called', theReview())
-  assert.equal(theRowNow(places)?.needs, '', 'the row still says a review that the member has taken up again needs the owner')
+  const after = theRowNow(places)
+  assert.equal(after?.needs, '', 'the row still says a review that the member has taken up again needs the owner')
+  assert.equal(after?.at, told?.at, 'taking the line back moved the row’s `at`, so the owner reads a beat the member never made')
+})
+
+test('#390 r=2: a second stopped review replaces the line the first one wrote in the row', (t) => {
+  const places = placesOf(t)
+  aRowSaying(places, '')
+  const telling = theMembersTelling(places)
+
+  telling.theRow(THE_LINE)
+  assert.equal(theRowNow(places)?.needs, THE_LINE, 'the first stopped review never reached the row, so this test could not see it replaced')
+
+  // The member ran the review again and it stopped again: the slot says the newer stop, not the one before it.
+  telling.theRow(THE_SECOND_LINE)
+  assert.equal(
+    theRowNow(places)?.needs,
+    THE_SECOND_LINE,
+    'the second stopped review left the first line standing, so the owner reads a review the member has already run again',
+  )
 })
 
 test('#390 r=1: a line the launcher wrote never takes another owner’s line off the row', async (t) => {

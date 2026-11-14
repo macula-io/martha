@@ -148,6 +148,7 @@ import {
 import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { theRowWithTheLine, theRowWithoutTheLineItWrote } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NO_BELLS, theBellsTheOwnerDeclared } from '../ring_the_owner/ring_the_owner.ts'
 import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
@@ -812,10 +813,10 @@ export interface TheTellingPlaces {
  * which is handed the line through the crew's channel the way every crew message is. A row the store does not hold yet
  * is not made here: the line waits for a row there is, as the dialogs slice leaves it.
  *
- * The row's `needs` is one slot shared with every other line the owner is told (a model switch's, martha#359), so this
- * telling keeps the line it wrote (martha#390 r=1): a second stopped review replaces its own line, a line another owner
- * wrote is never taken, and taking the line back — which happens once the member has taken the matter up — removes this
- * launcher's line and no other's.
+ * The row's `needs` is one slot shared with every other line the owner is told (a model switch's, martha#359), and who
+ * may write it, and whose line may be taken back, is the row's own rule in the core (../show_dashboard_beat,
+ * `theRowWithTheLine` / `theRowWithoutTheLineItWrote`). This telling keeps only which line it wrote, so it can tell its
+ * own from another owner's, and the store calls that put that line there and take it away.
  */
 export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
   const beats = dashboardRowsIn(places.dashboard)
@@ -825,10 +826,11 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
     theRow: (line) => {
       beats.change(places.member, (held) => {
         if (held === null) return null
-        // Another owner's line stands in the one slot the row has: it is theirs to answer, and never taken here.
-        if (held.needs !== '' && held.needs !== wrote) return held
+        const next = theRowWithTheLine(held, { wrote, line, at: Date.now() })
+        // Nothing comes back when another owner's line stands there, and then the line is not this telling's to take back.
+        if (next === null) return null
         wrote = line
-        return { ...held, needs: line, at: Date.now() }
+        return next
       })
     },
     theMember: (line) =>
@@ -840,8 +842,7 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
       const line = wrote
       if (line === null) return
       wrote = null
-      // The row's `at` is the member's own beat, and taking a line away is not one (martha#380).
-      beats.change(places.member, (held) => (held === null || held.needs !== line ? null : { ...held, needs: '' }))
+      beats.change(places.member, (held) => (held === null ? null : theRowWithoutTheLineItWrote(held, line)))
     },
   }
 }
