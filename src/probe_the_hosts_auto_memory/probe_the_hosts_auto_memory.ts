@@ -11,6 +11,7 @@ import { projectFolderFor, projectKeyOf, takeAwayTheOnesThisRunWrote, theProject
 import { runTheHost, stopTheProcessesLeftIn } from '../probe_launch_hosts/stop_a_host_that_outlives_the_run.ts'
 import { aScratchThisRunMade, leftBehindByARun } from '../probe_launch_hosts/the_scratches_this_run_made.ts'
 import {
+  CLAUDE_CODE,
   CLAUDE_MEMORY_OFF,
   fingerprintOf,
   launchEnvironment,
@@ -20,7 +21,6 @@ import {
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { HEADLESS_CLAUDE, PROMPT, put, RUN_TIMEOUT_MS } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every

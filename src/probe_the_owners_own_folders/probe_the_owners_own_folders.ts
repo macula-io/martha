@@ -8,8 +8,8 @@ import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_o
 import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, type OwnerMarkdownFile, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { TRASH_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
 //

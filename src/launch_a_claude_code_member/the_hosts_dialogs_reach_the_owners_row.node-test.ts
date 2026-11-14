@@ -25,7 +25,7 @@ import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { checkedBody, dialogBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE, startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -35,7 +35,6 @@ import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_
 import { IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
-import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
 
 const MEMBER = 'Vesta'

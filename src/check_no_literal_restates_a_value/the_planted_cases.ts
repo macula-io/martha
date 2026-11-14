@@ -59,6 +59,12 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: ["a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
   },
   {
+    what: 'two exported constants the change adds for one new value, in two new modules',
+    base: TOOL,
+    head: { 'a_one/a_one.ts': "export const ONE = 'a-brand-new-word'\n", 'a_two/a_two.ts': "export const TWO = 'a-brand-new-word'\n" },
+    prints: ["a_one/a_one.ts:1: 'a-brand-new-word' restates a_two/a_two.ts TWO", "a_two/a_two.ts:1: 'a-brand-new-word' restates a_one/a_one.ts ONE"],
+  },
+  {
     what: 'a constant the change revalues, with a copy of the old value',
     base: { 'a_tool/a_tool.ts': "export const TOOL = 'the-old-value'\n", 'a_user/a_user.ts': "call('the-old-value')\n" },
     head: { 'a_tool/a_tool.ts': "export const TOOL = 'the-newer-value'\n" },

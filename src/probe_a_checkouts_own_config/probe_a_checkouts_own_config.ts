@@ -5,7 +5,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
-import { LAUNCH_FILES_OF_HOST } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE, LAUNCH_FILES_OF_HOST } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   claude,
   claudeAsTheAgent,
@@ -17,7 +17,6 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']

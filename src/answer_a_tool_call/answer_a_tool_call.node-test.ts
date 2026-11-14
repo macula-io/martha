@@ -20,6 +20,7 @@ import {
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
+  CLAUDE_CODE,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   readLaunchState,
@@ -37,7 +38,7 @@ const names = claudeCodeToolNames
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
 after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: mkdtempSync(join(launch_home, 'work-')),
   stop_dir: launch_home,
   approved_fingerprints: [],
@@ -188,7 +189,7 @@ function approvedCheckout(t: TestContext): ApprovedLaunch {
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'reviewed')
 
-  const place = { host: 'claude-code', launch_dir: checkout, stop_dir: home }
+  const place = { host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home }
   return { ...place, approved_fingerprints: [fingerprintOf(readLaunchState(place, thisMachine))] }
 }
 

@@ -27,7 +27,7 @@ import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/sett
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE, startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { holdingTheEnds } from '../refresh_a_member/hold_the_end.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -35,7 +35,7 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { memberRelay, type MemberRelay, type TheMembersTelling } from './answer_the_relay.ts'
-import { CLAUDE_CODE, A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from './launch_a_claude_code_member.ts'
+import { A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from './launch_a_claude_code_member.ts'
 import { readTheNewestRelayJournal, relayJournalKeptIn, RELAY_JOURNAL_PLACE } from './keep_the_relays_journal.ts'
 import { removeTheTree } from './relay_copy.ts'
 
