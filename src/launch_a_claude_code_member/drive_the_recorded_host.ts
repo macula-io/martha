@@ -30,6 +30,7 @@ import { removeTheTree } from './relay_copy.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /**
  * The state home a run's processes find Martha's state in, under the home the run is given. Exported so a run that
@@ -213,6 +214,10 @@ export function theRecordedHostAt(claude: string): string {
 /**
  * The places a run's processes find their state and sockets in, under its home; exported so a case can read the PATH
  * it builds and the refusal a host it cannot run is given (martha#304).
+ *
+ * This environment is built here and not by `launchEnvironment`, so it carries the auto-updater's switch itself: a run
+ * whose home is not the owner's would otherwise let the host update the owner's global install with the scripts skipped
+ * (martha#460).
  */
 export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, base_url: string, runtime: string): RunEnvironment {
   const claude = theRecordedHostAt(run.claude)
@@ -228,6 +233,9 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
     XDG_RUNTIME_DIR: runtime,
     ANTHROPIC_BASE_URL: base_url,
     ANTHROPIC_API_KEY: STAND_IN_KEY,
+    // Last, as every launch environment spreads it (refuse_launch_of_unapproved_config): nothing above it can turn the
+    // auto-updater back on inside a run (martha#460 r=1).
+    ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF,
   }
 }
 

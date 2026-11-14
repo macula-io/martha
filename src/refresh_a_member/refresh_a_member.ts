@@ -14,9 +14,12 @@
 // resumes at the share its predecessor reached, so a threshold measured from zero asks again on the first free report,
 // clears, and resumes into the same size — the loop that started dozens of sessions in minutes with no work done.
 
-import type { CrewPlace, CrewStore, HandoverStamp, Refused } from '../host_contract/host_contract.ts'
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import { CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import type { AnEndPending } from '../end_a_running_turn/end_a_running_turn.ts'
+import type { CrewPlace, CrewStore, Refused } from '../host_contract/host_contract.ts'
+import type { TheAct } from './the_refresh_flow.ts'
+
+/** The act that does nothing, which is most of them. */
+export const NO_ACT: TheAct = { act: 'none' }
 
 /** Where a crew keeps its flows, under the one crew store. */
 export const REFRESHES_PLACE = 'refresh'
@@ -31,24 +34,8 @@ export const HANDOVER_LIMIT_PERCENT = 70
  */
 export const REFRESH_MARGIN_PERCENT = 10
 
-/** Two refreshes of one member inside this window are a storm, and a storm is parked, not refused. */
-export const STORM_WINDOW_MS = 30 * 60_000
-
-/** How many refreshes inside the window are a storm. */
-export const STORM_THRESHOLD = 2
-
 /** How long a flow may sit in one phase before it is abandoned, once, with the reason on the row. */
 export const FLOW_WINDOW_MS = 30 * 60_000
-
-/**
- * The share of its limit at which a member's running turn is ended at once, whatever the crew's ceiling says
- * (martha#311): a member past its whole limit is handed over now. A constant like HANDOVER_LIMIT_PERCENT, never a
- * setting.
- */
-export const CONTEXT_FULL_PERCENT = 100
-
-/** How many ends that ended one flow may spend before it is abandoned (martha#311, the owner's gate, question 3). */
-export const FORCED_ENDS = 2
 
 /** What started a flow: the limit always, a finished task when the crew switched it on, or someone asking. */
 export type RefreshTrigger = 'at_the_limit' | 'after_a_task' | 'asked'
@@ -110,16 +97,6 @@ export interface ARefresh {
    * runs. A question that carries another turn is free of it.
    */
   readonly gave_up_on?: string
-}
-
-/** An end of the running turn, announced and not yet concluded. */
-export interface AnEndPending {
-  readonly turn_id: string
-  readonly announced: number
-  /** What the end was announced as: why, and which end it is. */
-  readonly what: string
-  /** The ledger row it was announced at, and the package whose ledger holds it: null when the member held none. */
-  readonly ledger_row: { readonly package: string; readonly at: number } | null
 }
 
 /** The file one member's flow is kept in: one per member, so two flows never disagree. */
@@ -329,262 +306,9 @@ export function aDeclineIsAllowed(trigger: RefreshTrigger): boolean {
   return trigger === 'at_the_limit' || trigger === 'after_a_task'
 }
 
-/** The grounds a member may give, in the practice's own words, so the line it writes is the line the design names. */
-export const DECLINE_GROUNDS = [
-  'an approved range it has not pushed yet, or a push or tag ask it is still waiting on',
-  'a change in hand',
-  'a reply it must act on',
-] as const
-
-/** The ground an at-limit decline may give: the only one the design allows there. */
-export const THE_LIMIT_GROUND = 'it cannot reach a safe point at all'
-
-/**
- * The prompt a member is asked to hand over with. The file is the host's and the member is told no path: the tool
- * writes it where the launcher decided, and a path in a prompt would be a second place a handover could come from.
- */
-export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly percent: number }): string {
-  const first = asking.at_limit
-    ? [
-        `Your context is at ${asking.percent}%, past the ${HANDOVER_LIMIT_PERCENT}% handover limit, so this session hands over to a fresh one.`,
-        'First reach a safe point: finish the edit you are in, then commit or stash the work so the working tree is clean.',
-        'If an approved push has not been made yet, make it first: the yes is for that exact sha.',
-      ]
-    : [
-        'Your task is done and your context is large, so this session will be cleared and restarted from a handover.',
-        'First decide whether that is safe.',
-      ]
-  const grounds = asking.at_limit ? `Only if ${THE_LIMIT_GROUND},` : `If ${DECLINE_GROUNDS.join('; ')},`
-  return [
-    ...first,
-    `${grounds} answer exactly ${CREW_REFRESH_DECLINED} and one line saying which ground it is.`,
-    `Otherwise write your handover with the ${WRITE_MY_HANDOVER_TOOL} tool, in the shape the practice gives: first rules;`,
-    'what runs; open items in order; pending decisions; gotchas; and one line for each package your row says you hold,',
-    `carrying its branch and tip sha or "nothing committed". Then answer exactly ${CREW_HANDOVER_WRITTEN}.`,
-  ].join(' ')
-}
-
-/** The note a handover that missed something is sent back with: what was missing, and the word to answer with. */
-export function theSendBackNote(missing: readonly string[]): string {
-  return (
-    `Your handover is not accepted yet: ${missing.join('; ')}. Write it again with the ${WRITE_MY_HANDOVER_TOOL} tool, ` +
-    `then answer exactly ${CREW_HANDOVER_WRITTEN}.`
-  )
-}
-
-/**
- * What became of the handover a member says it wrote: accepted, sent back once with what was missing, or — at the
- * limit, and on a second miss — cleared anyway, because a clear that never happens is worse than an imperfect
- * handover. The stamp is the host's, so a file written before this flow asked is never taken for this flow's work.
- */
-export type HandoverVerdict =
-  | { readonly kind: 'accepted'; readonly missing: readonly string[] }
-  | { readonly kind: 'not_written'; readonly why: string }
-  | { readonly kind: 'sent_back'; readonly missing: readonly string[] }
-  | { readonly kind: 'cleared_anyway'; readonly missing: readonly string[] }
-
-/** What a handover is judged on: the host's stamp for the file, the file's text, and what the member's row holds. */
-export interface TheHandoverRead {
-  readonly stamp: HandoverStamp | Refused | undefined
-  readonly text: string
-  readonly asked_at: number
-  /** The packages the member's row says it holds. */
-  readonly holds: readonly string[]
-  /** How many times this flow has already sent one back. */
-  readonly sent_back: number
-  readonly at_limit: boolean
-}
-
-/** Every package line a handover is missing, in the order the row names the packages. */
-export function packagesMissingFrom(text: string, holds: readonly string[]): readonly string[] {
-  return holds.filter((held) => !text.includes(held)).map((held) => `no line naming ${held}`)
-}
-
-/** Whether the handover was written after this flow asked for it, by the host's stamp. */
-function writtenAfterAsking(stamp: HandoverStamp | Refused | undefined, asked_at: number): stamp is HandoverStamp {
-  if (stamp === undefined || 'refusal' in stamp) return false
-  const written = Date.parse(stamp.written_at)
-  return Number.isFinite(written) && written >= asked_at
-}
-
-/** What the answer to a handover ask means for the flow. */
-export function whatBecameOfTheHandover(reading: TheHandoverRead): HandoverVerdict {
-  if (reading.stamp === undefined) return { kind: 'not_written', why: 'this session has written no handover' }
-  if ('refusal' in reading.stamp) return { kind: 'not_written', why: reading.stamp.refusal }
-  if (!writtenAfterAsking(reading.stamp, reading.asked_at)) {
-    return { kind: 'not_written', why: 'the handover was written before this session was asked for one' }
-  }
-  const missing = packagesMissingFrom(reading.text, reading.holds)
-  if (missing.length === 0) return { kind: 'accepted', missing }
-  // At the limit a clear cannot wait, and a second miss clears anyway: the row says what was missing either way.
-  if (reading.at_limit || reading.sent_back >= 1) return { kind: 'cleared_anyway', missing }
-  return { kind: 'sent_back', missing }
-}
-
-/**
- * The prompt the successor resumes on: its handover's file, and the acts of its package that were sent and never
- * concluded — so it checks them instead of sending them twice (martha#254's read). The file is named, never quoted.
- */
-export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[] }): string {
-  const acts =
-    resuming.acts.length === 0
-      ? ''
-      : ` Before you send anything again, check what became of these acts of your package, which were sent and never concluded: ${resuming.acts.join('; ')}.`
-  return (
-    `You are ${resuming.member}. Martha just refreshed this session. Read your handover at ${resuming.file}: it is what ` +
-    `your predecessor left you, and it is the only place your work stands. Then carry on with the packages it names.${acts}`
-  )
-}
-
 /** Whether a flow has sat in its phase past the window: a prompt that never ran, or a member that never answered. */
 export function aFlowStalled(flow: ARefresh, now: number): boolean {
   return now - flow.at >= FLOW_WINDOW_MS
-}
-
-/**
- * What a beat reads to decide whether the member's running turn is ended so its handover can run (martha#311): the
- * turn, the flow, the owner dialogs open on the member's row, the context, and the crew's ceiling.
- */
-export interface TheRunningTurn {
-  /** The running main turn, as the mod kept it from that turn's start: '' when the question did not come from a beat. */
-  readonly turn_id: string
-  readonly flow: ARefresh
-  /** How many dialogs the row holds open for the owner: never the row's working state, which a dialog does not move. */
-  readonly dialogs_open: number
-  readonly percent: number
-  readonly now: number
-  readonly ceiling_ms: number
-}
-
-/** Whether the running turn is ended now: no, end it (the nth end), or give the flow up because its ends are spent. */
-export type AnEnd = { readonly kind: 'none' } | { readonly kind: 'end'; readonly why: string; readonly n: number } | { readonly kind: 'give_up'; readonly why: string }
-
-const NO_END: AnEnd = { kind: 'none' }
-
-/**
- * Whether a beat ends the running turn (martha#311 design §2). Only a `handing_over` flow's turn, never while an end
- * awaits its outcome, never while the owner has a dialog open; then past the ceiling since the flow's ask or its last
- * end that ended, or at once at CONTEXT_FULL_PERCENT; a second end a full ceiling after the first; and the time these
- * hold once more with FORCED_ENDS spent, the flow is given up.
- */
-export function anEndIsDue(turn: TheRunningTurn): AnEnd {
-  if (heldFromAnEnd(turn)) return NO_END
-  const why = whyTheTurnIsEnded(turn)
-  if (why === undefined) return NO_END
-  const forced = turn.flow.forced
-  if (forced !== undefined && turn.now - forced.last_at < turn.ceiling_ms) return NO_END
-  const ends = forced?.ends ?? 0
-  return ends >= FORCED_ENDS ? { kind: 'give_up', why } : { kind: 'end', why, n: ends + 1 }
-}
-
-/** The holds no reason answers over: no running turn, a flow not waiting on one, an end in flight, or the owner asked. */
-function heldFromAnEnd(turn: TheRunningTurn): boolean {
-  return turn.turn_id === '' || turn.flow.phase !== 'handing_over' || turn.flow.ending !== undefined || turn.dialogs_open > 0
-}
-
-/** Why the turn is ended, in the owner's words, or undefined while neither the context nor the ceiling says so. */
-function whyTheTurnIsEnded(turn: TheRunningTurn): string | undefined {
-  if (turn.percent >= CONTEXT_FULL_PERCENT) return `its context is at ${turn.percent}% of its limit`
-  const waited = turn.now - turn.flow.at
-  if (waited >= turn.ceiling_ms) return `its handover waited ${Math.round(waited / MINUTE_MS)} minutes behind a running turn`
-  return undefined
-}
-
-/** The reason a flow whose ends are spent is abandoned with, as the row says it. */
-export function theEndsSpentReason(why: string): string {
-  return `the handover never ran after ${FORCED_ENDS} forced ends (${why})`
-}
-
-/** What one end is announced as, in the ledger and on the row: why, and which of the ends it is. */
-export function theEndAnnounced(end: { readonly why: string; readonly n: number }): string {
-  return `${end.why}: end ${end.n} of ${FORCED_ENDS}`
-}
-
-/** The line the Supervisor hears for each end that ended: one per end, never one per beat. */
-export function theEndLine(ended: { readonly member: string; readonly what: string }): string {
-  return `${ended.member}'s running turn was ended so its handover can run (${ended.what}).`
-}
-
-/** The line the Supervisor hears once when a flow is given up after its ends are spent. */
-export function theGiveUpLine(given_up: { readonly member: string; readonly why: string }): string {
-  return `${given_up.member} could not be handed over: ${theEndsSpentReason(given_up.why)}. No new refresh starts on that turn.`
-}
-
-/** The flow once an end is announced: the pending end held in it until its outcome arrives (design 3d). */
-export function theFlowEnding(flow: ARefresh, pending: AnEndPending): ARefresh {
-  return { ...flow, ending: pending }
-}
-
-/** The flow once an end ended: one end spent, and the stall window restarted at the end (design 3b). */
-export function theFlowEnded(flow: ARefresh, at: number): ARefresh {
-  const { ending: _ended, ...rest } = flow
-  return { ...rest, at, forced: { ends: (flow.forced?.ends ?? 0) + 1, last_at: at } }
-}
-
-/**
- * The flow once an end the mod held behind a running tool expired (ruling D on martha#311): the end was tried and was
- * blocked, so it spends one end and restarts the gap to the next, but it never ended, so the stall window stays.
- */
-export function theFlowEndExpired(flow: ARefresh, at: number): ARefresh {
-  return { ...theFlowNotEnded(flow), forced: { ends: (flow.forced?.ends ?? 0) + 1, last_at: at } }
-}
-
-/** The flow once an end was refused or its session replaced: the pending end gone, nothing spent or moved. */
-export function theFlowNotEnded(flow: ARefresh): ARefresh {
-  const { ending: _refused, ...rest } = flow
-  return rest
-}
-
-/** The flow given up after its ends are spent, remembering the turn no new flow may start on. */
-export function theFlowGivenUp(flow: ARefresh, why: string, turn_id: string, at: number): ARefresh {
-  return { ...theFlowNotEnded(theFlowAbandoned(flow, theEndsSpentReason(why), at)), gave_up_on: turn_id }
-}
-
-/** Whether a pending end still holds, was outlived by a new session, or expired at one ceiling (design 3d, ruling D). */
-export type AnEndsHold = 'holds' | 'new_session' | 'expired'
-
-/**
- * Whether a pending end no longer holds (design 3d): a new session has started, so no end is in flight across it, and
- * its act is left open for the successor; or the end is older than one ceiling, so the mod held it behind a tool that
- * never finished (ruling D).
- */
-export function anEndOutlived(pending: AnEndPending, at: { readonly now: number; readonly ceiling_ms: number; readonly at_start: boolean }): AnEndsHold {
-  if (at.at_start) return 'new_session'
-  return at.now - pending.announced >= at.ceiling_ms ? 'expired' : 'holds'
-}
-
-/** Whether this refresh is one too many inside the window: a storm, parked rather than refused. */
-export function isAStorm(refreshed_at: readonly number[], now: number): boolean {
-  const inside = refreshed_at.filter((at) => now - at < STORM_WINDOW_MS)
-  return inside.length + 1 >= STORM_THRESHOLD
-}
-
-/** The line a storm sends the Supervisor, once: which member, at which contexts, from which handover. */
-export function theStormLine(storm: { readonly member: string; readonly percents: readonly number[]; readonly file: string }): string {
-  const minutes = Math.round(STORM_WINDOW_MS / 60_000)
-  return (
-    `${storm.member} was parked after ${storm.percents.length} refreshes inside ${minutes} minutes ` +
-    `(at ${storm.percents.join('%, ')}%), the last from ${storm.file}. It stays parked until the owner or the Supervisor wakes it.`
-  )
-}
-
-/**
- * The line a decline at the limit sends the Supervisor, once: the member is past the limit, has not handed over, and
- * says why it cannot. Sent as the storm's is, so the Supervisor hears it without watching the dashboard.
- */
-export function theLimitLine(refusal: { readonly member: string; readonly percent: number; readonly said: string }): string {
-  return (
-    `${refusal.member} is at ${refusal.percent}% of its context, past the ${HANDOVER_LIMIT_PERCENT}% handover limit, and has not handed over: ` +
-    `it declined at the limit, saying ${refusal.said}. It is asked again when it finishes a task.`
-  )
-}
-
-/** The line a refresh someone asked for that ends abandoned sends the Supervisor, once. */
-export function theAskedLine(refusal: { readonly member: string; readonly why: string }): string {
-  return (
-    `${refusal.member} was asked to refresh and could not hand over: ${refusal.why}. ` +
-    'The flow is abandoned with that reason on its row, and that instruction asks nothing more of it.'
-  )
 }
 
 /** The flow as the phase its send-back leaves it in: asked again, with what was missing kept for the row. */

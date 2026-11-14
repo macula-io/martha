@@ -19,7 +19,7 @@ import type { CrewPlace, KeyedRow, Processes, RowStore } from '../host_contract/
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { STORM_WINDOW_MS } from '../refresh_a_member/refresh_a_member.ts'
+import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { holdTheMember, notRunningToRestart, restartAMember, restartByTool, type AStart, type HoldingHost } from './restart_a_member.ts'
