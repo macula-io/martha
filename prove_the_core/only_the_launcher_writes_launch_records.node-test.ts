@@ -42,6 +42,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'claude_code_relay',
     'dashboard_rows_directory',
     'declare_a_solo_crew',
+    'find_what_a_later_git_run_reads',
     'hear_the_hosts_dialogs',
     'install_the_pinned_installer',
     'install_the_recorded_mesh_server',

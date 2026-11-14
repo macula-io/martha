@@ -1,9 +1,11 @@
 // Reading a crew's channel from inside a member's session (martha#253, slice 2).
 //
 // This exists so one rule has one home: the channel is read only while the session is IDLE, and only one read runs
-// at a time. The host queues every prompt a mod submits, and raises one back through `prompt.submit` only when it
-// was submitted while the host was idle; a submit made during a turn reaches the model and is never raised, so it
-// could never be counted as taken in (measured on the recorded host, martha#253 r=2).
+// at a time. The host queues every prompt a mod submits into the next main turn it starts, and the launcher counts a
+// handed message taken in when that turn starts. A submit made during a turn reaches the model inside the running
+// turn, before any turn start the launcher could count it at, so it is never made (martha#253 r=2; the count at the
+// turn start is Pluto's ruling (a) on 93437b7, where a raise back through `prompt.submit` proved not to happen for
+// every idle submit).
 //
 // Idle is the host's own word for it, and it is the MAIN turn's word: the host fires `turn.start` and `turn.complete`
 // for a subagent's turn as well, and those say nothing about whether the member itself is free. A subagent's end
@@ -44,7 +46,7 @@ const subagents = (agentId: unknown): boolean => agentId !== undefined
  */
 export function readingTheChannelWith(
   askTheLauncher: () => Promise<string | null>,
-  submit: (text: string) => Promise<void>,
+  submit: (text: string) => Promise<unknown>,
 ): ReadingTheChannel {
   // A session that has just started is idle: it is not in a turn until the host says one began.
   let busy = false

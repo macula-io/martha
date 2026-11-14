@@ -24,7 +24,7 @@ import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_BASH_RESULTS } from './claude_code_bash_results.ts'
-import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN, claudeCodeHost, ownNameOfCalledTool, RECORDED_MODELS, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN, claudeCodeHost, ownNameOfCalledTool, RECORDED_MODELS, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
 import { promptOriginKindsOf, promptOriginRemapsOf, promptOriginsIn, type RecordedPromptOrigins } from './claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_session_events.ts'
 import {
@@ -169,7 +169,7 @@ test('a called tool\'s own name is what follows the last __ of an mcp__ name', (
   // The host only replaces characters outside [A-Za-z0-9_-], so a server name may hold __.
   assert.equal(names.ownNameOf('mcp__macula__x__mesh_read_inbox'), 'mesh_read_inbox')
   // A built-in tool, or an mcp__ name with nothing after its last __, is its own name.
-  for (const called of ['Bash', 'mesh_read_inbox', 'mcp__srv__', 'xmcp__srv__mesh_read_inbox', '']) {
+  for (const called of [CLAUDE_CODE_SHELL_TOOL, 'mesh_read_inbox', 'mcp__srv__', 'xmcp__srv__mesh_read_inbox', '']) {
     assert.equal(names.ownNameOf(called), called, called)
   }
 })

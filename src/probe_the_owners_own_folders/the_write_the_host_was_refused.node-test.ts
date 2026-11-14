@@ -7,6 +7,7 @@ import { test } from 'node:test'
 
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const TARGET = '/scratch/owner-config/skills/probe-note.md'
 
@@ -27,7 +28,7 @@ test('the write the host was refused is read out of the answer the run printed a
 test('a refusal of another path, or of another tool, is not this row\'s refused write (#154 r=2)', () => {
   const otherPath = printedText(Buffer.from(answerThatRefusedTheWrite('/scratch/owner-config/agents/other.md')))
   assert.equal(deniedWriteIn(otherPath, TARGET), false)
-  const otherTool = printedText(Buffer.from(JSON.stringify({ permission_denials: [{ tool_name: 'Bash', tool_input: { file_path: TARGET } }] })))
+  const otherTool = printedText(Buffer.from(JSON.stringify({ permission_denials: [{ tool_name: CLAUDE_CODE_SHELL_TOOL, tool_input: { file_path: TARGET } }] })))
   assert.equal(deniedWriteIn(otherTool, TARGET), false)
 })
 

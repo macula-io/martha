@@ -7,7 +7,7 @@ import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_check
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
-import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 /** Why `'.json'` is written by literal in a filter (#289 part b). */
 export const ANY_JSON_FILE = 'a filter on any JSON file; the constant of that word is the suffix of the relay\'s journal'
@@ -19,6 +19,9 @@ export const COINCIDENCES: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  // The program's own name, which Martha signs a line of its own with in the crew channel (martha#390). The crew's
+  // state directory is named after the program and is not what this word means here.
+  { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/launch_a_claude_code_member.ts', reason: 'the program\'s own name, which Martha signs a line of its own with in the crew channel (martha#390): the state directory is named after the program and is not what this word means here' },
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
   { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },

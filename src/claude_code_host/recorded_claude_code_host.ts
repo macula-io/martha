@@ -18,6 +18,7 @@ import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
 import type { ProtectedConfigPlaces } from './protected_config_places.ts'
 import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
+import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 
 export { CREW_REFRESH }
 
@@ -76,6 +77,11 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
   readonly hooks_switch_calls: readonly string[]
   /** Where the host reads managed settings on Linux (martha#122). */
   readonly managed_settings: ManagedSettingsPlace
+  /**
+   * The envelope the host writes when an agent it started fails (martha#390): its notification's name, the elements it
+   * carries and the words its tasks end in, cut from the builder that writes it.
+   */
+  readonly failed_agents_report: ARecordedFailedAgentsReport
 }
 
 /** The recording this repository carries. */
@@ -106,8 +112,28 @@ export function recordedHostFrom(text: string): RecordedHost {
     throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
   }
   ruleMatchersIn(filePermissionRulesOf(recording).matcher)
+  failedAgentsReportOf(recording)
   return recording
 }
+
+/**
+ * The recorded statement on the report the host writes for a failed agent, or a refusal when the recording holds none, or
+ * one whose words do not say an agent failed (martha#390): without it a review that stopped reads as one that never ran.
+ */
+function failedAgentsReportOf(recording: RecordedHost): ARecordedFailedAgentsReport {
+  const report = recording.failed_agents_report
+  const elements = report?.elements ?? []
+  if (typeof report?.notification !== 'string' || report.notification === '' || !elements.some(({ field }) => field === 'toolUseId')) {
+    throw new Error("The recording does not hold the report the host writes for a failed agent, so a review that stopped cannot be told from one that never ran (martha#390).")
+  }
+  if (!report.task_statuses.includes(THE_FAILED_TASK_STATUS)) {
+    throw new Error(`The recorded task statuses hold no ${THE_FAILED_TASK_STATUS}, so what the host says an agent that failed is cannot be told (martha#390).`)
+  }
+  return report
+}
+
+/** The envelope the recorded host writes when an agent fails: its notification, its elements and its task statuses. */
+export const CLAUDE_CODE_FAILED_AGENTS_REPORT: ARecordedFailedAgentsReport = failedAgentsReportOf(RECORDED_HOST)
 
 /** The recorded statement on which rules the file permission checks match, or a refusal when the recording holds none. */
 function filePermissionRulesOf(recording: RecordedHost): FilePermissionRules {

@@ -18,8 +18,8 @@
 import { isAbsolute, relative } from 'node:path'
 
 import { asTheHostResolves, fileArgumentOf, WHOLE_FILE_CONTENT, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import type { LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
-import { blobAsGitAdds, checkoutTopOf, realOrResolved } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import type { LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import { blobAsGitAdds, checkoutTopOf, realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { OWN_WRITE_MODES, type OwnWrite, type OwnWriteMode } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 

@@ -56,7 +56,7 @@ import {
   type WorktreeAnswer,
   type WorktreesRequest,
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
-import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
@@ -129,7 +129,7 @@ import {
   type AGuardedSwitch,
   type OwnersDefaultPlace,
 } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
-import { reviewModelRefusal, type ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { CARRY_A_MODEL, type TheOrder } from '../refresh_a_member/the_refresh_flow.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
 import {
@@ -315,7 +315,7 @@ export interface CrewToolPlaces {
 export const THE_CHANNEL_READ_ASK = 'channel_read_seconds'
 
 /** The tools a crew's member can call. */
-export interface CrewTools {
+export interface CrewTools extends TheReviewRule {
   readonly tools: readonly CrewTool[]
   /** Answers a tool call: the member's name is this launch's, the session's is the one the call came from. */
   answer(name: string, args: Readonly<Record<string, unknown>>, session: string): Promise<CoreToolAnswer>
@@ -333,11 +333,6 @@ export interface CrewTools {
    * carries that the session's record must take in, so the shell gate stands behind what the line handed.
    */
   theLineToHandAtStart(): Promise<TheStartLine | null>
-  /**
-   * Why a subagent call this member made is not run: it spawns a review and does not name the crew's reviewer model
-   * (martha#315). Asked by the launcher's tool-call verdict, beside ../answer_a_tool_call, and never inside it.
-   */
-  refusesTheSubagent(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
   /**
    * The session a clear was told in, when the crew's flow is waiting for its successor and this id is it (martha#255):
    * the launcher starts that session as a `crew_refresh` with this predecessor, whichever of the host's two events
@@ -844,7 +839,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startSweeping: () => startSweeping(held),
     theLineToHandAtStart: () => theLineToHandAtStart(held, state),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
-    refusesTheSubagent: (call) => refusesTheSubagent(held, call),
+    ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
   }
@@ -852,8 +847,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
 
 /**
  * The asks the mod makes on a session's behalf, never a model's: the tools to register, how often to read the channel,
- * what to hand next, and what this session should do now. Undefined when `name` is one a member calls itself, which the
- * handlers answer.
+ * what to hand next, that a turn started, and what this session should do now. Undefined when `name` is one a member
+ * calls itself, which the handlers answer.
  */
 async function answerAnAskOfTheMods(
   places: CrewToolPlaces,
@@ -864,7 +859,8 @@ async function answerAnAskOfTheMods(
 ): Promise<CoreToolAnswer | undefined> {
   if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
   if (name === THE_CHANNEL_READ_ASK) return await theChannelReadAsk(places)
-  if (name === THE_NEXT_MESSAGE_ASK) return await theNextMessageAsk(places)
+  const channel = await answerAChannelAsk(places.carrier, name, args)
+  if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoAsk(places, args)
@@ -923,12 +919,6 @@ async function sweepOnce(places: CrewToolPlaces, processes: HostContract['proces
 async function theChannelReadAsk(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   const declared = await crewOrRefusal(places)
   return 'refused' in declared ? declared : { answer: String(declared.settings.channel_read_seconds) }
-}
-
-/** The next crew message to hand the session, or '' when none is waiting. */
-async function theNextMessageAsk(places: CrewToolPlaces): Promise<CoreToolAnswer> {
-  if (places.carrier === undefined) return { refused: 'this launch reads no crew channel' }
-  return { answer: (await places.carrier.next()) ?? '' }
 }
 
 /**
@@ -1753,18 +1743,3 @@ function rowAfterASwitch(row: DashboardRow, told: TheOwnersDefaultTold): Dashboa
   return told.before.includes(row.needs) ? { ...row, needs: '' } : row
 }
 
-/**
- * The reviewer-model rule, as the launcher's tool-call verdict asks it (martha#315): the crew's `house_rules`
- * `review_model`, the adapter's own data on which tool spawns a subagent and under which fields. A launch that cannot
- * say what a host's spawn looks like refuses a review rather than letting it run unheld: the rule is the crew's, and a
- * launcher that cannot judge it is not one that may pass it.
- */
-async function refusesTheSubagent(places: CrewToolPlaces, call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined> {
-  const declared = await crewOrRefusal(places)
-  if ('refused' in declared) return undefined
-  if (declared.settings.house_rules.review_model === null) return undefined
-  if (places.spawn === undefined) {
-    return `${call.tool} is not run: this crew holds reviews to ${declared.settings.house_rules.review_model}, and this launch cannot say which tool spawns a subagent, so no review may run.`
-  }
-  return reviewModelRefusal(call, { spawn: places.spawn, review_model: declared.settings.house_rules.review_model })
-}
