@@ -29,11 +29,14 @@ import {
   GITHUB_BUDGET_PLACE,
   THE_BUDGET_FILE,
   THE_FLOOR,
+  keepTheClose,
   keepTheHead,
   namesTheWholeNumber,
   readTheHeadOfAPackagesPullRequest,
+  readTheStateOfAPackagesIssue,
   spendTheGithubBudget,
   theBudgetIn,
+  theClosesOfTheWaits,
   theHeadsOfTheWaits,
   theNextBackoff,
   theTextOf,
@@ -392,4 +395,126 @@ test('#320 B: a crew whose store will not keep its count spends nothing', async 
   const spent = await spendTheGithubBudget(aSpender(place, aClock(Date.now()), run), ['api', 'x'])
   assert.ok('refusal' in spent, 'a crew whose store would not keep its count spent a call anyway')
   assert.deepEqual(asked, [], 'a call reached GitHub although the count could not be kept')
+})
+
+// A wait that ends when its package's issue closes (martha#320, its last part; Uranus's ruling on the design). The close
+// is read from GitHub through this budget, kept in the record beside the heads, and holds: a reopen never takes it away.
+
+/** What `gh issue view` says of an issue GitHub closed at `closed_at`, and of one that is open. */
+const aClosedIssue = (closed_at: number): ProcessOutcome => anAnswer(JSON.stringify({ state: 'CLOSED', closedAt: new Date(closed_at).toISOString() }))
+const AN_OPEN_ISSUE = anAnswer(JSON.stringify({ state: 'OPEN', closedAt: null }))
+
+/** The reads a runner was asked that read an issue's state. */
+const theIssueReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => theReadsOf(asked).filter((args) => args[0] === 'issue')
+
+/** The record a test starts from with a close already kept for the package. */
+const withAClose = (now: number, closed_at: number): TheBudget => keepTheClose(withRoom(now), A_PACKAGE, closed_at)
+
+test('#320 close: a record written before closes were kept still reads, and still spends', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const { closes: _left_out, ...older } = withRoom(clock.now())
+  place.keep(THE_BUDGET_FILE, `${JSON.stringify(older)}\n`)
+  const held = theBudgetIn(place)
+  assert.ok(!('refusal' in held), `a record in the shape main wrote stopped every GitHub read of the crew: ${JSON.stringify(held)}`)
+  assert.deepEqual(held.closes, {}, 'a record with no closes did not read as a crew that has seen none')
+  const runner = aRunner([anAnswer('{}')])
+  const spent = await spendTheGithubBudget(aSpender(place, clock, runner.run), ['api', 'x'])
+  assert.ok(!('refusal' in spent), `a record in the shape main wrote spent nothing: ${JSON.stringify(spent)}`)
+})
+
+test('#320 close: a close that is not a moment GitHub could have written makes the record unreadable', () => {
+  const place = aPlace()
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(Date.now()), closes: { [A_PACKAGE]: 'yesterday' } } as unknown as TheBudget))
+  assert.ok('refusal' in theBudgetIn(place), 'a close that is no count was read as one')
+})
+
+test('#320 close: the issue is read by its own number in its own repository, asking only its state and when it closed', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const runner = aRunner([AN_OPEN_ISSUE])
+  await readTheStateOfAPackagesIssue(aSpender(place, clock, runner.run), { repo: 'macula-io/martha', number: 143 })
+  assert.deepEqual(theReadsOf(runner.asked), [['issue', 'view', '143', '--repo', 'macula-io/martha', '--json', 'state,closedAt']])
+})
+
+test('#320 close: an issue GitHub closed is kept with the moment it closed', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const closed_at = clock.now() - MINUTE_MS * 30
+  const closes = await theClosesOfTheWaits(aSpender(place, clock, aRunner([aClosedIssue(closed_at)]).run), [A_PACKAGE])
+  assert.ok(!('refusal' in closes), `the closes could not be read: ${JSON.stringify(closes)}`)
+  assert.equal(closes[A_PACKAGE], closed_at, 'the moment GitHub closed the issue was not kept')
+  assert.equal(theBudgetHeld(place).closes[A_PACKAGE], closed_at, 'the close was answered and not kept in the record')
+})
+
+test('#320 close: a reopened issue leaves its close where it was', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const closed_at = clock.now() - MINUTE_MS * 30
+  place.keep(THE_BUDGET_FILE, theTextOf(withAClose(clock.now(), closed_at)))
+  const closes = await theClosesOfTheWaits(aSpender(place, clock, aRunner([AN_OPEN_ISSUE]).run), [A_PACKAGE])
+  assert.ok(!('refusal' in closes), `the closes could not be read: ${JSON.stringify(closes)}`)
+  assert.equal(closes[A_PACKAGE], closed_at, 'a reopen took the close away, bringing back the waits it had ended')
+})
+
+test('#320 close: a later close moves the one kept, and an older one never moves it back', async () => {
+  const clock = aClock(Date.now())
+  const first = clock.now() - MINUTE_MS * 60
+  const later = aPlace()
+  later.keep(THE_BUDGET_FILE, theTextOf(withAClose(clock.now(), first)))
+  const moved = await theClosesOfTheWaits(aSpender(later, clock, aRunner([aClosedIssue(first + MINUTE_MS * 30)]).run), [A_PACKAGE])
+  assert.ok(!('refusal' in moved), `the closes could not be read: ${JSON.stringify(moved)}`)
+  assert.equal(moved[A_PACKAGE], first + MINUTE_MS * 30, 'the issue closed again and the later close was not kept')
+
+  const older = aPlace()
+  older.keep(THE_BUDGET_FILE, theTextOf(withAClose(clock.now(), first)))
+  const kept = await theClosesOfTheWaits(aSpender(older, clock, aRunner([aClosedIssue(first - MINUTE_MS * 30)]).run), [A_PACKAGE])
+  assert.ok(!('refusal' in kept), `the closes could not be read: ${JSON.stringify(kept)}`)
+  assert.equal(kept[A_PACKAGE], first, 'an older close moved the one kept back, reopening the waits between them')
+})
+
+test('#320 close: a read GitHub does not answer keeps the close it had', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const closed_at = clock.now() - MINUTE_MS * 30
+  place.keep(THE_BUDGET_FILE, theTextOf(withAClose(clock.now(), closed_at)))
+  const closes = await theClosesOfTheWaits(aSpender(place, clock, aRunner([aFailure('gh: no network')]).run), [A_PACKAGE])
+  assert.ok(!('refusal' in closes), `the closes could not be read: ${JSON.stringify(closes)}`)
+  assert.equal(closes[A_PACKAGE], closed_at, 'a read GitHub could not answer cleared the close it had')
+})
+
+test('#320 close: a close GitHub names with no moment the crew can read is no close, never one at the start of time', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const unreadable = anAnswer(JSON.stringify({ state: 'CLOSED', closedAt: 'not a time' }))
+  const read = await readTheStateOfAPackagesIssue(aSpender(place, clock, aRunner([unreadable]).run), { repo: 'macula-io/martha', number: 143 })
+  assert.equal(read.kind, 'cannot_tell', 'a close with no moment was read as one')
+  assert.deepEqual(theBudgetHeld(place).closes, {}, 'a close with no moment was kept')
+})
+
+test('#320 close: two redraws a moment apart read the issue once, and the close is kept on the record the read left', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const runner = aRunner([aClosedIssue(clock.now() - MINUTE_MS), aClosedIssue(clock.now() - MINUTE_MS)])
+  const spender = aSpender(place, clock, runner.run)
+  await theClosesOfTheWaits(spender, [A_PACKAGE])
+  clock.wait(BACKOFF_MIN_MS / 2)
+  await theClosesOfTheWaits(spender, [A_PACKAGE])
+  assert.equal(theIssueReadsOf(runner.asked).length, 1, 'the second redraw read the issue again inside its wait: the read\'s own record was lost')
+  assert.equal(theBudgetHeld(place).calls, 2, 'the record lost the calls the read made, the question and the read')
+})
+
+test('#320 close: the issue and the pull request of one package are both read on one redraw', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const runner = aRunner([anAnswer(JSON.stringify([aPullRequest(143)])), AN_OPEN_ISSUE])
+  const spender = aSpender(place, clock, runner.run)
+  await theHeadsOfTheWaits(spender, [A_PACKAGE])
+  await theClosesOfTheWaits(spender, [A_PACKAGE])
+  assert.equal(theIssueReadsOf(runner.asked).length, 1, 'the head read\'s wait held the issue read of the same package')
 })

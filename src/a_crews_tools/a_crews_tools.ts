@@ -26,8 +26,10 @@ import {
   queueAnAsk,
   settleTheAsks,
   takeTheAsks,
+  theBranch,
   type TheOwnersMenus,
 } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { theBranchItRemoves } from '../read_the_tips_a_removal_covers/read_the_tips_a_removal_covers.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -66,13 +68,16 @@ import {
   theNudgesGoTo,
   theNudgesPartLines,
   windowsOf,
+  type ReviewWait,
   type SentMessage,
 } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { landingsOf, type LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { headNudges } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import {
   GITHUB_BUDGET_PLACE,
+  theClosesOfTheWaits,
+  theClosesRecorded,
   theHeadsOfTheWaits,
   type AHead,
   type TheGithubSpender,
@@ -677,7 +682,11 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: QUEUE_ASK_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: { ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' } },
+      properties: {
+        ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' },
+        repo: { type: 'string', description: 'When the ask would delete a branch: its repository, as owner/name' },
+        branch: { type: 'string', description: 'When the ask would delete a branch: the branch, so both tips the yes covers are recorded' },
+      },
       required: ['ask'],
     },
   },
@@ -1036,7 +1045,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD]: (args) => keepTheOwnersList(places, () => addAnAct(places.ledger, args, places.member)),
     [OWNER_TODO_DONE]: (args) => keepTheOwnersList(places, () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member })),
-    [QUEUE_ASK]: async (args) => asAnAnswer(await queueAnAsk(places.ledger, args, places.member)),
+    [QUEUE_ASK]: (args) => queueTheAsk(places, args),
     [LIST_ASKS]: async () => asAnAnswer(await listTheAsks(places.ledger)),
     [TAKE_ASKS]: () => theTakeOfTheAsks(places, state),
     [SETTLE_ASKS]: (args) => theSettlingOfTheAsks(places, state, args),
@@ -1045,6 +1054,20 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING]: async () => ({ answer: theStandingList(await theItemsThatStand(places), todayOf(places.ledger.clock.now())).join('\n') }),
     [WAIT_FOR_CI]: (args) => theCiWait(places, args),
   }
+}
+
+/**
+ * `queue_ask`, with the tips a branch removal covers when the ask names one (martha#391). The launcher reads them, in
+ * the clone the ask names, and the queue keeps them: an ask that named one copy of a branch and not the other cost the
+ * owner a second ask, because the yes covered only what the ask recorded.
+ */
+async function queueTheAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const removes = await theBranchItRemoves(
+    { processes: places.processes, clones: places.settings?.house_rules.clones, keepsTheBranch: theBranch },
+    args,
+  )
+  if (removes !== undefined && 'refused' in removes) return removes
+  return asAnAnswer(await queueAnAsk(places.ledger, args, places.member, removes))
 }
 
 /**
@@ -1314,10 +1337,39 @@ async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows
   if (!receivers.some((receiver) => receiver.toLowerCase() === places.member.toLowerCase())) return []
   const channel = await readTheChannel(places.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
-  const waits = reviewWaitsIn(messages, await landingsOf(places.ledger, packagesNamed(messages)), receivers)
+  const waits = await theWaitsTheClosesLeave(places, messages, receivers)
   const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(places, waits)
   return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads)]), settings)
+}
+
+/**
+ * The review waits left once the landings and the issues GitHub closed have ended theirs (martha#320). The closes the
+ * record holds end their waits first, so GitHub is asked only about a package that still waits: one with no close kept,
+ * or one handed off again since its close. A package closed once and not handed off since costs no call again.
+ */
+async function theWaitsTheClosesLeave(places: CrewToolPlaces, messages: readonly SentMessage[], receivers: readonly string[]): Promise<readonly ReviewWait[]> {
+  const landings = await landingsOf(places.ledger, packagesNamed(messages))
+  const recorded = theClosesRecorded(places.stores.crew.place(GITHUB_BUDGET_PLACE))
+  const open = reviewWaitsIn(messages, [...landings, ...theEndsOf(recorded)], receivers)
+  const closes = await theClosesOfTheWaiters(places, open, recorded)
+  return reviewWaitsIn(messages, [...landings, ...theEndsOf(closes)], receivers)
+}
+
+/** A close, read as the fact a landing is: the package and the moment its waits from before it end. */
+const theEndsOf = (closes: Readonly<Record<string, number>>): readonly LandedPackage[] =>
+  Object.entries(closes).map(([package_name, at]) => ({ package: package_name, at }))
+
+/** The closes of the packages still waiting, read through the crew's GitHub budget, or the ones the record already held
+ * when this launch holds no processes to ask with, nothing waits, or the budget refused. */
+async function theClosesOfTheWaiters(
+  places: CrewToolPlaces,
+  waits: readonly ReviewWait[],
+  recorded: Readonly<Record<string, number>>,
+): Promise<Readonly<Record<string, number>>> {
+  if (places.processes === undefined || waits.length === 0) return recorded
+  const closes = await theClosesOfTheWaits(theGithubSpenderOf({ ...places, processes: places.processes }), waits.map((wait) => wait.package))
+  return 'refusal' in closes ? recorded : closes
 }
 
 /**

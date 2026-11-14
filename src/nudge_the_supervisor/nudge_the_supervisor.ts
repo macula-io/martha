@@ -156,7 +156,8 @@ const theWaitAMessageLeaves = (message: SentMessage, waits: Map<string, ReviewWa
  * moment it happened — the channel's own messages, and the landings the ledgers keep with their time — so a verdict that
  * arrived before a hand-off cannot answer it, and a landing ends only the waits that began before it. That order is what
  * two packages of one issue need: they share a name, so a set of landed names would silence the second one's hand-off
- * for good once the first landed.
+ * for good once the first landed. An issue GitHub closed is handed in among the landings, at the moment it closed: it
+ * ends the waits before it the same way, and a hand-off made after it waits on its own.
  */
 export function reviewWaitsIn(messages: readonly SentMessage[], landings: readonly LandedPackage[], receivers: readonly string[]): readonly ReviewWait[] {
   const waits = new Map<string, ReviewWait>()
