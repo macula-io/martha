@@ -14,7 +14,7 @@ import { test } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { projectKeyOf, theProjectFoldersThere } from './the_project_folders_a_run_wrote.ts'
-import { aScratchThisRunMade, whatThisRunLeftAtTheEnd } from './probe_hosts.ts'
+import { aScratchThisRunMade, whatThisRunLeftAtTheEnd } from './the_scratches_this_run_made.ts'
 
 // Made-up scratch paths, keyed by the host's own rule rather than read from this machine's
 // TMPDIR: the CI runs under a link (a long path reached through a symlink), which would key

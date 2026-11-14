@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -35,7 +35,8 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { memberRelay, type MemberRelay, type TheMembersTelling } from './answer_the_relay.ts'
-import { CLAUDE_CODE, theMembersTelling } from './launch_a_claude_code_member.ts'
+import { CLAUDE_CODE, A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from './launch_a_claude_code_member.ts'
+import { readTheNewestRelayJournal, relayJournalKeptIn, RELAY_JOURNAL_PLACE } from './keep_the_relays_journal.ts'
 import { removeTheTree } from './relay_copy.ts'
 
 const MEMBER = 'builder'
@@ -144,12 +145,15 @@ function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): 
   })
 }
 
+/** The host's own id for the member's review, which a refused telling is written down against (martha#430). */
+const THE_CALLS_ID = 'toolu_the_review'
+
 /** The member's review: the subagent spawn the crew's rule reads as one of its reviews. */
 const theReview = () => ({
   session_id: SESSION,
   call: {
     tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!,
-    tool_use_id: 'toolu_the_review',
+    tool_use_id: THE_CALLS_ID,
     [CLAUDE_CODE_SUBAGENT_SPAWN.type_field]: 'Explore',
     [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch',
   },
@@ -218,4 +222,28 @@ test('#390 r=1: a line the launcher wrote never takes another owner’s line off
   // Nor does the launcher's own allow, which is the act that otherwise takes the line back.
   await relay.answer('tool_called', theReview())
   assert.equal(theRowNow(places)?.needs, THE_OTHER_OWNERS_LINE, 'the launcher took away a line it never wrote')
+})
+
+test('#430: a telling the member\'s store refuses is written down in the journal, not swallowed', async (t) => {
+  const places = placesOf(t)
+  // A file standing where the rows store would make its directory: every append under it is refused, by the file system.
+  const blocked = join(places.home, 'a-file-where-the-store-would-go')
+  writeFileSync(blocked, '')
+  const journals = join(places.home, RELAY_JOURNAL_PLACE)
+  mkdirSync(journals, { mode: 0o700 })
+  const journal = relayJournalKeptIn(journals, 'launch-of-the-test')
+  const telling = theMembersTelling({ ...places, rows: blocked, journal })
+
+  await telling.theMember(THE_LINE, THE_CALLS_ID)
+
+  const written = readTheNewestRelayJournal(journals).events
+  const noted = written.at(-1)
+  assert.equal(noted?.phase, 'noted', `the refused telling left no line of its own in the journal: ${JSON.stringify(written)}`)
+  assert.equal(noted?.event, A_TELLING_THAT_DID_NOT_REACH, 'the journal line does not say what the launcher could not do')
+  assert.equal(noted?.tool_use_id, THE_CALLS_ID, 'the journal line does not name the review\'s call, so a run cannot put the two halves together')
+  assert.ok((noted?.why ?? '') !== '', 'the journal line carries none of the store\'s own words for the refusal')
+
+  // The refusal is the member's half only: the member is not told twice, and nothing is thrown at the caller that told it.
+  const again = await telling.theMember(THE_LINE, THE_CALLS_ID)
+  assert.equal(again, undefined, 'a refused telling answered with something other than nothing')
 })
