@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { EMPTY_DIRECTORY_MODE, makeEmptyDirectory } from './empty_directory.ts'
-import { removeTheTree } from './relay_copy.ts'
+import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-empty-directory-'))

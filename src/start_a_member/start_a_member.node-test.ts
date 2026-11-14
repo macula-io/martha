@@ -14,6 +14,7 @@ import { basename, dirname, join, relative, sep } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
@@ -46,7 +47,7 @@ import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/sett
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { stopTheCrew } from '../run_the_martha_command/list_stop_and_restart_the_crew.ts'
+import { stopTheCrew } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
@@ -512,7 +513,7 @@ test('starting a member on an approval prunes the own writes of launches past th
 // --- the strict shell gate reaches the member (martha#259) ---------------------
 
 test("the declaration's strict gate is what the member's relay is handed, and off is the default", async (t) => {
-  const seenWith = async (house_rules: Readonly<Record<string, boolean>>): Promise<readonly (boolean | undefined)[]> => {
+  const seenWith = async (house_rules: Readonly<Record<string, boolean>>): Promise<readonly (GateMode | undefined)[]> => {
     const place = placeFor(t, { '.mcp.json': SERVERS })
     await declared(place)
     // The declaration the crew reads, with the house rules the owner wrote: init wrote none.
@@ -526,11 +527,11 @@ test("the declaration's strict gate is what the member's relay is handed, and of
     const handed: MemberRelayPlace[] = []
     const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), hear_relay_place: (relay_place) => void handed.push(relay_place) })
     assert.ok(started.started, started.started ? '' : started.refusal)
-    return handed.map((relay_place) => relay_place.strict_gate)
+    return handed.map((relay_place) => relay_place.gate)
   }
 
-  assert.deepEqual(await seenWith({}), [false], 'no house rules: the gate is off, as the owner decided')
-  assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), [true], 'the declaration turns it on')
+  assert.deepEqual(await seenWith({}), ['off'], 'no house rules: the gate is off, as the owner decided')
+  assert.deepEqual(await seenWith({ [STRICT_GATE]: true }), ['enforced'], 'the old declaration turns it on for every member')
 })
 
 /**
