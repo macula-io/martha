@@ -372,6 +372,15 @@ test('martha install with a switch it does not know is a usage error, and the us
   assert.doesNotMatch(run.err, /installer pin/)
 })
 
+test('martha install passes --withdrawal-in <version> through to the pinned installer, and the usage names it (martha#21)', (t) => {
+  // It reaches the pin, so the words were taken as a way the command is used and handed on, not refused here.
+  const run = martha(placeFor(t, { checkout: false }), 'install', '1.0.0', '--downgrade', '--withdrawal-in', '2.1.0')
+  assert.equal(run.status, EXIT_REFUSED)
+  assert.match(run.said, /installer pin/)
+  assert.ok(USAGE.includes('martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>]'), USAGE)
+  assert.equal(martha(placeFor(t), 'install', '1.0.0', '--withdrawal-in').status, EXIT_USAGE, '--withdrawal-in takes a value')
+})
+
 /**
  * A fake claude on the place's PATH that keeps every call's arguments, each call separated from the last, then ends at
  * once as the owner's host would end a session it finished with. The launcher asks its host several questions before

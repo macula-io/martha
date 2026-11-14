@@ -2,6 +2,7 @@
 // martha-install: install Martha from its signed public package, with nothing but Node (martha#21).
 //
 //   npx -y --ignore-scripts @macula-io/martha@<exact version> [<martha version>] [--downgrade] [--digest sha256:<hex>]
+//       [--withdrawal-in <version>]
 //
 // The line that names this installer's exact version is the trust anchor: npm never lets anyone replace a
 // published version. Everything after it is checked here; see install_a_release/install_a_release.mjs for the steps.
@@ -11,18 +12,21 @@ import { installRelease, placesOnThisMachine } from '../install_a_release/instal
 import { NAMES } from '../keep_the_names_in_one_place/names.mjs'
 import { Refused } from '../refuse_in_words/refuse_in_words.mjs'
 
-const USAGE = `usage: ${NAMES.command}-install [<version>] [--downgrade] [--digest sha256:<hex>]`
+const USAGE = `usage: ${NAMES.command}-install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>]`
+
+/** The switches that take the next word as their value, and the option each sets. */
+const VALUED = /** @type {const} */ ({ '--digest': 'digest', '--withdrawal-in': 'withdrawalIn' })
 
 /**
  * @param {string[]} argv
- * @returns {{ version?: string, digest?: string, downgrade: boolean, help: boolean }}
+ * @returns {{ version?: string, digest?: string, withdrawalIn?: string, downgrade: boolean, help: boolean }}
  */
 export function parseArguments (argv) {
-  /** @type {{ version?: string, digest?: string, downgrade: boolean, help: boolean }} */
+  /** @type {{ version?: string, digest?: string, withdrawalIn?: string, downgrade: boolean, help: boolean }} */
   const options = { downgrade: false, help: false }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] ?? ''
-    if (arg === '--digest') options.digest = argv[++i] ?? ''
+    if (Object.hasOwn(VALUED, arg)) options[VALUED[/** @type {keyof typeof VALUED} */ (arg)]] = argv[++i] ?? ''
     else if (arg.startsWith('-')) setSwitch(options, arg)
     else if (options.version !== undefined) throw new Refused('one version at a time')
     else options.version = arg

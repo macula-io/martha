@@ -160,9 +160,13 @@ function packTheCommittedTree (expected) {
   const { version } = JSON.parse(execFileSync('git', ['-C', repo, 'show', 'HEAD:package.json'], { encoding: 'utf8' }))
   // The tree, not the commit: a commit's archive opens with a pax global header carrying its id, which the release's
   // layer (built from the unpacked files) never holds and the installer refuses.
-  const tar = execFileSync('git', ['-C', repo, 'archive', '--format=tar', `--prefix=${TOP}/`, 'HEAD^{tree}'], { maxBuffer: 1 << 28 })
+  const archive = execFileSync('git', ['-C', repo, 'archive', '--format=tar', `--prefix=${TOP}/`, 'HEAD^{tree}'], { maxBuffer: 1 << 28 })
   mkdirSync(expected)
-  execFileSync('tar', ['-x', '-C', expected], { input: tar })
+  execFileSync('tar', ['-x', '-C', expected], { input: archive })
+  // What pack_a_release.sh adds before it packs: the floor the release declares (martha#21), so the layer served and
+  // the tree expected on disk both carry it, as a real release's do.
+  execFileSync(join(repo, 'pack_a_release', 'declare_the_floor.sh'), [String(version), join(expected, TOP)])
+  const tar = execFileSync('tar', ['--format=gnu', '-c', '-f', '-', TOP], { cwd: expected, maxBuffer: 1 << 28 })
   return { value: { version: String(version), tar }, detail: `${head} as ${TOP} ${version}, ${tar.length} bytes of tar` }
 }
 

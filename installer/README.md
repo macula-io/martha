@@ -25,7 +25,7 @@ trust. Leave out the Martha version to install the highest one; name it to insta
 1. The Node running it is one Martha runs on.
 2. The version resolves once, to a digest computed from the manifest's bytes. Never `:latest`.
 3. A version lower than the installed one needs `--downgrade` and the version named; a second digest for a version
-   you hold is always refused.
+   you hold is always refused. A version below the floor this machine holds is refused even then (see below).
 4. The digest carries a Sigstore signature from `macula-io/macula-ci-images`' `attest-image.yml`, at a commit listed
    in `signers.txt`, for `github.com/macula-io/martha` and the tag `v<version>`. A signature check that could not
    run says "could not check", never "unsigned".
@@ -33,14 +33,32 @@ trust. Leave out the Martha version to install the highest one; name it to insta
    entries and every name capped) before a byte is written.
 6. The release gets its own read-only directory under `$XDG_DATA_HOME/martha/releases/` (default
    `~/.local/share`), `current` is swapped to it by one rename, and `~/.local/bin/martha` links through `current`
-   when the release carries a `martha` command.
+   when the release carries a `martha` command. The release's `floor.json` is read before the rename, and once
+   `current` is swapped this machine's floor becomes the higher of what it held and what the release declares.
 
 Check the installer itself with `npm audit signatures`: it is published with provenance from this repository.
+
+## The version floor
+
+Each release declares a floor, and this machine keeps its own in `$XDG_DATA_HOME/martha/floor` (default
+`~/.local/share`). An ordinary install only ever raises it. Below it, the installer places nothing and an installed
+`martha` refuses to start, so an older release's weaker checks never come back to a machine that has passed them.
+`martha install` puts the highest signed release back.
+
+The only way below the floor is a withdrawal the project published: a later release carrying `floor-withdrawal.json`,
+which names the one version it permits and the floor it lowers from. Name that release with `--withdrawal-in`:
+
+```sh
+martha install <older version> --downgrade --withdrawal-in <the release that carries the withdrawal>
+```
+
+It is checked with the same signature as any release, it is never installed itself, and it is honoured only while this
+machine's floor is the one it lowers from.
 
 ## Options
 
 ```text
-martha-install [<version>] [--downgrade] [--digest sha256:<hex>]
+martha-install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>]
 ```
 
 ## How a release is made
