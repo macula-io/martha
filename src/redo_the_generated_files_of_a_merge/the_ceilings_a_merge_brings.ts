@@ -64,6 +64,18 @@ function aManifestIn(text: string, stage: string): Step<Manifest> {
   }
 }
 
+/**
+ * Whether two package.json texts are the same file once the ceilings map is taken out of each (martha#339): what the
+ * range gate's judge asks of a landed manifest against a reviewed head. Refused when either is not JSON.
+ */
+export function theSameOutsideTheCeilings(one: string, other: string): Step<boolean> {
+  const first = aManifestIn(one, 'the landed manifest')
+  if ('refused' in first) return first
+  const second = aManifestIn(other, 'the reviewed manifest')
+  if ('refused' in second) return second
+  return { ok: withoutTheCeilings(first.ok) === withoutTheCeilings(second.ok) }
+}
+
 /** One directory's ceiling in the merged map: both sides' number when they agree, and their sum from the base when not. */
 function theCeilingOnOneDirectory(
   directory: string,

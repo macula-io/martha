@@ -97,13 +97,13 @@ const afterAnUnplacedResult = () =>
 
 test('off: a member keeps its shell after a tool result Martha could not place', () => {
   const session = afterAnUnplacedResult()
-  assert.equal(bash(session, { strict_gate: false }), undefined)
+  assert.equal(bash(session, { gate: 'off' }), undefined)
   // The record is not switched off with the gate: what arrived is still written down, and nothing reads it.
   assert.equal(session.gate.ingested.length, 1, 'the unplaced result is still recorded')
 })
 
 test('on: the same unplaced result still closes the shell', () => {
-  const answer = denied(bash(afterAnUnplacedResult(), { strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(afterAnUnplacedResult(), { gate: 'enforced' }), 'a gate that is on')
   // The words name the result that could not be placed, so a switch that broke another rule cannot pass this.
   assert.match(answer, /a-tool-the-host-added-later/)
   assert.match(answer, /which this gate does not know/i)
@@ -113,11 +113,11 @@ test('on: the same unplaced result still closes the shell', () => {
 // --- a background agent that has not stopped (#170) -----------------------------
 
 test('off: a member keeps its shell while an agent it started has not stopped', () => {
-  assert.equal(bash(beginSession(store(), 's-1'), { agents_running: ['agent-7'], strict_gate: false }), undefined)
+  assert.equal(bash(beginSession(store(), 's-1'), { agents_running: ['agent-7'], gate: 'off' }), undefined)
 })
 
 test('on: the same running agent still closes the shell', () => {
-  const answer = denied(bash(beginSession(store(), 's-1'), { agents_running: ['agent-7'], strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(beginSession(store(), 's-1'), { agents_running: ['agent-7'], gate: 'enforced' }), 'a gate that is on')
   // The words name the agent, so a switch that broke another rule cannot pass this.
   assert.match(answer, /an agent this host started \(agent-7\) has not stopped/i)
   assert.match(answer, /the shell comes back when it stops/i)
@@ -145,13 +145,13 @@ const afterARefresh = () => {
 
 test("off: a successor that read a tainted predecessor's handover keeps its shell", () => {
   const successor = afterARefresh()
-  assert.equal(bash(successor, { strict_gate: false }), undefined)
+  assert.equal(bash(successor, { gate: 'off' }), undefined)
   // The carry is not switched off with it: the successor's record still holds the predecessor's text, unread.
   assert.equal(successor.gate.ingested.length, 1, 'the predecessor\'s record is still carried')
 })
 
 test('on: the same handover still carries the taint', () => {
-  const answer = denied(bash(afterARefresh(), { strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(afterARefresh(), { gate: 'enforced' }), 'a gate that is on')
   // The words name the path the inherited text arrived on, so a switch that broke another rule cannot pass this.
   namesThePath(answer, 'cross_session')
   assert.match(answer, /an unattributed sender/i)
@@ -161,11 +161,11 @@ test('on: the same handover still carries the taint', () => {
 // --- a record nobody can read ---------------------------------------------------
 
 test('off: a member whose record cannot be read keeps its shell', () => {
-  assert.equal(bash(resumeSession(store(), 'a-session-the-store-never-saw'), { strict_gate: false }), undefined)
+  assert.equal(bash(resumeSession(store(), 'a-session-the-store-never-saw'), { gate: 'off' }), undefined)
 })
 
 test('on: the same lost record still closes the shell', () => {
-  const answer = denied(bash(resumeSession(store(), 'a-session-the-store-never-saw'), { strict_gate: true }), 'a gate that is on')
+  const answer = denied(bash(resumeSession(store(), 'a-session-the-store-never-saw'), { gate: 'enforced' }), 'a gate that is on')
   // The words say the record cannot be read, so a switch that broke another rule cannot pass this.
   assert.match(answer, /its record of what it has taken in cannot be read/i)
   assert.ok(answer.includes(WHAT_CLEARS_IT))
@@ -184,6 +184,6 @@ test('a call site that says nothing keeps the gate: an out-of-date caller cannot
 
 test("off never widens what the owner did not switch: the record is still written, and reading is still allowed", () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  assert.equal(answerToolCall({ names, tool: 'Read', session: tainted, policy, launch, host: thisMachine, strict_gate: false }), undefined)
+  assert.equal(answerToolCall({ names, tool: 'Read', session: tainted, policy, launch, host: thisMachine, gate: 'off' }), undefined)
   assert.equal(tainted.gate.ingested.length, 1, 'the record still holds what arrived')
 })

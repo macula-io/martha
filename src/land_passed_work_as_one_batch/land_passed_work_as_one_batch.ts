@@ -13,8 +13,11 @@
 // (../log_ledger): every package the act lands holds the announcement before it runs, and its outcome after, so a
 // member refreshed mid-push leaves a package whose ledger says a push was sent and what became of it is not recorded.
 //
-// A package that cannot be landed stops the whole batch before anything is merged, and a merge that does not go cleanly
-// stops it there, naming the pull request and listing the packages not tried. The clone is left where it stood — on the
+// A package that cannot be landed stops the whole batch before anything is merged. A merge that clashes by hand, or whose
+// merged tree fails its ceilings, does not stop it (martha#339): that pull request is left out, named with why and what it
+// clashes with, and the rest land; a head that holds a left-out head is left out with it. The left-out pull request's
+// builder fixes it on its own branch after the batch lands, never here. `check: 1` asks the same before anything is
+// built (../forecast_what_a_batch_lands). The clone is left where it stood — on the
 // branch it was on, its HEAD unmoved and clean, the integration branch removed here and kept on origin — whether the
 // batch landed or stopped, so the clone a workspace keeps on its default branch does not leave it. Every run of git carries
 // marthasOwnGitArgs (../run_marthas_own_git) and goes through the contract's processes.run, and the repository and
@@ -32,6 +35,7 @@ import { A_HOLD_REFUSES, noneOfTheseIsHeld } from '../hold_a_package_back_from_a
 import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type LedgerRow, type Outcome } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { mergedInMemory, whatEachPathClashesWith, type AFirstParent, type AStep } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /**
@@ -53,12 +57,21 @@ export const THE_CHECK_PROGRAM = 'src/check_a_host_directory_stays_under_its_cei
 /** The script package.json runs the redo program by; ../check_a_host_directory_stays_under_its_ceiling names the other. */
 export const THE_REDO_SCRIPT = 'redo:generated'
 
+/**
+ * The trailer a redone merge's message carries, followed by the redo program's own words: what the range gate's judge
+ * holds the merge to (martha#339), so a merge committed by hand, which carries none, is not taken for the landing's.
+ */
+export const REDONE_GENERATED = 'Redone-generated:'
+
 /** The two tools this slice registers: the batch, and the fast-forward the owner's yes unlocks. */
 export const LAND_BATCH = 'land_batch'
 export const FAST_FORWARD_AFTER_THE_OWNERS_YES = 'fast_forward_after_the_owners_yes'
 
 /** The prefix every integration branch's name carries; the refs under it are how a day's landings are counted. */
 export const LAND = 'land'
+
+/** How much of a sha a left-out head's answer shows. */
+const SHORT_SHA = 7
 
 /** What a refusal says was not done: the batch merged nothing, the fast-forward pushed nothing. */
 const NOTHING_LANDED = 'nothing was landed'
@@ -203,7 +216,7 @@ const theLandingsIn = (package_name: string, rows: readonly LedgerRow[]): readon
   rows.filter((row) => row.kind === 'package_landed').map((row) => ({ package: package_name, at: row.at }))
 
 /** A batch starts when it names a package, none of its packages is held, and the clone fetches. */
-async function theBatchMayStart(host: LandingHost, batch: TheBatch): Promise<Step<true>> {
+export async function theBatchMayStart(host: LandingHost, batch: TheBatch): Promise<Step<true>> {
   if (batch.packages.length === 0) return no('a batch names no package to land.')
   const held = await noneOfTheseIsHeld(host, batch.packages, NOTHING_LANDED)
   if ('refused' in held) return held
@@ -214,7 +227,18 @@ async function theBatchMayStart(host: LandingHost, batch: TheBatch): Promise<Ste
 
 /** What `land_batch` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const LAND_BATCH_DESCRIPTION =
-  `Lands a batch of packages whose reviews passed, as one integration branch: one --no-ff merge per package at the head its reviewer passed, then the branch pushed. Answers with the range to check before the owner says yes. ${A_HOLD_REFUSES}`
+  `Lands a batch of packages whose reviews passed, as one integration branch: one --no-ff merge per package at the head its reviewer passed, then the branch pushed. A package whose merge clashes by hand, or whose merged tree fails its ceilings, is left out and named, and the rest land. Answers with the range to check before the owner says yes. With check 1 it is a dry run: it merges in memory only, writes and pushes nothing, and says which packages land, which are redone, and which clash by hand, in which paths and with what. ${A_HOLD_REFUSES}`
+
+/** The argument that makes a call of `land_batch` a dry run (martha#339). */
+export const A_DRY_RUN = 'check'
+
+/** Whether a call of `land_batch` asks for its dry run: `check` 1, left out or 0 for the landing itself. */
+export function aDryRunIsAsked(args: Readonly<Record<string, unknown>>): Step<boolean> {
+  const check = args[A_DRY_RUN]
+  if (check === undefined || check === 0) return { ok: false }
+  if (check === 1) return { ok: true }
+  return no(`${A_DRY_RUN} is 1 for a dry run that writes nothing, or 0 (or left out) for the landing.`)
+}
 
 /** What `fast_forward_after_the_owners_yes` says it is for (martha#256). */
 export const FAST_FORWARD_DESCRIPTION =
@@ -254,7 +278,7 @@ async function theCloneHoldsNoChange(host: LandingHost, path: string): Promise<S
  * A merge commit carries a committer, and git refuses the merge when the clone cannot name one. It is checked before a
  * branch is cut, so a clone that would fail on its first merge is told what to set instead of being left half landed.
  */
-async function theCloneSaysWhoCommits(host: LandingHost, path: string): Promise<Step<true>> {
+export async function theCloneSaysWhoCommits(host: LandingHost, path: string): Promise<Step<true>> {
   const identity = await git(host, path, ['var', 'GIT_COMMITTER_IDENT'])
   if (identity.exit_code === 0) return { ok: true }
   return no(
@@ -304,15 +328,19 @@ async function landingsOn(host: LandingHost, path: string, date: string): Promis
 }
 
 /**
- * Merges every passed head `--no-ff`, in the batch's order; the first that will not merge aborts its merge and stops the
- * batch there, leaving the branch cut with the merges that did go through and nothing pushed.
+ * Merges every passed head `--no-ff`, in the batch's order. A head that will not merge, or whose merged tree fails its
+ * ceilings, is left out and named, and the rest land (martha#339); the gate before the push still runs once, on the whole
+ * branch, and stops it all. A batch that leaves every head out pushes nothing.
  */
 async function mergeEveryHeadAndPush(host: LandingHost, member: string, cut: TheCutBatch): Promise<Landing> {
-  const merged = await mergeEveryHead(host, cut.batch.path, cut.work)
+  const merged = await mergeEveryHead(host, cut, cut.work)
   if ('refused' in merged) return merged
-  const passed = await theGateBeforeThePush(host, cut.batch.path, merged.ok)
+  const left_out = theLeftOutSaid(merged.ok.left_out)
+  if (merged.ok.landed.length === 0) return no(`${NOTHING_LANDED}: every package was left out.${left_out}`)
+  const passed = await theGateBeforeThePush(host, cut.batch.path, merged.ok.redone)
   if ('refused' in passed) return passed
-  return pushTheBatch(host, member, cut, merged.ok)
+  const pushed = await pushTheBatch(host, member, cut, merged.ok)
+  return 'told' in pushed ? { told: `${pushed.told}${left_out}` } : pushed
 }
 
 /** A merge the landing redid for: which pull request it was, and what was redone. */
@@ -322,27 +350,91 @@ interface RedoneByTheLanding {
   readonly what: readonly string[]
 }
 
-/**
- * Merges every passed head `--no-ff`, in the batch's order; the first that will not merge stops the batch there. A clash
- * only in generated files is redone and the batch goes on (../the_generated_files_a_landing_redoes); every merge, redone
- * or not, is then held to the ceilings it brought, because a clash the landing did not redo is still one the tree fails.
- */
-async function mergeEveryHead(host: LandingHost, path: string, work: readonly LandedWork[]): Promise<Step<readonly RedoneByTheLanding[]>> {
-  const redone: RedoneByTheLanding[] = []
-  for (const [at, one] of work.entries()) {
-    const settled = await mergeOneHead(host, path, one)
-    if ('refused' in settled) return theBatchStopsAt(one, settled.refused, work.slice(at + 1))
-    const holds = await theCeilingsHold(host, path)
-    if ('refused' in holds) return theBatchStopsAt(one, holds.refused, work.slice(at + 1))
-    if (settled.ok.length > 0) redone.push({ package: one.package, pr: one.pr, what: settled.ok })
-  }
-  return { ok: redone }
+/** A head the landing left out, and why, in the words the owner's menu carries. */
+interface LeftOut {
+  readonly one: LandedWork
+  readonly why: string
 }
 
-/** Where a batch stopped: the pull request it stopped at, why, and the packages it never tried. */
-function theBatchStopsAt(one: LandedWork, why: string, untried: readonly LandedWork[]): Refusal {
-  const rest = untried.length === 0 ? '' : ` Untried: ${untried.map((next) => next.package).join(', ')}.`
-  return no(`stopped at ${one.package} (PR ${String(one.pr)}): ${why}.${rest}`)
+/** What the merges came to: the heads that landed, in order, what was redone for them, and the heads left out. */
+interface TheMerges {
+  readonly landed: readonly LandedWork[]
+  readonly redone: readonly RedoneByTheLanding[]
+  readonly left_out: readonly LeftOut[]
+  /** The commits a clash is traced along: the default branch's tip, then each landing merge made so far. */
+  readonly steps: readonly AStep[]
+}
+
+/**
+ * Merges every passed head `--no-ff`, in the batch's order. A clash only in generated files is redone and the merge goes
+ * on (../redo_the_generated_files_of_a_merge); every merge, redone or not, is then held to the ceilings it brought. A head
+ * that fails either, or that holds the head of one left out, is left out: its merge is undone and the next head is tried.
+ */
+async function mergeEveryHead(host: LandingHost, cut: TheCutBatch, work: readonly LandedWork[]): Promise<Step<TheMerges>> {
+  let merges: TheMerges = { landed: [], redone: [], left_out: [], steps: [{ commit: cut.base, label: `${cut.origin.default_branch} at ${cut.base.slice(0, SHORT_SHA)}` }] }
+  for (const one of work) {
+    const next = await mergeOneHeadOrLeaveItOut(host, cut.batch.path, merges, one)
+    if ('refused' in next) return next
+    merges = next.ok
+  }
+  return { ok: merges }
+}
+
+/** One head merged, or left out with why; refused only when the branch could not be put back after a head left out. */
+async function mergeOneHeadOrLeaveItOut(host: LandingHost, path: string, merges: TheMerges, one: LandedWork): Promise<Step<TheMerges>> {
+  const inside = await theLeftOutHeadItHolds(host, path, merges.left_out, one)
+  if (inside !== undefined) return { ok: leftOut(merges, one, `its head holds the head of PR ${String(inside.pr)}, which was left out, so landing it would land that one's clash too`) }
+  const before = await gitSaid(host, path, ['rev-parse', 'HEAD'])
+  if (before === undefined) return no('the integration branch holds no commit git will name.')
+  const settled = await mergeOneHead(host, path, one)
+  if ('refused' in settled) return { ok: leftOut(merges, one, `${settled.refused}${await theClashTraced(host, path, before, merges, one)}`) }
+  const holds = await theCeilingsHold(host, path)
+  if ('refused' in holds) return theMergeUndone(host, path, before, leftOut(merges, one, holds.refused))
+  const tip = await gitSaid(host, path, ['rev-parse', 'HEAD'])
+  if (tip === undefined) return no(`the merge of ${one.package} holds no commit git will name.`)
+  const redone = settled.ok.length === 0 ? merges.redone : [...merges.redone, { package: one.package, pr: one.pr, what: settled.ok }]
+  return { ok: { ...merges, landed: [...merges.landed, one], redone, steps: [...merges.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } }
+}
+
+/** The merges with one more head left out. */
+const leftOut = (merges: TheMerges, one: LandedWork, why: string): TheMerges => ({ ...merges, left_out: [...merges.left_out, { one, why }] })
+
+/** The head of a package left out that this head holds, if any. */
+async function theLeftOutHeadItHolds(host: LandingHost, path: string, left_out: readonly LeftOut[], one: LandedWork): Promise<LandedWork | undefined> {
+  for (const earlier of left_out) {
+    const holds = await git(host, path, ['merge-base', '--is-ancestor', earlier.one.head, one.head])
+    if (holds.exit_code === 0) return earlier.one
+  }
+  return undefined
+}
+
+/** A merge that went through and then failed its ceilings, taken back off the branch, so the next head merges without it. */
+async function theMergeUndone(host: LandingHost, path: string, before: string, merges: TheMerges): Promise<Step<TheMerges>> {
+  const reset = await git(host, path, ['reset', '--quiet', '--hard', before])
+  if (reset.exit_code !== 0) return no(`a merge left out could not be taken off the integration branch: ${saidBy(reset)}. ${NOTHING_LANDED}`)
+  return { ok: merges }
+}
+
+/** What each path a left-out head clashes in clashes with, said after the reason: earlier heads, or the default branch's landings. */
+async function theClashTraced(host: LandingHost, path: string, before: string, merges: TheMerges, one: LandedWork): Promise<string> {
+  const merged = await mergedInMemory(host, path, before, one.head)
+  if ('refused' in merged || merged.ok.clashed.size === 0) return ''
+  const traced = await whatEachPathClashesWith(host, path, one.head, merges.steps, [...merged.ok.clashed.keys()], aFirstParentNamed)
+  if ('refused' in traced) return ''
+  const by_whom = new Map<string, string[]>()
+  for (const [clashed, whom] of traced.ok) by_whom.set(whom, [...(by_whom.get(whom) ?? []), clashed])
+  return `; it clashes in ${[...by_whom].map(([whom, paths]) => `${paths.join(', ')} with ${whom}`).join('; ')}`
+}
+
+/** A first-parent commit of the default branch, named by the pull request its landing merged, or by its sha. */
+function aFirstParentNamed(commit: AFirstParent): string {
+  const pr = thePullRequestALandingNames(commit.subject)
+  return pr === undefined ? `the commit ${commit.commit.slice(0, SHORT_SHA)}` : `PR ${String(pr)}`
+}
+
+/** The heads left out, as the answer and the owner's menu say them: `Left out: PR n (package), why.` */
+function theLeftOutSaid(left_out: readonly LeftOut[]): string {
+  return left_out.map((out) => ` Left out: PR ${String(out.one.pr)} (${out.one.package}), ${out.why}.`).join('')
 }
 
 /** One head merged `--no-ff`: what the landing redid if it clashed only in generated files, or why it stopped. */
@@ -366,7 +458,7 @@ async function redoTheClash(host: LandingHost, path: string, one: LandedWork): P
   if ('refused' in recorded) return recorded
   const added = await git(host, path, ['add', '--all'])
   if (added.exit_code !== 0) return no(`the redone merge would not be staged: ${saidBy(added)}`)
-  const said = `Redone-generated: ${redone.stdout.trim()}`
+  const said = `${REDONE_GENERATED} ${redone.stdout.trim()}`
   const committed = await git(host, path, ['commit', '--quiet', '-m', theMergeMessage(one), '-m', said])
   if (committed.exit_code !== 0) return no(`the merge was redone and would not commit: ${saidBy(committed)}`)
   return { ok: redone.stdout.trim().split('; ') }
@@ -410,8 +502,18 @@ async function theGateBeforeThePush(host: LandingHost, path: string, redone: rea
   return { ok: true }
 }
 
+/** What a landing merge's subject opens with, before the pull request's number. */
+const A_LANDING = 'Land #'
+
 /** The message the merge carries: which pull request landed, which package it is, and that its verdict passed. */
-const theMergeMessage = (one: LandedWork): string => `Land #${String(one.pr)} (${one.package}, PASS)`
+const theMergeMessage = (one: LandedWork): string => `${A_LANDING}${String(one.pr)} (${one.package}, PASS)`
+
+/** The pull request a landing merge's subject names, or undefined when the subject is not a landing's (martha#339). */
+export function thePullRequestALandingNames(subject: string): number | undefined {
+  if (!subject.startsWith(A_LANDING)) return undefined
+  const number = Number.parseInt(subject.slice(A_LANDING.length), 10)
+  return Number.isInteger(number) ? number : undefined
+}
 
 /**
  * Puts the clone back on the branch it stood on and removes the integration branch it cut here. It runs after the
@@ -438,18 +540,19 @@ function withTheCloneBack(landing: Landing, back: Step<true>): Landing {
   return 'told' in landing ? { told: `${landing.told} ${why}` } : no(`${landing.refused} ${why}`)
 }
 
-/** Pushes the integration branch, announced in every package's ledger before it runs. */
-async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch, redone: readonly RedoneByTheLanding[]): Promise<Landing> {
+/** Pushes the integration branch, announced in the ledger of every package it lands before it runs. */
+async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch, merged: TheMerges): Promise<Landing> {
   const tip = await gitSaid(host, cut.batch.path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`${cut.branch} holds no commit git will name.`)
-  const landed = cut.work.map((one) => `${one.package} (PR ${String(one.pr)})`).join(', ')
+  const landed = merged.landed.map((one) => `${one.package} (PR ${String(one.pr)})`).join(', ')
   const what = `the batch ${cut.branch} of ${landed}`
-  const sent = await pushForEveryPackage(host, member, cut.batch.packages, what, () => pushTheBranch(host, cut.batch.path, cut.branch, tip))
+  const packages = merged.landed.map((one) => one.package)
+  const sent = await pushForEveryPackage(host, member, packages, what, () => pushTheBranch(host, cut.batch.path, cut.branch, tip))
   if ('refused' in sent) return sent
   const redone_said =
-    redone.length === 0
+    merged.redone.length === 0
       ? ''
-      : ` Generated files were redone for ${redone.map((one) => `${one.package} (PR ${String(one.pr)}): ${one.what.join(', ')}`).join('; ')}.`
+      : ` Generated files were redone for ${merged.redone.map((one) => `${one.package} (PR ${String(one.pr)}): ${one.what.join(', ')}`).join('; ')}.`
   return { told: `${sent.sent}. The range the owner says yes to is ${cut.base}..${tip}, over ${landed}.${redone_said}` }
 }
 

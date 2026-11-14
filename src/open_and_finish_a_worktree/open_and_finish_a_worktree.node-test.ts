@@ -101,6 +101,8 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     clones: places.clones,
     worktrees: places.worktrees,
   },
+  // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
+  gate: { kind: 'off' },
   channel_read_seconds: 30,
 })
 
