@@ -99,7 +99,7 @@ import { USER_SETTINGS_FILE, userSettingsPath, CLAUDE_FOLDER } from '../load_the
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
-import { type ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
+import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'

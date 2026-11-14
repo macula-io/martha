@@ -104,7 +104,7 @@ import { meshServerInstallsIn } from '../install_the_mesh_server_for_claude_code
 import { environmentFromSettings, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { pluginDirsIn } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { type ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
+import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
