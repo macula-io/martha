@@ -53,6 +53,8 @@ import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
+import type { GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { theCallIn, TOOL_CHECK, whatTheHostSaidOf } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -102,11 +104,16 @@ export interface MemberRelayPlace {
   /** The settings files the host reads, watched for a key that turns the relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
   /**
-   * Whether the owner turned the strict gate on in the crew's declaration (martha#259): the launcher reads
-   * `house_rules.strict_gate` once and hands it here, and every answer this relay gives follows it. Absent means on, so
-   * a place built by a caller that has not heard of the setting keeps the guard.
+   * What the gate does to this member (martha#321): the launcher reads it from the declaration once and hands it here,
+   * and every answer this relay gives follows it. Absent means enforced, so a place built by a caller that has not
+   * heard of the setting keeps the guard.
    */
-  readonly strict_gate?: boolean
+  readonly gate?: GateMode
+  /**
+   * Where an audited member's would-be refusals are kept (martha#321). Absent, an audited member's call is refused: the
+   * audit never runs without a place to write its evidence.
+   */
+  readonly audit?: GateAuditPlace | undefined
   /** Where the owner's sessions load memory and instructions from, which a member does not write (martha#136). */
   readonly ownerMemory: OwnerMemoryPlaces
   /** The member's signed runs (martha#129); a member without them runs no shape. */
@@ -235,11 +242,11 @@ function agentStateOf(state: RelayState, id: unknown): { readonly id: string; re
   return { id, state: run.stopped ? 'unknown' : 'running' }
 }
 
-/** The agents started under this session that have not stopped: the shell is refused while any of them runs. */
+/** The agents started under this session that have not stopped, by id: the shell is refused while any of them runs. */
 function agentsRunning(state: RelayState, session: HostSession): readonly string[] {
-  return [...state.agents.values()]
-    .filter((run) => run.session_id === session.id && !run.stopped)
-    .map((run) => (run.started ? 'an agent' : 'an agent this launcher never saw start'))
+  return [...state.agents.entries()]
+    .filter(([, run]) => run.session_id === session.id && !run.stopped)
+    .map(([id, run]) => (run.started ? id : `an agent this launcher never saw start (${id})`))
 }
 
 /**
@@ -441,11 +448,15 @@ async function keep(state: RelayState, session: HostSession): Promise<string | u
   }
 }
 
-/** Checks the session's stored record is still the one kept, or marks it broken and says why. */
-async function vouchFor(state: RelayState, session: HostSession): Promise<string | undefined> {
+/**
+ * Checks the session's stored record is still the one kept, or marks it broken and says why; and answers with the
+ * session as the gate now reads it, because the owner may have released it since the last call (martha#321).
+ */
+async function vouchFor(state: RelayState, session: HostSession): Promise<HostSession | string> {
   try {
     await state.place.records.check(session.id)
-    return undefined
+    const record = state.place.records.store.read(session.id)
+    return record === undefined ? session : { ...session, gate: record }
   } catch (error) {
     const code = (error as { code?: unknown }).code
     const why = `the record of session ${session.id} can no longer be vouched for (${typeof code === 'string' ? code : error instanceof Error ? error.message : String(error)}), so nothing in it is answered for again`
@@ -682,12 +693,12 @@ async function subagentStopped(state: RelayState, body: Body): Promise<RelayRepl
 
 async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
-  const session = sessionNamed(state, body.session_id)
-  if (typeof session === 'string') return denied(session)
+  const named = sessionNamed(state, body.session_id)
+  if (typeof named === 'string') return denied(named)
   const call = callOf(body)
   if (call === undefined) return denied('the tool call names no tool')
-  const unvouched = await vouchFor(state, session)
-  if (unvouched !== undefined) return denied(unvouched)
+  const session = await vouchFor(state, named)
+  if (typeof session === 'string') return denied(session)
   const agent_id = noteTheAgentsCall(state, session, body)
   const denial = await theDenialOfACall(state, session, call, agent_id)
   if (denial !== undefined) return denied(denial)
@@ -719,7 +730,8 @@ async function theDenialOfACall(
     names: place.names,
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
-    ...(place.strict_gate === undefined ? {} : { strict_gate: place.strict_gate }),
+    ...(place.gate === undefined ? {} : { gate: place.gate }),
+    ...(place.audit === undefined ? {} : { audit: place.audit }),
   })?.deny
   if (verdict !== undefined) return verdict
   // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
