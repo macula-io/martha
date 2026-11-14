@@ -23,7 +23,7 @@ import { STANDING_ADD, STANDING_HEADING } from '../keep_the_supervisors_standing
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -103,7 +103,7 @@ async function aSessionStarts(place: ReturnType<typeof aCrewPlace>, crew: CrewTo
   const answered = await relay.answer('session_started', { session_id: id, source: 'startup', hook_event_name: 'SessionStart', transcript_path: '/nowhere' })
   assert.ok(answered.answered, answered.answered ? '' : answered.stopping)
   const handed = answered.answered && 'handed' in answered.body ? String(answered.body.handed) : ''
-  const last = (await rows.read(`${SESSION_RECORD_STREAM}${id}`)).at(-1)
+  const last = (await rows.read(sessionRecordStreamOf(id))).at(-1)
   return { handed, paths: last === undefined ? [] : recordOf(last.row).ingested.map((ingest) => ingest.path) }
 }
 

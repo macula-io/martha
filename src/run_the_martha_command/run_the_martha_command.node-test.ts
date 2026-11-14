@@ -34,7 +34,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare
 import { crewKeyOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
+import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -154,7 +154,7 @@ test('martha release on a terminal clears the live session’s record and answer
   aLiveSessionRow(place, 'builder', session)
   const rows = rowStreamsDirectory(theCrewsRows(place))
   return (async () => {
-    await rows.append(`${SESSION_RECORD_STREAM}${session}`, { ingested: [{ path: 'A2', from_node_id: 'a-stranger' }] })
+    await rows.append(sessionRecordStreamOf(session), { ingested: [{ path: 'A2', from_node_id: 'a-stranger' }] })
     const run = marthaOnATerminal(place, {}, 'release', 'builder')
     assert.equal(run.status, EXIT_DONE, run.said)
     assert.match(run.said, /Released builder: cleared 1 arrival/)
