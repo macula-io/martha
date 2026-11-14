@@ -48,6 +48,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     ],
     mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER] } },
     house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, clones: null, worktrees: null },
+    // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
+    gate: { kind: 'off' },
     channel_read_seconds: 30,
   }
 }
