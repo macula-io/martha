@@ -295,3 +295,13 @@ test('#311: two ends a ceiling apart, then the flow is given up, the Supervisor 
   assert.equal((await member.linesToTheSupervisor()).length, FORCED_ENDS + 1, 'the give-up was said more than once')
   assert.equal((await member.turnEnded(32, '', 'another-turn'))['carry'], CARRY_A_TEXT, 'another turn did not start a new flow')
 })
+
+test('a beat while the end is held behind a running tool keeps the hold, and the end still rides on that tool\'s answer', async () => {
+  const member = await aMemberHandingOver({ ceiling_minutes: 10 })
+  member.tools.ends.aCallAllowed(SESSION, 'a-long-tool')
+  assert.deepEqual(await member.beat(10), NOTHING, 'the end was ordered while a tool was in flight')
+  // Only the end of the turn the order names drops the hold; a beat asks while that turn still runs.
+  assert.deepEqual(await member.beat(11), NOTHING, 'the next beat did something')
+  assert.equal(member.tools.ends.deniesACall(SESSION), A_TOOL_WHILE_THE_END_IS_HELD, 'a beat dropped the hold behind a running tool')
+  assert.equal(member.tools.ends.aCallAnswered(SESSION, 'a-long-tool'), THE_TURN, 'after a beat, the end did not ride on the tool\'s answer')
+})
