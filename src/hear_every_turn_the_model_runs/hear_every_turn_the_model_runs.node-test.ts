@@ -16,6 +16,7 @@ import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
@@ -28,7 +29,7 @@ import { memberRelay, type MemberRelay } from '../launch_a_claude_code_member/an
 import type { RelayJournal } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
 import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { A_PLUGINS_ORIGIN, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -44,7 +45,7 @@ const SESSION = 'session-440'
 /** The owner's typing, as the engine stamps it. */
 const THE_OWNERS_KIND = 'composer'
 /** The path a crew message the mod submitted is recorded on: a plugin's prompt, as the engine stamps one. */
-const THE_CREW_PATH = PATH_OF_SOURCE[CLAUDE_CODE_PROMPT_ORIGINS.sources[A_PLUGINS_ORIGIN] ?? SOURCE_OF_AN_UNKNOWN_ORIGIN]
+const THE_CREW_PATH = 'source' in ARRIVAL_OF_A_PLUGINS_PROMPT ? PATH_OF_SOURCE[ARRIVAL_OF_A_PLUGINS_PROMPT.source] : ''
 /** The path the owner's own typing is recorded on. */
 const THE_OWNERS_PATH = PATH_OF_SOURCE[CLAUDE_CODE_PROMPT_ORIGINS.sources[THE_OWNERS_KIND] ?? SOURCE_OF_AN_UNKNOWN_ORIGIN]
 /** The path a turn of unnamed source is recorded on. */
@@ -72,7 +73,7 @@ function theFixedPlaceOf(home: string, checkout: string, rows: ReturnType<typeof
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(home, '.claude', 'settings.json'),
+      user: join(home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE),
       home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(home, 'managed') },
@@ -88,7 +89,7 @@ function theFixedPlaceOf(home: string, checkout: string, rows: ReturnType<typeof
       user_scope: {
         markdown_kinds: RECORDED_HOST.markdown_kinds,
         output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-        reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+        reported_output_styles_dir: join(home, DEFAULT_CONFIG_DIR, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
       },
     }),
   }
@@ -116,7 +117,7 @@ function aLaunch(t: TestContext): ALaunch {
     crew: crewToolsOver({
       member: MEMBER,
       ledger: channel,
-      beats: dashboardRowsIn(join(home, 'dashboard')),
+      beats: dashboardRowsIn(join(home, 'the-owners-rows')),
       root: checkout,
       documents: host.stores.documents,
       stores: { crew: crewFilesDirectory(join(home, 'crew-files')) },
@@ -178,7 +179,7 @@ test("#440: an idle member's message-started turn is kept in its record", async 
   const after = await launch.paths()
   assert.equal(countOf(after, THE_CREW_PATH) - countOf(before, THE_CREW_PATH), 1, 'the turn the crew message started is not in the record, so the launcher never heard a turn its model ran')
   assert.equal(turnStarts(launch.screen), 1, "the owner's row never heard the turn start, so a dialog an earlier turn left open still pins it")
-  assert.deepEqual(launch.raised, [{ text: frame, arrival: { source: CLAUDE_CODE_PROMPT_ORIGINS.sources[A_PLUGINS_ORIGIN] } }], 'the turn listeners did not hear the crew message exactly once')
+  assert.deepEqual(launch.raised, [{ text: frame, arrival: ARRIVAL_OF_A_PLUGINS_PROMPT }], 'the turn listeners did not hear the crew message exactly once')
   assert.deepEqual(launch.noted, [], 'a crew message the launcher handed was noted as a turn of unnamed source')
   assert.deepEqual([...(await takenInBy(launch.channel, MEMBER))], [0], 'the count and the record disagree about the turn')
 })
@@ -189,7 +190,8 @@ test('#440: a message raised from inside a host event is kept once, and the next
 
   // The first is submitted inside a host event, so the host raises it: the prompt hook records it, the start adds nothing.
   const first = await handed(launch, 'the first message')
-  await heard(launch, first, A_PLUGINS_ORIGIN)
+  // The engine stamps a plugin's own prompt with this kind.
+  await heard(launch, first, 'plugin')
   await aTurnStarted(launch, first)
   // The second comes while the member is idle, by the mod's timer: only its turn start is heard.
   const second = await handed(launch, 'the second message')

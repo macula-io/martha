@@ -34,7 +34,7 @@ export type WhatATurnStartRecords =
   /** A turn with no crew message and no prompt heard: recorded from an origin the launcher cannot name. */
   | { readonly records: 'an unnamed source' }
   /** A turn already in the record, because `prompt.submit` heard what started it. */
-  | { readonly records: 'nothing' }
+  | { readonly records: 'heard already' }
 
 /** One main turn's start, as the mod reports it and the carrier answered it. */
 export interface AMainTurnStart {
@@ -46,8 +46,8 @@ export interface AMainTurnStart {
 
 /** What a main turn start adds to the record, given the texts `prompt.submit` heard since the last one. */
 export function whatATurnStartRecords(heard: ReadonlySet<string>, start: AMainTurnStart): WhatATurnStartRecords {
-  if (start.taken !== '') return heard.has(start.taken) ? { records: 'nothing' } : { records: 'the crew message', text: start.taken }
-  return heard.has(start.text) ? { records: 'nothing' } : { records: 'an unnamed source' }
+  if (start.taken !== '') return heard.has(start.taken) ? { records: 'heard already' } : { records: 'the crew message', text: start.taken }
+  return heard.has(start.text) ? { records: 'heard already' } : { records: 'an unnamed source' }
 }
 
 /** The texts heard per session since its last main turn start: kept by the launcher, emptied at every main start. */

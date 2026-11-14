@@ -78,12 +78,6 @@ export function whatAPromptCarries(prompt: { readonly command?: unknown; readonl
 }
 
 /**
- * The origin kind Claude Code's engine stamps on a prompt a plugin submitted: a crew mod's handed message among them,
- * which the launcher records under it when `prompt.submit` never raised it (martha#440).
- */
-export const A_PLUGINS_ORIGIN = 'plugin'
-
-/**
  * Claude Code's origin kinds, as its engine names them for `prompt.submit`
  * (recorded from the host binary by ../claude_code_host, whose
  * recorded_claude_code_host.json names the version).
@@ -127,7 +121,7 @@ export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
     // plugin's injected prompt, a crew mod's and Martha's own handToModel
     // included (whose turn its slice already recorded on its own path).
     channel: 'mcp_result',
-    [A_PLUGINS_ORIGIN]: 'mcp_result',
+    plugin: 'mcp_result',
   },
 }
 
@@ -138,6 +132,12 @@ export function arrivalOfPrompt(declared: HostPromptOrigins, kind: string, carri
   const typedOnly = !carries.command && !carries.meta
   return { source: source === 'owner_typed' && !typedOnly ? SOURCE_OF_TYPING_THAT_CARRIES_MORE : source }
 }
+
+/**
+ * Where a prompt a plugin submitted came from, with nothing beside its text: a crew mod's handed message among them,
+ * which the launcher records this way when the host never raised it to the mod's `prompt.submit` (martha#440).
+ */
+export const ARRIVAL_OF_A_PLUGINS_PROMPT: Arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, 'plugin', { command: false, meta: false })
 
 /** The origin kinds a host sends that its declaration does not list. */
 export function undeclaredPromptOrigins(declared: HostPromptOrigins, emitted: readonly string[]): readonly string[] {

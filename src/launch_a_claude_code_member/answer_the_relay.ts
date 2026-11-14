@@ -45,7 +45,7 @@ import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contr
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
-import { A_PLUGINS_ORIGIN, arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { ARRIVAL_OF_A_PLUGINS_PROMPT, arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { THE_TURN_STARTED_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { A_TURN_OF_UNNAMED_SOURCE, heardSinceTheLastStart, type AMainTurnStart, type HeardSinceTheLastStart } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -427,15 +427,14 @@ function aMainTurnStartIn(body: unknown, answer: Answered | Refused): (AMainTurn
  */
 async function hearAMainTurnStart(state: RelayState, start: AMainTurnStart & { readonly session_id: string }): Promise<void> {
   const decided = state.heard.aMainTurnStarted(start.session_id, start)
-  if (decided.records === 'nothing') return
+  if (decided.records === 'heard already') return
   const session = sessionNamed(state, start.session_id)
   if (typeof session === 'string') return
   const crewMessage = decided.records === 'the crew message'
-  const carries = { command: false, meta: false }
-  const arrival: Arrival = crewMessage ? arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, A_PLUGINS_ORIGIN, carries) : { source: SOURCE_OF_AN_UNKNOWN_ORIGIN }
+  const arrival: Arrival = crewMessage ? ARRIVAL_OF_A_PLUGINS_PROMPT : { source: SOURCE_OF_AN_UNKNOWN_ORIGIN }
   if ((await keep(state, takeInTurn(session, arrival, state.place.binder))) !== undefined) return
   state.place.screen?.heard(session.id, { said: 'turn-started' }, now())
-  if (crewMessage) state.place.turns?.prompted(decided.text, A_PLUGINS_ORIGIN, carries)
+  if (crewMessage) state.place.turns?.arrived({ text: decided.text, arrival })
   else state.place.journal?.noted(THE_TURN_STARTED_ASK, A_TURN_OF_UNNAMED_SOURCE)
 }
 

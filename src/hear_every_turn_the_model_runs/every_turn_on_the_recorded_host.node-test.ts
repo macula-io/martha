@@ -22,6 +22,7 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { DEFAULT_CONFIG_DIR } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import {
@@ -37,7 +38,7 @@ import {
   type TheOwnersHands,
 } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { A_PLUGINS_ORIGIN, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -60,7 +61,7 @@ const THE_SHELL_LIMIT_MS = 120_000
 const SILENCE_MS = 120_000
 const END = { text: 'Done.' }
 /** The path a plugin's prompt is recorded on, a crew message the mod submitted among them. */
-const THE_CREW_PATH = PATH_OF_SOURCE[CLAUDE_CODE_PROMPT_ORIGINS.sources[A_PLUGINS_ORIGIN] ?? SOURCE_OF_AN_UNKNOWN_ORIGIN]
+const THE_CREW_PATH = 'source' in ARRIVAL_OF_A_PLUGINS_PROMPT ? PATH_OF_SOURCE[ARRIVAL_OF_A_PLUGINS_PROMPT.source] : ''
 /** The path the owner's typing is recorded on. */
 const THE_OWNERS_PATH = PATH_OF_SOURCE[CLAUDE_CODE_PROMPT_ORIGINS.sources['composer'] ?? SOURCE_OF_AN_UNKNOWN_ORIGIN]
 /** The path a turn of unnamed source is recorded on. */
@@ -131,7 +132,7 @@ async function untilTheTurnCarryingItEnded(hands: TheOwnersHands, text: string):
 
 /** The sessions the host kept transcripts for in this run: the record of each is read by its id. */
 function theSessionsOf(project: Project): readonly string[] {
-  const projects = join(project.home, '.claude', 'projects')
+  const projects = join(project.home, DEFAULT_CONFIG_DIR, 'projects')
   return readdirSync(projects, { recursive: true, encoding: 'utf8' })
     .filter((name) => name.endsWith('.jsonl') && !name.includes('subagents'))
     .map((name) => basename(name, '.jsonl'))
