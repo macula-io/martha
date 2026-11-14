@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import { holdingTheEnds } from '../refresh_a_member/hold_the_end.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -74,6 +75,7 @@ function aCrewRefusingEverything(asked: string[]): CrewTools {
     startBeating: () => () => {},
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    ends: holdingTheEnds(),
     thePredecessorOf: async () => null,
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,

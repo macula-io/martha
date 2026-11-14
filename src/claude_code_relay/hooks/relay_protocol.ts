@@ -101,9 +101,13 @@ export interface Ran {
   readonly output: string
 }
 
-/** The launcher took the event in. */
+/**
+ * The launcher took the event in. On a ran tool's report it may also name the running turn to end (martha#311, ruling
+ * D): the last call in flight under an end the launcher holds, so the end is carried only after its report was heard.
+ */
 export interface Taken {
   readonly taken: 1
+  readonly end_turn?: string
 }
 
 /**
@@ -128,8 +132,8 @@ export const TAKEN: Taken = { taken: 1 }
 export const ALLOW: Verdict = { allow: 1 }
 
 /** What the relay acts on: the launcher's yes, or why not. A yes may carry the one line a session is handed as it
- * starts (martha#254 test 10), which is the only answer here that carries anything but its verdict. */
-export type Heard = { readonly yes: true; readonly handed?: string } | { readonly yes: false; readonly why: string }
+ * starts (martha#254 test 10), or the turn a ran tool's report ends (martha#311): nothing else but its verdict. */
+export type Heard = { readonly yes: true; readonly handed?: string; readonly end_turn?: string } | { readonly yes: false; readonly why: string }
 
 const NO = (why: string): Heard => ({ yes: false, why })
 const YES: Heard = { yes: true }
@@ -194,9 +198,10 @@ export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
   const value = jsonObjectOf(text)
   if (value === undefined) return NO(MALFORMED)
-  if (exactKeys(value, ['taken']) && value.taken === 1) return YES
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
-  return NO(MALFORMED)
+  if (value.taken !== 1) return NO(MALFORMED)
+  if (exactKeys(value, ['taken'])) return YES
+  return exactKeys(value, ['taken', 'end_turn']) && isReason(value.end_turn) ? { yes: true, end_turn: value.end_turn } : NO(MALFORMED)
 }
 
 /**

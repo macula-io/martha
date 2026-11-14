@@ -31,6 +31,11 @@
     "proves": "a permission prompt reaches the owner's row and clears once the owner answers it (martha#363)"
   },
   {
+    "file": "src/launch_a_claude_code_member/an_end_on_the_recorded_host.node-test.ts",
+    "cases": 1,
+    "proves": "the host ends a running turn on the launcher's order and the handover queued behind it runs (martha#311)"
+  },
+  {
     "file": "src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts",
     "cases": 2,
     "proves": "a member's switch in this host leaves the owner's own default alone (martha#359)"

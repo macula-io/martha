@@ -10,9 +10,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { orderIn, PANE_CHROME_ROWS, paneIn, switchTheModelOnTheHost, theOwnersListIn } from './crew_answers.ts'
-import { theActAsked, theListForThePane } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { theActAsked, theListForThePane, theStandingLines } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { STANDING_HEADING } from '../../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
-import { CARRY_A_TEXT, CARRY_THE_CLEAR, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
+import { CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
 
 /** The model a switch moves a session to, in these tests: any name at all, since the slice only passes it on. */
@@ -109,14 +109,33 @@ test('#315: a model command the host resolved is reported once, with the model i
 test('the owner\'s list the launcher answers is the list the pane draws, its copy only on the revealed row (martha#316)', () => {
   const row = theActAsked({ id: 'an-act', title: 'Do a thing', commands: [{ command: 'make release', does: 'cuts the release' }] }, 'Pallas', 0)
   assert.ok(!('refused' in row), 'the test could not build its row')
-  const launchers = { ...theListForThePane([row], '', 0), standing: [] }
+  const { heading, claim, focus, next, drawn, copy, lines } = theListForThePane([row], '', 0)
+  const launchers = { heading, claim, focus, next, drawn, copy, lines }
   assert.deepEqual(theOwnersListIn(JSON.stringify(launchers)), launchers, 'the pane reads the launcher\'s own list answer differently')
+  assert.ok(copy !== '' && drawn.filter((line) => line.copy).length === 1, 'the revealed row carries one copy button and the text it copies')
   assert.equal(theOwnersListIn('{"heading":"x"}'), null, 'the pane drew an answer that is not a list')
 })
 
 test('the standing items under the list are the lines the launcher answers, and an answer with none to read is not drawn (martha#317)', () => {
-  const launchers = { ...theListForThePane([], '', 0), standing: [STANDING_HEADING, '- HELD martha-353: PR 353. Why: a demo. Until: the demo is over.'] }
-  assert.deepEqual(theOwnersListIn(JSON.stringify(launchers))?.standing, launchers.standing)
-  assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, standing: undefined })), null, 'an answer with no standing lines was drawn')
-  assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, standing: [1] })), null, 'a standing line that is not text was drawn')
+  const standing = [STANDING_HEADING, '- HELD martha-353: PR 353. Why: a demo. Until: the demo is over.']
+  const { heading, claim, focus, next, drawn, copy, lines } = theListForThePane([], '', 0)
+  const launchers = { heading, claim, focus, next, drawn: [...drawn, ...theStandingLines(standing)], copy, lines: lines + standing.length }
+  const read = theOwnersListIn(JSON.stringify(launchers))
+  assert.deepEqual(read?.drawn.slice(-standing.length).map((line) => line.text), standing, 'the standing lines do not end what the pane draws')
+  assert.equal(read?.drawn.at(-standing.length)?.bold, true, 'the standing heading is not drawn bold')
+  assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, drawn: undefined })), null, 'an answer with no lines was drawn')
+  assert.equal(theOwnersListIn(JSON.stringify({ ...launchers, drawn: [{ text: 1 }] })), null, 'a line that is not text was drawn')
+})
+
+// The end of a running turn (martha#311 design §1 and §5): a fourth order word beside the text, the clear and the
+// model, which every host's mod carries, and the outcome the mod reports back so only an end that ended is counted.
+test('#311: the end the launcher answers is the end the mod carries, with the turn it names (mutant: map it to none)', () => {
+  const order = theOrderOf({ act: CARRY_THE_END, turn_id: 'a-turn' })
+  assert.deepEqual(order, { carry: CARRY_THE_END, turn_id: 'a-turn' }, 'the launcher does not answer an end with the turn it ends')
+  assert.deepEqual(orderIn(JSON.stringify(order)), order, 'the mod reads the launcher\'s end order differently')
+})
+
+test('#311: an end that names no turn is not an order the mod carries out (mutant: drop the turn check)', () => {
+  assert.equal(orderIn(JSON.stringify({ carry: CARRY_THE_END })), null, 'an end with no turn was read as an order')
+  assert.equal(orderIn(JSON.stringify({ carry: CARRY_THE_END, turn_id: '' })), null, 'an end with an empty turn was read as an order')
 })

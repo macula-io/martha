@@ -394,13 +394,13 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 }
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
-const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
 /** The acts that take exactly one argument (martha#129). */
-const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
+export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
 
 type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[] }
 
-function actOf(argv: readonly string[]): Asked | undefined {
+export function actOf(argv: readonly string[]): Asked | undefined {
   const [act] = argv
   if (act === undefined) return undefined
   if (ACTS_ALONE.includes(act)) return argv.length === 1 ? { act, args: [] } : undefined
@@ -413,7 +413,7 @@ function actOf(argv: readonly string[]): Asked | undefined {
 const installOf = (act: string, argv: readonly string[]): Asked | undefined => (installWordsAreAWay(argv.slice(1)) ? { act, args: argv.slice(1) } : undefined)
 
 /** The acts that read their own arguments: each parser answers undefined when the words are no way it is used. */
-const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
+export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
   install: installOf,
   gate: gateOf,
   [STOP]: stopOf,

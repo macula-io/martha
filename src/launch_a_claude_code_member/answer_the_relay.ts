@@ -54,7 +54,7 @@ import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_laun
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
-import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import { type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -790,6 +790,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
   // the tool runs, and never when this launcher refused the call, because a refused call never runs.
   closeTheDialogTheCallRan(state, session, body, call)
+  place.crew?.ends.aCallAllowed(session.id, call.id ?? '')
   return answered(ALLOW)
 }
 
@@ -815,12 +816,13 @@ async function theDenialOfACall(
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.gate === undefined ? {} : { gate: place.gate }),
-    ...(place.audit === undefined ? {} : { audit: place.audit }),
+    audit: place.audit,
   })?.deny
   if (verdict !== undefined) return verdict
   // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
-  // may not make is refused after the gate has allowed it, and never in place of the gate's own answer.
-  return place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })
+  // may not make is refused after the gate has allowed it, and never in place of the gate's own answer. A held end of
+  // the turn (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
+  return (await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })) ?? place.crew?.ends.deniesACall(session.id)
 }
 
 /**
@@ -831,7 +833,17 @@ function closeTheDialogTheCallRan(state: RelayState, session: HostSession, body:
   state.place.screen?.heard(session.id, { said: 'ran', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }
 
+/**
+ * A ran tool's report, answered (#132, #121, #122, the lanes); then, on a yes and only on one, the end of the turn the
+ * launcher holds rides on it when this was the last call in flight (martha#311 ruling D). A no stays a no.
+ */
 async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
+  const reply = await theReportOfARanTool(state, body)
+  const end = reply.answered && isText(body.session_id) ? state.place.crew?.ends.aCallAnswered(body.session_id, callOf(body)?.id ?? '') : undefined
+  return end === undefined ? reply : answered({ ...TAKEN, end_turn: end })
+}
+
+async function theReportOfARanTool(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
   const session = sessionNamed(state, body.session_id)
   if (typeof session === 'string') return stopMember(place, session)
