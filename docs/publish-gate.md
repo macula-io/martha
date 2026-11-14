@@ -190,8 +190,8 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
    The fingerprint holds every listed file's content hash, every file under a
    listed directory, which of the files are absent, and the checkout's work
    tree: the tree git would write if every tracked change and every untracked,
-   unignored file were staged now (`checkout_tree.ts`, in a scratch index, with
-   inherited `GIT_*` variables dropped and fsmonitor off). A pull that changes
+   unignored file were staged now (`src/judge_a_checkouts_tree/`, in a scratch
+   index, with inherited `GIT_*` variables dropped and fsmonitor off). A pull that changes
    only the script an approved hook runs changes the fingerprint. It is read
    before every tool call, so a checkout git reports clean reads as HEAD's own
    tree without staging anything.

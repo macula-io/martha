@@ -124,6 +124,22 @@ const DIALOG_PARTS: Readonly<Record<string, string>> = {
   ].join(';'),
 }
 
+/** The variables one host's report of a failed agent holds its names in; the minifier's own, matched by shape only. */
+const REPORT_NAMES = ['eA', 'eB', 'eC', 'eD', 'eE', 'eF']
+
+/**
+ * The report a host writes for a failed agent (martha#390), in the shape the host spells it: the notification's name and
+ * one constant per element, the one function that builds the report by walking its map, and the switch that gives a task
+ * its status. Each value is the recording's own, so this part says what the binary said.
+ */
+const REPORT_PARTS: Readonly<Record<string, string>> = {
+  failed_agents_report: [
+    `var nA="${RECORDED_HOST.failed_agents_report.notification}",${RECORDED_HOST.failed_agents_report.elements.map(({ element }, at) => `${REPORT_NAMES[at] ?? ''}="${element}"`).join(',')}`,
+    `function bR({taskId:t,toolUseId:n,taskType:r,outputFile:i,status:s,summary:e,summaryLead:d,body:T,trailing:p}){let l=[${['t', 'n', 'r', 'i', 's', 'e'].map((argument, at) => `[${REPORT_NAMES[at] ?? ''},${argument}]`).join(',')}],a=\`<\${nA}>\`;return a}`,
+    `function gT(e){switch(e.status){${RECORDED_HOST.failed_agents_report.task_statuses.map((status) => `case"${status}":return{taskId:q,status:"${status}"}`).join(';')}}}`,
+  ].join(';'),
+}
+
 /** The functions the managed-folder guard reaches, as recorded (martha#412). */
 const GUARD = (JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed).managed_folder_guard_calls
 const exportedAs = (index: number): string => `guardFunction${String(index)}`
@@ -162,6 +178,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...PLACE_PARTS,
   ...RULE_PARTS,
   ...DIALOG_PARTS,
+  ...REPORT_PARTS,
   ...MEMORY_PARTS,
   // Last, so the import of what the guard calls is in the loader's module, before the first module of its own.
   managed_folder_guard_calls: guardModules(GUARD),
@@ -354,6 +371,23 @@ test('a host that maps a second list of hook events cannot be read, naming the p
     assert.equal(run.status, 1, second.slice(0, 80))
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: hook events a module hears\n`)
   }
+})
+
+// The report a host writes for a failed agent is compared like every other part (martha#390): a host that renames an
+// element or stops writing the report fails the check by that field, rather than a review that stopped reading as one
+// that never ran.
+test('a host that renames an element of a failed agent\'s report fails the check naming the field (martha#390)', (t) => {
+  const planted = (REPORT_PARTS.failed_agents_report ?? '').replace('="tool-use-id"', '="task-call-id"')
+  assert.notEqual(planted, REPORT_PARTS.failed_agents_report, 'the planted report differs')
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, failed_agents_report: planted }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: failed_agents_report\n`)
+})
+
+test('a host that no longer builds the report cannot be read, naming the part (martha#390)', (t) => {
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, failed_agents_report: 'var unrelated=1' }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: a failed agent's report\n`)
 })
 
 /** The recorded guard with the one function `name` declares changed by `change` (martha#412). */

@@ -167,6 +167,43 @@ export function beatAfter(held: DashboardRow | null, beat: DashboardRow): Dashbo
   return held.at >= beat.at ? null : beat
 }
 
+/**
+ * The line one writer is putting in the row's `needs`, and the line that writer put there before (martha#390 r=2): the
+ * row has one slot, so a writer that puts a line there says it is its own, and is the only one that may take it back.
+ */
+export interface ALinePutInTheRow {
+  /** The line this writer put in the slot last time, which is its own to take back; null when it put none. */
+  readonly wrote: string | null
+  /** The line to put there now. */
+  readonly line: string
+  /** Milliseconds since the epoch, when the line was told: a line told to the owner is a beat, and it is this writer's. */
+  readonly at: number
+}
+
+/**
+ * The row after a writer puts its own line in the one `needs` slot (martha#390): the line written over an empty slot or
+ * over this writer's own line, and nothing at all when another owner's line stands there — that line is theirs to
+ * answer, and a stopped review that replaced it would hide the switch the owner has to act on (martha#359). Answering
+ * nothing is how a change says the row does not take it, and the writer then knows the line is not its own to tell.
+ *
+ * Its twin is the model switch's (../a_crews_tools, `rowAfterASwitch`), and the two stances differ on purpose: a switch
+ * writes its line over any, because what it reports is the owner's file not being put back, and takes back only the
+ * lines its own record carries. Both take back only their own; neither may leave the slot saying something nobody wrote.
+ */
+export function theRowWithTheLine(held: DashboardRow, putting: ALinePutInTheRow): DashboardRow | null {
+  if (held.needs !== '' && held.needs !== putting.wrote) return null
+  return { ...held, needs: putting.line, at: putting.at }
+}
+
+/**
+ * The row after a writer takes its own line back (martha#390): `wrote` gone from the slot when the slot still says it,
+ * and nothing at all when it does not — a line another owner wrote over this one is left where it is. The row's `at` is
+ * left exactly as it was, because taking a line away is not a beat of the member's (martha#380).
+ */
+export function theRowWithoutTheLineItWrote(held: DashboardRow, wrote: string): DashboardRow | null {
+  return held.needs === wrote ? { ...held, needs: '' } : null
+}
+
 /** Where a member's row is kept: the host's store, which the launcher implements and a slice of the core only uses. */
 export interface DashboardStore {
   /** The member's row as it is, or null when the store holds none. */

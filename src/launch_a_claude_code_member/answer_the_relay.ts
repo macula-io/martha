@@ -42,6 +42,8 @@ import {
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import { reviewSpawnsRemembered, theFailedReviewIn, theLineAboutIt, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
@@ -150,8 +152,26 @@ export interface MemberRelayPlace {
    * is the row's change. A launch given none writes no row and rings nothing.
    */
   readonly screen?: TheScreenKeeper
+  /**
+   * Where a line of Martha's own about this member goes (martha#390): its row, and the member's own session. Absent, a
+   * launch tells neither and every other answer is as it was.
+   */
+  readonly telling?: TheMembersTelling
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
+}
+
+/** The two places a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member. */
+export interface TheMembersTelling {
+  /** The member's row: the line goes where the owner's dashboard reads what is waiting. */
+  theRow(line: string): void
+  /** The member's own session: the line is handed to it as a turn, through the crew's own channel. */
+  theMember(line: string): Promise<void>
+  /**
+   * The line this launcher put in the row leaves it again (martha#390 r=1): the member has taken the matter up, so what
+   * needed the owner no longer does. Only this launcher's own line goes — a line another owner wrote stays where it is.
+   */
+  takeTheLineBack(): void
 }
 
 /** Why a run is refused for a member launched without signed runs. */
@@ -194,6 +214,8 @@ interface RelayState {
   readonly agents: Map<string, AgentRun>
   /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
   readonly everyTurn: HearingEveryTurn
+  /** The review calls this launcher allowed, by the host's id for the call, and what it resolved to (martha#390). */
+  readonly reviews: TheReviewSpawns
 }
 
 /**
@@ -287,6 +309,7 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
     everyTurn: hearingEveryTurn({ keep: async (id, arrival) => keepATurn(state, id, arrival), ...place, now }),
+    reviews: reviewSpawnsRemembered(),
   }
   let queue: Promise<unknown> = Promise.resolve()
 
@@ -606,6 +629,7 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   // The turn is kept, so the host really took it in: it is raised to whatever waits on turns, in the shape the host
   // contract names (martha#253). A prompt this launcher refused is never raised.
   state.place.turns?.prompted(body.text, origin.kind, whatAPromptCarries(body))
+  await nameTheReviewTheHostReportsFailed(state, body.text, origin.kind)
   return answered(TAKEN)
 }
 
@@ -720,6 +744,65 @@ async function subagentStopped(state: RelayState, body: Body): Promise<RelayRepl
   return why === undefined ? answered(TAKEN) : refused(why)
 }
 
+/**
+ * Keeps an Agent call this launcher allowed when it is one of the crew's reviews on its reviewer model (martha#390), so
+ * a failure the host reports later can be read as that review's and as no other's. A crew that names no reviewer model,
+ * and a call that is not a review on it, keep nothing.
+ *
+ * An allowed review is also the member taking up again whichever review stopped before it: the line that one left in
+ * the row has been acted on, and leaves it here (martha#390 r=1).
+ */
+async function noteTheReviewThisLauncherLetThrough(state: RelayState, call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>>; readonly id: string | undefined }): Promise<void> {
+  const crew = state.place.crew
+  if (crew === undefined || call.id === undefined) return
+  const review_model = await crew.theReviewModelOfTheCall(call)
+  if (review_model === null) return
+  state.reviews.remember(call.id, review_model)
+  state.place.telling?.takeTheLineBack()
+}
+
+/**
+ * Keeps the model the host said a kept review call resolved to (martha#390): the call's answer carries the agent's own
+ * model, and that — never a name out of the host's prose — is what a line about the review names it by.
+ */
+function noteWhatTheReviewResolvedTo(state: RelayState, call: { readonly id: string | undefined }, answer: unknown): void {
+  if (call.id === undefined || state.reviews.theSpawn(call.id) === undefined) return
+  const resolved = resolvedModelIn(answer)
+  if (resolved !== undefined) state.reviews.resolved(call.id, resolved)
+}
+
+/** The model the host answered an agent's call with, or undefined when the answer carries none. */
+function resolvedModelIn(answer: unknown): string | undefined {
+  if (!isBody(answer)) return undefined
+  const result = answer['result']
+  if (!isBody(result)) return undefined
+  const resolved = result['resolvedModel']
+  return isText(resolved) ? resolved : undefined
+}
+
+/**
+ * The host's own report of a review that failed, named to the member and its row (martha#390): the envelope's fixed
+ * fields decide it, the model is the one the allowed call resolved to, and the host's summary is repeated verbatim.
+ * Nothing relaunches the review, and no second model is chosen anywhere. A line that cannot be put in the member's
+ * session leaves the row's line standing: the member is told by the host's own turn in any case.
+ */
+async function nameTheReviewTheHostReportsFailed(state: RelayState, text: string, origin_kind: string): Promise<void> {
+  const crew = state.place.crew
+  const telling = state.place.telling
+  if (crew === undefined || telling === undefined) return
+  const review_model = await crew.theReviewModel()
+  if (review_model === null) return
+  const failed = theFailedReviewIn(state.reviews, text, { origin_kind, review_model, report: THE_HOSTS_FAILED_REVIEW })
+  if (failed === undefined) return
+  const line = theLineAboutIt(failed)
+  telling.theRow(line)
+  try {
+    await telling.theMember(line)
+  } catch {
+    // The channel's own store refused the append: the row still says it, and the host's turn reached the member anyway.
+  }
+}
+
 async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
   const named = sessionNamed(state, body.session_id)
@@ -732,6 +815,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const denial = await theDenialOfACall(state, session, call, agent_id)
   if (denial !== undefined) return denied(denial)
   place.signed_runs?.callAllowed(call.tool, call.input)
+  await noteTheReviewThisLauncherLetThrough(state, call)
   // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
   // the tool runs, and never when this launcher refused the call, because a refused call never runs.
   closeTheDialogTheCallRan(state, session, body, call)
@@ -794,6 +878,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
+  noteWhatTheReviewResolvedTo(state, call, body.answer)
   // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears.
   place.crew?.noteTheCallsAnswer({ tool: call.tool }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
