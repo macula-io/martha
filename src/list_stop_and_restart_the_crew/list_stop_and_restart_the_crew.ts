@@ -1,8 +1,10 @@
 // `martha ls`, `martha stop [<member>]` and `martha restart <member> [--fresh]` (martha#312): the owner's view of which
 // members run, the owner's stop and restart, and the hold that lets a launcher start its member again.
 //
-// Host glue only. The places are this machine's directories, read through the stores the launcher writes; what a
-// member is, and how a stop or a restart is asked and carried out, are ../stop_and_restart_a_member's.
+// Host adapter, and no decision of its own. The places are this machine's directories, read through the stores the
+// launcher writes; what a member is, and how a stop or a restart is asked and carried out, are
+// ../stop_and_restart_a_member's. It sits here rather than in ../run_the_martha_command because that adapter has a
+// ceiling and composes slices, so this wiring has a directory of its own, declared in package.json as an adapter.
 
 import { randomUUID } from 'node:crypto'
 
