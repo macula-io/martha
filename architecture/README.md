@@ -137,6 +137,11 @@ box:
 |---|---|
 | `record_mesh_answers` | A script run by hand, `npm run record:mesh-answers`, when a version of the mesh server is recorded. The gate reads the answer shapes it wrote; the script itself never runs. |
 | `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
+| `declare_a_launch_probe` | What one row of `npm run probe:launch` is: its shape, the place it runs in, and the command builders its rows share. The rows and the runner both import it; the `martha` command never loads it. |
+| `probe_a_checkouts_own_config` | The rows of `npm run probe:launch` about a checkout's own config: its `CLAUDE.md` files and agents, and the tool servers, hooks and plugins it declares. The `martha` command never loads them. |
+| `probe_the_owners_hooks` | The rows of `npm run probe:launch` about the owner's hooks: user hooks and plugins, the keys that turn every hook off, and the spellings of the `hooks` key. The `martha` command never loads them. |
+| `probe_the_owners_own_folders` | The rows of `npm run probe:launch` about the owner's own folders: the skills trash, the synced skills, and a write into each folder the host loads the owner's text from. The `martha` command never loads them. |
+| `probe_the_hosts_auto_memory` | The rows of `npm run probe:launch` about Claude Code's auto-memory, in a plain checkout and in a worktree. The `martha` command never loads them. |
 | `record_claude_code_host` | A script run by hand, `npm run record:claude-code-host`, when the coding tool is upgraded. The adapter reads the recording it writes; the script itself never runs. |
 | `redo_the_generated_files_of_a_merge` | A program `land_batch` runs, `npm run redo:generated`, over a clone whose batch clashes only in a C4 picture or the host ceilings (martha#381). It redraws the picture and merges the ceilings; the core runs it and never loads it. Two more modes answer for its rule without merging (martha#339): `--classify` tells the dry run whether one clashed path is redone, and `--judge` tells `verify_range` whether a landing merge that clashed is what the redo makes and nothing more. |
 

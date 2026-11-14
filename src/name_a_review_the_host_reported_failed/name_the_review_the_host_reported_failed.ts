@@ -59,18 +59,39 @@ export interface TheReviewSpawns {
   resolved(tool_use_id: string, resolved_model: string): void
   /** What this launcher knows of one call, or undefined for a call it never allowed. */
   theSpawn(tool_use_id: string): AnAllowedSpawn | undefined
+  /** Forgets one call: the line about it has been written, or the table had no room for it. */
+  forget(tool_use_id: string): void
 }
+
+/**
+ * How many of the launcher's allowed reviews are held: enough for the reviews one member can have open at once and the
+ * last stop the host reported, few enough that a launch spawning reviews all day does not keep every one of them
+ * (martha#430). What the bound costs is stated where it is spent: past this many, a failure the host reports for an
+ * older call is not named in the row — the member still reads the host's own turn, which is the route this slice relies
+ * on whenever no line can be written at all.
+ */
+export const REVIEWS_REMEMBERED = 32
 
 /** A spawn table that starts empty: one per launch. */
 export function reviewSpawnsRemembered(): TheReviewSpawns {
   const spawns = new Map<string, AnAllowedSpawn>()
+  const forgetTheOldest = (): void => {
+    const oldest = spawns.keys().next()
+    if (!oldest.done) spawns.delete(oldest.value)
+  }
   return {
-    remember: (tool_use_id, allowed_model) => void spawns.set(tool_use_id, { allowed_model }),
+    remember: (tool_use_id, allowed_model) => {
+      // A call remembered again goes to the back of the table, so the oldest is the least recently allowed.
+      spawns.delete(tool_use_id)
+      spawns.set(tool_use_id, { allowed_model })
+      if (spawns.size > REVIEWS_REMEMBERED) forgetTheOldest()
+    },
     resolved: (tool_use_id, resolved_model) => {
       const held = spawns.get(tool_use_id)
       if (held !== undefined) spawns.set(tool_use_id, { ...held, resolved_model })
     },
     theSpawn: (tool_use_id) => spawns.get(tool_use_id),
+    forget: (tool_use_id) => void spawns.delete(tool_use_id),
   }
 }
 
@@ -120,6 +141,48 @@ export function whatTheEnvelopeNoLongerHolds(text: string, report: TheReportTheH
 
 /** One line about a failed review: the model the call resolved to, and the host's own words for the stop. */
 export const theLineAboutIt = (failed: TheFailedReview): string => `review on ${failed.model}: ${failed.reason}`
+
+/** Where the line about a failed review goes: the owner's row, and the member's own session. */
+export interface WhereTheFailedReviewIsTold {
+  /** The row the owner reads, which says what needs them. */
+  readonly theRow: (line: string) => void
+  /**
+   * The member's own session, through the crew's channel; a store that refuses it is the telling's to write down. The
+   * review's call is handed over so that writing it down can name it (martha#430).
+   */
+  readonly theMember: (line: string, call: string) => Promise<void>
+}
+
+/**
+ * Names the review the host reports failed in `text` (martha#390): the row first, so the owner reads it whatever happens
+ * to the member's half, then the member's session. The call is forgotten once the line is written (martha#430) — the
+ * entry was kept for this one reading, and a second envelope naming the same call then names nothing rather than
+ * putting the same stop in the row twice. A turn that is not that envelope, or not one of this launcher's reviews,
+ * names nothing and forgets nothing.
+ */
+export async function nameTheFailedReviewIn(
+  spawns: TheReviewSpawns,
+  text: string,
+  reading: HowTheTurnIsRead,
+  where: WhereTheFailedReviewIsTold,
+): Promise<void> {
+  const failed = theFailedReviewIn(spawns, text, reading)
+  if (failed === undefined) return
+  const line = theLineAboutIt(failed)
+  where.theRow(line)
+  await where.theMember(line, failed.tool_use_id)
+  spawns.forget(failed.tool_use_id)
+}
+
+/**
+ * The model the host answered an agent's call with, or undefined when the answer carries none (martha#390): the agent's
+ * own model, never one read out of the host's prose. The answer's own shape is the host's, which is why it is read here
+ * and not in the launcher that only passes it on.
+ */
+export function resolvedModelIn(answer: unknown): string | undefined {
+  const resolved = (answer as { readonly result?: { readonly resolvedModel?: unknown } } | null | undefined)?.result?.resolvedModel
+  return typeof resolved === 'string' && resolved !== '' ? resolved : undefined
+}
 
 /** What one element of the host's envelope holds, or undefined when the text holds no such element. */
 export function theElementIn(text: string, element: string): string | undefined {

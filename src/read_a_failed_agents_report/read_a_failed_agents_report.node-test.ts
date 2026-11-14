@@ -1,7 +1,7 @@
 // The host's report of a failed agent, cut from its own text (martha#390): what the names stand for, and what happens
 // when the host renames one or stops writing the report at all.
 //
-// The text here is the shape Claude Code 2.1.323 writes, in the size a test can hold: the declarations, the one function
+// The text here is the shape the host the pin names writes, in the size a test can hold: the declarations, the one function
 // that builds the report, and the switch that gives a task its status. The real bundle is cut by the drift job
 // (host-drift.yml), which re-records from npm's latest release and names the field that differs.
 
