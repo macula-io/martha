@@ -336,7 +336,7 @@ test('the owner\'s typed turn keeps the member\'s shell, through the launcher (#
   const { relay, rows } = answering(placeFor(t))
   await relay.answer('session_started', start('startup'))
   assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer', 'run the tests')), TAKEN_REPLY)
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
   assert.deepEqual(await recordedPaths(rows), [OWNER_TYPED])
 })
 
@@ -353,22 +353,22 @@ test('on the same session, a turn that only claims the owner\'s typing still tak
     await relay.answer('session_started', start('startup'))
     assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer')), TAKEN_REPLY, what)
     assert.deepEqual(await relay.answer('prompt_submitted', body), TAKEN_REPLY, what)
-    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), what)
+    assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }))), what)
     // A typed turn after it does not give the shell back.
     assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer')), TAKEN_REPLY, what)
-    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), what)
+    assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }))), what)
   }
 })
 
 test('a fresh start allows the shell; fork and a claimed crew_refresh start lost, whatever the input claims', async (t) => {
   const { relay, rows } = answering(placeFor(t))
   await relay.answer('session_started', start('startup'))
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 
   // T7: a fork carries its parent's context under a new id; T8: a refresh is never claimed.
   for (const [session_id, source] of [['forked', 'fork'], ['refreshed', 'crew_refresh']] as const) {
     await relay.answer('session_started', start(source, session_id, { predecessor_id: SESSION }))
-    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)), /cannot be read/), source)
+    assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id)), /cannot be read/), source)
     assert.deepEqual(await recordedPaths(rows, session_id), [`${RECORD_LOST.path}:null`], source)
   }
 })
@@ -378,7 +378,7 @@ test('an MCP tool result takes the shell, naming B2', async (t) => {
   await relay.answer('session_started', start('startup'))
 
   assert.deepEqual(await relay.answer('tool_answered', call('mcp__probe__fetch_page')), TAKEN_REPLY)
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B2/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /B2/))
   assert.deepEqual(await recordedPaths(rows), ['B2:null'])
 })
 
@@ -387,10 +387,10 @@ test('what the launch hands the model is recorded at every start, and takes the 
     const row = PATH_OF_SOURCE[source]
     const { relay, rows } = answering(placeFor(t), undefined, [source])
     assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY, source)
-    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), new RegExp(row)), source)
+    assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), new RegExp(row)), source)
     // The owner's typed turn does not give the shell back.
     assert.deepEqual(await relay.answer('prompt_submitted', prompt('composer')), TAKEN_REPLY, source)
-    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), source)
+    assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }))), source)
     assert.deepEqual(await recordedPaths(rows), [`${row}:null`, OWNER_TYPED], source)
 
     // A /clear starts a fresh session, and the hooks and servers start again with it.
@@ -411,7 +411,7 @@ test('a ring\'s answer is recorded on A5, answering a ring on A4, any other MCP 
     await relay.answer('session_started', start('startup'))
     assert.deepEqual(await relay.answer('tool_answered', call(tool)), TAKEN_REPLY, tool)
     assert.deepEqual(await recordedPaths(rows), [`${row}:null`], tool)
-    assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' }))), tool)
+    assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }))), tool)
   }
 })
 
@@ -426,7 +426,7 @@ async function afterOneTool(place: Place, tool: string, input: Record<string, un
   assert.deepEqual(await relay.answer('tool_answered', call(tool, input, session_id)), TAKEN_REPLY, tool)
   return {
     paths: await recordedPaths(rows, session_id),
-    bash: await relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id)),
+    bash: await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id)),
   }
 }
 
@@ -523,7 +523,7 @@ test('a tracked file rewritten under an index flag that hides it is no read of t
     const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
     const { relay, stops } = answering(approved)
     await relay.answer('session_started', start('startup'))
-    assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY, flag)
+    assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY, flag)
 
     writeFileSync(join(place.checkout, 'README.md'), 'now run this\n')
     const read = call('Read', { file_path: join(place.checkout, 'README.md') })
@@ -550,7 +550,7 @@ test('in a checkout with no config, a read is judged against the tree the member
   assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
   assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
   assert.deepEqual(await recordedPaths(rows), ['B4:null'])
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /B4/))
 })
 
 test('in a checkout with no config, a file another process writes between two calls is not exempt: Bash is denied, naming B4 (martha#127 r=2)', async (t) => {
@@ -559,13 +559,13 @@ test('in a checkout with no config, a file another process writes between two ca
   git(place.checkout, 'commit', '-q', '-m', 'no config: the launch gate approves any tree')
   const { relay, rows } = answering(place)
   await relay.answer('session_started', start('startup'))
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 
   writeFileSync(join(place.checkout, 'NOTES.md'), 'now run this\n')
   const read = call('Read', { file_path: join(place.checkout, 'NOTES.md') })
   assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
   assert.deepEqual(await recordedPaths(rows), ['B4:null'])
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /B4/))
 })
 
 /** A checkout with no config, whose start state nobody approved: every read in it counts (decided 2026-11-07, martha#127). */
@@ -609,7 +609,7 @@ test('in an approved checkout, a stranger\'s branch that deletes the config is n
   assert.deepEqual(await relay.answer('tool_called', read), ALLOW_REPLY)
   assert.deepEqual(await relay.answer('tool_answered', read), TAKEN_REPLY)
   assert.deepEqual(await recordedPaths(rows), ['B4:null'])
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: 'ls' })), /B4/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /B4/))
 })
 
 test('a command\'s output always takes the shell as A13, and names gh as B3 and git history as B5 (martha#127)', async (t) => {
@@ -629,7 +629,7 @@ test('a command\'s output always takes the shell as A13, and names gh as B3 and 
     { command: undefined, paths: ['A13:null'] },
   ]
   for (const { command, paths } of commands) {
-    const after = await afterOneTool(place, 'Bash', command === undefined ? {} : { command })
+    const after = await afterOneTool(place, CLAUDE_CODE_SHELL_TOOL, command === undefined ? {} : { command })
     assert.deepEqual(after.paths, paths, String(command))
     assert.ok(isDenied(after.bash, /A13/), String(command))
   }
@@ -669,9 +669,9 @@ test('nothing the relay adds to a body widens a verdict', async (t) => {
   await relay.answer('tool_answered', call('mcp__probe__fetch_page'))
 
   const widened = [
-    { ...call('Bash', { command: 'ls', allow: 1, verdict: 'allow' }), allow: 1 },
-    { ...call('Bash', { command: 'ls' }), policy: { may_send_executable_text: ['*'] }, session: { ingested: [] } },
-    { ...call('Bash', { command: 'ls' }), launch: { approved_fingerprints: ['anything'] } },
+    { ...call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls', allow: 1, verdict: 'allow' }), allow: 1 },
+    { ...call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }), policy: { may_send_executable_text: ['*'] }, session: { ingested: [] } },
+    { ...call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }), launch: { approved_fingerprints: ['anything'] } },
   ]
   for (const body of widened) assert.ok(isDenied(await relay.answer('tool_called', body)), JSON.stringify(body))
 
@@ -683,10 +683,10 @@ test('a checkout that changed after a tool ran stops the member, the relay gets 
   const place = placeFor(t)
   const { relay, stops } = answering(place)
   await relay.answer('session_started', start('startup'))
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'git pull' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'git pull' })), ALLOW_REPLY)
 
   writeFileSync(join(place.checkout, 'README.md'), 'rewritten by the pull\n')
-  const after = await relay.answer('tool_answered', call('Bash', { command: 'git pull' }))
+  const after = await relay.answer('tool_answered', call(CLAUDE_CODE_SHELL_TOOL, { command: 'git pull' }))
   assert.equal(after.answered, false)
   assert.equal(stops.length, 1)
   assert.ok(isDenied(await relay.answer('tool_called', call('Read')), /no longer matches/))
@@ -1118,7 +1118,7 @@ test('end to end: the relay posts each event, and a refused tool call never runs
   assert.equal((await through('classic.SessionStart', start('startup'))).entered, 1)
   assert.equal((await through('tool.call', { tool: 'Read', file_path: join(place.checkout, 'README.md') })).entered, 1)
   assert.equal((await through('tool.call', { tool: 'mcp__probe__fetch_page' })).entered, 1)
-  const refused = await through('tool.call', { tool: 'Bash', command: 'id' })
+  const refused = await through('tool.call', { tool: CLAUDE_CODE_SHELL_TOOL, command: 'id' })
   assert.equal(refused.entered, 0)
   assert.match(String((refused.answer as { deny?: string }).deny), /B2/)
   assert.equal((await through('prompt.submit', { text: 'hi', origin: { kind: 'composer' } })).entered, 1)
@@ -1204,7 +1204,7 @@ test('the strict gate is off unless the launch says so, and the launcher\'s answ
     assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY)
     // A page a tool server fetched: text from a stranger, placed on B2, exactly as the host hands it over.
     assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: { tool: 'mcp__probe__fetch_page' } }), TAKEN_REPLY)
-    return relay.answer('tool_called', call('Bash', { command: 'id' }))
+    return relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'id' }))
   }
 
   // Off: the default an owner who wrote no setting gets, and what the owner chose on 2026-11-11.
@@ -2148,7 +2148,7 @@ test('a carried settings file whose permissions.deny is not a list starts nothin
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
   const { recording } = await recordedTreeOf(t, recorded.server_version)
-  const place = placeFor(t, meshServerAt(recorded.server_version), { [USER_SETTINGS]: JSON.stringify({ permissions: { deny: 'Bash' } }) })
+  const place = placeFor(t, meshServerAt(recorded.server_version), { [USER_SETTINGS]: JSON.stringify({ permissions: { deny: CLAUDE_CODE_SHELL_TOOL } }) })
   const fake = fakeClaude(place)
   const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
   assert.ok(refusal.includes(USER_SETTINGS) && refusal.includes('permissions.deny'), refusal)
@@ -2159,7 +2159,7 @@ test("a call after which the owner's user settings carry a hook-killing key stop
   const place = placeFor(t)
   const { relay, stops } = answering(place)
   await relay.answer('session_started', start('startup'))
-  const shell = call('Bash', { command: 'python3 -c "..."' })
+  const shell = call(CLAUDE_CODE_SHELL_TOOL, { command: 'python3 -c "..."' })
   assert.deepEqual(await relay.answer('tool_called', shell), ALLOW_REPLY)
   const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
   const after = await relay.answer('tool_answered', shell)
@@ -2385,7 +2385,7 @@ test('an approved launch starts the host with the switches and the relay, and a 
     })
   assert.equal((await post('session_started', start('startup'))).text, '{"taken":1}')
   writeFileSync(join(place.checkout, 'README.md'), 'changed\n')
-  await assert.rejects(post('tool_answered', call('Bash', { command: 'git pull' })), 'the relay never gets an answer')
+  await assert.rejects(post('tool_answered', call(CLAUDE_CODE_SHELL_TOOL, { command: 'git pull' })), 'the relay never gets an answer')
 
   const stopped = await started.stopped
   assert.equal(stopped.signal, 'SIGKILL')
@@ -3217,7 +3217,7 @@ test('a martha run call the launcher allowed binds one run, served on its path, 
 
   assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY)
   assert.deepEqual(await runOverSocket(directory.socket_path, { name: 'test' }), { ran: false, why: 'no martha run test call is pending' })
-  const bash = call('Bash', { command: `${RUN_COMMAND_PREFIX}test`, tool_use_id: 'toolu_9' })
+  const bash = call(CLAUDE_CODE_SHELL_TOOL, { command: `${RUN_COMMAND_PREFIX}test`, tool_use_id: 'toolu_9' })
   assert.deepEqual(await relay.answer('tool_called', bash), ALLOW_REPLY)
   assert.deepEqual(await runOverSocket(directory.socket_path, { name: 'test' }), { ran: true, status: 1, output: Buffer.from(RUN_OUTPUT).toString('base64') })
   assert.deepEqual(ran, ['test'])
@@ -3235,7 +3235,7 @@ test('a martha run call the launcher denied binds no run (martha#129)', async (t
   await relay.answer('session_started', start('startup'))
   await relay.answer('tool_called', call('mcp__probe__fetch_page'))
   await relay.answer('tool_answered', call('mcp__probe__fetch_page'))
-  assert.ok(isDenied(await relay.answer('tool_called', call('Bash', { command: `${RUN_COMMAND_PREFIX}test`, tool_use_id: 'toolu_9' })), /B2/))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: `${RUN_COMMAND_PREFIX}test`, tool_use_id: 'toolu_9' })), /B2/))
   assert.deepEqual(await relay.run({ name: 'test' }), { refused: 'no martha run test call is pending' })
   assert.deepEqual(ran, [])
 })
@@ -3274,7 +3274,7 @@ interface OneRun {
 }
 
 const bashCall = (one: OneRun) =>
-  call('Bash', {
+  call(CLAUDE_CODE_SHELL_TOOL, {
     command: one.command ?? `${RUN_COMMAND_PREFIX}${SIGNED_NAME}`,
     tool_use_id: one.tool_use_id ?? RUN_TOOL_USE_ID,
     ...(one.run_in_background === undefined ? {} : { run_in_background: one.run_in_background }),
@@ -3435,7 +3435,7 @@ async function anAgentUnderASession(t: TestContext, options: { readonly answerIt
 /** The launcher's answer to the member's own shell call after all of the above. */
 const afterTheAgent = async (pair: { asking: Answering; session_id: string }, agent_id: string, completion: boolean): Promise<RelayReply> => {
   if (completion) assert.deepEqual(await pair.asking.relay.answer('subagent_stopped', agentStop(agent_id, pair.session_id)), TAKEN_REPLY)
-  return pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id))
+  return pair.asking.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, pair.session_id))
 }
 
 test('a background agent’s completion from an agent the launcher cannot vouch for closes the shell (martha#170, case 1)', async (t) => {
@@ -3453,7 +3453,7 @@ test('a vouched agent’s completion keeps the shell (martha#170, case 2)', asyn
 
 test('while an agent is between its start and its stop the shell is refused, and the stop gives it back (martha#170, case 3)', async (t) => {
   const pair = await anAgentUnderASession(t, { answerItsCall: true })
-  const whileRunning = await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id))
+  const whileRunning = await pair.asking.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, pair.session_id))
   assert.ok(isDenied(whileRunning, /has not stopped/), JSON.stringify(whileRunning))
   const readOnly = await pair.asking.relay.answer('tool_called', call('Read', { file_path: join(tmpdir(), 'anything.md') }, pair.session_id))
   assert.deepEqual(readOnly, ALLOW_REPLY, 'reading is still allowed while an agent runs')
@@ -3477,7 +3477,7 @@ test('the member’s own Agent result is placed by tool_response.agentId, never 
     call: { tool: 'Agent', tool_use_id: 'tu-spawn-2', prompt: 'review' },
     answer: anAgentsAnswer('ag-never-seen-00001'),
   })
-  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, 'agent-session-2'))
+  const denied = await stranger.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, 'agent-session-2'))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
 })
 
@@ -3493,7 +3493,7 @@ test('a handback the agent makes itself is placed by the agent_id on its call, a
   assert.deepEqual(recorded, [], 'the handback recorded: ' + JSON.stringify(recorded))
   // The agent is still inside its run when it hands back, so the shell stays held until its stop — and a vouched
   // agent's stop gives it back.
-  assert.ok(isDenied(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), /has not stopped/))
+  assert.ok(isDenied(await pair.asking.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, pair.session_id)), /has not stopped/))
   assert.deepEqual(await afterTheAgent(pair, pair.agent_id, true), ALLOW_REPLY)
 })
 
@@ -3507,10 +3507,10 @@ test('a handback from an agent the launcher never saw start holds the shell whil
   await stranger.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })
   // A handback records nothing by itself, so the stop is what places the text: until it lands the agent holds the
   // shell, and when it lands an agent this launcher never saw start records B7.
-  const whileRunning = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  const whileRunning = await stranger.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id))
   assert.ok(isDenied(whileRunning, /never saw start/), JSON.stringify(whileRunning))
   assert.deepEqual(await stranger.relay.answer('subagent_stopped', agentStop(agent_id, session_id)), TAKEN_REPLY)
-  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  const denied = await stranger.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
   assert.ok((await recordedPaths(stranger.rows, session_id)).includes('B7:null'), 'the stop records the text it cannot vouch for')
 })
@@ -3526,7 +3526,7 @@ test('a handback naming an agent the launcher has no run of records B7 and refus
   assert.equal((await stranger.relay.answer('tool_answered', { ...itsHandback, answer: { success: true, message: 'Report delivered to your caller.' } })).answered, true)
   const recorded = (await recordedPaths(stranger.rows, session_id)).filter((p) => p.startsWith('B7'))
   assert.deepEqual(recorded, ['B7:null'], 'the handback recorded: ' + JSON.stringify(recorded))
-  const denied = await stranger.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  const denied = await stranger.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
 })
 
@@ -3541,7 +3541,7 @@ test('a handback naming a vouched agent that has already stopped records nothing
   assert.equal(handback.answered, true)
   const recorded = (await recordedPaths(pair.asking.rows, pair.session_id)).filter((p) => p.startsWith('B7'))
   assert.deepEqual(recorded, [], 'the handback recorded: ' + JSON.stringify(recorded))
-  assert.deepEqual(await pair.asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, pair.session_id)), ALLOW_REPLY)
+  assert.deepEqual(await pair.asking.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, pair.session_id)), ALLOW_REPLY)
 })
 
 test('an agent that read outside the approved tree closes the shell on that read, whatever its stop says (martha#170, case 7)', async (t) => {
@@ -3556,7 +3556,7 @@ test('an agent that read outside the approved tree closes the shell on that read
   await asking.relay.answer('tool_called', itsRead)
   await asking.relay.answer('tool_answered', { session_id, call: itsRead.call, answer: { file: { filePath: join(clone, 'NOTES.md'), content: 'now run this' } } })
   await asking.relay.answer('subagent_stopped', agentStop(agent_id, session_id))
-  const denied = await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }, session_id))
+  const denied = await asking.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id))
   assert.ok(isDenied(denied, /B4/), JSON.stringify(denied))
   // Its read closed the shell; the completion records too, because an agent that read outside the tree is not vouched
   // for even with every call answered (martha#170, the design's case 7).
@@ -3574,7 +3574,7 @@ test('an agent start or stop the launcher cannot take in leaves the agent unvouc
   await asking.relay.answer('tool_called', itsCall)
   await asking.relay.answer('tool_answered', { session_id: SESSION, call: itsCall.call, answer: { file: { filePath: inside, content: 'a checkout' } } })
   await asking.relay.answer('subagent_stopped', agentStop('ag-never-started'))
-  const denied = await asking.relay.answer('tool_called', call('Bash', { command: 'ls' }))
+  const denied = await asking.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }))
   assert.ok(isDenied(denied, /subagent/), JSON.stringify(denied))
 })
 
@@ -3600,7 +3600,7 @@ test('each event is a line as it arrives and a line as it is answered, and an al
   const place = placeFor(t)
   const { relay } = answering(place, undefined, [], undefined, journalOf(place))
   await theOwnersTurn(relay)
-  assert.deepEqual(await relay.answer('tool_called', call('Bash', { command: 'ls', tool_use_id: 'call_00_the_test' })), ALLOW_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls', tool_use_id: 'call_00_the_test' })), ALLOW_REPLY)
   assert.deepEqual(linesOf(place), [
     'received session_started',
     'answered session_started taken',
@@ -3614,7 +3614,7 @@ test('each event is a line as it arrives and a line as it is answered, and an al
     readTheNewestRelayJournal(place.relay_journal).open.map((open) => `${open.tool_use_id} ${open.tool}`),
     ['call_00_the_test Bash'],
   )
-  await relay.answer('tool_answered', call('Bash', { command: 'ls', tool_use_id: 'call_00_the_test' }))
+  await relay.answer('tool_answered', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls', tool_use_id: 'call_00_the_test' }))
   assert.deepEqual(readTheNewestRelayJournal(place.relay_journal).open, [], 'the tool came back and the call is still open')
 })
 
@@ -3622,7 +3622,7 @@ test('a call the launcher denies never opens, so a run has nothing to wait on', 
   const place = placeFor(t)
   const { relay } = answering(place, undefined, [], undefined, journalOf(place))
   // A call on a session whose start was never taken: the launcher refuses it, and a refusal is a deny here.
-  const reply = await relay.answer('tool_called', call('Bash', { command: 'ls', tool_use_id: 'call_00_denied' }))
+  const reply = await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls', tool_use_id: 'call_00_denied' }))
   assert.ok(isDenied(reply, /no start of session/), 'the launcher answered a call this case needed denied')
   assert.deepEqual(readTheNewestRelayJournal(place.relay_journal).open, [])
   assert.deepEqual(linesOf(place), ['received tool_called call_00_denied', 'answered tool_called call_00_denied deny'])
@@ -3635,7 +3635,7 @@ test('an allow the relay gave up on is journalled as the deny the host took, and
   let late_by = 0
   const { relay } = answering(place, undefined, [], undefined, journalOf(place, () => Date.now() + late_by))
   await theOwnersTurn(relay)
-  const answered = relay.answer('tool_called', call('Bash', { command: 'ls', tool_use_id: 'call_00_late' }))
+  const answered = relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls', tool_use_id: 'call_00_late' }))
   // Stamped before the event queues, so moving the clock here is moving it between the receipt and the answer (martha#240).
   late_by = RELAY_DEADLINE_MS + 1
   assert.deepEqual(await answered, ALLOW_REPLY, 'the member was answered differently, and only the journal was meant to change')

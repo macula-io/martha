@@ -12,6 +12,7 @@ import {
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import {
   arrivalOfPrompt,
   CLAUDE_CODE_PROMPT_ORIGINS,
@@ -42,7 +43,7 @@ const pathOfKind = (kind: string, carries: PromptCarries = TYPED): string | unde
   recordOfKind(kind, carries).ingested[0]?.path
 
 const shellAllowedAfter = (kind: string, carries: PromptCarries = TYPED): boolean =>
-  refuseExecutionAfterUngatedText({ tool: 'Bash', session: recordOfKind(kind, carries), policy: { may_send_executable_text: [] } }).allow
+  refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: recordOfKind(kind, carries), policy: { may_send_executable_text: [] } }).allow
 
 // The oracle, written out: what each kind is, as the engine documents it.
 const EXPECTED_PATH: Readonly<Record<string, string>> = {

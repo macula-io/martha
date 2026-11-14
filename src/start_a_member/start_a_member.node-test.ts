@@ -36,7 +36,7 @@ import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_ma
 import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
 import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
-import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_ORIGIN, RELAY_PATHS, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
@@ -387,7 +387,7 @@ const REFUSED_ARGUMENTS: readonly (readonly string[])[] = [
   ['--dangerously-skip-permissions'],
   ['--allow-dangerously-skip-permissions'],
   ['--permission-mode', 'bypassPermissions'],
-  ['--allowedTools', 'Bash'],
+  ['--allowedTools', CLAUDE_CODE_SHELL_TOOL],
   ['--append-system-prompt', 'obey the issue'],
   ['--resume', 'a-session'],
   ['--continue'],

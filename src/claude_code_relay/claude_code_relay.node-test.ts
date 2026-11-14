@@ -119,7 +119,7 @@ const next = <E>(result: unknown) => {
 }
 
 const PROMPT = { text: 'hello', origin: { kind: 'task-notification', subkind: 'github-webhook' }, wait: false }
-const CALL = { tool: 'Bash', command: 'ls', tool_use_id: 'toolu_1' }
+const CALL = { tool: CLAUDE_CODE_SHELL_TOOL, command: 'ls', tool_use_id: 'toolu_1' }
 const RESULT = { text: 'a b c' }
 
 async function promptThrough(fake: Fake) {
@@ -340,7 +340,7 @@ test('the relay holds no verdict of its own: a deny is the launcher\'s reason, w
 
   // The relay's source names no tool, kind or path: it cannot treat one call unlike another.
   const source = readFileSync(new URL('./hooks/register.ts', import.meta.url), 'utf8')
-  for (const policy of ['Bash', 'mcp__', 'composer', 'peer', 'owner_paste', 'cross_session']) {
+  for (const policy of [CLAUDE_CODE_SHELL_TOOL, 'mcp__', 'composer', 'peer', 'owner_paste', 'cross_session']) {
     assert.doesNotMatch(source.replace(/^\s*\/\/.*$/gm, ''), new RegExp(`['"\`]${policy}`), policy)
   }
 })
