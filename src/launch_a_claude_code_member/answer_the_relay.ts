@@ -42,7 +42,7 @@ import {
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
-import { reviewSpawnsRemembered, theFailedReviewIn, theLineAboutIt, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+import { nameTheFailedReviewIn, resolvedModelIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
@@ -165,8 +165,12 @@ export interface MemberRelayPlace {
 export interface TheMembersTelling {
   /** The member's row: the line goes where the owner's dashboard reads what is waiting. */
   theRow(line: string): void
-  /** The member's own session: the line is handed to it as a turn, through the crew's own channel. */
-  theMember(line: string): Promise<void>
+  /**
+   * The member's own session: the line is handed to it as a turn, through the crew's own channel. `call` is the host's
+   * id for the review the line is about, when the line is about one, so a refusal can be written down against it
+   * (martha#430).
+   */
+  theMember(line: string, call?: string): Promise<void>
   /**
    * The line this launcher put in the row leaves it again (martha#390 r=1): the member has taken the matter up, so what
    * needed the owner no longer does. Only this launcher's own line goes — a line another owner wrote stays where it is.
@@ -771,20 +775,14 @@ function noteWhatTheReviewResolvedTo(state: RelayState, call: { readonly id: str
   if (resolved !== undefined) state.reviews.resolved(call.id, resolved)
 }
 
-/** The model the host answered an agent's call with, or undefined when the answer carries none. */
-function resolvedModelIn(answer: unknown): string | undefined {
-  if (!isBody(answer)) return undefined
-  const result = answer['result']
-  if (!isBody(result)) return undefined
-  const resolved = result['resolvedModel']
-  return isText(resolved) ? resolved : undefined
-}
-
 /**
  * The host's own report of a review that failed, named to the member and its row (martha#390): the envelope's fixed
  * fields decide it, the model is the one the allowed call resolved to, and the host's summary is repeated verbatim.
- * Nothing relaunches the review, and no second model is chosen anywhere. A line that cannot be put in the member's
- * session leaves the row's line standing: the member is told by the host's own turn in any case.
+ * Nothing relaunches the review, and no second model is chosen anywhere.
+ *
+ * What the line is, where it goes, and the call being forgotten once it is written (martha#430) are the slice's
+ * (../name_a_review_the_host_reported_failed); here is only what this launch can hand it: the crew's reviewer model,
+ * and the row and the member the telling reaches.
  */
 async function nameTheReviewTheHostReportsFailed(state: RelayState, text: string, origin_kind: string): Promise<void> {
   const crew = state.place.crew
@@ -792,15 +790,7 @@ async function nameTheReviewTheHostReportsFailed(state: RelayState, text: string
   if (crew === undefined || telling === undefined) return
   const review_model = await crew.theReviewModel()
   if (review_model === null) return
-  const failed = theFailedReviewIn(state.reviews, text, { origin_kind, review_model, report: THE_HOSTS_FAILED_REVIEW })
-  if (failed === undefined) return
-  const line = theLineAboutIt(failed)
-  telling.theRow(line)
-  try {
-    await telling.theMember(line)
-  } catch {
-    // The channel's own store refused the append: the row still says it, and the host's turn reached the member anyway.
-  }
+  await nameTheFailedReviewIn(state.reviews, text, { origin_kind, review_model, report: THE_HOSTS_FAILED_REVIEW }, telling)
 }
 
 async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {

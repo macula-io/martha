@@ -111,7 +111,13 @@ function aLaunch(t: TestContext): ALaunch {
   turns.onTurn((turn) => void raised.push(turn))
   const screen: WhatTheHostSaid[] = []
   const noted: { event: string; why: string }[] = []
-  const journal: RelayJournal = { received: () => ({ answered: () => {} }), noted: (event, why) => void noted.push({ event, why }) }
+  // The journal #440's case watches, with #430's second note-styled method along for the shape: this run never finishes
+  // something it could not hand on, so that half stays empty and is there only because the interface requires it.
+  const journal: RelayJournal = {
+    received: () => ({ answered: () => {} }),
+    noted: (event, why) => void noted.push({ event, why }),
+    notedWhatItCouldNotFinish: () => {},
+  }
   const relay = memberRelay({
     ...theFixedPlaceOf(home, checkout, rows),
     crew: crewToolsOver({
