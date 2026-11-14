@@ -72,7 +72,7 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
@@ -365,13 +365,13 @@ test('on the same session, a turn that only claims the owner\'s typing still tak
   }
 })
 
-test('a fresh start allows the shell; fork and a claimed crew_refresh start lost, whatever the input claims', async (t) => {
+test('a fresh start allows the shell; fork and a claimed martha_refresh start lost, whatever the input claims', async (t) => {
   const { relay, rows } = answering(placeFor(t))
   await relay.answer('session_started', start('startup'))
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 
   // T7: a fork carries its parent's context under a new id; T8: a refresh is never claimed.
-  for (const [session_id, source] of [['forked', 'fork'], ['refreshed', CREW_REFRESH]] as const) {
+  for (const [session_id, source] of [['forked', 'fork'], ['refreshed', THE_REFRESH_THE_MOD_RUNS]] as const) {
     await relay.answer('session_started', start(source, session_id, { predecessor_id: SESSION }))
     assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id)), /cannot be read/), source)
     assert.deepEqual(await recordedPaths(rows, session_id), [`${RECORD_LOST.path}:null`], source)

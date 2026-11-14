@@ -26,6 +26,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { modelPlace, theModelMarker, theModelOf, type TheModel } from '../switch_a_members_model/switch_a_members_model.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import {
   CREW_TOOL_NAMES,
   crewToolsOver,
@@ -199,7 +200,7 @@ test('#315: a report on another package brings the member home, and one on the s
   const moved = await aCrewOfTools()
   await switched(moved.tools, THE_PACKAGE)
   await theOrderTheModGets(moved)
-  const reported = await moved.tools.answer('report_progress', { task: 'the other piece of work', step: 0, of: 2, package: ANOTHER_PACKAGE }, 'a-session')
+  const reported = await moved.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the other piece of work', step: 0, of: 2, package: ANOTHER_PACKAGE }, 'a-session')
   assert.ok('answer' in reported, `the report was refused: ${'refused' in reported ? reported.refused : ''}`)
   assert.match(reported.answer, new RegExp(`you reported progress on ${ANOTHER_PACKAGE}`), 'a member that moved on to other work was not told it comes home')
   assert.equal(theRecordOf(moved.crew).kind, 'home', 'a member that moved on to another package kept the switch')
@@ -207,7 +208,7 @@ test('#315: a report on another package brings the member home, and one on the s
   const staying = await aCrewOfTools()
   await switched(staying.tools, THE_PACKAGE)
   await theOrderTheModGets(staying)
-  const again = await staying.tools.answer('report_progress', { task: 'the review itself', step: 1, of: 2, package: THE_PACKAGE }, 'a-session')
+  const again = await staying.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the review itself', step: 1, of: 2, package: THE_PACKAGE }, 'a-session')
   assert.ok('answer' in again, `the report was refused: ${'refused' in again ? again.refused : ''}`)
   assert.equal(theRecordOf(staying.crew).kind, 'switched', 'a report on the package the switch was made for took the member off the model that work needs')
 })
@@ -277,7 +278,7 @@ test('#315 r2: a switch for a member that declares no model of its own is refuse
 
 test('#315: the row says a switched model only once the mod reports the host resolved it (mutant: the row written from the order)', async () => {
   const crew = await aCrewOfTools()
-  const reported = await crew.tools.answer('report_progress', { task: 'the package', step: 0, of: 2, package: THE_PACKAGE }, 'a-session')
+  const reported = await crew.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the package', step: 0, of: 2, package: THE_PACKAGE }, 'a-session')
   assert.ok('answer' in reported, `the report was refused: ${'refused' in reported ? reported.refused : ''}`)
   assert.equal((crew.theRow()?.host as Record<string, unknown>).model, OWN_MODEL, 'the row does not say the model the member was launched on')
 

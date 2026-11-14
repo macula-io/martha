@@ -17,7 +17,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { FreeRow } from '../see_who_is_free/see_who_is_free.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { PARK_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
@@ -77,8 +77,8 @@ test('a member whose role is not allowed assign_work is refused, and the refusal
 
 test('the Supervisor reads a report as the time it last reported, and a park from the marker the member kept', async () => {
   clock.at = 1_000
-  answerOf(await theToolsOf(BUILDER).answer('report_progress', { task: 'build', step: 1, of: 3, package: 'macula-io/martha#319' }, 'session-builder'))
-  answerOf(await theToolsOf(REVIEWER).answer('report_progress', { task: 'review', step: 1, of: 1 }, 'session-reviewer'))
+  answerOf(await theToolsOf(BUILDER).answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3, package: 'macula-io/martha#319' }, 'session-builder'))
+  answerOf(await theToolsOf(REVIEWER).answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'review', step: 1, of: 1 }, 'session-reviewer'))
   clock.at = 21_000
 
   const rows = JSON.parse(answerOf(await theToolsOf(LEAD).answer(WHO_IS_FREE, {}, 'session-lead'))) as FreeRow[]

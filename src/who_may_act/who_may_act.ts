@@ -20,7 +20,7 @@
 // a file in the crew's state directory, a shell running as the same OS user can
 // rewrite it — the roster anchor weakness, unchanged here and named in the doc.
 //
-// `take_asks` was on this list, and is not any more: taking the owner's asks and
+// `take_the_owners_asks` was on this list, and is not any more: taking the owner's asks and
 // settling a batch are decided by the declaration's table, on the act
 // OFFER_OWNER_ASKS, because a solo crew has no node id to compare (martha#313,
 // ../queue_the_owners_asks). A list that named it here would claim a gate this

@@ -21,7 +21,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
-import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { holdTheMember, notRunningToRestart, restartAMember, restartByTool, type AStart, type HoldingHost } from './restart_a_member.ts'
 import {
   ANSWER_DEADLINE_MS,
@@ -92,7 +92,7 @@ function keepARestart(lifecycle: CrewPlace, options: { fresh?: boolean; by?: str
 function handedOver(crew: ReturnType<typeof aCrew>, at: Date): string {
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: `s-${at.getTime()}` })
   const written = writeMyHandover({ stores: { crew: crew.crew } }, { member: 'builder', content: 'What stands.', at, stamps: crew.stamps, session })
-  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
   return theHandoverFile('builder', at)
 }
 

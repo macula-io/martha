@@ -2,7 +2,7 @@
 //
 // This exists so the mod that runs in the member's session registers the tools and the launcher answers them: the
 // session can draw and post, and nothing that decides anything runs inside it. Every tool here is a name, an
-// argument object, and an answer the slice behind it gives — `report_progress` and `see_the_crew` over the dashboard
+// argument object, and an answer the slice behind it gives — `report_where_the_work_stands` and `see_the_crew` over the dashboard
 // rows, `log_a_milestone`, `what_was_sent` and `note_what_became_of_an_act` over the ledger.
 //
 // The row a member's beat writes is the launcher's own state: the report moves it, and a heartbeat keeps it fresh at
@@ -101,7 +101,7 @@ import {
   whatWasSent,
 } from '../keep_the_ledger/keep_the_ledger.ts'
 import { ledgerStreamOf, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { REPORT_PROGRESS_DESCRIPTION, takeProgress, type TheCrew } from '../report_progress/report_progress.ts'
+import { REPORT_WHERE_THE_WORK_STANDS, REPORT_WHERE_THE_WORK_STANDS_DESCRIPTION, takeProgress, type TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
 import { restartByTool } from '../stop_and_restart_a_member/restart_a_member.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
@@ -180,8 +180,8 @@ export const RESTART_A_MEMBER = 'restart_a_member'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
- * refreshed session is recorded with: the SessionStart source value keeps its own name, `CREW_REFRESH`, because a
- * ledger already holds it and the host's vocabulary names it.
+ * refreshed session is recorded with: the SessionStart source value keeps a name of its own,
+ * `THE_REFRESH_THE_MOD_RUNS`, whose value is `martha_refresh` since #468 took crew-code's tool name off it.
  */
 export const REFRESH_THIS_SESSION = 'refresh_this_session'
 
@@ -199,7 +199,7 @@ export const THE_MODEL_REPORT_ASK = 'note_the_model_the_session_runs'
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
 export const CREW_TOOL_NAMES = [
-  'report_progress',
+  REPORT_WHERE_THE_WORK_STANDS,
   LOG_A_MILESTONE,
   'what_was_sent',
   'note_what_became_of_an_act',
@@ -335,7 +335,7 @@ export interface CrewTools extends TheReviewRule {
   theLineToHandAtStart(): Promise<TheStartLine | null>
   /**
    * The session a clear was told in, when the crew's flow is waiting for its successor and this id is it (martha#255):
-   * the launcher starts that session as a `crew_refresh` with this predecessor, whichever of the host's two events
+   * the launcher starts that session as a `martha_refresh` with this predecessor, whichever of the host's two events
    * names it first. Null when no clear is in flight, or when this id is the session the clear was told in.
    */
   thePredecessorOf(session_id: string): Promise<string | null>
@@ -429,8 +429,8 @@ export const CREW_REFRESH_DESCRIPTION =
 /** The tools, as the mod registers them. */
 export const CREW_TOOLS: readonly CrewTool[] = [
   {
-    name: 'report_progress',
-    description: REPORT_PROGRESS_DESCRIPTION,
+    name: REPORT_WHERE_THE_WORK_STANDS,
+    description: REPORT_WHERE_THE_WORK_STANDS_DESCRIPTION,
     inputSchema: {
       type: 'object',
       properties: {
@@ -708,7 +708,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        batch: { type: 'integer', minimum: 0, description: "The batch's id, as take_asks answered it" },
+        batch: { type: 'integer', minimum: 0, description: "The batch's id, as take_the_owners_asks answered it" },
         yes: { type: 'array', items: { type: 'integer', minimum: 0 }, description: 'The ids of the asks the owner ticked' },
       },
       required: ['batch', 'yes'],
@@ -999,7 +999,7 @@ async function keepTheStandingItems(places: CrewToolPlaces, act: () => Promise<T
 function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Record<CrewToolName, (args: Readonly<Record<string, unknown>>) => Promise<CoreToolAnswer>>> {
   const workerOf = (args: Readonly<Record<string, unknown>>): AWorker => ({ package: textOf(args['package']), member: places.member })
   return {
-    report_progress: (args) => reportProgress(places, state, args),
+    [REPORT_WHERE_THE_WORK_STANDS]: (args) => reportProgress(places, state, args),
     see_the_crew: () => seeTheCrewOf(places),
     [WHO_IS_FREE]: (args) => whoIsFreeOf(places, args),
     [READ_THE_RECEIPTS]: async () => {
@@ -1058,7 +1058,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
 }
 
 /**
- * `queue_ask`, with the tips a branch removal covers when the ask names one (martha#391). The launcher reads them, in
+ * `ask_the_owner`, with the tips a branch removal covers when the ask names one (martha#391). The launcher reads them, in
  * the clone the ask names, and the queue keeps them: an ask that named one copy of a branch and not the other cost the
  * owner a second ask, because the yes covered only what the ask recorded.
  */
@@ -1084,14 +1084,14 @@ async function theOfferingPlace(
   return { declaration: theDeclarationOf(declared.settings), member: places.member, session: state.session, menus: places.menus }
 }
 
-/** `take_asks`: every waiting ask claimed for one menu, or why nothing was (martha#313). */
+/** `take_the_owners_asks`: every waiting ask claimed for one menu, or why nothing was (martha#313). */
 async function theTakeOfTheAsks(places: CrewToolPlaces, state: SessionState): Promise<CoreToolAnswer> {
   const offering = await theOfferingPlace(places, state)
   if ('refused' in offering) return offering
   return asAnAnswer(await takeTheAsks(places.ledger, offering))
 }
 
-/** `settle_asks`: the batch off, with the ids the owner ticked, or why not (martha#313). */
+/** `settle_the_owners_asks`: the batch off, with the ids the owner ticked, or why not (martha#313). */
 async function theSettlingOfTheAsks(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
   const offering = await theOfferingPlace(places, state)
   if ('refused' in offering) return offering
@@ -1235,7 +1235,7 @@ function writeRow(places: CrewToolPlaces, state: SessionState, change: (row: Das
   if (changed !== null) state.held = changed
 }
 
-/** `report_progress`: the report's own rules move the row, and the member is told what landed. */
+/** `report_where_the_work_stands`: the report's own rules move the row, and the member is told what landed. */
 async function reportProgress(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
   const declared = await crewOrRefusal(places)
   if ('refused' in declared) return declared

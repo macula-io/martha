@@ -15,7 +15,7 @@ import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import {
   CrewTextRefused,
   crewTextFilesOf,

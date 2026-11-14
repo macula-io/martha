@@ -27,7 +27,7 @@ import {
   theParkOf,
   type TheDeclaration,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { CREW_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { THE_WAKE_CLEARS_THE_PARK, theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -71,7 +71,7 @@ function aStartSaying(started: boolean, refusal?: string) {
 function handedOver(host: ReturnType<typeof aWakeHost>, member = 'builder', content = 'What stands: the package, its branch, its tip.') {
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
   const written = writeMyHandover(host, { member, content, at: AT, stamps: host.stamps, session })
-  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
   return theHandoverFile(member, AT)
 }
 

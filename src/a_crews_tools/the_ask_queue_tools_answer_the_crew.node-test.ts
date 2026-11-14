@@ -40,7 +40,7 @@ import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_
 import { LIST_ASKS, MAX_ASK, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-ask-queue-tools-'))
@@ -118,7 +118,7 @@ test('the session the table does not name is refused, and the one it names takes
   assert.equal(TOLD(await lead.answer(LIST_ASKS, {}, 'session-lead')), 'No asks are waiting for the owner.')
 })
 
-// --- a queue_ask that removes a branch (martha#391) --------------------------------
+// --- a ask_the_owner that removes a branch (martha#391) --------------------------------
 
 const THE_CLONES = join(home, 'the-clones')
 mkdirSync(THE_CLONES)
@@ -224,9 +224,9 @@ test('an ask that removes a branch records both tips, read in the clone it names
   assert.deepEqual([...new Set(asked.map((one) => one.slice(0, THE_CLONE.length)))], [THE_CLONE], 'both tips are read in <clones>/<org>/<repo>: a read anywhere else answers no repository')
   assert.equal(asked.length, 2, 'two refs are read: the clone\'s own branch, and origin itself')
 
-  assert.match(TOLD(await place.answer(LIST_ASKS, {}, 'session-lead')), new RegExp(`- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? It removes ${THE_BRANCH}`), 'list_asks names both tips')
+  assert.match(TOLD(await place.answer(LIST_ASKS, {}, 'session-lead')), new RegExp(`- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? It removes ${THE_BRANCH}`), 'see_the_owners_asks names both tips')
   const lead = aPlaceOver('rows-for-branches', { member: LEAD, processes: aGitOnlyInTheClone(THE_TWO_COPIES), settings: theSettingsWith(THE_CLONES) })
-  assert.match(TOLD(await lead.answer(TAKE_ASKS, {}, 'session-lead')), /It removes vesta\/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a\./, 'take_asks, which the menu is built from, names both tips')
+  assert.match(TOLD(await lead.answer(TAKE_ASKS, {}, 'session-lead')), /It removes vesta\/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a\./, 'take_the_owners_asks, which the menu is built from, names both tips')
 })
 
 test('a branch the queue would change never reaches a menu, and no tip is read for it (martha#391 r=1)', async () => {
