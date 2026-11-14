@@ -110,6 +110,11 @@ export const NO_JOURNAL: RelayJournalRead = { launch: '', written: 0, open: [], 
 export interface RelayJournal {
   /** The event arrived, before it queues: the line is stamped on this journal's own clock, like every other line. */
   received(event: RelayEvent, body: unknown): JournalEntry
+  /**
+   * Something the launcher took in that no relay event carried, as one answered line with its words (martha#440: a
+   * turn of unnamed source, heard from the mod's turn-start report): the record says what it was, this says it ran.
+   */
+  noted(event: string, why: string): void
 }
 
 /** The receipt of one event, answered once. */
@@ -279,6 +284,11 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
           keep()
         },
       }
+    },
+    noted: (event, why) => {
+      writing.written += 1
+      writing.events.push({ at: isoOf(now()), phase: 'answered', event, answer: 'taken', why })
+      keep()
     },
   }
 }
