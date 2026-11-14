@@ -90,6 +90,14 @@
       "src/row_streams_directory": 159,
       "src/owners_settings_directory": 173
     },
+    "sliceCap": 600,
+    "sliceCeilings": {
+      "src/a_crews_tools": 1298,
+      "src/probe_launch_hosts": 1133,
+      "src/refuse_launch_of_unapproved_config": 867,
+      "src/refresh_a_member": 615,
+      "src/check_no_literal_restates_a_value": 611
+    },
     "packageImports": {
       "typescript": "prove_the_core",
       "eslint": "prove_the_core",

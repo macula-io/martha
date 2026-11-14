@@ -21,6 +21,7 @@ import {
   headNudges,
   theNudgesGoTo,
   theNudgesPart,
+  theWaitsTheClosesLeave,
   windowsOf,
   type NudgeInput,
   type SentMessage,
@@ -321,4 +322,48 @@ test('#320 B: a hand-off of a design names no tip, so no head is compared for it
   const waits = reviewWaitsIn([sent('Vesta', ['Mars'], design, NOW - REVIEW)], [], RECEIVERS)
   assert.equal(waits[0]?.tip, '', 'a design hand-off carried a tip it never named')
   assert.deepEqual(headNudges(waits, { 'macula-io/martha#320': { head: 'c'.repeat(40), at: NOW } }), [], 'a design hand-off was nudged for a head it has none of')
+})
+
+// --- #415: the closes GitHub recorded end the waits here, not in the crew's tools -------------------------------------
+
+test('#415: a close the record holds ends its wait without a call, and GitHub is asked only about the packages still waiting', async () => {
+  const closedOnRecord = 'macula-io/martha#320'
+  const stillWaiting = 'macula-io/martha#321'
+  const messages = [sent('Vesta', ['Mars'], handoff(closedOnRecord), NOW - REVIEW * 3), sent('Vesta', ['Mars'], handoff(stillWaiting), NOW - REVIEW * 3)]
+  const asked: (readonly string[])[] = []
+  const waits = await theWaitsTheClosesLeave(messages, RECEIVERS, {
+    landings: [],
+    recorded: { [closedOnRecord]: NOW - REVIEW * 2 },
+    // The budget's reader answers the whole record it keeps, the closes it held before and the ones it just read.
+    read: async (packages) => {
+      asked.push(packages)
+      return { [closedOnRecord]: NOW - REVIEW * 2, [stillWaiting]: NOW - REVIEW }
+    },
+  })
+  assert.deepEqual(asked, [[stillWaiting]], 'a package the record already closed costs no call')
+  assert.deepEqual(waits, [], 'the recorded close and the close GitHub answered each end their wait')
+})
+
+test('#415: a read GitHub refused, or no reader at all, falls back to the closes the record holds', async () => {
+  const messages = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 3), sent('Vesta', ['Mars'], handoff('macula-io/martha#321'), NOW - REVIEW * 3)]
+  const recorded = { 'macula-io/martha#320': NOW - REVIEW * 2 }
+  const refused = await theWaitsTheClosesLeave(messages, RECEIVERS, { landings: [], recorded, read: async () => ({ refusal: 'the budget is spent' }) })
+  assert.deepEqual(refused.map((wait) => wait.package), ['macula-io/martha#321'], 'a refused read keeps the recorded close and clears nothing else')
+  const unread = await theWaitsTheClosesLeave(messages, RECEIVERS, { landings: [], recorded })
+  assert.deepEqual(unread.map((wait) => wait.package), ['macula-io/martha#321'], 'a launch with nothing to ask with keeps the recorded close')
+})
+
+test('#415: nothing waiting asks GitHub nothing, and a landing ends a wait as a close does', async () => {
+  const messages = [sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - REVIEW * 3)]
+  let calls = 0
+  const waits = await theWaitsTheClosesLeave(messages, RECEIVERS, {
+    landings: [{ package: 'macula-io/martha#320', at: NOW - REVIEW }],
+    recorded: {},
+    read: async () => {
+      calls += 1
+      return {}
+    },
+  })
+  assert.deepEqual(waits, [])
+  assert.equal(calls, 0, 'a landing left nothing waiting, so nothing was asked')
 })
