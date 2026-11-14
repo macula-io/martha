@@ -18,7 +18,7 @@ import { after, test } from 'node:test'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -114,7 +114,7 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
     launched_on: OWN_MODEL,
     owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
-  return { tools, crew, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += 60_000) }
+  return { tools, crew, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += MINUTE_MS) }
 }
 
 /** This member's model record, as a later session and the owner read it. */

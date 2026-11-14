@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { REPORT_PROGRESS_DESCRIPTION, TASK_CHARACTERS, takeProgress, cutTask, type TheCrew } from './report_progress.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 const CREW: TheCrew = { owner: 'raf', members: ['Vesta', 'Uranus'] }
 const NO_WAIT_BEFORE = { waits: null, holds: '' }
@@ -28,7 +29,7 @@ test('a report lands step and of clamped into the bound it names, and a task cut
 })
 
 test('a wait on a person with no waiting_for is not recorded, the member is told, and the row keeps its wait (test 5)', () => {
-  const held = { on: 'Supervisor', for: 'a verdict', since: NOW - 60_000 }
+  const held = { on: 'Supervisor', for: 'a verdict', since: NOW - MINUTE_MS }
   const reported = takeProgress({ task: 'Build the crew store', step: 1, of: 3, waiting_on: 'Supervisor' }, CREW, { waits: held, holds: '' }, NOW)
 
   assert.deepEqual(reported.taken.waits, held, 'the wait the row had is the wait it keeps')

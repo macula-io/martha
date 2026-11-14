@@ -19,6 +19,7 @@ import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { REFRESH_BEAT_MS } from './hooks/crew_turn_beat.ts'
 import { RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 /** Why the five landing tools are named by literal in the hooks module (martha#256), as one wording for all five. */
@@ -49,6 +50,12 @@ const THE_HOST_READS_THE_SOCKET_BY_LITERAL = 'the host reads this name from the 
  * files, so no constant of the core is reachable from inside it.
  */
 const THE_RELAY_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module there imports only its own files and the name it asks is held by literal'
+
+/**
+ * Why the relay's beat is written as a minute of its own (martha#441): a hooks module imports only its own files, so
+ * the relay cannot import the core's MINUTE_MS, and its beat is the same duration under its own name.
+ */
+const THE_BEAT_IS_A_MINUTE_THE_HOOKS_MODULE_CANNOT_IMPORT = 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name'
 
 export const COINCIDENCES: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
@@ -124,4 +131,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  // The relay's beat, which is a minute too (martha#441).
+  { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: THE_BEAT_IS_A_MINUTE_THE_HOOKS_MODULE_CANNOT_IMPORT },
 ]

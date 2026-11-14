@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -108,7 +108,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   })
   /** The act of the next question, one turn later than the last write: a beat the row store takes as the newest. */
   const answerWith = async (session: string, percent: number, answer: string, at_start: boolean): Promise<string> => {
-    clock.at += 60_000
+    clock.at += MINUTE_MS
     const answered = await tools.answer(THE_REFRESH_ASK, questionOf(percent, null, at_start ? '' : `t-${clock.at}`, answer), session)
     assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
     return (JSON.parse(answered.answer) as { readonly carry: string }).carry

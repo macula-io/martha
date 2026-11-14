@@ -69,12 +69,27 @@ import { isInAType, lineOf, nodesOf, parseSource } from './parse_a_source.ts'
 /** The shortest value this check reads: `env` and `id` are words before they are values. */
 export const SHORTEST_VALUE = 4
 
+/**
+ * The smallest number this check reads where a declaration holds one (martha#441): a count and a magnitude are
+ * written the same way, so a number below this one restates nothing. The tree holds `20`, `64` and `100` in dozens
+ * of places and every one of them is a count, an index or a column; what it defines as a magnitude — a minute, a
+ * deadline, a ceiling — is never below ten seconds.
+ */
+export const SHORTEST_NUMBER = 10_000
+
+/**
+ * Whether a number a declaration holds is one the tree defines (martha#441): a magnitude, never a count. Without
+ * this floor every `0` and `2` in the tree would be a copy of some constant holding it.
+ */
+const isAMagnitudeTheTreeDefines = (value: number): boolean => Math.abs(value) >= SHORTEST_NUMBER
+
 /** The type a record's definition is marked with when its keys and values are shared values. */
 export const THE_MARKER = 'DefinesItsValues'
 
 /** A place that must name a value by literal, and why the word there means something else. */
 export interface Exception {
-  readonly value: string
+  /** A number the tree defines is written as the constant that holds it, so this is a number where that constant is one. */
+  readonly value: string | number
   /** Relative to `src/`. */
   readonly file: string
   readonly reason: string
@@ -140,6 +155,30 @@ const textOf = (node: ts.Node | undefined): string | null => {
   return null
 }
 
+/**
+ * A number as a value, kept apart from a string that spells the same text: the
+ * check compares values, so `60_000` and `60000` are one value while `'60000'` is
+ * another (martha#441). Its digits are the number's own value, not its spelling.
+ */
+const NUMBER = 'number:'
+
+/** The number an initializer holds, through `as const`, `satisfies` and parentheses; null when it holds none. */
+const numberOf = (node: ts.Node | undefined): string | null => {
+  if (node === undefined) return null
+  if (ts.isNumericLiteral(node)) return `${NUMBER}${Number(node.text.replaceAll('_', ''))}`
+  if (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node)) return numberOf(node.expression)
+  return null
+}
+
+/** The value an initializer holds: a string's text, or a number's value (martha#441). */
+const valueText = (node: ts.Node | undefined): string | null => textOf(node) ?? numberOf(node)
+
+/** The value a number carries, for the rule that says which numbers the tree defines. */
+const asANumber = (value: string): number => Number(value.slice(NUMBER.length))
+
+/** Whether a value is a number's rather than a string's. */
+const isANumber = (value: string): boolean => value.startsWith(NUMBER)
+
 const isExported = (statement: ts.VariableStatement): boolean =>
   (ts.getCombinedModifierFlags(statement.declarationList.declarations[0]!) & ts.ModifierFlags.Export) !== 0
 
@@ -194,8 +233,12 @@ const isAnAlias = (declaration: ts.VariableDeclaration): boolean => declaration.
 /** What one declaration defines: its own value, or the entries of the record it marks. */
 function definitionsOfADeclaration(path: string, declaration: ts.VariableDeclaration, exported: boolean): Definition[] {
   if (!ts.isIdentifier(declaration.name)) return []
-  const value = textOf(declaration.initializer)
-  if (value !== null) return [{ path, name: declaration.name.text, value, exported, node: declaration, alias: isAnAlias(declaration) }]
+  const value = valueText(declaration.initializer)
+  if (value !== null) {
+    // A number is a value here only where the tree defines a magnitude (martha#441).
+    if (isANumber(value) && !isAMagnitudeTheTreeDefines(asANumber(value))) return []
+    return [{ path, name: declaration.name.text, value, exported, node: declaration, alias: isAnAlias(declaration) }]
+  }
   const record = exported ? markedRecordOf(declaration) : null
   return record === null ? [] : entriesOf(path, declaration.name.text, record)
 }
@@ -247,6 +290,20 @@ const namesAProperty = (node: ts.Node): boolean => {
 const isALiteral = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral =>
   ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
 
+/** A literal that carries a value: a string's text, or a number's own value (martha#441). */
+const isAValueLiteral = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral =>
+  isALiteral(node) || ts.isNumericLiteral(node)
+
+/** The value a value literal carries, as the definitions hold it. */
+const valueOfALiteral = (node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral): string =>
+  ts.isNumericLiteral(node) ? `${NUMBER}${Number(node.text.replaceAll('_', ''))}` : node.text
+
+/** An exception's value as the check holds it: a number's as its own value, a string's as its text. */
+const asAValueTheCheckHolds = (value: string | number): string => (typeof value === 'number' ? `${NUMBER}${value}` : value)
+
+/** A value as a message writes it: a number's digits, a string's text. */
+const asTheMessageShowsIt = (value: string): string => (isANumber(value) ? value.slice(NUMBER.length) : value)
+
 /** A constant as a source declares it, with the line its value is written on. */
 export interface ConstantInSource {
   readonly name: string
@@ -278,7 +335,7 @@ export function constantsIn(text: string, path: string): ConstantInSource[] {
 function literalsUnder(node: ts.Node): ts.Node[] {
   const found: ts.Node[] = []
   const visit = (at: ts.Node): void => {
-    if (isALiteral(at)) found.push(at)
+    if (isAValueLiteral(at)) found.push(at)
     ts.forEachChild(at, visit)
   }
   visit(node)
@@ -366,12 +423,12 @@ function findingsForAUse(path: string, line: number, literal: string, declared: 
 
 /** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
-  nodesOf(file).filter(isALiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
+  nodesOf(file).filter(isAValueLiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
 
 /** What one literal is, if it restates something. */
 function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
-  const literal = (node as ts.StringLiteral).text
-  if (literal.length < SHORTEST_VALUE) return []
+  const literal = valueOfALiteral(node as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral)
+  if (!isANumber(literal) && literal.length < SHORTEST_VALUE) return []
   const definition = definitionAt.get(node)
   return definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
@@ -385,13 +442,18 @@ function findingsAt(node: ts.Node, line: number, path: string, declared: readonl
  */
 export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Finding[] {
   const reads = parseAll(sources)
-  const definitions = reads.flatMap(definitionsIn)
   const declared = judge.defined ?? []
   const exceptions = judge.exceptions ?? []
+  // A place the tree declares a coincidence holds its value for no one (martha#441): it is neither a finding nor the
+  // constant another site is told to import. The relay's beat cannot import the core's minute, so the minute stays the
+  // one every other copy names.
+  const definitions = reads
+    .flatMap(definitionsIn)
+    .filter((definition) => !exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === definition.value && exception.file === definition.path))
   const judged = judge.judged
   const definitionAt = new Map(definitions.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
   const isDeclaredACoincidence = (finding: Finding): boolean =>
-    exceptions.some((exception) => exception.value === finding.literal && exception.file === finding.path)
+    exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === finding.literal && exception.file === finding.path)
   const isJudged = (finding: Finding): boolean =>
     judged === null || judged.has(at(finding.path, finding.line)) || declared.some((entry) => entry.value === finding.literal)
   return reads
@@ -403,7 +465,7 @@ export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Fi
 /** The literal sites a set of judged lines holds, read from the sources: what the gate may say it looked at. */
 export function literalSitesJudged(sources: readonly CoreSource[], judged: ReadonlySet<string> | null): number {
   return parseAll(sources).flatMap(({ path, file }) =>
-    nodesOf(file).filter(isALiteral).filter((node) => judged === null || judged.has(at(path, lineOf(file, node)))),
+    nodesOf(file).filter(isAValueLiteral).filter((node) => judged === null || judged.has(at(path, lineOf(file, node)))),
   ).length
 }
 
@@ -418,7 +480,7 @@ export function exceptionsNotHeld<Entry extends Exception>(sources: readonly Cor
   const repeated = (exception: Exception, index: number): boolean =>
     exceptions.findIndex((each) => each.value === exception.value && each.file === exception.file) !== index
   return exceptions.filter((exception, index) =>
-    exception.reason.trim() === '' || repeated(exception, index) || !excused.has(`${exception.value}\u0000${exception.file}`))
+    exception.reason.trim() === '' || repeated(exception, index) || !excused.has(`${asAValueTheCheckHolds(exception.value)}\u0000${exception.file}`))
 }
 
 /** What a finding whose value the change took away tells its author to do. */
@@ -426,7 +488,7 @@ export const GONE = '(gone in this change: keep a constant that holds this value
 
 /** Each finding as the one line CI prints. */
 export const lineOfAFinding = (finding: Finding): string =>
-  `${finding.path}:${finding.line}: '${finding.literal}' restates ${finding.module} ${finding.name}${finding.gone ? ` ${GONE}` : ''}`
+  `${finding.path}:${finding.line}: '${asTheMessageShowsIt(finding.literal)}' restates ${finding.module} ${finding.name}${finding.gone ? ` ${GONE}` : ''}`
 
 /** A marker the check cannot hold to its claim: misplaced, renamed, or on a record it cannot read entry by entry. */
 export interface MarkerNotHeld {
