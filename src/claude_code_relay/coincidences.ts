@@ -51,20 +51,6 @@ const THE_HOST_READS_THE_SOCKET_BY_LITERAL = 'the host reads this name from the 
  */
 const THE_RELAY_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module there imports only its own files and the name it asks is held by literal'
 
-/**
- * Why the relay's beat is written as a minute of its own (martha#441): a hooks module imports only its own files, so
- * the relay cannot import the core's MINUTE_MS, and its beat is the same duration under its own name.
- */
-const THE_BEAT_IS_A_MINUTE_THE_HOOKS_MODULE_CANNOT_IMPORT = 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name'
-
-/**
- * Why the relay's wait for its launcher is half a minute of its own (martha#441): this file is the protocol both sides
- * of a launch read, and a hooks module imports only its own files, so it cannot read the launcher's wait for a host
- * answer. The two deadlines are the same length and not the same deadline: this one waits for the launcher to check a
- * checkout's tree, that one for the host to answer a question.
- */
-const THE_RELAYS_WAIT_FOR_ITS_LAUNCHER = 'the relay\'s wait for the launcher to check a checkout\'s tree; the launcher\'s wait for a host answer is the same half minute and not the same deadline, and a hooks module cannot import it'
-
 export const COINCIDENCES: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
@@ -139,8 +125,11 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
-  // The relay's beat, which is a minute too (martha#441).
-  { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: THE_BEAT_IS_A_MINUTE_THE_HOOKS_MODULE_CANNOT_IMPORT },
-  // The relay's own half-minute wait (martha#441), written beside the launcher's half-minute wait for the host.
-  { value: RELAY_DEADLINE_MS, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: THE_RELAYS_WAIT_FOR_ITS_LAUNCHER },
+  // The relay's beat, which is a minute too (martha#441): a hooks module imports only its own files, so the relay cannot
+  // import the core's MINUTE_MS, and its beat is the same duration under its own name.
+  { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name' },
+  // The relay's own half-minute wait (martha#441): this file is the protocol both sides of a launch read, so it imports
+  // nothing, and its wait for the launcher to check a checkout's tree is the same half minute as the launcher's wait
+  // for a host answer and not the same deadline.
+  { value: RELAY_DEADLINE_MS, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: 'the relay\'s wait for the launcher to check a checkout\'s tree; the launcher\'s wait for a host answer is the same half minute and not the same deadline, and a hooks module imports only its own files' },
 ]

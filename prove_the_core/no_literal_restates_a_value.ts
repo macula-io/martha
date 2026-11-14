@@ -385,17 +385,21 @@ const namedFor = (holder: Definition | undefined, fromTheChange: DefinedByTheCha
  * holds the value as the record does, while a private `const T = 'Edit'` there
  * is a copy of it.
  */
-function findingsForADefinition(definition: Definition, line: number, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] {
+function findingsForADefinition(definition: Definition, line: number, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], everyDefinition: readonly Definition[]): Finding[] {
   const isDefinedByTheChange = (one: Definition): boolean => declared.some((entry) => entry.value === one.value && entry.module === one.path && entry.name === one.name)
   const holders = holdersOf(definition.value, definitions, definition.path)
   const heldBefore = holders.filter((each) => each.path !== definition.path && !isDefinedByTheChange(each))
-  if (isDefinedByTheChange(definition)) return namedAgainst(definition, line, heldBefore[0] ?? holders.find((each) => each.path !== definition.path))
+  // A definition is compared against every holder, a coincidence declared or not (martha#441): a place's own exception
+  // says what the word means there, not that another module's copy of the value is not a copy. It is only kept out of
+  // the constants a USE is told to import.
+  const everyHolder = holdersOf(definition.value, everyDefinition, definition.path)
+  if (isDefinedByTheChange(definition)) return namedAgainst(definition, line, heldBefore[0] ?? holders.find((each) => each.path !== definition.path) ?? everyHolder.find((each) => each.path !== definition.path))
   const isACopyAgainst = (module: string): boolean => module !== definition.path || !definition.exported
   const isAHolder = definition.exported && !definition.alias
-  const holdsANewDefinition = (entry: DefinedByTheChange): boolean => holders.some((each) => each.path === entry.module && each.name === entry.name)
+  const holdsANewDefinition = (entry: DefinedByTheChange): boolean => everyHolder.some((each) => each.path === entry.module && each.name === entry.name)
   const fromTheChange = declared.find((entry) => entry.value === definition.value && isACopyAgainst(entry.module) && !(isAHolder && holdsANewDefinition(entry)))
   if (fromTheChange !== undefined) {
-    const { constant, gone } = namedFor(holders.find((each) => isACopyAgainst(each.path)), fromTheChange)
+    const { constant, gone } = namedFor(holders.find((each) => isACopyAgainst(each.path)) ?? everyHolder.find((each) => isACopyAgainst(each.path)), fromTheChange)
     return [findingAt(definition.path, line, definition.value, constant, 'restates_a_value_the_change_defines', gone)]
   }
   return namedAgainst(definition, line, heldBefore[0])
@@ -426,13 +430,13 @@ const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
   nodesOf(file).filter(isAValueLiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
 
 /** What one literal is, if it restates something. */
-function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
+function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], everyDefinition: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
   const literal = valueOfALiteral(node as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral)
   if (!isANumber(literal) && literal.length < SHORTEST_VALUE) return []
   const definition = definitionAt.get(node)
   return definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
-    : findingsForADefinition(definition, line, declared, definitions)
+    : findingsForADefinition(definition, line, declared, definitions, everyDefinition)
 }
 
 /**
@@ -444,20 +448,20 @@ export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Fi
   const reads = parseAll(sources)
   const declared = judge.defined ?? []
   const exceptions = judge.exceptions ?? []
-  // A place the tree declares a coincidence holds its value for no one (martha#441): it is neither a finding nor the
-  // constant another site is told to import. The relay's beat cannot import the core's minute, so the minute stays the
-  // one every other copy names.
-  const definitions = reads
-    .flatMap(definitionsIn)
-    .filter((definition) => !exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === definition.value && exception.file === definition.path))
+  const everyDefinition = reads.flatMap(definitionsIn)
+  // A place the tree declares a coincidence holds its value for no USE to import (martha#441). The relay's beat cannot
+  // import the core's minute, so the minute stays the one every other copy is told to name. A definition is still read
+  // as one, and every holder still answers a definition's comparison: what a place means does not change what holds the
+  // value, only what a copy elsewhere should import.
+  const definitions = everyDefinition.filter((definition) => !exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === definition.value && exception.file === definition.path))
   const judged = judge.judged
-  const definitionAt = new Map(definitions.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
+  const definitionAt = new Map(everyDefinition.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
   const isDeclaredACoincidence = (finding: Finding): boolean =>
     exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === finding.literal && exception.file === finding.path)
   const isJudged = (finding: Finding): boolean =>
     judged === null || judged.has(at(finding.path, finding.line)) || declared.some((entry) => entry.value === finding.literal)
   return reads
-    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, definitionAt)))
+    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, everyDefinition, definitionAt)))
     .filter((finding) => !isDeclaredACoincidence(finding) && isJudged(finding))
     .sort(byPlace)
 }
