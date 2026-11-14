@@ -173,6 +173,7 @@ test('the table holds the newest reviews and no more, so a launch spawning revie
     spawns.resolved(id, RESOLVED)
   }
   assert.equal(spawns.theSpawn(theCalls[0] ?? ''), undefined, 'the oldest review stands past the table\'s bound, so the table grows with every review the launch runs')
+  assert.notEqual(spawns.theSpawn(theCalls[1] ?? ''), undefined, 'the table held one fewer than its bound: the second-oldest review was forgotten as though the table were already full')
   assert.notEqual(spawns.theSpawn(theCalls[theCalls.length - 1] ?? ''), undefined, 'the newest review was dropped, so the stop that just happened would not be named')
   // A review remembered again is the newest, not the oldest: it is the one the host is about to report on, so the bound
   // must not be the thing that drops it.
