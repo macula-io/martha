@@ -1078,7 +1078,7 @@ test('#339 T4: a redone package.json that also adds a dependency is refused (mut
   const widened = `${JSON.stringify({ ...landed, dependencies: { 'left-pad': '1.3.0' } }, null, 2)}\n`
   const evil = aMergeMadeByHand(fixture, tip, { 'package.json': widened }, theMessageOf(fixture, tip))
   const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip: evil, packages })
-  assert.match(wordsOf(checked), /package\.json differs from both reviewed heads outside martha\.hostCeilings/)
+  assert.match(wordsOf(checked), /package\.json, outside martha\.hostCeilings, is not what merging the two reviewed heads writes/)
 })
 
 // --- the dry run says what a batch would do, and writes nothing (martha#339, T1, T2, T5, T6) ----------------------
@@ -1163,6 +1163,44 @@ test('#339 T6: two heads whose package.json also differ outside the ceilings cla
   const { packages, forecast } = await twoHeadsThatClashInTheManifest(t, { ours: { ours: 'echo ours' }, theirs: { theirs: 'echo theirs' } })
   const words = refusedLanding(forecast)
   assert.ok(words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): package.json with PR 281`), `package.json is not named a clash by hand with the first head: ${words}`)
+})
+
+test('#410: a head that adds a script the other left alone is answered lands, redone (mutants: compare the two sides whole; write the manifest from the first head)', async (t) => {
+  const { packages, forecast } = await twoHeadsThatClashInTheManifest(t, { ours: {}, theirs: { added: 'echo theirs' } })
+  assert.ok('told' in forecast, `a script one head added beside the ceilings was refused by the dry run: ${wordsOf(forecast)}`)
+  assert.ok(
+    forecast.told.includes(`- lands, redone: ${at(packages, 1)} (PR 282): package.json martha.hostCeilings (measured)`),
+    `the head that raises a ceiling beside a script is not answered lands, redone: ${forecast.told}`,
+  )
+})
+
+test('#410: the landing writes the script the second head added, and the summed ceiling beside it (mutant: write the first head\'s file)', async (t) => {
+  // The shape of 9c88ca7 + 666c1d0: one head raises three ceilings and adds a script, the other raises a ceiling, and
+  // the merged tree measures what the sum says, so only the manifest's own rule is on trial here.
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': aManifestWithScripts({}, { [AN_ADAPTER]: 2 }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+  })
+  const ours = aBranchWriting(fixture, 'passed0', base, {
+    'package.json': aManifestWithScripts({}, { [AN_ADAPTER]: 3 }),
+    [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
+  })
+  const theirs = aBranchWriting(fixture, 'passed1', base, {
+    'package.json': aManifestWithScripts({ added: 'echo theirs' }, { [AN_ADAPTER]: 4 }),
+    [`${AN_ADAPTER}/three.ts`]: codeLines('d', 2),
+  })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], { npm: [], programs: [] })
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('told' in landed, `a batch of one script and two ceilings was refused: ${wordsOf(landed)}`)
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  const manifest = JSON.parse(gitIn(fixture.clone, 'show', `${tip}:package.json`)) as {
+    readonly scripts: Readonly<Record<string, string>>
+    readonly martha: { readonly hostCeilings: Readonly<Record<string, number>> }
+  }
+  assert.deepEqual(manifest.scripts, { added: 'echo theirs' }, "the script the second head added was dropped for the first head's file")
+  assert.equal(manifest.martha.hostCeilings[AN_ADAPTER], 5, 'the landing did not write the base plus both raises')
 })
 
 /** Three heads: the second clashes by hand with the first, and the third was cut from the second. */

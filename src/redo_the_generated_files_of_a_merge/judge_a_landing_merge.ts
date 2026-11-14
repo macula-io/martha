@@ -7,7 +7,8 @@
 // 1. every path merging the parents clashes in is one the redo redoes, read from git and never from the message;
 // 2. the merge's Redone-generated line names exactly those, in the redo's own words;
 // 3. outside those paths, the merge's tree is the one merging its parents writes;
-// 4. package.json, when it is one of them, is both reviewed heads' file outside martha.hostCeilings.
+// 4. package.json, when it is one of them, is outside martha.hostCeilings what merging the two reviewed heads writes
+//    there (martha#410), which is the same three-way rule the redo applies and the dry run forecasts.
 //
 // What the redone files hold is judged where it already is: the C4 test pins the picture to its generator, and CI's
 // exact check:host-ceilings pins the map's numbers. A merge resolved by hand, a redo line that names a source path, or a
@@ -17,9 +18,9 @@ import { A_JUDGED_MERGE } from '../check_a_range_before_the_owner_says_yes/check
 import { whatAMergeTreeWrote, type AMergeInMemory } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { REDONE_GENERATED } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { CEILINGS_NAME } from '../../prove_the_core/the_host_ceilings.ts'
-import { classifyAClashedPath } from './classify_a_clashed_path.ts'
+import { classifyAClashedPath, theManifestStages } from './classify_a_clashed_path.ts'
 import { gitRan, gitSaid, saidBy } from './git_in_the_repository.ts'
-import { theSameOutsideTheCeilings } from './the_ceilings_a_merge_brings.ts'
+import { thePackageJsonOfAMerge, theSameOutsideTheCeilings } from './the_ceilings_a_merge_brings.ts'
 import { THE_WORDS_BETWEEN, theManifestAsGitNamesIt } from './the_generated_files.ts'
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
@@ -77,17 +78,24 @@ function nothingElseDiffers(repository: string, merge: string, clash: AMergeInMe
   return { refused: `it changes ${others.join(', ')}, which merging its parents does not, so what would land is not what passed` }
 }
 
-/** Check 4: the landed package.json, outside the ceilings, is the reviewed heads' file (they agree, or check 1 refused). */
-function theManifestIsTheReviewedOne(repository: string, merge: string, parents: TheParents, clash: AMergeInMemory): Step<true> {
+/**
+ * Check 4: the landed package.json, outside the ceilings, is what merging the two reviewed heads writes there. The
+ * three stages are the ones the clash kept, so this reads the same rule the redo and the dry run read.
+ */
+function theManifestIsTheOneTheMergeWrites(repository: string, merge: string, clash: AMergeInMemory): Step<true> {
   const the_manifest = theManifestAsGitNamesIt(repository)
-  if (!clash.clashed.has(the_manifest)) return { ok: true }
+  const stages = clash.clashed.get(the_manifest)
+  if (stages === undefined) return { ok: true }
+  const texts = theManifestStages(repository, the_manifest, stages)
+  if ('refused' in texts) return texts
+  const written = thePackageJsonOfAMerge(repository, ...texts.ok)
+  if ('refused' in written) return written
   const landed = gitSaid(repository, ['show', `${merge}:${the_manifest}`])
-  const reviewed = gitSaid(repository, ['show', `${parents.into}:${the_manifest}`])
-  if (landed === undefined || reviewed === undefined) return { refused: `${the_manifest} could not be read on the merge and its first parent` }
-  const same = theSameOutsideTheCeilings(landed, reviewed)
+  if (landed === undefined) return { refused: `${the_manifest} could not be read on the merge` }
+  const same = theSameOutsideTheCeilings(landed, written.ok.text)
   if ('refused' in same) return same
   if (same.ok) return { ok: true }
-  return { refused: `${the_manifest} differs from both reviewed heads outside ${CEILINGS_NAME}` }
+  return { refused: `${the_manifest}, outside ${CEILINGS_NAME}, is not what merging the two reviewed heads writes` }
 }
 
 /**
@@ -105,6 +113,6 @@ export function judgeALandingMerge(repository: string, merge: string): Step<stri
   if ('refused' in named) return named
   const alone = nothingElseDiffers(repository, merge, clash.ok)
   if ('refused' in alone) return alone
-  const manifest = theManifestIsTheReviewedOne(repository, merge, parents.ok, clash.ok)
+  const manifest = theManifestIsTheOneTheMergeWrites(repository, merge, clash.ok)
   return 'refused' in manifest ? manifest : { ok: `${A_JUDGED_MERGE}: ${words.ok.join(THE_WORDS_BETWEEN)}` }
 }
