@@ -1201,6 +1201,8 @@ test('#410: the landing writes the script the second head added, and the summed 
   }
   assert.deepEqual(manifest.scripts, { added: 'echo theirs' }, "the script the second head added was dropped for the first head's file")
   assert.equal(manifest.martha.hostCeilings[AN_ADAPTER], 5, 'the landing did not write the base plus both raises')
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages })
+  assert.ok('told' in checked, `the range gate refused a landed script that merging the two heads writes: ${wordsOf(checked)}`)
 })
 
 /** Three heads: the second clashes by hand with the first, and the third was cut from the second. */
