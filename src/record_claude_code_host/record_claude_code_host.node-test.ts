@@ -14,7 +14,7 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CHUNK } from '../claude_code_host/protected_config_places.ts'
-import type { Committed } from './carry_over_what_is_restated_by_hand.ts'
+import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
 import type { ManagedFolderGuardCalls } from './what_the_managed_folder_guard_calls.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
@@ -396,9 +396,9 @@ test('a host whose memory guard, on check or hosted-mode variable is not the one
   // The on check is a function the managed-folder guard reaches too, so a host that changes it changes both.
   const reached = GUARD.functions.some((entry) => entry.function === on_check)
   for (const [quoted, planted, fields] of [
-    [file_mode_guard, file_mode_guard.replace('return"off";', 'return"on";'), ['memory_off']],
-    [on_check, on_check.replace('"on"', '"enabled"'), reached ? ['managed_folder_guard_calls', 'memory_off'] : ['memory_off']],
-    [hosted_mode_variable, [...`${hosted_mode_variable}_RENAMED`].reverse().join(''), ['memory_off']],
+    [file_mode_guard, file_mode_guard.replace('return"off";', 'return"on";'), [MEMORY_OFF]],
+    [on_check, on_check.replace('"on"', '"enabled"'), reached ? ['managed_folder_guard_calls', MEMORY_OFF] : [MEMORY_OFF]],
+    [hosted_mode_variable, [...`${hosted_mode_variable}_RENAMED`].reverse().join(''), [MEMORY_OFF]],
   ] as const) {
     assert.notEqual(planted, quoted, 'the planted text differs')
     const memory_off = MEMORY_PARTS.memory_off?.replace(quoted, planted) ?? ''
