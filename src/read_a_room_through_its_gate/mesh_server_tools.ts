@@ -15,7 +15,7 @@
 // rather than discovered.
 //
 // Which version a member installs is its host's to read (for Claude Code,
-// ../claude_code_host/mesh_server_install.ts, from the approved server config),
+// ../install_the_mesh_server_for_claude_code/mesh_server_install.ts, from the approved server config),
 // and the launcher refuses to start a member whose version is not recorded
 // (refusalOfInstalledMeshServers). So a version is retired by removing its
 // record in a reviewed commit: a host still on it is then refused by name.

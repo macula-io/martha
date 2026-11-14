@@ -108,8 +108,8 @@ test('#255 part 2: a parked member with a handover is started on it, and its par
 
 test('#255 part 2: the prompt names the handover\'s file and does not carry its text', () => {
   const text = 'What stands: the package, its branch, its tip.'
-  const prompt = theResumePrompt({ file: '/somewhere/HANDOVER_2026-11-12_builder.md', content: text }, 'builder')
-  assert.match(prompt, /\/somewhere\/HANDOVER_2026-11-12_builder\.md/, 'the prompt does not name the handover file')
+  const prompt = theResumePrompt({ file: '/somewhere/MARTHA_HANDOVER_2026-11-12_builder.md', content: text }, 'builder')
+  assert.match(prompt, /\/somewhere\/MARTHA_HANDOVER_2026-11-12_builder\.md/, 'the prompt does not name the handover file')
   assert.ok(!prompt.includes(text), 'the prompt carries the handover\'s text, which would be a second handover nothing stamped')
 })
 

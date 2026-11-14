@@ -47,8 +47,8 @@ import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell
 import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { NOT_STARTED, recordedInsideTheHold } from '../end_a_launch/end_a_launch.ts'
 import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
@@ -70,7 +70,7 @@ import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
@@ -2467,12 +2467,49 @@ async function pidsCarrying(relay_root: string): Promise<number[]> {
   return found
 }
 
-/** Waits, within cleanup's own bound, for every process that still carries this relay root to be gone (martha#216). */
-async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<void> {
+/**
+ * What one look at the place sees: every pid that still carries its relay root, and the launcher, which carries none
+ * (martha#216). A look reads the processes that exist when it begins, so it is a photograph, never a watch.
+ */
+type ALook = () => Promise<number[]>
+
+/**
+ * Waits, within cleanup's own bound, for nothing to carry the relay root any more, and answers the pids that outlast
+ * the wait: those are the ones a test left behind (martha#216).
+ *
+ * The bound is on how long a process is waited for, never on how long a look may take: a look reads every process's
+ * environment, and one caught in `exec` holds the look for up to CLEANUP_SETTLE_MS (martha#85), so a busy machine can
+ * spend the whole bound inside one look and end the wait on a photograph taken before anything was looked for.
+ *
+ * A look that finds nothing is followed by one more (martha#466): the photograph it took is of the processes that
+ * existed when it began, so a process forked while it ran is in neither its list nor the one before it, and believing
+ * the first quiet photograph failed a run on a process that was only on its way out.
+ */
+async function waitForNothingToCarry(look: ALook): Promise<number[]> {
   const deadline = Date.now() + CLEANUP_SETTLE_MS * 4
-  const stillHere = async (): Promise<boolean> =>
-    alsoGone.some((pid) => pid > 1 && isAlive(pid)) || (await pidsCarrying(relay_root)).length > 0
-  while (Date.now() < deadline && (await stillHere())) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  while (Date.now() < deadline) {
+    if (await nothingCarriesTwice(look)) return []
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+  return look()
+}
+
+/**
+ * Whether two looks in a row found nothing. The second is taken after the first has ended, so a process forked while
+ * the first ran — which that look's own list does not hold — is seen by it (martha#466). A first look that finds
+ * something is answered without a second: it is not quiet, and the wait goes on.
+ */
+async function nothingCarriesTwice(look: ALook): Promise<boolean> {
+  if ((await look()).length > 0) return false
+  return (await look()).length === 0
+}
+
+/** Waits for every process that still carries this relay root to be gone, and answers the ones that outlast it. */
+async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<number[]> {
+  return waitForNothingToCarry(async () => [
+    ...(await pidsCarrying(relay_root)),
+    ...alsoGone.filter((pid) => pid > 1 && isAlive(pid)),
+  ])
 }
 
 /**
@@ -2508,16 +2545,15 @@ async function killWhateverNamesTheHome(home: string): Promise<void> {
  *
  * Whatever still holds the home when it is due is killed here, so a red run never leaves a member behind, and the test
  * then fails by name naming those pids: a home that goes under a running host is never again only an occasioned
- * ENOTEMPTY (martha#216).
+ * ENOTEMPTY (martha#216). A pid is named only once it has outlasted the wait that the look before it began: a process
+ * that is on its way out is waited for, never named (martha#466).
  */
 async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: readonly number[] = []): Promise<void> {
-  await noProcessCarries(place.relay_root, alsoGone)
-  const left = (await pidsCarrying(place.relay_root)).filter((pid) => !alsoGone.includes(pid))
-  const launcherLeft = alsoGone.filter((pid) => pid > 1 && isAlive(pid))
+  const left = await noProcessCarries(place.relay_root, alsoGone)
   await killGroupsCarrying(place.relay_root)
   removeTheTree(place.home)
-  if (left.length > 0 || launcherLeft.length > 0) {
-    throw new Error(`the place's home was due for removal while ${[...left, ...launcherLeft].join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
+  if (left.length > 0) {
+    throw new Error(`the place's home was due for removal while ${left.join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
   }
 }
 
@@ -2530,6 +2566,37 @@ const thePlaceGoesWithItsProcesses = (t: TestContext, place: Place): void => {
   place.aRemovalIsRegistered()
   t.after(() => theHomeGoes(place))
 }
+
+test('a quiet look is not a watch: a second look in a row is what ends the wait (martha#466)', async () => {
+  // One look reads the processes that exist when it begins, so a quiet one may simply have been taken before the one
+  // that was leaving was forked. The wait may end only on two quiet looks in a row, so a place that is quiet every
+  // time is looked at exactly twice: a wait that stopped on the first quiet look would take one.
+  let looks = 0
+  const left = await waitForNothingToCarry(async () => {
+    looks += 1
+    return []
+  })
+  assert.deepEqual(left, [])
+  assert.equal(looks, 2, 'the wait ended on one quiet look, which is the photograph that can miss a process forked while it ran')
+})
+
+test('the removal waits for a process that is only on its way out, and does not name it (martha#466)', async () => {
+  // The looks a busy machine can hand the wait: the first quiet, then — in the one look that closes the window a
+  // photograph leaves — a process that is already leaving, gone by the look after. Nothing was left behind, so nothing
+  // is named, and a run that changed nothing is not failed for it. The first quiet look is not believed, which is what
+  // lets the second one see the process at all.
+  const looks = [[], [41234], []]
+  let at = 0
+  const left = await waitForNothingToCarry(async () => looks[at++] ?? [])
+  assert.deepEqual(left, [])
+  assert.ok(at > 1, 'the wait ended on the first quiet look and so never saw the process the look after it found')
+})
+
+test('the removal names a process that outlasts its wait (martha#216)', async () => {
+  // A member a test never stopped is there every time the wait looks: it is named, never passed over.
+  const left = await waitForNothingToCarry(async () => [41234])
+  assert.deepEqual(left, [41234])
+})
 
 /**
  * A launcher in a process of its own, started on this place, that says when its
@@ -2801,6 +2868,12 @@ interface OwnersTerminal {
   press(keys: string): void
   /** What the terminal has shown so far. */
   shown(): string
+  /**
+   * The status the launcher ended with and the last of what it printed, when it ended without starting a member
+   * (martha#454): a script that cannot load dies before the launcher says `started`, so nothing else it could say
+   * tells a test why the member never came. Undefined while it runs, and for one that started or refused one.
+   */
+  launcherEnd(): { readonly code: number; readonly said: string } | undefined
 }
 
 /** How the owner's terminal launches: what it starts, its environment, and where the launcher's stderr goes. */
@@ -2818,6 +2891,8 @@ interface TerminalLaunch {
   readonly deadlines?: SessionStartDeadlines
   /** The owner's arguments to the host, instead of a prompt to print an answer to. */
   readonly args?: readonly string[]
+  /** The launcher script the terminal runs, instead of the one the harness writes, for a script that cannot load (martha#454). */
+  readonly launcher_script?: string
 }
 
 /** The deadlines a test gives a launch in place of the launcher's own. */
@@ -2843,13 +2918,41 @@ async function ownersTerminal(t: TestContext, place: Place, how: TerminalLaunch 
 /** The line the launcher process prints when it refuses (launcherProcess), as the terminal shows it. */
 const REFUSED_LINE = /refused: [^\r\n]*/
 
+/** The line the launcher process prints when it starts its member, as the terminal shows it. */
+const STARTED_LINE = /started \d+/
+
+/**
+ * The last of what a launcher printed, for a message that has to carry its own error: the stack frames are left out,
+ * since the line that says what went wrong is the one above them, and what remains is capped so the message stays one
+ * line a reader can follow.
+ */
+const theLastOf = (said: string): string =>
+  said
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('at '))
+    .slice(-3)
+    .join(' / ')
+    .slice(-400)
+
 /**
  * Waits on the owner's terminal for what a test means, and fails at once when
  * the launcher has said it refused: after that, no member event can come
  * (martha#94).
+ *
+ * A launcher that ends fails the wait at once too, naming the status it ended
+ * with and the last of what it printed (martha#454): a script that cannot load
+ * says nothing on the terminal and starts no member, so the wait would otherwise
+ * run to the harness's timeout and leave only that as the failure.
  */
-const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
-  until(what, holds, t, () => terminal.shown(), () => REFUSED_LINE.exec(terminal.shown())?.[0])
+const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown' | 'launcherEnd'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
+  until(what, holds, t, () => terminal.shown(), () => {
+    const refused = REFUSED_LINE.exec(terminal.shown())?.[0]
+    if (refused !== undefined) return refused
+    const ended = terminal.launcherEnd()
+    if (ended === undefined) return undefined
+    return `the launcher ended with status ${ended.code} and started nothing${ended.said === '' ? '' : `; it said: ${ended.said}`}`
+  })
 
 /** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
 function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
@@ -2857,14 +2960,16 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
-  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
+  const launcher = how.launcher_script ?? launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
     `readlink /proc/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
     // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
-    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & echo $! > '${note('launcher')}'; wait`,
+    // The launcher's own status is noted when it ends, so a test waiting on the terminal can fail at once with it
+    // rather than run to the harness's timeout (martha#454).
+    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & launcher=$!; echo $launcher > '${note('launcher')}'; wait $launcher; echo $? > '${note('ended')}'`,
     'read finished',
   ].join('; ')
   const runner = spawn(PTY_RUNNER, ['-qec', shell, '/dev/null'], { stdio: ['pipe', 'pipe', 'inherit'] })
@@ -2899,6 +3004,15 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
     type: (line: string) => void runner.stdin.write(`${line}\n`),
     press: (keys: string) => void runner.stdin.write(keys),
     shown: () => shown,
+    // What the launcher printed is the terminal itself, unless the test sent its stderr to a file: either way it is the
+    // launcher's own error, which is the whole point of naming it (martha#454).
+    launcherEnd: () => {
+      const ended = textIn(note('ended'))
+      // A launcher that started or refused a member has said what became of it: what follows its end is another
+      // test's to wait for, and its end rules nothing out (martha#454).
+      if (ended === '' || STARTED_LINE.test(shown) || REFUSED_LINE.test(shown)) return undefined
+      return { code: Number(ended), said: theLastOf(how.stderrTo === undefined ? shown : textIn(how.stderrTo)) }
+    },
   }
 }
 
@@ -3149,6 +3263,25 @@ for (const [what, make] of [
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+test('a launcher script that cannot load fails the test at once, naming the export it wanted and did not get (martha#454)', async (t) => {
+  const place = placeFor(t)
+  // A script whose import names something the launch module does not export. The host ends it before it starts anything,
+  // and the terminal shows no line at all, so the launcher's own error is the only thing that can say why: without it
+  // the wait runs to the harness's timeout, which reports the wait and never the script.
+  const script = join(place.home, 'launcher-that-cannot-load.ts')
+  const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
+  writeFileSync(script, `import { launchClaudeCodeMember, NOTHING_THIS_MODULE_EXPORTS } from ${JSON.stringify(launchModule)}\nvoid launchClaudeCodeMember\nvoid NOTHING_THIS_MODULE_EXPORTS\n`)
+  // A file, so what the launcher printed is read as the launcher wrote it, with no race against the terminal.
+  const said = join(place.home, 'launcher-that-cannot-load.stderr')
+  await assert.rejects(ownersTerminal(t, place, { launcher_script: script, stderrTo: said }), (failure: Error) => {
+    // The harness's timeout is the failure this replaces, and it names nothing.
+    assert.doesNotMatch(failure.message, /timed out/)
+    assert.match(failure.message, /the launcher ended with status 1 and started nothing/)
+    assert.match(failure.message, /does not provide an export named 'NOTHING_THIS_MODULE_EXPORTS'/)
+    return true
+  })
+})
 
 // The recorded host itself, on the owner's terminal (martha#117). The host writes
 // its generated types into the folder --plugin-dir names on an interactive start,

@@ -47,8 +47,6 @@ export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/claude_code_relay/hooks/crew.tsx', text: 'take_asks', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/declare_crew/declare_crew.ts', text: '.crew', reason: "the refusal that tells a person their checkout still holds crew-code's declaration names this file", removed_by: STAYS },
   { path: 'src/declare_crew/declare_crew.ts', text: 'crew.json', reason: "the refusal that tells a person their checkout still holds crew-code's declaration names this file", removed_by: STAYS },
-  { path: 'src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.node-test.ts', text: 'HANDOVER_2026-11-11_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
-  { path: 'src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.node-test.ts', text: 'HANDOVER_2026-11-12_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
   { path: 'src/answer_the_relay/a_tool_the_mod_posts_is_answered.node-test.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/queue_the_owners_asks/queue_the_owners_asks.ts', text: 'list_asks', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/queue_the_owners_asks/queue_the_owners_asks.ts', text: 'queue_ask', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
@@ -57,7 +55,4 @@ export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/read_a_room_through_its_gate/read_a_room_through_its_gate.node-test.ts', text: 'mcp__crew__crew_mail_read', reason: "a peer program's own tool call, which this test proves Martha does not answer", removed_by: STAYS },
   { path: 'src/refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.node-test.ts', text: 'crew_restart', reason: "a tool crew-code's host really registers, which this test proves Martha refuses like any other name that executes", removed_by: STAYS },
   { path: 'src/trust_only_signed_lists/trust_only_signed_lists.node-test.ts', text: 'crew_roster', reason: "Martha's signed-list kind still carries crew-code's tool name", removed_by: "the signed-list-kind PR (martha#468, after the inventory's rows)" },
-  { path: 'src/write_my_handover/write_my_handover.node-test.ts', text: 'HANDOVER_2001-02-03_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
-  { path: 'src/write_my_handover/write_my_handover.ts', text: 'CREW-HANDOVER-WRITTEN', reason: "Martha's marker still carries crew-code's name", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
-  { path: 'src/write_my_handover/write_my_handover.ts', text: 'CREW-REFRESH-DECLINED', reason: "Martha's marker still carries crew-code's name", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
 ]

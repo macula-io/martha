@@ -181,14 +181,18 @@
 <text class="t-desc" x="364" y="1292">not given, and say_what_the_gate_does</text>
 <text class="t-desc" x="364" y="1308">prints it; apply_the_owners_release reads</text>
 <text class="t-desc" x="364" y="1324">a member the owner released</text>
-<rect class="b-cmp" x="664" y="948" width="300" height="148" rx="10"/>
+<rect class="b-cmp" x="664" y="948" width="300" height="212" rx="10"/>
 <text class="t-code" x="680" y="976">name_the_source_of_a_prompt</text>
 <text class="t-type" x="680" y="994">[whose text it was]</text>
 <text class="t-desc" x="680" y="1018">The origin a host attests, carried with</text>
 <text class="t-desc" x="680" y="1034">the turn: attribute_a_cross_session_sender,</text>
 <text class="t-desc" x="680" y="1050">carry_taint_across_a_refresh, and the shell</text>
-<text class="t-desc" x="680" y="1066">gate's reading; trust_only_signed_lists is</text>
-<text class="t-desc" x="680" y="1082">how every list a gate trusts is opened</text>
+<text class="t-desc" x="680" y="1066">gate's reading; hear_every_turn_the_</text>
+<text class="t-desc" x="680" y="1082">model_runs hears every main turn the</text>
+<text class="t-desc" x="680" y="1098">model runs, whatever started it, and</text>
+<text class="t-desc" x="680" y="1114">records its source; trust_only_signed_</text>
+<text class="t-desc" x="680" y="1130">lists is how every list a gate trusts is</text>
+<text class="t-desc" x="680" y="1146">opened</text>
 <rect class="b-cmp" x="32" y="1354" width="300" height="148" rx="10"/>
 <text class="t-code" x="48" y="1382">admit_a_room_message</text>
 <text class="t-type" x="48" y="1400">[loaded; the room is not built]</text>
@@ -197,23 +201,28 @@
 <text class="t-desc" x="48" y="1456">member has; read_a_room_through_its_gate</text>
 <text class="t-desc" x="48" y="1472">gives the mesh server's tools, and refuse_</text>
 <text class="t-desc" x="48" y="1488">widening_a_member_reach refuses the rest</text>
-<rect class="b-cmp" x="348" y="1354" width="300" height="294" rx="10"/>
+<rect class="b-cmp" x="348" y="1354" width="300" height="374" rx="10"/>
 <text class="t-code" x="364" y="1382">claude_code_host,</text>
 <text class="t-code" x="364" y="1400">claude_code_relay</text>
 <text class="t-type" x="364" y="1418">[the Claude Code host]</text>
 <text class="t-desc" x="364" y="1442">The host contract on Claude Code: the</text>
 <text class="t-desc" x="364" y="1458">plugin, its hooks, the relay on a socket</text>
-<text class="t-desc" x="364" y="1474">and the member's tools;</text>
-<text class="t-desc" x="364" y="1490">hear_the_hosts_dialogs reads in the</text>
-<text class="t-desc" x="364" y="1506">crew's words the dialogs the host</text>
-<text class="t-desc" x="364" y="1522">raises; refuse_a_member_writing_</text>
-<text class="t-desc" x="364" y="1538">owner_memory keeps a member's writes</text>
-<text class="t-desc" x="364" y="1554">out of the owner's memory, and find_</text>
-<text class="t-desc" x="364" y="1570">what_a_later_git_run_reads reads what</text>
-<text class="t-desc" x="364" y="1586">a later git run would read;</text>
-<text class="t-desc" x="364" y="1602">hear_every_turn_the_model_runs hears</text>
-<text class="t-desc" x="364" y="1618">each turn the model runs, whatever</text>
-<text class="t-desc" x="364" y="1634">started it</text>
+<text class="t-desc" x="364" y="1474">and the member's tools; cut_the_rules_</text>
+<text class="t-desc" x="364" y="1490">from_the_host_binary holds the rules cut</text>
+<text class="t-desc" x="364" y="1506">out of the host, and refuse_settings_</text>
+<text class="t-desc" x="364" y="1522">that_turn_hooks_off the refusal of a</text>
+<text class="t-desc" x="364" y="1538">launch that reads one; load_the_hosts_</text>
+<text class="t-desc" x="364" y="1554">markdown is the markdown it loads and</text>
+<text class="t-desc" x="364" y="1570">the settings env reaching servers, and</text>
+<text class="t-desc" x="364" y="1586">install_the_mesh_server_for_claude_code</text>
+<text class="t-desc" x="364" y="1602">the server a launch hands the model;</text>
+<text class="t-desc" x="364" y="1618">hear_the_hosts_dialogs reads in the</text>
+<text class="t-desc" x="364" y="1634">crew's words the dialogs the host</text>
+<text class="t-desc" x="364" y="1650">raises; refuse_a_member_writing_</text>
+<text class="t-desc" x="364" y="1666">owner_memory keeps a member's writes</text>
+<text class="t-desc" x="364" y="1682">out of the owner's memory, and find_</text>
+<text class="t-desc" x="364" y="1698">what_a_later_git_run_reads reads what a</text>
+<text class="t-desc" x="364" y="1714">later git run would read</text>
 <rect class="b-cmp" x="664" y="1354" width="300" height="454" rx="10"/>
 <text class="t-code" x="680" y="1382">check_nothing_private_gets_in,</text>
 <text class="t-code" x="680" y="1400">check_every_link_resolves</text>

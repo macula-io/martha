@@ -17,7 +17,6 @@ import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/kee
 import { RELAY_JOURNAL_SUFFIX } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
-import { CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED } from '../write_my_handover/write_my_handover.ts'
 
 /** Why the inventory's own words are spelled by the table rather than imported (martha#468). */
 export const THE_INVENTORY_SPELLS_THE_NAME = 'a name crew-code gives something, as #468\'s inventory lists it; the constant of that word is the name Martha gives it until the rename that takes it away, and the table must not follow that rename'
@@ -45,8 +44,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: TAKE_ASKS, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: SETTLE_ASKS, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_REFRESH, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: CREW_HANDOVER_WRITTEN, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: CREW_REFRESH_DECLINED, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: GATE_AUDIT_PLACE, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_DIRECTORY, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_FILE, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
@@ -55,7 +52,5 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: TAKE_ASKS, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: SETTLE_ASKS, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_REFRESH, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: CREW_HANDOVER_WRITTEN, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: CREW_REFRESH_DECLINED, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: GATE_AUDIT_PLACE, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
 ]

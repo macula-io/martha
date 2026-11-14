@@ -421,7 +421,7 @@ test('martha wake starts the member on its newest handover, and the prompt it is
   const run = marthaOnATerminal(place, claude.env, 'wake', member)
 
   assert.equal(run.status, 0, run.said)
-  assert.match(run.said, new RegExp(`^${member} woken from .*HANDOVER_2026-11-12_${member}\\.md$`, 'm'), 'the wake did not say which handover it woke the member from')
+  assert.match(run.said, new RegExp(`^${member} woken from .*MARTHA_HANDOVER_2026-11-12_${member}\\.md$`, 'm'), 'the wake did not say which handover it woke the member from')
   const calls = readFileSync(claude.args, 'utf8')
     .split('---\n')
     .map((call) => call.split('\n').filter((line) => line !== ''))

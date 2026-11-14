@@ -40,7 +40,7 @@ import {
   sessionStartOf,
   type SessionStartHookInput,
 } from '../claude_code_host/claude_code_host.ts'
-import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { nameTheFailedReviewIn, resolvedModelIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'

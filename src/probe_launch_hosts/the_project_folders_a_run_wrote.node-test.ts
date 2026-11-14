@@ -21,7 +21,7 @@ import {
   theProjectFoldersThere,
   whatIsStillLeftAtTheEnd,
 } from './the_project_folders_a_run_wrote.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 // The names are the host's keys for paths under /tmp, written out as its own rule makes
 // them -- not read from this machine's TMPDIR, which the CI runs under a link (a long

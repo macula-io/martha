@@ -20,7 +20,7 @@ import { whatTheHostSaysWithTheseSettings } from '../ask_the_host_what_it_loads/
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
 import { HOST_TERMINAL } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 /** The rule written under the same place as `rule`, but under a tool the file permission checks never use. */
 const anInertTwinOf = (rule: string): string => rule.replace(/^\w+\(/, 'Write(')
