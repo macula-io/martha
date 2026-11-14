@@ -91,8 +91,8 @@ function aRepository(t: TestContext): Fixture {
   gitIn(seed, 'init', '--quiet', '--initial-branch=main')
   writeFileSync(join(seed, 'shared.txt'), 'one\n')
   // A landing's tree carries a package.json, and the ceilings it declares are read from the tree it merges: a fixture
-  // without one is a tree no landing could hold to them.
-  writeFileSync(manifestPathOf(seed), '{"type":"module"}\n')
+  // without one is a tree no landing could hold to them, and one without a cap on its core slices fails by name (#415).
+  writeFileSync(manifestPathOf(seed), theManifestOfAPlantedTree({}))
   commitIn(seed, 'the first commit')
   gitIn(seed, 'remote', 'add', 'origin', origin)
   gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
