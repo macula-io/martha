@@ -49,6 +49,7 @@ import ts from 'typescript'
 import { coreSources } from './core_sources.ts'
 import { moduleReferencesOf } from './parse_a_source.ts'
 import { isTestFile } from './declared_in_package_json.ts'
+import { isACoincidenceFile } from './the_coincidences_a_slice_declares.ts'
 
 /** The slices under src/ that may write launch records, besides the host glue. */
 export const LAUNCH_RECORD_WRITERS = ['attribute_a_cross_session_sender', 'host_contract'] as const
@@ -298,7 +299,8 @@ export function launchRecordWritesOutsideTheLauncher(
 
 /**
  * Every import, in a source outside the host glue, of a module inside it. The
- * glue builds the writable store, so a slice that imported it could write.
+ * glue builds the writable store, so a slice that imported it could write. Tests,
+ * programs and a slice's coincidences.ts are no slices, and are not judged.
  * Paths are relative to src/; `planted` are added as if they were files there.
  */
 export function hostGlueImportedBySlices(
@@ -313,6 +315,10 @@ export function hostGlueImportedBySlices(
     .filter((source) => !host_glue.includes(sliceOf(source.path)))
     // A test or a program package.json runs is no slice: it may drive the real glue (#26).
     .filter((source) => !isTestFile(test_suffixes, source.path) && !programs.includes(sliceOf(source.path)))
+    // Nor is a slice's coincidences.ts: it never runs, only another coincidences.ts may import it, and its shape is
+    // pinned, so its imports only tie each entry to its constant (#289 r=3, Addendum 2). The source side only: what
+    // counts as host glue does not change, and a file of another name beside it is still judged.
+    .filter((source) => !isACoincidenceFile(source.path))
     .flatMap((source) =>
       moduleReferencesOf(source.text, source.path)
         .flatMap(({ specifier }) => specifier ?? [])

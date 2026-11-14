@@ -156,7 +156,7 @@ test('a process runs through the runner the test gives, and its outcome comes ba
   const { host } = hostForTests({
     run: async ({ command, args }) => ({ exit_code: 0, stdout: `${command} ${args.join(' ')}`, stderr: '' }),
   })
-  assert.deepEqual(await host.processes.run({ command: 'git', args: ['status'], cwd: '/work' }), {
+  assert.deepEqual(await host.processes.run({ command: 'git', args: ['status'], cwd: '/a-run-tree' }), {
     exit_code: 0,
     stdout: 'git status',
     stderr: '',
@@ -164,7 +164,7 @@ test('a process runs through the runner the test gives, and its outcome comes ba
 })
 
 test('a host with no runner refuses to run a process rather than inventing an outcome', async () => {
-  await assert.rejects(hostForTests().host.processes.run({ command: 'git', args: [], cwd: '/work' }), /no process runner/)
+  await assert.rejects(hostForTests().host.processes.run({ command: 'git', args: [], cwd: '/a-run-tree' }), /no process runner/)
 })
 
 test('a turn handed to the model is delivered, and an arriving turn reaches every listener', async () => {
@@ -191,12 +191,12 @@ test('a tool is registered once; a second tool by the same name is refused', asy
 
 test('with no files, scratch or runner given, the test host refuses every read, directory and run (#26)', () => {
   const { host } = hostForTests()
-  assert.throws(() => host.stores.files.kindOf('/work'), /no file tree/)
-  assert.throws(() => host.stores.files.bytesOf('/work'), /no file tree/)
-  assert.throws(() => host.stores.files.childrenOf('/work'), /no file tree/)
-  assert.throws(() => host.stores.files.realPathOf('/work'), /no file tree/)
+  assert.throws(() => host.stores.files.kindOf('/a-run-tree'), /no file tree/)
+  assert.throws(() => host.stores.files.bytesOf('/a-run-tree'), /no file tree/)
+  assert.throws(() => host.stores.files.childrenOf('/a-run-tree'), /no file tree/)
+  assert.throws(() => host.stores.files.realPathOf('/a-run-tree'), /no file tree/)
   assert.throws(() => host.stores.scratch.make(null, 'x-'), /no scratch place/)
-  assert.throws(() => host.processes.runNow({ command: 'git', args: [], cwd: '/work' }), /no process runner/)
+  assert.throws(() => host.processes.runNow({ command: 'git', args: [], cwd: '/a-run-tree' }), /no process runner/)
 })
 
 test('the files, scratch and runner a test gives are the ones the host uses (#26)', () => {
@@ -206,11 +206,11 @@ test('the files, scratch and runner a test gives are the ones the host uses (#26
     scratch: { make: (root, prefix) => ({ path: `${root ?? '/tmp'}/${prefix}1`, write: (name) => name, remove: () => undefined }) },
     runNow: () => outcome,
   })
-  assert.deepEqual(host.stores.files.kindOf('/work'), { kind: 'absent' })
-  assert.deepEqual(host.stores.files.childrenOf('/work'), ['a'])
-  assert.equal(host.stores.files.realPathOf('/work'), '/real')
+  assert.deepEqual(host.stores.files.kindOf('/a-run-tree'), { kind: 'absent' })
+  assert.deepEqual(host.stores.files.childrenOf('/a-run-tree'), ['a'])
+  assert.equal(host.stores.files.realPathOf('/a-run-tree'), '/real')
   assert.equal(host.stores.scratch.make(null, 'x-').path, '/tmp/x-1')
-  assert.equal(host.processes.runNow({ command: 'git', args: [], cwd: '/work' }), outcome)
+  assert.equal(host.processes.runNow({ command: 'git', args: [], cwd: '/a-run-tree' }), outcome)
 })
 
 // --- a called tool's own name is the host's to give (martha#2, item 5 (b)) ---

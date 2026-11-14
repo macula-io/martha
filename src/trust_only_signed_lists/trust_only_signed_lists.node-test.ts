@@ -224,14 +224,14 @@ const scratch = (run: (dir: string) => void) => {
 test('ssh-keygen -Y verify accepts the hardware key signature the fixtures write', () => {
   scratch((dir) => {
     const document = documentOf('crew_roster', [member])
-    writeFileSync(join(dir, 'allowed_signers'), `owner ${owner.line}\n`)
+    writeFileSync(join(dir, 'allowed_signers'), `a-signer ${owner.line}\n`)
     writeFileSync(join(dir, 'roster.json.sig'), signed(document))
     const out = execFileSync(
       'ssh-keygen',
-      ['-Y', 'verify', '-f', join(dir, 'allowed_signers'), '-I', 'owner', '-n', TRUST_LIST_NAMESPACE, '-s', join(dir, 'roster.json.sig')],
+      ['-Y', 'verify', '-f', join(dir, 'allowed_signers'), '-I', 'a-signer', '-n', TRUST_LIST_NAMESPACE, '-s', join(dir, 'roster.json.sig')],
       { input: document, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
     )
-    assert.ok(out.includes(`Good "${TRUST_LIST_NAMESPACE}" signature for owner`), out)
+    assert.ok(out.includes(`Good "${TRUST_LIST_NAMESPACE}" signature for a-signer`), out)
   })
 })
 

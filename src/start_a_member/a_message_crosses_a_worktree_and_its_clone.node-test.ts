@@ -54,8 +54,8 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
 
   const state = openState(join(home, '.local', 'state', 'martha'), clone)
   assert.ok('directory' in state, 'the state opens')
-  const inTheClone = launcherPlacesOf(state, join(home, 'relay'), clone)
-  const inTheWorktree = launcherPlacesOf(state, join(home, 'relay'), worktree)
+  const inTheClone = launcherPlacesOf(state, join(home, 'relay-places'), clone)
+  const inTheWorktree = launcherPlacesOf(state, join(home, 'relay-places'), worktree)
   assert.ok('rows' in inTheClone && 'rows' in inTheWorktree)
   assert.equal(inTheWorktree.rows, inTheClone.rows, 'a worktree and its clone were given different row stores, so no message can cross them')
 

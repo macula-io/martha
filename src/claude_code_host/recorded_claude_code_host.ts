@@ -48,7 +48,8 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
   /**
    * How the recorded host's auto-memory is kept off, re-read by hand from that
    * version's code and restated, never derived: the recorder carries it over
-   * and --check leaves it out (martha#136).
+   * (martha#136), and --check names it when a text it quotes is no longer in the
+   * host's code (martha#412).
    */
   readonly memory_off: MemoryOff
   /** The host's SessionStart hook-input schema, as its binary spells it. */

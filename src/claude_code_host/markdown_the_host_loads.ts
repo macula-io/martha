@@ -107,7 +107,7 @@ function enclosingAsyncFunction(text: string, at: number): { readonly name: stri
 }
 
 /** The host's markdown loader, whole, checked to read the managed and the user scope. */
-function loaderIn(text: string, managed: string): { readonly name: string; readonly source: string } {
+export function loaderIn(text: string, managed: string): { readonly name: string; readonly source: string } {
   const marks = [...text.matchAll(new RegExp(LOADER_MARK, 'g'))]
   if (marks.length !== 1) throw new Error(`The host text marks ${String(marks.length)} markdown loaders, not one.`)
   const loader = enclosingAsyncFunction(text, marks[0]?.index ?? 0)

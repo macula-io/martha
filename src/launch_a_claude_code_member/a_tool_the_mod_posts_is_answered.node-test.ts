@@ -66,7 +66,7 @@ function toolsIn(place: { readonly home: string; readonly checkout: string; read
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
   })
 }
 

@@ -40,7 +40,7 @@ function placesOf(t: TestContext): Places {
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
-  const rows = join(home, 'rows')
+  const rows = join(home, 'row-streams')
   mkdirSync(rows, { mode: 0o700 })
   return { home, checkout, rows }
 }

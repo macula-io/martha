@@ -22,10 +22,13 @@
 // end missing, or a base of zeroes, which is what a repository's first push hands
 // over — falls back to the whole tree.
 //
-// The exceptions (`./exceptions.ts`) are read in both modes, and a list that no
-// longer matches the tree is an error, never a pass. They belong to this checkout:
-// a tree brought here with `--root` is judged without them, because an entry names
-// a file here and says nothing about another tree.
+// The coincidences each slice declares in its own `coincidences.ts` are read from
+// the tree in both modes (../../prove_the_core/the_coincidences_a_slice_declares.ts),
+// never imported. An entry the reader cannot read, an entry about a file outside its
+// own slice, and a list that no longer matches the tree are each an error, never a
+// pass. The entries belong to this checkout: a tree brought here with `--root` is
+// judged without them, because an entry names a file here and says nothing about
+// another tree.
 
 import { join } from 'node:path'
 
@@ -35,11 +38,11 @@ import {
   lineOfAMarkerNotHeld,
   markersNotHeld,
   restatementsIn,
-  type Exception,
   type MarkerNotHeld,
 } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
-import { EXCEPTIONS } from './exceptions.ts'
+import { coincidencesIn, lineOfAnUnreadableCoincidence, type DeclaredCoincidence } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+import { entriesOutsideTheirSlice, lineOfAnEntryOutsideItsSlice } from './a_slice_excuses_only_its_own_files.ts'
 import { summaryOf, verdictOf } from './judge_a_change.ts'
 import { CORE } from './the_core_the_check_reads.ts'
 import { exceptionsThatApply } from './the_exceptions_that_apply.ts'
@@ -71,10 +74,16 @@ function runSelfTest(): number {
   return failures.length === 0 ? 0 : 1
 }
 
-function reportStale(stale: readonly Exception[]): number {
+function reportStale(stale: readonly DeclaredCoincidence[]): number {
   for (const entry of stale) {
-    console.error(`${NAME}: '${entry.value}' in ${entry.file} is declared an exception but matches nothing there, or carries no reason, or repeats another entry. Drop it, or say why it stays.`)
+    console.error(`${NAME}: ${entry.declared_in}:${entry.line}: '${entry.value}' in ${entry.file} is declared a coincidence but matches nothing there, or carries no reason, or repeats another entry. Drop it, or say why it stays.`)
   }
+  return 2
+}
+
+/** The slices' coincidence files cannot be held as written: each place, by name, and the run could not look. */
+function reportRefused(refused: readonly string[]): number {
+  for (const line of refused) console.error(`${NAME}: ${line}`)
   return 2
 }
 
@@ -83,7 +92,7 @@ function reportMarkers(markers: readonly MarkerNotHeld[]): void {
   if (markers.length > 0) console.error(`${NAME}: ${markers.length} marker(s) claim more than the check can read. Mark only a top-level exported record of plain keys and string values, by the marker's own name.`)
 }
 
-function runReport(root: string, exceptions: readonly Exception[]): number {
+function runReport(root: string, exceptions: readonly DeclaredCoincidence[]): number {
   const sources = coreSources(join(root, CORE))
   const markers = markersNotHeld(sources)
   reportMarkers(markers)
@@ -92,7 +101,7 @@ function runReport(root: string, exceptions: readonly Exception[]): number {
   return markers.length === 0 ? 0 : 1
 }
 
-function runGate(root: string, exceptions: readonly Exception[]): number {
+function runGate(root: string, exceptions: readonly DeclaredCoincidence[]): number {
   const verdict = verdictOf(root, option('--range'), exceptions)
   if (verdict.stale.length > 0) return reportStale(verdict.stale)
   if (verdict.judged === null) console.log(`${NAME}: no readable range, so the whole tree is judged`)
@@ -104,14 +113,17 @@ function runGate(root: string, exceptions: readonly Exception[]): number {
     console.log(`${NAME}: no literal restates a defined value`)
     return 0
   }
-  if (verdict.findings.length > 0) console.error(`${NAME}: ${verdict.findings.length} site(s) restate a value the tree defines. Import the constant, or declare the coincidence in src/check_no_literal_restates_a_value/exceptions.ts with its reason.`)
+  if (verdict.findings.length > 0) console.error(`${NAME}: ${verdict.findings.length} site(s) restate a value the tree defines. Import the constant, or declare the coincidence, with its reason, in the coincidences.ts of the slice that holds the file.`)
   return 1
 }
 
 const main = (): number => {
   if (process.argv.includes('--self-test')) return runSelfTest()
   const root = option('--root') ?? process.cwd()
-  const exceptions = exceptionsThatApply(root, CHECKOUT, EXCEPTIONS)
+  const declared = coincidencesIn(coreSources(join(root, CORE)))
+  const refused = [...declared.unreadable.map(lineOfAnUnreadableCoincidence), ...entriesOutsideTheirSlice(declared.entries).map(lineOfAnEntryOutsideItsSlice)]
+  if (refused.length > 0) return reportRefused(refused)
+  const exceptions = exceptionsThatApply(root, CHECKOUT, declared.entries)
   if (process.argv.includes('--report')) {
     const stale = exceptionsNotHeld(coreSources(join(root, CORE)), exceptions)
     return stale.length > 0 ? reportStale(stale) : runReport(root, exceptions)

@@ -155,10 +155,10 @@ export function rangeOf(root: string, range: string | undefined): Judged | null 
 }
 
 /** What the gate found in one tree for one range, before anything is printed. */
-export interface Verdict {
+export interface Verdict<Entry extends Exception = Exception> {
   readonly sources: readonly CoreSource[]
   /** Exceptions that no longer hold: the check could not be made. */
-  readonly stale: readonly Exception[]
+  readonly stale: readonly Entry[]
   readonly markers: readonly MarkerNotHeld[]
   /** Null when there was no readable range and the whole tree was judged. */
   readonly judged: Judged | null
@@ -167,7 +167,7 @@ export interface Verdict {
 }
 
 /** The gate's verdict on `root` for `range`, the whole tree when the range cannot be read. */
-export function verdictOf(root: string, range: string | undefined, exceptions: readonly Exception[]): Verdict {
+export function verdictOf<Entry extends Exception>(root: string, range: string | undefined, exceptions: readonly Entry[]): Verdict<Entry> {
   const sources = coreSources(join(root, CORE))
   const stale = exceptionsNotHeld(sources, exceptions)
   const markers = markersNotHeld(sources)

@@ -303,7 +303,7 @@ test('a crew whose workspace layout is on must name where its clones and worktre
 })
 
 test('a place that is not an absolute path is refused by name, and a crew with the layout off needs none', async () => {
-  await refusedWith({ ...solo, house_rules: { clones: 'clones' } }, 'house_rules.clones')
+  await refusedWith({ ...solo, house_rules: { clones: 'some-clones' } }, 'house_rules.clones')
   await refusedWith({ ...solo, house_rules: { worktrees: '' } }, 'house_rules.worktrees')
   const off = await declare(solo).settings
   assert.equal(off.house_rules.clones, null)

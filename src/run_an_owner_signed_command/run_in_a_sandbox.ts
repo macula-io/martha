@@ -69,7 +69,7 @@ export interface RunEnded {
 /** A run directory: tree and home, written from the verified bytes; or why a .bin link cannot point at a copied file. */
 export function buildTheRunDirectory(parent: string, copy: RunCopy): { readonly root: string; readonly tree: string; readonly home: string } | string {
   const root = mkdtempSync(join(parent, 'run-'))
-  const tree = join(root, 'tree')
+  const tree = join(root, 'checkout-copy')
   const home = join(root, 'home')
   mkdirSync(tree, { mode: 0o700 })
   mkdirSync(join(home, NPM_CACHE), { recursive: true, mode: 0o700 })

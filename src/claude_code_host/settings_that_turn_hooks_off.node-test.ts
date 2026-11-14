@@ -293,7 +293,7 @@ test('the watch reads the user file, the approved copy, the managed file and eac
 
 test("a file tool call naming the owner's user settings file is named, directly, relatively, and through a link to its folder", (t) => {
   const root = scratch(t)
-  const config = join(root, 'config')
+  const config = join(root, 'conf-dir')
   mkdirSync(config)
   const owners = join(config, 'settings.json')
   symlinkSync(config, join(root, 'linked'))
@@ -302,7 +302,7 @@ test("a file tool call naming the owner's user settings file is named, directly,
   assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd, root))
   assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', 'settings.json') }, owners, cwd, root))
   assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', 'settings.json') }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ file_path: '../config/settings.json' }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ file_path: '../conf-dir/settings.json' }, owners, cwd, root))
   writeFileSync(owners, '{}')
   symlinkSync(owners, join(cwd, 'innocent.json'))
   assert.ok(namesTheOwnersSettings({ file_path: join(cwd, 'innocent.json') }, owners, cwd, root))

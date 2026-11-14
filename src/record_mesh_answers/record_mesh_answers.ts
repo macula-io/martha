@@ -355,7 +355,7 @@ try {
     stderr.write(`${MESH_SERVER_PACKAGE} ${tree.server_version} has no recorded bin ${serverBin}\n`)
     exit(1)
   }
-  const installed = join(scratch, 'tree')
+  const installed = join(scratch, 'installed-tree')
   const server_file = join(installed, DEPENDENCIES, MESH_SERVER_PACKAGE, bin)
 
   const { bare, named } = await runsAnsweredIn(server_file, runsIn(scratch))

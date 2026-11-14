@@ -164,13 +164,13 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
   return {
     home,
     checkout,
-    rows: closed('rows'),
-    dashboard: closed('dashboard'),
+    rows: closed('row-streams'),
+    dashboard: closed('dashboard-rows'),
     launch_records: closed('launches'),
     relay_root,
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
-    relay_journal: closed('relay-journal'),
+    relay_journal: closed('the-relay-journal'),
     approved,
     aMemberStartsHere: () => {
       aMemberStarts = true
@@ -1144,7 +1144,7 @@ test('a session starting on a package is handed its predecessor\'s unfinished ac
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
   })
   // The predecessor's row: the member holds a package, and says so where the launcher reads it.
   const kept = dashboardRowsIn(place.dashboard).change(member, () => ({
@@ -1190,7 +1190,7 @@ test('a session starting on no package is handed nothing, and its start is taken
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
   })
 
   const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
@@ -3209,7 +3209,7 @@ test('a martha run call the launcher allowed binds one run, served on its path, 
   const receipts = receiptsInMemory()
   const runs = signedRunsOf(receipts, async (name) => (ran.push(name), { output: Buffer.from(RUN_OUTPUT), status: 1 }), () => ['test'], CLAUDE_CODE_BASH_RESULT_SHAPES)
   const { relay } = answering(place, rowStreamsDirectory(place.rows), [], runs)
-  const directory = makeRelayDirectory(join(place.relay_root, 'runs'))
+  const directory = makeRelayDirectory(join(place.relay_root, 'relay-runs'))
   assert.ok(directory.made)
   if (!directory.made) return
   const server = await serveTheRelay(relay, directory.socket_path)

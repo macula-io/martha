@@ -113,7 +113,7 @@
     "export const notes = { keep: (x: string) => x, drop: 'recordMemberLaunch' }\nnotes.keep('a')\n"
   ],
   "hostGlueImports": {
-    "_why": "Planted imports for hostGlueImportedBySlices: a slice that imported the host glue could build the writable store itself. A test file, by package.json's test glob, is no slice and may import glue (#26); a file that only looks like one is still a slice.",
+    "_why": "Planted imports for hostGlueImportedBySlices: a slice that imported the host glue could build the writable store itself. A test file, by package.json's test glob, is no slice and may import glue (#26); a file that only looks like one is still a slice. A coincidences.ts is no slice either: it never runs, only another coincidences.ts imports one, and its shape is pinned (#289 r=3, Addendum 2); a file of another name in the same folder is still a slice, so the pair shares one folder.",
     "caught": [
       {
         "path": "planted_glue_0/planted.ts",
@@ -134,6 +134,10 @@
       {
         "path": "planted_glue_4/planted.node-test-helper.ts",
         "text": "import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'\n"
+      },
+      {
+        "path": "a_pair_beside_glue/coincidences_more.ts",
+        "text": "import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'\n"
       }
     ],
     "quiet": [
@@ -147,6 +151,10 @@
       },
       {
         "path": "quiet_glue_2/quiet.node-test.ts",
+        "text": "import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'\n"
+      },
+      {
+        "path": "a_pair_beside_glue/coincidences.ts",
         "text": "import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'\n"
       }
     ]
