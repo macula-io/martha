@@ -212,7 +212,7 @@ martha wake builder
 ```
 
 ```text
-builder woken from ~/.local/state/martha/crews/6f2c…/handovers/HANDOVER_2026-11-12_builder.md
+builder woken from ~/.local/state/martha/crews/6f2c…/handovers/MARTHA_HANDOVER_2026-11-12_builder.md
 ```
 
 A member whose role the declaration grants `resume_parked_work` can also bring

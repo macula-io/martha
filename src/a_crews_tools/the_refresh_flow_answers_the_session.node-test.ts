@@ -23,7 +23,7 @@ import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_wo
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
-import { HANDOVERS_PLACE, CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { HANDOVERS_PLACE, THE_HANDOVER_WRITTEN, THE_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
 
@@ -150,13 +150,13 @@ test('#255: write_my_handover is one of the crew’s tools, and its answer is th
   assert.ok((CREW_TOOL_NAMES as readonly string[]).includes(WRITE_MY_HANDOVER_TOOL), 'the handover tool is not one the crew registers')
   const { tools, crew, clock } = await aCrewOfTools('builder')
   const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules\nwhat runs' }, 'a-session')
-  assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
+  assert.deepEqual(answered, { answer: THE_HANDOVER_WRITTEN })
   const place = { stores: { crew: keepTheCrewsFilesAsDirectories(crew) } }.stores.crew.place(HANDOVERS_PLACE)
   assert.ok(!('refusal' in place), 'the crew store refused the handovers place')
-  const written = place.read(`HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`)
+  const written = place.read(`MARTHA_HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`)
   assert.ok(written !== undefined && !('refusal' in written), 'the tool wrote no handover file')
   assert.ok(written.text.includes('first rules'), 'the handover written is not the text the member gave')
-  const stamp = handoverStampsIn(crew).read(join(place.path, `HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`))
+  const stamp = handoverStampsIn(crew).read(join(place.path, `MARTHA_HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`))
   assert.ok(stamp !== undefined && !('refusal' in stamp), 'the handover was written and not stamped')
 })
 
@@ -209,8 +209,8 @@ test('#255: the clear is told with the session it was told in, so its successor 
   assert.equal(keepTheFlow(place, 'builder', flow), undefined)
   assert.equal(await tools.thePredecessorOf('a-session'), null, 'the session the clear was told in was named its own successor')
   const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'a handover naming no package' }, 'a-session')
-  assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
-  const moved = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-3', CREW_HANDOVER_WRITTEN), 'a-session')
+  assert.deepEqual(answered, { answer: THE_HANDOVER_WRITTEN })
+  const moved = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-3', THE_HANDOVER_WRITTEN), 'a-session')
   assert.ok('answer' in moved)
   assert.deepEqual(JSON.parse(moved.answer), { carry: CARRY_THE_CLEAR })
   const after = theFlowOf(place, 'builder')
@@ -226,10 +226,10 @@ test('#255: a handover written before the flow asked is sent back, not cleared',
   assert.ok(!('refusal' in place))
   // The member writes its handover first, then a flow asks for one: the file predates the ask, so it is not this
   // flow's handover and nothing is cleared on it.
-  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'an old handover' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
+  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'an old handover' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
   const flow = aFlowStarting({ trigger: 'after_a_task', reason: 'its task finished', at: clock.at + 1_000, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
   assert.equal(keepTheFlow(place, 'builder', flow), undefined)
-  const answered = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-4', CREW_HANDOVER_WRITTEN), 'a-session')
+  const answered = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-4', THE_HANDOVER_WRITTEN), 'a-session')
   assert.ok('answer' in answered)
   const act = JSON.parse(answered.answer) as { readonly carry?: unknown }
   assert.equal(act.carry, CARRY_A_TEXT, 'a stale handover cleared the session rather than being sent back')
@@ -246,7 +246,7 @@ test('#255: a decline after a task holds the ask back on that task, turn after t
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   await crew.report('task x', 1, 1)
   assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT, 'the finished task did not ask')
-  assert.equal(await crew.ask('a-session', 40, `${CREW_REFRESH_DECLINED} a change in hand`), 'none', 'the decline was not taken')
+  assert.equal(await crew.ask('a-session', 40, `${THE_REFRESH_DECLINED} a change in hand`), 'none', 'the decline was not taken')
   // The row is rewritten by every question, so a name that moved with it would ask again on the same finished task.
   assert.equal(await crew.ask('a-session', 41, 'a turn that only answered'), 'none', 'the same finished task was asked again after a decline')
   assert.equal(await crew.ask('a-session', 45), 'none', 'the same finished task was asked again on a later turn')
@@ -257,7 +257,7 @@ test('#255: a decline after a task holds until another task finishes past the sh
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   await crew.report('task x', 1, 1)
   assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
-  assert.equal(await crew.ask('a-session', 40, `${CREW_REFRESH_DECLINED} a change in hand`), 'none')
+  assert.equal(await crew.ask('a-session', 40, `${THE_REFRESH_DECLINED} a change in hand`), 'none')
   await crew.report('task y', 1, 1)
   assert.equal(await crew.ask('a-session', 45), 'none', 'asked again inside the margin above the share it declined at')
   assert.equal(await crew.ask('a-session', 40 + REFRESH_MARGIN_PERCENT + 1), CARRY_A_TEXT, 'a finished task past the margin above the decline did not ask')
@@ -268,8 +268,8 @@ test('#255: a successor is not asked on the finished report its predecessor alre
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   await crew.report('task x', 1, 1)
   assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
-  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules; what runs' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
-  assert.equal(await crew.ask('a-session', 41, CREW_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules; what runs' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.equal(await crew.ask('a-session', 41, THE_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
   assert.equal(await crew.openTheSession('b-session', 5), CARRY_A_TEXT, 'the successor was not resumed from its handover')
   // The row still shows the predecessor's finished task, and the flow file outlives the clear: the successor's first
   // flow reads the report its predecessor was asked on, rather than handing over again into the same work.
@@ -281,8 +281,8 @@ test('#255: a successor taken past the limit hands over on the task its predeces
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   await crew.report('task x', 1, 1)
   assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
-  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules; what runs' }, 'a-session'), { answer: CREW_HANDOVER_WRITTEN })
-  assert.equal(await crew.ask('a-session', 41, CREW_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules; what runs' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.equal(await crew.ask('a-session', 41, THE_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
   assert.equal(await crew.openTheSession('b-session', 5), CARRY_A_TEXT, 'the successor was not resumed from its handover')
   // The same row and the same flow file as P3, and the successor is past the limit: the limit answers over the past ask
   // rather than holding it back, so a member that grew to 90% hands over instead of holding forever on older work.
@@ -293,7 +293,7 @@ test('#255: a refresh someone asked for that is declined is abandoned, and the S
   const crew = await aCrewOfTools('builder', { supervisor: true })
   assert.ok('answer' in (await crew.tools.answer(REFRESH_THIS_SESSION, { reason: 'the owner is moving me off a large context' }, 'a-session')))
   assert.equal(await crew.ask('a-session', 30), CARRY_A_TEXT, 'the ask someone made did not start a flow')
-  assert.equal(await crew.ask('a-session', 30, `${CREW_REFRESH_DECLINED} a change in hand`), 'none')
+  assert.equal(await crew.ask('a-session', 30, `${THE_REFRESH_DECLINED} a change in hand`), 'none')
   const said = await crew.saidInTheChannel()
   assert.equal(said.length, 1, `the Supervisor was not told once, it was told ${said.length} times`)
   assert.deepEqual(said[0]?.message.to, [SUPERVISOR], 'the line did not go to the crew\'s supervisor')
@@ -307,7 +307,7 @@ test('#255: a decline at the limit is said once, and a later decline at the limi
   const crew = await aCrewOfTools('builder', { supervisor: true })
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 1), CARRY_A_TEXT, 'a session past the limit did not hand over')
-  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 1, `${CREW_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
+  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 1, `${THE_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
   const said = await crew.saidInTheChannel()
   assert.equal(said.length, 1, `the Supervisor was not told once at the limit, it was told ${said.length} times`)
   assert.deepEqual(said[0]?.message.to, [SUPERVISOR])
@@ -316,6 +316,6 @@ test('#255: a decline at the limit is said once, and a later decline at the limi
   // told once, not once per ask.
   await crew.report('task x', 1, 1)
   assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2), CARRY_A_TEXT, 'a finished task past the limit did not ask again')
-  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2, `${CREW_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
+  assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2, `${THE_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
   assert.equal((await crew.saidInTheChannel()).length, 1, 'the second decline at the limit sent another line')
 })

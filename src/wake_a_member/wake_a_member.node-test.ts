@@ -27,7 +27,7 @@ import {
   theParkOf,
   type TheDeclaration,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { CREW_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { THE_WAKE_CLEARS_THE_PARK, theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -71,7 +71,7 @@ function aStartSaying(started: boolean, refusal?: string) {
 function handedOver(host: ReturnType<typeof aWakeHost>, member = 'builder', content = 'What stands: the package, its branch, its tip.') {
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
   const written = writeMyHandover(host, { member, content, at: AT, stamps: host.stamps, session })
-  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
   return theHandoverFile(member, AT)
 }
 
@@ -108,8 +108,8 @@ test('#255 part 2: a parked member with a handover is started on it, and its par
 
 test('#255 part 2: the prompt names the handover\'s file and does not carry its text', () => {
   const text = 'What stands: the package, its branch, its tip.'
-  const prompt = theResumePrompt({ file: '/somewhere/HANDOVER_2026-11-12_builder.md', content: text }, 'builder')
-  assert.match(prompt, /\/somewhere\/HANDOVER_2026-11-12_builder\.md/, 'the prompt does not name the handover file')
+  const prompt = theResumePrompt({ file: '/somewhere/MARTHA_HANDOVER_2026-11-12_builder.md', content: text }, 'builder')
+  assert.match(prompt, /\/somewhere\/MARTHA_HANDOVER_2026-11-12_builder\.md/, 'the prompt does not name the handover file')
   assert.ok(!prompt.includes(text), 'the prompt carries the handover\'s text, which would be a second handover nothing stamped')
 })
 

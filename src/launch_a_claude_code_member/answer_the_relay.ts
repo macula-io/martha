@@ -32,7 +32,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
   CLAUDE_CODE_TOOL_RESULT_ROWS,
@@ -40,7 +40,7 @@ import {
   sessionStartOf,
   type SessionStartHookInput,
 } from '../claude_code_host/claude_code_host.ts'
-import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { nameTheFailedReviewIn, resolvedModelIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
@@ -568,7 +568,7 @@ export function handedAtThisStart(crewText: string | undefined, theLine: string 
  */
 async function asTheCrewsRefresh(state: RelayState, reported: SessionStart): Promise<SessionStart> {
   const predecessor = await theRefreshTheSessionInherits(state, reported.session_id)
-  return predecessor === null ? reported : { event: CREW_REFRESH, session_id: reported.session_id, predecessor_id: predecessor }
+  return predecessor === null ? reported : { event: THE_REFRESH_THE_MOD_RUNS, session_id: reported.session_id, predecessor_id: predecessor }
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -592,7 +592,7 @@ async function takeInARefreshedSession(state: RelayState, session_id: string): P
   if (predecessor === null) return undefined
   await state.place.records.load(session_id)
   const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: CREW_REFRESH,
+    event: THE_REFRESH_THE_MOD_RUNS,
     session_id,
     predecessor_id: predecessor,
   })

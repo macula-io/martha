@@ -48,12 +48,12 @@ test('#255: a place is made inside the crew\'s directory, and a file kept there 
   assert.equal(lstatSync(crew).mode & PERMISSIONS, CREW_DIRECTORY_MODE, 'the crew directory is not this user\'s alone')
   assert.equal(lstatSync(place.path).mode & PERMISSIONS, CREW_DIRECTORY_MODE, 'a place is not this user\'s alone')
 
-  assert.equal(place.keep('HANDOVER_2026-11-11_builder.md', 'what the member held\n'), undefined, 'the store refused a file it should keep')
-  const file = join(place.path, 'HANDOVER_2026-11-11_builder.md')
+  assert.equal(place.keep('MARTHA_HANDOVER_2026-11-11_builder.md', 'what the member held\n'), undefined, 'the store refused a file it should keep')
+  const file = join(place.path, 'MARTHA_HANDOVER_2026-11-11_builder.md')
   assert.equal(statSync(file).mode & PERMISSIONS, CREW_FILE_MODE, 'a crew file is readable by someone other than its owner')
-  assert.deepEqual(place.read('HANDOVER_2026-11-11_builder.md'), { text: 'what the member held\n' })
-  assert.deepEqual(place.names(), ['HANDOVER_2026-11-11_builder.md'])
-  assert.deepEqual(readdirSync(place.path), ['HANDOVER_2026-11-11_builder.md'], 'the store left its staging file behind')
+  assert.deepEqual(place.read('MARTHA_HANDOVER_2026-11-11_builder.md'), { text: 'what the member held\n' })
+  assert.deepEqual(place.names(), ['MARTHA_HANDOVER_2026-11-11_builder.md'])
+  assert.deepEqual(readdirSync(place.path), ['MARTHA_HANDOVER_2026-11-11_builder.md'], 'the store left its staging file behind')
 })
 
 test('#255: a name kept twice holds the second text, so a reader never sees half of it', () => {
@@ -136,7 +136,7 @@ test('#255: a file the disk kept only part of is refused, and none of it is left
 test('#255 part 2: a stamp the store will not read is a refusal, never a handover that was never stamped', () => {
   const crew = aCrew('stamps')
   const stamps = handoverStampsIn(crew)
-  const handover = join(crew, HANDOVERS_PLACE, 'HANDOVER_2026-11-12_builder.md')
+  const handover = join(crew, HANDOVERS_PLACE, 'MARTHA_HANDOVER_2026-11-12_builder.md')
   const stamp: HandoverStamp = {
     member: 'builder',
     predecessor_id: 'a-session',
@@ -149,7 +149,7 @@ test('#255 part 2: a stamp the store will not read is a refusal, never a handove
   assert.deepEqual(stamps.read(handover), stamp, 'a stamp the store kept does not read back as it was kept')
 
   // Readable by others: the store refuses the file, so the stamp is one it will not answer for.
-  const kept = join(crew, HANDOVER_STAMPS_PLACE, 'HANDOVER_2026-11-12_builder.md')
+  const kept = join(crew, HANDOVER_STAMPS_PLACE, 'MARTHA_HANDOVER_2026-11-12_builder.md')
   chmodSync(kept, 0o644)
   const read = stamps.read(handover)
   assert.ok(read !== undefined && 'refusal' in read, 'a stamp anyone may read was answered as though it were the host\'s own')

@@ -180,8 +180,8 @@ export const RESTART_A_MEMBER = 'restart_a_member'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
- * refreshed session is recorded with: the SessionStart source value keeps a name of its own, `CREW_REFRESH`, whose
- * value is `martha_refresh` since #468 took crew-code's tool name off it.
+ * refreshed session is recorded with: the SessionStart source value keeps a name of its own,
+ * `THE_REFRESH_THE_MOD_RUNS`, whose value is `martha_refresh` since #468 took crew-code's tool name off it.
  */
 export const REFRESH_THIS_SESSION = 'refresh_this_session'
 
@@ -420,7 +420,7 @@ export const RETURN_TO_YOUR_OWN_MODEL_DESCRIPTION =
 
 /** What `write_my_handover` says it is for: the host writes the file, at the path the host chose, and stamps it. */
 export const WRITE_MY_HANDOVER_DESCRIPTION =
-  'Write your handover — what your successor needs to carry on — as one text. Martha writes and stamps the file at a path it chooses; a handover you write with your own file tool is not one and clears nothing. Answer CREW-HANDOVER-WRITTEN when your handover ask is done.'
+  'Write your handover — what your successor needs to carry on — as one text. Martha writes and stamps the file at a path it chooses; a handover you write with your own file tool is not one and clears nothing. Answer MARTHA-HANDOVER-WRITTEN when your handover ask is done.'
 
 /** What `refresh_this_session` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
 export const CREW_REFRESH_DESCRIPTION =

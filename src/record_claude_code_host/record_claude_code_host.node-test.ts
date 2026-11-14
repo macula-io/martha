@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
-import { CHUNK } from '../claude_code_host/protected_config_places.ts'
+import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
 import type { ManagedFolderGuardCalls } from './what_the_managed_folder_guard_calls.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'

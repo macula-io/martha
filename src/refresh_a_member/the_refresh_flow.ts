@@ -18,8 +18,8 @@ import { isAStorm, parkAMember, parkedPlace, theNewestHandover, theParkOf, theSt
 import { sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
-  CREW_HANDOVER_WRITTEN,
-  CREW_REFRESH_DECLINED,
+  THE_HANDOVER_WRITTEN,
+  THE_REFRESH_DECLINED,
   HANDOVERS_PLACE,
   theAskedLine,
   theHandoverPrompt,
@@ -305,8 +305,8 @@ async function carryTheHandover(
   now: number,
 ): Promise<TheAct> {
   const answer = question.answer
-  if (answer.includes(CREW_REFRESH_DECLINED)) return declined(places, place, flow, answer, settings, now)
-  if (answer.includes(CREW_HANDOVER_WRITTEN)) return theWrittenHandover(places, place, flow, question, settings, now)
+  if (answer.includes(THE_REFRESH_DECLINED)) return declined(places, place, flow, answer, settings, now)
+  if (answer.includes(THE_HANDOVER_WRITTEN)) return theWrittenHandover(places, place, flow, question, settings, now)
   if (question.turn_running) return await theEndOfTheRunningTurn(withTheFlowsActs(places), place, flow, question, settings, now)
   if (flow.ending === undefined && aFlowStalled(flow, now)) return abandon(places, place, flow, 'no answer to the handover ask', now, settings)
   return NO_ACT
@@ -392,7 +392,7 @@ function sentBack(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, mi
  * to the Supervisor when it was taken at the limit.
  */
 function declined(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, answer: string, settings: CrewSettings, now: number): TheAct {
-  const ground = answer.slice(answer.indexOf(CREW_REFRESH_DECLINED) + CREW_REFRESH_DECLINED.length).trim().replace(/^[:\s-]+/, '')
+  const ground = answer.slice(answer.indexOf(THE_REFRESH_DECLINED) + THE_REFRESH_DECLINED.length).trim().replace(/^[:\s-]+/, '')
   const said = ground === '' ? 'it gave no ground' : ground
   if (!aDeclineIsAllowed(flow.trigger)) return abandon(places, place, flow, `declined a refresh that was asked for: ${said}`, now, settings)
   // A decline at the limit is the member saying it cannot reach a safe point at all, and the Supervisor hears it once:

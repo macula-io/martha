@@ -78,7 +78,7 @@ export const SESSION_START_OUTCOMES: readonly SessionStartOutcome[] = ['same_id'
 
 /** The refresh the crew's mod runs itself: a start no host sends, with the predecessor's id. Martha's own word since
  * martha#468: it was crew-code's tool name, and the source keeps a name of its own. */
-export const CREW_REFRESH = 'martha_refresh'
+export const THE_REFRESH_THE_MOD_RUNS = 'martha_refresh'
 
 /** Every event a host can start a session with, and what each does to the record. */
 export interface HostSessionEvents {
@@ -107,7 +107,7 @@ export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
     compact: 'same_id',
     resume: 'same_id',
     fork: 'same_id',
-    [CREW_REFRESH]: 'inherits',
+    [THE_REFRESH_THE_MOD_RUNS]: 'inherits',
   },
 }
 
