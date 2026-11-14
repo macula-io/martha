@@ -39,7 +39,7 @@
 
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
-import { realOrResolved, type LaunchHost } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { realOrResolved, type LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
 
 /** The file name a git directory holds its main configuration in. */
 export const CONFIG = 'config'

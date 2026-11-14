@@ -82,10 +82,25 @@ export interface ModelRequest {
   answered_at?: number
 }
 
+/**
+ * An error the stand-in hands the host instead of a turn (martha#390): the API's own refusal, as the account's limit
+ * answers a request. The host never receives a message, so what a run reads is what the host makes of a refusal.
+ */
+export interface ARefusedRequest {
+  /** The status the API answers with: 429 for a limit, 529 for an overloaded backend. */
+  readonly status: number
+  /** The API's own error type, as its body spells it (`rate_limit_error`, `overloaded_error`). */
+  readonly type: string
+  readonly message: string
+  /** Seconds the API tells the client to wait, as its `retry-after` header carries them: the client's own backoff otherwise. */
+  readonly retry_after?: number
+}
+
 /** What the stand-in answers one model request with. */
 export type ScriptedTurn =
   | { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }
   | { readonly text: string }
+  | { readonly refused: ARefusedRequest }
 
 /** The model's turns: answer request `number`, after doing what the run needs done first. */
 export type ModelScript = (request: ModelRequest) => ScriptedTurn | Promise<ScriptedTurn>
@@ -249,8 +264,8 @@ export function marthaOnATerminal(run: Pick<RecordedHostRun, 'claude' | 'home' |
 
 const quoted = (word: string): string => `'${word.replaceAll("'", "'\\''")}'`
 
-/** The server-sent events of one streamed message holding `turn`. */
-function streamOf(turn: ScriptedTurn, model: unknown, number: number): string {
+/** The server-sent events of one streamed message holding `turn`, which is never a refusal. */
+function streamOf(turn: Exclude<ScriptedTurn, { readonly refused: ARefusedRequest }>, model: unknown, number: number): string {
   const message = { id: `msg_${number}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }
   const block =
     'tool' in turn
@@ -289,9 +304,18 @@ const offersTools = (body: Record<string, unknown>): boolean => Array.isArray(bo
 async function answerWithTheScript(script: ModelScript, heard: ModelRequest[], body: Record<string, unknown>, response: ServerResponse): Promise<void> {
   const heard_request = offersTools(body) ? record(heard, body) : undefined
   const turn: ScriptedTurn = heard_request === undefined ? { text: 'a side answer' } : await script(heard_request)
-  response.writeHead(200, { 'content-type': 'text/event-stream' }).end(streamOf(turn, body['model'], heard.length))
+  if ('refused' in turn) {
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (turn.refused.retry_after !== undefined) headers['retry-after'] = String(turn.refused.retry_after)
+    response.writeHead(turn.refused.status, headers).end(refusalOf(turn.refused))
+  } else {
+    response.writeHead(200, { 'content-type': 'text/event-stream' }).end(streamOf(turn, body['model'], heard.length))
+  }
   if (heard_request !== undefined) heard_request.answered_at = Date.now()
 }
+
+/** The API's own body for a refused request, byte for byte what the host reads from it. */
+const refusalOf = (refused: ARefusedRequest): string => JSON.stringify({ type: 'error', error: { type: refused.type, message: refused.message } })
 
 /** The stand-in model: answers each request offering tools by its number, and every other request with text. */
 export async function theStandInModel(script: ModelScript, heard: ModelRequest[], failed: (why: string) => void): Promise<{ readonly url: string; close(): Promise<void> }> {
