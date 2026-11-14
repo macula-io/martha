@@ -58,7 +58,7 @@ import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, ty
 import { HOST_EXIT_COMMAND, HOST_TERMINAL } from './drive_the_recorded_host.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
-import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { LOST, recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarkFor, releasesIn, RELEASE_STREAM, releaseStreamOf } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -307,7 +307,7 @@ function isDenied(reply: RelayReply, pattern?: RegExp): boolean {
 const isRefused = (reply: RelayReply): boolean => reply.answered && 'refused' in reply.body
 
 async function recordedPaths(rows: RowStore, session_id = SESSION): Promise<string[]> {
-  const stored = await rows.read(`${SESSION_RECORD_STREAM}${session_id}`)
+  const stored = await rows.read(sessionRecordStreamOf(session_id))
   const last = stored.at(-1)
   return last === undefined ? [] : recordOf(last.row).ingested.map((ingest) => `${ingest.path}:${String(ingest.from_node_id)}`)
 }
@@ -737,7 +737,7 @@ test('ROW_NOT_DURABLE on a record is never an allow: the prompt is refused, and 
 test('one session whose record cannot be kept refuses only itself: another session starts and prompts', async (t) => {
   const place = placeFor(t)
   const real = rowStreamsDirectory(place.rows)
-  const broken = `${SESSION_RECORD_STREAM}session-a`
+  const broken = sessionRecordStreamOf('session-a')
   const rows: RowStore = {
     read: (stream) => real.read(stream),
     append: async (stream, row: Row, expected) => {
@@ -759,8 +759,8 @@ test('a second writer of a session record refuses the session', async (t) => {
   const place = placeFor(t)
   const { relay, rows } = answering(place)
   await relay.answer('session_started', start('startup'))
-  const stored = await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)
-  await rows.append(`${SESSION_RECORD_STREAM}${SESSION}`, { ingested: [] }, stored.length)
+  const stored = await rows.read(sessionRecordStreamOf(SESSION))
+  await rows.append(sessionRecordStreamOf(SESSION), { ingested: [] }, stored.length)
   assert.ok(isDenied(await relay.answer('tool_called', call('Read')), /holds 2 rows where this launcher kept 1/))
 })
 
@@ -787,7 +787,7 @@ test('a session record nobody loaded, or whose last row is no record, reads as l
   const records = sessionRecordsIn(rows)
   assert.equal(records.store.read('never-loaded'), LOST)
 
-  await rows.append(`${SESSION_RECORD_STREAM}planted`, { ingested: [{ path: 'A1', from_node_id: null, extra: 1 }] })
+  await rows.append(sessionRecordStreamOf('planted'), { ingested: [{ path: 'A1', from_node_id: null, extra: 1 }] })
   await records.load('planted')
   assert.equal(records.store.read('planted'), LOST)
   await records.load('empty')
@@ -806,7 +806,7 @@ test('a session record nobody loaded, or whose last row is no record, reads as l
 
 /** Writes the owner's release where `martha release` writes it: a mark on `release-of:<session>`, never on the record. */
 async function theOwnerReleases(rows: RowStore, session_id: string): Promise<void> {
-  const stored = await rows.read(`${SESSION_RECORD_STREAM}${session_id}`)
+  const stored = await rows.read(sessionRecordStreamOf(session_id))
   const last = stored.at(-1)
   const raw = last === undefined ? [] : recordOf(last.row).ingested
   await rows.append(releaseStreamOf(session_id), releaseMarkFor(raw, OWNER_AT_THE_TERMINAL) as unknown as Row)
@@ -816,7 +816,7 @@ test('#321: a session the owner released resumes with the shell it lost, without
   const place = placeFor(t)
   const { relay, rows } = answering(place)
   // A record a stranger's text reached, kept as the launcher keeps one: the raw record, never a cleared copy.
-  await rows.append(`${SESSION_RECORD_STREAM}${SESSION}`, { ingested: [{ path: 'A2', from_node_id: 'stranger' }] })
+  await rows.append(sessionRecordStreamOf(SESSION), { ingested: [{ path: 'A2', from_node_id: 'stranger' }] })
   await theOwnerReleases(rows, SESSION)
   assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
@@ -852,7 +852,7 @@ test('#321: a member released and then resumed keeps what it takes in after the 
     'an arrival taken in after the release was lost from the stream, so the gate let the shell run',
   )
 
-  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  const kept = recordOf((await rows.read(sessionRecordStreamOf(SESSION))).at(-1)!.row).ingested
   assert.equal(kept.length, 2, 'the stream lost the arrival the member took in after the owner released it')
 })
 
@@ -886,7 +886,7 @@ test('#321: a release typed after a resume is not undone by the member\'s next t
     'text the member took in after the release did not hold it',
   )
 
-  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  const kept = recordOf((await rows.read(sessionRecordStreamOf(SESSION))).at(-1)!.row).ingested
   assert.deepEqual(kept.map((one) => one.path), ['B7', 'B7', 'A14', 'A6'], 'an arrival the owner cleared was written back into the stream after the prefix')
 })
 
@@ -921,7 +921,7 @@ test('#321: a second release after a resume is not undone by the auto-continuati
     'text the member took in after the second release did not hold it',
   )
 
-  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  const kept = recordOf((await rows.read(sessionRecordStreamOf(SESSION))).at(-1)!.row).ingested
   assert.deepEqual(kept.map((one) => one.path), ['B7', 'B7', 'A14', 'A6'], 'an arrival the owner cleared was written back into the stream after the prefix')
 })
 
@@ -930,14 +930,14 @@ test('#321: after a release the stream still holds the raw record, and what came
   const { relay, rows } = answering(place)
   await relay.answer('session_started', start('startup'))
   await relay.answer('prompt_submitted', prompt('auto-continuation'))
-  const before = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  const before = recordOf((await rows.read(sessionRecordStreamOf(SESSION))).at(-1)!.row).ingested
   assert.equal(before.length, 1, 'the session took nothing in, so there is nothing for the release to clear')
 
   await theOwnerReleases(rows, SESSION)
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
   await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
 
-  const after = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  const after = recordOf((await rows.read(sessionRecordStreamOf(SESSION))).at(-1)!.row).ingested
   assert.deepEqual(after.slice(0, before.length), before, 'the record the owner cleared is not in the stream: only what came after it is')
   assert.equal(after.length, before.length + 1, 'what the session took in after the release was not appended to the raw record')
 })
@@ -967,7 +967,7 @@ test('a record that says why it lost a sender is a record, and keeps the reason 
   const rows = rowStreamsDirectory(place.rows)
   const records = sessionRecordsIn(rows)
   const said = 'the answer was recorded but the caller could not be told'
-  await rows.append(`${SESSION_RECORD_STREAM}explained`, { ingested: [{ path: 'A4', from_node_id: null, why: said }] })
+  await rows.append(sessionRecordStreamOf('explained'), { ingested: [{ path: 'A4', from_node_id: null, why: said }] })
   await records.load('explained')
   assert.deepEqual(records.store.read('explained'), { ingested: [{ path: 'A4', from_node_id: null, why: said }] })
 })

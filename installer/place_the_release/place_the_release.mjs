@@ -79,7 +79,7 @@ export async function swapLink (target, link) {
  * A tree this run made, removed even when it is read-only.
  * @param {string} path
  */
-async function removeTree (path) {
+export async function removeTree (path) {
   /** @param {string} dir */
   const walk = async (dir) => {
     await chmod(dir, 0o700).catch(() => {})
@@ -93,17 +93,22 @@ async function removeTree (path) {
 
 /**
  * The release unpacked into its own directory, unless it is already there: staged inside `releases`, so it
- * arrives by a rename on one filesystem, and removed when anything fails.
- * @param {{ releases: string, name: string, unpack: (stage: string) => Promise<void> }} request
+ * arrives by a rename on one filesystem, and removed when anything fails. `accept` reads the unpacked tree before
+ * the rename (or the one already there), and refuses it by throwing (martha#21: the floor it declares).
+ * @param {{ releases: string, name: string, unpack: (stage: string) => Promise<void>, accept: (tree: string) => Promise<void> }} request
  * @returns {Promise<string>} the release directory
  */
-export async function placeRelease ({ releases, name, unpack }) {
+export async function placeRelease ({ releases, name, unpack, accept }) {
   const final = join(releases, name)
-  if (await there(final)) return final
+  if (await there(final)) {
+    await accept(final)
+    return final
+  }
   await mkdir(releases, { recursive: true })
   const stage = await mkdtemp(join(releases, '.work-'))
   try {
     await unpack(stage)
+    await accept(stage)
     await rename(stage, final)
   } catch (error) {
     await removeTree(stage)

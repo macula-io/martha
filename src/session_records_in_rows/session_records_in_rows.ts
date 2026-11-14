@@ -136,7 +136,7 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
     load: async (session_id) => {
       if (loaded.has(session_id)) return
       try {
-        const stored = await rows.read(streamOf(session_id))
+        const stored = await rows.read(sessionRecordStreamOf(session_id))
         const last = stored.at(-1)
         const record = last === undefined ? undefined : recordOf(last.row)
         const release = await releaseOf(released, session_id, record)
@@ -167,7 +167,7 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
         throw new Error(`The record of session ${session_id} is not kept: its stream could not be read.`)
       }
       const kept = keptRawOf(state.last, session, state.release, state.handed)
-      await rows.append(streamOf(session_id), kept as unknown as Row, state.length)
+      await rows.append(sessionRecordStreamOf(session_id), kept as unknown as Row, state.length)
       state.length += 1
       state.last = kept
       // The core wrote `session`, so from here on that is the view it goes on extending; the next flush appends only
@@ -187,7 +187,7 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
       // The owner may have released the member since the last call: read the release again before vouching for the
       // record, so the call after the release is answered on the record the release leaves.
       state.release = await releaseOf(released, session_id, state.last)
-      const stored = await rows.read(streamOf(session_id))
+      const stored = await rows.read(sessionRecordStreamOf(session_id))
       if (stored.length !== state.length) {
         throw new Error(`The record of session ${session_id} holds ${stored.length} rows where this launcher kept ${state.length}.`)
       }
@@ -195,7 +195,8 @@ export function sessionRecordsIn(rows: RowStore, released?: ReleasedRecordIn): S
   }
 }
 
-const streamOf = (session_id: string): string => `${SESSION_RECORD_STREAM}${session_id}`
+/** The one way to name a session’s stream: the launcher writes it and `martha release` reads it (martha#424). */
+export const sessionRecordStreamOf = (session_id: string): string => `${SESSION_RECORD_STREAM}${session_id}`
 
 /** The third key a stored ingestion may carry beside its path and sender: the reason, one sentence (martha#247). */
 const isWhy = (entry: Readonly<Record<string, unknown>>): boolean =>

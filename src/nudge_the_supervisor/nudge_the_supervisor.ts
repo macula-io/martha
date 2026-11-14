@@ -169,6 +169,35 @@ export function reviewWaitsIn(messages: readonly SentMessage[], landings: readon
   return [...waits.values()]
 }
 
+/** What reads the closes of the packages still waiting (martha#320): GitHub through the crew's budget, or its refusal. */
+export type ReadTheCloses = (packages: readonly string[]) => Promise<Readonly<Record<string, number>> | { readonly refusal: string }>
+
+/** What ends a wait besides the channel's own lines: the landings, the closes the record holds, and a reader of new ones. */
+export interface WhatEndsAWait {
+  readonly landings: readonly LandedPackage[]
+  readonly recorded: Readonly<Record<string, number>>
+  /** Left out when this launch holds no processes to ask GitHub with. */
+  readonly read?: ReadTheCloses
+}
+
+/**
+ * The review waits left once the landings and the issues GitHub closed have ended theirs (martha#320, moved here by
+ * martha#415). The closes the record holds end their waits first, so GitHub is asked only about a package that still
+ * waits: one with no close kept, or one handed off again since its close. A package closed once and not handed off since
+ * costs no call again, and a read GitHub refused falls back to the record. The reader is handed in rather than imported,
+ * because the budget already imports this slice.
+ */
+export async function theWaitsTheClosesLeave(messages: readonly SentMessage[], receivers: readonly string[], ends: WhatEndsAWait): Promise<readonly ReviewWait[]> {
+  const open = reviewWaitsIn(messages, [...ends.landings, ...theEndsOf(ends.recorded)], receivers)
+  const read = ends.read === undefined || open.length === 0 ? ends.recorded : await ends.read(open.map((wait) => wait.package))
+  const closes = 'refusal' in read ? ends.recorded : read
+  return reviewWaitsIn(messages, [...ends.landings, ...theEndsOf(closes)], receivers)
+}
+
+/** A close, read as the fact a landing is: the package and the moment its waits from before it end. */
+const theEndsOf = (closes: Readonly<Record<string, number>>): readonly LandedPackage[] =>
+  Object.entries(closes).map(([package_name, at]) => ({ package: package_name, at }))
+
 /** Whether a row is fresh enough to be read at all: a quiet row is `offline`, and no member is nudged for one. */
 const quiet = (row: DashboardRow, now: number): boolean => now - row.at > OFFLINE_AFTER_MS
 

@@ -12,7 +12,15 @@ export interface Planted {
   readonly glue?: readonly string[]
   readonly ceilings?: Readonly<Record<string, number>>
   readonly files?: Readonly<Record<string, string>>
+  /** The cap on every core slice (martha#415): A_PLANTED_SLICE_CAP when left out, and none at all when null. */
+  readonly slice_cap?: number | null
+  readonly slice_ceilings?: Readonly<Record<string, number>>
+  /** The host contract's directory, as package.json declares it in martha.hostContract. */
+  readonly host_contract?: string
 }
+
+/** The cap a planted tree holds its core slices to unless a test says otherwise: far above any slice a plant writes. */
+export const A_PLANTED_SLICE_CAP = 600
 
 /** The linter's config the linter itself reads: code by extension, as the repository's own does. */
 export const LINTER_CONFIG = "export default [{ files: ['**/*.{ts,tsx}'], rules: { 'max-depth': ['error', { max: 2 }] } }]\n"
@@ -23,9 +31,12 @@ export const theManifestOfAPlantedTree = (planted: Planted): string =>
     {
       type: 'module',
       martha: {
+        ...(planted.host_contract === undefined ? {} : { hostContract: planted.host_contract }),
         hostAdapters: planted.adapters ?? [],
         hostGlue: planted.glue ?? [],
         hostCeilings: planted.ceilings ?? {},
+        ...(planted.slice_cap === null ? {} : { sliceCap: planted.slice_cap ?? A_PLANTED_SLICE_CAP }),
+        ...(planted.slice_ceilings === undefined ? {} : { sliceCeilings: planted.slice_ceilings }),
       },
     },
     null,

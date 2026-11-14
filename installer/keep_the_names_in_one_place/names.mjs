@@ -22,6 +22,10 @@ const manifest = createRequire(import.meta.url)('../package.json')
  * @property {string} installerTagPrefix what an installer tag starts with
  * @property {string} installerPublishWorkflow the workflow whose run publishes this installer, and signs that publish
  * @property {string} dryRunTagPrefix  what a dry run's image tag starts with: never a version, never a release tag
+ * @property {string} floorFile         the file the packer generates in the release folder: the version floor that
+ *                                      release declares, { "floor": "X.Y.Z" }, from the tree's floor.txt
+ * @property {string} withdrawalFile    a tracked file a release may carry: the owner's withdrawal of a floor,
+ *                                      { "version": "X.Y.Z", "from": "X.Y.Z" }
  */
 
 /** @type {Readonly<Names>} */

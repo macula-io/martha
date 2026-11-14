@@ -70,8 +70,8 @@ export const FAST_FORWARD_AFTER_THE_OWNERS_YES = 'fast_forward_after_the_owners_
 /** The prefix every integration branch's name carries; the refs under it are how a day's landings are counted. */
 export const LAND = 'land'
 
-/** How much of a sha a left-out head's answer shows. */
-const SHORT_SHA = 7
+/** How much of a sha an answer shows: the landing's, its dry run's and the range gate's (martha#423). */
+export const SHORT_SHA = 7
 
 /** What a refusal says was not done: the batch merged nothing, the fast-forward pushed nothing. */
 const NOTHING_LANDED = 'nothing was landed'
@@ -382,7 +382,7 @@ async function mergeEveryHead(host: LandingHost, cut: TheCutBatch, work: readonl
 
 /** One head merged, or left out with why; refused only when the branch could not be put back after a head left out. */
 async function mergeOneHeadOrLeaveItOut(host: LandingHost, path: string, merges: TheMerges, one: LandedWork): Promise<Step<TheMerges>> {
-  const inside = await theLeftOutHeadItHolds(host, path, merges.left_out, one)
+  const inside = await theLeftOutHeadItHolds(host, path, merges.left_out.map((out) => out.one), one)
   if (inside !== undefined) return { ok: leftOut(merges, one, `its head holds the head of PR ${String(inside.pr)}, which was left out, so landing it would land that one's clash too`) }
   const before = await gitSaid(host, path, ['rev-parse', 'HEAD'])
   if (before === undefined) return no('the integration branch holds no commit git will name.')
@@ -399,11 +399,14 @@ async function mergeOneHeadOrLeaveItOut(host: LandingHost, path: string, merges:
 /** The merges with one more head left out. */
 const leftOut = (merges: TheMerges, one: LandedWork, why: string): TheMerges => ({ ...merges, left_out: [...merges.left_out, { one, why }] })
 
-/** The head of a package left out that this head holds, if any. */
-async function theLeftOutHeadItHolds(host: LandingHost, path: string, left_out: readonly LeftOut[], one: LandedWork): Promise<LandedWork | undefined> {
+/**
+ * The head of a package left out that this head holds, if any: landing it would land that one's clash too. The landing
+ * and its dry run (../forecast_what_a_batch_lands) both leave a head out by this one rule (martha#423).
+ */
+export async function theLeftOutHeadItHolds(host: LandingHost, path: string, left_out: readonly LandedWork[], one: LandedWork): Promise<LandedWork | undefined> {
   for (const earlier of left_out) {
-    const holds = await git(host, path, ['merge-base', '--is-ancestor', earlier.one.head, one.head])
-    if (holds.exit_code === 0) return earlier.one
+    const holds = await git(host, path, ['merge-base', '--is-ancestor', earlier.head, one.head])
+    if (holds.exit_code === 0) return earlier
   }
   return undefined
 }
@@ -421,13 +424,18 @@ async function theClashTraced(host: LandingHost, path: string, before: string, m
   if ('refused' in merged || merged.ok.clashed.size === 0) return ''
   const traced = await whatEachPathClashesWith(host, path, one.head, merges.steps, [...merged.ok.clashed.keys()], aFirstParentNamed)
   if ('refused' in traced) return ''
+  return `; it clashes in ${theClashesSaid(traced.ok)}`
+}
+
+/** Each path a head clashes in, grouped by what it clashes with, in the order they were found: the landing's words and its dry run's. */
+export function theClashesSaid(clashes: ReadonlyMap<string, string>): string {
   const by_whom = new Map<string, string[]>()
-  for (const [clashed, whom] of traced.ok) by_whom.set(whom, [...(by_whom.get(whom) ?? []), clashed])
-  return `; it clashes in ${[...by_whom].map(([whom, paths]) => `${paths.join(', ')} with ${whom}`).join('; ')}`
+  for (const [clashed, whom] of clashes) by_whom.set(whom, [...(by_whom.get(whom) ?? []), clashed])
+  return [...by_whom].map(([whom, paths]) => `${paths.join(', ')} with ${whom}`).join('; ')
 }
 
 /** A first-parent commit of the default branch, named by the pull request its landing merged, or by its sha. */
-function aFirstParentNamed(commit: AFirstParent): string {
+export function aFirstParentNamed(commit: AFirstParent): string {
   const pr = thePullRequestALandingNames(commit.subject)
   return pr === undefined ? `the commit ${commit.commit.slice(0, SHORT_SHA)}` : `PR ${String(pr)}`
 }
@@ -470,6 +478,12 @@ async function theCeilingsRecorded(host: LandingHost, path: string): Promise<Ste
   if (ran.exit_code !== 0) return no(`the ceilings would not be recorded: ${whatItSaid(THE_CHECK_PROGRAM, ran)}`)
   return { ok: true }
 }
+
+/**
+ * What the dry run says of every head it forecasts to land (martha#423): it merges in memory and has no tree on disk to
+ * measure, so it cannot run this check, and a head it answers lands may still be left out here.
+ */
+export const THE_CEILINGS_STILL_AHEAD = 'a forecast: the landing still holds the merged tree to its ceilings and leaves the head out if it does not'
 
 /** Every merge is held to its ceilings, redone or not: a directory over its ceiling is where a decision hid. */
 async function theCeilingsHold(host: LandingHost, path: string): Promise<Step<true>> {
