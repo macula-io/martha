@@ -22,6 +22,7 @@ import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { DASHBOARD } from '../declare_crew/declare_crew.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
@@ -1209,7 +1210,7 @@ function theToolsOver(fixture: Fixture, tests: HostForTests): CrewTools {
   return crewToolsOver({
     member: MEMBER,
     ledger: { clock: tests.host.clock, stores: { rows: tests.host.stores.rows } },
-    beats: dashboardRowsIn(join(fixture.root, 'dashboard')),
+    beats: dashboardRowsIn(join(fixture.root, DASHBOARD)),
     root: fixture.root,
     documents: { read: async () => '{}' },
     stores: { crew: crewFilesDirectory(join(fixture.root, 'crew-files')) },
