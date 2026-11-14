@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { COINCIDENCE_FILE, isACoincidenceFile } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
 import { RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { makeRelayDirectory } from './relay_directory.ts'
 import * as relayCopy from './relay_copy.ts'
@@ -41,12 +42,24 @@ function filesUnder(directory: string): string[] {
     .sort()
 }
 
-test('the declared relay files are the relay folder the repo tracks, its tests left out', () => {
+/**
+ * What the relay folder tracks but a launch does not carry: its tests, and the relay slice's coincidences.ts, which
+ * no hook imports and nothing runs (#289 r=3, Addendum 2). The one rule both tests below read.
+ */
+const leftOutOfTheCopy = (file: string): boolean => file.endsWith('.node-test.ts') || isACoincidenceFile(file)
+
+test('the declared relay files are the relay folder the repo tracks, its tests and its coincidences left out', () => {
   const tracked = execFileSync('git', ['ls-files'], { cwd: RELAY_PLUGIN_DIR, encoding: 'utf8' })
     .split('\n')
-    .filter((file) => file !== '' && !file.endsWith('.node-test.ts'))
+    .filter((file) => file !== '' && !leftOutOfTheCopy(file))
     .sort()
   assert.deepEqual([...relayCopy.RELAY_FILES].sort(), tracked)
+})
+
+test('the declared relay files hold nothing the copy leaves out, by the same rule the comparison reads', () => {
+  assert.deepEqual(relayCopy.RELAY_FILES.filter(leftOutOfTheCopy), [])
+  assert.equal(leftOutOfTheCopy(COINCIDENCE_FILE), true, 'the relay slice\'s coincidences.ts is left out')
+  assert.equal(leftOutOfTheCopy('hooks/coincidences_more.ts'), false, 'a file of another name beside it is carried')
 })
 
 test('a copy holds the declared files byte for byte, and nothing in it can be written', (t) => {
