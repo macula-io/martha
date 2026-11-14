@@ -25,6 +25,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
+// martha#460 r=1: the host is driven under a home of its own, so it must start with the auto-updater off or it would
+// install the owner's global Claude Code over itself. The switch is one definition, in the launch module; it is spread
+// here from there rather than typed, so a change to it reaches this run and a run that drops it fails
+// every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name.
+import { THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
 const OUT = process.argv[2] ?? mkdtempSync(join(tmpdir(), 'martha-dialog-order-'))
@@ -137,7 +143,7 @@ const waitFor = (shown, needle, ms) => settles(() => shown().includes(needle), m
 async function driveTheHost(out, places, base_url) {
   const child = spawn('script', ['-qefc', `'${join(places.home, 'bin', 'claude')}' --permission-mode default --plugin-dir '${places.plugin}'`, '/dev/null'], {
     cwd: places.checkout,
-    env: { HOME: places.home, PATH: [join(places.home, 'bin'), join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color', ANTHROPIC_BASE_URL: base_url, ANTHROPIC_API_KEY: STAND_IN_KEY },
+    env: { HOME: places.home, PATH: [join(places.home, 'bin'), join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color', ANTHROPIC_BASE_URL: base_url, ANTHROPIC_API_KEY: STAND_IN_KEY, ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF },
   })
   let drawn = ''
   const t0 = Date.now()

@@ -10,10 +10,12 @@
 //
 // The switch is one definition (`THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF`), and these cases call the two builders
 // a host can be started with, so a launch path that stops carrying it fails by name here rather than on the owner's
-// machine. Nothing here starts a host: both builders are pure, so this runs in every CI run.
+// machine. Two more launches start a host themselves, outside those builders — the relay-loads check-bites leg and the
+// dialog-order probe — and they are read here for the same switch (martha#460 r=1). Nothing here starts a host: both
+// builders are pure, so this runs in every CI run.
 
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -82,4 +84,49 @@ test('neither an inherited value nor a switch can turn the updater back on insid
   assertTheUpdaterIsOff('a launch inheriting an owner who switched it on', launchEnvironment(foreign, NO_SWITCHES))
   assertTheUpdaterIsOff('a launch whose switches name another value', launchEnvironment(foreign, switched))
   assert.equal(launchEnvironment(foreign, switched)[name], value, 'the launch decides this, not the owner environment it inherits')
+})
+
+// The two launches below start a host themselves rather than through a builder, so no case above can reach them. Each
+// is read as committed: the launch must take the switch from the definition and hand it to the host it starts.
+const aRunsFile = (path: string): string => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
+
+/** The one line of `text` that holds `needle`, or a failure naming the run and the line that is gone. */
+function theLineHolding(run: string, text: string, needle: string): string {
+  const line = text.split('\n').find((candidate) => candidate.includes(needle))
+  assert.ok(line !== undefined, `${run} has no line holding ${needle}: the launch this case reads is gone, so it proves nothing`)
+  return line
+}
+
+test('the relay-loads check-bites leg switches the host auto-updater off', () => {
+  const run = 'the relay-loads check-bites leg (prove_the_relay_loads.sh)'
+  const file = aRunsFile('prove_the_relay_loads/prove_the_relay_loads.sh')
+
+  assert.match(
+    file,
+    /THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF/,
+    `${run} starts a host under its own home, so it must take the switch from THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF; it does not name the definition`,
+  )
+  const launch = theLineHolding(run, file, 'env -i')
+  assert.match(
+    launch,
+    /"\$\{AUTO_UPDATER_OFF\[@\]\}"/,
+    `${run} starts a host under its own home with a bare environment, so its launch must pass the switch the definition names; it starts it without that`,
+  )
+})
+
+test('the host-drift and local re-record run switches the host auto-updater off', () => {
+  const run = 'the host-drift and local re-record run (prove_the_order_of_the_dialogs.mjs)'
+  const file = aRunsFile('prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs')
+
+  assert.match(
+    file,
+    /import\s*\{[^}]*THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF[^}]*\}\s*from\s*'[^']*refuse_launch_of_unapproved_config\.ts'/,
+    `${run} starts a host under its own home, so it must take the switch from THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF in the launch module; it does not`,
+  )
+  const launch = theLineHolding(run, file, 'HOME: places.home,')
+  assert.match(
+    launch,
+    /\.\.\.THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF\s*\}/,
+    `${run} starts a host under its own home, so its environment must spread the switch last; it starts it without that`,
+  )
 })

@@ -226,7 +226,6 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
   rmSync(join(bin, 'claude'), { force: true })
   symlinkSync(claude, join(bin, 'claude'))
   return {
-    ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF,
     HOME: run.home,
     PATH: [bin, join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'),
     TERM: HOST_TERMINAL,
@@ -234,6 +233,9 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
     XDG_RUNTIME_DIR: runtime,
     ANTHROPIC_BASE_URL: base_url,
     ANTHROPIC_API_KEY: STAND_IN_KEY,
+    // Last, as every launch environment spreads it (refuse_launch_of_unapproved_config): nothing above it can turn the
+    // auto-updater back on inside a run (martha#460 r=1).
+    ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF,
   }
 }
 
