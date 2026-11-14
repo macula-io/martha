@@ -17,7 +17,7 @@ import { theRangeACallNames, VERIFY_RANGE, verifyRange } from '../check_a_range_
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -131,6 +131,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
     gate: { kind: 'off' },
     channel_read_seconds: 30,
+    handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   }
 }
 

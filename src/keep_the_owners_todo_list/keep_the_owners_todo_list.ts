@@ -370,6 +370,45 @@ export interface TodoPaneRow {
   readonly copy: string
 }
 
+/**
+ * One line of the owner's list as the pane draws it (martha#311): its words, whether they are set bold or dim, and
+ * whether the copy button stands in its place. How a row reads on the pane is decided here, where a test reaches it; it
+ * sat in the mod, which no test can import, and the mod now draws these lines as they come.
+ */
+export interface TodoPaneLine {
+  readonly text: string
+  readonly bold: boolean
+  readonly dim: boolean
+  readonly copy: boolean
+}
+
+/** One line, set as `set` says and plain otherwise. */
+const aPaneLine = (text: string, set: { readonly bold?: boolean; readonly dim?: boolean; readonly copy?: boolean } = {}): TodoPaneLine => ({
+  text,
+  bold: set.bold === true,
+  dim: set.dim === true,
+  copy: set.copy === true,
+})
+
+/**
+ * A row's lines on the pane: its heading, marked and bold when revealed; its goal, dim; each act, and on the revealed row
+ * its command in bold under it; and the copy button last, only where the row carries something to copy.
+ */
+export function theLinesOfARow(row: TodoPaneRow): readonly TodoPaneLine[] {
+  const acts = row.acts.flatMap((act) => [aPaneLine(`    ${row.revealed ? '▾' : '▸'} ${act.does}`), ...(act.line === '' ? [] : [aPaneLine(`      ${act.line}`, { bold: true })])])
+  return [
+    aPaneLine(`${row.revealed ? '▶' : ' '} ${row.heading}`, { bold: row.revealed }),
+    ...(row.goal === '' ? [] : [aPaneLine(`    ${row.goal}`, { dim: true })]),
+    ...acts,
+    ...(row.copy === '' ? [] : [aPaneLine('', { copy: true })]),
+  ]
+}
+
+/** The Supervisor's standing items as the pane draws them under the list (martha#317): the heading bold, one line each. */
+export function theStandingLines(standing: readonly string[]): readonly TodoPaneLine[] {
+  return standing.map((text, at) => aPaneLine(text, { bold: at === 0 }))
+}
+
 /** The lines the pane's list takes besides its rows: its heading, and the claim line or the line saying nothing waits. */
 export const PANE_LIST_CHROME = 2
 
@@ -385,6 +424,10 @@ export interface TodoPane {
   readonly focus: string
   readonly next: string
   readonly rows: readonly TodoPaneRow[]
+  /** Every row's lines, in order, as the pane draws them (martha#311). */
+  readonly drawn: readonly TodoPaneLine[]
+  /** What the copy button puts on the clipboard: the revealed row's `!` lines, or '' when no row carries any. */
+  readonly copy: string
   /** How many lines the rows take in the pane, so it can ask the host for them. */
   readonly lines: number
 }
@@ -398,8 +441,12 @@ export function theListForThePane(rows: readonly OwnerTodoRow[], focus: unknown,
     const acts = row.commands.map((act) => ({ does: act.does, line: revealed ? commandLine(act) : '' }))
     return { id: row.id, heading: theHeadingOf(row, now), goal: row.goal, revealed, acts, copy: revealed ? copyText(row) : '' }
   })
-  const lines = shown.reduce((sum, row) => sum + 1 + (row.goal === '' ? 0 : 1) + row.acts.length * (row.revealed ? 2 : 1), 0)
+  const drawn = shown.flatMap(theLinesOfARow)
+  // The copy button asks the host for no line of its own, as it never did.
+  const lines = drawn.filter((line) => !line.copy).length
   // Its heading, then the claim line (or, with no row, the line saying nothing waits), then the rows.
   const claim = rows.length === 0 ? NOTHING_WAITS_ON_THE_OWNER : A_MEMBER_WROTE_THIS
-  return { heading: THE_OWNERS_LIST_HEADING, claim, focus: focused, next: rows[(at + 1) % Math.max(1, rows.length)]?.id ?? '', rows: shown, lines: PANE_LIST_CHROME + lines }
+  const next = rows[(at + 1) % Math.max(1, rows.length)]?.id ?? ''
+  const copy = shown.find((row) => row.revealed)?.copy ?? ''
+  return { heading: THE_OWNERS_LIST_HEADING, claim, focus: focused, next, rows: shown, drawn, copy, lines: PANE_LIST_CHROME + lines }
 }
