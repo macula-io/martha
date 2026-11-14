@@ -2565,14 +2565,29 @@ const thePlaceGoesWithItsProcesses = (t: TestContext, place: Place): void => {
   t.after(() => theHomeGoes(place))
 }
 
+test('a quiet look is not a watch: a second look in a row is what ends the wait (martha#466)', async () => {
+  // One look reads the processes that exist when it begins, so a quiet one may simply have been taken before the one
+  // that was leaving was forked. The wait may end only on two quiet looks in a row, so a place that is quiet every
+  // time is looked at exactly twice: a wait that stopped on the first quiet look would take one.
+  let looks = 0
+  const left = await waitForNothingToCarry(async () => {
+    looks += 1
+    return []
+  })
+  assert.deepEqual(left, [])
+  assert.equal(looks, 2, 'the wait ended on one quiet look, which is the photograph that can miss a process forked while it ran')
+})
+
 test('the removal waits for a process that is only on its way out, and does not name it (martha#466)', async () => {
   // The looks a busy machine can hand the wait: the first quiet, then — in the one look that closes the window a
   // photograph leaves — a process that is already leaving, gone by the look after. Nothing was left behind, so nothing
-  // is named, and a run that changed nothing is not failed for it.
+  // is named, and a run that changed nothing is not failed for it. The first quiet look is not believed, which is what
+  // lets the second one see the process at all.
   const looks = [[], [41234], []]
   let at = 0
   const left = await waitForNothingToCarry(async () => looks[at++] ?? [])
   assert.deepEqual(left, [])
+  assert.ok(at > 1, 'the wait ended on the first quiet look and so never saw the process the look after it found')
 })
 
 test('the removal names a process that outlasts its wait (martha#216)', async () => {
