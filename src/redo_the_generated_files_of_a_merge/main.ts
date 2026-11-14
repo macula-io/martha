@@ -1,4 +1,6 @@
 // Run:   node src/redo_the_generated_files_of_a_merge/main.ts --repository <path>
+//        node src/redo_the_generated_files_of_a_merge/main.ts --repository <path> --classify <path> <base> <ours> <theirs>
+//        node src/redo_the_generated_files_of_a_merge/main.ts --repository <path> --judge <merge-sha>
 //
 // Redoes the files a merge of two passed heads clashed in, when those are the ones nobody wrote by hand (martha#381): the
 // C4 picture is drawn again by the program that draws it, and package.json's host ceilings are merged — each at its base
@@ -8,14 +10,32 @@
 // `assets/c4-context.svg (picture); package.json martha.hostCeilings (measured)`.
 // Exit 0 the clash was redone and nothing is unsettled; 1 it was not, in the words a landing prints when it stops; 2 it
 // could not be done. It never settles a path it does not name.
+//
+// Two more modes answer for the rule without merging anything (martha#339), so a slice that may not import this program
+// still reads its one rule by running it:
+// - `--classify` takes one path a merge clashed in and its three stage blobs (`-` for a side that has none), and prints
+//   the words the redo would record of it, exit 0, or why it is a clash by hand, exit 1. A batch's dry run asks it.
+// - `--judge` takes one landing merge that clashed, and passes it, exit 0, only when it is what the redo makes and
+//   nothing more (./judge_a_landing_merge.ts); refused, exit 1, by name. The range gate asks it.
 
 import { spawnSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 
-import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { classifyAClashedPath } from './classify_a_clashed_path.ts'
+import { gitRan, gitSaid, saidBy } from './git_in_the_repository.ts'
+import { judgeALandingMerge } from './judge_a_landing_merge.ts'
 import { thePackageJsonOfAMerge, type ThePackageJsonAMergeBrings } from './the_ceilings_a_merge_brings.ts'
-import { aPictureRedone, isAPictureRedrawn, THE_PICTURES_REDRAWN_AS, theManifestAsGitNamesIt, theManifestIn } from './the_generated_files.ts'
+import {
+  aClashNotRedone,
+  aPictureRedone,
+  isAPictureRedrawn,
+  noThreeStages,
+  THE_PICTURES_REDRAWN_AS,
+  THE_WORDS_BETWEEN,
+  theManifestAsGitNamesIt,
+  theManifestIn,
+} from './the_generated_files.ts'
 
 const NAME = 'redo_the_generated_files_of_a_merge'
 
@@ -25,18 +45,6 @@ type Step<T> = { readonly ok: T } | { readonly refused: string }
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
   return at === -1 ? undefined : process.argv[at + 1]
-}
-
-/** What a run said, as one line: its own words, or the status it ended with when it said none. */
-function saidBy(program: string, ran: { readonly status: number | null; readonly stdout: string; readonly stderr: string }): string {
-  const first = (ran.stderr.trim() === '' ? ran.stdout.trim() : ran.stderr.trim()).split('\n')[0] ?? ''
-  return first === '' ? `${program} ended with ${String(ran.status)}` : first
-}
-
-/** What git in this clone says, when it ends well. */
-function gitSaid(repository: string, args: readonly string[]): string | undefined {
-  const ran = spawnSync(GIT, [...marthasOwnGitArgs(args)], { cwd: repository, encoding: 'utf8' })
-  return ran.status === 0 ? ran.stdout.trim() : undefined
 }
 
 /** The paths the merge could not settle, as git names them; undefined when git would not say. */
@@ -59,7 +67,7 @@ function theManifestMerged(repository: string, the_manifest: string): Step<ThePa
   const stages = [1, 2, 3].map((at) => gitSaid(repository, ['show', `:${String(at)}:${the_manifest}`]))
   const [base, ours, theirs] = stages
   if (base === undefined || ours === undefined || theirs === undefined) {
-    return { refused: `${the_manifest} has no three stages here: a side added or removed it, which is a change to the file and not to the map` }
+    return { refused: noThreeStages(the_manifest) }
   }
   return thePackageJsonOfAMerge(repository, base, ours, theirs)
 }
@@ -81,13 +89,13 @@ function theClashIn(repository: string): Step<TheClash> {
   if ('refused' in settled) return settled
   const the_manifest = theManifestAsGitNamesIt(repository)
   const others = thePathsNotRedone(settled.ok, the_manifest)
-  if (others.length > 0) return { refused: `the merge clashes in ${others.join(', ')}, which a landing does not redo` }
+  if (others.length > 0) return { refused: aClashNotRedone(others) }
   return { ok: { manifest: settled.ok.includes(the_manifest) ? the_manifest : undefined, pictures: settled.ok.filter(isAPictureRedrawn) } }
 }
 
 /** The redone paths marked settled in the index, so git no longer counts them unmerged. */
 function thePathsSettled(repository: string, paths: readonly string[]): Step<true> {
-  const ran = spawnSync(GIT, [...marthasOwnGitArgs(['add', '--', ...paths])], { cwd: repository, encoding: 'utf8' })
+  const ran = gitRan(repository, ['add', '--', ...paths])
   if (ran.status !== 0) return { refused: `the redone paths would not be marked settled: ${saidBy(GIT, ran)}` }
   return { ok: true }
 }
@@ -123,15 +131,39 @@ function redo(repository: string): Step<readonly string[]> {
   return 'refused' in left ? left : redone
 }
 
-function main(): number {
-  const repository = option('--repository') ?? '.'
-  const redone = redo(repository)
-  if ('refused' in redone) {
-    console.error(`${NAME}: ${redone.refused}`)
+/** A stage blob as `--classify` takes it: `-` is a side that has none. */
+const aStage = (given: string | undefined): string | undefined => (given === undefined || given === '-' ? undefined : given)
+
+/** The one answer a mode gives: its words on stdout and exit 0, or its refusal on stderr and exit 1. */
+function answered(step: Step<string>): number {
+  if ('refused' in step) {
+    console.error(`${NAME}: ${step.refused}`)
     return 1
   }
-  console.log(redone.ok.join('; '))
+  console.log(step.ok)
   return 0
+}
+
+/** `--classify <path> <base> <ours> <theirs>`: what the redo would record of one clashed path, or why it would not. */
+function classify(repository: string, at: number): Step<string> {
+  const [path, base, ours, theirs] = process.argv.slice(at + 1, at + 5)
+  if (path === undefined || path === '') return { refused: '--classify takes a path and its three stage blobs' }
+  return classifyAClashedPath(repository, path, { base: aStage(base), ours: aStage(ours), theirs: aStage(theirs) })
+}
+
+/** `--judge <merge>`: whether one landing merge that clashed is what the redo makes and nothing more. */
+function judge(repository: string, merge: string | undefined): Step<string> {
+  if (merge === undefined || merge === '') return { refused: '--judge takes the merge it judges' }
+  return judgeALandingMerge(repository, merge)
+}
+
+function main(): number {
+  const repository = option('--repository') ?? '.'
+  const classifying = process.argv.indexOf('--classify')
+  if (classifying !== -1) return answered(classify(repository, classifying))
+  if (process.argv.includes('--judge')) return answered(judge(repository, option('--judge')))
+  const redone = redo(repository)
+  return answered('refused' in redone ? redone : { ok: redone.ok.join(THE_WORDS_BETWEEN) })
 }
 
 process.exitCode = main()
