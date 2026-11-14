@@ -70,7 +70,7 @@
     "hostCeilings": {
       "src/approve_a_checkouts_config": 76,
       "src/claude_code_host": 1531,
-      "src/claude_code_relay": 798,
+      "src/claude_code_relay": 797,
       "src/declare_a_solo_crew": 84,
       "src/find_what_a_later_git_run_reads": 494,
       "src/install_the_pinned_installer": 124,

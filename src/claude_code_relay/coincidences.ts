@@ -25,12 +25,12 @@ import { RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal'
 
 /**
- * Why the mod writes `clear` twice by literal (martha#255 r=2): it is the word an order carries the clear under, which
- * the launcher holds as a constant a hooks module cannot import, and it is also the name of the host command the mod
- * runs to clear a session — the same spelling twice, and only the first is the launcher's word. The list is keyed by
- * value and file, so the two are one entry.
+ * Why the mod writes `clear` (martha#255 r=2) and `model` (martha#315) twice by literal: each is the word an order
+ * carries under, which the launcher holds as a constant a hooks module cannot import, and it is also the name of the
+ * host command the mod runs — the same spelling twice, and only the first is the launcher's word. The list is keyed by
+ * value and file, so each pair is one entry.
  */
-const THE_CLEAR_IN_THE_MOD = 'the word an order carries the clear under, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs to clear a session, which the host names'
+const AN_ORDER_WORD_THAT_IS_A_HOST_COMMAND = 'the word an order carries, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs, which the host names'
 
 /**
  * Why the relay registers the host's five hook events by literal (martha#313): the host's plugin validator reads the
@@ -42,13 +42,6 @@ const THE_HOST_NAMES_ITS_HOOKS = 'the host\'s plugin validator refuses an on(...
 
 /** Why the relay socket's name is written by literal in register.ts (#289 part b, as for crew.tsx in martha#254). */
 const THE_HOST_READS_THE_SOCKET_BY_LITERAL = 'the host reads this name from the hooks module and refuses anything but a literal in $.env.get, an imported constant included (#104)'
-
-/**
- * Why the mod writes `model` twice by literal (martha#315): it is the word an order carries a model under, which the
- * launcher holds as a constant a hooks module cannot import, and it is also the name of the host command the mod runs to
- * switch a session's model — the same spelling twice, and only the first is the launcher's word.
- */
-const THE_MODEL_IN_THE_MOD = 'the word an order carries a model under, which the launcher holds as a constant a hooks module cannot import, and the name of the host command this mod runs to switch a session, which the host names'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -100,17 +93,19 @@ export const COINCIDENCES: readonly Exception[] = [
   // The socket the mod talks to its launcher over (martha#254): the name is read by the host from this very file, and
   // the host refuses a hooks module that gives `$.env.get` anything but a literal, an imported constant included
   // (#104) — so the copy of the name has to sit here, and this line is the one that says it is the same name.
-  { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the host reads this name from the hooks module and refuses anything but a literal in $.env.get, an imported constant included (#104)' },
+  { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_HOST_READS_THE_SOCKET_BY_LITERAL },
   // The order's two decision words (martha#255 r=2 R1): the launcher names them as constants, so the mod's own copy of
   // each — it reads the answer and runs it, and a hooks module cannot import the constant — is held here. Reword either
   // on the launcher's side and this entry matches no literal in the mod, and the gate says so by name.
   { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a text under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the clear under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_A_TEXT, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod submits a prompt under; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_CLEAR_IN_THE_MOD },
+  // The clear: the word an order carries the clear under, and the host command this mod runs to clear a session.
+  { value: CARRY_THE_CLEAR, file: 'claude_code_relay/hooks/crew.tsx', reason: AN_ORDER_WORD_THAT_IS_A_HOST_COMMAND },
   // The model order's word and the model switch's own tool names (martha#315): the same reason as the entries above.
   { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries a model under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
-  { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: THE_MODEL_IN_THE_MOD },
+  // The model: the word an order carries a model under, and the host command this mod runs to switch a session.
+  { value: CARRY_A_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: AN_ORDER_WORD_THAT_IS_A_HOST_COMMAND },
   { value: SWITCH_YOUR_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: RETURN_TO_YOUR_OWN_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: THE_MODEL_REPORT_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher once a model switch resolved; ${THE_RELAY_CANNOT_IMPORT}` },
