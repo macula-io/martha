@@ -4,7 +4,7 @@ import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
 import { coreSources } from './core_sources.ts'
-import { CORE, escaped, isTestFile, manifestOf, programsRunByScriptsOf, testSuffixesOf } from './declared_in_package_json.ts'
+import { CORE, escaped, isTestFile, manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
 import {
   adapterReachesBeyondItsKind,
   glueReachesBeyondTheContract,
@@ -24,10 +24,11 @@ const underTheCore = new RegExp(`^${escaped(CORE)}/`)
 const declaredPath = (entry: string) => entry.replace(underTheCore, '')
 
 // Which files under src/ are not slices, as package.json declares them: the test
-// files its test script runs, the programs its other scripts run with node, and
-// the host glue it lists under martha.hostGlue.
+// files its test script runs, the programs its other scripts run with node and the
+// parts of them it lists under martha.programParts (martha#443), and the host glue
+// it lists under martha.hostGlue.
 const testSuffixes = testSuffixesOf(manifest)
-const programsRunByScripts = programsRunByScriptsOf(manifest)
+const programsAndTheirParts = programsAndTheirPartsOf(manifest)
 
 // The host glue: the code that implements the host contract on one machine. It is
 // declared as <core>/<directory>; it is not a slice, and reaching the machine is its job.
@@ -44,10 +45,10 @@ const decisionFiles = (manifest.martha?.decisionFiles ?? []).map(declaredPath)
 
 const isSlice = (path: string) => {
   const top = path.split(sep)[0] ?? ''
-  return !isTestFile(testSuffixes, path) && !programsRunByScripts.includes(top) && !hostGlue.includes(top) && !hostAdapters.includes(top)
+  return !isTestFile(testSuffixes, path) && !programsAndTheirParts.includes(top) && !hostGlue.includes(top) && !hostAdapters.includes(top)
 }
 
-const isTestOrProgram = (path: string) => isTestFile(testSuffixes, path) || programsRunByScripts.includes(path.split(sep)[0] ?? '')
+const isTestOrProgram = (path: string) => isTestFile(testSuffixes, path) || programsAndTheirParts.includes(path.split(sep)[0] ?? '')
 // The files the three reach rules judge: every one but a slice's coincidences.ts, which the restated-values check
 // reads as a syntax tree and nothing runs (martha#289 r=3, ruling P). The exemption is the SOURCE side only: what
 // a file may import (isSlice, isTestOrProgram) keeps its meaning, and only another coincidences.ts may import one
@@ -78,12 +79,12 @@ const importOf = (specifier: string) => ['import', '{ x }', 'from', `'${specifie
 
 test('package.json names a test glob and at least one program, so the exemptions are not empty by accident', () => {
   assert.notDeepEqual(testSuffixes, [])
-  assert.notDeepEqual(programsRunByScripts, [])
+  assert.notDeepEqual(programsAndTheirParts, [])
 })
 
 test('a test file, a program a script runs, host glue and a host adapter are not slices; a directory that only starts like one is', () => {
   for (const suffix of testSuffixes) assert.equal(isSlice(join('a', `a${suffix}`)), false)
-  for (const directory of [...programsRunByScripts, ...hostGlue, ...hostAdapters]) {
+  for (const directory of [...programsAndTheirParts, ...hostGlue, ...hostAdapters]) {
     assert.equal(isSlice(join(directory, 'main.ts')), false)
     assert.equal(isSlice(join(`${directory}_too`, 'x.ts')), true)
   }
@@ -158,7 +159,7 @@ for (const [kind, cases] of Object.entries(planted.caught)) {
 
 test('caught: a slice importing what is not a slice, the host glue, a program or a test (review r=3)', () => {
   const someTest = `some_slice${testSuffixes[0] ?? ''}`
-  const notSlices = [...hostGlue, ...hostAdapters, ...programsRunByScripts].map(directory => `../${directory}/main.ts`)
+  const notSlices = [...hostGlue, ...hostAdapters, ...programsAndTheirParts].map(directory => `../${directory}/main.ts`)
   for (const specifier of [...notSlices, `./${someTest}`]) {
     const found = judge(`${importOf(specifier)}\n`)
     assert.deepEqual(linesOf(found), [1], `${specifier}\n${JSON.stringify(found)}`)
@@ -189,7 +190,7 @@ for (const adapter of hostAdapters) {
   const judgeAdapter = (text: string) => adapterReachesBeyondItsKind([{ path: at, text }], isTestOrProgram)
 
   test(`caught: host adapter ${adapter} importing a test, a program or a package (review r=5)`, () => {
-    const programs = programsRunByScripts.map(program => importOf(`../${program}/main.ts`))
+    const programs = programsAndTheirParts.map(program => importOf(`../${program}/main.ts`))
     const tests = testSuffixes.map(suffix => importOf(`../some_slice/some_slice${suffix}`))
     assert.ok(programs.length > 0 && tests.length > 0)
     const generated = [...programs, ...tests].map(text => ({ text: `${text}\n`, lines: [1] }))
@@ -252,14 +253,14 @@ test('no slice in this repository reads a setting from anywhere but the declarat
 
 test('no directory package.json runs as a program is one a slice imports from', () => {
   const slices: Source[] = judgedByTheReachRules(coreSources(src).filter(source => isSlice(source.path)))
-  assert.deepEqual(slicesImportingPrograms(slices, programsRunByScripts), [])
+  assert.deepEqual(slicesImportingPrograms(slices, programsAndTheirParts), [])
 })
 
 test('caught: a program script pointing into a directory a slice imports (review r=5)', () => {
-  assert.notDeepEqual(programsRunByScripts, [])
-  for (const program of programsRunByScripts) {
+  assert.notDeepEqual(programsAndTheirParts, [])
+  for (const program of programsAndTheirParts) {
     const slice = { path: PLANTED_PATH, text: `${importOf(`../${program}/shared.ts`)}\n` }
-    assert.deepEqual(linesOf(slicesImportingPrograms([slice], programsRunByScripts)), [1], program)
+    assert.deepEqual(linesOf(slicesImportingPrograms([slice], programsAndTheirParts)), [1], program)
     assert.deepEqual(slicesImportingPrograms([slice], []), [], program)
   }
 })
@@ -278,5 +279,5 @@ test('the host adapters in this repository import no test, no program and no pac
 
 test('the programs package.json runs exist, so an exemption cannot outlive its program', () => {
   const directories = new Set(coreSources(src).map(source => source.path.split(sep)[0]))
-  for (const program of programsRunByScripts) assert.ok(directories.has(program), program)
+  for (const program of programsAndTheirParts) assert.ok(directories.has(program), program)
 })
