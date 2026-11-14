@@ -55,14 +55,15 @@ Start solo and move to team without changing tools.
 **It is**
 
 - fully open source;
-- a core that no coding tool owns, with thin adapters for each one (Claude
-  Code, OpenCode, lazymesh and others);
+- a core that no coding tool owns, run through one host adapter today (Claude
+  Code), with an adapter for OpenCode next;
 - usable alone, with the mesh only when a team wants it.
 
 **It is not**
 
 - a hosted service, or anything that needs an account;
-- tied to one AI vendor or one coding tool;
+- tied to one AI vendor or one coding tool yet: that is the aim, and Claude
+  Code is the only host it runs on so far;
 - a replacement for your own review: every push and every release still waits
   for a person's yes.
 
