@@ -132,7 +132,7 @@ import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
-import { memberRelay, type MemberRelay, type MemberRelayPlace } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace, type TheMembersTelling } from './answer_the_relay.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   hostTrustsTheFolder,
@@ -148,6 +148,7 @@ import {
 import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { theRowWithTheLine, theRowWithoutTheLineItWrote } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NO_BELLS, theBellsTheOwnerDeclared } from '../ring_the_owner/ring_the_owner.ts'
 import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
@@ -156,6 +157,7 @@ import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -781,9 +783,10 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  * started on no approval names itself, martha#240), and the owner's screen (martha#313) — the member's own row, moved
  * by what the host asks, and the bell that change is worth, rung on the terminal this launcher was started on.
  */
-function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen'> {
+function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
   return {
     journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
+    telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows }),
     screen: theOwnersScreen({
       beats: dashboardRowsIn(launch.places.dashboard),
       member: launch.member_name,
@@ -791,6 +794,58 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlac
       onTheOwnersTerminal: isOnTheOwnersTerminal(launch.stdio),
       write: (bytes) => void process.stdout.write(bytes),
     }),
+  }
+}
+
+/**
+ * Where a line of Martha's own is told: the member whose row and channel it goes to, and the two store directories those
+ * are kept in. Named apart from the launch so the telling can be built and read on its own (martha#390 r=1).
+ */
+export interface TheTellingPlaces {
+  readonly member: string
+  readonly dashboard: string
+  readonly rows: string
+}
+
+/**
+ * Where a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member's own session,
+ * which is handed the line through the crew's channel the way every crew message is. A row the store does not hold yet
+ * is not made here: the line waits for a row there is, as the dialogs slice leaves it.
+ *
+ * The row's `needs` is one slot shared with every other line the owner is told (a model switch's, martha#359), and who
+ * may write it, and whose line may be taken back, is the row's own rule in the core (../show_dashboard_beat,
+ * `theRowWithTheLine` / `theRowWithoutTheLineItWrote`). This telling keeps only which line it wrote, so it can tell its
+ * own from another owner's, and the store calls that put that line there and take it away.
+ */
+export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
+  const beats = dashboardRowsIn(places.dashboard)
+  // The line this telling last put in the row, so it can tell its own line from another owner's, and take back its own.
+  let wrote: string | null = null
+  return {
+    theRow: (line) => {
+      beats.change(places.member, (held) => {
+        if (held === null) return null
+        const next = theRowWithTheLine(held, { wrote, line, at: Date.now() })
+        // Nothing comes back when another owner's line stands there, and then the line is not this telling's to take back.
+        if (next === null) return null
+        wrote = line
+        return next
+      })
+    },
+    theMember: (line) =>
+      appendToTheChannel(
+        { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(places.rows) } },
+        // The program's own name, and never a member's: the word is spelled here rather than defined as a value, because
+        // eleven places in the tree spell it for something else — a repository, a state directory, an installed binary, a
+        // test's command word — and a constant of it would make every one of them stale at once (martha#390 r=4).
+        { from: 'martha', to: [places.member], text: line, sent_at: Date.now() },
+      ).then(() => undefined),
+    takeTheLineBack: () => {
+      const line = wrote
+      if (line === null) return
+      wrote = null
+      beats.change(places.member, (held) => (held === null ? null : theRowWithoutTheLineItWrote(held, line)))
+    },
   }
 }
 
