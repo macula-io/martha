@@ -69,7 +69,7 @@
     "hostCeilings": {
       "src/approve_a_checkouts_config": 76,
       "src/claude_code_host": 1496,
-      "src/claude_code_relay": 796,
+      "src/claude_code_relay": 797,
       "src/declare_a_solo_crew": 84,
       "src/install_the_pinned_installer": 124,
       "src/install_the_recorded_mesh_server": 312,
@@ -92,7 +92,7 @@
     },
     "sliceCap": 600,
     "sliceCeilings": {
-      "src/a_crews_tools": 1293,
+      "src/a_crews_tools": 1290,
       "src/probe_launch_hosts": 1142,
       "src/refuse_launch_of_unapproved_config": 880,
       "src/refresh_a_member": 878
