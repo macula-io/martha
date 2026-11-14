@@ -47,8 +47,7 @@ import {
   type Finding,
   type MarkerNotHeld,
 } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import type { CoreSource } from '../host_contract/core_source.ts'
-import { isScannedSource } from '../host_contract/core_source.ts'
+import { isScannedSource, type CoreSource } from '../host_contract/core_source.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { CORE } from './the_core_the_check_reads.ts'
 import { addedLinesIn, underCore } from './the_lines_a_change_adds.ts'
