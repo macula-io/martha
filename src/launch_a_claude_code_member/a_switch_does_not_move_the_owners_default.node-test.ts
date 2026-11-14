@@ -25,7 +25,7 @@ import { crewSubdirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_
 import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 
 

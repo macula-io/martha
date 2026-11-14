@@ -28,7 +28,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** One of Claude Code's own variables, which its settings may carry and the mesh server never reads. */
 export interface ClaudeCodeOwnVariable {

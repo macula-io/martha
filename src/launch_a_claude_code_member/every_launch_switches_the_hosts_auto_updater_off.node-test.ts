@@ -29,7 +29,7 @@ import {
   type Host,
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The switches a launch that adds nothing asks for: what the member and probe launches start from. */
 const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }

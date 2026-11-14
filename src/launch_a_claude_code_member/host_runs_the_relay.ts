@@ -45,7 +45,7 @@ import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { isatty } from 'node:tty'
 
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
+import { MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**
  * How long one question to the host may take. The load check reads the relay's

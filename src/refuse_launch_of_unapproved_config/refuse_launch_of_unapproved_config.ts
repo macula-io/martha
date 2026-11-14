@@ -53,7 +53,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 
 export type { LaunchHost }

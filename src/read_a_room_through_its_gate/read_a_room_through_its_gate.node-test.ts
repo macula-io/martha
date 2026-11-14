@@ -27,7 +27,7 @@ import {
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 

@@ -44,7 +44,7 @@ import {
   type HookSettingsFile,
   type OwnersMarkdown,
 } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isOff = (value: unknown): boolean => value === undefined || value === false || value === null

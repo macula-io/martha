@@ -24,7 +24,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { GATE_AUDIT_PLACE, auditFileIn, theLinesIn, type GateAuditPlace } from './audit_the_gate_for_a_member.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 const policy: Policy = { may_send_executable_text: [] }

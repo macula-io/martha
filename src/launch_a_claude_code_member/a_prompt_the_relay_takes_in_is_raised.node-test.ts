@@ -26,7 +26,7 @@ import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 interface Places {
   readonly home: string

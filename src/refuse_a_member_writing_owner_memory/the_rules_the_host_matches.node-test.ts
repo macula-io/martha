@@ -21,7 +21,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
 import { HOST_TERMINAL } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The rule written under the same place as `rule`, but under a tool the file permission checks never use. */
 const anInertTwinOf = (rule: string): string => rule.replace(/^\w+\(/, 'Write(')

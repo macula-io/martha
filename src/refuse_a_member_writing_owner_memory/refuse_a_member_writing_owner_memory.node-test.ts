@@ -33,7 +33,7 @@ import {
 } from './refuse_a_member_writing_owner_memory.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
 function placeFor(t: TestContext) {

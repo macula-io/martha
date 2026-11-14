@@ -31,7 +31,7 @@ import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the
 const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { GATE_AUDIT_PLACE, theLinesIn } from './audit_the_gate_for_a_member.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 interface Places {
   readonly home: string

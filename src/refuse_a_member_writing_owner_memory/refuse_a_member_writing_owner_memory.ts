@@ -104,7 +104,7 @@ import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_chec
 import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
-import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const

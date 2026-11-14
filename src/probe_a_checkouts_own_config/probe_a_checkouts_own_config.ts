@@ -17,7 +17,7 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode

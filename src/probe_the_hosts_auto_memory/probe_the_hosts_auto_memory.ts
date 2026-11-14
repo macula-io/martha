@@ -20,7 +20,7 @@ import {
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { HEADLESS_CLAUDE, PROMPT, put, RUN_TIMEOUT_MS } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every

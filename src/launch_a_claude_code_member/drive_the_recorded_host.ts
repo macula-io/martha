@@ -31,7 +31,7 @@ import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_th
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**
  * The state home a run's processes find Martha's state in, under the home the run is given. Exported so a run that

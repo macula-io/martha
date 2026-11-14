@@ -37,7 +37,7 @@ import { latestOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/
 import { startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { takeInToolResult } from './take_in_a_tool_result.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'builder'
 const LAUNCH = 'launch-1'

@@ -55,7 +55,7 @@ HOST_TERMINAL="$(defined_in_harness HOST_TERMINAL)"
 # module; it is read from there rather than typed here, so a change to it reaches this launch and a launch that drops it
 # fails every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name (martha#474).
 AUTO_UPDATER_OFF_DEFINITION="${REPO}/src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts"
-CLAUDE_CODE_FACTS="${REPO}/src/claude_code_host/claude_code_facts.ts"
+CLAUDE_CODE_FACTS="${REPO}/src/know_claude_codes_own_facts/claude_code_facts.ts"
 auto_updater_off="$(node --input-type=module -e "const m = await import('${AUTO_UPDATER_OFF_DEFINITION}'); const f = await import('${CLAUDE_CODE_FACTS}'); process.stdout.write(Object.entries(m.HOSTS[f.CLAUDE_CODE].env_last).map(([name, value]) => name + '=' + value).join(' '))")"
 [[ -n "${auto_updater_off}" ]] || { echo "prove_the_relay_loads: ${AUTO_UPDATER_OFF_DEFINITION} gives Claude Code's row no env_last" >&2; exit 2; }
 read -r -a AUTO_UPDATER_OFF <<< "${auto_updater_off}"

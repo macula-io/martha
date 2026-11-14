@@ -40,7 +40,7 @@ import {
   type ConfigEntry,
   type LaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The one answer that approves. */
 export const YES = 'yes'

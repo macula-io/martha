@@ -46,7 +46,7 @@
 //      false one, counts (whatAPromptCarries).
 
 import type { Arrival, TurnSource } from '../host_contract/host_contract.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** What each origin kind a host sends means, as a turn source. */
 export interface HostPromptOrigins {

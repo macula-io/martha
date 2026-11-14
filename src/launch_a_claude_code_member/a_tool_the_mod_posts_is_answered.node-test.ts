@@ -36,7 +36,7 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'

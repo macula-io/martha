@@ -21,7 +21,7 @@ import {
   theApprovalInUse,
   type LaunchPlace,
 } from './refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The file a checkout uses to start a tool server: config that starts code by itself. */
 const [SERVERS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]

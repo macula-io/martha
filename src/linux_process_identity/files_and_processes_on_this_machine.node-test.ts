@@ -16,7 +16,7 @@ import {
 } from './files_and_processes_on_this_machine.ts'
 import { linuxProcessIdentities } from './process_identity_from_proc.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 function place(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-machine-'))

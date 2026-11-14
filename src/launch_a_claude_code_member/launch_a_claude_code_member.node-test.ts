@@ -72,7 +72,7 @@ import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reac
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({

@@ -28,7 +28,7 @@ import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const NOW = Date.UTC(2026, 10, 13, 9, 0, 0)
 

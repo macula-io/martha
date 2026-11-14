@@ -12,7 +12,7 @@ import type { HookSwitches } from '../cut_the_rules_from_the_host_binary/the_rul
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { hookSettingsWatch, namesTheOwnersSettings, settingsTurningHooksOff } from './settings_that_turn_hooks_off.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const USER = '/owner/.claude/settings.json'
 const MANAGED = '/etc/claude-code/managed-settings.json'

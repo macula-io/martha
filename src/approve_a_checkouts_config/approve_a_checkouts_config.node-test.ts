@@ -17,7 +17,7 @@ import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { approveConfig, NOT_A_TERMINAL, type OwnersTerminal } from './approve_a_checkouts_config.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 

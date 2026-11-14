@@ -37,7 +37,7 @@ import type { WhatTheHostSaid } from '../say_what_the_host_is_asking/say_what_th
 import { recordOf, sessionRecordStreamOf, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { A_TURN_OF_UNNAMED_SOURCE, theCommandLineOf } from './hear_every_turn_the_model_runs.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'Builder'
 const SENDER = 'Reviewer'

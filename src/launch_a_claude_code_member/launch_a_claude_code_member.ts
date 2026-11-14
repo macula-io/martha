@@ -162,7 +162,7 @@ import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))

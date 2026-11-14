@@ -59,7 +59,7 @@ import {
   WORDLESS_TOOLS,
   type RecordedMeshAnswerShape,
 } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
-import { CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 export interface Gap {
   readonly path: string

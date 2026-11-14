@@ -38,7 +38,7 @@ import { memberRelay, type MemberRelay, type TheMembersTelling } from './answer_
 import { A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from './launch_a_claude_code_member.ts'
 import { readTheNewestRelayJournal, relayJournalKeptIn, RELAY_JOURNAL_PLACE } from './keep_the_relays_journal.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'builder'
 const SESSION = 'the-session'

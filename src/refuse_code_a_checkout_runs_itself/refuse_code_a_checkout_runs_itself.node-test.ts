@@ -24,7 +24,7 @@ import {
   switchesThatRunNothingFromACheckout,
 } from './refuse_code_a_checkout_runs_itself.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-runs-nothing-'))

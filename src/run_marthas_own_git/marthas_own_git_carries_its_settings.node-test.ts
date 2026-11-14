@@ -21,7 +21,7 @@ import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_
 import { blobAsGitAdds } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { readTheCheckoutOnce } from '../run_an_owner_signed_command/read_the_checkout_once.ts'
 import { MARTHAS_OWN_GIT_SETTINGS, marthasOwnGitArgs, marthasOwnGitSettingsArgs } from './run_marthas_own_git.ts'
-import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The one setting this package adds: a bare repository git was not told about is refused. */
 const THE_SWITCH = 'safe.bareRepository'

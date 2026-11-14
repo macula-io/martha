@@ -30,7 +30,7 @@ import process from 'node:process'
 // it is spread here from there rather than typed, so a change to it reaches this run and a run that drops it fails
 // every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name (martha#474).
 import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../src/claude_code_host/claude_code_facts.ts'
+import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
