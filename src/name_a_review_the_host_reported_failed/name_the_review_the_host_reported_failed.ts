@@ -118,9 +118,6 @@ export function whatTheEnvelopeNoLongerHolds(text: string, report: TheReportTheH
   return theElementIn(text, report.status) === report.failed ? undefined : `its status is not ${report.failed}: this slice reads the host's own word for a failed agent, and it is not the one this host writes`
 }
 
-/** The sender a line Martha itself writes into the crew's channel carries (martha#390): never a member's own name. */
-export const THE_CREWS_OWN_NAME = 'martha'
-
 /** One line about a failed review: the model the call resolved to, and the host's own words for the stop. */
 export const theLineAboutIt = (failed: TheFailedReview): string => `review on ${failed.model}: ${failed.reason}`
 

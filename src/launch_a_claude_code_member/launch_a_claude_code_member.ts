@@ -158,7 +158,6 @@ import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
-import { THE_CREWS_OWN_NAME } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -836,7 +835,10 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
     theMember: (line) =>
       appendToTheChannel(
         { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(places.rows) } },
-        { from: THE_CREWS_OWN_NAME, to: [places.member], text: line, sent_at: Date.now() },
+        // The program's own name, and never a member's: the word is spelled here rather than defined as a value, because
+        // eleven places in the tree spell it for something else — a repository, a state directory, an installed binary, a
+        // test's command word — and a constant of it would make every one of them stale at once (martha#390 r=4).
+        { from: 'martha', to: [places.member], text: line, sent_at: Date.now() },
       ).then(() => undefined),
     takeTheLineBack: () => {
       const line = wrote

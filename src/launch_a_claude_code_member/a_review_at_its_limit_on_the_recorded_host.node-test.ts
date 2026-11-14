@@ -22,12 +22,11 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
-import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { addressedTo, readTheChannel, type PlacedMessage } from '../keep_the_crew_channel/crew_channel.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { THE_CREWS_OWN_NAME } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, stateHomeUnder, whatTheLaunchSaw } from './drive_the_recorded_host.ts'
@@ -85,8 +84,6 @@ function approvedProjectWithModels(t: TestContext): Project {
     writeFileSync(join(checkout, path), text)
   }
   git(checkout, 'init', '-q', '.')
-  git(checkout, 'config', 'user.name', GIT_NAME)
-  git(checkout, 'config', 'user.email', GIT_EMAIL)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
   const place = { claude: recordedHost(), home, checkout }
@@ -167,7 +164,11 @@ test('on the recorded host a review the reviewer model refused is named to the m
       silence_ms: HOST_SILENCE_MS,
       // The member's own model answers; the reviewer model is refused, exactly as an account at its limit is.
       script: ({ number, body }) =>
-        number === 1 ? { tool: 'Agent', input: THE_REVIEW } : body['model'] === THE_RESOLVED_REVIEW_MODEL ? { refused: THE_APIS_ANSWER } : { text: 'Done.' },
+        number === 1
+          ? { tool: 'Agent', input: THE_REVIEW }
+          : body[CLAUDE_CODE_SUBAGENT_SPAWN.model_field] === THE_RESOLVED_REVIEW_MODEL
+            ? { refused: THE_APIS_ANSWER }
+            : { text: 'Done.' },
       atTheTerminal: async (hands) => {
         await hands.until('the owner\'s row naming the failed review', () => theRowNamesIt(project))
         // The host's own notification is a turn in the member's session: the member takes it in, and asks the model
@@ -186,7 +187,8 @@ test('on the recorded host a review the reviewer model refused is named to the m
   assert.ok(told.needs.includes(THE_APIS_ANSWER.message), `the row's line does not repeat the host's own reason:\n${told.needs}`)
   // The member is told through the crew's channel, by Martha's own name and to this member, in the same words the owner
   // reads on the row: a member that never looks at the dashboard still learns its review stopped.
-  const mine = (await theChannelOf(project)).filter(({ message }) => message.from === THE_CREWS_OWN_NAME && addressedTo(message, MEMBER))
-  assert.equal(mine.length, 1, `the crew's channel holds ${mine.length} line(s) from Martha to ${MEMBER}, not one: ${JSON.stringify(mine)}`)
-  assert.equal(mine.at(0)?.message.text, told.needs, 'the member was told something other than what the owner\'s row says')
+  const theLine = told.needs
+  const mine = (await theChannelOf(project)).filter(({ message }) => message.from !== MEMBER && addressedTo(message, MEMBER) && message.text === theLine)
+  assert.equal(mine.length, 1, `the crew's channel holds ${mine.length} line(s) not from ${MEMBER} itself, to ${MEMBER}, in the row's own words: ${JSON.stringify(mine)}`)
+  assert.equal(mine.at(0)?.message.text, theLine, 'the member was told something other than what the owner\'s row says')
 })

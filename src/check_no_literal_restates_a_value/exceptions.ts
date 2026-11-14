@@ -25,7 +25,6 @@ import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/op
 import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
-import { THE_CREWS_OWN_NAME } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, STANDING_ITEMS_SOURCE, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
@@ -98,18 +97,8 @@ const THE_HOST_NAMES_ITS_HOOKS = 'the host\'s plugin validator refuses an on(...
  */
 const THE_HOSTS_OWN_MODEL_FIELD = 'the host\'s own name for the argument that carries a model, in the Agent schema it declares and in the request body it sends: recorded host data, not the word an order carries a model under'
 
-/**
- * Why `martha` is written by literal in nine files that are not about the crew channel (martha#390): it is this program's
- * own name, and each of those places spells it for something else — the repository this one is, the state directory
- * Martha keeps, the binary a launch drives, a word typed at a command line in a test.
- */
-const THE_PROGRAMS_OWN_NAME = 'martha is this program\'s own name, spelled the same in a repository\'s name, a state directory, an installed binary and a command typed in a test; the crew channel\'s sender is that word and is none of those places'
-
 /** Why `model` is written by literal for the dashboard (martha#315): it is the row's own field, read and written by it. */
 const THE_ROWS_MODEL_FIELD = 'the row\'s own field for the model a session runs on, which the dashboard reads back and writes'
-
-/** Why `model` is written by literal for the declaration (martha#315): it is the key a member's own model is declared under. */
-const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'
 
 /** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */
 const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narrows on by literal; the crew\'s park place is named the same word and is not this'
@@ -227,6 +216,7 @@ export const EXCEPTIONS: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/launch_a_claude_code_member.ts', reason: 'the program\'s own name, which Martha signs a line of its own with in the crew channel (martha#390): the state directory is named after the program and is not what this word means here' },
   // The dashboard's own word for a parked member (martha#320). It is the row's state, and shares its spelling with
   // PARKED_PLACE, the name of the place a crew keeps its park markers in: the two are different names for different
   // things, and a park is read by both — the marker and the row the member itself wrote.
@@ -264,27 +254,11 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: PARKED_PLACE, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the word a park\'s answer says a member is now in, in the line the member is told; the constant of that name is the place a crew keeps a park marker in' },
   { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
-  { value: CARRY_A_MODEL, file: 'declare_crew/declare_crew.ts', reason: THE_DECLARATIONS_MODEL_KEY },
+  // The key a member's own model is declared under (martha#315): the declaration writes that key itself.
+  { value: CARRY_A_MODEL, file: 'declare_crew/declare_crew.ts', reason: 'the key a member\'s own model is declared under, in the declaration this repository writes' },
   { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: THE_ROWS_MODEL_FIELD },
-  { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/a_review_at_its_limit_on_the_recorded_host.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
-  // The same git subcommand, in the refused review's throwaway repository (martha#390).
-  { value: CONFIG, file: 'launch_a_claude_code_member/a_review_at_its_limit_on_the_recorded_host.node-test.ts', reason: 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in' },
-  // The word `martha` in every place that spells it (martha#390): the crew's channel carries Martha's own name as a
-  // sender, and a repository's name, a state directory, an installed binary and a test's command word are that same word
-  // with nothing to do with a sender.
-  { value: THE_CREWS_OWN_NAME, file: 'check_nothing_private_gets_in/check_nothing_private_gets_in.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'check_nothing_private_gets_in/declared.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'check_posted_text_carries_nothing_private/check_posted_text_carries_nothing_private.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'install_the_pinned_installer/install_the_pinned_installer.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'start_a_member/a_message_crosses_a_worktree_and_its_clone.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
-  { value: THE_CREWS_OWN_NAME, file: 'start_a_member/start_a_member.node-test.ts', reason: THE_PROGRAMS_OWN_NAME },
   // The same spelling for the key a restore may touch in the owner's settings file (martha#359), in two files that mean
   // something else by it.
   { value: THE_MODEL_KEY, file: 'refresh_a_member/the_refresh_flow.ts', reason: `the word an order carries a model under, which this file holds as CARRY_A_MODEL; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
