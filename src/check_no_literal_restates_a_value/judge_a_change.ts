@@ -1,7 +1,8 @@
-// What the gate judges in a change, read from git (martha#289).
+// What the range run judges in a change, read from git (martha#289).
 //
-// The gate judges what a change adds, not the whole tree: the lines it adds, and
-// every literal equal to a value it defines, revalues or takes away — those are
+// This module reads the range run, `--range`; the whole-tree run is ./main.ts with
+// no range. The range run judges what a change adds: the lines it adds, and every
+// literal equal to a value it defines, revalues or takes away — those are
 // judged over the whole tree, because a constant added today makes every old copy
 // of its value stale at once, and a revalued, renamed or removed one leaves every
 // literal still holding the old value behind (Uranus's R1). The change is read as
