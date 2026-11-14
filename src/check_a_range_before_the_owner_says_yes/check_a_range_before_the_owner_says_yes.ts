@@ -28,7 +28,7 @@ import {
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { THE_REDO_SCRIPT } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { SHORT_SHA, THE_REDO_SCRIPT } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -38,9 +38,6 @@ export const VERIFY_RANGE = 'verify_range'
 
 /** The word the redo program's judge opens a pass with (martha#339); anything else it answers is not a pass. */
 export const A_JUDGED_MERGE = 'judged'
-
-/** How much of a sha the menu line shows; the whole of it stands in the commits above the line. */
-const SHORT_SHA = 7
 
 /** GitHub answers a page of runs or jobs at a time; more than this on one tip is said on the line rather than hidden. */
 const PER_PAGE = 100
