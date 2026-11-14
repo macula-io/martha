@@ -17,7 +17,7 @@ import {
   isAPlainName,
 } from './keep_the_crews_files_as_directories.ts'
 import type { CrewPlace, HandoverStamp } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'

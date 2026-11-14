@@ -35,7 +35,7 @@ import {
 } from '../declare_crew/declare_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ProcessOutcome, ProcessRequest, Processes } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { LIST_ASKS, MAX_ASK, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'

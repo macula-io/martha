@@ -14,7 +14,7 @@ import { test, type TestContext } from 'node:test'
 
 import { chmodSync } from 'node:fs'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CREW_ROWS_PLACE, CREWS_PLACE, crewKeyOf, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, PERMISSION_BITS, projectStateDirectory } from './keep_martha_state_outside_the_checkout.ts'
 
 /** A directory the test owns, removed when it ends. */

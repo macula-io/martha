@@ -10,7 +10,7 @@ import { after, test } from 'node:test'
 import { ACTS, OWNER } from '../declare_crew/declare_crew.ts'
 import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import {
   ACT_ASKED_OF_OWNER,

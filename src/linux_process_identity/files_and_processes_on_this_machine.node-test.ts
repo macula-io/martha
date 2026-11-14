@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   environmentWith,
   filesOnThisMachine as files,

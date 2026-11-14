@@ -16,7 +16,7 @@ import { join, relative } from 'node:path'
 import { test } from 'node:test'
 
 import { PIN_IN_THE_LAYER } from '../../rehearse_a_release/the_layer_is_the_tree_and_the_pin.mjs'
-import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { NAMES } from '../keep_the_names_in_one_place/names.mjs'
 import { CouldNotCheck, Refused } from '../refuse_in_words/refuse_in_words.mjs'
 import { pinTheInstaller } from './pin_the_installer.mjs'

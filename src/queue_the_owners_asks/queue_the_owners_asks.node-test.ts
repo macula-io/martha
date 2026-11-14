@@ -11,7 +11,7 @@ import { after, test } from 'node:test'
 
 import { OFFER_OWNER_ASKS, OWNER } from '../declare_crew/declare_crew.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import {

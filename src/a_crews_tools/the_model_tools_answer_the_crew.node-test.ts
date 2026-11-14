@@ -22,7 +22,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declar
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { modelPlace, theModelMarker, theModelOf, type TheModel } from '../switch_a_members_model/switch_a_members_model.ts'

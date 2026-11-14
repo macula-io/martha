@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { projectKeyOf, theProjectFoldersThere } from './the_project_folders_a_run_wrote.ts'
 import { aScratchThisRunMade, whatThisRunLeftAtTheEnd } from './the_scratches_this_run_made.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'

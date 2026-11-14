@@ -14,7 +14,7 @@ import { join, relative } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { GIT_SETTINGS_VARIABLE, switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'

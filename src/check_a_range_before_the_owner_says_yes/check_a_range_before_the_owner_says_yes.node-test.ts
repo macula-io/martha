@@ -19,7 +19,7 @@ import { test, type TestContext } from 'node:test'
 
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'

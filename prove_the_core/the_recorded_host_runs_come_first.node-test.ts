@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { RECORDED_HOST_VARIABLE } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
+import { RECORDED_HOST_VARIABLE } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
 import { manifestOf, testCommandsOf, type Manifest } from './declared_in_package_json.ts'
 
 const repository = join(import.meta.dirname, '..')

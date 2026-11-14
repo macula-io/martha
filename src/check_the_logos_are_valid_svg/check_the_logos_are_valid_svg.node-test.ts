@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { checkTheLogosAreValidSvg } from './check_the_logos_are_valid_svg.ts'
 
 const REPO = join(import.meta.dirname, '..', '..')

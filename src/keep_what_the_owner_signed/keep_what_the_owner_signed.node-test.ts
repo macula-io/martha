@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openState, STATE_FILE_MODE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { ED25519 } from '../trust_only_signed_lists/ssh_signature.ts'
 import { fixtureKey, signLikeAHardwareKey } from '../trust_only_signed_lists/sign_like_a_hardware_key.ts'
 import { COMMAND_SHAPES_KIND, TRUST_LIST_NAMESPACE } from '../trust_only_signed_lists/trust_only_signed_lists.ts'

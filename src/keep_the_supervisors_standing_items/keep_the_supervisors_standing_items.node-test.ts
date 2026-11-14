@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import type { TodoHost } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import {
   DUE,

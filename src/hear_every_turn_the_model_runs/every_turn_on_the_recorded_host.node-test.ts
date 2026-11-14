@@ -36,8 +36,8 @@ import {
   type ModelRequest,
   type RecordedHostRun,
   type TheOwnersHands,
-} from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+} from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'

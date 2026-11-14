@@ -16,10 +16,10 @@ import { test } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
-import { whatTheHostSaysWithTheseSettings } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { whatTheHostSaysWithTheseSettings } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, userScopeUnder } from './refuse_a_member_writing_owner_memory.ts'
-import { HOST_TERMINAL } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
+import { HOST_TERMINAL } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
 import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 /** The rule written under the same place as `rule`, but under a tool the file permission checks never use. */

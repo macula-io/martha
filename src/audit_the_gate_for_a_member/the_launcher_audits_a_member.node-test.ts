@@ -24,12 +24,12 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
 const STATE_LINES = { append: appendStateLine, read: readStateFile }
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { GATE_AUDIT_PLACE, theLinesIn } from './audit_the_gate_for_a_member.ts'
 
 interface Places {

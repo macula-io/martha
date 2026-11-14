@@ -64,11 +64,11 @@ import {
 import {
   HOOK_SETTINGS_CHECK_MS,
   launchClaudeCodeMember,
-  NOT_STARTED,
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
 import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
 import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
@@ -77,7 +77,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
-import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
+import { RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
 import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'

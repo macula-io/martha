@@ -16,7 +16,7 @@ import { after, test } from 'node:test'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   A_FRESH_BUDGET,
   BACKOFF_MAX_MS,

@@ -32,7 +32,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 NAME="prove_the_relay_loads"
-HARNESS="src/launch_a_claude_code_member/drive_the_recorded_host.ts"
+HARNESS="src/drive_the_recorded_host/drive_the_recorded_host.ts"
 MARKER_FILE="src/check_every_recorded_host_test_is_run/recorded_host_skip.ts"
 BOUNDS="./prove_the_core/every_test_run_ends.ts"
 OUTPUT_CHECK="./prove_the_core/no_test_output_carries_the_environment.ts"

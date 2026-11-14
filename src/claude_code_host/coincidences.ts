@@ -7,7 +7,7 @@ import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_check
 import { CREW_ROWS_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/coincidences.ts'
 import { ANY_JSON_FILE } from '../launch_a_claude_code_member/coincidences.ts'
-import { RELAY_JOURNAL_SUFFIX } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
+import { RELAY_JOURNAL_SUFFIX } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 
 /**

@@ -22,7 +22,7 @@ const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string
 const COMMAND = fileURLToPath(new URL('../../src/run_the_martha_command/run_the_martha_command.ts', import.meta.url))
 const { startedLine } = /** @type {{ startedLine: (member: string, pid: string) => string }} */ (await import(COMMAND))
 // The relay's declared files and the name of a launch's copy of them (martha#117), computed for the same reason.
-const RELAY_COPY = fileURLToPath(new URL('../../src/launch_a_claude_code_member/relay_copy.ts', import.meta.url))
+const RELAY_COPY = fileURLToPath(new URL('../../src/serve_the_relay_to_a_launch/relay_copy.ts', import.meta.url))
 const { RELAY_FILES, RELAY_COPY_NAME } = /** @type {{ RELAY_FILES: readonly string[], RELAY_COPY_NAME: string }} */ (await import(RELAY_COPY))
 // A command run that hangs fails here instead of stalling the suite to its own timeout.
 const COMMAND_TIMEOUT_MS = 50_000

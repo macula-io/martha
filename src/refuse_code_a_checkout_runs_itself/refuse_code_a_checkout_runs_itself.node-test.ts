@@ -13,7 +13,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 import { gunzipSync } from 'node:zlib'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   GIT_HOOK_EVENTS,

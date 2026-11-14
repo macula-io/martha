@@ -12,7 +12,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 RECORDING="${REPO}/src/claude_code_host/recorded_claude_code_host.json"
-HARNESS="${REPO}/src/launch_a_claude_code_member/drive_the_recorded_host.ts"
+HARNESS="${REPO}/src/drive_the_recorded_host/drive_the_recorded_host.ts"
 VARIABLE_CONSTANT="RECORDED_HOST_VARIABLE"
 WORK="${1:-$(mktemp -d)}"
 mkdir -p "${WORK}"

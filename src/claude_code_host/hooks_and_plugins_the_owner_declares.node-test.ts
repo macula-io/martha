@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { SYNC_OFF_SETTING, HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from './recorded_claude_code_host.ts'
 import { hookSettingsWatch, markdownFolders } from './settings_that_turn_hooks_off.ts'

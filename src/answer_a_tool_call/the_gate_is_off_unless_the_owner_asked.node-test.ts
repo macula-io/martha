@@ -18,7 +18,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { readHandover, stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   WHAT_CLEARS_IT,

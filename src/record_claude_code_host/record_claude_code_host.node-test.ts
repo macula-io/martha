@@ -16,7 +16,7 @@ import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_cl
 import { CHUNK } from '../claude_code_host/protected_config_places.ts'
 import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
 import type { ManagedFolderGuardCalls } from './what_the_managed_folder_guard_calls.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)

@@ -14,7 +14,7 @@ import { CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE } from '../
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { DEPENDENCIES, LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { RELAY_JOURNAL_SUFFIX } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
+import { RELAY_JOURNAL_SUFFIX } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED } from '../write_my_handover/write_my_handover.ts'
