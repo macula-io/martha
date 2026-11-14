@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import {
   ACTS,
@@ -85,7 +85,7 @@ function theToolsOf(member: string): CrewTools {
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(join(home, 'the-crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'the-crew-store')) },
     menus: menusTheLauncherKeeps({ now: () => clock.at }),
   })
 }
@@ -210,7 +210,7 @@ function aPlaceOver(rows: string, held: { member?: string; processes?: Processes
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(join(home, 'the-crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'the-crew-store')) },
     ...held,
   })
 }
@@ -288,7 +288,7 @@ test('a place handed no menu record keeps its own over the crew clock, so a menu
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(join(home, 'the-crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'the-crew-store')) },
   })
   clock.at = 4_000
   TOLD(await place.answer(QUEUE_ASK, { ask: 'Remove the stale worktree?' }, 'session-lead'))

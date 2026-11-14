@@ -33,14 +33,14 @@ import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
-import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { readingOnly } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
@@ -227,7 +227,7 @@ function signedShapeNames(state: MarthaState): readonly string[] {
 function theCrewsStores(state: MarthaState, root: string): { readonly crew: CrewStore; readonly stamps: HandoverStampStore } {
   const crew = crewStateDirectory(state.state_root, root)
   if ('refusal' in crew) return { crew: { place: () => crew }, stamps: { read: () => crew, write: () => crew } }
-  return { crew: crewFilesDirectory(crew.path), stamps: handoverStampsIn(crew.path) }
+  return { crew: keepTheCrewsFilesAsDirectories(crew.path), stamps: handoverStampsIn(crew.path) }
 }
 
 /**
@@ -248,7 +248,7 @@ function ownersDefaultPlaceOf(request: MemberStartRequest): OwnersDefaultPlace |
  */
 export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readonly crew: string }): StoppingHost {
   return {
-    stores: { lifecycle: crewFilesDirectory(places.crew).place(LIFECYCLE_PLACE), rows: rowStreamsDirectory(places.launcher.rows) },
+    stores: { lifecycle: keepTheCrewsFilesAsDirectories(places.crew).place(LIFECYCLE_PLACE), rows: rowStreamsDirectory(places.launcher.rows) },
     launches: () => launchesIn(readingOnly(launchRecordsDirectory(places.launcher.launch_records))),
     processes: thisMachine.processes,
     clock: { now: () => Date.now() },

@@ -34,7 +34,7 @@ import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { wakeAMember } from '../wake_a_member/wake_a_member.ts'
 import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.ts'
@@ -205,7 +205,7 @@ async function wake(io: CommandIo, places: Places, member: string): Promise<numb
   if (typeof declaration === 'string') return refused(io, declaration)
   let running: MemberStarted | undefined
   const woken = await wakeAMember(
-    { stores: { crew: crewFilesDirectory(crew.path) }, stamps: handoverStampsIn(crew.path) },
+    { stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) }, stamps: handoverStampsIn(crew.path) },
     { member, declaration, at: new Date() },
     async (asking) => {
       const started = await startingTheMember(io, places, asking.member, [], asking.prompt)

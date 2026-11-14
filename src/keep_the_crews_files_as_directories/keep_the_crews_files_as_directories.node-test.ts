@@ -12,10 +12,10 @@ import {
   CREW_FILE_MODE,
   HANDOVER_STAMPS_PLACE,
   STAGING_PREFIX,
-  crewFilesDirectory,
+  keepTheCrewsFilesAsDirectories,
   handoverStampsIn,
   isAPlainName,
-} from './crew_files_directory.ts'
+} from './keep_the_crews_files_as_directories.ts'
 import type { CrewPlace, HandoverStamp } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 
@@ -32,7 +32,7 @@ function aCrew(name: string): string {
 }
 
 const placeOf = (crew: string, name: string): CrewPlace => {
-  const place = crewFilesDirectory(crew).place(name)
+  const place = keepTheCrewsFilesAsDirectories(crew).place(name)
   assert.ok(!('refusal' in place), `the store refused the place ${name}: ${'refusal' in place ? place.refusal : ''}`)
   return place
 }
@@ -72,7 +72,7 @@ test('#255: a place that others may write into is refused, and nothing is writte
   const crew = aCrew('open')
   mkdirSync(crew, { recursive: true, mode: CREW_DIRECTORY_MODE })
   chmodSync(crew, 0o777)
-  const refused = crewFilesDirectory(crew).place('handovers')
+  const refused = keepTheCrewsFilesAsDirectories(crew).place('handovers')
   assert.ok('refusal' in refused, 'a crew directory anyone may write into was accepted')
   assert.match(refused.refusal, /may be written by others/, 'the refusal does not say what is wrong with the directory')
   assert.deepEqual(readdirSync(crew), [], 'the store wrote into a directory it refused')
@@ -84,7 +84,7 @@ test('#255: a place that is a link to somewhere else is refused', () => {
   mkdirSync(elsewhere, { recursive: true, mode: CREW_DIRECTORY_MODE })
   mkdirSync(crew, { recursive: true, mode: CREW_DIRECTORY_MODE })
   symlinkSync(elsewhere, join(crew, 'handovers'))
-  const refused = crewFilesDirectory(crew).place('handovers')
+  const refused = keepTheCrewsFilesAsDirectories(crew).place('handovers')
   assert.ok('refusal' in refused, 'a place that is a link was followed')
   assert.match(refused.refusal, /is a link/, 'the refusal does not say the place is a link')
 })
@@ -156,7 +156,7 @@ test('#255 part 2: a stamp the store will not read is a refusal, never a handove
 
 test('#255: a place or a file name that is a path is refused, never translated into one', () => {
   const crew = aCrew('paths')
-  const store = crewFilesDirectory(crew)
+  const store = keepTheCrewsFilesAsDirectories(crew)
   for (const name of ['../elsewhere', 'a/b', '/etc', '.', '..', '', '..\\x', `${STAGING_PREFIX}x`]) {
     assert.equal(isAPlainName(name), false, `${JSON.stringify(name)} was accepted as a name`)
     assert.ok('refusal' in store.place(name), `${JSON.stringify(name)} was accepted as a place`)

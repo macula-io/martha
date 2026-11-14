@@ -6,7 +6,7 @@
 // host's, and a file a member wrote itself is not a handover and clears nothing (martha#16's rule 3, wired here).
 //
 // This slice owns the name of the file and the decision to write it; the directory is the crew store's and the writer
-// is host glue behind the host contract (src/crew_files_directory), so no slice of the core touches a disk. What it
+// is host glue behind the host contract (src/keep_the_crews_files_as_directories), so no slice of the core touches a disk. What it
 // keeps is the name: one file per member per day, in the crew's `handovers` place.
 //
 // The tool a member calls, and the flow that asks for a handover, are #254 part 2, and answer over a seam this does not

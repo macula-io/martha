@@ -27,10 +27,7 @@ export interface DeclaredException {
 
 /** Every place a crew-code name may stand, until the rename that takes it away. */
 export const EXCEPTIONS: readonly DeclaredException[] = [
-  { path: 'architecture/c4_diagrams.node-test.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and the slice is renamed by #473", removed_by: '#473' },
-  { path: 'architecture/c4_diagrams.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and the slice is renamed by #473", removed_by: '#473' },
   { path: 'architecture/c4_diagrams.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
-  { path: 'prove_the_core/only_the_launcher_writes_launch_records.node-test.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and the slice is renamed by #473", removed_by: '#473' },
   { path: 'src/a_crews_tools/a_crews_tools.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/a_crews_tools/the_refresh_flow_answers_the_session.node-test.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
@@ -49,10 +46,10 @@ export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/claude_code_relay/hooks/crew.tsx', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/claude_code_relay/hooks/crew.tsx', text: 'settle_asks', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/claude_code_relay/hooks/crew.tsx', text: 'take_asks', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
-  { path: 'src/crew_files_directory/crew_files_directory.node-test.ts', text: 'HANDOVER_2026-11-11_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
-  { path: 'src/crew_files_directory/crew_files_directory.node-test.ts', text: 'HANDOVER_2026-11-12_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
   { path: 'src/declare_crew/declare_crew.ts', text: '.crew', reason: "the refusal that tells a person their checkout still holds crew-code's declaration names this file", removed_by: STAYS },
   { path: 'src/declare_crew/declare_crew.ts', text: 'crew.json', reason: "the refusal that tells a person their checkout still holds crew-code's declaration names this file", removed_by: STAYS },
+  { path: 'src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.node-test.ts', text: 'HANDOVER_2026-11-11_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
+  { path: 'src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.node-test.ts', text: 'HANDOVER_2026-11-12_builder.md', reason: "a handover file is still named as crew-code names one", removed_by: 'the markers PR (martha#468 wave 2) — rows 9-11' },
   { path: 'src/launch_a_claude_code_member/a_tool_the_mod_posts_is_answered.node-test.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/launch_a_claude_code_member/launch_a_claude_code_member.node-test.ts', text: 'crew_refresh', reason: "the refresh source is still spelled with crew-code's tool name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/queue_the_owners_asks/queue_the_owners_asks.ts', text: 'list_asks', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },

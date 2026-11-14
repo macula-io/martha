@@ -6,7 +6,7 @@
 // file the member wrote itself is not a handover and clears nothing (this is martha#16's rule 3, wired here).
 //
 // The slice is driven through the contract's test host, with the crew store the host really composes over a directory
-// (../crew_files_directory), so what it writes is a file on a disk the way a launch writes one. The name the file has,
+// (../keep_the_crews_files_as_directories), so what it writes is a file on a disk the way a launch writes one. The name the file has,
 // and the stamp, are this slice's, and are what these cases pin.
 
 import assert from 'node:assert/strict'
@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, readHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -44,7 +44,7 @@ const THE_DAY = '2026-11-11'
 const CONTENT = '# Handover: builder\n\n## Package lines\n\n- macula-io/martha#255, branch vesta/255-part1, nothing committed\n'
 
 /** The contract's test host, over the crew's own store on this disk. */
-const aHost = (over: string = crew): HostForTests => hostForTests({ crew: crewFilesDirectory(over) })
+const aHost = (over: string = crew): HostForTests => hostForTests({ crew: keepTheCrewsFilesAsDirectories(over) })
 
 const sessions = (): SessionRecordStore => {
   const records = new Map<string, never>()

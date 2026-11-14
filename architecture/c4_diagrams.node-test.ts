@@ -270,7 +270,7 @@ test('every component box has a row in the Components table', () => {
 const boxHolding = (directory: string): { readonly name: string; readonly names: readonly string[] } =>
   components().coverage.find((box) => box.names.includes(directory))!
 const CREW_BOX = boxHolding('show_dashboard_beat')
-const STORE_BOX = boxHolding('crew_files_directory')
+const STORE_BOX = boxHolding('keep_the_crews_files_as_directories')
 const HANDOVER_BOX = boxHolding('write_my_handover')
 
 /** The table row whose Component cell opens with the given directory. */

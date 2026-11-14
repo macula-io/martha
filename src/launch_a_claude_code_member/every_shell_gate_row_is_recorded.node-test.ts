@@ -19,7 +19,7 @@ import { test, type TestContext } from 'node:test'
 
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
@@ -113,7 +113,7 @@ async function aCrewThatHandsAStandingItem(place: { readonly home: string; reado
     beats: dashboardRowsIn(join(place.home, 'beats')),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.home, 'crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.home, 'crew-store')) },
   })
 }
 

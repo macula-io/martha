@@ -371,14 +371,15 @@
 <text class="t-desc" x="364" y="2916">and martha stop: a stop is a request the</text>
 <text class="t-desc" x="364" y="2932">launcher holding the member acts on</text>
 <text class="t-desc" x="364" y="2948">(martha#312)</text>
-<rect class="b-cmp" x="664" y="2702" width="300" height="148" rx="10"/>
-<text class="t-code" x="680" y="2730">crew_files_directory</text>
-<text class="t-type" x="680" y="2748">[the crew's store, on this machine]</text>
-<text class="t-desc" x="680" y="2772">The host contract's crew store as files</text>
-<text class="t-desc" x="680" y="2788">in one directory: a place per name, a</text>
-<text class="t-desc" x="680" y="2804">file kept whole under a staging name</text>
-<text class="t-desc" x="680" y="2820">and 0600, and nothing read that is not</text>
-<text class="t-desc" x="680" y="2836">this user's alone (martha#254, #255)</text>
+<rect class="b-cmp" x="664" y="2702" width="300" height="166" rx="10"/>
+<text class="t-code" x="680" y="2730">keep_the_crews_</text>
+<text class="t-code" x="680" y="2748">files_as_directories</text>
+<text class="t-type" x="680" y="2766">[the crew's store, on this machine]</text>
+<text class="t-desc" x="680" y="2790">The host contract's crew store as files</text>
+<text class="t-desc" x="680" y="2806">in one directory: a place per name, a</text>
+<text class="t-desc" x="680" y="2822">file kept whole under a staging name</text>
+<text class="t-desc" x="680" y="2838">and 0600, and nothing read that is not</text>
+<text class="t-desc" x="680" y="2854">this user's alone (martha#254, #255)</text>
 <rect class="b-cmp" x="32" y="2980" width="300" height="358" rx="10"/>
 <text class="t-code" x="48" y="3008">switch_a_members_model,</text>
 <text class="t-code" x="48" y="3026">put_the_owners_model_back</text>

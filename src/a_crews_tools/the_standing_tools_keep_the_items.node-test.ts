@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { noneOfTheseIsHeld } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -80,7 +80,7 @@ function toolsOf(place: APlace, member: string): CrewTools {
     beats: dashboardRowsIn(join(place.rows, '..', 'beats')),
     root: place.root,
     documents: { read: documentsOf.get(place.root)! },
-    stores: { crew: crewFilesDirectory(join(place.rows, '..', 'crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, '..', 'crew-store')) },
   })
 }
 

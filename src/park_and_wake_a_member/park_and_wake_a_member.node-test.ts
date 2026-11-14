@@ -9,7 +9,7 @@
 // them — so an unpark is the same marker with `parked: false`, carrying who unparked it, why and when.
 //
 // Both are driven through the contract's test host, over the crew store the host really composes on a disk
-// (../crew_files_directory), so the marker read back is the file a launch would have left.
+// (../keep_the_crews_files_as_directories), so the marker read back is the file a launch would have left.
 
 import assert from 'node:assert/strict'
 import { chmodSync, mkdtempSync } from 'node:fs'
@@ -18,7 +18,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, stampHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
@@ -46,7 +46,7 @@ const AT = new Date('2026-11-11T15:00:00Z')
 const LATER = new Date('2026-11-12T09:00:00Z')
 
 /** The contract's test host, over the crew's own store on this disk. */
-const aHost = (): HostForTests => hostForTests({ crew: crewFilesDirectory(crew) })
+const aHost = (): HostForTests => hostForTests({ crew: keepTheCrewsFilesAsDirectories(crew) })
 
 const stampStore = (): HandoverStampStore & { readonly all: Map<string, HandoverStamp> } => {
   const all = new Map<string, HandoverStamp>()

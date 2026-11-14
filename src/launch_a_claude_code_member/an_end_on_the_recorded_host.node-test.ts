@@ -22,7 +22,7 @@ import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_t
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_LEAST } from '../declare_crew/declare_crew.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { crewStateDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { theHandoverPrompt } from '../write_my_handover/write_my_handover.ts'
@@ -102,7 +102,7 @@ const theCrewsStreams = (project: Project) => ({
 function theCrewsRefreshes(project: Project) {
   const crew = crewStateDirectory(join(stateHomeUnder(project.home), STATE_ROOT_NAME), project.checkout)
   if ('refusal' in crew) throw new Error(crew.refusal)
-  const place = refreshesPlace({ stores: { crew: crewFilesDirectory(crew.path) } })
+  const place = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } })
   if ('refusal' in place) throw new Error(place.refusal)
   return place
 }

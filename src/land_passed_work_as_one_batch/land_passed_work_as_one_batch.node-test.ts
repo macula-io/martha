@@ -20,7 +20,7 @@ import { test, type TestContext } from 'node:test'
 
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { DASHBOARD } from '../declare_crew/declare_crew.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
@@ -1323,7 +1323,7 @@ function theToolsOver(fixture: Fixture, tests: HostForTests): CrewTools {
     beats: dashboardRowsIn(join(fixture.root, DASHBOARD)),
     root: fixture.root,
     documents: { read: async () => '{}' },
-    stores: { crew: crewFilesDirectory(join(fixture.root, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(fixture.root, 'crew-files')) },
     processes: tests.host.processes,
   })
 }

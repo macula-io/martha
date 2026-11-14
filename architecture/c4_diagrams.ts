@@ -736,7 +736,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['A member\'s handover is written by the', 'host, at the path the host chose, and', 'stamped: one file per member per day', 'in the crew\'s own store, so a file the', 'member wrote itself is not a handover.', 'refresh_a_member is the flow around it:', 'when a refresh is due, the ask, the', 'send-back and the decline, the clear,', 'and the prompt the successor resumes on;', 'end_a_running_turn ends the turn a', 'handover waits behind (martha#311)'] },
     { col: 1, kind: 'b-cmp', name: 'park_and_wake_a_member', names: ['park_and_wake_a_member', 'wake_a_member', 'stop_and_restart_a_member'], type: '[a park that outlives a session]', code: true,
       desc: ['A member\'s park is a marker in the', 'crew\'s store, so a clear, a restart or a', 'refresh cannot lose it; who may park', 'another member is the declaration\'s', 'table, not who_may_act (martha#255 r=3).', 'wake_a_member is martha wake: the park', 'cleared and the member started on its', 'newest handover (part 2).', 'stop_and_restart_a_member is martha ls', 'and martha stop: a stop is a request the', 'launcher holding the member acts on', '(martha#312)'] },
-    { col: 2, kind: 'b-cmp', name: 'crew_files_directory', names: ['crew_files_directory'], type: '[the crew\'s store, on this machine]', code: true,
+    { col: 2, kind: 'b-cmp', name: 'keep_the_crews_files_as_directories', names: ['keep_the_crews_files_as_directories'], type: '[the crew\'s store, on this machine]', code: true,
       desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] },
   ],
   [

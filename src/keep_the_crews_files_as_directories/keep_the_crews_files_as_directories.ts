@@ -51,7 +51,7 @@ export function isAPlainName(name: string): boolean {
  * The crew's own store over the crew's directory, `crew` (../keep_martha_state_outside_the_checkout's
  * crewStateDirectory). The directory is made 0700 when it is missing, and refused when it is not this user's own.
  */
-export function crewFilesDirectory(crew: string): CrewStore {
+export function keepTheCrewsFilesAsDirectories(crew: string): CrewStore {
   return { place: (name) => placeIn(crew, name) }
 }
 

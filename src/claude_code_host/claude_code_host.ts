@@ -13,7 +13,7 @@
 //     only as `readingOnly` (#42): the writable store is the launcher's seam and
 //     never leaves the launcher; the disk's files and scratch directories, also
 //     from ../linux_process_identity (#26); and the crew's own store in
-//     ../crew_files_directory, over the crew's directory the launcher resolved
+//     ../keep_the_crews_files_as_directories, over the crew's directory the launcher resolved
 //     (martha#255);
 //   - processes: a child process run directly, so a signal reads as a null exit
 //     code (the engine's own runner reports it as 1), one run now and waited for
@@ -55,7 +55,7 @@ import { readFileSync } from 'node:fs'
 
 import { bindNothing, type Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import {
   readingOnly,
   type HostContract,
@@ -144,7 +144,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
       launches: readingOnly(launchRecordsDirectory(places.launch_records)),
       files: filesOnThisMachine,
       scratch: scratchOnThisMachine,
-      crew: crewFilesDirectory(places.crew),
+      crew: keepTheCrewsFilesAsDirectories(places.crew),
     },
     processes: thisMachine.processes,
     delivery: {

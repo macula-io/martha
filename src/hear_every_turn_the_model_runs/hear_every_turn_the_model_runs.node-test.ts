@@ -19,7 +19,7 @@ import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_OUT
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK, carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import type { ArrivingTurn } from '../host_contract/host_contract.ts'
@@ -125,7 +125,7 @@ function aLaunch(t: TestContext): ALaunch {
       beats: dashboardRowsIn(join(home, 'the-owners-rows')),
       root: checkout,
       documents: host.stores.documents,
-      stores: { crew: crewFilesDirectory(join(home, 'crew-files')) },
+      stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'crew-files')) },
       carrier: carryingTo({ member: MEMBER, host: channel }),
     }),
     turns,

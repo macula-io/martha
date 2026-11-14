@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -55,14 +55,14 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
   })
   return { tools, crew }
 }
 
 /** What the crew's store holds for `member`, as the wake and the launcher read it. */
 function theParkInTheStore(crew: string, member: string) {
-  const place = parkedPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = parkedPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), `the crew's store refused its park place: ${'refusal' in place ? place.refusal : ''}`)
   return theParkOf(place, member)
 }
