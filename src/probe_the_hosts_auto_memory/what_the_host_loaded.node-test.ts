@@ -12,7 +12,7 @@ import { test } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { memoryTheHostLoaded, memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
-import { theRecordsIn } from './probe_hosts.ts'
+import { theRecordsIn } from './probe_the_hosts_auto_memory.ts'
 
 const CODEWORD = 'ZEBRA0123abcd'
 /** The folder a run starts its host in, and one that is no run of ours. */

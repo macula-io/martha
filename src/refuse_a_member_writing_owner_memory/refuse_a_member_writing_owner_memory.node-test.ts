@@ -11,7 +11,7 @@ import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { entriesInText, SHELL_DEPTH_CAP } from './git_config_a_later_run_reads.ts'
+import { SHELL_DEPTH_CAP } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import {
   FILE_WRITING_TOOLS,
   gapsInTheNameMap,
@@ -1328,13 +1328,9 @@ test('a key on the line of its section header is read as git reads it (#192 r=2)
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'tools', 'y.sh'), 'a second header on the line')
 })
 
-// Mercurius's G6 (martha#192 r=3): git reads `[core] ; note` as the header and
-// nothing else — the key on the next line is its own entry (measured, 2.56.0, and in
-// five spellings: `; note`, `;note`, `# note`, `#note`, and either one stuck to the
-// bracket). The guard called the line an unmodelled form and refused every write into
-// the checkout, which is the refusing side but refuses a config git reads perfectly.
+// Mercurius's G6 (martha#192 r=3) as the guard meets it: a config git reads perfectly is no refusal. The parse itself is
+// pinned beside the parser, ../find_what_a_later_git_run_reads/git_config_a_later_run_reads.node-test.ts.
 test('a comment after a section header is no entry, and the key below it is git\'s (#192 r=3)', (t) => {
-  assert.deepEqual(entriesInText('/scratch/config', '[core] ; note\n\tkey = v\n'), { kind: 'entries', entries: [{ file: '/scratch/config', line: 2, key: 'core.key', value: 'v' }] })
   const place = placeFor(t)
   const checkout = checkoutWith(place, { config: '[core] ; note\n\thooksPath = hk6\n' })
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk6', 'pre-commit'), 'a key under a header that ends in a comment')
@@ -1343,13 +1339,6 @@ test('a comment after a section header is no entry, and the key below it is git\
   // The same in the spelling with the comment stuck to the bracket, and with `#`.
   writeFileSync(join(checkout, '.git', 'config'), '[core]#note\n\thooksPath = hk6b\n')
   assertRefusedAs192(placesFor(place), checkout, place.home, join(checkout, 'hk6b', 'pre-commit'), 'a comment stuck to the header')
-})
-
-test('an old-style subsection is lowercased as git lowercases it (#192 r=2)', () => {
-  // git reads `[sec.Sub]` as the section `sec.sub` (measured), and a guard that kept
-  // the case would read a key under a name git never looks the key up by.
-  const read = entriesInText('/scratch/config', '[sec.Sub]\n\tkey = v\n')
-  assert.deepEqual(read, { kind: 'entries', entries: [{ file: '/scratch/config', line: 2, key: 'sec.sub.key', value: 'v' }] })
 })
 
 test('a config the guard cannot read refuses every write into that checkout, naming the file and line (#192)', (t) => {

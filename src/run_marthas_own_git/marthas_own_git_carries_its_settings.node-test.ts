@@ -18,7 +18,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { GIT_SETTINGS_VARIABLE, switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { blobAsGitAdds } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { blobAsGitAdds } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { readTheCheckoutOnce } from '../run_an_owner_signed_command/read_the_checkout_once.ts'
 import { MARTHAS_OWN_GIT_SETTINGS, marthasOwnGitArgs, marthasOwnGitSettingsArgs } from './run_marthas_own_git.ts'
 
@@ -104,9 +104,13 @@ test('the switch stays off the member\'s environment, where a bare checkout is a
 /** What starts git: the command the host contract is given, or a process call whose first argument is git. */
 const STARTS_GIT = [/(?:^|[^\w.])command:\s*(['"])git\1/, /(?:^|[^\w.])(?:spawn|spawnSync|exec|execFile|execFileSync|execSync)\(\s*(['"`])git(?:\1\s*[,)]|\s)/]
 
+/** Why a probe script starts git: the probe runner and the auto-memory rows both make their own scratch repository. */
+const A_PROBES_OWN_SCRATCH = 'probe scripts that git init a scratch repository they made themselves'
+
 /** The files that start git for a reason of their own, and are not Martha's runs on a member's choice. */
 const OUTSIDE: Readonly<Record<string, string>> = {
-  'src/probe_launch_hosts/probe_hosts.ts': 'probe scripts that git init a scratch repository they made themselves',
+  'src/probe_launch_hosts/probe_hosts.ts': A_PROBES_OWN_SCRATCH,
+  'src/probe_the_hosts_auto_memory/probe_the_hosts_auto_memory.ts': A_PROBES_OWN_SCRATCH,
   'src/check_nothing_private_gets_in/read_sources.ts': 'the repository\'s own check, reading this repo\'s sources and never a member\'s tree',
 }
 

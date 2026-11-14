@@ -30,6 +30,7 @@ import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules
 import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../claude_code_host/markdown_the_host_loads.ts'
 import { protectedConfigPlacesIn } from '../claude_code_host/protected_config_places.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { failedAgentsReportIn } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
 import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 import { managedFolderGuardCallsIn } from './what_the_managed_folder_guard_calls.ts'
 
@@ -47,6 +48,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'markdown the host loads', read: markdownIn },
   { part: 'protected config places', read: protectedConfigPlacesIn },
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
+  { part: "a failed agent's report", read: (text) => ({ failed_agents_report: failedAgentsReportIn(text) }) },
 ]
 
 /** The markdown the host loads, and what its loader's managed-folder guard calls (martha#146, martha#412). */

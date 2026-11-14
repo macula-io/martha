@@ -24,7 +24,7 @@ import {
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { readCheckoutTree } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { readCheckoutTree } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import {
   CLAUDE_CODE,
   HOSTS,

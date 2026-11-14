@@ -11,6 +11,10 @@
 // keeps the calls the launcher allowed and has not seen answered, so an open tool is not read as silence
 // (../launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts reads all of it).
 //
+// A launcher also notes what it did on no event of the host's, where a run has nowhere else to read it (martha#430): a
+// telling that did not reach a member leaves the member's channel store's own refusal in the journal, so the one thing
+// the member's half of it did is written down rather than swallowed.
+//
 // It is kept with Martha's own per-project state, one file per launch under RELAY_JOURNAL_PLACE, rewritten whole under
 // a staging name. Only the last JOURNAL_EVENTS_KEPT lines are kept, beside a count of every line ever written, so a
 // long run cannot grow the file and a reader still sees it move. A launch writes an empty journal as it is made, so a
@@ -66,10 +70,13 @@ export const GAVE_UP_BEFORE_ALLOW = 'the relay gave up before this allow'
 /** What the launcher answered an event with, as the journal keeps it. */
 export type JournalAnswer = 'allow' | 'deny' | 'taken' | 'refused' | 'stopped'
 
-/** Whether a line says the launcher received the event or answered it. */
-export type JournalPhase = 'received' | 'answered'
+/**
+ * Whether a line says the launcher received the event, answered it, or is about something it did on no event of the
+ * host's at all — a telling that did not reach a member has no event to hang on.
+ */
+export type JournalPhase = 'received' | 'answered' | 'noted'
 
-/** One line of a launch's journal: an event the launcher received, or the answer it gave it. */
+/** One line of a launch's journal: an event the launcher received, the answer it gave it, or a thing it noted itself. */
 export interface JournalLine {
   /** When the line was written, on the launcher's clock. */
   readonly at: string
@@ -106,10 +113,23 @@ export interface RelayJournalRead {
 /** What a reader sees when there is no journal to read: a launch that never got as far as writing one. */
 export const NO_JOURNAL: RelayJournalRead = { launch: '', written: 0, open: [], events: [] }
 
-/** The journal one launch writes: a line when it receives an event, and one when it answers it. */
+/** The journal one launch writes: a line when it receives an event, one when it answers it, and one it chose to note. */
 export interface RelayJournal {
   /** The event arrived, before it queues: the line is stamped on this journal's own clock, like every other line. */
   received(event: RelayEvent, body: unknown): JournalEntry
+  /**
+   * Something the launcher took in that no relay event carried, as one answered line with its words (martha#440: a
+   * turn of unnamed source, heard from the mod's turn-start report): the record says what it was, this says it ran.
+   */
+  noted(event: string, why: string): void
+  /**
+   * Something the launcher set out to do and could not finish, where a run has nowhere else to read it: what it could
+   * not do, under `event`'s name, why, and — when it is about one of the host's calls — the call's own id (martha#430).
+   * A member not being told is the case this exists for: the store refused the line, so the journal is the only place
+   * that says the member's half of it did not happen, and which review's call it was about. It is a different line from
+   * `noted`: that one says the launcher took something in, this one says it did not manage to hand it on.
+   */
+  notedWhatItCouldNotFinish(event: string, why: string, tool_use_id?: string): void
 }
 
 /** The receipt of one event, answered once. */
@@ -253,9 +273,15 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
       // Stated in the header: a journal that cannot be written leaves the last one on disk, and the wait still ends.
     }
   }
+  const write = (line: JournalLine): void => {
+    writing.written += 1
+    writing.events.push(line)
+    keep()
+  }
   pruneOldJournals(directory)
   keep()
   return {
+    notedWhatItCouldNotFinish: (event, why, tool_use_id) => write({ at: isoOf(now()), phase: 'noted', event, why, ...(tool_use_id === undefined ? {} : { tool_use_id }) }),
     received: (event, body) => {
       const at = now()
       const call = callIn(body)
@@ -263,9 +289,7 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
       writing.receipts.push({ key, at })
       // The tool returned when the relay posts its answer, which is this line: the call is no longer the run's wait.
       if (event === 'tool_answered' && call.tool_use_id !== undefined) writing.open.delete(call.tool_use_id)
-      writing.written += 1
-      writing.events.push({ at: isoOf(at), phase: 'received', event, ...call })
-      keep()
+      write({ at: isoOf(at), phase: 'received', event, ...call })
       return {
         answered: (answer, why) => {
           const received_at = takeReceipt(writing, key)
@@ -274,11 +298,14 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
           if (call.tool_use_id !== undefined && opensACall(answer, call.tool_use_id, late)) {
             writing.open.set(call.tool_use_id, { tool_use_id: call.tool_use_id, tool: call.tool ?? '', at: isoOf(now_at) })
           }
-          writing.written += 1
-          writing.events.push(answerLineOf(event, call, answer, why, received_at, now_at))
-          keep()
+          write(answerLineOf(event, call, answer, why, received_at, now_at))
         },
       }
+    },
+    noted: (event, why) => {
+      writing.written += 1
+      writing.events.push({ at: isoOf(now()), phase: 'answered', event, answer: 'taken', why })
+      keep()
     },
   }
 }
@@ -286,7 +313,7 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
 const isLine = (value: unknown): value is JournalLine => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const line = value as Record<string, unknown>
-  return typeof line['at'] === 'string' && (line['phase'] === 'received' || line['phase'] === 'answered') && typeof line['event'] === 'string'
+  return typeof line['at'] === 'string' && (line['phase'] === 'received' || line['phase'] === 'answered' || line['phase'] === 'noted') && typeof line['event'] === 'string'
 }
 
 const isOpenCall = (value: unknown): value is OpenCall => {

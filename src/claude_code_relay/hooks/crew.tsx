@@ -64,6 +64,13 @@ const THE_PANES_RENDER = 'ui.render'
 /** What the mod asks the launcher for: the next message this member has not taken in (martha#253). */
 const THE_NEXT_MESSAGE = 'take_a_crew_message'
 
+/**
+ * What the mod tells the launcher at every turn start, so a handed message is taken in at the next main turn
+ * (martha#253), and so the launcher hears every main turn the model runs, the ones whose prompt the host never raised
+ * to this mod included (martha#440).
+ */
+const THE_TURN_STARTED = 'a_turn_started'
+
 /** What the mod asks the launcher for: how often, in seconds, to read the channel again (martha#253). */
 const THE_CHANNEL_READ = 'channel_read_seconds'
 
@@ -96,9 +103,9 @@ let theReading: ReturnType<typeof readingTheChannelWith> | null = null
 
 /**
  * The reading this session holds (martha#253, slice 2): the launcher answers with the framed text of the next crew
- * message the member has not taken in, and the mod submits it as a prompt. Only an idle submit is raised back through
- * the prompt hook, and that raise is what counts the message as taken in — so the reading is the one rule in
- * ./crew_channel_reading.ts, and every hook here goes through it.
+ * message the member has not taken in, and the mod submits it as a prompt, only while the session is idle. The launcher
+ * counts it taken in when the next main turn starts, which `turn.start` below reports — so the reading is the one rule
+ * in ./crew_channel_reading.ts, and every hook here goes through it.
  */
 function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWith> {
   theReading ??= readingTheChannelWith(
@@ -106,9 +113,7 @@ function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWi
       const heard = await hearTheLauncher($, THE_NEXT_MESSAGE, {})
       return 'said' in heard ? heard.said : null
     },
-    async (text) => {
-      await $.prompt.submit({ text })
-    },
+    (text) => $.prompt.submit({ text }),
   )
   return theReading
 }
@@ -191,8 +196,8 @@ async function askTheLauncherQuietly($: CrewEngine, tool: string, args: Readonly
 /** How long after the turn the clear is run: out of the hook, so the host is not holding a turn while it clears. */
 const CLEAR_DELAY_MS = 500
 
-/** A field of an event as text, or '' — the two shapes the host stamps a turn's answer with. */
-function textIn(e: unknown, field: 'turnId' | 'answer'): string {
+/** A field of an event as text, or '': a turn's id and its text at its start, and its answer at its end. */
+function textIn(e: unknown, field: 'turnId' | 'text' | 'answer'): string {
   const held = typeof e === 'object' && e !== null ? (e as Record<string, unknown>)[field] : undefined
   return typeof held === 'string' ? held : ''
 }
@@ -423,13 +428,18 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
     return next(e)
   })
 
-  // A turn is running from `turn.start` until it ends, and the channel is read only outside one: the host queues a
-  // submit made during a turn and never raises it back, so it could never be counted as taken in (martha#253 r=2).
-  // The host fires both events for a subagent's turn too; those carry the agent, and the rule ignores them, or a
-  // subagent finishing inside the member's own turn would read as the member going idle.
+  // A turn is running from `turn.start` until it ends, and the channel is read only outside one: a submit made while
+  // the session is idle is queued into the next main turn, and that turn's start is what counts the message taken in.
+  // The launcher is told of every start, with the agent it carries; it counts only a main one (martha#253, Pluto's
+  // ruling (a)). The host fires both events for a subagent's turn too; those carry the agent, and the reading ignores
+  // them, or a subagent finishing inside the member's own turn would read as the member going idle. The start carries
+  // the turn's id and its text, the turn's last user message: a prompt this mod submitted from its own timer is never
+  // raised to its `prompt.submit` (the host's re-entry rule), so this is the only place the launcher hears that turn
+  // (martha#440).
   on('turn.start', ($: CrewEngine, e: unknown, next: CrewNext) => {
     theChannelReading($).aTurnStarted(agentIdIn(e))
     theTurnBeat($).aTurnStarted(agentIdIn(e), textIn(e, 'turnId'))
+    void hearTheLauncher($, THE_TURN_STARTED, { agentId: agentIdIn(e), turnId: textIn(e, 'turnId'), text: textIn(e, 'text') })
     return next(e)
   })
 

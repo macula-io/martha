@@ -19,7 +19,7 @@
 //
 //   2. APPROVAL IS BY CONTENT, NEVER BY NAME, AND COVERS WHAT THE CONFIG RUNS.
 //      The fingerprint holds every listed file's content hash, which of them are
-//      absent, and the checkout's work tree (./checkout_tree.ts): a pull that
+//      absent, and the checkout's work tree (../judge_a_checkouts_tree/checkout_tree.ts): a pull that
 //      changes only the script an approved hook runs changes the fingerprint.
 //      Claude Code's own approval is a list of server names, which is why it
 //      cannot be this control.
@@ -44,13 +44,13 @@
 //
 // The gate reaches the machine only through the host contract (martha#26): it
 // reads files through `stores.files`, writes snapshots into `stores.scratch` and
-// runs git through `processes.runNow` (./checkout_tree.ts). Every reader takes
+// runs git through `processes.runNow` (../judge_a_checkouts_tree/checkout_tree.ts). Every reader takes
 // the host it reads through.
 
 import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
-import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from './checkout_tree.ts'
+import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 
@@ -245,7 +245,7 @@ export type ConfigEntry =
 /** Everything an approval binds: the config, and the work tree the config runs. */
 export interface LaunchState {
   readonly entries: readonly ConfigEntry[]
-  /** The checkout's work tree (./checkout_tree.ts), or `null` outside any checkout below the stop. */
+  /** The checkout's work tree (../judge_a_checkouts_tree/checkout_tree.ts), or `null` outside any checkout below the stop. */
   readonly tree: string | null
   /**
    * Set when the work tree could not be read at all, or was read and is not the tree the owner approved: the words to

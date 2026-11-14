@@ -76,6 +76,8 @@ function aCrewRefusingEverything(asked: string[]): CrewTools {
     theLineToHandAtStart: async () => null,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,
+    theReviewModelOfTheCall: async () => null,
+    theReviewModel: async () => null,
     // This crew hears no menu close, which is what the ask queue reads a settle on (martha#313).
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async (call) => {

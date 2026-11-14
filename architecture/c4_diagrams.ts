@@ -582,6 +582,26 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
   {
+    name: 'declare_a_launch_probe',
+    why: 'what one row of npm run probe:launch is, shared by its rows and its runner; the command never loads it',
+  },
+  {
+    name: 'probe_a_checkouts_own_config',
+    why: "npm run probe:launch's rows about a checkout's own config; the command never loads them",
+  },
+  {
+    name: 'probe_the_owners_hooks',
+    why: "npm run probe:launch's rows about the owner's hooks; the command never loads them",
+  },
+  {
+    name: 'probe_the_owners_own_folders',
+    why: "npm run probe:launch's rows about the owner's own folders; the command never loads them",
+  },
+  {
+    name: 'probe_the_hosts_auto_memory',
+    why: "npm run probe:launch's rows about the host's auto-memory; the command never loads them",
+  },
+  {
     name: 'record_mesh_answers',
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
@@ -668,8 +688,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] },
     { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member'], type: '[the launcher]', code: true,
       desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners, and hand_a_', 'crew_message_to_its_member hands one', 'message at a time and counts it taken', 'in; run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] },
-    { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git', 'empty_directory_of_a_launch'], type: '[the launch gate]', code: true,
-      desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries, and', 'empty_directory_of_a_launch the place', 'their hooks are pointed at'] },
+    { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'judge_a_checkouts_tree', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git', 'empty_directory_of_a_launch'], type: '[the launch gate]', code: true,
+      desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; judge_a_checkouts_tree', 'reads and judges a checkout\'s tree;', 'refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries, and', 'empty_directory_of_a_launch the place', 'their hooks are pointed at'] },
   ],
   [
     { col: 0, kind: 'b-dat', name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory', 'dashboard_rows_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
@@ -690,8 +710,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
       desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] },
-    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'hear_the_hosts_dialogs', 'refuse_a_member_writing_owner_memory'], type: '[the Claude Code host]', code: true,
-      desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools;', 'hear_the_hosts_dialogs reads in the', 'crew\'s words the dialogs the host', 'raises; refuse_a_member_writing_', 'owner_memory keeps a member\'s writes', 'out of the owner\'s memory'] },
+    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'hear_the_hosts_dialogs', 'refuse_a_member_writing_owner_memory', 'find_what_a_later_git_run_reads', 'hear_every_turn_the_model_runs'], type: '[the Claude Code host]', code: true,
+      desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools;', 'hear_the_hosts_dialogs reads in the', 'crew\'s words the dialogs the host', 'raises; refuse_a_member_writing_', 'owner_memory keeps a member\'s writes', 'out of the owner\'s memory, and find_', 'what_a_later_git_run_reads reads what', 'a later git run would read;', 'hear_every_turn_the_model_runs hears', 'each turn the model runs, whatever', 'started it'] },
     { col: 2, kind: 'b-cmp', name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg', 'check_no_test_the_base_passed_goes_missing', 'check_posted_text_carries_nothing_private', 'check_no_literal_restates_a_value', 'check_a_host_directory_stays_under_its_ceiling', 'check_every_recorded_host_test_is_run'], type: '[this repository\'s own checks]', code: true,
       desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; so does a home path in the text', 'members post on GitHub, which check_', 'posted_text_carries_nothing_private', 'reads daily. A badge host that answers', '408 is asked again before its link is', 'broken; check_the_logos_are_valid_svg', 'holds every logo to well-formed XML;', 'check_no_test_the_base_passed_goes_', 'missing names a dropped test, and', 'check_no_literal_restates_a_value', 'names a literal spelling out a value', 'an exported constant already holds;', 'check_a_host_directory_stays_under_', 'its_ceiling fails a host directory', 'one code line over its ceiling, by name;', 'check_every_recorded_host_test_is_run', 'names a recorded-host case no CI job runs'] },
   ],
@@ -720,8 +740,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] },
   ],
   [
-    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model'], type: '[a member\'s model, and the owner\'s]', code: true,
-      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
+    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model', 'name_a_review_the_host_reported_failed', 'read_a_failed_agents_report'], type: '[a model, the owner\'s, a review\'s]', code: true,
+      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model;', 'read_a_failed_agents_report cuts the', 'host\'s failed-agent report from its own', 'text, and name_a_review_the_host_', 'reported_failed names that review, on the', 'model it ran on and in the host\'s words', '(martha#390)'] },
   ],
 ]
 

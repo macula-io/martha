@@ -64,6 +64,8 @@ function aCrewHolding(ends: TheEndsHold): CrewTools {
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
     ends,
+    theReviewModelOfTheCall: async () => null,
+    theReviewModel: async () => null,
     thePredecessorOf: async () => null,
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async () => undefined,

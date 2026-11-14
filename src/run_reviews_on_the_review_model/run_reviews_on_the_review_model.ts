@@ -14,6 +14,8 @@
 // Which tool spawns a subagent, and which of its arguments carry the type, the description and the model, are the
 // adapter's to say; the core compares the names the adapter has resolved and never splits a model id itself.
 
+import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+
 // Which tool spawns a subagent, and which of its arguments carry the type, the description and the model, are the
 // adapter's to say. The two names are compared as they are written: the host publishes no mapping from an alias to a
 // full model id, so the alias IS the name the host takes in that field, and Martha invents no second spelling for it.
@@ -95,4 +97,69 @@ function wordsOf(text: string): readonly string[] {
 /** A field of a call as text, trimmed; '' when the member named none. */
 function textOf(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+/** What the crew's declaration said, or why it could not be read: what the rule is decided over here. */
+export type TheCrewsDeclaration = { readonly settings: CrewSettings } | { readonly refused: string }
+
+/** What a launch hands the rule: the declaration as it is read, and the host's own shape for a spawn. */
+export interface WhatTheReviewRuleReads {
+  readonly declared: () => Promise<TheCrewsDeclaration>
+  readonly spawn: ASpawnedAgent | undefined
+}
+
+/**
+ * The three questions the launcher asks about a crew's reviews: whether a subagent call is refused (martha#315), and
+ * which allowed call is one of the crew's reviews on its reviewer model and what that model is (martha#390).
+ */
+export interface TheReviewRule {
+  /** Why a subagent call this member made is not run: it spawns a review and does not name the reviewer model. */
+  refusesTheSubagent(call: ASubagentCall): Promise<string | undefined>
+  /** The crew's reviewer model when this call is one of its reviews on it, or null for any other call. */
+  theReviewModelOfTheCall(call: ASubagentCall): Promise<string | null>
+  /** The crew's reviewer model as the declaration names it, or null when it names none or cannot be read. */
+  theReviewModel(): Promise<string | null>
+}
+
+/**
+ * The rule, over one launch's places (martha#390 r=4): all three questions are the same rule read three ways, so they
+ * are answered here from one reading of the declaration, and the adapter only says where the declaration and the host's
+ * spawn shape are. A launch that cannot say what a spawn looks like refuses a review rather than letting it run unheld
+ * (martha#315): the rule is the crew's, and a launcher that cannot judge it is not one that may pass it.
+ */
+export function theReviewRuleOver(reads: WhatTheReviewRuleReads): TheReviewRule {
+  return {
+    refusesTheSubagent: async (call) => refusesTheSubagentIn(call, await reads.declared(), reads.spawn),
+    theReviewModelOfTheCall: async (call) => theReviewModelOfTheCallIn(call, await reads.declared(), reads.spawn),
+    theReviewModel: async () => theReviewModelIn(await reads.declared()),
+  }
+}
+
+/** Why a subagent call is not run, or undefined when nothing refuses it (martha#315). */
+function refusesTheSubagentIn(call: ASubagentCall, declared: TheCrewsDeclaration, spawn: ASpawnedAgent | undefined): string | undefined {
+  if ('refused' in declared) return undefined
+  const review_model = declared.settings.house_rules.review_model
+  if (review_model === null) return undefined
+  if (spawn === undefined) {
+    return `${call.tool} is not run: this crew holds reviews to ${review_model}, and this launch cannot say which tool spawns a subagent, so no review may run.`
+  }
+  return reviewModelRefusal(call, { spawn, review_model })
+}
+
+/**
+ * The crew's reviewer model when this call spawns one of its reviews on it (martha#390), or null. It is the same rule
+ * `reviewModelRefusal` applies, read the other way round: the call is a review by the words the rule itself matches, and
+ * the model it names is the crew's reviewer model as the declaration spells it.
+ */
+function theReviewModelOfTheCallIn(call: ASubagentCall, declared: TheCrewsDeclaration, spawn: ASpawnedAgent | undefined): string | null {
+  if ('refused' in declared) return null
+  const review_model = declared.settings.house_rules.review_model
+  if (review_model === null || spawn === undefined) return null
+  if (!spawn.tools.includes(call.tool) || !isAReview(call.input, spawn)) return null
+  return textOf(call.input[spawn.model_field]) === review_model ? review_model : null
+}
+
+/** The crew's reviewer model as the declaration names it, or null when it names none or cannot be read (martha#390). */
+function theReviewModelIn(declared: TheCrewsDeclaration): string | null {
+  return 'refused' in declared ? null : declared.settings.house_rules.review_model
 }

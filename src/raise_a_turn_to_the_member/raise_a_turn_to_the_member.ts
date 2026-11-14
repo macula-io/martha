@@ -21,6 +21,8 @@ export interface TurnRaising {
    * beside its text. A turn is raised only once the session it arrived in took it in.
    */
   prompted(text: string, origin_kind: string, carries: PromptCarries): void
+  /** Raises one turn whose source the launcher already named: one the host never raised as a prompt (martha#440). */
+  arrived(turn: ArrivingTurn): void
 }
 
 /** A raising that starts with no listeners; a member's launcher puts it on the relay's place. */
@@ -30,6 +32,9 @@ export function turnsRaised(): TurnRaising {
     onTurn: (take) => void listeners.push(take),
     prompted: (text, origin_kind, carries) => {
       const turn: ArrivingTurn = { text, arrival: arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin_kind, carries) }
+      for (const take of listeners) take(turn)
+    },
+    arrived: (turn) => {
       for (const take of listeners) take(turn)
     },
   }

@@ -12,6 +12,7 @@
 // |---|---|
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
+// | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message that no heard prompt started (its text, or a slash command's line), `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
 // | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
@@ -41,10 +42,13 @@ import {
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import { nameTheFailedReviewIn, resolvedModelIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
@@ -148,8 +152,30 @@ export interface MemberRelayPlace {
    * is the row's change. A launch given none writes no row and rings nothing.
    */
   readonly screen?: TheScreenKeeper
+  /**
+   * Where a line of Martha's own about this member goes (martha#390): its row, and the member's own session. Absent, a
+   * launch tells neither and every other answer is as it was.
+   */
+  readonly telling?: TheMembersTelling
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
+}
+
+/** The two places a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member. */
+export interface TheMembersTelling {
+  /** The member's row: the line goes where the owner's dashboard reads what is waiting. */
+  theRow(line: string): void
+  /**
+   * The member's own session: the line is handed to it as a turn, through the crew's own channel. `call` is the host's
+   * id for the review the line is about, when the line is about one, so a refusal can be written down against it
+   * (martha#430).
+   */
+  theMember(line: string, call?: string): Promise<void>
+  /**
+   * The line this launcher put in the row leaves it again (martha#390 r=1): the member has taken the matter up, so what
+   * needed the owner no longer does. Only this launcher's own line goes — a line another owner wrote stays where it is.
+   */
+  takeTheLineBack(): void
 }
 
 /** Why a run is refused for a member launched without signed runs. */
@@ -190,6 +216,10 @@ interface RelayState {
   readonly broken: Map<string, string>
   /** The agents this host has started under a session, by the id the host stamps (martha#170). */
   readonly agents: Map<string, AgentRun>
+  /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
+  readonly everyTurn: HearingEveryTurn
+  /** The review calls this launcher allowed, by the host's id for the call, and what it resolved to (martha#390). */
+  readonly reviews: TheReviewSpawns
 }
 
 /**
@@ -282,8 +312,17 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     sessions,
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
+    everyTurn: hearingEveryTurn({ keep: async (id, arrival) => keepATurn(state, id, arrival), ...place, now }),
+    reviews: reviewSpawnsRemembered(),
   }
   let queue: Promise<unknown> = Promise.resolve()
+
+  /** Runs `work` after every event already queued, so it reads the record the one before it wrote. */
+  const inOrder = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = queue.then(work)
+    queue = next.catch(() => undefined)
+    return next
+  }
 
   const stop = (why: string): RelayReply => stopMember(place, why)
 
@@ -319,17 +358,15 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
       // The receipt line is stamped here, synchronously, before the event queues: an event waiting its turn is timed
       // from when it arrived rather than from when the queue reached it (martha#240).
       const journaled = place.journal?.received(event, body)
-      const next = queue.then(async () => {
+      return inOrder(async () => {
         const reply = await answerOne(event, body)
         // Written before the answer goes back, so an event this launcher has answered is on disk at once.
         journaled?.answered(journalAnswerOf(reply), refusalReasonOf(reply))
         return reply
       })
-      queue = next.catch(() => undefined)
-      return next
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
-    answerTool: async (body) => answerACoreTool(state, body),
+    answerTool: async (body) => answerAToolAndHearItsTurn(state, body, inOrder),
   }
 
   /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
@@ -385,6 +422,23 @@ async function answerACoreTool(state: RelayState, body: unknown): Promise<Answer
   const why = await takeInARefreshedSession(state, call.session_id)
   if (why !== undefined) return { refused: why }
   return place.crew.answer(call.tool, call.args, call.session_id)
+}
+
+/**
+ * A tool call the mod posted, answered; and a main turn's start it reported, recorded among the host's events after the
+ * carrier decided what the turn took in (martha#440): the record follows that decision, never one of its own.
+ */
+async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrder: (work: () => Promise<void>) => Promise<void>): Promise<Answered | Refused> {
+  const answer = await answerACoreTool(state, body)
+  const start = state.everyTurn.startIn(body, answer)
+  if (start !== undefined) await inOrder(async () => state.everyTurn.recorded(start))
+  return answer
+}
+
+/** Takes a turn the host never raised as a prompt into its session's record (martha#440); false when it was not kept. */
+async function keepATurn(state: RelayState, session_id: string, arrival: Arrival): Promise<boolean> {
+  const session = sessionNamed(state, session_id)
+  return typeof session !== 'string' && (await keep(state, takeInTurn(session, arrival, state.place.binder))) === undefined
 }
 
 /** A tool call's three fields, or undefined when the body is not one. */
@@ -571,12 +625,15 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   if (why !== undefined) return refused(why)
+  // Heard, so the turn it starts (or the running turn it is folded into) is in the record already (martha#440).
+  state.everyTurn.heard(session.id, { text: body.text, command: theCommandNamed(body.command) })
   // A dialog an earlier turn left open is dropped as this turn starts (martha#313): a prompt nobody answered cannot pin
   // the row at "needs you" for the rest of the session. Only a prompt this launcher took in starts a turn.
   state.place.screen?.heard(session.id, { said: 'turn-started' }, now())
   // The turn is kept, so the host really took it in: it is raised to whatever waits on turns, in the shape the host
   // contract names (martha#253). A prompt this launcher refused is never raised.
   state.place.turns?.prompted(body.text, origin.kind, whatAPromptCarries(body))
+  await nameTheReviewTheHostReportsFailed(state, body.text, origin.kind)
   return answered(TAKEN)
 }
 
@@ -691,6 +748,51 @@ async function subagentStopped(state: RelayState, body: Body): Promise<RelayRepl
   return why === undefined ? answered(TAKEN) : refused(why)
 }
 
+/**
+ * Keeps an Agent call this launcher allowed when it is one of the crew's reviews on its reviewer model (martha#390), so
+ * a failure the host reports later can be read as that review's and as no other's. A crew that names no reviewer model,
+ * and a call that is not a review on it, keep nothing.
+ *
+ * An allowed review is also the member taking up again whichever review stopped before it: the line that one left in
+ * the row has been acted on, and leaves it here (martha#390 r=1).
+ */
+async function noteTheReviewThisLauncherLetThrough(state: RelayState, call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>>; readonly id: string | undefined }): Promise<void> {
+  const crew = state.place.crew
+  if (crew === undefined || call.id === undefined) return
+  const review_model = await crew.theReviewModelOfTheCall(call)
+  if (review_model === null) return
+  state.reviews.remember(call.id, review_model)
+  state.place.telling?.takeTheLineBack()
+}
+
+/**
+ * Keeps the model the host said a kept review call resolved to (martha#390): the call's answer carries the agent's own
+ * model, and that — never a name out of the host's prose — is what a line about the review names it by.
+ */
+function noteWhatTheReviewResolvedTo(state: RelayState, call: { readonly id: string | undefined }, answer: unknown): void {
+  if (call.id === undefined || state.reviews.theSpawn(call.id) === undefined) return
+  const resolved = resolvedModelIn(answer)
+  if (resolved !== undefined) state.reviews.resolved(call.id, resolved)
+}
+
+/**
+ * The host's own report of a review that failed, named to the member and its row (martha#390): the envelope's fixed
+ * fields decide it, the model is the one the allowed call resolved to, and the host's summary is repeated verbatim.
+ * Nothing relaunches the review, and no second model is chosen anywhere.
+ *
+ * What the line is, where it goes, and the call being forgotten once it is written (martha#430) are the slice's
+ * (../name_a_review_the_host_reported_failed); here is only what this launch can hand it: the crew's reviewer model,
+ * and the row and the member the telling reaches.
+ */
+async function nameTheReviewTheHostReportsFailed(state: RelayState, text: string, origin_kind: string): Promise<void> {
+  const crew = state.place.crew
+  const telling = state.place.telling
+  if (crew === undefined || telling === undefined) return
+  const review_model = await crew.theReviewModel()
+  if (review_model === null) return
+  await nameTheFailedReviewIn(state.reviews, text, { origin_kind, review_model, report: THE_HOSTS_FAILED_REVIEW }, telling)
+}
+
 async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
   const named = sessionNamed(state, body.session_id)
@@ -703,6 +805,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const denial = await theDenialOfACall(state, session, call, agent_id)
   if (denial !== undefined) return denied(denial)
   place.signed_runs?.callAllowed(call.tool, call.input)
+  await noteTheReviewThisLauncherLetThrough(state, call)
   // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
   // the tool runs, and never when this launcher refused the call, because a refused call never runs.
   closeTheDialogTheCallRan(state, session, body, call)
@@ -765,6 +868,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
+  noteWhatTheReviewResolvedTo(state, call, body.answer)
   // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears.
   place.crew?.noteTheCallsAnswer({ tool: call.tool }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).

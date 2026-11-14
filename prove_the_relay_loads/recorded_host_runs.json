@@ -16,6 +16,11 @@
     "proves": "the host matches every rule the launch writes, and names an inert twin of one (martha#226)"
   },
   {
+    "file": "src/launch_a_claude_code_member/a_review_at_its_limit_on_the_recorded_host.node-test.ts",
+    "cases": 1,
+    "proves": "a review the reviewer model refused is named to the member and its row (martha#390)"
+  },
+  {
     "file": "src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts",
     "cases": 2,
     "proves": "a member switches its model in this host and a review off the reviewer model is refused (martha#315)"
@@ -34,5 +39,10 @@
     "file": "src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts",
     "cases": 2,
     "proves": "a member's switch in this host leaves the owner's own default alone (martha#359)"
+  },
+  {
+    "file": "src/hear_every_turn_the_model_runs/every_turn_on_the_recorded_host.node-test.ts",
+    "cases": 6,
+    "proves": "the launcher hears every main turn the model runs, one the mod's timer submitted included, each recorded once, and a paste, a background agent's delivered answer and a slash command are no turn of unnamed source (martha#440)"
   }
 ]

@@ -50,6 +50,7 @@
       "src/claude_code_relay",
       "src/dashboard_rows_directory",
       "src/declare_a_solo_crew",
+      "src/find_what_a_later_git_run_reads",
       "src/hear_the_hosts_dialogs",
       "src/install_the_pinned_installer",
       "src/install_the_recorded_mesh_server",
@@ -68,16 +69,17 @@
     ],
     "hostCeilings": {
       "src/approve_a_checkouts_config": 76,
-      "src/claude_code_host": 1496,
-      "src/claude_code_relay": 796,
+      "src/claude_code_host": 1531,
+      "src/claude_code_relay": 797,
       "src/declare_a_solo_crew": 84,
+      "src/find_what_a_later_git_run_reads": 494,
       "src/install_the_pinned_installer": 124,
       "src/install_the_recorded_mesh_server": 312,
       "src/keep_martha_state_outside_the_checkout": 429,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 2823,
+      "src/launch_a_claude_code_member": 2938,
       "src/list_stop_and_restart_the_crew": 90,
-      "src/refuse_a_member_writing_owner_memory": 1088,
+      "src/refuse_a_member_writing_owner_memory": 594,
       "src/run_an_owner_signed_command": 569,
       "src/run_the_martha_command": 414,
       "src/run_the_nodes_own_npm_alone": 165,
@@ -90,11 +92,16 @@
       "src/row_streams_directory": 165,
       "src/owners_settings_directory": 173
     },
+    "programParts": {
+      "src/declare_a_launch_probe": "src/probe_launch_hosts",
+      "src/probe_a_checkouts_own_config": "src/probe_launch_hosts",
+      "src/probe_the_hosts_auto_memory": "src/probe_launch_hosts",
+      "src/probe_the_owners_hooks": "src/probe_launch_hosts",
+      "src/probe_the_owners_own_folders": "src/probe_launch_hosts"
+    },
     "sliceCap": 600,
     "sliceCeilings": {
-      "src/a_crews_tools": 1293,
-      "src/probe_launch_hosts": 1143,
-      "src/refuse_launch_of_unapproved_config": 881,
+      "src/a_crews_tools": 1280,
       "src/refresh_a_member": 878
     },
     "packageImports": {

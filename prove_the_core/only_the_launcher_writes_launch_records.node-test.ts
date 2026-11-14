@@ -10,16 +10,16 @@ import {
   launchRecordWritesOutsideTheLauncher,
   type PlantedSource,
 } from './only_the_launcher_writes_launch_records.ts'
-import { manifestOf, programsRunByScriptsOf, testSuffixesOf } from './declared_in_package_json.ts'
+import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
 
 const repository = join(import.meta.dirname, '..')
 
 // The host glue package.json declares: directories under src/ that implement the
 // contract on a real machine, so they are not slices (#42).
 const hostGlue = [...declaredHostGlue(repository), ...declaredHostGlue(repository, 'hostAdapters')]
-// The test files and the programs package.json runs: no slices, so they may import glue.
+// The test files, the programs package.json runs and their declared parts (martha#443): no slices, so they may import glue.
 const testSuffixes = testSuffixesOf(manifestOf(repository))
-const programs = programsRunByScriptsOf(manifestOf(repository))
+const programs = programsAndTheirPartsOf(manifestOf(repository))
 
 interface Planted {
   readonly caught: Readonly<Record<string, { readonly text: string; readonly lines: readonly number[]; readonly extension?: string }>>
@@ -42,6 +42,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'claude_code_relay',
     'dashboard_rows_directory',
     'declare_a_solo_crew',
+    'find_what_a_later_git_run_reads',
     'hear_the_hosts_dialogs',
     'install_the_pinned_installer',
     'install_the_recorded_mesh_server',
