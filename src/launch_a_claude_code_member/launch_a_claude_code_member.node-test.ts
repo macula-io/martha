@@ -2799,6 +2799,12 @@ interface OwnersTerminal {
   press(keys: string): void
   /** What the terminal has shown so far. */
   shown(): string
+  /**
+   * The status the launcher ended with and the last of what it printed, when it ended without starting a member
+   * (martha#454): a script that cannot load dies before the launcher says `started`, so nothing else it could say
+   * tells a test why the member never came. Undefined while it runs, and for one that started or refused one.
+   */
+  launcherEnd(): { readonly code: number; readonly said: string } | undefined
 }
 
 /** How the owner's terminal launches: what it starts, its environment, and where the launcher's stderr goes. */
@@ -2816,6 +2822,8 @@ interface TerminalLaunch {
   readonly deadlines?: SessionStartDeadlines
   /** The owner's arguments to the host, instead of a prompt to print an answer to. */
   readonly args?: readonly string[]
+  /** The launcher script the terminal runs, instead of the one the harness writes, for a script that cannot load (martha#454). */
+  readonly launcher_script?: string
 }
 
 /** The deadlines a test gives a launch in place of the launcher's own. */
@@ -2841,13 +2849,41 @@ async function ownersTerminal(t: TestContext, place: Place, how: TerminalLaunch 
 /** The line the launcher process prints when it refuses (launcherProcess), as the terminal shows it. */
 const REFUSED_LINE = /refused: [^\r\n]*/
 
+/** The line the launcher process prints when it starts its member, as the terminal shows it. */
+const STARTED_LINE = /started \d+/
+
+/**
+ * The last of what a launcher printed, for a message that has to carry its own error: the stack frames are left out,
+ * since the line that says what went wrong is the one above them, and what remains is capped so the message stays one
+ * line a reader can follow.
+ */
+const theLastOf = (said: string): string =>
+  said
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('at '))
+    .slice(-3)
+    .join(' / ')
+    .slice(-400)
+
 /**
  * Waits on the owner's terminal for what a test means, and fails at once when
  * the launcher has said it refused: after that, no member event can come
  * (martha#94).
+ *
+ * A launcher that ends fails the wait at once too, naming the status it ended
+ * with and the last of what it printed (martha#454): a script that cannot load
+ * says nothing on the terminal and starts no member, so the wait would otherwise
+ * run to the harness's timeout and leave only that as the failure.
  */
-const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
-  until(what, holds, t, () => terminal.shown(), () => REFUSED_LINE.exec(terminal.shown())?.[0])
+const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown' | 'launcherEnd'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
+  until(what, holds, t, () => terminal.shown(), () => {
+    const refused = REFUSED_LINE.exec(terminal.shown())?.[0]
+    if (refused !== undefined) return refused
+    const ended = terminal.launcherEnd()
+    if (ended === undefined) return undefined
+    return `the launcher ended with status ${ended.code} and started nothing${ended.said === '' ? '' : `; it said: ${ended.said}`}`
+  })
 
 /** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
 function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
@@ -2855,14 +2891,16 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
-  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
+  const launcher = how.launcher_script ?? launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
     `readlink /proc/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
     // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
-    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & echo $! > '${note('launcher')}'; wait`,
+    // The launcher's own status is noted when it ends, so a test waiting on the terminal can fail at once with it
+    // rather than run to the harness's timeout (martha#454).
+    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & launcher=$!; echo $launcher > '${note('launcher')}'; wait $launcher; echo $? > '${note('ended')}'`,
     'read finished',
   ].join('; ')
   const runner = spawn(PTY_RUNNER, ['-qec', shell, '/dev/null'], { stdio: ['pipe', 'pipe', 'inherit'] })
@@ -2897,6 +2935,15 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
     type: (line: string) => void runner.stdin.write(`${line}\n`),
     press: (keys: string) => void runner.stdin.write(keys),
     shown: () => shown,
+    // What the launcher printed is the terminal itself, unless the test sent its stderr to a file: either way it is the
+    // launcher's own error, which is the whole point of naming it (martha#454).
+    launcherEnd: () => {
+      const ended = textIn(note('ended'))
+      // A launcher that started or refused a member has said what became of it: what follows its end is another
+      // test's to wait for, and its end rules nothing out (martha#454).
+      if (ended === '' || STARTED_LINE.test(shown) || REFUSED_LINE.test(shown)) return undefined
+      return { code: Number(ended), said: theLastOf(how.stderrTo === undefined ? shown : textIn(how.stderrTo)) }
+    },
   }
 }
 
@@ -3147,6 +3194,25 @@ for (const [what, make] of [
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+test('a launcher script that cannot load fails the test at once, naming the export it wanted and did not get (martha#454)', async (t) => {
+  const place = placeFor(t)
+  // A script whose import names something the launch module does not export. The host ends it before it starts anything,
+  // and the terminal shows no line at all, so the launcher's own error is the only thing that can say why: without it
+  // the wait runs to the harness's timeout, which reports the wait and never the script.
+  const script = join(place.home, 'launcher-that-cannot-load.ts')
+  const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
+  writeFileSync(script, `import { launchClaudeCodeMember, NOTHING_THIS_MODULE_EXPORTS } from ${JSON.stringify(launchModule)}\nvoid launchClaudeCodeMember\nvoid NOTHING_THIS_MODULE_EXPORTS\n`)
+  // A file, so what the launcher printed is read as the launcher wrote it, with no race against the terminal.
+  const said = join(place.home, 'launcher-that-cannot-load.stderr')
+  await assert.rejects(ownersTerminal(t, place, { launcher_script: script, stderrTo: said }), (failure: Error) => {
+    // The harness's timeout is the failure this replaces, and it names nothing.
+    assert.doesNotMatch(failure.message, /timed out/)
+    assert.match(failure.message, /the launcher ended with status 1 and started nothing/)
+    assert.match(failure.message, /does not provide an export named 'NOTHING_THIS_MODULE_EXPORTS'/)
+    return true
+  })
+})
 
 // The recorded host itself, on the owner's terminal (martha#117). The host writes
 // its generated types into the folder --plugin-dir names on an interactive start,
