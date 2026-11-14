@@ -18,7 +18,7 @@ import { test, type TestContext } from 'node:test'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { findingsIn, isAFileTheCheckReads } from './findings_in.ts'
 import { judgeTree } from './judge_a_tree.ts'
-import { CREW_CODE_NAMES } from './the_crew_code_names.ts'
+import { CREW_CODE_NAMES, CREW_CODES_PROGRESS_TOOL } from './the_crew_code_names.ts'
 import { EXCEPTIONS, type DeclaredException } from './the_exceptions.ts'
 
 /** A tree a test owns, holding `files` by their path under it, removed when the test ends. */
@@ -113,10 +113,10 @@ test('a string literal naming one trips, and the anchored family lets a template
 })
 
 test('an exception excuses one file and one name, and one that excuses nothing is a finding', (t) => {
-  const root = plantedTree(t, { 'src/planted.ts': "export const tool = 'report_progress'\n" })
-  const elsewhere: readonly DeclaredException[] = [{ path: 'src/elsewhere.ts', text: 'report_progress', reason: 'a test', removed_by: 'a test' }]
+  const root = plantedTree(t, { 'src/planted.ts': `export const tool = '${CREW_CODES_PROGRESS_TOOL}'\n` })
+  const elsewhere: readonly DeclaredException[] = [{ path: 'src/elsewhere.ts', text: CREW_CODES_PROGRESS_TOOL, reason: 'a test', removed_by: 'a test' }]
   const anotherName: readonly DeclaredException[] = [{ path: 'src/planted.ts', text: 'crew_other', reason: 'a test', removed_by: 'a test' }]
-  const held: readonly DeclaredException[] = [{ path: 'src/planted.ts', text: 'report_progress', reason: 'a test', removed_by: 'a test' }]
+  const held: readonly DeclaredException[] = [{ path: 'src/planted.ts', text: CREW_CODES_PROGRESS_TOOL, reason: 'a test', removed_by: 'a test' }]
   assert.deepEqual(judgeTree(root, held).findings, [])
   assert.deepEqual(judgeTree(root, held).stale, [])
   // The same exception against another file, or for another name, matches nothing: it is reported, and the plant stands.

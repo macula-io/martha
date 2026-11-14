@@ -4,14 +4,14 @@
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { THE_CHANNEL_READ_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { OWNER, ROLE_TEXTS_DIRECTORY } from './declare_crew.ts'
 
 /** Why `'owner'` is written by literal in the declaration (#289 part b). */
 const A_FIELD_OF_THE_DECLARATION = 'a field of the crew declaration, as its schema names it and as a refusal names the field'
 
 /** Why a role name is written by literal in a test crew (#289 part b). */
-export const A_ROLE_A_TEST_CREW_DECLARES = 'the role a test crew declares; a role is the declaration\'s own word, and the constant of that word is the role report_progress reads'
+export const A_ROLE_A_TEST_CREW_DECLARES = 'the role a test crew declares; a role is the declaration\'s own word, and the constant of that word is the role report_where_the_work_stands reads'
 
 /** Why `model` is written by literal for the declaration (martha#315): it is the key a member's own model is declared under. */
 const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'

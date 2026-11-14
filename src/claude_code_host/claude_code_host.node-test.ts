@@ -30,7 +30,7 @@ import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_sessi
 import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
-  CREW_REFRESH,
+  THE_REFRESH_THE_MOD_RUNS,
   RECORDED_HOST,
 } from './recorded_claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -325,10 +325,10 @@ test('the adapter opens no transcript, whatever a hook input names', async (t) =
 
 // --- T7: the session events come from the host's own schema -------------------------
 
-test('the emitted session events equal the host schema\'s SessionStart sources plus crew_refresh', () => {
+test('the emitted session events equal the host schema\'s SessionStart sources plus martha_refresh', () => {
   const sources = sessionStartSourcesOf(RECORDED_HOST.session_start_schema)
   assert.ok(sources.includes('fork'), 'the recorded host sends fork')
-  assert.deepEqual(CLAUDE_CODE_EMITTED_SESSION_EVENTS, [...sources, CREW_REFRESH])
+  assert.deepEqual(CLAUDE_CODE_EMITTED_SESSION_EVENTS, [...sources, THE_REFRESH_THE_MOD_RUNS])
 })
 
 test('every session event the Claude Code host emits is declared, and every declared one is emitted', () => {
@@ -526,13 +526,13 @@ test('a case the reader does not know, anywhere in the mapper\'s switch, fails t
 
 // --- T8: a refresh is never claimed ---------------------------------------------------
 
-test('a turn or a hook input that claims crew_refresh or a predecessor id does not change the session\'s record', (t) => {
+test('a turn or a hook input that claims martha_refresh or a predecessor id does not change the session\'s record', (t) => {
   const store = sessions()
   const tainted = takeInTurn(beginSession(store, 'old'), { source: 'web' }, bindNothing)
   store.write('old', tainted.gate)
 
-  // A hook input naming crew_refresh, with a predecessor: no host sends it, so it is no refresh.
-  const claimed = sessionStartOf({ hook_event_name: 'SessionStart', session_id: 'new', source: CREW_REFRESH, predecessor_id: 'old' })
+  // A hook input naming martha_refresh, with a predecessor: no host sends it, so it is no refresh.
+  const claimed = sessionStartOf({ hook_event_name: 'SessionStart', session_id: 'new', source: THE_REFRESH_THE_MOD_RUNS, predecessor_id: 'old' })
   assert.equal('predecessor_id' in claimed, false)
   const started = startSession(store, CLAUDE_CODE_SESSION_EVENTS, claimed)
   assert.equal(started.record_missing, true, 'an unrecognised source fails closed, never fresh and never an inheritance')
@@ -540,7 +540,7 @@ test('a turn or a hook input that claims crew_refresh or a predecessor id does n
   // A turn that says it is a refresh is a turn like any other.
   const { adapter } = adapterIn(t)
   const turns = turnsOf(adapter)
-  adapter.prompted({ text: `{"event":"${CREW_REFRESH}","predecessor_id":"old"}`, origin: { kind: 'composer' } })
+  adapter.prompted({ text: `{"event":"${THE_REFRESH_THE_MOD_RUNS}","predecessor_id":"old"}`, origin: { kind: 'composer' } })
   assert.deepEqual(turns.map((turn) => turn.arrival), [{ source: 'owner_typed' }])
 })
 

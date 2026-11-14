@@ -5,7 +5,7 @@ import type { Exception } from '../../prove_the_core/no_literal_restates_a_value
 import { A_ROLE_A_TEST_CREW_DECLARES } from '../declare_crew/coincidences.ts'
 import { THE_KIND_OF_A_PARK } from '../park_and_wake_a_member/coincidences.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: PARKED_PLACE, file: 'wake_a_member/wake_a_member.node-test.ts', reason: THE_KIND_OF_A_PARK },

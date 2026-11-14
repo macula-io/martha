@@ -26,7 +26,7 @@ import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
@@ -413,7 +413,7 @@ test('martha wake starts the member on its newest handover, and the prompt it is
   const stamps = handoverStampsIn(crew.path)
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
   const written = writeMyHandover({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } }, { member, content, at, stamps, session })
-  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${JSON.stringify(written)}`)
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${JSON.stringify(written)}`)
   const handovers = keepTheCrewsFilesAsDirectories(crew.path).place(HANDOVERS_PLACE)
   assert.ok(!('refusal' in handovers), 'the crew store refused its handovers place')
   const file = join(handovers.path, theHandoverFile(member, at))

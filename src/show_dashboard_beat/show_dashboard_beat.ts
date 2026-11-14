@@ -118,7 +118,7 @@ export interface DashboardRow {
    */
   readonly dialogs?: readonly AnOwnerDialogOnARow[]
   /**
-   * When the member last reported its progress (martha#319): only `report_progress` writes it, so a heartbeat that keeps
+   * When the member last reported its progress (martha#319): only `report_where_the_work_stands` writes it, so a heartbeat that keeps
    * `at` fresh cannot hide a member that stopped reporting. Absent on a row written before the field existed, and on a
    * member that has not reported yet.
    */
