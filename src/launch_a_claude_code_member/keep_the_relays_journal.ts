@@ -39,6 +39,7 @@ import { join } from 'node:path'
 
 import { RELAY_DEADLINE_MS, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { projectStateDirectory, STATE_FILE_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 /** The directory inside Martha's state that holds the launcher's journals, one file per launch. */
 export const RELAY_JOURNAL_PLACE = 'relay-journal'
@@ -61,8 +62,6 @@ export const JOURNAL_EVENTS_KEPT = 32
 /** How many launches' journals are kept: the newest, so a project's state does not grow with every launch it had. */
 export const JOURNAL_LAUNCHES_KEPT = 64
 
-/** A file being written before it is renamed into place, as every state file here is. */
-const STAGING_PREFIX = '.staging-'
 
 /** Why a late allow is written as a deny: the sentence the host's own deny would have carried. */
 export const GAVE_UP_BEFORE_ALLOW = 'the relay gave up before this allow'

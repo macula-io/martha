@@ -84,12 +84,10 @@ import {
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { runIsolatedNpm } from '../run_the_nodes_own_npm_alone/run_the_nodes_own_npm_alone.ts'
 import { TREE_PARAMETER, treeUrlOf } from './confine_to_the_recorded_tree.ts'
+import { DEPENDENCIES, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
-const NODE_MODULES = 'node_modules'
-const PACKAGE_JSON = 'package.json'
-const PACKAGE_LOCK = 'package-lock.json'
 /** npm's own record of what it installed, which only npm reads. */
-const HIDDEN_LOCK = join(NODE_MODULES, '.package-lock.json')
+const HIDDEN_LOCK = join(DEPENDENCIES, '.package-lock.json')
 /** The links npm makes to each bin, which nothing starts: the member starts its bin by path. */
 const BIN_LINKS = '.bin'
 /** npm's home, config and cache under the root, outside every tree. */
@@ -112,14 +110,14 @@ const PRELOAD = '--import'
 /** The arguments that start `file` with every module it loads confined to the tree at `dir`, a real path (provedTreeOf). */
 function confinedStart(dir: string, file: string): readonly string[] {
   const hook = new URL(CONFINING_HOOK)
-  hook.searchParams.set(TREE_PARAMETER, treeUrlOf(join(dir, NODE_MODULES)))
+  hook.searchParams.set(TREE_PARAMETER, treeUrlOf(join(dir, DEPENDENCIES)))
   return [PRELOAD, hook.href, file]
 }
 
 /** Every file of an installed tree, by path under `dir`, sorted, with its hash; refuses what is no plain file. */
 export function filesOfTree(dir: string): { readonly files: Record<string, string> } | { readonly refusal: string } {
   const files: Record<string, string> = {}
-  const top = join(dir, NODE_MODULES)
+  const top = join(dir, DEPENDENCIES)
   if (!existsSync(top)) return { files }
   for (const entry of readdirSync(top, { recursive: true, withFileTypes: true })) {
     const path = relative(dir, join(entry.parentPath, entry.name)).split(sep).join('/')
@@ -140,13 +138,13 @@ function manifestOfLock(lock: NpmLock): string {
 /** The package an integrity failure is about, found by the integrity npm wanted. */
 function failedPackageOf(lock: NpmLock, why: string): string {
   const failed = Object.entries(lock.packages).filter(([key, locked]) => key !== '' && typeof locked.integrity === 'string' && why.includes(locked.integrity))
-  return failed.map(([key]) => key.slice(key.lastIndexOf(`${NODE_MODULES}/`) + NODE_MODULES.length + 1)).join(', ') || 'a package of the lock'
+  return failed.map(([key]) => key.slice(key.lastIndexOf(`${DEPENDENCIES}/`) + DEPENDENCIES.length + 1)).join(', ') || 'a package of the lock'
 }
 
 /** Installs the lock into `dir` with nothing but it. */
 function installLock(lock: NpmLock, dir: string, registry: string, npmHome: string): string | undefined {
-  writeFileSync(join(dir, PACKAGE_JSON), manifestOfLock(lock))
-  writeFileSync(join(dir, PACKAGE_LOCK), `${JSON.stringify(lock, null, 2)}\n`)
+  writeFileSync(join(dir, MANIFEST), manifestOfLock(lock))
+  writeFileSync(join(dir, LOCK), `${JSON.stringify(lock, null, 2)}\n`)
   const ran = runIsolatedNpm(['ci'], dir, registry, npmHome)
   if (ran.ran) return undefined
   if (ran.why.includes(INTEGRITY_FAILED)) {
@@ -328,7 +326,7 @@ function placedEntry(
   if ('refusal' in proved) return { refusal: `its server ${name}: ${proved.refusal}` }
   const unreviewed = refusalOfTreeReads(name, pin, proved.dir, tree, recording)
   if (unreviewed !== undefined) return unreviewed
-  const packageDir = join(proved.dir, NODE_MODULES, MESH_SERVER_PACKAGE)
+  const packageDir = join(proved.dir, DEPENDENCIES, MESH_SERVER_PACKAGE)
   const file = join(packageDir, binFile)
   if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
   return { entry: { ...entry, command: process.execPath, args: confinedStart(proved.dir, file), env: builtEnvironment(placement.hostEnvironment, entry.env) } }
@@ -395,7 +393,7 @@ export function recordMeshTree(request: MeshTreeRecordRequest): RecordedMeshTree
   const untar = spawnSync('tar', ['-xzf', packed, '-C', extracted], { encoding: 'utf8' })
   if (untar.status !== 0) throw new Error(`The tarball cannot be read: ${untar.stderr.trim()}`)
   const packageDir = join(extracted, 'package')
-  const manifest = JSON.parse(readFileSync(join(packageDir, PACKAGE_JSON), 'utf8')) as { name: string; version: string }
+  const manifest = JSON.parse(readFileSync(join(packageDir, MANIFEST), 'utf8')) as { name: string; version: string }
   if (manifest.name !== MESH_SERVER_PACKAGE) throw new Error(`The tarball holds ${manifest.name}, not ${MESH_SERVER_PACKAGE}`)
   if (!EXACT_VERSION.test(manifest.version)) throw new Error(`The tarball's version ${manifest.version} names no single release`)
 
@@ -406,10 +404,10 @@ export function recordMeshTree(request: MeshTreeRecordRequest): RecordedMeshTree
   const npmHome = join(scratch, NPM_HOME)
   const project = join(scratch, LOCK_PROJECT)
   mkdirSync(project)
-  writeFileSync(join(project, PACKAGE_JSON), `${JSON.stringify({ name: LOCK_PROJECT, private: true, dependencies: { [MESH_SERVER_PACKAGE]: manifest.version } }, null, 2)}\n`)
+  writeFileSync(join(project, MANIFEST), `${JSON.stringify({ name: LOCK_PROJECT, private: true, dependencies: { [MESH_SERVER_PACKAGE]: manifest.version } }, null, 2)}\n`)
   const locked = runIsolatedNpm(['install', '--package-lock-only'], project, recording.registry, npmHome)
   if (!locked.ran) throw new Error(`npm could not lock ${MESH_SERVER_PACKAGE} ${manifest.version}: ${locked.why}`)
-  const lock = JSON.parse(readFileSync(join(project, PACKAGE_LOCK), 'utf8')) as NpmLock
+  const lock = JSON.parse(readFileSync(join(project, LOCK), 'utf8')) as NpmLock
   const integrity = sriOf(tarball)
   const refusal = refusalOfLock(lock, { server: MESH_SERVER_PACKAGE, version: manifest.version, integrity, registry: recording.registry })
   if (refusal !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${refusal}`)

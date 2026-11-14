@@ -52,6 +52,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 
 export type { LaunchHost }
@@ -208,8 +209,6 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
   },
 }
 
-/** A directory a host keeps installed packages in; its presence counts, its contents do not. */
-const INSTALLED_PACKAGES = 'node_modules'
 
 /**
  * What a launch started the host with, down to the names a host's declaration lists (martha#135): its arguments,
@@ -672,7 +671,7 @@ function entriesAt(machine: LaunchHost, start: string, dir: string, name: string
 function walk(machine: LaunchHost, start: string, path: string): readonly ConfigEntry[] {
   const entry = entryOf(machine, start, path)
   if (entry.kind !== 'directory') return [entry]
-  if (path.split(sep).at(-1) === INSTALLED_PACKAGES) return [entry]
+  if (path.split(sep).at(-1) === DEPENDENCIES) return [entry]
 
   let children: string[]
   try {

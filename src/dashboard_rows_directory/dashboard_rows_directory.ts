@@ -22,12 +22,11 @@ import {
   type DashboardRow,
   type DashboardStore,
 } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 /** Only the owner may read or write a row. */
 export const ROW_FILE_MODE = 0o600
 
-/** What starts a row's file while it is still being written, as the state files do. */
-const STAGING_PREFIX = '.staging-'
 
 /** What one row is called in a refusal. */
 const ONE_ROW = 'dashboard row'

@@ -56,6 +56,7 @@ import {
   type OwnWritesOfTheHistory,
   type OwnWritesStore,
 } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 /** Only the owner may enter, list or write a state directory. */
 export const STATE_DIRECTORY_MODE = 0o700
@@ -88,7 +89,6 @@ const NODE_ID_BYTES = 32
 export const PERMISSION_BITS = 0o777
 const WRITABLE_BY_OTHERS = 0o022
 const OPEN_TO_OTHERS = 0o077
-const STAGING_PREFIX = '.staging-'
 
 /** One project's state directory, opened and checked. */
 export interface MarthaState {
