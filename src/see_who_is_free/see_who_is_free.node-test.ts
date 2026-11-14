@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import {
   CLAIM_LIMIT_PERCENT,
   NOBODY_FITS,
@@ -93,15 +94,15 @@ test('test 3: a fresh beat does not hide a report older than the stale age, and 
   const midway = { state: 'working', holds: 'macula-io/martha#319', task: 'who is free', progress: { step: 2, of: 5 } } as const
   const stale = theCrewWith({
     ...everyoneFree(),
-    Vesta: freeBeat('Vesta', { ...midway, at: NOW - 1_000, reported_at: NOW - PROGRESS_STALE_AFTER_MS - 60_000 }),
-    Uranus: freeBeat('Uranus', { ...midway, progress: { step: 5, of: 5 }, at: NOW - 1_000, reported_at: NOW - PROGRESS_STALE_AFTER_MS - 60_000 }),
+    Vesta: freeBeat('Vesta', { ...midway, at: NOW - 1_000, reported_at: NOW - PROGRESS_STALE_AFTER_MS - MINUTE_MS }),
+    Uranus: freeBeat('Uranus', { ...midway, progress: { step: 5, of: 5 }, at: NOW - 1_000, reported_at: NOW - PROGRESS_STALE_AFTER_MS - MINUTE_MS }),
     Terra: freeBeat('Terra', { ...midway, at: NOW - 1_000, reported_at: NOW - PROGRESS_STALE_AFTER_MS }),
   })
   const rows = seeWhoIsFree(stale)
   const vesta = rows.find((row) => row.member === 'Vesta')
 
-  assert.deepEqual(vesta?.flags, [`progress ${String(Math.floor((PROGRESS_STALE_AFTER_MS + 60_000) / 60_000))}m old`], 'its row is flagged by the report, not the beat')
-  assert.equal(vesta?.reported_ago, PROGRESS_STALE_AFTER_MS + 60_000, 'and says how old its last report is')
+  assert.deepEqual(vesta?.flags, [`progress ${String(Math.floor((PROGRESS_STALE_AFTER_MS + MINUTE_MS) / MINUTE_MS))}m old`], 'its row is flagged by the report, not the beat')
+  assert.equal(vesta?.reported_ago, PROGRESS_STALE_AFTER_MS + MINUTE_MS, 'and says how old its last report is')
   assert.equal(vesta?.beat_ago, 1_000, 'beside how old its beat is')
   assert.deepEqual(rows.find((row) => row.member === 'Uranus')?.flags, [], 'a member whose last report was step == of is not flagged')
   assert.deepEqual(rows.find((row) => row.member === 'Terra')?.flags, [], 'exactly at the stale age, a report is not yet stale')
@@ -155,7 +156,7 @@ test('a member asked about that is not on the crew is refused by name, and nobod
 test('an offline member whose last report finished its package is refused as offline, and flagged so (Uranus r=1)', () => {
   // Its last report was step == of, so the busy rule would let it through: only the offline rule stands between a
   // member whose session died just after a package and a yes.
-  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { state: 'waiting', holds: 'macula-io/martha#319', progress: { step: 5, of: 5 }, at: NOW - OFFLINE_AFTER_MS - 60_000 }) })
+  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { state: 'waiting', holds: 'macula-io/martha#319', progress: { step: 5, of: 5 }, at: NOW - OFFLINE_AFTER_MS - MINUTE_MS }) })
   const answer = mayTakeAPackage(crew, 'Vesta', SUPERVISOR)
 
   assert.ok(!('refused' in answer) && !answer.may, 'an offline member was offered a package because its last report was finished')
