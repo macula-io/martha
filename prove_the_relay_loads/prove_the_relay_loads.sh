@@ -50,6 +50,15 @@ HOST_VARIABLE="$(defined_in_harness RECORDED_HOST_VARIABLE)"
 HOST_TERMINAL="$(defined_in_harness HOST_TERMINAL)"
 [[ -n "${HOST_VARIABLE}" && -n "${HOST_TERMINAL}" ]] || { echo "prove_the_relay_loads: ${HARNESS} defines no RECORDED_HOST_VARIABLE or HOST_TERMINAL" >&2; exit 2; }
 
+# martha#460 r=1: the host started below runs under a home of its own, so it must start with the auto-updater off or it
+# would install the owner's global Claude Code over itself. The switch is one definition, in the launch module; it is
+# read from there rather than typed here, so a change to it reaches this launch and a launch that drops it fails
+# every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name.
+AUTO_UPDATER_OFF_DEFINITION="${REPO}/src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts"
+auto_updater_off="$(node --input-type=module -e "const m = await import('${AUTO_UPDATER_OFF_DEFINITION}'); process.stdout.write(Object.entries(m.THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF).map(([name, value]) => name + '=' + value).join(' '))")"
+[[ -n "${auto_updater_off}" ]] || { echo "prove_the_relay_loads: ${AUTO_UPDATER_OFF_DEFINITION} defines no THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF" >&2; exit 2; }
+read -r -a AUTO_UPDATER_OFF <<< "${auto_updater_off}"
+
 npm install --prefix "${WORK}/host" --no-save --no-package-lock --no-audit --no-fund "@anthropic-ai/claude-code@${version}" > /dev/null \
   || { echo "prove_the_relay_loads: Claude Code ${version} could not be installed" >&2; exit 2; }
 claude="${WORK}/host/node_modules/.bin/claude"
@@ -78,7 +87,7 @@ writes="${WORK}/writes"
 mkdir -p "${writes}/home" "${writes}/project"
 cp -R "${RELAY}" "${writes}/relay"
 printf '{"hasCompletedOnboarding":true,"projects":{"%s":{"hasTrustDialogAccepted":true}}}\n' "${writes}/project" > "${writes}/home/.claude.json"
-(cd "${writes}/project" && exec env -i HOME="${writes}/home" PATH="${PATH}" TERM="${HOST_TERMINAL}" \
+(cd "${writes}/project" && exec env -i HOME="${writes}/home" PATH="${PATH}" TERM="${HOST_TERMINAL}" "${AUTO_UPDATER_OFF[@]}" \
   script -qfec "'${claude}' --plugin-dir '${writes}/relay'" /dev/null < /dev/null > /dev/null 2>&1) &
 started=$!
 for _ in $(seq "${HOST_WRITES_WITHIN_S}"); do

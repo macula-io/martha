@@ -65,9 +65,28 @@ export interface HostSwitches {
 }
 
 /**
+ * The variable the host reads to keep its own auto-updater off, and the value that does it (martha#460).
+ *
+ * A launch hands the host a home of its own, so the host starts with the updater's default, which is on: the owner's
+ * own answer lives in the owner's `~/.claude.json`, which a run never reads. A host older than the registry's latest
+ * then updates itself, and its update is `npm install --global`, which npm resolves against the NODE prefix and not
+ * against HOME. So an install meant for the sandbox lands on the owner's real machine, over whichever Claude Code the
+ * owner has there, and npm's own log for it names the owner's global `claude` among the paths it retires (measured on
+ * the crew host: 2.1.323 updating to 2.1.325). What it leaves cannot run: the updater's own npm environment carries
+ * `npm_config_ignore_scripts=true`, so the package's postinstall never copies the native binary over `bin/claude.exe`
+ * and the tarball's stub is what stays.
+ *
+ * Every environment a launch starts a host with spreads this last, so neither an inherited value nor a switch can turn
+ * the updater back on inside a run; and it is spread rather than written into each builder, so a launch path added
+ * later carries it or fails the test that names it (every_launch_switches_the_hosts_auto_updater_off.node-test.ts).
+ */
+export const THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF: Readonly<Record<string, string>> = { DISABLE_AUTOUPDATER: '1' }
+
+/**
  * The environment to start the host with: `inherited` without the dropped
  * variables, with the switches' own on top, so no inherited value can switch
- * project config back on.
+ * project config back on, and the auto-updater off last, so nothing above it can
+ * turn it back on (martha#460).
  */
 export function launchEnvironment(
   inherited: Readonly<Record<string, string | undefined>>,
@@ -76,7 +95,7 @@ export function launchEnvironment(
   const kept = Object.entries(inherited).filter(
     (entry): entry is [string, string] => entry[1] !== undefined && !switches.env_dropped.includes(entry[0]),
   )
-  return { ...Object.fromEntries(kept), ...switches.env }
+  return { ...Object.fromEntries(kept), ...switches.env, ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF }
 }
 
 /**
