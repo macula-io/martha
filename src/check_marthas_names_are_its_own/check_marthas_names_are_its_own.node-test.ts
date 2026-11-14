@@ -9,6 +9,7 @@
 //     it, which is the case `crew_channel_taken` showed (design r=4).
 
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -18,7 +19,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { findingsIn, isAFileTheCheckReads } from './findings_in.ts'
 import { judgeTree } from './judge_a_tree.ts'
 import { CREW_CODE_NAMES } from './the_crew_code_names.ts'
-import type { DeclaredException } from './the_exceptions.ts'
+import { EXCEPTIONS, type DeclaredException } from './the_exceptions.ts'
 
 /** A tree a test owns, holding `files` by their path under it, removed when the test ends. */
 const plantedTree = (t: TestContext, files: Readonly<Record<string, string>>): string => {
@@ -123,6 +124,16 @@ test('an exception excuses one file and one name, and one that excuses nothing i
   assert.equal(judgeTree(root, elsewhere).findings.length, 1)
   assert.equal(judgeTree(root, anotherName).stale.length, 1)
   assert.equal(judgeTree(root, anotherName).findings.length, 1)
+})
+
+test('the run exits 1 when a stale exception is the only fault (mutant: count findings alone)', (t) => {
+  // The stale rule is judged by ./judge_a_tree.ts, but the exit code is decided in ./main.ts, and a test that only reads
+  // the verdict would say nothing about the command CI runs. A tree spelling no name of crew-code's still has the
+  // shipped exception list to answer for: every entry of it excuses nothing here, so the run must be red all the same.
+  const root = plantedTree(t, { 'src/quiet.ts': 'export const own = 1\n' })
+  const run = spawnSync(process.execPath, [join(import.meta.dirname, 'main.ts'), '--root', root], { encoding: 'utf8' })
+  assert.equal(run.stderr.match(/is excused by nothing/g)?.length, EXCEPTIONS.length, `every shipped exception should be named as stale:\n${run.stderr}`)
+  assert.equal(run.status, 1, `the run answered ${String(run.status)} on a stale exception alone:\n${run.stderr}`)
 })
 
 test('the kinds of file the run reads are the sources, the JSON, the JSONL and the shell scripts', () => {

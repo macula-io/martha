@@ -6,11 +6,11 @@
 // because a list that has stopped matching the tree says nothing true about it.
 //
 // `removed_by` is the package's PR that takes the entry away, or STAYS for a place no rename will ever remove: the
-// refusal that recognises crew-code's declaration to say so, the check's own table and planted cases, a test that proves
-// Martha refuses or ignores a peer program's own tool, and a literal that is Martha's own rather than crew-code's (the
-// family catches it by shape alone, and no other program can see it).
+// refusal that recognises crew-code's declaration to say so, the check's own table and planted cases, or a test that
+// proves Martha refuses or ignores a peer program's own tool. A literal that is Martha's own is not a STAYS: the family
+// catches it by shape, and a name of Martha's in crew-code's shape moves like any other.
 
-/** An exception that no rename will remove: the place must name a crew-code name, or is Martha's own name. */
+/** An exception that no rename will remove: the place must name a crew-code name. */
 export const STAYS = 'stays'
 
 /** One place a crew-code name is allowed to stand. */
@@ -27,10 +27,10 @@ export interface DeclaredException {
 
 /** Every place a crew-code name may stand, until the rename that takes it away. */
 export const EXCEPTIONS: readonly DeclaredException[] = [
-  { path: 'architecture/c4_diagrams.node-test.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and no file holds it as a name of a thing at run time", removed_by: STAYS },
-  { path: 'architecture/c4_diagrams.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and no file holds it as a name of a thing at run time", removed_by: STAYS },
+  { path: 'architecture/c4_diagrams.node-test.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and the slice is renamed by #473", removed_by: '#473' },
+  { path: 'architecture/c4_diagrams.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and the slice is renamed by #473", removed_by: '#473' },
   { path: 'architecture/c4_diagrams.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
-  { path: 'prove_the_core/only_the_launcher_writes_launch_records.node-test.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and no file holds it as a name of a thing at run time", removed_by: STAYS },
+  { path: 'prove_the_core/only_the_launcher_writes_launch_records.node-test.ts', text: 'crew_files_directory', reason: "Martha's own source slice, named in the architecture table and a test: crew-code gives nothing this name, and the slice is renamed by #473", removed_by: '#473' },
   { path: 'src/a_crews_tools/a_crews_tools.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
   { path: 'src/a_crews_tools/the_refresh_flow_answers_the_session.node-test.ts', text: 'report_progress', reason: "Martha's tool still carries crew-code's name", removed_by: 'the tool-names PR (martha#468 wave 3) — rows 3-8' },
