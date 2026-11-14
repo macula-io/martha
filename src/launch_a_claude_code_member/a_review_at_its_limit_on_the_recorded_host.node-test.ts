@@ -25,7 +25,7 @@ import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_t
 import { CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
-import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { addressedTo, readTheChannel, type PlacedMessage } from '../keep_the_crew_channel/crew_channel.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
