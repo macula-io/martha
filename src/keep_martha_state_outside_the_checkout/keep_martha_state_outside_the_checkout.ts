@@ -299,8 +299,7 @@ const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
 }
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
-  JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
+export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean => JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
 
 const isEntry = (value: unknown): value is ConfigEntry => {
   const fields = isRecord(value) && typeof value['kind'] === 'string' ? ENTRY_FIELDS[value['kind']] : undefined

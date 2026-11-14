@@ -10,7 +10,6 @@
 // journal is kept under — the same letters, two meanings.
 
 import { CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
-import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { DEPENDENCIES, LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RELAY_JOURNAL_SUFFIX } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
@@ -37,8 +36,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: LOCK, file: JUDGE, reason: A_NAME_NO_WALK_READS },
   { value: CREW_CODE_DECLARATION_DIRECTORY, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_FILE, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: GATE_AUDIT_PLACE, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_DIRECTORY, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_FILE, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: GATE_AUDIT_PLACE, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
 ]

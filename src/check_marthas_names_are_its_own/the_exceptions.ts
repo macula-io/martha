@@ -28,7 +28,6 @@ export interface DeclaredException {
 /** Every place a crew-code name may stand, until the rename that takes it away. */
 export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/answer_a_tool_call/answer_a_tool_call.node-test.ts', text: 'mcp__crew__crew_mail_send', reason: "a peer program's own tool call, which this test proves Martha does not answer", removed_by: STAYS },
-  { path: 'src/audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts', text: 'gate_would_refuse', reason: "Martha's gate-audit folder still carries crew-code's name", removed_by: 'the state-folder PR (martha#468 wave 4) — row 12' },
   { path: 'src/check_marthas_names_are_its_own/check_marthas_names_are_its_own.node-test.ts', text: 'crew_channel_taken/', reason: "the check's own planted case, which must spell the name to prove the check finds it", removed_by: STAYS },
   { path: 'src/check_marthas_names_are_its_own/check_marthas_names_are_its_own.node-test.ts', text: 'crew_other', reason: "the check's own planted case, which must spell the name to prove the check finds it", removed_by: STAYS },
   { path: 'src/check_marthas_names_are_its_own/check_marthas_names_are_its_own.node-test.ts', text: 'crew_roster', reason: "the check's own planted case, which must spell the name to prove the check finds it", removed_by: STAYS },

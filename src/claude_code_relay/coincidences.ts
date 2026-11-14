@@ -20,7 +20,7 @@ import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
+import { RELAY_SOCKET_VARIABLE, PANE } from './hooks/relay_protocol.ts'
 
 /** Why the five landing tools are named by literal in the hooks module (martha#256), as one wording for all five. */
 const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal'
@@ -127,4 +127,5 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: PANE, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: 'the pane\'s id and the command that opens it are the program\'s own name; the same word names the folder Martha keeps her state under' },
 ]
