@@ -641,8 +641,9 @@ export const CARRY_A_MODEL = 'model'
 
 /**
  * The word an order carries the end of the running turn under (martha#311): the one the mod answers by asking the host
- * to end the turn the order names, then asking again with the outcome. The core decides when; every host's mod must
- * carry this word, and the mod's copy is declared in src/check_no_literal_restates_a_value/exceptions.ts.
+ * to end the turn the order names. It reports no outcome: the flow concludes the end from that turn's own end. The core
+ * decides when; every host's mod must carry this word, and the mod's copy is declared in
+ * src/check_no_literal_restates_a_value/exceptions.ts.
  */
 export const CARRY_THE_END = 'end_the_turn'
 

@@ -182,7 +182,7 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: SWITCH_YOUR_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: RETURN_TO_YOUR_OWN_MODEL, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: THE_MODEL_REPORT_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher once a model switch resolved; ${THE_RELAY_CANNOT_IMPORT}` },
-  // The end order's word and the two outcomes the mod reports back (martha#311): the same reason as the entries above.
+  // The end order's word (martha#311), which the mod reads off the wire and carries out: the same reason as the entries above.
   { value: CARRY_THE_END, file: 'claude_code_relay/hooks/crew_answers.ts', reason: `the word an order carries the end of a running turn under, read back off the wire; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: CARRY_THE_END, file: 'claude_code_relay/hooks/crew.tsx', reason: `the word this mod ends the running turn under; ${THE_RELAY_CANNOT_IMPORT}` },
   // A coincidence of names (martha#312): the declaration's own field, as v0.1.0's file lacks it, is not the launcher's ask.
