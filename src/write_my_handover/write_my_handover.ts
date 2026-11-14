@@ -21,10 +21,10 @@ import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
-export const CREW_HANDOVER_WRITTEN = 'CREW-HANDOVER-WRITTEN'
+export const CREW_HANDOVER_WRITTEN = 'MARTHA-HANDOVER-WRITTEN'
 
 /** The word a member answers a handover ask it may not take, with one line saying which ground it gives. */
-export const CREW_REFRESH_DECLINED = 'CREW-REFRESH-DECLINED'
+export const CREW_REFRESH_DECLINED = 'MARTHA-REFRESH-DECLINED'
 
 /**
  * The tool a member calls to hand over (martha#255): the name the launcher registers and the mod answers. Spelled
@@ -43,7 +43,7 @@ export type HandingOverHost = { readonly stores: TheCrewFilesStores }
  * chose. A day names one file per member, so a second handover the same day replaces the first rather than leaving two
  * for a successor to choose between.
  */
-export const theHandoverFile = (member: string, at: Date): string => `HANDOVER_${at.toISOString().slice(0, 10)}_${member}.md`
+export const theHandoverFile = (member: string, at: Date): string => `MARTHA_HANDOVER_${at.toISOString().slice(0, 10)}_${member}.md`
 
 /** Where one crew's handovers live, `<crew>/handovers`: made when missing, refused when it is not a place to write. */
 export function handoversPlace(host: HandingOverHost): CrewPlace | Refused {

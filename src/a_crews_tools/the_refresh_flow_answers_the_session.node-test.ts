@@ -153,10 +153,10 @@ test('#255: write_my_handover is one of the crew’s tools, and its answer is th
   assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
   const place = { stores: { crew: keepTheCrewsFilesAsDirectories(crew) } }.stores.crew.place(HANDOVERS_PLACE)
   assert.ok(!('refusal' in place), 'the crew store refused the handovers place')
-  const written = place.read(`HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`)
+  const written = place.read(`MARTHA_HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`)
   assert.ok(written !== undefined && !('refusal' in written), 'the tool wrote no handover file')
   assert.ok(written.text.includes('first rules'), 'the handover written is not the text the member gave')
-  const stamp = handoverStampsIn(crew).read(join(place.path, `HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`))
+  const stamp = handoverStampsIn(crew).read(join(place.path, `MARTHA_HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`))
   assert.ok(stamp !== undefined && !('refusal' in stamp), 'the handover was written and not stamped')
 })
 
