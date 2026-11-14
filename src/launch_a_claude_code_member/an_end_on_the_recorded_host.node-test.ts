@@ -72,8 +72,11 @@ function approvedProjectWithTheLeastCeiling(t: TestContext): Project {
     writeFileSync(join(checkout, path), text)
   }
   git(checkout, 'init', '-q', '.')
+  // martha init reads the owner's name from the checkout's own git config: on a runner with no global name, only this.
+  git(checkout, 'config', 'user.name', GIT_NAME)
+  git(checkout, 'config', 'user.email', GIT_EMAIL)
   git(checkout, 'add', '--all')
-  git(checkout, '-c', `user.name=${GIT_NAME}`, '-c', `user.email=${GIT_EMAIL}`, 'commit', '-q', '-m', 'start')
+  git(checkout, 'commit', '-q', '-m', 'start')
   const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
   const declared = marthaOnATerminal(place, ['init'])
