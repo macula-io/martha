@@ -220,3 +220,13 @@ test('two new exported definitions of one new value, in two new modules, are eac
     "a_two/a_two.ts:1: 'a-brand-new-word' restates a_one/a_one.ts ONE",
   ])
 })
+
+test('a new exported definition is named against the holder that held its value before, ahead of another holder the change adds', () => {
+  const sortsFirst = source('a_aaa/a_aaa.ts', "export const FIRST = 'the-tool'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'the-tool', module: 'a_aaa/a_aaa.ts', name: 'FIRST' }, ...ADDS_A_SECOND_HOLDER]
+
+  assert.deepEqual(restatementsIn([EXPORTER, A_SECOND_HOLDER, sortsFirst], { judged: everyLine(A_SECOND_HOLDER, sortsFirst), defined }).map(lineOfAFinding), [
+    "a_aaa/a_aaa.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
+    "a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
+  ])
+})
