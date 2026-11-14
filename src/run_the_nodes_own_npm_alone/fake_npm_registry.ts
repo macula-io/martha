@@ -21,6 +21,7 @@ import process from 'node:process'
 import { createInterface } from 'node:readline'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { TREE_HASH } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 
 /** One package the registry serves: its manifest and its files, by path inside the package. */
 export interface FakePackage {
@@ -48,7 +49,7 @@ export interface FakeRegistry {
 }
 
 /** The SRI string npm writes for a tarball. */
-export const sha512Of = (bytes: Uint8Array): string => `sha512-${createHash('sha512').update(bytes).digest('base64')}`
+export const sha512Of = (bytes: Uint8Array): string => `sha512-${createHash(TREE_HASH).update(bytes).digest('base64')}`
 
 /** The file a package's packument is served from, inside its directory. */
 const PACKUMENT = 'packument.json'
