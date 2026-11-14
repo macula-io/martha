@@ -68,7 +68,7 @@ test('the user settings file is under CLAUDE_CONFIG_DIR when it is set, else und
 // host (martha#65 r=4, martha#75).
 for (const [shape, configDir] of [
   ['empty', ''],
-  ['relative', 'config'],
+  ['relative', 'conf-dir'],
   ['relative with a dot', './config'],
   // Claude Code trims the value before it uses it (martha#75): the launcher must not judge the untrimmed one.
   ['absolute with a trailing space', '/owner/config '],

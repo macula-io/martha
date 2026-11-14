@@ -127,7 +127,7 @@ test('a registry in the environment, scoped or not, is not the registry npm asks
 
 test('a user or global config in the environment is never read', async (t) => {
   const { good, evil } = await registries(t)
-  const dir = projectOf(t, 'config')
+  const dir = projectOf(t, 'conf-dir')
   const planted = join(scratch(t, 'config-rc'), 'npmrc')
   writeFileSync(planted, `registry=${evil.registry}\nproxy=${evil.registry}\n`)
   // The control: with the file named the ordinary way, npm sends its request through it.

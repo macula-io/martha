@@ -43,7 +43,7 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
   crewsSoFar += 1
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
-  const crew = join(home, 'crew')
+  const crew = join(home, 'crew-files')
   mkdirSync(root, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
@@ -51,7 +51,7 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   const tools = crewToolsOver({
     member,
-    ledger: { clock: { now: () => 1_000 }, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } },
+    ledger: { clock: { now: () => 1_000 }, stores: { rows: rowStreamsDirectory(join(home, 'row-streams')) } },
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,

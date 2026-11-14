@@ -58,7 +58,7 @@ const recordedEngine = (now = 1_700_000_000_000) => {
 
 const adapterIn = (t: TestContext) => {
   const root = scratch(t)
-  const places = { rows: join(root, 'rows'), launch_records: join(root, 'launches'), crew: join(root, 'crew') }
+  const places = { rows: join(root, 'row-streams'), launch_records: join(root, 'launches'), crew: join(root, 'crew-files') }
   mkdirSync(places.rows, { mode: 0o700 })
   mkdirSync(places.launch_records, { mode: 0o700 })
   const recorded = recordedEngine()

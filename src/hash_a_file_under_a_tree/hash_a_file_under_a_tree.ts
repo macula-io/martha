@@ -73,7 +73,7 @@ export function blobUnderTheTree(store: LauncherStore, path: string, bytes: Buff
 function askedOfGit(store: LauncherStore, path: string, bytes: Buffer): string | undefined {
   const scratch = store.scratch.make(null, 'martha-hash-')
   try {
-    const content = scratch.write('content', bytes)
+    const content = scratch.write('the-bytes', bytes)
     const run = store.processes.runNow({
       command: 'git',
       args: ['--git-dir', store.repository, ...marthasOwnGitArgs(['hash-object', '-w', `--path=${path}`, '--', content])],

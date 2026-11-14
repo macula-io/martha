@@ -93,8 +93,8 @@ function watchingTheRunsOwnTempDir(tree: string): { readonly onWorkDir: (work: s
 
 /** The running release's tree: the manifest naming the installer, and the pin it carries. */
 function treeOf(t: TestContext, pin: Partial<Pin> | string, installerPackageName: string = NAME): string {
-  const tree = scratch(t, 'tree')
-  writeFileSync(join(tree, 'package.json'), JSON.stringify({ name: 'martha', version: '1.0.0', martha: { installerPackage: installerPackageName } }))
+  const tree = scratch(t, 'a-scratch-tree')
+  writeFileSync(join(tree, 'package.json'), JSON.stringify({ name: 'a-fixture-package', version: '1.0.0', martha: { installerPackage: installerPackageName } }))
   const text = typeof pin === 'string' ? pin : JSON.stringify({ name: NAME, version: VERSION, integrity: 'sha512-planted', ...pin })
   writeFileSync(join(tree, PIN_FILE), text)
   return tree
@@ -155,7 +155,7 @@ test('a pin that is not JSON, misses a field, or names another package is refuse
 
 test('a release whose own manifest names no installer package is refused by name', (t) => {
   const tree = scratch(t, 'no-name')
-  writeFileSync(join(tree, 'package.json'), JSON.stringify({ name: 'martha' }))
+  writeFileSync(join(tree, 'package.json'), JSON.stringify({ name: 'a-fixture-package' }))
   writeFileSync(join(tree, PIN_FILE), JSON.stringify({ name: NAME, version: VERSION, integrity: 'sha512-x' }))
   assert.match(refusalOf(installThePinnedInstaller(requestFor(tree))), /names no installer package/)
 })

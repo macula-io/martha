@@ -574,7 +574,7 @@ test("a run reading a member's rows derives the same place the launcher writes t
   try {
     const state = openState(join(state_home, '.local', 'state', 'martha'), checkout)
     assert.ok('directory' in state, 'the state opens')
-    const places = launcherPlacesOf(state, join(state_home, 'relay'), checkout)
+    const places = launcherPlacesOf(state, join(state_home, 'relay-places'), checkout)
     assert.ok('rows' in places, 'the launcher places are made')
     assert.equal(crewRowsDirectoryOf(join(state_home, '.local', 'state'), checkout), places.rows, 'the reader derives the place the launcher built')
   } finally {

@@ -258,7 +258,7 @@ test('a synced skill is refused with the remedy its owner can carry out, and any
 test('the watch refuses a hooked agent, skill or command in each user and managed folder the host loads, a synced skill included, and lets it go once removed', (t) => {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
-  const user = join(root, 'config', 'settings.json')
+  const user = join(root, 'conf-dir', 'settings.json')
   const watch = hookSettingsWatch({ user, home: root, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
   const folders = markdownFolders(user, managed, CLAUDE_CODE_OWNERS_MARKDOWN.kinds)
   assert.equal(folders.length, 2 * CLAUDE_CODE_OWNERS_MARKDOWN.kinds.length)
@@ -278,7 +278,7 @@ test('the watch refuses a hooked agent, skill or command in each user and manage
 test('the watch follows a link to a folder, reads only .md files, and refuses a folder it cannot read', (t) => {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
-  const user = join(root, 'config', 'settings.json')
+  const user = join(root, 'conf-dir', 'settings.json')
   const watch = hookSettingsWatch({ user, home: root, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
   const [agents] = markdownFolders(user, managed, CLAUDE_CODE_OWNERS_MARKDOWN.kinds)
   assert.ok(agents !== undefined)
@@ -308,7 +308,7 @@ test('the watch follows a link to a folder, reads only .md files, and refuses a 
 function watchOver(t: TestContext, settings: unknown) {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
-  const user = join(root, 'config', 'settings.json')
+  const user = join(root, 'conf-dir', 'settings.json')
   mkdirSync(dirname(user), { recursive: true })
   writeFileSync(user, JSON.stringify(settings))
   const approved = join(root, 'approved.json')

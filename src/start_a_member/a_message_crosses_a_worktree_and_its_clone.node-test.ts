@@ -55,8 +55,8 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
 
   const state = openState(join(home, '.local', 'state', 'martha'), clone)
   assert.ok('directory' in state, 'the state opens')
-  const inTheClone = launcherPlacesOf(state, join(home, 'relay'), clone)
-  const inTheWorktree = launcherPlacesOf(state, join(home, 'relay'), worktree)
+  const inTheClone = launcherPlacesOf(state, join(home, 'relay-places'), clone)
+  const inTheWorktree = launcherPlacesOf(state, join(home, 'relay-places'), worktree)
   assert.ok('rows' in inTheClone && 'rows' in inTheWorktree)
   assert.equal(inTheWorktree.rows, inTheClone.rows, 'a worktree and its clone were given different row stores, so no message can cross them')
 
@@ -66,7 +66,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const channel = { clock: host.clock, stores: { rows: rowStreamsDirectory(inTheClone.rows) } }
   const turns = turnsRaised()
   const crewOf = (member: string, root: string): ReturnType<typeof crewToolsOver> =>
-    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew')) }, carrier: carryingTo({ member, host: channel, turns }) })
+    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew-files')) }, carrier: carryingTo({ member, host: channel, turns }) })
 
   const sent = await crewOf('Builder', worktree).answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
   assert.ok('answer' in sent, `the send from the worktree was not answered: ${JSON.stringify(sent)}`)

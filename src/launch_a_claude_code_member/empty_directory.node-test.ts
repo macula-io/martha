@@ -19,7 +19,7 @@ function scratch(t: TestContext): string {
 
 test('the empty directory is made new, 0500 and empty; a path that exists or a link refuses', (t) => {
   const dir = scratch(t)
-  const made = join(dir, 'nothing')
+  const made = join(dir, 'not-there')
   assert.deepEqual(makeEmptyDirectory(made), { made: true })
   assert.equal(lstatSync(made).mode & 0o777, EMPTY_DIRECTORY_MODE)
   assert.deepEqual(readdirSync(made), [])
@@ -28,5 +28,5 @@ test('the empty directory is made new, 0500 and empty; a path that exists or a l
   const link = join(dir, 'link')
   symlinkSync(dir, link)
   assert.equal(makeEmptyDirectory(link).made, false, 'a link is never followed')
-  assert.equal(makeEmptyDirectory(join(dir, 'missing', 'nothing')).made, false, 'a parent that is not there refuses')
+  assert.equal(makeEmptyDirectory(join(dir, 'missing', 'not-there')).made, false, 'a parent that is not there refuses')
 })

@@ -235,7 +235,7 @@ try {
     stderr.write(`${MESH_SERVER_PACKAGE} ${tree.server_version} has no recorded bin ${serverBin}: record the version's tools first (npm run record:mesh-tools)\n`)
     exit(1)
   }
-  const server_file = join(scratch, 'tree', 'node_modules', MESH_SERVER_PACKAGE, bin)
+  const server_file = join(scratch, 'installed-tree', 'node_modules', MESH_SERVER_PACKAGE, bin)
   const code = join(scratch, 'extracted', 'package')
   const recorded = await record(server_file, tree.server_version, tree.integrity, code, scratch)
   const next = withVersion(KEY_RECORDING, recorded)
