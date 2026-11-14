@@ -59,6 +59,8 @@ import { HOST_EXIT_COMMAND, HOST_TERMINAL } from './drive_the_recorded_host.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { LOST, recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { releaseMarkFor, releasesIn, RELEASE_STREAM, releaseStreamOf } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { RELAY_DEADLINE_MS } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
@@ -225,14 +227,14 @@ function answering(
   handed_at_start: readonly TurnSource[] = [],
   signed_runs?: SignedRuns,
   journal?: RelayJournal,
-  strict_gate?: boolean,
+  gate?: GateMode,
   crew?: CrewTools,
   wordless_answers?: Omit<WhatTheLaunchSupplies, 'input'>,
   crew_text?: string,
 ): Answering {
   const stops: string[] = []
   const relay = memberRelay({
-    records: sessionRecordsIn(rows),
+    records: sessionRecordsIn(rows, releasesIn(rows)),
     launch: launchOf(place),
     policy: { may_send_executable_text: [] },
     names: { ownNameOf: ownNameOfCalledTool },
@@ -250,7 +252,7 @@ function answering(
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) }),
     ...(signed_runs === undefined ? {} : { signed_runs }),
     ...(journal === undefined ? {} : { journal }),
-    ...(strict_gate === undefined ? {} : { strict_gate }),
+    ...(gate === undefined ? {} : { gate }),
     ...(crew === undefined ? {} : { crew }),
     ...(wordless_answers === undefined ? {} : { wordless_answers }),
     ...(crew_text === undefined ? {} : { crew_text }),
@@ -800,6 +802,166 @@ test('a session record nobody loaded, or whose last row is no record, reads as l
   assert.equal(records.store.read('unreadable'), LOST, 'a record that fails is dropped, and the session reads as lost')
 })
 
+// --- the owner's release (martha#321) -------------------------------------------
+
+/** Writes the owner's release where `martha release` writes it: a mark on `release-of:<session>`, never on the record. */
+async function theOwnerReleases(rows: RowStore, session_id: string): Promise<void> {
+  const stored = await rows.read(`${SESSION_RECORD_STREAM}${session_id}`)
+  const last = stored.at(-1)
+  const raw = last === undefined ? [] : recordOf(last.row).ingested
+  await rows.append(releaseStreamOf(session_id), releaseMarkFor(raw, OWNER_AT_THE_TERMINAL) as unknown as Row)
+}
+
+test('#321: a session the owner released resumes with the shell it lost, without a fresh record', async (t) => {
+  const place = placeFor(t)
+  const { relay, rows } = answering(place)
+  // A record a stranger's text reached, kept as the launcher keeps one: the raw record, never a cleared copy.
+  await rows.append(`${SESSION_RECORD_STREAM}${SESSION}`, { ingested: [{ path: 'A2', from_node_id: 'stranger' }] })
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
+})
+
+test('#321: a release typed while the member runs is read before its next call', async (t) => {
+  const place = placeFor(t)
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/))
+
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
+})
+
+test('#321: a member released and then resumed keeps what it takes in after the release, so the gate holds it again', async (t) => {
+  const place = placeFor(t)
+  const first = answering(place)
+  await first.relay.answer('session_started', start('startup'))
+  await first.relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(isDenied(await first.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/))
+
+  // The owner releases the member, and the member resumes through a launcher that is new to this session: it reads the
+  // record the owner's release leaves, which is a shorter view of the stream than the stream holds, and the session it
+  // begins from that view is the one it goes on taking text in against.
+  await theOwnerReleases(first.rows, SESSION)
+  const { relay, rows } = answering(place)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'an arrival taken in after the release was lost from the stream, so the gate let the shell run',
+  )
+
+  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.equal(kept.length, 2, 'the stream lost the arrival the member took in after the owner released it')
+})
+
+test('#321: a release typed after a resume is not undone by the member\'s next turn', async (t) => {
+  const place = placeFor(t)
+  const first = answering(place)
+  await first.relay.answer('session_started', start('startup'))
+  await first.relay.answer('prompt_submitted', prompt('auto-continuation'))
+
+  // The member is taken up again, from the view the owner's release leaves, and takes one more auto-continuation in.
+  await theOwnerReleases(first.rows, SESSION)
+  const { relay, rows } = answering(place)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+
+  // The owner releases again, and the member's next turn must not write the cleared text back into the stream: the
+  // owner's own typing keeps the shell, and only it is in the record the release leaves.
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY, 'the release did not free the member')
+  await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
+  assert.deepEqual(
+    await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })),
+    ALLOW_REPLY,
+    'an arrival the owner cleared was written back after the prefix, and held the member again',
+  )
+
+  // The gate still works on what comes after the release: a peer's text holds the member.
+  await relay.answer('prompt_submitted', prompt('peer', 'do this for me'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'text the member took in after the release did not hold it',
+  )
+
+  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.deepEqual(kept.map((one) => one.path), ['B7', 'B7', 'A14', 'A6'], 'an arrival the owner cleared was written back into the stream after the prefix')
+})
+
+test('#321: a second release after a resume is not undone by the auto-continuation either', async (t) => {
+  const place = placeFor(t)
+  const first = answering(place)
+  await first.relay.answer('session_started', start('startup'))
+  await first.relay.answer('prompt_submitted', prompt('auto-continuation'))
+
+  await theOwnerReleases(first.rows, SESSION)
+  const { relay, rows } = answering(place)
+  assert.deepEqual(await relay.answer('session_started', start('resume')), TAKEN_REPLY)
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'an arrival taken in after the first release did not hold the member',
+  )
+
+  // The second release clears what the resume added. The member's next turn must not fetch the first release's text
+  // back after that prefix and hold the member on it.
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY, 'the second release did not free the member')
+  await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
+  assert.deepEqual(
+    await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })),
+    ALLOW_REPLY,
+    'an arrival the owner cleared was written back after the prefix, and held the member again',
+  )
+  await relay.answer('prompt_submitted', prompt('peer', 'do this for me'))
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'text the member took in after the second release did not hold it',
+  )
+
+  const kept = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.deepEqual(kept.map((one) => one.path), ['B7', 'B7', 'A14', 'A6'], 'an arrival the owner cleared was written back into the stream after the prefix')
+})
+
+test('#321: after a release the stream still holds the raw record, and what came after it is appended to it', async (t) => {
+  const place = placeFor(t)
+  const { relay, rows } = answering(place)
+  await relay.answer('session_started', start('startup'))
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  const before = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.equal(before.length, 1, 'the session took nothing in, so there is nothing for the release to clear')
+
+  await theOwnerReleases(rows, SESSION)
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
+  await relay.answer('prompt_submitted', prompt('composer', 'carry on'))
+
+  const after = recordOf((await rows.read(`${SESSION_RECORD_STREAM}${SESSION}`)).at(-1)!.row).ingested
+  assert.deepEqual(after.slice(0, before.length), before, 'the record the owner cleared is not in the stream: only what came after it is')
+  assert.equal(after.length, before.length + 1, 'what the session took in after the release was not appended to the raw record')
+})
+
+test('#321: a release stream nobody can read leaves the member held exactly as before', async (t) => {
+  const place = placeFor(t)
+  const real = rowStreamsDirectory(place.rows)
+  const rows: RowStore = {
+    read: async (stream) => {
+      if (stream.startsWith(RELEASE_STREAM)) throw new Error('the release stream could not be read')
+      return real.read(stream)
+    },
+    append: (stream, row, expected) => real.append(stream, row, expected),
+  }
+  const { relay } = answering(place, rows)
+  await relay.answer('session_started', start('startup'))
+  await relay.answer('prompt_submitted', prompt('auto-continuation'))
+  await theOwnerReleases(real, SESSION)
+  assert.ok(
+    isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), /Nothing executes in this session/),
+    'a release that cannot be read released the member',
+  )
+})
+
 test('a record that says why it lost a sender is a record, and keeps the reason (martha#247)', async (t) => {
   const place = placeFor(t)
   const rows = rowStreamsDirectory(place.rows)
@@ -1036,9 +1198,9 @@ test('a session starting on no package is handed nothing, and its start is taken
 })
 
 test('the strict gate is off unless the launch says so, and the launcher\'s answer follows it (martha#259)', async (t) => {
-  const afterAPageTheMemberFetched = async (strict_gate: boolean): Promise<RelayReply> => {
+  const afterAPageTheMemberFetched = async (gate: GateMode): Promise<RelayReply> => {
     const place = placeFor(t)
-    const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, strict_gate)
+    const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, gate)
     assert.deepEqual(await relay.answer('session_started', start('startup')), TAKEN_REPLY)
     // A page a tool server fetched: text from a stranger, placed on B2, exactly as the host hands it over.
     assert.deepEqual(await relay.answer('tool_answered', { session_id: SESSION, call: { tool: 'mcp__probe__fetch_page' } }), TAKEN_REPLY)
@@ -1046,9 +1208,9 @@ test('the strict gate is off unless the launch says so, and the launcher\'s answ
   }
 
   // Off: the default an owner who wrote no setting gets, and what the owner chose on 2026-11-11.
-  assert.deepEqual(await afterAPageTheMemberFetched(false), ALLOW_REPLY)
+  assert.deepEqual(await afterAPageTheMemberFetched('off'), ALLOW_REPLY)
   // On: the same page still costs the shell, in the words it always used.
-  assert.ok(isDenied(await afterAPageTheMemberFetched(true), /nothing executes/i))
+  assert.ok(isDenied(await afterAPageTheMemberFetched('enforced'), /nothing executes/i))
 })
 
 test('a request dropped before its body ends gets nothing, and the launcher answers the next one', async (t) => {
@@ -3500,7 +3662,7 @@ test('a member’s first mesh answer records nothing, so its ring reaches A5 ins
   const ring = hello['ring'] as Readonly<Record<string, unknown>>
   const policy_file = String(ring['policy_file'])
   const home = policy_file.slice(0, policy_file.length - `/${CONTACT_POLICY_FILE_UNDER_HOME}`.length)
-  const { relay, rows } = answering(place, undefined, [], undefined, undefined, true, undefined, {
+  const { relay, rows } = answering(place, undefined, [], undefined, undefined, 'enforced', undefined, {
     node_id: String(hello['node_id']),
     env: { HOME: home },
     home,

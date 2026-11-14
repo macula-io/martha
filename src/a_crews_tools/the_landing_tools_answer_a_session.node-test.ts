@@ -128,6 +128,8 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
       clones: places.clones,
       worktrees: places.worktrees,
     },
+    // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
+    gate: { kind: 'off' },
     channel_read_seconds: 30,
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   }

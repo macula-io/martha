@@ -34,6 +34,9 @@
 // request, the state of a package's issue, and the rate limit itself. Nothing outside this directory names `gh` with `run list` or `run watch`, and
 // prove_the_core/one_place_asks_github fails by name when something does.
 //
+// A `git ls-remote` of origin, as ../read_the_tips_a_removal_covers runs one for a queued branch removal, is git's own
+// transport and not GitHub's API: it spends nothing from this allowance, and it is outside this budget on purpose.
+//
 // The numbers are named once, here: a floor of five hundred calls left, a minute of backoff that doubles to five, and
 // twelve reads for one wait. They are the crew's, not a declaration's: a crew cannot buy itself a bigger token by
 // editing a file.

@@ -24,6 +24,7 @@
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
+import { GATE_AUDITS, GATE_ENFORCES, gateSettingOf, type GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
 
 /** Where a crew's declaration lives, relative to the project root. */
 export const DECLARATION_DIRECTORY = '.crew'
@@ -84,6 +85,10 @@ export const DASHBOARD = 'dashboard'
 /** The house rule that runs the strict shell gate (martha#259): a session that took in text it cannot trace executes
  * nothing until it is replaced. Off unless the declaration names it, as every switch is, so an owner who wrote no
  * `house_rules` gets a member that keeps its shell (DECIDED 2026-11-11 "make the guard opt-in").
+ *
+ * Read for one upgrade only, since macula-io/martha#321 replaced it with `gate_enforces` and `gate_audits`: a file an
+ * earlier release wrote still declares, and `true` there reads as the gate enforcing for every member. Nothing reads
+ * this switch beside the new fields — see ../read_the_gate_mode for the one reading.
  */
 export const STRICT_GATE = 'strict_gate'
 
@@ -179,6 +184,12 @@ export interface CrewSettings {
   readonly mode: Mode
   readonly house_rules: HouseRules
   /**
+   * What the shell gate does to a member (martha#321): off, audited, or enforced, read once from the declaration's own
+   * fields and from the old `strict_gate` boolean. Read it through ../read_the_gate_mode's gateModeFor, never by
+   * comparing fields here.
+   */
+  readonly gate: GateSetting
+  /**
    * How often, in seconds, a member's session reads the crew's channel for a message it has not taken in (martha#253).
    * A declaration that names none reads as the value `martha init` writes (martha#374), so a crew declared by an
    * earlier release carries messages without its owner editing the file.
@@ -214,7 +225,14 @@ const MODE_KEYS = ['name', 'roles', 'may'] as const
 // What a field must look like, written from its keys: `{ a, b, c? }`.
 const shapeOf = (required: readonly string[], optional: readonly string[] = []) =>
   `{ ${[...required, ...optional.map(key => `${key}?`)].join(', ')} }`
-const HOUSE_RULE_KEYS: readonly string[] = [...HOUSE_RULE_SWITCHES, REVIEW_MODEL, ...HOUSE_RULE_PLACES, ...HOUSE_RULE_MINUTES]
+const HOUSE_RULE_KEYS: readonly string[] = [
+  ...HOUSE_RULE_SWITCHES,
+  REVIEW_MODEL,
+  ...HOUSE_RULE_PLACES,
+  ...HOUSE_RULE_MINUTES,
+  GATE_ENFORCES,
+  GATE_AUDITS,
+]
 
 type Json = Record<string, unknown>
 
@@ -283,12 +301,14 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
   if (value['version'] !== DECLARATION_VERSION) refuse.at('version', `is not ${DECLARATION_VERSION}`)
   if (!isText(value['owner'])) refuse.at('owner', 'is not a name')
   const mode = modeOf(refuse, value['mode'])
+  const members = membersOf(refuse, value['members'], mode.roles)
   return {
     paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) },
     owner: value['owner'].trim(),
-    members: membersOf(refuse, value['members'], mode.roles),
+    members,
     mode,
     house_rules: houseRulesOf(refuse, value['house_rules'], models),
+    gate: gateOf(refuse, value['house_rules'], members),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
   }
@@ -392,6 +412,18 @@ function memberNameOf(refuse: Refuse, name: unknown, at: string, seen: Set<strin
   if (seen.has(folded)) refuse.at(`${at}.name`, 'is on the crew twice (names are compared ignoring case)')
   seen.add(folded)
   return name
+}
+
+/**
+ * What the gate does to a member, read from the declaration's own fields (martha#321).
+ *
+ * The reading itself is ../read_the_gate_mode's, so the owner's rule lives in one place; this only turns its refusal
+ * into a declaration refusal naming the field, which is where the owner sees it.
+ */
+function gateOf(refuse: Refuse, value: unknown, members: readonly Member[]): GateSetting {
+  const read = gateSettingOf(isObject(value) ? value : undefined, members.map((member) => member.name))
+  if ('refused' in read) return refuse.at(`house_rules.${read.field}`, read.why)
+  return read
 }
 
 function houseRulesOf(refuse: Refuse, value: unknown, models: readonly string[]): HouseRules {
