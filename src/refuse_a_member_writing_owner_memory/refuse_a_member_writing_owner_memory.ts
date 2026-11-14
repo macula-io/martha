@@ -95,7 +95,7 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, userSettingsPath, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
@@ -1020,7 +1020,7 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
 export function userScopeUnder(home: string): OwnerUserScope {
   const settings = userSettingsPath({ HOME: home })
   // With only a HOME, `userSettingsPath` never refuses; the fallback is the host's own default, never a restated one.
-  const config = 'path' in settings ? dirname(settings.path) : join(home, DEFAULT_CONFIG_DIR)
+  const config = 'path' in settings ? dirname(settings.path) : join(home, CLAUDE_FOLDER)
   return {
     markdown_kinds: RECORDED_HOST.markdown_kinds,
     output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,

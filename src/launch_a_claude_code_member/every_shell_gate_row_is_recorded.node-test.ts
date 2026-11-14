@@ -43,14 +43,13 @@ import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 const bytes = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value))
@@ -134,7 +133,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
     handed_at_start: sourcesALaunchHandsTheModel(CARRIED),
     // No settings file in the test's home, so the watch finds nothing and every event reaches its row.
     hookSettings: hookSettingsWatch({
-      user: join(place.home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+      user: join(place.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: place.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') },

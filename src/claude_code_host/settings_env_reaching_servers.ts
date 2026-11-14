@@ -52,8 +52,9 @@ export const CLAUDE_CODE_OWN_VARIABLES: readonly ClaudeCodeOwnVariable[] = [
 
 /** Where Claude Code reads the owner's user settings: CLAUDE_CONFIG_DIR, else ~/.claude. */
 export const USER_SETTINGS_FILE = 'settings.json'
-/** The config dir under the home a host loads when CLAUDE_CONFIG_DIR says nothing. */
-export const DEFAULT_CONFIG_DIR = '.claude'
+/** The folder Claude Code keeps its own files in, under what holds them: the home when CLAUDE_CONFIG_DIR says
+ * nothing, a project, and the managed folder, whose markdown folders the recorded loader joins under it. */
+export const CLAUDE_FOLDER = '.claude'
 
 /**
  * The user settings file the host started with this environment reads; or a
@@ -65,7 +66,7 @@ export const DEFAULT_CONFIG_DIR = '.claude'
  */
 export function userSettingsPath(env: Readonly<Record<string, string | undefined>>): { readonly path: string } | { readonly refusal: string } {
   const configDir = env.CLAUDE_CONFIG_DIR
-  if (configDir === undefined) return { path: join(env.HOME ?? homedir(), DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE) }
+  if (configDir === undefined) return { path: join(env.HOME ?? homedir(), CLAUDE_FOLDER, USER_SETTINGS_FILE) }
   if (!isAbsolute(configDir)) {
     return {
       refusal: `CLAUDE_CONFIG_DIR is ${JSON.stringify(configDir)}, not an absolute directory, so which user settings file Claude Code reads cannot be told; set it to an absolute path or unset it`,

@@ -35,8 +35,7 @@ import { removeTheTree } from './relay_copy.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RELAY_SOCKET_NAME } from './relay_directory.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'
@@ -87,7 +86,7 @@ test('a tool call posted by the mod is answered by the core\'s slice, and the ro
       binder: bindNothing,
       handed_at_start: sourcesALaunchHandsTheModel({}),
       hookSettings: hookSettingsWatch({
-        user: join(place.home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+        user: join(place.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
         home: place.home,
         approved: undefined,
         managed: { ...RECORDED_MANAGED, dir: join(place.home, 'managed') },
@@ -163,7 +162,7 @@ test('a name the crew registers nothing for is refused, naming it (test 11)', as
       binder: bindNothing,
       handed_at_start: sourcesALaunchHandsTheModel({}),
       hookSettings: hookSettingsWatch({
-        user: join(place.home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+        user: join(place.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
         home: place.home,
         approved: undefined,
         managed: { ...RECORDED_MANAGED, dir: join(place.home, 'managed') },
@@ -205,6 +204,6 @@ function userScopeFor(home: string): OwnerUserScope {
   return {
     markdown_kinds: RECORDED_HOST.markdown_kinds,
     output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-    reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+    reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
   }
 }

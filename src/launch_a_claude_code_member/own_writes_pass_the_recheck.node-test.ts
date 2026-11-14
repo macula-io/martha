@@ -33,14 +33,13 @@ import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_rel
 import { removeTheTree } from './relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 const MEMBER = 'builder'
@@ -104,7 +103,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
     handed_at_start: [],
     ownerMemory: ownerMemoryPlaces({ launcher_env: { HOME: home }, member_env: { HOME: home }, home, launch_dir: home, settings_files: [], user_scope: userScopeFor(home) }),
     hookSettings: hookSettingsWatch({
-      user: join(home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+      user: join(home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(home, 'managed') },

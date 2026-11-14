@@ -8,7 +8,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { CONFIG_WORKTREE, CONFIG, SHELL_DEPTH_CAP } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
@@ -32,7 +32,7 @@ import {
   type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { SKILLS_KIND, MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { SKILLS_KIND } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
@@ -40,7 +40,7 @@ function placeFor(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'martha-136-'))
   t.after(() => removeTheTree(root))
   const home = join(root, 'home')
-  const config = join(home, MANAGED_MARKDOWN_FOLDER)
+  const config = join(home, CLAUDE_FOLDER)
   const mainMemory = join(config, 'projects', '-work-main-clone', 'memory')
   const otherMemory = join(config, 'projects', '-work-other', 'memory')
   const worktree = join(root, 'some-worktrees', 'main-clone-feature')

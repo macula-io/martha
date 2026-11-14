@@ -23,7 +23,7 @@ import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameO
 import { DASHBOARD } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -87,7 +87,7 @@ function aRowSaying(places: Places, needs: string): void {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, DEFAULT_CONFIG_DIR, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** A crew that lets every call through and reads a subagent spawn as its review on the reviewer model. */
@@ -123,7 +123,7 @@ function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): 
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(places.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE),
+      user: join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: places.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(places.home, 'managed') },

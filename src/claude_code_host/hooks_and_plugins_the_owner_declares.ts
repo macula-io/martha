@@ -170,9 +170,6 @@ export interface OwnersMarkdown {
   readonly kinds: readonly string[]
 }
 
-/** The folder under the managed folder that holds its markdown folders, as the recorded loader joins it. */
-export const MANAGED_MARKDOWN_FOLDER = '.claude'
-
 const BYTE_ORDER_MARK = 0xfeff
 
 /** What a scan of the frontmatter found: a backslash outside a value, and a quoted value that never closes. */

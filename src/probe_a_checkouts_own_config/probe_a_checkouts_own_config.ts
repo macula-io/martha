@@ -17,7 +17,7 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -84,7 +84,7 @@ function plantFixedText(place: Place): void {
   put(place.checkout, INSTRUCTION_FILES.checkout, 'Probe instructions at the top.\n')
   put(place.checkout, join(NESTED_DIR, INSTRUCTION_FILES.checkout), 'Probe instructions below the top.\n')
   put(place.checkout, NESTED_FILE, 'a file below the top\n')
-  put(place.checkout, join(MANAGED_MARKDOWN_FOLDER, 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
+  put(place.checkout, join(CLAUDE_FOLDER, 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
 }
 
 /**

@@ -51,7 +51,8 @@ import { basename, dirname, join } from 'node:path'
 
 import { FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT, asTheHostResolves } from './claude_code_file_tools.ts'
 
-import { hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, MANAGED_MARKDOWN_FOLDER, SKILLS_KIND, SYNCED_SKILLS_FOLDER, SYNC_OFF_SETTING, TRASH_FOLDER, type OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
+import { hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, SKILLS_KIND, SYNCED_SKILLS_FOLDER, SYNC_OFF_SETTING, TRASH_FOLDER, type OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
 
 /** How safe mode is switched on: by a variable in the host's environment, or by a flag on its command line. */
 export interface SafeMode {
@@ -582,7 +583,7 @@ function markdownTextOf(path: string): { readonly path: string; readonly text: s
 
 /** The markdown folders the host loads in the user and managed scopes: each kind under the user config folder and under the managed folder. */
 export function markdownFolders(user: string, managed: ManagedSettingsPlace, kinds: readonly string[]): string[] {
-  return kinds.flatMap((kind) => [join(dirname(user), kind), join(managed.dir, MANAGED_MARKDOWN_FOLDER, kind)])
+  return kinds.flatMap((kind) => [join(dirname(user), kind), join(managed.dir, CLAUDE_FOLDER, kind)])
 }
 
 /** Whether a path is at or below a folder. */
@@ -599,7 +600,7 @@ const isUnder = (path: string, folder: string): boolean => path === folder || pa
  */
 function hooksInMarkdown(user: string, managed: ManagedSettingsPlace, markdown: OwnersMarkdown, syncedOff: boolean): string[] {
   const syncedFolder = join(dirname(user), SKILLS_KIND, SYNCED_SKILLS_FOLDER)
-  const skillsFolders = new Set([join(dirname(user), SKILLS_KIND), join(managed.dir, MANAGED_MARKDOWN_FOLDER, SKILLS_KIND)])
+  const skillsFolders = new Set([join(dirname(user), SKILLS_KIND), join(managed.dir, CLAUDE_FOLDER, SKILLS_KIND)])
   const walked = markdownFolders(user, managed, markdown.kinds).map((folder) => markdownUnder(folder, new Set(), skillsFolders.has(folder) ? TRASH_FOLDER : undefined))
   const read = walked
     .flatMap((one) => one.files)

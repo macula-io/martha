@@ -19,8 +19,7 @@ import { test, type TestContext } from 'node:test'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { checkedBody, dialogBody } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -60,7 +59,7 @@ function placesOf(t: TestContext): Places {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** A store that keeps one member's row in memory. */
@@ -105,7 +104,7 @@ function relayFor(places: Places, store: DashboardStore, wrote: string[]): Membe
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(places.home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+      user: join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: places.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(places.home, 'managed') },

@@ -47,7 +47,7 @@ import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell
 import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { MANAGED_MARKDOWN_FOLDER, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
 import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './leftover_relay_directories.ts'
@@ -68,7 +68,7 @@ import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
@@ -77,7 +77,7 @@ import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exac
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 // --- a member's places ----------------------------------------------------------
@@ -1272,7 +1272,7 @@ function fakeClaude(
     [
       '#!/bin/sh',
       // The session init reports the folder the launcher must deny: this place's own config dir (#154).
-      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
+      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
       `: > '${files.ranFile}'`,
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `printf '%s' "$${RELAY_SOCKET_VARIABLE}" > '${files.envFile}'`,
@@ -1934,7 +1934,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
 // The host gives every server its own environment, then the env of each settings
 // file it loaded: the owner's user settings and the approved --settings copy.
 
-const USER_SETTINGS = join(MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE)
+const USER_SETTINGS = join(CLAUDE_FOLDER, USER_SETTINGS_FILE)
 const settingsWithEnv = (env: Record<string, string>) => JSON.stringify({ env })
 
 function ownerSettings(place: Place, env: Record<string, string>): string {
@@ -1992,7 +1992,7 @@ test('a name in the approved --settings env nobody approved starts nothing, nami
 
 for (const [shape, configDir] of [
   ['empty', ''],
-  ['relative', MANAGED_MARKDOWN_FOLDER],
+  ['relative', CLAUDE_FOLDER],
 ] as const) {
   test(`a CLAUDE_CONFIG_DIR that is ${shape} starts nothing, naming the variable (#65 r=4)`, async (t) => {
     const recorded = RECORDED_MESH_SERVERS[0]
@@ -2364,7 +2364,7 @@ test('an approved launch starts the host with the switches and the relay, and a 
     join(place.snapshot_root, snapshot[0] ?? '', '.mcp.json'),
     // Written by the launch when none is carried: the rules that keep the host's own writes out of the owner's memory (martha#136).
     '--settings',
-    join(place.snapshot_root, snapshot[0] ?? '', MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+    join(place.snapshot_root, snapshot[0] ?? '', CLAUDE_FOLDER, USER_SETTINGS_FILE),
     '--plugin-dir',
     plugin_dir,
   ])

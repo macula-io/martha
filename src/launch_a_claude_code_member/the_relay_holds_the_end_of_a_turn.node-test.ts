@@ -17,7 +17,7 @@ import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCal
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -52,7 +52,7 @@ function placesOf(t: TestContext): Places {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, DEFAULT_CONFIG_DIR, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** A crew that refuses no call, over the one hold on the end of a running turn the test drives (martha#311). */
@@ -92,7 +92,7 @@ function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: Sign
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(places.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE),
+      user: join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: places.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(places.home, 'managed') },
@@ -124,12 +124,12 @@ const call = (tool: string, more: Readonly<Record<string, unknown>> = {}) => ({ 
 const THE_TURN = 'the-running-turn'
 
 /** The owner's user settings file, where a member's launch reads it (martha#122). */
-const ownersSettingsOf = (places: Places): string => join(places.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE)
+const ownersSettingsOf = (places: Places): string => join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
 
 /** A relay over a crew holding `ends`, its session started, with what it took receipts for and why it stopped. */
 async function aStartedRelay(t: TestContext, ends: TheEndsHold | undefined) {
   const places = placesOf(t)
-  mkdirSync(join(places.home, DEFAULT_CONFIG_DIR), { recursive: true })
+  mkdirSync(join(places.home, CLAUDE_FOLDER), { recursive: true })
   writeFileSync(ownersSettingsOf(places), '{}\n')
   const allowed: string[] = []
   const stops: string[] = []

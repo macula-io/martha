@@ -23,7 +23,6 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { DEFAULT_CONFIG_DIR } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import {
@@ -43,6 +42,7 @@ import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_U
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
+import { CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 const MEMBER = 'builder'
 const SENDER = 'the-owner'
@@ -149,7 +149,7 @@ async function untilTheTurnCarryingItEnded(hands: TheOwnersHands, text: string):
 
 /** The sessions the host kept transcripts for in this run: the record of each is read by its id. */
 function theSessionsOf(project: Project): readonly string[] {
-  const projects = join(project.home, DEFAULT_CONFIG_DIR, 'projects')
+  const projects = join(project.home, CLAUDE_FOLDER, 'projects')
   return readdirSync(projects, { recursive: true, encoding: 'utf8' })
     .filter((name) => name.endsWith('.jsonl') && !name.includes('subagents'))
     .map((name) => basename(name, '.jsonl'))

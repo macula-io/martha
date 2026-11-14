@@ -20,8 +20,8 @@
 
 import { closingBrace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { loaderIn } from '../claude_code_host/markdown_the_host_loads.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 import { CHUNK } from '../claude_code_host/protected_config_places.ts'
+import { CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 /** One function the guard reaches, whole, and the entry each name it calls binds to. */
 export interface GuardFunction {
@@ -96,7 +96,7 @@ function assignmentIn(loader: string, name: string): string[] {
 
 /** The guard's expression in the loader, and each name it reads that the loader assigns, their expressions too. */
 function guardExpressionsIn(loader: string, managed: string): string[] {
-  const folder = new RegExp(`([\\w$]+)=[\\w$]+\\(${escaped(managed)}\\(\\),${escaped(JSON.stringify(MANAGED_MARKDOWN_FOLDER))},`).exec(loader)?.[1]
+  const folder = new RegExp(`([\\w$]+)=[\\w$]+\\(${escaped(managed)}\\(\\),${escaped(JSON.stringify(CLAUDE_FOLDER))},`).exec(loader)?.[1]
   const guards = folder === undefined ? [] : [...loader.matchAll(new RegExp(`\\[\\(([^?]+)\\?Promise\\.resolve\\(\\[\\]\\):[\\w$]+\\(${escaped(folder)},`, 'g'))]
   if (guards.length !== 1) throw new Error(`The markdown loader holds ${String(guards.length)} guards on the managed folder, not one.`)
   const expressions = [guards[0]?.[1] ?? '']

@@ -28,8 +28,8 @@
 //     here; the path itself is the one the session's own init reports at launch,
 //     since the host resolves it after the settings env blocks.
 
-import { MANAGED_MARKDOWN_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 import { closingBrace } from './settings_that_turn_hooks_off.ts'
+import { CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
 
 /** What the host binary says about the markdown it loads, as recorded. */
 export interface MarkdownTheHostLoads {
@@ -111,7 +111,7 @@ export function loaderIn(text: string, managed: string): { readonly name: string
   const marks = [...text.matchAll(new RegExp(LOADER_MARK, 'g'))]
   if (marks.length !== 1) throw new Error(`The host text marks ${String(marks.length)} markdown loaders, not one.`)
   const loader = enclosingAsyncFunction(text, marks[0]?.index ?? 0)
-  const reads = [`${managed}(),${JSON.stringify(MANAGED_MARKDOWN_FOLDER)},`, 'source:"policySettings"', 'source:"userSettings"']
+  const reads = [`${managed}(),${JSON.stringify(CLAUDE_FOLDER)},`, 'source:"policySettings"', 'source:"userSettings"']
   const missing = reads.filter((read) => !loader.source.includes(read))
   if (missing.length > 0) throw new Error(`The markdown loader does not read ${missing.join(', ')}, so the folders it loads cannot be told.`)
   return loader
@@ -130,7 +130,7 @@ function kindsIn(text: string, loader: string, managed: string): string[] {
   const named = [...text.matchAll(new RegExp(`[^\\w$]${caller}\\("([a-z-]+)"`, 'g'))].map((match) => match[1] ?? '')
   const skills = theOne(
     text,
-    new RegExp(`([\\w$]+)=[\\w$]+\\(${escaped(managed)}\\(\\),"${MANAGED_MARKDOWN_FOLDER.replace('.', '\\.')}","([a-z-]+)"\\)[^\`]{0,4000}?\`Loading skills from: managed=\\$\\{\\1\\}`, 'g'),
+    new RegExp(`([\\w$]+)=[\\w$]+\\(${escaped(managed)}\\(\\),"${CLAUDE_FOLDER.replace('.', '\\.')}","([a-z-]+)"\\)[^\`]{0,4000}?\`Loading skills from: managed=\\$\\{\\1\\}`, 'g'),
     'the skills loader',
   )[2]
   if (named.length === 0 || skills === undefined) throw new Error('The folders the host loads markdown from cannot be read.')

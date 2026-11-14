@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { CLAUDE_CODE_OWN_VARIABLES, environmentFromSettings, userSettingsPath, USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
-import { MANAGED_MARKDOWN_FOLDER, PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_CODE_OWN_VARIABLES, environmentFromSettings, userSettingsPath, USER_SETTINGS_FILE, CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
+import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
 
 const ALLOWED = ['HOME', 'PATH', 'MACULA_MESH_REALMS']
 const USER = '/owner/.claude/settings.json'
@@ -60,7 +60,7 @@ for (const [shape, text] of [
 }
 
 test('the user settings file is under CLAUDE_CONFIG_DIR when it is set, else under HOME/.claude', () => {
-  assert.deepEqual(userSettingsPath({ HOME: '/owner' }), { path: join('/owner', MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE) })
+  assert.deepEqual(userSettingsPath({ HOME: '/owner' }), { path: join('/owner', CLAUDE_FOLDER, USER_SETTINGS_FILE) })
   assert.deepEqual(userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: '/config' }), { path: join('/config', USER_SETTINGS_FILE) })
 })
 

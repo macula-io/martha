@@ -18,8 +18,7 @@ import {
   settingsTurningHooksOff,
   type HookSwitches,
 } from './settings_that_turn_hooks_off.ts'
-import { USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
-import { MANAGED_MARKDOWN_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
 
 const USER = '/owner/.claude/settings.json'
 const MANAGED = '/etc/claude-code/managed-settings.json'
@@ -315,7 +314,7 @@ test("a file tool call naming the owner's user settings file is named, directly,
 test("a file tool call naming the owner's file the way the host spells it is named: ~/ against the host's home, and white space around the path", (t) => {
   const root = scratch(t)
   const home = join(root, 'home')
-  const owners = join(home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE)
+  const owners = join(home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
   mkdirSync(dirname(owners), { recursive: true })
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)

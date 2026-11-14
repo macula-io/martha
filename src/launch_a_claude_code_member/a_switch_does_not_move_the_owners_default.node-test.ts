@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
@@ -84,13 +84,13 @@ function approvedProjectWithModels(t: TestContext, ownersSettings: Record<string
 
 /** The owner's own settings file, as they wrote it: the file the host's model command saves a default into. */
 function writeTheOwnersSettings(home: string, settings: Record<string, unknown>): void {
-  const config = join(home, DEFAULT_CONFIG_DIR)
+  const config = join(home, CLAUDE_FOLDER)
   mkdirSync(config, { recursive: true })
   writeFileSync(join(config, USER_SETTINGS_FILE), `${JSON.stringify(settings, null, 2)}\n`)
 }
 
 /** The owner's settings file as it is now, byte for byte. */
-const theOwnersSettingsNow = (project: Project): string => readFileSync(join(project.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE), 'utf8')
+const theOwnersSettingsNow = (project: Project): string => readFileSync(join(project.home, CLAUDE_FOLDER, USER_SETTINGS_FILE), 'utf8')
 
 /** Gives the crew's declaration its models: the builder's own, and the one every review runs on. */
 function declareTheModels(checkout: string): void {
@@ -161,7 +161,7 @@ test('on the recorded host a switch leaves a settings file that held a model byt
   // sessions", and the restore is what makes that untrue. Only the file's bytes are the pass condition, because the
   // wording is the host's to change and Martha's answer must not depend on it.
   assert.match(drawnWithoutGaps(seen.shown), /SetmodeltoOpus/i, `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
-  assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE)} no longer holds what the owner wrote`)
+  assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)} no longer holds what the owner wrote`)
   assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did to the owner\'s default outlived the restore')
 })
 
@@ -179,6 +179,6 @@ test('on the recorded host a switch leaves an owner with no model where they wer
       script: ({ number }) => (number === 1 ? theSwitch : { text: 'Done.' }),
     }),
   )
-  assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE)} gained a model the owner never chose`)
+  assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)} gained a model the owner never chose`)
   assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did to the owner\'s default outlived the restore')
 })

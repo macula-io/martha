@@ -38,8 +38,7 @@ import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } fro
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
-import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
 
 // Synthetic node ids and pids, never a real one: this repository is public.
 const MEMBER = 'a'.repeat(64)
@@ -71,7 +70,7 @@ const CARRIED = {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, MANAGED_MARKDOWN_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** A member's places, under one directory the test removes. */
@@ -109,7 +108,7 @@ function relayFor(place: { readonly home: string; readonly checkout: string; rea
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(CARRIED),
     hookSettings: hookSettingsWatch({
-      user: join(place.home, MANAGED_MARKDOWN_FOLDER, USER_SETTINGS_FILE),
+      user: join(place.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: place.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(place.home, 'managed') },
