@@ -24,11 +24,9 @@
 // settingsTurningHooksOff, which reads every file read here, so it is passed
 // here rather than refused twice.
 //
-// Read by the settings watch of ./settings_that_turn_hooks_off.ts (martha#122)
+// Read by the settings watch of ../refuse_settings_that_turn_hooks_off (martha#122)
 // at launch and for the member's whole life, so a hook written into one of
 // these files while a member runs stops it too.
-
-import type { HookSettingsFile } from './settings_that_turn_hooks_off.ts'
 
 /** The variable from which Claude Code loads plugin folders, when it is set and not blank. */
 export const PLUGIN_DIRS_VARIABLE = 'CLAUDE_CODE_PLUGIN_DIRS'
@@ -264,4 +262,14 @@ export function hooksInFrontmatterOf(file: HookSettingsFile, pattern: string): s
   if (rules.length === 0) return undefined
   const why = file.synced === true ? SYNCED_FRONTMATTER_WHY : FRONTMATTER_WHY
   return `${file.path} has frontmatter holding ${rules.join(' and ')}, so it can declare hooks: ${why}`
+}
+
+/** A settings file the host reads; `text` is undefined when there is no such file. */
+export interface HookSettingsFile {
+  readonly path: string
+  readonly text: string | undefined
+  /** A managed file, where the host honours every switch. */
+  readonly managed: boolean
+  /** A skill the host synced from the owner's Claude account, which it writes again at every start (martha#243). */
+  readonly synced?: boolean
 }

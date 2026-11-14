@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { type Host, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 /** How long one host run may take before the probe gives up on it. */
 export const RUN_TIMEOUT_MS = 120_000
