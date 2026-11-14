@@ -238,6 +238,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts', reason: THE_GIT_SUBCOMMAND },
   // The same git subcommand, in the permission-prompt run's throwaway repository (martha#363).
   { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: THE_GIT_SUBCOMMAND },
+  // The same git subcommand, in the recorded end's throwaway repository (martha#311): martha init reads its owner there.
+  { value: CONFIG, file: 'launch_a_claude_code_member/an_end_on_the_recorded_host.node-test.ts', reason: THE_GIT_SUBCOMMAND },
   // The word `model` in the model-switch work (martha#315), in five files that each mean a field of their own by it.
   { value: CLAUDE_CODE_SHELL_TOOL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: 'a call to a tool that spawns no subagent, named as the host names its shell: what the test needs is a real tool the rule must not hold' },
   { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
