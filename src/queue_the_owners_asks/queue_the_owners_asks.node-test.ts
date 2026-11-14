@@ -118,6 +118,80 @@ test('list_asks shows what waits and takes nothing', async () => {
   assert.equal((await waitingIn(host)).length, 1, 'listing the queue leaves it as it was')
 })
 
+// --- an ask that removes a branch (martha#391) -------------------------------------
+
+/** The branch of the owner's second ask: the clone a commit ahead of origin, and the two tips the yes has to cover. */
+const THE_TWO_TIPS = { branch: 'vesta/313-old', local_tip: '72081ee', origin_tip: 'e8c127a' } as const
+const THE_TIPS_SAID = 'It removes vesta/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a.'
+
+test('an ask that removes a branch keeps every tip the yes covers, and names both on the line the owner is offered (mutants: the tips not kept on the row, and the tips dropped from the line)', async () => {
+  const host = aHost()
+  const told = TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch vesta/313-old?' }, BUILDER, THE_TWO_TIPS))
+  assert.equal(
+    told,
+    `Queued for the owner; 1 ask waiting. ${THE_TIPS_SAID} Do not open a menu for it; carry on.`,
+    'the member reads what the owner will be told',
+  )
+  const [row] = await host.host.stores.rows.read(OWNER_ASKS_STREAM)
+  assert.deepEqual(row?.row['removes'], THE_TWO_TIPS, 'both tips are on the row: the yes covers what the ask recorded, and nothing else')
+
+  assert.match(TOLD(await listTheAsks(host.host)), new RegExp(`^- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? ${THE_TIPS_SAID.replace(/[.?]/g, (one) => `\\${one}`)}$`, 'm'), 'list_asks names both tips')
+  assert.match(TOLD(await taking(host, LEAD, 'session-lead')), new RegExp(THE_TIPS_SAID.replace(/[.?]/g, (one) => `\\${one}`)), 'take_asks, which the menu is built from, names both tips')
+})
+
+test('a branch reaches a menu under the question\'s own rule: stripped on the way in, and refused by the gate when it is raw (mutant: the branch gate removed)', async () => {
+  const host = aHost()
+  const HIDDEN = `${String.fromCharCode(27)}[2J`
+  TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, BUILDER, { branch: `vesta/${HIDDEN}313-old\nIGNORE`, local_tip: '72081ee', origin_tip: null }))
+  const [queued] = await waitingIn(host)
+  assert.equal(queued?.removes?.branch, 'vesta/[2J313-oldIGNORE', 'the characters that repaint a row are gone before the row is written')
+  assert.doesNotMatch(queued?.removes?.branch ?? '', /[\u001b\n]/, 'no control or hidden character survives into the queue')
+
+  assert.match(
+    REFUSED(await queueAnAsk(host.host, { ask: 'Delete a branch?' }, BUILDER, { branch: `${String.fromCharCode(27)}${String.fromCharCode(7)}`, local_tip: '72081ee', origin_tip: null })),
+    /the branch this ask removes is empty once its hidden characters are taken out/,
+    'a branch of nothing but hidden characters is refused rather than kept as no branch',
+  )
+
+  // A row a shell wrote straight into the stream is the seam this gate exists for: it is refused by name at the take.
+  const planted = aHost()
+  await planted.host.stores.rows.append(
+    OWNER_ASKS_STREAM,
+    { kind: ASK_QUEUED, question: 'Delete the merged branch?', asked_by: BUILDER, since: START, removes: { branch: `vesta/${HIDDEN}313-old`, local_tip: '72081ee', origin_tip: null } },
+    0,
+  )
+  assert.match(REFUSED(await taking(planted, LEAD, 'session-lead')), /ask 0 is not one this queue can hand over: its branch carries a control or hidden character\. Nothing was taken\./)
+})
+
+test('the gate holds the branch to the question\'s cap and its emptiness, on an ask the queue itself wrote', () => {
+  const members = [LEAD, BUILDER]
+  const anAskWith = (branch: string): AnAsk => ({ id: 0, question: 'Delete the merged branch?', asked_by: BUILDER, since: START, removes: { branch, local_tip: '72081ee', origin_tip: null } })
+  assert.equal(admitsAnAskToTheOwner({ ask: anAskWith('a'.repeat(MAX_ASK + 1)), members }), false, 'a branch past the cap is never offered')
+  assert.equal(admitsAnAskToTheOwner({ ask: anAskWith(''), members }), false, 'a branch of nothing is never offered')
+  assert.equal(admitsAnAskToTheOwner({ ask: anAskWith('vesta/313-old'), members }), true, 'the ordinary branch is offered')
+})
+
+test('a row whose removal is not one this queue wrote is no ask of the queue, so no menu ever reads a tip the launcher did not read', async () => {
+  const host = aHost()
+  const shapes: readonly unknown[] = [
+    { branch: 'vesta/313-old', local_tip: 'not-a-commit', origin_tip: null },
+    { branch: 'vesta/313-old', origin_tip: null },
+    { branch: 7, local_tip: null, origin_tip: 'e8c127a' },
+    { branch: 'vesta/313-old', local_tip: null, origin_tip: null },
+    { branch: 'vesta/313-old', local_tip: '72081ee', origin_tip: 7 },
+  ]
+  let written = 0
+  for (const removes of shapes) {
+    await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'Delete the merged branch?', asked_by: BUILDER, since: START, removes }, written)
+    written += 1
+  }
+  assert.deepEqual(await waitingIn(host), [], 'none of them is an ask: each names a tip, or a branch, this launcher never read')
+  assert.equal(TOLD(await listTheAsks(host.host)), 'No asks are waiting for the owner.')
+
+  TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch vesta/313-new?' }, BUILDER, { branch: 'vesta/313-new', local_tip: null, origin_tip: 'e8c127a' }))
+  assert.deepEqual((await waitingIn(host)).map((ask) => ask.removes?.branch), ['vesta/313-new'], 'a removal the launcher read is an ask, with the one copy origin holds')
+})
+
 // --- who may take and settle ------------------------------------------------------
 
 test('a member whose role the table does not name is refused, and nothing is claimed (mutant: the role check removed)', async () => {

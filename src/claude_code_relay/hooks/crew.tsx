@@ -339,6 +339,7 @@ const answerSettleAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<un
 const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_add')
 const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
 const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
+const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wait_for_ci')
 
 /**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
@@ -402,6 +403,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing_add' }, answerStandingAdd)
   on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
+  on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
 
   on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
     await openThePane($)
