@@ -20,6 +20,7 @@ import { test, type TestContext } from 'node:test'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { DASHBOARD } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
@@ -61,7 +62,7 @@ function placesOf(t: TestContext): Places {
   mkdirSync(checkout)
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
   const rows = join(home, CREW_ROWS_PLACE)
-  const dashboard = join(home, 'dashboard')
+  const dashboard = join(home, DASHBOARD)
   mkdirSync(rows, { mode: 0o700 })
   mkdirSync(dashboard, { mode: 0o700 })
   return { member: MEMBER, home, checkout, rows, dashboard }
