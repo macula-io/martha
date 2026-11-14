@@ -37,7 +37,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import type { WhatTheHostSaid } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { recordOf, sessionRecordStreamOf, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
-import { A_TURN_OF_UNNAMED_SOURCE } from './hear_every_turn_the_model_runs.ts'
+import { A_TURN_OF_UNNAMED_SOURCE, theCommandLineOf } from './hear_every_turn_the_model_runs.ts'
 
 const MEMBER = 'Builder'
 const SENDER = 'Reviewer'
@@ -155,8 +155,9 @@ async function handed(launch: ALaunch, text: string): Promise<string> {
 }
 
 /** The host raises a prompt to the relay, as it does for one typed or one submitted inside a host event. */
-async function heard(launch: ALaunch, text: string, kind: string): Promise<void> {
-  const answered = await launch.relay.answer('prompt_submitted', { session_id: SESSION, text, origin: { kind } })
+async function heard(launch: ALaunch, text: string, kind: string, command?: string): Promise<void> {
+  const marks = command === undefined ? {} : { command: { name: command, args: '' } }
+  const answered = await launch.relay.answer('prompt_submitted', { session_id: SESSION, text, origin: { kind }, ...marks })
   assert.equal(answered.answered, true)
 }
 
@@ -247,4 +248,30 @@ test("#440: a subagent's turn start records nothing", async (t) => {
   assert.deepEqual(await launch.paths(), before, "a subagent's turn start changed the member's record")
   assert.deepEqual(launch.noted, [])
   assert.deepEqual(launch.raised, [])
+})
+
+test("#440: a slash command's turn is the prompt the host raised, though it starts on the command's line", async (t) => {
+  const launch = aLaunch(t)
+  const before = await started(launch)
+
+  // The host raises what the owner typed, marked as a command; the turn starts on the line it wrote for the model.
+  await heard(launch, '/init', THE_OWNERS_KIND, 'init')
+  await aTurnStarted(launch, `<command-message>init</command-message>\n${theCommandLineOf('init')}`)
+
+  const after = await launch.paths()
+  assert.equal(countOf(after, THE_UNNAMED_PATH) - countOf(before, THE_UNNAMED_PATH), 0, "the command's turn was recorded again as one of unnamed source")
+  assert.deepEqual(launch.noted, [], "the command's heard turn was noted as one of unnamed source")
+})
+
+test('#440: a heard command names only its own turn', async (t) => {
+  const launch = aLaunch(t)
+  const before = await started(launch)
+
+  // A command was heard, but the turn that starts names another: the launcher cannot name what started it.
+  await heard(launch, '/init', THE_OWNERS_KIND, 'init')
+  await aTurnStarted(launch, `<command-message>review</command-message>\n${theCommandLineOf('review')}`)
+
+  const after = await launch.paths()
+  assert.equal(countOf(after, THE_UNNAMED_PATH) - countOf(before, THE_UNNAMED_PATH), 1, 'a turn naming another command was taken for the heard one')
+  assert.deepEqual(launch.noted, [{ event: THE_TURN_STARTED_ASK, why: A_TURN_OF_UNNAMED_SOURCE }])
 })

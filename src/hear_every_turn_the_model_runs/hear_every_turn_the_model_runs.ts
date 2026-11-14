@@ -15,10 +15,20 @@
 //     it is recorded now as the crew message it is.
 //   - A turn that took no crew message in and whose text the launcher did not hear is a turn of unnamed source: it
 //     is recorded as one, from an origin the launcher cannot name, never as a crew message, and never left out.
-//   - What was heard is the texts `prompt.submit` took in since the last main turn start. The turn's own text is
+//   - What was heard is the prompts `prompt.submit` took in since the last main turn start. The turn's own text is
 //     checked against them BEFORE this start empties them (Pluto's observation, design r=2), and they are emptied at
 //     every main turn start, so a prompt the host folded into a running turn (the owner typing mid-turn starts no
 //     turn of its own) cannot be carried into a later one.
+//   - A heard prompt names the turn when the turn's text is the prompt's text, byte for byte, or, for a prompt the
+//     host marked as a slash command, when the turn's text names that command. The host starts a command's turn on
+//     the command line it wrote for the model, `<command-message>init</command-message>` and `<command-name>/init
+//     </command-name>`, never on the `/init` it raised (martha#440 r=2, Pluto's required change).
+//
+// The shapes measured on the recorded host 2.1.325 (every_turn_on_the_recorded_host.node-test.ts): plain typing, a
+// prompt a plugin submits inside a host event, one the owner types into a running turn, a paste (raised already
+// expanded, equal byte for byte), the turn the host starts by itself to deliver a background agent's answer (raised
+// as a `task-notification` prompt, equal byte for byte), and a slash command (named by its command). A shape not
+// measured here that the host starts on other words is recorded as a turn of unnamed source: that fails closed.
 //
 // The launcher's relay hands this slice a port (WhereEveryTurnIsRecorded): its own record write, the owner's screen, the
 // turns it raises and its journal. The relay answers the mod's call and queues the recording among the host's events;
@@ -45,6 +55,28 @@ export type WhatATurnStartRecords =
   /** A turn already in the record, because `prompt.submit` heard what started it. */
   | { readonly records: 'heard already' }
 
+/** A prompt `prompt.submit` took in: its text, and the slash command the host marked it with, if any. */
+export interface APromptHeard {
+  readonly text: string
+  /** The command's name, without its slash, when the host marked the prompt as a slash command. */
+  readonly command?: string | undefined
+}
+
+/** The name of the slash command in the host's `command` mark (`{ name, args }`), or undefined when it names none. */
+export function theCommandNamed(mark: unknown): string | undefined {
+  if (typeof mark !== 'object' || mark === null) return undefined
+  const { name } = mark as Record<string, unknown>
+  return typeof name === 'string' && name !== '' ? name : undefined
+}
+
+/** How the host names a slash command in the text a command's turn starts on (recorded host 2.1.325). */
+export const theCommandLineOf = (name: string): string => `<command-name>/${name}</command-name>`
+
+/** Whether `prompt` is what started a turn whose text is `text`. */
+function startedOn(prompt: APromptHeard, text: string): boolean {
+  return prompt.text === text || (prompt.command !== undefined && text.includes(theCommandLineOf(prompt.command)))
+}
+
 /** One main turn's start, as the mod reports it and the carrier answered it. */
 export interface AMainTurnStart {
   /** The turn's text at its start: the last user message the host put in it, or '' when the host sent none. */
@@ -53,31 +85,31 @@ export interface AMainTurnStart {
   readonly taken: string
 }
 
-/** What a main turn start adds to the record, given the texts `prompt.submit` heard since the last one. */
-export function whatATurnStartRecords(heard: ReadonlySet<string>, start: AMainTurnStart): WhatATurnStartRecords {
-  if (start.taken !== '') return heard.has(start.taken) ? { records: 'heard already' } : { records: 'the crew message', text: start.taken }
-  return heard.has(start.text) ? { records: 'heard already' } : { records: 'an unnamed source' }
+/** What a main turn start adds to the record, given the prompts `prompt.submit` heard since the last one. */
+export function whatATurnStartRecords(heard: readonly APromptHeard[], start: AMainTurnStart): WhatATurnStartRecords {
+  if (start.taken !== '') return heard.some((prompt) => prompt.text === start.taken) ? { records: 'heard already' } : { records: 'the crew message', text: start.taken }
+  return heard.some((prompt) => startedOn(prompt, start.text)) ? { records: 'heard already' } : { records: 'an unnamed source' }
 }
 
-/** The texts heard per session since its last main turn start: kept by the launcher, emptied at every main start. */
+/** The prompts heard per session since its last main turn start: kept by the launcher, emptied at every main start. */
 export interface HeardSinceTheLastStart {
-  /** `prompt.submit` took this text in for this session. */
-  heard(session_id: string, text: string): void
+  /** `prompt.submit` took this prompt in for this session. */
+  heard(session_id: string, prompt: APromptHeard): void
   /** A main turn started: what it adds to the record, decided against what was heard, and only then emptied. */
   aMainTurnStarted(session_id: string, start: AMainTurnStart): WhatATurnStartRecords
 }
 
 /** The launcher's memory of what it heard, for every session of one launch. */
 export function heardSinceTheLastStart(): HeardSinceTheLastStart {
-  const held = new Map<string, Set<string>>()
+  const held = new Map<string, APromptHeard[]>()
   return {
-    heard: (session_id, text) => {
-      const texts = held.get(session_id) ?? new Set<string>()
-      texts.add(text)
-      held.set(session_id, texts)
+    heard: (session_id, prompt) => {
+      const prompts = held.get(session_id) ?? []
+      prompts.push(prompt)
+      held.set(session_id, prompts)
     },
     aMainTurnStarted: (session_id, start) => {
-      const decided = whatATurnStartRecords(held.get(session_id) ?? new Set<string>(), start)
+      const decided = whatATurnStartRecords(held.get(session_id) ?? [], start)
       held.delete(session_id)
       return decided
     },
@@ -99,8 +131,8 @@ export type ATurnStartReported = AMainTurnStart & { readonly session_id: string 
 
 /** What one launch hears of its turns: the prompts the host raised, and every main turn start the mod reported. */
 export interface HearingEveryTurn {
-  /** `prompt.submit` took this text in for this session: the turn it starts, or the one it is folded into, is recorded. */
-  heard(session_id: string, text: string): void
+  /** `prompt.submit` took this prompt in for this session: the turn it starts, or the one it is folded into, is recorded. */
+  heard(session_id: string, prompt: APromptHeard): void
   /** The main turn start a mod's call reported, with what the carrier answered it took in; undefined for any other call. */
   startIn(call: unknown, answer: { readonly answer: string } | { readonly refused: string }): ATurnStartReported | undefined
   /** Records what a main turn start adds: the crew message never heard, or a turn of unnamed source; else nothing. */
@@ -111,7 +143,7 @@ export interface HearingEveryTurn {
 export function hearingEveryTurn(where: WhereEveryTurnIsRecorded): HearingEveryTurn {
   const heard = heardSinceTheLastStart()
   return {
-    heard: (session_id, text) => heard.heard(session_id, text),
+    heard: (session_id, prompt) => heard.heard(session_id, prompt),
     startIn: aMainTurnStartIn,
     recorded: async (start) => {
       const decided = heard.aMainTurnStarted(start.session_id, start)

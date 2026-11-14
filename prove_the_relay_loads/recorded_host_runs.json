@@ -37,7 +37,7 @@
   },
   {
     "file": "src/hear_every_turn_the_model_runs/every_turn_on_the_recorded_host.node-test.ts",
-    "cases": 3,
-    "proves": "the launcher hears every main turn the model runs, one the mod's timer submitted included, each recorded once (martha#440)"
+    "cases": 6,
+    "proves": "the launcher hears every main turn the model runs, one the mod's timer submitted included, each recorded once, and a paste, a background agent's delivered answer and a slash command are no turn of unnamed source (martha#440)"
   }
 ]

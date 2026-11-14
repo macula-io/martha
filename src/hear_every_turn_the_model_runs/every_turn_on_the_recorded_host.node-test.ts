@@ -9,9 +9,10 @@
 // before: that `turn.start` carries the turn's `text`, equal byte for byte to the prompt the host raised to the relay
 // (a heard turn that did not match would be recorded a second time, as a turn of unnamed source); and that a prompt the
 // host raises reaches the launcher before that turn's start does (else the start would find it unheard and record the
-// turn twice). The three cases are the design's: a message the mod's timer submits into an idle member; one submitted
-// inside a host event and then one by the timer; and a prompt the owner types into a running turn, then a message by
-// the timer.
+// turn twice). The first three cases are the design's: a message the mod's timer submits into an idle member; one
+// submitted inside a host event and then one by the timer; and a prompt the owner types into a running turn, then a
+// message by the timer. The last three are the ordinary turns whose text could differ from the prompt raised (Pluto's
+// required change, build r=1): a paste, the turn that delivers a background agent's answer, and a slash command.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -60,6 +61,22 @@ const THE_LONG_TOOL = 'node -e "setTimeout(() => {}, 15000)"'
 const THE_SHELL_LIMIT_MS = 120_000
 const SILENCE_MS = 120_000
 const END = { text: 'Done.' }
+/** What the owner pastes: long enough that the host holds it as a pasted text, not as typing. */
+const PASTED = Array.from({ length: 30 }, (_, line) => `line ${line + 1} of the notes the owner pastes`).join('\n')
+/** The paste's last line: the request that carries it carries the paste whole. */
+const THE_PASTES_LAST_LINE = 'line 30 of the notes the owner pastes'
+/** How a terminal brackets a paste, so the host knows it from typing. */
+const BRACKETED_PASTE = { opens: '\x1b[200~', closes: '\x1b[201~' }
+/** What the background agent is asked: the request carrying it is the agent's own. */
+const THE_AGENTS_TASK = 'Look at the README, in the background.'
+/** What the host wraps a background agent's answer in, as it delivers it into the member's own turn. */
+const THE_AGENTS_DELIVERY = '<task-notification>'
+/** A slash command of the host's own whose expansion reaches the model: project commands are not loaded for a member. */
+const THE_COMMAND = '/init'
+/** A word only that command's expansion carries to the model. */
+const THE_COMMANDS_EXPANSION = 'CLAUDE.md'
+/** How long the owner's hands wait between typing a prompt and pressing Enter, as a person would. */
+const BEFORE_ENTER_MS = 800
 /** The path a plugin's prompt is recorded on, a crew message the mod submitted among them. */
 const THE_CREW_PATH = 'source' in ARRIVAL_OF_A_PLUGINS_PROMPT ? PATH_OF_SOURCE[ARRIVAL_OF_A_PLUGINS_PROMPT.source] : ''
 /** The path the owner's typing is recorded on. */
@@ -225,4 +242,62 @@ test('#440 on the recorded host: a prompt the owner types into a running turn do
   assert.equal(countOf(paths, THE_OWNERS_PATH), 2, "the owner's two prompts are not in the record exactly once each")
   assert.equal(countOf(paths, THE_CREW_PATH), 1, 'the prompt folded into the running turn swallowed the crew message: its turn is not in the record')
   assert.equal(countOf(paths, THE_UNNAMED_PATH), 0, 'a heard turn was recorded again as one of unnamed source')
+})
+
+/** The owner's first turn ends, then the owner types `keys` and presses Enter, and the turn carrying `carried` ends. */
+async function thenTheOwnerEnters(hands: TheOwnersHands, keys: string, carried: string): Promise<void> {
+  await untilTheTurnCarryingItEnded(hands, OWNER_TURN)
+  hands.type(keys)
+  await new Promise((resolve) => setTimeout(resolve, BEFORE_ENTER_MS))
+  hands.type('\r')
+  await untilTheTurnCarryingItEnded(hands, carried)
+}
+
+test('#440 on the recorded host: a paste is the prompt the host raised, and no turn of unnamed source', { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProject(t)
+  await ran(project, {
+    requests: 8,
+    completesWhen: (requests) => someRequestCarries(requests, THE_PASTES_LAST_LINE),
+    script: () => END,
+    atTheTerminal: (hands) => thenTheOwnerEnters(hands, `${BRACKETED_PASTE.opens}${PASTED}${BRACKETED_PASTE.closes}`, THE_PASTES_LAST_LINE),
+  })
+  const paths = await thePathsRecorded(project)
+  t.diagnostic(`the record's paths: ${JSON.stringify(paths)}`)
+  assert.equal(countOf(paths, THE_OWNERS_PATH), 2, "the owner's turn and the paste are not in the record exactly once each")
+  assert.equal(countOf(paths, THE_UNNAMED_PATH), 0, "the paste's turn was recorded again as one of unnamed source: its text did not match the prompt the host raised")
+})
+
+test("#440 on the recorded host: the turn that delivers a background agent's answer is the prompt the host raised", { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProject(t)
+  await ran(project, {
+    requests: 12,
+    completesWhen: (requests) => someRequestCarries(requests, THE_AGENTS_DELIVERY),
+    script: (request) => {
+      const seen = whatTheModelSaw(request)
+      // The member's first request starts the agent in the background; the agent's own requests, and every other, end.
+      if (request.number === 1 && seen.includes(OWNER_TURN)) {
+        return { tool: 'Agent', input: { description: 'read the readme', prompt: THE_AGENTS_TASK, subagent_type: 'general-purpose', run_in_background: true } }
+      }
+      return END
+    },
+    atTheTerminal: (hands) => untilTheTurnCarryingItEnded(hands, THE_AGENTS_DELIVERY),
+  })
+  const paths = await thePathsRecorded(project)
+  t.diagnostic(`the record's paths: ${JSON.stringify(paths)}`)
+  // The host raises the delivery as a task-notification prompt, which is recorded from an origin no sender is named
+  // for; it is that one ingestion, and the turn it starts adds no second.
+  assert.equal(countOf(paths, THE_UNNAMED_PATH), 1, "the agent's delivered answer is not in the record exactly once: its turn was recorded again as one of unnamed source, or the prompt was never heard")
+})
+
+test("#440 on the recorded host: a slash command's turn is the prompt the host raised, though it starts on the command's line", { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProject(t)
+  await ran(project, {
+    requests: 8,
+    completesWhen: (requests) => someRequestCarries(requests, THE_COMMANDS_EXPANSION),
+    script: () => END,
+    atTheTerminal: (hands) => thenTheOwnerEnters(hands, THE_COMMAND, THE_COMMANDS_EXPANSION),
+  })
+  const paths = await thePathsRecorded(project)
+  t.diagnostic(`the record's paths: ${JSON.stringify(paths)}`)
+  assert.equal(countOf(paths, THE_UNNAMED_PATH), 0, "the command's turn was recorded as one of unnamed source: the host started it on words that name no heard command")
 })

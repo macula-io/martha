@@ -12,7 +12,7 @@
 // |---|---|
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
-// | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message whose text was not heard, `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
+// | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message that no heard prompt started (its text, or a slash command's line), `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
 // | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
@@ -46,7 +46,7 @@ import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { hearingEveryTurn, type HearingEveryTurn } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
+import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
@@ -599,7 +599,7 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   if (why !== undefined) return refused(why)
   // Heard, so the turn it starts (or the running turn it is folded into) is in the record already (martha#440).
-  state.everyTurn.heard(session.id, body.text)
+  state.everyTurn.heard(session.id, { text: body.text, command: theCommandNamed(body.command) })
   // A dialog an earlier turn left open is dropped as this turn starts (martha#313): a prompt nobody answered cannot pin
   // the row at "needs you" for the rest of the session. Only a prompt this launcher took in starts a turn.
   state.place.screen?.heard(session.id, { said: 'turn-started' }, now())
