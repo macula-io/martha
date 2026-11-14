@@ -19,7 +19,8 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree, type Planted } from './a_tree_whose_ceilings_a_test_reads.ts'
 import { describe, RECORD_COMMAND } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree } from './judge_the_tree.ts'
-import { withLoweredCeilings } from './record_the_ceilings.ts'
+import { withLoweredCeilings, withLoweredSliceCeilings } from './record_the_ceilings.ts'
+import { describeASlice } from './the_core_slices_under_the_cap.ts'
 
 const plantedPackageJson = theManifestOfAPlantedTree
 
@@ -141,4 +142,75 @@ test('after recording, a tree with headroom passes: the check fails exactly when
   assert.deepEqual(recorded.lowered, [{ directory: 'src/shrunk', from: 3, to: 2 }])
   writeFileSync(manifestPathOf(root), recorded.text)
   assert.deepEqual(await findingsIn(root), [], 'and nothing fails once the ceiling follows the code down')
+})
+
+// --- #415: every core slice under one cap, and the few above it at their own ceiling -------------------------------
+
+/** What a red run would print over the tree about its core slices. */
+const sliceFindingsIn = async (root: string): Promise<string[]> => (await judgeTheTree(root)).slice_findings.map(describeASlice)
+
+const THREE_LINES = `${TWO_LINES}export const c = 3\n`
+const MOVE_IT = '  move the decision into the slice that owns it, not into a new slice made to hold it'
+
+test('#415: a core slice at the cap passes, and one code line over fails naming it, its count and the cap', async (t) => {
+  assert.deepEqual(await sliceFindingsIn(craft(t, { slice_cap: 2, files: { 'src/a_slice/a.ts': TWO_LINES + NO_CODE } })), [])
+  assert.deepEqual(await sliceFindingsIn(craft(t, { slice_cap: 2, files: { 'src/a_slice/a.ts': THREE_LINES } })), [
+    `src/a_slice: 3 lines of code, over the cap of 2 (martha.sliceCap)\n${MOVE_IT}`,
+  ])
+})
+
+test('#415: a new slice over the cap fails as any slice does, and a host directory is never held to the cap', async (t) => {
+  const files = { 'src/an_adapter/a.ts': THREE_LINES, 'src/a_new_slice/n.ts': THREE_LINES }
+  const root = craft(t, { slice_cap: 2, adapters: ['src/an_adapter'], ceilings: { 'src/an_adapter': 3 }, files })
+  assert.deepEqual(await findingsIn(root), [], 'the adapter is held to its own ceiling')
+  assert.deepEqual(await sliceFindingsIn(root), [`src/a_new_slice: 3 lines of code, over the cap of 2 (martha.sliceCap)\n${MOVE_IT}`])
+})
+
+test('#415: src/host_contract is a core slice under the cap, though package.json names it as the contract', async (t) => {
+  const root = craft(t, { slice_cap: 2, host_contract: 'src/host_contract', files: { 'src/host_contract/host_contract.ts': THREE_LINES } })
+  assert.deepEqual(await sliceFindingsIn(root), [`src/host_contract: 3 lines of code, over the cap of 2 (martha.sliceCap)\n${MOVE_IT}`])
+  assert.deepEqual(Object.keys((await judgeTheTree(root)).slices), ['src/host_contract'])
+})
+
+test('#415: a tree that declares no cap fails by name, and is never passed because nothing held its slices', async (t) => {
+  assert.deepEqual(await sliceFindingsIn(craft(t, { slice_cap: null, files: { 'src/a_slice/a.ts': TWO_LINES } })), [
+    'martha.sliceCap is not declared, so no core slice is held to a ceiling',
+  ])
+})
+
+test('#415: a slice above the cap is held to its own ceiling: over it fails, and room under it fails until it is recorded', async (t) => {
+  const files = { 'src/big/b.ts': THREE_LINES }
+  assert.deepEqual(await sliceFindingsIn(craft(t, { slice_cap: 1, slice_ceilings: { 'src/big': 3 }, files })), [], 'at its ceiling')
+  assert.deepEqual(await sliceFindingsIn(craft(t, { slice_cap: 1, slice_ceilings: { 'src/big': 2 }, files })), [
+    `src/big: 3 lines of code, ceiling 2 (martha.sliceCeilings)\n${MOVE_IT}`,
+  ])
+  assert.deepEqual(await sliceFindingsIn(craft(t, { slice_cap: 1, slice_ceilings: { 'src/big': 4 }, files })), [
+    `src/big: 3 lines of code, ceiling 4 (martha.sliceCeilings): 1 line(s) of room to grow back unseen\n  lower it in the change that shrank it: ${RECORD_COMMAND}`,
+  ])
+})
+
+test('#415: an exception for a slice at or under the cap, or for no slice at all, fails by name', async (t) => {
+  const root = craft(t, { slice_cap: 3, slice_ceilings: { 'src/shrunk': 4, 'src/gone': 9 }, files: { 'src/shrunk/s.ts': THREE_LINES } })
+  assert.deepEqual(await sliceFindingsIn(root), [
+    `martha.sliceCeilings holds src/shrunk at 4, and it is 3 lines, at or under the cap of 3\n  remove the exception in the change that shrank it: ${RECORD_COMMAND}`,
+    'martha.sliceCeilings names src/gone, which is no core slice',
+  ])
+})
+
+test('#415: recording lowers an exception, takes out one at or under the cap, and never raises one nor invents one', () => {
+  const text = plantedPackageJson({ slice_cap: 10, slice_ceilings: { 'src/shrunk': 30, 'src/under': 12, 'src/grew': 15 } })
+  const recorded = withLoweredSliceCeilings(text, { 'src/shrunk': 20, 'src/under': 10, 'src/grew': 40, 'src/newcomer': 50 })
+  assert.deepEqual(recorded.lowered, [{ directory: 'src/shrunk', from: 30, to: 20 }])
+  assert.deepEqual(recorded.removed, ['src/under'])
+  const after = JSON.parse(recorded.text) as { martha: { sliceCeilings: Record<string, number> } }
+  assert.deepEqual(after.martha.sliceCeilings, { 'src/shrunk': 20, 'src/grew': 15 }, 'nothing was raised or added, and the slice under the cap lost its exception')
+  assert.equal(withLoweredSliceCeilings(recorded.text, { 'src/shrunk': 20, 'src/grew': 99 }).text, recorded.text, 'and a rise writes nothing')
+})
+
+test('#415: after recording, a tree whose slice shrank under the cap passes', async (t) => {
+  const root = craft(t, { slice_cap: 3, slice_ceilings: { 'src/shrunk': 5 }, files: { 'src/shrunk/s.ts': TWO_LINES } })
+  assert.equal((await sliceFindingsIn(root)).length, 1, 'the stale exception fails before it is recorded')
+  const recorded = withLoweredSliceCeilings(readFileSync(manifestPathOf(root), 'utf8'), (await judgeTheTree(root)).slices)
+  writeFileSync(manifestPathOf(root), recorded.text)
+  assert.deepEqual(await sliceFindingsIn(root), [])
 })
