@@ -56,7 +56,7 @@ import {
   type WorktreeAnswer,
   type WorktreesRequest,
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
-import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
@@ -847,8 +847,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
 
 /**
  * The asks the mod makes on a session's behalf, never a model's: the tools to register, how often to read the channel,
- * what to hand next, and what this session should do now. Undefined when `name` is one a member calls itself, which the
- * handlers answer.
+ * what to hand next, that a turn started, and what this session should do now. Undefined when `name` is one a member
+ * calls itself, which the handlers answer.
  */
 async function answerAnAskOfTheMods(
   places: CrewToolPlaces,
@@ -859,7 +859,8 @@ async function answerAnAskOfTheMods(
 ): Promise<CoreToolAnswer | undefined> {
   if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
   if (name === THE_CHANNEL_READ_ASK) return await theChannelReadAsk(places)
-  if (name === THE_NEXT_MESSAGE_ASK) return await theNextMessageAsk(places)
+  const channel = await answerAChannelAsk(places.carrier, name, args)
+  if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoAsk(places, args)
@@ -918,12 +919,6 @@ async function sweepOnce(places: CrewToolPlaces, processes: HostContract['proces
 async function theChannelReadAsk(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   const declared = await crewOrRefusal(places)
   return 'refused' in declared ? declared : { answer: String(declared.settings.channel_read_seconds) }
-}
-
-/** The next crew message to hand the session, or '' when none is waiting. */
-async function theNextMessageAsk(places: CrewToolPlaces): Promise<CoreToolAnswer> {
-  if (places.carrier === undefined) return { refused: 'this launch reads no crew channel' }
-  return { answer: (await places.carrier.next()) ?? '' }
 }
 
 /**
