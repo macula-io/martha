@@ -20,7 +20,7 @@ import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_mes
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { REFRESH_BEAT_MS } from './hooks/crew_turn_beat.ts'
-import { RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
+import { RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 /** Why the five landing tools are named by literal in the hooks module (martha#256), as one wording for all five. */
 const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal'
@@ -56,6 +56,14 @@ const THE_RELAY_CANNOT_IMPORT = 'the host installs the relay as a copy of its ow
  * the relay cannot import the core's MINUTE_MS, and its beat is the same duration under its own name.
  */
 const THE_BEAT_IS_A_MINUTE_THE_HOOKS_MODULE_CANNOT_IMPORT = 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name'
+
+/**
+ * Why the relay's wait for its launcher is half a minute of its own (martha#441): this file is the protocol both sides
+ * of a launch read, and a hooks module imports only its own files, so it cannot read the launcher's wait for a host
+ * answer. The two deadlines are the same length and not the same deadline: this one waits for the launcher to check a
+ * checkout's tree, that one for the host to answer a question.
+ */
+const THE_RELAYS_WAIT_FOR_ITS_LAUNCHER = 'the relay\'s wait for the launcher to check a checkout\'s tree; the launcher\'s wait for a host answer is the same half minute and not the same deadline, and a hooks module cannot import it'
 
 export const COINCIDENCES: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
@@ -133,4 +141,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   // The relay's beat, which is a minute too (martha#441).
   { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: THE_BEAT_IS_A_MINUTE_THE_HOOKS_MODULE_CANNOT_IMPORT },
+  // The relay's own half-minute wait (martha#441), written beside the launcher's half-minute wait for the host.
+  { value: RELAY_DEADLINE_MS, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: THE_RELAYS_WAIT_FOR_ITS_LAUNCHER },
 ]

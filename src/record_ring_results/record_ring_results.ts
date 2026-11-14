@@ -30,12 +30,13 @@ import { argv, exit, stderr } from 'node:process'
 
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { MESH_TREE_RECORDING } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+// The same budget its sibling recording tool gives a server's answer (martha#441): one wait for one answer, named once.
+import { ANSWER_MILLISECONDS } from '../record_mesh_answers/ask_a_mesh_server_a_tool.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { ANSWERS_A_RING, MESH_HELLO, RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
 const RECORDING = new URL('../read_a_ring_results_sender/recorded_ring_result_keys.json', import.meta.url)
-const ANSWER_SECONDS = 90_000
 
 interface RingResultKeyRecord {
   readonly server_version: string
@@ -99,8 +100,8 @@ class MeshServer {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiting.delete(id)
-        reject(new Error(`${what} did not answer within ${ANSWER_SECONDS / 1000}s`))
-      }, ANSWER_SECONDS)
+        reject(new Error(`${what} did not answer within ${ANSWER_MILLISECONDS / 1000}s`))
+      }, ANSWER_MILLISECONDS)
       this.waiting.set(id, {
         resolve: (value) => {
           clearTimeout(timer)
