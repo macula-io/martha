@@ -29,6 +29,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { admitsInCrewRoom } from '../admit_a_room_message/admit_a_room_message.ts'
 import { refuseExecutionAfterUngatedText } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { actorFromCallingSession, refuseActionFromAnUnverifiedActor } from '../who_may_act/who_may_act.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 // Synthetic node ids and crew names, never real ones: this repository is public.
 const member = '1'.repeat(64)
@@ -284,9 +285,9 @@ test('a refused policy lets no sender text reach the shell', () => {
   const document = documentOf('policy', [member])
 
   const signed_policy = open({ kind: 'policy', document, signature: signed(document) })
-  assert.equal(refuseExecutionAfterUngatedText({ tool: 'Bash', session, policy: policy(signed_policy) }).allow, true)
+  assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session, policy: policy(signed_policy) }).allow, true)
   const unsigned = open({ kind: 'policy', document, signature: undefined })
-  assert.equal(refuseExecutionAfterUngatedText({ tool: 'Bash', session, policy: policy(unsigned) }).allow, false)
+  assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session, policy: policy(unsigned) }).allow, false)
 })
 
 test('a refused supervisor list lets nobody act as supervisor', () => {
@@ -430,7 +431,7 @@ test('an upper-case node id in a signed policy matches the same sender in lower 
   const opened = open({ kind: 'policy', document, signature: signed(document) })
   assert.deepEqual(opened.node_ids, [sender])
   const session = { ingested: [{ path: 'A1', from_node_id: sender }] }
-  assert.equal(refuseExecutionAfterUngatedText({ tool: 'Bash', session, policy: trustedPolicy(opened) }).allow, true)
+  assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session, policy: trustedPolicy(opened) }).allow, true)
 })
 
 test('a signed members list binds a launched member, and a refused one binds nobody', () => {

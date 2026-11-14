@@ -109,7 +109,7 @@ test("a member's own Write, then one shell command that branches and commits it,
   const ran = await run(project, 3, ({ number }) =>
     [
       { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, 'hello.txt'), content: 'hello\n' } },
-      { tool: 'Bash', input: { command: 'git checkout -q -b first-task && git add hello.txt && git commit -q -m "the hello note"' } },
+      { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'git checkout -q -b first-task && git add hello.txt && git commit -q -m "the hello note"' } },
     ][number - 1] ?? END,
   )
   // Every scripted turn was asked for; the host may send one more as it ends.
@@ -122,7 +122,7 @@ test("a member's own Write, then one shell command that branches and commits it,
 
 test('an outsider change brought in by a shell command stops the member, naming the path and martha approve', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
-  const ran = await run(project, 2, ({ number }) => (number === 1 ? { tool: 'Bash', input: { command: `git checkout -q ${OUTSIDER_BRANCH}` } } : END))
+  const ran = await run(project, 2, ({ number }) => (number === 1 ? { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: `git checkout -q ${OUTSIDER_BRANCH}` } } : END))
   assert.ok(flat(ran.shown).includes(stoppedLine('README.md')), flat(ran.shown))
   assert.notEqual(ran.exit_code, 0)
 })

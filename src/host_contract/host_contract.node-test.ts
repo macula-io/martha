@@ -9,6 +9,7 @@ import { SCANNED_EXTENSIONS, isScannedSource } from './core_source.ts'
 import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
 import { hostForTests } from './host_for_tests.ts'
 import { claudeCodeToolNames, openCodeToolNames } from './tool_names_for_tests.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const SRC = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -241,7 +242,7 @@ test("OpenCode's split strips the longest server name that matches, in any order
 
 test('each split keeps a built-in tool its own name, and splits only its own form', () => {
   const openCode = openCodeToolNames(['macula', 'macula-mcp'])
-  for (const names of [claudeCodeToolNames, openCode]) assert.equal(names.ownNameOf('Bash'), 'Bash')
+  for (const names of [claudeCodeToolNames, openCode]) assert.equal(names.ownNameOf(CLAUDE_CODE_SHELL_TOOL), CLAUDE_CODE_SHELL_TOOL)
   assert.equal(claudeCodeToolNames.ownNameOf('mcp__plugin_macula-mcp_macula__mesh_read_inbox'), 'mesh_read_inbox')
   assert.equal(openCode.ownNameOf('macula-mcp_mesh_read_inbox'), 'mesh_read_inbox')
   assert.equal(openCode.ownNameOf('unknown_mesh_read_inbox'), 'unknown_mesh_read_inbox')

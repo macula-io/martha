@@ -27,6 +27,7 @@ import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN, MESH_TOOL_PREFIX, sourceOfAMes
 import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS, type RecordedRingResultKeys } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { ADMITS, MESH_GOODBYE, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type RecordedMeshAnswerShape } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -36,7 +37,7 @@ const stranger = 'b'.repeat(64)
 // The gate this check drives. If the gate stops refusing, the check goes red.
 const gateRefuses = (path: string) =>
   refuseExecutionAfterUngatedText({
-    tool: 'Bash',
+    tool: CLAUDE_CODE_SHELL_TOOL,
     session: recordIngestion(startFreshSession(), [{ path, from_node_id: stranger }]),
     policy,
   }).allow === false
