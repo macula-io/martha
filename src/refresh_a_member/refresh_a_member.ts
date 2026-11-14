@@ -16,6 +16,10 @@
 
 import type { AnEndPending } from '../end_a_running_turn/end_a_running_turn.ts'
 import type { CrewPlace, CrewStore, Refused } from '../host_contract/host_contract.ts'
+import type { TheAct } from './the_refresh_flow.ts'
+
+/** The act that does nothing, which is most of them. */
+export const NO_ACT: TheAct = { act: 'none' }
 
 /** Where a crew keeps its flows, under the one crew store. */
 export const REFRESHES_PLACE = 'refresh'
