@@ -29,7 +29,7 @@ import { installThePinnedInstaller } from '../install_the_pinned_installer/insta
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { crewRowsDirectory, crewStateDirectory, openState, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
@@ -39,7 +39,11 @@ import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
-import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from './list_stop_and_restart_the_crew.ts'
+import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
+import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
+import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
+import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 
 /** The command ended as asked. */
@@ -54,7 +58,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -294,6 +298,44 @@ async function restart(io: CommandIo, places: Places, member: string, fresh: boo
 }
 
 /**
+ * `martha release <member>` (martha#321): the owner's release of a member the gate is holding, typed at the owner's
+ * terminal. The act is ../release_a_held_member's; this hands it the places and tells the owner its answer.
+ */
+async function release(io: CommandIo, places: Places, member: string): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const released = await releaseAHeldMember({
+    member,
+    members: crew.settings.members.map((one) => one.name),
+    row: dashboardRowsIn(crew.launcher.dashboard).read(member),
+    rows: rowStreamsDirectory(crew.launcher.rows),
+    onATerminal: io.terminal.is_terminal,
+    gate: gateModeFor(crew.settings.gate, member),
+  })
+  if (!released.released) return refused(io, toldOfARelease(released))
+  io.out(toldOfARelease(released))
+  return EXIT_DONE
+}
+
+/**
+ * `martha gate [--member <name>]` (martha#321): what the gate does to each declared member, or one member's lines.
+ * The reading is ../say_what_the_gate_does's; this only hands it the crew's own place and prints what it answers.
+ */
+async function theGate(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const shown = sayWhatTheGateDoes({
+    members: crew.settings.members.map((one) => one.name),
+    gate: crew.settings.gate,
+    crew: { directory: crew.crew, lines: { append: appendStateLine, read: readStateFile } },
+    ...(member === undefined ? {} : { member }),
+  })
+  if (!shown.shown) return refused(io, shown.refusal)
+  shown.lines.forEach((line) => io.out(line))
+  return EXIT_DONE
+}
+
+/**
  * `martha install`: the installer this release pins, run with the words typed here unchanged (martha#84). It runs
  * before any place is read, so an installed machine with no checkout can still upgrade.
  */
@@ -346,7 +388,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
 const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
 /** The acts that take exactly one argument (martha#129). */
-const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake']
+const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
 /** The switches `martha install` passes through to the installer; any other is no way the command is used. */
 const INSTALL_SWITCHES: readonly string[] = ['--downgrade', '-h', '--help']
 /** The switch that takes the next word as its value. */
@@ -359,10 +401,17 @@ function actOf(argv: readonly string[]): Asked | undefined {
   if (act === undefined) return undefined
   if (ACTS_ALONE.includes(act)) return argv.length === 1 ? { act, args: [] } : undefined
   if (ACTS_OF_ONE.includes(act)) return actOfOne(act, argv)
-  if (act === 'install') return installOf(act, argv)
-  if (act === STOP) return stopOf(act, argv)
-  if (act === RESTART) return restartOf(act, argv)
-  return act === 'start' ? startOf(act, argv) : undefined
+  const parse = ACTS_OF_THEIR_OWN[act]
+  return parse === undefined ? undefined : parse(act, argv)
+}
+
+/** The acts that read their own arguments: each parser answers undefined when the words are no way it is used. */
+const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
+  install: installOf,
+  gate: gateOf,
+  [STOP]: stopOf,
+  [RESTART]: restartOf,
+  start: startOf,
 }
 
 /** `install [<version>] [--downgrade] [--digest sha256:<hex>]`: one version at most, and no other switch. */
@@ -479,6 +528,8 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   approve: (io, places) => approve(io, places),
   todo: (io, places) => todo(io, places),
   wake: (io, places, asked) => wake(io, places, asked.args[0]!),
+  release: (io, places, asked) => release(io, places, asked.args[0]!),
+  gate: (io, places, asked) => theGate(io, places, asked.member),
   ls: (io, places) => ls(io, places),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),

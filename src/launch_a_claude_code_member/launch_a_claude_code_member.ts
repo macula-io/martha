@@ -145,7 +145,7 @@ import {
   TRUST_ANSWER_DEADLINE_MS,
   whatTheHostSaysWithTheseSettings,
 } from './host_runs_the_relay.ts'
-import { makeEmptyDirectory } from './empty_directory.ts'
+import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -156,6 +156,9 @@ import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
+import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
@@ -180,6 +183,11 @@ export interface LauncherPlaces {
   readonly mesh_servers: string
   /** Where each launch keeps its journal, one file per launch (martha#240). */
   readonly relay_journal: string
+  /**
+   * The crew's own folder where an audited member's would-be refusals are written (martha#321), made with the crew's
+   * place. Absent, an audited member's call is refused: the audit never runs without a place to write its evidence.
+   */
+  readonly gate_audit?: string
 }
 
 export interface ClaudeCodeMemberLaunch {
@@ -188,11 +196,6 @@ export interface ClaudeCodeMemberLaunch {
   /** Where the member starts and what the owner approved there, for `prepareLaunch`. */
   readonly place: SnapshotPlace
   readonly policy: Policy
-  /**
-   * Whether the crew's declaration turned the strict shell gate on (`house_rules.strict_gate`, martha#259), read once by
-   * `martha start`. Absent means on, so a launcher built by a caller that has not heard of the setting keeps the guard.
-   */
-  readonly strict_gate?: boolean
   /**
    * The crew's declaration, from which the text every session is handed is composed (martha#306): the practice when
    * the crew switched it on, this member's role text, the mode's text, the lines it sends and the crew's conventions.
@@ -804,8 +807,11 @@ async function servedRelay(
   // One map of this launch's sessions, shared by the relay that keeps them and the crew's tools that read them
   // (martha#255): a handover is stamped with the session it came from, and a refresh's successor inherits it.
   const sessions = new Map<string, HostSession>()
+  const rows = rowStreamsDirectory(launch.places.rows)
   const place: MemberRelayPlace = {
-    records: sessionRecordsIn(rowStreamsDirectory(launch.places.rows)),
+    // The owner's releases are read again at load and before every check, so a member released while it runs is free
+    // on its next call (martha#321).
+    records: sessionRecordsIn(rows, releasesIn(rows)),
     launch: {
       host: launch.place.host,
       launch_dir: launch.place.launch_dir,
@@ -814,8 +820,9 @@ async function servedRelay(
       ...(launch.place.since_approval === undefined ? {} : { since_approval: launch.place.since_approval }),
     },
     policy: launch.policy,
-    // The owner's switch, read from the declaration once: absent from the launch means on, never off.
-    strict_gate: launch.strict_gate ?? true,
+    // What the gate does to this member, read from the declaration once (martha#321): absent means enforced, never off.
+    gate: launch.crew_settings === undefined ? 'enforced' : gateModeFor(launch.crew_settings.gate, launch.member_name),
+    audit: launch.places.gate_audit === undefined ? undefined : { directory: launch.places.gate_audit, member: launch.member_name, lines: { append: appendStateLine, read: readStateFile } },
     names: { ownNameOf: ownNameOfCalledTool },
     started_with: startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, starting.args, starting.env),
     binder: bindNothing,
