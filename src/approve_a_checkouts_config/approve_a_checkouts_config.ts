@@ -27,7 +27,6 @@
 import { crewTextFilesToApprove } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   appendApproval,
@@ -35,6 +34,7 @@ import {
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import {
+  CLAUDE_CODE,
   decideLaunch,
   fingerprintOf,
   readLaunchState,

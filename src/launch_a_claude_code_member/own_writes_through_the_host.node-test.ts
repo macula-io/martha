@@ -14,6 +14,7 @@ import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refus
 import { OWN_WRITE_MODES, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { ownWriteOfCall, rememberOwnWriteOfCall, type CallThatRan } from './remember_own_write_of_a_call.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 const HOME = '/the-owners-home'
 const TOP = `${HOME}/checkout`
@@ -96,7 +97,7 @@ const hostWith = (files: FileTree): HostForTests => hostForTests({ files, runNow
 /** A launch started on an owner's approval, and the writes it keeps. */
 function launchKeeping(kept: OwnWrite[]): ApprovedLaunch {
   return {
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     launch_dir: TOP,
     stop_dir: HOME,
     approved_fingerprints: [],

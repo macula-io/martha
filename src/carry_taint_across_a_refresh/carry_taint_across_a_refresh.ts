@@ -69,6 +69,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import type { HandoverStamp, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { recordDigestOf, releasedRecordOf, type ReleaseMark } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** What an event that starts a session does to the record. */
 export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
@@ -98,7 +99,7 @@ export interface HostSessionEvents {
  * adapter (../claude_code_host).
  */
 export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   events: {
     startup: 'fresh',
     clear: 'fresh',

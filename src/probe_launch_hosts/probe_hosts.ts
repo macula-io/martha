@@ -28,6 +28,7 @@ import {
 } from './the_project_folders_a_run_wrote.ts'
 import { runTheHost, stopTheProcessesLeftIn } from './stop_a_host_that_outlives_the_run.ts'
 import {
+  CLAUDE_CODE,
   CLAUDE_MEMORY_OFF,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
@@ -283,7 +284,7 @@ const opencode = (...extra: readonly string[]): Command => (switches) => ({
 const PROBES: readonly Probe[] = [
   {
     what: "Claude Code by hand, headless: a checkout's CLAUDE.md at the top and below it",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude(...READ_BELOW_CLAUDE),
     planted: (place) => {
       plantFixedText(place)
@@ -294,7 +295,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as Martha starts it, headless: a checkout's CLAUDE.md at the top and below it (A16)",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude(...READ_BELOW_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place)),
     planted: plantFixedText,
@@ -303,7 +304,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code by hand, headless: started as a checkout's agent",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeAsTheAgent(AGENT, ...HEADLESS_CLAUDE),
     planted: plantFixedText,
     expected: { AGENT_LOADED: true, AGENT_NOT_FOUND: false },
@@ -311,7 +312,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as Martha starts it, headless: started as a checkout's agent (A16)",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeAsTheAgent(AGENT, ...HEADLESS_CLAUDE),
     planted: plantFixedText,
     expected: { AGENT_LOADED: false, AGENT_NOT_FOUND: true },
@@ -319,7 +320,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code by hand, interactive health check: a project tool server',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude('mcp', 'list'),
     planted: (place) => put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER'))),
     // The list it prints is the proof it ran and read this checkout's config: the claim is about the server it did NOT
@@ -330,7 +331,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code by hand, headless: a project tool server and SessionStart hook',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     planted: (place) => {
       put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
@@ -352,7 +353,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code as Martha starts it, headless: config rewritten after approval',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     // The prompt goes before the switches: `--mcp-config` takes every argument up to the next option.
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: (place) => {
@@ -395,7 +396,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code as Martha starts it, headless: an after-call hook that only reports',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeInItsOwnGroup(...ONE_CALL_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, claudeStopHooks(place, ONLY_REPORT)),
     planted: () => {},
@@ -404,7 +405,7 @@ const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as Martha starts it, headless: the after-call hook waits for the launcher to SIGKILL the member's group",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeInItsOwnGroup(...ONE_CALL_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, claudeStopHooks(place, KILL_THE_GROUP)),
     planted: () => {},
@@ -466,7 +467,7 @@ const ownerHookAndSwitch = (place: Place, key: string) =>
 const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] => {
   const as = gated ? 'as martha start starts it, its settings gate included' : 'on the switches alone, its settings gate skipped'
   const refused = (marker: string) => (gated ? { [marker]: false, GATE_REFUSED: true } : { [marker]: true })
-  const common = { host: 'claude-code' as const, command: claude(...HEADLESS_CLAUDE, PROMPT), approved: () => {}, planted: () => {}, planned: true }
+  const common = { host: CLAUDE_CODE, command: claude(...HEADLESS_CLAUDE, PROMPT), approved: () => {}, planted: () => {}, planned: true }
   return [
     {
       ...common,
@@ -497,7 +498,7 @@ const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] =>
 /** Each key alone, gated: no hook in the file, so the only reason the launcher has to refuse is the key itself. */
 const SWITCH_PROBES: readonly Probe[] = HOOK_KILLING_KEYS.map((key): Probe => ({
   what: `Claude Code as martha start starts it: ${key} alone in the owner's user settings, with no hook beside it`,
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   command: claude(...HEADLESS_CLAUDE, PROMPT),
   approved: () => {},
   planted: () => {},
@@ -545,7 +546,7 @@ const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.flatMap(({ rule }
     const name = `spelling-${ruleAt}-${at}.md`
     return {
       what: `Claude Code as martha start starts it: a user-scope agent whose frontmatter spells the hooks key as ${rule}, spelling ${at + 1}`,
-      host: 'claude-code' as const,
+      host: CLAUDE_CODE,
       command: claude(...HEADLESS_CLAUDE, PROMPT),
       approved: () => {},
       planted: () => {},
@@ -648,7 +649,7 @@ const HOST_KEY_CASES: ReadonlyArray<{
 
 const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
   what: one.what,
-  host: 'claude-code' as const,
+  host: CLAUDE_CODE,
   command: claudeAsTheAgent(one.name, ...HEADLESS_CLAUDE),
   approved: () => {},
   planted: () => {},
@@ -674,7 +675,7 @@ const TRASH_BELOW = 'trash-below'
 
 const TRASH_PROBE: Probe = {
   what: 'Claude Code as martha start starts it: the skill files under the owner skills folder, the one the host loads at the top of the trash and the one below an entry it does not',
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   command: (switches) => ({
     command: 'claude',
     args: ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose', PROMPT, ...switches.args],
@@ -720,7 +721,7 @@ const syncedPathsOf = (place: Place, files: readonly OwnerMarkdownFile[]): reado
 const SYNCED_PROBES: readonly Probe[] = [
   {
     what: 'Claude Code as martha start starts it: two skills the host syncs from the owner account, each holding a backslash in a quoted description and no hook (martha#243)',
-    host: 'claude-code' as const,
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: () => {},
     planted: () => {},
@@ -732,7 +733,7 @@ const SYNCED_PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code as martha start starts it: a synced skill whose frontmatter really declares a hook is refused, naming the file and the rule (martha#243)',
-    host: 'claude-code' as const,
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: () => {},
     planted: () => {},
@@ -744,7 +745,7 @@ const SYNCED_PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as martha start starts it: the same synced skill with `syncClaudeAiSkills: false` in the owner's settings, which the host reads as off, so the gate lets the start through (martha#243)",
-    host: 'claude-code' as const,
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: () => {},
     planted: () => {},
@@ -1005,7 +1006,7 @@ const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder
     const target = (place: Place) => join(userScopeConfig(place), folder, 'probe-note.md')
     return {
       what: `Claude Code ${gated ? 'as martha start starts it, the permission rules the launch carries in the settings it reads' : 'by hand, with none of the launch\'s rules'}: a write into the ${folder} folder of the owner's config dir (martha#154)`,
-      host: 'claude-code',
+      host: CLAUDE_CODE,
       command: (switches, place) => ({
         command: 'claude',
         args: [
@@ -1175,7 +1176,7 @@ function memoryLines(scratch: string, memory: string, main: string, start: strin
   put(folder, MEMORY_NOTE, `---\nname: codeword\ndescription: the codeword\n---\nThe codeword is ${codeword}.\n`)
   const planted = filesUnder(folder)
 
-  const where = { host: 'claude-code' as const, launch_dir: start, stop_dir: scratch }
+  const where = { host: CLAUDE_CODE, launch_dir: start, stop_dir: scratch }
   const prepared = prepareLaunch({ ...where, snapshot_root: join(scratch, 'snapshots'), approved_fingerprints: [fingerprintOf(readLaunchState(where, thisMachine))] }, thisMachine)
   if (!prepared.allow) return [['prepareLaunch allows the launch', prepared.refusal, true]]
   // Both runs pass the same switches; only the environment differs, so the control isolates the off switch.

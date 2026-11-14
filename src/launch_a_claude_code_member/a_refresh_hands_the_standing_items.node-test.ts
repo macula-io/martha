@@ -21,13 +21,12 @@ import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { STANDING_ADD, STANDING_HEADING } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE, startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
 
 const NOW = Date.UTC(2026, 10, 13, 9, 0, 0)

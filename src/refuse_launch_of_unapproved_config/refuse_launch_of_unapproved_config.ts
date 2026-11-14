@@ -79,6 +79,9 @@ export function launchEnvironment(
   return { ...Object.fromEntries(kept), ...switches.env }
 }
 
+/** Claude Code's name as a host: its key in the tables below, and the host the launcher starts. */
+export const CLAUDE_CODE = 'claude-code' as const
+
 /**
  * The files and directories each host reads from a project directory to start
  * something by itself. Each is one the host was seen to start something from
@@ -86,7 +89,7 @@ export function launchEnvironment(
  */
 export const LAUNCH_FILES_OF_HOST = {
   // The last one Claude Code writes itself: a member's own permission answers.
-  'claude-code': ['.mcp.json', '.claude/settings.json', '.claude/settings.local.json'],
+  [CLAUDE_CODE]: ['.mcp.json', '.claude/settings.json', '.claude/settings.local.json'],
   // The last one holds a checkout's plugins and their installed packages.
   opencode: ['opencode.json', 'opencode.jsonc', '.opencode'],
 } as const
@@ -143,14 +146,14 @@ export const CLAUDE_MEMORY_ELSEWHERE = [
   'CLAUDE_CODE_REMOTE_MEMORY_DIR',
 ] as const
 
-export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
+export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
 
 /** The switches that hand Claude Code a settings file: the carried copy, or the one a launch writes (martha#136). */
 export const claudeSettingsSwitches = (path: string): HostSwitches => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED })
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
-  'claude-code': {
+  [CLAUDE_CODE]: {
     // --strict-mcp-config: only the servers passed by --mcp-config start.
     project_config_off: {
       args: ['--setting-sources', 'user', '--strict-mcp-config'],

@@ -27,6 +27,7 @@ import {
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 const names = claudeCodeToolNames
 
@@ -35,7 +36,7 @@ const names = claudeCodeToolNames
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
 after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: mkdtempSync(join(launch_home, 'work-')),
   stop_dir: launch_home,
   approved_fingerprints: [],

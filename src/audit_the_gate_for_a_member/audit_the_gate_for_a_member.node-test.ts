@@ -16,10 +16,9 @@ import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the
 /** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
 const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
