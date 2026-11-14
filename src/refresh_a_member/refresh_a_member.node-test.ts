@@ -26,22 +26,19 @@ import {
   aRefreshIsDue,
   FLOW_WINDOW_MS,
   HANDOVER_LIMIT_PERCENT,
-  isAStorm,
   keepTheFlow,
   REFRESH_MARGIN_PERCENT,
   refreshesPlace,
-  STORM_WINDOW_MS,
   theFlowAbandoned,
   theFlowClearing,
   theFlowDeclined,
   theFlowOf,
-  theHandoverPrompt,
   theRefreshFile,
-  theSendBackNote,
-  whatBecameOfTheHandover,
   type ARefresh,
   type TheSessionsReading,
 } from './refresh_a_member.ts'
+import { theHandoverPrompt, theSendBackNote, whatBecameOfTheHandover } from '../write_my_handover/write_my_handover.ts'
+import { isAStorm, STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-refresh-'))
 after(() => removeTheTree(home))

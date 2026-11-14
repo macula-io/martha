@@ -22,7 +22,7 @@ import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_h
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { A_TOOL_WHILE_THE_END_IS_HELD, holdingTheEnds, type TheEndsHold } from '../refresh_a_member/hold_the_end.ts'
+import { A_TOOL_WHILE_THE_END_IS_HELD, holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'

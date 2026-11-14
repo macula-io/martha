@@ -21,7 +21,7 @@
 import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import type { HandoverStampStore, Processes, Refused, RowStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { theNewestHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { STORM_WINDOW_MS } from '../refresh_a_member/refresh_a_member.ts'
+import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_OF_PHASE } from '../report_progress/report_progress.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
