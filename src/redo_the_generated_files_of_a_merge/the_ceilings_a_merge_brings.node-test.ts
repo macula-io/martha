@@ -1,8 +1,9 @@
-// The ceilings a merge of two passed heads brings (martha#381).
+// The ceilings a merge of two passed heads brings (martha#381, martha#410).
 //
 // A landing that finds two heads clashing only in package.json's ceilings sums them: each is the base plus what each
-// review added. What this pins is the whole judgement — the sum, the keys the sides already agree on, and the two
-// clashes that are not the map's and so stop a batch rather than being settled here.
+// review added. What this pins is the whole judgement — the sum, the keys the sides already agree on, what a merge
+// writes outside the map when only one head changed it (martha#410), and the two clashes that are not the map's and so
+// stop a batch rather than being settled here.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -17,6 +18,25 @@ const aManifest = (ceilings: Readonly<Record<string, number>>): string =>
   theManifestOfAPlantedTree({ adapters: Object.keys(ceilings), ceilings })
 
 const AN_ADAPTER = 'src/an_adapter'
+
+/** `manifest` with the scripts a change outside the ceilings map made, in place of the scripts it carried. */
+const withScripts = (manifest: string, scripts: Readonly<Record<string, string>>): string =>
+  `${JSON.stringify({ ...(JSON.parse(manifest) as Record<string, unknown>), scripts }, null, 2)}\n`
+
+/** `manifest` with `value` under `key` in front of every other key: a change outside the map, at the file's top. */
+const withAKeyInFront = (manifest: string, key: string, value: unknown): string =>
+  `${JSON.stringify({ [key]: value, ...(JSON.parse(manifest) as Record<string, unknown>) }, null, 2)}\n`
+
+/** `manifest` with `value` under `key` after every other key: a change outside the map, at the file's end. */
+const withAKeyAtTheEnd = (manifest: string, key: string, value: unknown): string =>
+  `${JSON.stringify({ ...(JSON.parse(manifest) as Record<string, unknown>), [key]: value }, null, 2)}\n`
+
+/** The manifest the merge writes, or a failure naming the refusal the landing would print instead. */
+function theManifestOfTheMerge(base: string, ours: string, theirs: string): Record<string, unknown> {
+  const merged = thePackageJsonOfAMerge(A_REPOSITORY, base, ours, theirs)
+  assert.ok('ok' in merged, `the merge was refused: ${'refused' in merged ? merged.refused : ''}`)
+  return JSON.parse(merged.ok.text) as Record<string, unknown>
+}
 
 /** What the merge came to, or the refusal the landing would print instead. */
 function theMergeOf(base: string, ours: string, theirs: string): string {
@@ -47,17 +67,67 @@ test('#381: a ceiling one side has no number for is not merged, because the file
   assert.match(refused, /no ceiling for src\/an_adapter on every side/, 'a key without three numbers was summed anyway')
 })
 
-test('#381: a package.json the sides differ in outside the ceilings is refused, not rewritten', () => {
-  const with_scripts = `${JSON.stringify(
-    {
-      ...(JSON.parse(aManifest({ [AN_ADAPTER]: 111 })) as Record<string, unknown>),
-      scripts: { ours: 'echo ours' },
-    },
-    null,
-    2,
-  )}\n`
-  const refused = theMergeOf(aManifest({ [AN_ADAPTER]: 100 }), with_scripts, aManifest({ [AN_ADAPTER]: 105 }))
+test('#410: a script one head adds, which the other left alone, merges with the summed ceiling', () => {
+  const refused = theMergeOf(
+    aManifest({ [AN_ADAPTER]: 100 }),
+    aManifest({ [AN_ADAPTER]: 111 }),
+    withScripts(aManifest({ [AN_ADAPTER]: 105 }), { added: 'echo added' }),
+  )
+  assert.equal(refused, '116 package.json martha.hostCeilings (measured)', 'a change one head made outside the map stopped the merge')
+})
+
+test('#410: the script the head merged in added is written, not dropped for the head it is merged onto', () => {
+  const manifest = theManifestOfTheMerge(
+    aManifest({ [AN_ADAPTER]: 100 }),
+    aManifest({ [AN_ADAPTER]: 111 }),
+    withScripts(aManifest({ [AN_ADAPTER]: 105 }), { added: 'echo added' }),
+  )
+  assert.deepEqual(manifest.scripts, { added: 'echo added' }, "the merge writes the first head's scripts and not the second's")
+  const martha = manifest.martha as { hostCeilings: Record<string, number> }
+  assert.equal(martha.hostCeilings[AN_ADAPTER], 116, 'the summed ceiling is not what the merge writes')
+})
+
+test('#410: a script the head being merged onto adds, which the other left alone, merges too', () => {
+  const manifest = theManifestOfTheMerge(
+    aManifest({ [AN_ADAPTER]: 100 }),
+    withScripts(aManifest({ [AN_ADAPTER]: 111 }), { added: 'echo added' }),
+    aManifest({ [AN_ADAPTER]: 105 }),
+  )
+  assert.deepEqual(manifest.scripts, { added: 'echo added' }, 'the change the first head made outside the map is not written')
+})
+
+test('#381: a package.json the two sides change in the same part outside the ceilings is refused, not rewritten', () => {
+  const refused = theMergeOf(
+    aManifest({ [AN_ADAPTER]: 100 }),
+    withScripts(aManifest({ [AN_ADAPTER]: 111 }), { ours: 'echo ours' }),
+    withScripts(aManifest({ [AN_ADAPTER]: 105 }), { theirs: 'echo theirs' }),
+  )
   assert.match(refused, /differs outside martha\.hostCeilings/, 'a clash outside the map was settled by the landing')
+})
+
+/** `manifest` with its ceilings map in front of the rest of `martha`, as a file written by hand can have it. */
+const withTheMapInFront = (manifest: string): string => {
+  const parsed = JSON.parse(manifest) as { readonly martha: Readonly<Record<string, unknown>> }
+  const { hostCeilings, ...rest } = parsed.martha
+  return `${JSON.stringify({ ...parsed, martha: { hostCeilings, ...rest } }, null, 2)}\n`
+}
+
+test('#410: the map is written where the head it is merged onto had it, so the landing moves no other line', () => {
+  const manifest = theManifestOfTheMerge(
+    withTheMapInFront(aManifest({ [AN_ADAPTER]: 100 })),
+    withTheMapInFront(aManifest({ [AN_ADAPTER]: 111 })),
+    withTheMapInFront(aManifest({ [AN_ADAPTER]: 105 })),
+  )
+  assert.deepEqual(Object.keys(manifest.martha as object), ['hostCeilings', 'hostAdapters', 'hostGlue', 'sliceCap'], 'the merge moved the ceilings map to the end of martha')
+})
+
+test('#410: a merge that settles one key twice is refused, because what it writes is not one manifest', () => {
+  const refused = theMergeOf(
+    aManifest({ [AN_ADAPTER]: 100 }),
+    withAKeyInFront(aManifest({ [AN_ADAPTER]: 111 }), 'aKeyTwice', 'ours'),
+    withAKeyAtTheEnd(aManifest({ [AN_ADAPTER]: 105 }), 'aKeyTwice', 'theirs'),
+  )
+  assert.match(refused, /is not one manifest outside martha\.hostCeilings/, 'a file no side wrote was handed to a landing to write')
 })
 
 // --- #415: the core slices' exceptions, where a key appearing or disappearing is routine ---------------------------
@@ -107,4 +177,56 @@ test('#415: a merge that moves both maps names both in the words its commit reco
   const merged = thePackageJsonOfAMerge(A_REPOSITORY, both(100, 1287), both(110, 1280), both(105, 1270))
   assert.ok('ok' in merged, `the merge was refused: ${'refused' in merged ? merged.refused : ''}`)
   assert.equal(merged.ok.recorded, 'package.json martha.hostCeilings, martha.sliceCeilings (measured)')
+})
+
+// --- #410: a head that moves the cap, which no sum of the ceilings can stand on -----------------------------------
+
+const A_LOWERED_CAP = 500
+const A_SLICE_ABOVE_THE_CAP = 'src/big'
+const A_SLICE_THE_LOWER_CAP_NEEDS = 'src/mid'
+
+/** A manifest holding the core slices under `cap` (none at all when null), with one host directory at `ceiling`. */
+const slicedUnder = (cap: number | null, ceiling: number, slices: Readonly<Record<string, number>>): string =>
+  theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: ceiling }, slice_cap: cap, slice_ceilings: slices })
+
+test('#410: a head that lowers the cap is refused, because the other side measured its slices against the old one', () => {
+  // The probe from r=2: theirs lowers the cap and records src/mid at 550, which only the lower cap needs. Summed
+  // against the old cap the exception is dropped, and the landed tree then fails the slice check.
+  const refused = theMergeOf(
+    slicedUnder(THE_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(THE_CAP, 111, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(A_LOWERED_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700, [A_SLICE_THE_LOWER_CAP_NEEDS]: 550 }),
+  )
+  assert.equal(
+    refused,
+    `martha.sliceCap is ${String(THE_CAP)} and ${String(A_LOWERED_CAP)} across the three stages of the merge, so the core slices' ceilings were measured against no one cap: a head that moves it is merged by hand`,
+    'a cap one head moved was taken from the merge and every side summed against the other cap',
+  )
+})
+
+test('#410: a cap the base never held is refused too, though the two heads agree on it', () => {
+  // The base is one of the three stages: it held no cap, so neither head's slices were measured against the number
+  // the other stands at, and the sum would stand on none.
+  const refused = theMergeOf(
+    slicedUnder(null, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(THE_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(THE_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+  )
+  assert.equal(
+    refused,
+    `martha.sliceCap is no cap and ${String(THE_CAP)} across the three stages of the merge, so the core slices' ceilings were measured against no one cap: a head that moves it is merged by hand`,
+    'a cap the base never held was summed as though the base had stood at it',
+  )
+})
+
+test('#410: a script one head adds, with both heads moving one slice ceiling, merges both', () => {
+  const manifest = theManifestOfTheMerge(
+    sliced({ [A_SLICE]: 1287 }),
+    sliced({ [A_SLICE]: 1280 }),
+    withScripts(sliced({ [A_SLICE]: 1270 }), { added: 'echo added' }),
+  )
+  assert.deepEqual(manifest.scripts, { added: 'echo added' }, 'the script one head added outside the maps was dropped')
+  const martha = manifest.martha as { sliceCeilings: Record<string, number> }
+  assert.equal(martha.sliceCeilings[A_SLICE], 1263, 'the slice ceiling one head left alone was not summed with the other')
+  assert.equal(theSlicesOf(sliced({ [A_SLICE]: 1287 }), sliced({ [A_SLICE]: 1280 }), withScripts(sliced({ [A_SLICE]: 1270 }), { added: 'echo added' })), `{"${A_SLICE}":1263} package.json martha.sliceCeilings (measured)`)
 })

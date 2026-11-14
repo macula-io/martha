@@ -4,7 +4,8 @@
 //
 // Redoes the files a merge of two passed heads clashed in, when those are the ones nobody wrote by hand (martha#381): the
 // C4 picture is drawn again by the program that draws it, and package.json's host ceilings are merged — each at its base
-// plus what each review added — instead of taken from one side. Any other path in the clash is left as it is and named.
+// plus what each review added — instead of taken from one side, while everything outside the map is what git's own merge
+// of the two sides writes there (martha#410). Any other path in the clash is left as it is and named.
 //
 // Prints, on one line, the words a landing's commit records of the redo, such as
 // `assets/c4-context.svg (picture); package.json martha.hostCeilings (measured)`.

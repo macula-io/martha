@@ -2,8 +2,8 @@
 //
 // A batch's dry run asks this before anything is merged, and the range gate's judge asks it of every path a landing
 // merge clashed in, so the two read one rule, the one the redo itself applies: a picture the C4 program draws is redone;
-// package.json is redone only when its two sides are the same file outside martha.hostCeilings, which is decided on the
-// three stages' text and never by its name; any other path is a clash a builder settles by hand.
+// package.json is redone only when merging its three stages clashes nowhere outside martha.hostCeilings (martha#410),
+// which is decided on the stages' text and never by its name; any other path is a clash a builder settles by hand.
 //
 // A stage is a blob id the repository holds, and is absent when one side added or removed the file, so it has none.
 
@@ -20,8 +20,11 @@ const theTextOf = (repository: string, blob: string): string | undefined => {
   return said === undefined ? undefined : `${said}\n`
 }
 
-/** package.json's three stages, read as text, or why they cannot all be. */
-function theManifestStages(repository: string, the_manifest: string, stages: TheStages): Step<readonly [string, string, string]> {
+/**
+ * package.json's three stages, read as text in git's order, or why they cannot all be. The judge asks the same three of
+ * the manifest to compare a landed file with what the merge of the reviewed heads writes (martha#410).
+ */
+export function theManifestStages(repository: string, the_manifest: string, stages: TheStages): Step<readonly [string, string, string]> {
   const { base, ours, theirs } = stages
   if (base === undefined || ours === undefined || theirs === undefined) return { refused: noThreeStages(the_manifest) }
   const texts = [base, ours, theirs].map((blob) => theTextOf(repository, blob))
