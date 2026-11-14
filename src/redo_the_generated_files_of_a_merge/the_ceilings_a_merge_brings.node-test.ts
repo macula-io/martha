@@ -105,6 +105,22 @@ test('#381: a package.json the two sides change in the same part outside the cei
   assert.match(refused, /differs outside martha\.hostCeilings/, 'a clash outside the map was settled by the landing')
 })
 
+/** `manifest` with its ceilings map in front of the rest of `martha`, as a file written by hand can have it. */
+const withTheMapInFront = (manifest: string): string => {
+  const parsed = JSON.parse(manifest) as { readonly martha: Readonly<Record<string, unknown>> }
+  const { hostCeilings, ...rest } = parsed.martha
+  return `${JSON.stringify({ ...parsed, martha: { hostCeilings, ...rest } }, null, 2)}\n`
+}
+
+test('#410: the map is written where the head it is merged onto had it, so the landing moves no other line', () => {
+  const manifest = theManifestOfTheMerge(
+    withTheMapInFront(aManifest({ [AN_ADAPTER]: 100 })),
+    withTheMapInFront(aManifest({ [AN_ADAPTER]: 111 })),
+    withTheMapInFront(aManifest({ [AN_ADAPTER]: 105 })),
+  )
+  assert.deepEqual(Object.keys(manifest.martha as object), ['hostCeilings', 'hostAdapters', 'hostGlue'], 'the merge moved the ceilings map to the end of martha')
+})
+
 test('#410: a merge that settles one key twice is refused, because what it writes is not one manifest', () => {
   const refused = theMergeOf(
     aManifest({ [AN_ADAPTER]: 100 }),

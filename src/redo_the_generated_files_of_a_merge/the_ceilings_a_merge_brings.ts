@@ -30,11 +30,12 @@ export interface ThePackageJsonAMergeBrings {
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
 /**
- * The manifest with its ceilings map taken out, as one text: the file the two sides hold outside the map, one key to a
- * line so a merge of the two finds what each side changed there.
+ * The manifest with its ceilings map emptied, as one text: the file the two sides hold outside the map, one key to a
+ * line so a merge of the two finds what each side changed there. The map keeps its place — emptied, every side holds it
+ * the same, so the merge passes it through where it stands and the numbers are written over it afterwards.
  */
-function withoutTheCeilings(manifest: Manifest): string {
-  const martha = Object.fromEntries(Object.entries(manifest.martha ?? {}).filter(([key]) => key !== THE_CEILINGS_KEY))
+function withTheCeilingsEmptied(manifest: Manifest): string {
+  const martha = manifest.martha === undefined ? undefined : { ...manifest.martha, [THE_CEILINGS_KEY]: {} }
   return `${JSON.stringify({ ...manifest, martha }, null, 2)}\n`
 }
 
@@ -57,7 +58,7 @@ export function theSameOutsideTheCeilings(one: string, other: string): Step<bool
   if ('refused' in first) return first
   const second = aManifestIn(other, 'the merged manifest')
   if ('refused' in second) return second
-  return { ok: withoutTheCeilings(first.ok) === withoutTheCeilings(second.ok) }
+  return { ok: withTheCeilingsEmptied(first.ok) === withTheCeilingsEmptied(second.ok) }
 }
 
 /** One directory's ceiling in the merged map: both sides' number when they agree, and their sum from the base when not. */
@@ -114,7 +115,7 @@ function theManifestOutsideTheCeilingsAMergeWrites(
   ours: Manifest,
   theirs: Manifest,
 ): Step<string> {
-  const merged = theMergeOfThreeTexts([withoutTheCeilings(ours), withoutTheCeilings(base), withoutTheCeilings(theirs)])
+  const merged = theMergeOfThreeTexts([withTheCeilingsEmptied(ours), withTheCeilingsEmptied(base), withTheCeilingsEmptied(theirs)])
   if ('refused' in merged) return merged
   if ('clashed' in merged) {
     return { refused: `${the_manifest} differs outside ${CEILINGS_NAME}, so the clash is not one this redoes` }
