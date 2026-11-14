@@ -80,11 +80,21 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   assert.ok('answer' in handed)
   assert.equal(handed.answer, '[crew #0] Builder: a hand-off, in words')
 
-  // The mod reports the reviewer's next main turn starting, which is the turn the handed message is queued into.
+  /** The builder's receipts, as the tool answers them, read through the worktree's launch. */
+  const receiptsOfTheBuilder = async (): Promise<string> => {
+    const receipts = await crewOf('Builder', worktree).answer(READ_THE_RECEIPTS, {}, 'session-a')
+    assert.ok('answer' in receipts, `the receipts were not answered: ${JSON.stringify(receipts)}`)
+    return receipts.answer
+  }
+
+  // A subagent's turn start, as the mod reports it: the agent the host stamped on it goes with the ask, and the
+  // launcher counts nothing for it.
+  const subagents = await crewOf('Reviewer', clone).answer(THE_TURN_STARTED_ASK, { agentId: 'agent-1' }, 'session-b')
+  assert.ok('answer' in subagents, `the subagent's turn start was not answered: ${JSON.stringify(subagents)}`)
+  assert.equal(await receiptsOfTheBuilder(), 'message 0 to Reviewer: written, not yet taken in by Reviewer', "a subagent's turn start counted the hand-off taken in")
+
+  // The reviewer's next main turn starts, which is the turn the handed message is queued into.
   const started = await crewOf('Reviewer', clone).answer(THE_TURN_STARTED_ASK, {}, 'session-b')
   assert.ok('answer' in started, `the turn start was not answered: ${JSON.stringify(started)}`)
-
-  const receipts = await crewOf('Builder', worktree).answer(READ_THE_RECEIPTS, {}, 'session-a')
-  assert.ok('answer' in receipts)
-  assert.match(receipts.answer, /taken in by Reviewer/, `the sender's receipts do not read the reviewer's taken-in row: ${receipts.answer}`)
+  assert.equal(await receiptsOfTheBuilder(), 'message 0 to Reviewer: written, taken in by Reviewer', "the sender's receipts do not read the reviewer's taken-in row")
 })

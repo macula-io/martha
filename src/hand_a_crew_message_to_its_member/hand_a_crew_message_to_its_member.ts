@@ -12,12 +12,13 @@
 // idle session reached the model and was never raised (martha#253, Pallas's live run on 93437b7), so the raise is no
 // writer. The host fires `turn.start` for every turn, whatever path dispatched it (Pluto's ruling, side (a)). A
 // subagent's turn start carries its agent and counts nothing: it can arrive while the member is idle with a message
-// handed. A message is handed **once per session**: the host queues every prompt a mod submits until it is next idle,
-// so handing the same text again on each read tick put one message into the model's context once per tick (Mercurius,
-// r=1, seen live on the recorded host: ten copies of one message, one taken row). While a handed message waits for its
-// turn the carrier hands nothing, and a session that ends before that turn starts writes nothing, so the next
-// session's carrier hands the message again. Being late is acceptable; being lost is not, and neither is being read
-// ten times.
+// handed. A main turn the owner starts between the hand-over and the mod's submit counts it at that turn's start;
+// the host folds the submit into that running turn, so the model still reads it there. A message is handed **once per
+// session**: the host queues every prompt a mod submits until it is next idle, so handing the same text again on each
+// read tick put one message into the model's context once per tick (Mercurius, r=1, seen live on the recorded host:
+// ten copies of one message, one taken row). While a handed message waits for its turn the carrier hands nothing, and
+// a session that ends before that turn starts writes nothing, so the next session's carrier hands the message again.
+// Being late is acceptable; being lost is not, and neither is being read ten times.
 
 import { type ChannelHost, addressedTo, keepTakenIn, readTheChannel, takenInBy } from '../keep_the_crew_channel/crew_channel.ts'
 
