@@ -92,10 +92,16 @@
       "src/row_streams_directory": 165,
       "src/owners_settings_directory": 173
     },
+    "programParts": {
+      "src/declare_a_launch_probe": "src/probe_launch_hosts",
+      "src/probe_a_checkouts_own_config": "src/probe_launch_hosts",
+      "src/probe_the_hosts_auto_memory": "src/probe_launch_hosts",
+      "src/probe_the_owners_hooks": "src/probe_launch_hosts",
+      "src/probe_the_owners_own_folders": "src/probe_launch_hosts"
+    },
     "sliceCap": 600,
     "sliceCeilings": {
       "src/a_crews_tools": 1280,
-      "src/probe_launch_hosts": 1142,
       "src/refresh_a_member": 878
     },
     "packageImports": {
