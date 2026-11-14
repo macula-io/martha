@@ -18,7 +18,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { GIT_SETTINGS_VARIABLE, switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { blobAsGitAdds } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import { blobAsGitAdds } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { readTheCheckoutOnce } from '../run_an_owner_signed_command/read_the_checkout_once.ts'
 import { MARTHAS_OWN_GIT_SETTINGS, marthasOwnGitArgs, marthasOwnGitSettingsArgs } from './run_marthas_own_git.ts'
 
