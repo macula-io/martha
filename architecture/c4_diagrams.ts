@@ -682,7 +682,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] },
   ],
   [
-    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model', 'name_a_review_the_host_reported_failed', 'read_a_failed_agents_report'], type: '[a member\'s model, the owner\'s, a review\'s]', code: true,
+    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model', 'name_a_review_the_host_reported_failed', 'read_a_failed_agents_report'], type: '[a model, the owner\'s, a review\'s]', code: true,
       desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the three ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model;', 'read_a_failed_agents_report cuts the', 'host\'s failed-agent report from its own', 'text, and name_a_review_the_host_', 'reported_failed names that review, on the', 'model it ran on and in the host\'s words', '(martha#390)'] },
   ],
 ]

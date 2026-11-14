@@ -343,7 +343,7 @@
 <rect class="b-cmp" x="32" y="2592" width="300" height="358" rx="10"/>
 <text class="t-code" x="48" y="2620">switch_a_members_model,</text>
 <text class="t-code" x="48" y="2638">put_the_owners_model_back</text>
-<text class="t-type" x="48" y="2656">[a member's model, the owner's, a review's]</text>
+<text class="t-type" x="48" y="2656">[a model, the owner's, a review's]</text>
 <text class="t-desc" x="48" y="2680">switch_a_members_model keeps the model a</text>
 <text class="t-desc" x="48" y="2696">member runs on for one package, in the</text>
 <text class="t-desc" x="48" y="2712">crew's own store, and the three ways back;</text>
