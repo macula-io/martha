@@ -9,6 +9,9 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
+  HANDOVER_CEILING_MINUTES_LEAST,
+  HANDOVER_CEILING_MINUTES_MOST,
+  HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   DECLARATION_DIRECTORY,
   PERSON_MINUTES,
   REVIEW_MINUTES,
@@ -352,6 +355,17 @@ test('#253: a crew that does not say how often its sessions read the channel rea
   await refusedWith({ ...solo, channel_read_seconds: 0 }, 'channel_read_seconds')
   await refusedWith({ ...solo, channel_read_seconds: 1.5 }, 'channel_read_seconds')
   await refusedWith({ ...solo, channel_read_seconds: '30' }, 'channel_read_seconds')
+})
+
+// --- 6b. how long a handover waits behind a running turn (martha#311) ------------
+
+test('#311: a crew that names no handover ceiling reads the default, and 0 or past the most is refused by field name (mutant: accept 0)', async () => {
+  assert.equal((await declare(without('handover_ceiling_minutes', solo)).settings).handover_ceiling_minutes, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED)
+  await refusedWith({ ...solo, handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_LEAST - 1 }, 'handover_ceiling_minutes')
+  await refusedWith({ ...solo, handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_MOST + 1 }, 'handover_ceiling_minutes')
+  await refusedWith({ ...solo, handover_ceiling_minutes: 2.5 }, 'handover_ceiling_minutes')
+  assert.equal((await declare({ ...solo, handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_MOST }).settings).handover_ceiling_minutes, HANDOVER_CEILING_MINUTES_MOST)
+  assert.equal((await declare({ ...solo, handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_LEAST }).settings).handover_ceiling_minutes, HANDOVER_CEILING_MINUTES_LEAST)
 })
 
 // --- 7. a declaration an earlier release's init wrote (martha#374) ------------

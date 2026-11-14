@@ -16,6 +16,7 @@ import {
   ACTS,
   CLONES,
   DASHBOARD,
+  HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
   DECLARATION_VERSION,
@@ -197,6 +198,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   // Off: these tests ask about the tips a removal covers, and the gate is not theirs (martha#321).
   gate: { kind: 'off' },
   channel_read_seconds: 30,
+  handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */

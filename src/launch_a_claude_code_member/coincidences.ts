@@ -25,6 +25,8 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   // The same git subcommand, in the permission-prompt run's throwaway repository (martha#363).
   { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  // The same git subcommand, in the recorded end's throwaway repository (martha#311): martha init reads its owner there.
+  { value: CONFIG, file: 'launch_a_claude_code_member/an_end_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'launch_a_claude_code_member/run_nothing_a_checkout_planted.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_REPOSITORYS_OWN_NAME },

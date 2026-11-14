@@ -56,8 +56,13 @@ export const MILESTONES = [
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
 
-/** The acts that leave the member's own session, and so are announced first. */
-export const OUTWARD_ACTS = ['push', 'handoff', 'room_message', 'tag'] as const
+/**
+ * The acts that leave the member's own session, or are done to it, and so are announced first. `refresh_forced` is the
+ * second kind (martha#311): the launcher ends the member's running turn so its handover can run, which throws away
+ * whatever that turn was doing, so a successor must see it among the acts left open.
+ */
+export const REFRESH_FORCED = 'refresh_forced'
+export const OUTWARD_ACTS = ['push', 'handoff', 'room_message', 'tag', REFRESH_FORCED] as const
 export type OutwardActKind = (typeof OUTWARD_ACTS)[number]
 
 const ACT_ANNOUNCED = 'act_announced'

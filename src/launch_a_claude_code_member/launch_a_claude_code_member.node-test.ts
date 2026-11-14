@@ -1069,6 +1069,7 @@ function engineOver(socket_path: string, session_id: string): RelayEngine & { re
     ran,
     env: { get: async (name) => (name === RELAY_SOCKET_VARIABLE ? socket_path : undefined) },
     http: { fetch: fetchOverSocket },
+    turn: { abort: async () => undefined },
     session: { id: async () => session_id },
     clock: {
       after: (ms, fn) => {

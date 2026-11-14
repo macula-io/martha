@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { type CrewSettings, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { type CrewSettings, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -104,6 +104,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
   gate: { kind: 'off' },
   channel_read_seconds: 30,
+  handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
 })
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */

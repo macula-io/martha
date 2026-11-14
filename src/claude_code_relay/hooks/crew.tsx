@@ -12,7 +12,8 @@
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
-import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown, type TheOwnersRowShown } from './crew_answers.ts'
+import { beatingTheTurnWith } from './crew_turn_beat.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
 /** The pane's id, as the host names one. */
 export const PANE = 'crew'
@@ -35,6 +36,8 @@ interface CrewEngine {
   readonly clock: { after(ms: number, fn: () => void): { cancel(): void }; every(ms: number, fn: () => void): { cancel(): void } }
   /** Submits a prompt into this session (martha#253): the text a message is handed in. */
   readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
+  /** Ends a running turn by its id (martha#311); the host rejects when that turn is not the one running. */
+  readonly turn: { abort(input: { readonly turnId: string }): Promise<unknown> }
   readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
   /** `run` runs one of the host's own commands in this session: the refresh flow's clear is that one (martha#255). */
   readonly command: { register(command: { name: string; description: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
@@ -110,6 +113,11 @@ function theChannelReading($: CrewEngine): ReturnType<typeof readingTheChannelWi
   return theReading
 }
 
+/** The one beat this session holds (martha#311): the running main turn asked about, as ./crew_turn_beat.ts rules it. */
+let theBeat: ReturnType<typeof beatingTheTurnWith> | null = null
+const theTurnBeat = ($: CrewEngine): ReturnType<typeof beatingTheTurnWith> =>
+  (theBeat ??= beatingTheTurnWith((ms, fn) => $.clock.every(ms, fn), (turnId) => takeTheAct($, { turnId }, { turn_running: 1 })))
+
 /** The agent an event belongs to: the host stamps a subagent's turn with one, and the main turn with none. */
 function agentIdIn(event: unknown): unknown {
   return typeof event === 'object' && event !== null ? (event as { agentId?: unknown }).agentId : undefined
@@ -131,15 +139,15 @@ async function startReadingTheChannel($: CrewEngine): Promise<void> {
  * question — its context, the turn that just ended and the answer it ended with — and the launcher decides; this does
  * nothing but carry the act out. A clear is run out of the turn's own hook, because a `/clear` cannot run inside one.
  */
-async function takeTheAct($: CrewEngine, e: unknown): Promise<void> {
-  const order = await theOrderTheLauncherAnswers($, e)
+async function takeTheAct($: CrewEngine, e: unknown, more: Readonly<Record<string, unknown>> = {}): Promise<void> {
+  const order = await theOrderTheLauncherAnswers($, e, more)
   if (order === null || order.carry === 'none') return
   await carryOutTheAct($, order)
 }
 
 /** The order the launcher answers this session's question with, or null when it said none this mod could read. */
-async function theOrderTheLauncherAnswers($: CrewEngine, e: unknown): Promise<TheOrder | null> {
-  const heard = await hearTheLauncher($, THE_REFRESH_QUESTION, await whatTheSessionSays($, e))
+async function theOrderTheLauncherAnswers($: CrewEngine, e: unknown, more: Readonly<Record<string, unknown>>): Promise<TheOrder | null> {
+  const heard = await hearTheLauncher($, THE_REFRESH_QUESTION, { ...(await whatTheSessionSays($, e)), ...more })
   return 'said' in heard ? orderIn(heard.said) : null
 }
 
@@ -152,6 +160,8 @@ async function whatTheSessionSays($: CrewEngine, e: unknown): Promise<Readonly<R
 async function carryOutTheAct($: CrewEngine, order: TheOrder): Promise<void> {
   if (order.carry === 'submit') return await $.prompt.submit({ text: order.text })
   if (order.carry === 'model') await switchTheModel($, order.model)
+  // The end of the running turn (martha#311): the host's abort; the launcher reads the outcome off the turn's own end.
+  if (order.carry === 'end_the_turn') return void (await $.turn.abort({ turnId: order.turn_id }).catch(() => undefined))
   if (order.carry !== 'clear') return
   // Out of the turn's hook: /clear cannot run inside a hook the turn waits on.
   $.clock.after(CLEAR_DELAY_MS, () => void $.command.run({ command: 'clear' }).catch(() => undefined))
@@ -261,39 +271,24 @@ async function stepTheOwnersList($: CrewEngine, next: string): Promise<void> {
 
 type TheViews = { Box: unknown; Text: unknown; Button: unknown }
 
-/** One row of the owner's list: what each command does, and on the revealed row the command itself and its copy. */
-function anOwnersRow($: CrewEngine, views: TheViews, row: TheOwnersRowShown): unknown {
-  const { Box, Text, Button } = views
-  return (
-    <Box key={`todo:${row.id}`} flexDirection="column">
-      <Text bold={row.revealed}>{`${row.revealed ? '▶' : ' '} ${row.heading}`}</Text>
-      {row.goal === '' ? null : <Text dimColor>{`    ${row.goal}`}</Text>}
-      {row.acts.map((act, at) => (
-        <Box key={`todo:${row.id}:${at}`} flexDirection="column">
-          <Text>{`    ${row.revealed ? '▾' : '▸'} ${act.does}`}</Text>
-          {act.line === '' ? null : <Text bold>{`      ${act.line}`}</Text>}
-        </Box>
-      ))}
-      {row.copy === '' ? null : (
-        <Button key={`todo:${row.id}:copy`} label="copy" hotkey="c" onPress={(press: { surface?: unknown } | undefined) => void $.ui.copy({ text: row.copy, surface: press?.surface }).catch(() => undefined)} />
-      )}
-    </Box>
-  )
-}
-
-/** The owner's list under the crew (martha#316): its heading, the line saying a member wrote it, and its rows. */
+/**
+ * The owner's list under the crew (martha#316): its heading, the line saying a member wrote it, and its lines as the
+ * launcher drew them, the copy button where the launcher put it (martha#311).
+ */
 function theOwnersListBlock($: CrewEngine, views: TheViews, list: TheOwnersListShown | null): unknown {
   const { Box, Text, Button } = views
   if (list === null) return <Text>Could not read the owner's list.</Text>
+  const copy = (press: { surface?: unknown } | undefined): void => void $.ui.copy({ text: list.copy, surface: press?.surface }).catch(() => undefined)
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" justifyContent="space-between">
         <Text bold>{list.heading}</Text>
-        {list.rows.length < 2 ? null : <Button key="todo:next" label="next" hotkey="n" onPress={() => void stepTheOwnersList($, list.next)} />}
+        {list.next === list.focus ? null : <Button key="todo:next" label="next" hotkey="n" onPress={() => void stepTheOwnersList($, list.next)} />}
       </Box>
       <Text dimColor>{list.claim}</Text>
-      {list.rows.map((row) => anOwnersRow($, views, row))}
-      {list.standing.map((line, at) => <Text key={`standing:${at}`} bold={at === 0}>{line}</Text>)}
+      {list.drawn.map((line, at) =>
+        line.copy ? <Button key={`todo:copy:${at}`} label="copy" hotkey="c" onPress={copy} /> : <Text key={`todo:${at}`} bold={line.bold} dimColor={line.dim}>{line.text}</Text>,
+      )}
     </Box>
   )
 }
@@ -305,23 +300,6 @@ async function openThePane($: CrewEngine): Promise<void> {
   const list = await theOwnersList($)
   await $.ui.open({ id: PANE, title: 'Crew', rows: (shown === null ? PANE_CHROME_ROWS : shown.rows) + (list === null ? 1 : list.lines) })
   if (shown !== null) startRedrawing($, shown.redraw_ms)
-}
-
-/**
- * The pane when the read failed: it says that it could not read the crew, and why. Drawing `0/0 online` and "no one
- * has reported" over a broken answer tells the owner a lie about a working crew (martha#254 part 2 r=2 R2).
- */
-function unreadablePane($: CrewEngine, views: { Box: unknown; Text: unknown; Button: unknown }, why: string): unknown {
-  const { Box, Text, Button } = views
-  return (
-    <Box flexDirection="column">
-      <Box flexDirection="row" justifyContent="space-between">
-        <Text bold>Could not read the crew</Text>
-        <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
-      </Box>
-      <Text>{why}</Text>
-    </Box>
-  )
 }
 
 /** One tool's hook: the call's own fields, minus the ones the host adds, posted to the launcher. */
@@ -363,26 +341,31 @@ const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise
 const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
 const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wait_for_ci')
 
-/** The pane as the host draws it: the crew's rows, then the owner's list (martha#316). */
+/**
+ * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
+ * could not read the crew, and why: drawing `0/0 online` and "no one has reported" over a broken answer tells the owner
+ * a lie about a working crew (martha#254 part 2 r=2 R2).
+ */
 async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
-  const { Box, Text, Button } = $.ui.resolve(e) as { Box: unknown; Text: unknown; Button: unknown }
+  const views = $.ui.resolve(e) as TheViews
+  const { Box, Text, Button } = views
   const heard = await hearTheLauncher($, 'see_the_crew', {})
   const shown = 'said' in heard ? paneIn(heard.said) : null
-  if (shown === null) return unreadablePane($, { Box, Text, Button }, 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why)
+  const unread = 'said' in heard ? `Martha answered with something the pane cannot read: ${heard.said}` : heard.why
   // A pane that is being drawn is a pane that is open: if nothing is asking the host to draw it again, ask, so a
   // member who reports after it opened is drawn without the owner typing anything (part 2 r=2 R1).
-  startRedrawing($, shown.redraw_ms)
-  const list = await theOwnersList($)
+  if (shown !== null) startRedrawing($, shown.redraw_ms)
+  const list = shown === null ? undefined : await theOwnersList($)
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" justifyContent="space-between">
-        <Text bold>{shown.header}</Text>
+        <Text bold>{shown === null ? 'Could not read the crew' : shown.header}</Text>
         <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
       </Box>
-      {shown.lines.map((line, at) => (
+      {(shown === null ? [unread] : shown.lines).map((line, at) => (
         <Text key={`${at}`}>{line}</Text>
       ))}
-      {theOwnersListBlock($, { Box, Text, Button }, list)}
+      {list === undefined ? null : theOwnersListBlock($, views, list)}
     </Box>
   )
 }
@@ -446,6 +429,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // subagent finishing inside the member's own turn would read as the member going idle.
   on('turn.start', ($: CrewEngine, e: unknown, next: CrewNext) => {
     theChannelReading($).aTurnStarted(agentIdIn(e))
+    theTurnBeat($).aTurnStarted(agentIdIn(e), textIn(e, 'turnId'))
     return next(e)
   })
 
@@ -453,6 +437,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // idle and can take the next message the launcher hands it (martha#253, slice 2). The submit from `turn.complete`
   // is the one shape the host's own guidance names for submitting while the session idles.
   on('turn.complete', async ($: CrewEngine, e: unknown, next: CrewNext) => {
+    theTurnBeat($).aTurnEnded(agentIdIn(e))
     await theChannelReading($).aTurnEnded(agentIdIn(e))
     await takeTheAct($, e)
     return next(e)
