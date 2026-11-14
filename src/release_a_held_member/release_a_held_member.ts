@@ -23,7 +23,7 @@
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { Row, RowStore } from '../host_contract/host_contract.ts'
 import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { recordOf, SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
+import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { releaseMarkFor, releaseStreamOf } from '../apply_the_owners_release/apply_the_owners_release.ts'
@@ -100,7 +100,7 @@ async function keepTheRelease(asked: ReleaseAsked, member: string, session: stri
 async function theRawRecord(rows: RowStore, session_id: string): Promise<readonly Ingestion[] | string> {
   let stored
   try {
-    stored = await rows.read(`${SESSION_RECORD_STREAM}${session_id}`)
+    stored = await rows.read(sessionRecordStreamOf(session_id))
   } catch (error) {
     return (error as NodeJS.ErrnoException).code ?? String(error)
   }

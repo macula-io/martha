@@ -10,11 +10,12 @@ import { test } from 'node:test'
 import { removeTheTree } from '../src/launch_a_claude_code_member/relay_copy.ts'
 import {
   differences,
+  FLOOR_IN_THE_LAYER,
   inWords,
   PIN_IN_THE_LAYER,
   pinFieldsThatDiffer,
   thePinIn,
-  withoutThePin
+  withoutWhatThePackerWrites
 } from './the_layer_is_the_tree_and_the_pin.mjs'
 
 /** @param {Record<string, string>} entries @returns {Map<string, string>} */
@@ -22,36 +23,39 @@ const tree = (entries) => new Map(Object.entries(entries))
 
 /** The committed tree, small enough to read: a path and the hash treeOf would give it. */
 const committed = () => tree({ 'package.json': 'aaaa', 'docs/how-a-release-is-made.md': 'bbbb', 'src/a.ts': 'cccc' })
-/** What the packer lays down: the same tree, plus its pin, at the one path the pin is written to. */
-const packed = () => tree({ ...Object.fromEntries(committed()), [PIN_IN_THE_LAYER]: 'dddd' })
+/**
+ * What the packer lays down: the same tree, plus its pin and the floor it declares (martha#21), each at the one path
+ * it is written to.
+ */
+const packed = () => tree({ ...Object.fromEntries(committed()), [PIN_IN_THE_LAYER]: 'dddd', [FLOOR_IN_THE_LAYER]: '1111' })
 
 test('the layer the packer makes is never the bare archive, which is what the dry run refused (martha#207)', () => {
   // The comparison as it was: the layer against `git archive HEAD`, path for path and hash for hash.
-  assert.notDeepEqual(packed(), committed(), 'the layer holds the pin and the archive does not')
+  assert.notDeepEqual(packed(), committed(), 'the layer holds the pin and the floor, and the archive does not')
   const differing = differences(committed(), packed())
-  assert.deepEqual(differing, { missing: [], extra: [PIN_IN_THE_LAYER], changed: [] }, 'nothing but the pin differs')
+  assert.deepEqual(differing, { missing: [], extra: [FLOOR_IN_THE_LAYER, PIN_IN_THE_LAYER].sort(), changed: [] }, 'nothing but the pin and the floor differs')
   assert.ok(inWords(differing).includes(PIN_IN_THE_LAYER), `the difference names ${PIN_IN_THE_LAYER}: ${inWords(differing)}`)
 })
 
 test('the layer, once the pin is set aside, is the committed tree and passes', () => {
-  assert.deepEqual(withoutThePin(packed()), committed(), 'what is left of the layer is the tree, byte for byte')
-  assert.equal(inWords(differences(committed(), withoutThePin(packed()))), '', 'nothing to report')
-  assert.deepEqual(withoutThePin(committed()), committed(), 'a layer with no pin is still the committed tree')
+  assert.deepEqual(withoutWhatThePackerWrites(packed()), committed(), 'what is left of the layer is the tree, byte for byte')
+  assert.equal(inWords(differences(committed(), withoutWhatThePackerWrites(packed()))), '', 'nothing to report')
+  assert.deepEqual(withoutWhatThePackerWrites(committed()), committed(), 'a layer with no pin is still the committed tree')
 })
 
 test('a planted file is refused, and the refusal names it', () => {
-  const words = inWords(differences(committed(), withoutThePin(tree({ ...Object.fromEntries(packed()), 'martha/stray.txt': 'eeee' }))))
+  const words = inWords(differences(committed(), withoutWhatThePackerWrites(tree({ ...Object.fromEntries(packed()), 'martha/stray.txt': 'eeee' }))))
   assert.ok(words.includes('not in the committed tree (1): martha/stray.txt'), words)
 })
 
 test('a file missing from the layer is refused, and the refusal names it', () => {
-  const short = new Map([...withoutThePin(packed())].filter(([path]) => path !== 'src/a.ts'))
+  const short = new Map([...withoutWhatThePackerWrites(packed())].filter(([path]) => path !== 'src/a.ts'))
   const words = inWords(differences(committed(), short))
   assert.ok(words.includes('missing from the layer (1): src/a.ts'), words)
 })
 
 test('a file with other bytes is refused, and the refusal names it', () => {
-  const changed = new Map(withoutThePin(packed())).set('package.json', 'ffff')
+  const changed = new Map(withoutWhatThePackerWrites(packed())).set('package.json', 'ffff')
   const words = inWords(differences(committed(), changed))
   assert.ok(words.includes('differing bytes (1): package.json'), words)
 })

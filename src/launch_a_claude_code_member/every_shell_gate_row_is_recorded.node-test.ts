@@ -43,7 +43,7 @@ import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { CLAUDE_CODE } from './launch_a_claude_code_member.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { recordOf, SESSION_RECORD_STREAM, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -176,7 +176,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
     await relay.answer('tool_answered', { session_id: id, call, answer })
   }
 
-  const lasts = await Promise.all(sessions.map(async (id) => (await rows.read(`${SESSION_RECORD_STREAM}${id}`)).at(-1)))
+  const lasts = await Promise.all(sessions.map(async (id) => (await rows.read(sessionRecordStreamOf(id))).at(-1)))
   const recorded = lasts.flatMap((last) => (last === undefined ? [] : recordOf(last.row).ingested.map((ingest) => ingest.path)))
   return [...new Set(recorded)]
 }

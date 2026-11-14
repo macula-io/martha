@@ -32,4 +32,9 @@ test('the packed installer runs from under node_modules, ships .mjs only, and ca
   const refused = spawnSync(process.execPath, [bin, '--latest'], { encoding: 'utf8' })
   assert.equal(refused.status, 1)
   assert.match(refused.stderr, /^martha-install: unknown option '--latest'/)
+  // The bootstrap line reaches the same floor checks as `martha install` (martha#21): the switch is the installer's own.
+  assert.match(help.stdout, /\[--withdrawal-in <version>\]/)
+  const unnamed = spawnSync(process.execPath, [bin, '--withdrawal-in', '2.1.0'], { encoding: 'utf8', env: { PATH: process.env['PATH'], HOME: scratch } })
+  assert.equal(unnamed.status, 1)
+  assert.match(unnamed.stderr, /^martha-install: --withdrawal-in needs the version it withdraws to; name it/)
 })

@@ -1,6 +1,6 @@
 {
   "name": "@macula-io/martha",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Install Martha from its signed public package: verifies the release's sigstore signature, then installs it",
   "type": "module",
   "license": "Apache-2.0",
@@ -22,6 +22,7 @@
     "verify_the_release_signature/verify_the_release_signature.mjs",
     "unpack_the_release_layer/unpack_the_release_layer.mjs",
     "place_the_release/place_the_release.mjs",
+    "hold_the_version_floor/hold_the_version_floor.mjs",
     "install_a_release/install_a_release.mjs",
     "refuse_in_words/refuse_in_words.mjs",
     "signers.txt",
@@ -61,6 +62,8 @@
     "releaseFolder": "martha",
     "pinFile": "installer.json",
     "dryRunTagPrefix": "dry-run-",
-    "installerPublishWorkflow": ".github/workflows/installer.yml"
+    "installerPublishWorkflow": ".github/workflows/installer.yml",
+    "floorFile": "floor.json",
+    "withdrawalFile": "floor-withdrawal.json"
   }
 }
