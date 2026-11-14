@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import {
   exceptionsNotHeld,
   GONE,
+  holdsAnAddress,
   lineOfAFinding,
   literalSitesJudged,
   pathSegmentsOf,
@@ -260,5 +261,24 @@ test('a literal that is exactly the path of a source the check reads names that 
 
   assert.deepEqual(restatementsIn([tool, slice, coincidences], { judged: null }).map(lineOfAFinding), [
     "wake_it/coincidences.ts:2: 'wake_it' (a path segment) restates a_crews_tools/a_crews_tools.ts WAKE_IT",
+  ])
+})
+
+test('an address is judged whole, never split: a URL, or an owner/repo name whose owner has a hyphen (the owner\'s ruling on martha#437, r=3)', () => {
+  for (const address of ['macula-io/martha', 'gh secret set KEY -R macula-io/martha', 'macula-io/martha#253', 'repos/macula-io/martha/actions/runs', 'https://example.invalid/owner/project.git', 'file:///srv/git/martha']) {
+    assert.equal(holdsAnAddress(address), true, address)
+  }
+  for (const path of ['actions/runs', 'skills/deploy.md', 'refs/martha/base', '/crew-place/clones', 'skills/synced/acct-1/xlsx', '../conf-dir/settings.json', 'torvalds/linux', 'crew-place/clones/x', '-bad/martha']) {
+    assert.equal(holdsAnAddress(path), false, path)
+  }
+})
+
+test('a constant inside an address is not named, and the same constant in any other path still is (martha#437, r=3)', () => {
+  const repo = source('a_repo/a_repo.ts', "export const THE_REPO = 'the-repo'\n")
+  const user = source('a_user/a_user.ts', "call('an-org/the-repo')\ncall('https://example.invalid/anorg/the-repo')\ncall('repos/an-org/the-repo/actions')\ncall('refs/the-repo/base')\ncall('anorg/the-repo')\n")
+
+  assert.deepEqual(restatementsIn([repo, user], { judged: null }).map(lineOfAFinding), [
+    "a_user/a_user.ts:4: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO",
+    "a_user/a_user.ts:5: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO",
   ])
 })

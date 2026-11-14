@@ -28,7 +28,14 @@
 //     word, and a literal that is exactly the path of a source the check reads
 //     names that file as a module specifier does, so its segments are never
 //     judged: `file: 'wake_a_member/wake_a_member.ts'` in a slice's coincidences
-//     is the slice's directory, not the WAKE_A_MEMBER tool;
+//     is the slice's directory, not the WAKE_A_MEMBER tool. A literal holding
+//     an address is judged whole too, never split (the owner's ruling on
+//     martha#437, r=3): a URL, anything with `://`, and a GitHub owner/repo
+//     name whose owner has a hyphen, as the whole literal or one word of it, or
+//     after `repos/` in an API route — `macula-io/martha`, `-R macula-io/martha`,
+//     `macula-io/martha#253`, `repos/macula-io/martha/actions/runs`. A
+//     hyphen-free `owner/repo` is spelled like a relative path (`actions/runs`)
+//     and stays split;
 //   - a *definition* whose value equals an exported constant of ANOTHER module,
 //     exported or not: three private `const X = 'node_modules'` beside
 //     `DEPENDENCIES` are three restatements, and `const T = 'Bash'` is the same
@@ -385,6 +392,21 @@ export const PATH_SEPARATOR = '/'
 export const pathSegmentsOf = (literal: string): string[] =>
   [...new Set(literal.split(PATH_SEPARATOR))].filter((segment) => segment !== literal && segment.length >= SHORTEST_VALUE)
 
+/** What a URL holds, wherever it stands in a literal. */
+const URL_MARK = '://'
+
+/** A GitHub owner with a hyphen, then a repository: what tells a slug from a relative path such as `actions/runs`. */
+const SLUG = '[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/[A-Za-z0-9._-]+'
+
+/** An owner/repo name as a word of its own, or after `repos/` in a GitHub API route. */
+const OWNER_REPO = new RegExp(`(?:^|\\s)(?:${SLUG}(?=$|\\s|#)|repos/${SLUG}(?=$|\\s|#|/))`)
+
+/**
+ * Whether a literal holds an address, which is judged whole and never split: a
+ * URL, or a GitHub owner/repo name (the owner's ruling on martha#437, r=3).
+ */
+export const holdsAnAddress = (literal: string): boolean => literal.includes(URL_MARK) || OWNER_REPO.test(literal)
+
 /** A value written as one segment of a path literal: a use of it, as the bare value would be (martha#437). */
 const findingsForTheSegments = (path: string, line: number, literal: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
   pathSegmentsOf(literal).flatMap((segment) => findingsForAUse(path, line, segment, declared, definitions).map((finding) => ({ ...finding, segment: true })))
@@ -401,7 +423,7 @@ function findingsAt(node: ts.Node, line: number, path: string, declared: readonl
   const whole = definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
     : findingsForADefinition(definition, line, declared, definitions)
-  return files.has(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, literal, declared, definitions)]
+  return files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, literal, declared, definitions)]
 }
 
 /**
