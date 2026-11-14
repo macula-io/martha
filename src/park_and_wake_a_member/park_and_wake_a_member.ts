@@ -200,3 +200,24 @@ export function theNewestHandover(place: CrewPlace, stamps: HandoverStampStore, 
   if ('refusal' in read) return { kind: 'unreadable', refusal: read.refusal }
   return { kind: 'a_handover', handover: { file: join(place.path, newest.name), content: read.text } }
 }
+
+/** Two refreshes of one member inside this window are a storm, and a storm is parked, not refused. */
+export const STORM_WINDOW_MS = 30 * 60_000
+
+/** How many refreshes inside the window are a storm. */
+export const STORM_THRESHOLD = 2
+
+/** Whether this refresh is one too many inside the window: a storm, parked rather than refused. */
+export function isAStorm(refreshed_at: readonly number[], now: number): boolean {
+  const inside = refreshed_at.filter((at) => now - at < STORM_WINDOW_MS)
+  return inside.length + 1 >= STORM_THRESHOLD
+}
+
+/** The line a storm sends the Supervisor, once: which member, at which contexts, from which handover. */
+export function theStormLine(storm: { readonly member: string; readonly percents: readonly number[]; readonly file: string }): string {
+  const minutes = Math.round(STORM_WINDOW_MS / 60_000)
+  return (
+    `${storm.member} was parked after ${storm.percents.length} refreshes inside ${minutes} minutes ` +
+    `(at ${storm.percents.join('%, ')}%), the last from ${storm.file}. It stays parked until the owner or the Supervisor wakes it.`
+  )
+}

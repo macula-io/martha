@@ -86,7 +86,7 @@ import { WAIT_FOR_CI, WAIT_FOR_CI_DESCRIPTION, A_COMMIT, theAnswerOf, waitForCi,
 import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { aSwitchMayFollow, askAMemberToRefresh, theOrderOf, theQuestionIn, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
-import { holdingTheEnds, type TheEndsHold } from '../refresh_a_member/hold_the_end.ts'
+import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theHandoverAToolWrote, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import {

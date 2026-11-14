@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { aSwitchMayFollow, CARRY_THE_CLEAR, NO_ACT, theOrderOf, theQuestionIn, type TheSessionsQuestion } from './the_refresh_flow.ts'
+import { NO_ACT } from './refresh_a_member.ts'
+import { aSwitchMayFollow, CARRY_THE_CLEAR, theOrderOf, theQuestionIn, type TheSessionsQuestion } from './the_refresh_flow.ts'
 
 /** A question as the mod asks it at a turn's end, or as its beat asks it while the turn runs. */
 function asked(turn_running: 1 | undefined): TheSessionsQuestion {

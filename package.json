@@ -101,8 +101,7 @@
     },
     "sliceCap": 600,
     "sliceCeilings": {
-      "src/a_crews_tools": 1280,
-      "src/refresh_a_member": 878
+      "src/a_crews_tools": 1280
     },
     "packageImports": {
       "typescript": "prove_the_core",
