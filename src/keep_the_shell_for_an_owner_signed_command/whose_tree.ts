@@ -10,7 +10,7 @@
 
 import type { BlobUnderTheTree } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import { ownWriteMatches, type OwnWriteLeft } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import type { TreeChange } from '../refuse_launch_of_unapproved_config/checkout_tree.ts'
+import type { TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 
 /** The modes of a regular file, as git writes them: the only entries a run sees, as the only own writes. */
