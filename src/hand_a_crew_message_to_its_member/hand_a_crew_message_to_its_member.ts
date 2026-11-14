@@ -40,8 +40,9 @@ export interface MessageCarrier {
    * handed has not been taken in yet. */
   next(): Promise<string | null>
   /** A turn started in the member's session: the first MAIN turn after a hand-over takes the handed message in. A
-   * subagent's turn (one that carries an `agentId`) counts nothing. */
-  aTurnStarted(agentId?: unknown): Promise<void>
+   * subagent's turn (one that carries an `agentId`) counts nothing. Gives back the framed text this turn took in, or
+   * null when it took none in: the one decision the launcher's record of the turn follows (martha#440). */
+  aTurnStarted(agentId?: unknown): Promise<string | null>
 }
 
 export interface CarryingTo {
@@ -54,8 +55,8 @@ const aSubagents = (agentId: unknown): boolean => agentId !== undefined
 
 /** The carrier for one member of one crew: it hands one message at a time and counts it at the next main turn. */
 export function carryingTo(input: CarryingTo): MessageCarrier {
-  /** The position last handed, until a main turn starts; a message handed and not taken in is handed again. */
-  let handed: number | null = null
+  /** The message last handed, until a main turn starts; a message handed and not taken in is handed again. */
+  let handed: { readonly position: number; readonly text: string } | null = null
 
   return {
     async next(): Promise<string | null> {
@@ -65,18 +66,20 @@ export function carryingTo(input: CarryingTo): MessageCarrier {
       const [taken, messages] = await Promise.all([takenInBy(input.host, input.member), readTheChannel(input.host)])
       const nextOne = messages.find(({ position, message }) => !taken.has(position) && forThisMember(message, input.member))
       if (nextOne === undefined) return null
-      handed = nextOne.position
-      return framed(nextOne.position, nextOne.message.from, nextOne.message.text)
+      handed = { position: nextOne.position, text: framed(nextOne.position, nextOne.message.from, nextOne.message.text) }
+      return handed.text
     },
-    async aTurnStarted(agentId?: unknown): Promise<void> {
+    async aTurnStarted(agentId?: unknown): Promise<string | null> {
       const waiting = handed
-      if (waiting === null || aSubagents(agentId)) return
+      if (waiting === null || aSubagents(agentId)) return null
       handed = null
       try {
-        await keepTakenIn(input.host, input.member, waiting)
+        await keepTakenIn(input.host, input.member, waiting.position)
+        return waiting.text
       } catch {
         // The row was not kept, so the message was not taken in: it is offered again rather than counted.
         handed = waiting
+        return null
       }
     },
   }
@@ -84,7 +87,8 @@ export function carryingTo(input: CarryingTo): MessageCarrier {
 
 /**
  * The mod's two asks of the channel (martha#253), answered by this launch's carrier: the next message to hand, or ''
- * when none is waiting; and a turn start, with the agent the host stamped on it. Undefined for any other ask.
+ * when none is waiting; and a turn start, with the agent the host stamped on it, answered with the framed text that
+ * turn took in, or '' when it took none in (martha#440). Undefined for any other ask.
  */
 export async function answerAChannelAsk(
   carrier: MessageCarrier | undefined,
@@ -94,8 +98,7 @@ export async function answerAChannelAsk(
   if (name !== THE_NEXT_MESSAGE_ASK && name !== THE_TURN_STARTED_ASK) return undefined
   if (carrier === undefined) return { refused: 'this launch reads no crew channel' }
   if (name === THE_NEXT_MESSAGE_ASK) return { answer: (await carrier.next()) ?? '' }
-  await carrier.aTurnStarted(args['agentId'])
-  return { answer: '' }
+  return { answer: (await carrier.aTurnStarted(args['agentId'])) ?? '' }
 }
 
 /** Whether a message is this member's to take in: the whole crew's, or its own by name — never its own send to the crew. */
