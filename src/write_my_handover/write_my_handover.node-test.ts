@@ -21,7 +21,17 @@ import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_co
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { CREW_HANDOVER_WRITTEN, handoversPlace, theHandoverFile, writeMyHandover } from './write_my_handover.ts'
+import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
+import {
+  CREW_HANDOVER_WRITTEN,
+  handoversPlace,
+  theHandoverFile,
+  theHandoverPrompt,
+  theSendBackNote,
+  whatBecameOfTheHandover,
+  WRITE_MY_HANDOVER_TOOL,
+  writeMyHandover,
+} from './write_my_handover.ts'
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-handover-'))
@@ -181,4 +191,41 @@ test('#255: a crew store the host will not write into refuses the handover, and 
   const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps, session })
   assert.ok(typeof said !== 'string' && 'refusal' in said, 'a store that could not make the place took the handover anyway')
   assert.equal(stamps.all.size, 0, 'a handover that was never written was stamped, so a successor could inherit from nothing')
+})
+
+test('#255: a handover written before the flow asked for one is not this flow’s handover', () => {
+  const verdict = whatBecameOfTheHandover({
+    stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(500).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' },
+    text: 'a handover',
+    asked_at: 1_000,
+    holds: [],
+    sent_back: 0,
+    at_limit: false,
+  })
+  assert.deepEqual(verdict, { kind: 'not_written', why: 'the handover was written before this session was asked for one' })
+})
+
+test('#255: a handover missing the line of a package the row holds is sent back once, and clears on the second miss', () => {
+  const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['synthetic-owner/repo#7'] }
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(
+    whatBecameOfTheHandover({ ...asked, text: 'it holds synthetic-owner/repo#7, at a branch and a sha', sent_back: 1, at_limit: false }),
+    { kind: 'accepted', missing: [] },
+  )
+})
+
+test('#255: the send-back note names what was missing and the word to answer with', () => {
+  const note = theSendBackNote(['no line naming synthetic-owner/repo#7'])
+  assert.ok(note.includes('no line naming synthetic-owner/repo#7'), 'the note does not say what was missing')
+  assert.ok(note.includes(CREW_HANDOVER_WRITTEN), 'the note does not say which word to answer with')
+})
+
+test('#255: the handover prompt names the limit and the tool, and asks for the word', () => {
+  const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2 })
+  assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
+  assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
+  assert.ok(atTheLimit.includes(CREW_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
+  assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30 }).includes('handover limit'), 'a task’s end reads as the limit')
 })

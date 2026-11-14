@@ -2,7 +2,7 @@
 // mod asks on while the turn runs, the end it is answered with, the outcome the mod reports back, and what the ledger,
 // the flow and the Supervisor are left with.
 //
-// The crew's own store is the real one on this disk, as in ./the_refresh_flow_answers_the_session.node-test.ts, and the
+// The crew's own store is the real one on this disk, as in ../a_crews_tools/the_refresh_flow_answers_the_session.node-test.ts, and the
 // clock is the test's, so every minute named in a test is the minute the flow reads.
 
 import assert from 'node:assert/strict'
@@ -30,7 +30,7 @@ import { A_TOOL_WHILE_THE_END_IS_HELD } from '../end_a_running_turn/hold_the_end
 import { CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { FORCED_ENDS } from '../end_a_running_turn/end_a_running_turn.ts'
-import { crewToolsOver } from './a_crews_tools.ts'
+import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 
 const HOST_MODELS = ['opus', 'fable']
 const MEMBER = 'builder'

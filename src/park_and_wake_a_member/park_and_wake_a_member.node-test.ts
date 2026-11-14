@@ -25,11 +25,13 @@ import { hostForTests, type HostForTests } from '../host_contract/host_for_tests
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { handoversPlace, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import {
+  isAStorm,
   mayParkOrUnparkAnother,
   parkAMember,
   parkedPlace,
   theNewestHandover,
   theParkMarker,
+  STORM_WINDOW_MS,
   theParkOf,
   unparkAMember,
   type TheDeclaration,
@@ -270,4 +272,11 @@ test('#255: a member whose role is not granted the act unparks nobody, and a mem
   assert.equal(theParkOf(theParkedPlace(host), 'reviewer').kind, 'parked', 'a refused unpark unparked the member anyway')
   const itself = unparkAMember(host.host, parkingOf(declared, 'reviewer', 'reviewer', LATER))
   assert.ok(!('refusal' in itself), 'a member was refused the unpark of itself, which the declaration has nothing to say about')
+})
+
+test('#255: two refreshes inside the window are a storm, and one outside it is not', () => {
+  const now = 10 * STORM_WINDOW_MS
+  assert.equal(isAStorm([now - STORM_WINDOW_MS / 2], now), true)
+  assert.equal(isAStorm([now - STORM_WINDOW_MS - 1], now), false)
+  assert.equal(isAStorm([], now), false)
 })
