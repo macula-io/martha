@@ -783,7 +783,7 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
 function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
   return {
     journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
-    telling: theMembersTelling(launch),
+    telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows }),
     screen: theOwnersScreen({
       beats: dashboardRowsIn(launch.places.dashboard),
       member: launch.member_name,
@@ -795,21 +795,51 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlac
 }
 
 /**
+ * Where a line of Martha's own is told: the member whose row and channel it goes to, and the two store directories those
+ * are kept in. Named apart from the launch so the telling can be built and read on its own (martha#390 r=1).
+ */
+export interface TheTellingPlaces {
+  readonly member: string
+  readonly dashboard: string
+  readonly rows: string
+}
+
+/**
  * Where a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member's own session,
  * which is handed the line through the crew's channel the way every crew message is. A row the store does not hold yet
  * is not made here: the line waits for a row there is, as the dialogs slice leaves it.
+ *
+ * The row's `needs` is one slot shared with every other line the owner is told (a model switch's, martha#359), so this
+ * telling keeps the line it wrote (martha#390 r=1): a second stopped review replaces its own line, a line another owner
+ * wrote is never taken, and taking the line back — which happens once the member has taken the matter up — removes this
+ * launcher's line and no other's.
  */
-function theMembersTelling(launch: ClaudeCodeMemberLaunch): TheMembersTelling {
-  const beats = dashboardRowsIn(launch.places.dashboard)
+export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
+  const beats = dashboardRowsIn(places.dashboard)
+  // The line this telling last put in the row, so it can tell its own line from another owner's, and take back its own.
+  let wrote: string | null = null
   return {
     theRow: (line) => {
-      beats.change(launch.member_name, (held) => (held === null ? null : { ...held, needs: line, at: Date.now() }))
+      beats.change(places.member, (held) => {
+        if (held === null) return null
+        // Another owner's line stands in the one slot the row has: it is theirs to answer, and never taken here.
+        if (held.needs !== '' && held.needs !== wrote) return held
+        wrote = line
+        return { ...held, needs: line, at: Date.now() }
+      })
     },
     theMember: (line) =>
       appendToTheChannel(
-        { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(launch.places.rows) } },
-        { from: THE_CREWS_OWN_NAME, to: [launch.member_name], text: line, sent_at: Date.now() },
+        { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(places.rows) } },
+        { from: THE_CREWS_OWN_NAME, to: [places.member], text: line, sent_at: Date.now() },
       ).then(() => undefined),
+    takeTheLineBack: () => {
+      const line = wrote
+      if (line === null) return
+      wrote = null
+      // The row's `at` is the member's own beat, and taking a line away is not one (martha#380).
+      beats.change(places.member, (held) => (held === null || held.needs !== line ? null : { ...held, needs: '' }))
+    },
   }
 }
 

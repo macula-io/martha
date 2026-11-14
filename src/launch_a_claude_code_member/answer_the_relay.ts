@@ -158,6 +158,11 @@ export interface TheMembersTelling {
   theRow(line: string): void
   /** The member's own session: the line is handed to it as a turn, through the crew's own channel. */
   theMember(line: string): Promise<void>
+  /**
+   * The line this launcher put in the row leaves it again (martha#390 r=1): the member has taken the matter up, so what
+   * needed the owner no longer does. Only this launcher's own line goes — a line another owner wrote stays where it is.
+   */
+  takeTheLineBack(): void
 }
 
 /** Why a run is refused for a member launched without signed runs. */
@@ -703,6 +708,9 @@ async function subagentStopped(state: RelayState, body: Body): Promise<RelayRepl
  * Keeps an Agent call this launcher allowed when it is one of the crew's reviews on its reviewer model (martha#390), so
  * a failure the host reports later can be read as that review's and as no other's. A crew that names no reviewer model,
  * and a call that is not a review on it, keep nothing.
+ *
+ * An allowed review is also the member taking up again whichever review stopped before it: the line that one left in
+ * the row has been acted on, and leaves it here (martha#390 r=1).
  */
 async function noteTheReviewThisLauncherLetThrough(state: RelayState, call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>>; readonly id: string | undefined }): Promise<void> {
   const crew = state.place.crew
@@ -710,6 +718,7 @@ async function noteTheReviewThisLauncherLetThrough(state: RelayState, call: { re
   const review_model = await crew.theReviewModelOfTheCall(call)
   if (review_model === null) return
   state.reviews.remember(call.id, review_model)
+  state.place.telling?.takeTheLineBack()
 }
 
 /**
