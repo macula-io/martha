@@ -61,6 +61,8 @@
     "releaseFolder": "martha",
     "pinFile": "installer.json",
     "dryRunTagPrefix": "dry-run-",
-    "installerPublishWorkflow": ".github/workflows/installer.yml"
+    "installerPublishWorkflow": ".github/workflows/installer.yml",
+    "floorFile": "floor.json",
+    "withdrawalFile": "floor-withdrawal.json"
   }
 }

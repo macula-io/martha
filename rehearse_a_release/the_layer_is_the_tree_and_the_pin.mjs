@@ -12,6 +12,9 @@ import { NAMES } from '../installer/keep_the_names_in_one_place/names.mjs'
 /** Where a layer holds the pin the packer generated: the release folder, and the file the installer package names. */
 export const PIN_IN_THE_LAYER = `${NAMES.releaseFolder}/${NAMES.pinFile}`
 
+/** Where a layer holds the floor the packer declared from floor.txt (martha#21), the other file it generates. */
+export const FLOOR_IN_THE_LAYER = `${NAMES.releaseFolder}/${NAMES.floorFile}`
+
 /** At most this many paths are named in one refusal, so a tree that differs everywhere stays readable. */
 const NAMED_AT_MOST = 10
 
@@ -20,7 +23,7 @@ const NAMED_AT_MOST = 10
  * @param {Map<string, string>} layer path -> hash, as treeOf reads them
  * @returns {Map<string, string>}
  */
-export const withoutThePin = (layer) => new Map([...layer].filter(([path]) => path !== PIN_IN_THE_LAYER))
+export const withoutWhatThePackerWrites = (layer) => new Map([...layer].filter(([path]) => path !== PIN_IN_THE_LAYER))
 
 /**
  * Every path on which two trees differ: what only `expected` holds, what only `layer` holds, and what both hold with

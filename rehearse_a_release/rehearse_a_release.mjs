@@ -28,7 +28,7 @@ import { layerOf, registry } from '../installer/read_the_release_registry/read_t
 import { TOP, unpackLayer } from '../installer/unpack_the_release_layer/unpack_the_release_layer.mjs'
 import { signedBy } from '../installer/verify_the_release_signature/verify_the_release_signature.mjs'
 import { removeEvenReadOnly, treeOf } from '../installer/serve_a_release_locally/serve_a_release_locally.mjs'
-import { differences, inWords, pinFieldsThatDiffer, thePinIn, withoutThePin } from './the_layer_is_the_tree_and_the_pin.mjs'
+import { differences, inWords, pinFieldsThatDiffer, thePinIn, withoutWhatThePackerWrites } from './the_layer_is_the_tree_and_the_pin.mjs'
 
 /** The checkout this runs in, whose committed tree the layer must hold. */
 const REPO = dirname(import.meta.dirname)
@@ -81,7 +81,7 @@ try {
   // Both trees start at their own root, so the pin's path is the one the layer holds it at: the release folder, and
   // the file inside it. The packer writes that pin after the archive, so it is all the layer may add.
   const layerTree = treeOf(stage)
-  const differing = inWords(differences(treeOf(archived), withoutThePin(layerTree)))
+  const differing = inWords(differences(treeOf(archived), withoutWhatThePackerWrites(layerTree)))
   if (differing !== '') assert.fail(differing)
   const pin = thePinIn(stage)
   const published = await pinFor({ repo: REPO })
