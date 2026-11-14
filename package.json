@@ -95,8 +95,8 @@
       "src/a_crews_tools": 1279,
       "src/probe_launch_hosts": 1133,
       "src/refuse_launch_of_unapproved_config": 867,
-      "src/refresh_a_member": 615,
-      "src/check_no_literal_restates_a_value": 611
+      "src/refresh_a_member": 869,
+      "src/check_no_literal_restates_a_value": 617
     },
     "packageImports": {
       "typescript": "prove_the_core",
