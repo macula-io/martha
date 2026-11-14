@@ -21,6 +21,6 @@ const realpathOf = (path: string): string => {
 }
 
 /** The exceptions that apply to `root`: the declared ones when it is the checkout, and none for any other tree. */
-export function exceptionsThatApply(root: string, checkout: string, declared: readonly Exception[]): readonly Exception[] {
+export function exceptionsThatApply<Entry extends Exception>(root: string, checkout: string, declared: readonly Entry[]): readonly Entry[] {
   return realpathOf(root) === realpathOf(checkout) ? declared : []
 }

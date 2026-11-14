@@ -19,6 +19,7 @@ import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, stampHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { OWNER } from '../declare_crew/declare_crew.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -62,7 +63,7 @@ const aTeamGranting = (granted: readonly string[]): TheDeclaration => ({
 /** A solo crew: no roles but its member's, and the act granted to the owner alone. */
 const aSoloCrew: TheDeclaration = {
   members: [{ name: 'builder', role: 'builder' }],
-  mode: { may: { resume_parked_work: ['owner'] } },
+  mode: { may: { resume_parked_work: [OWNER] } },
 }
 
 const parkingOf = (declaration: TheDeclaration, actor: string, member = 'builder', at = AT) => ({
@@ -112,11 +113,11 @@ test('#255: an owner the table does not grant the act parks nobody', () => {
   const host = aHost()
   const ownerHasNoGrant = aTeamGranting(['supervisor'])
   assert.equal(
-    mayParkOrUnparkAnother(ownerHasNoGrant, 'owner'),
+    mayParkOrUnparkAnother(ownerHasNoGrant, OWNER),
     false,
     'the owner was allowed to park another member by being the owner, which the declaration does not say',
   )
-  const said = parkAMember(host.host, parkingOf(ownerHasNoGrant, 'owner', 'reviewer'))
+  const said = parkAMember(host.host, parkingOf(ownerHasNoGrant, OWNER, 'reviewer'))
   assert.ok('refusal' in said, 'the owner parked another member with no grant in the table')
   assert.match(said.refusal, /resume_parked_work/, 'the refusal does not name the act that would have allowed it')
   assert.deepEqual(theParkOf(theParkedPlace(host), 'reviewer'), { kind: 'not_parked', last_marker: null }, 'a refused park by the owner left a marker behind')
@@ -124,9 +125,9 @@ test('#255: an owner the table does not grant the act parks nobody', () => {
 
 test('#255: a solo crew parks its member, because the owner is granted the act and has no node id to be checked against', () => {
   const host = aHost()
-  assert.equal(mayParkOrUnparkAnother(aSoloCrew, 'owner'), true, 'a solo crew cannot park at all: its owner is granted the act and nothing else is')
+  assert.equal(mayParkOrUnparkAnother(aSoloCrew, OWNER), true, 'a solo crew cannot park at all: its owner is granted the act and nothing else is')
   assert.equal(mayParkOrUnparkAnother(aSoloCrew, 'builder'), false, 'a solo crew\'s member parked by its role, which is not granted the act')
-  const said = parkAMember(host.host, parkingOf(aSoloCrew, 'owner'))
+  const said = parkAMember(host.host, parkingOf(aSoloCrew, OWNER))
   assert.ok(!('refusal' in said), 'the owner of a solo crew was refused the park of its only member')
 })
 

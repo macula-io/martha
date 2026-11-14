@@ -24,11 +24,11 @@ function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typ
   t.after(() => removeTheTree(home))
   return crewToolsOver({
     member: 'Pallas',
-    ledger: { clock: { now: () => 1_000 }, stores: { rows: rowStreamsDirectory(join(home, 'rows')) } },
+    ledger: { clock: { now: () => 1_000 }, stores: { rows: rowStreamsDirectory(join(home, 'row-streams')) } },
     beats: dashboardRowsIn(join(home, 'row')),
     root: home,
     documents: { read: async () => '{}' },
-    stores: { crew: crewFilesDirectory(join(home, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(home, 'crew-files')) },
   })
 }
 

@@ -9,11 +9,11 @@
 
 import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 
-import { ED25519, SK_ED25519, USER_PRESENT, sshString } from './ssh_signature.ts'
+import { ED25519, SK_ED25519, SSH_SHA512, USER_PRESENT, sshString } from './ssh_signature.ts'
 
 const MAGIC = Buffer.from('SSHSIG')
 const APPLICATION = 'ssh:'
-const HASH = 'sha512'
+const HASH = SSH_SHA512
 const ARMOR_LINE = 70
 
 export interface FixtureKey {

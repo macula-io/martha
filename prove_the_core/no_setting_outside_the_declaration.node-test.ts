@@ -13,6 +13,7 @@ import {
   slicesImportingPrograms,
   type Source,
 } from './no_setting_outside_the_declaration.ts'
+import { COINCIDENCE_FILE, isACoincidenceFile } from './the_coincidences_a_slice_declares.ts'
 
 const repository = join(import.meta.dirname, '..')
 const src = join(repository, CORE)
@@ -47,8 +48,13 @@ const isSlice = (path: string) => {
 }
 
 const isTestOrProgram = (path: string) => isTestFile(testSuffixes, path) || programsRunByScripts.includes(path.split(sep)[0] ?? '')
+// The files the three reach rules judge: every one but a slice's coincidences.ts, which the restated-values check
+// reads as a syntax tree and nothing runs (martha#289 r=3, ruling P). The exemption is the SOURCE side only: what
+// a file may import (isSlice, isTestOrProgram) keeps its meaning, and only another coincidences.ts may import one
+// (only_a_coincidence_file_imports_one.ts).
+const judgedByTheReachRules = <Each extends Source>(sources: readonly Each[]): Each[] => sources.filter(source => !isACoincidenceFile(source.path))
 const sourcesIn = (directories: readonly string[]) =>
-  coreSources(src).filter(source => directories.includes(source.path.split(sep)[0] ?? '') && !isTestFile(testSuffixes, source.path))
+  judgedByTheReachRules(coreSources(src).filter(source => directories.includes(source.path.split(sep)[0] ?? '') && !isTestFile(testSuffixes, source.path)))
 
 interface PlantedCase { readonly text: string; readonly lines: readonly number[] }
 interface Planted {
@@ -202,6 +208,34 @@ for (const adapter of hostAdapters) {
   })
 }
 
+// --- a coincidence file is not judged, and its neighbour still is (ruling P) -----
+
+/** The same import, in a coincidences.ts and in a file of another name beside it: only the second is judged. */
+const aPairIn = (folder: string, text: string): Source[] => [
+  { path: join(folder, COINCIDENCE_FILE), text: `${text}\n` },
+  { path: join(folder, `coincidences_more.ts`), text: `${text}\n` },
+]
+
+test('the slice rule skips a coincidences.ts importing an adapter, and names the file beside it that does the same', () => {
+  const found = settingsReadOutsideTheDeclaration(judgedByTheReachRules(aPairIn('some_slice', importOf(`../${hostAdapters[0]}/x.ts`))), isSlice)
+  assert.deepEqual(found.map(finding => finding.path), [join('some_slice', 'coincidences_more.ts')])
+})
+
+test('the glue rule skips a coincidences.ts importing a slice, and names the file beside it that does the same', () => {
+  const found = glueReachesBeyondTheContract(judgedByTheReachRules(aPairIn(hostGlue[0]!, importOf('../some_slice/x.ts'))), hostContract)
+  assert.deepEqual(found.map(finding => finding.path), [join(hostGlue[0]!, 'coincidences_more.ts')])
+})
+
+test('the adapter rule skips a coincidences.ts importing a test, and names the file beside it that does the same', () => {
+  const found = adapterReachesBeyondItsKind(judgedByTheReachRules(aPairIn(hostAdapters[0]!, importOf(`../some_slice/some_slice${testSuffixes[0]}`))), isTestOrProgram)
+  assert.deepEqual(found.map(finding => finding.path), [join(hostAdapters[0]!, 'coincidences_more.ts')])
+})
+
+test('the exemption is the source side only: a slice importing a coincidences.ts is still a slice import, named by the import guard, not admitted as a target kind', () => {
+  assert.equal(isSlice(join('some_slice', COINCIDENCE_FILE)), true, 'isSlice keeps its meaning as the target the slice rule admits')
+  assert.equal(isTestOrProgram(join('some_slice', COINCIDENCE_FILE)), false, 'isTestOrProgram keeps its meaning as the target the adapter rule refuses')
+})
+
 // --- what is not a reach is left alone ----------------------------------------
 
 test('words in comments, strings and regular expressions, properties, types and allowed imports are not reaches', () => {
@@ -211,13 +245,13 @@ test('words in comments, strings and regular expressions, properties, types and 
 // --- the tree -----------------------------------------------------------------
 
 test('no slice in this repository reads a setting from anywhere but the declaration', () => {
-  const slices: Source[] = coreSources(src).filter(source => isSlice(source.path))
+  const slices: Source[] = judgedByTheReachRules(coreSources(src).filter(source => isSlice(source.path)))
   assert.ok(slices.length > 1, 'the walk read the core')
   assert.deepEqual(settingsReadOutsideTheDeclaration(slices, isSlice), [])
 })
 
 test('no directory package.json runs as a program is one a slice imports from', () => {
-  const slices: Source[] = coreSources(src).filter(source => isSlice(source.path))
+  const slices: Source[] = judgedByTheReachRules(coreSources(src).filter(source => isSlice(source.path)))
   assert.deepEqual(slicesImportingPrograms(slices, programsRunByScripts), [])
 })
 

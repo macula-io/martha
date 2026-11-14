@@ -30,7 +30,7 @@ test('a path reads as absent, a file, a directory, a link (never followed) or ot
   mkdirSync(join(dir, 'a-dir'))
   symlinkSync('a-file', join(dir, 'a-link'))
 
-  assert.deepEqual(files.kindOf(join(dir, 'nothing')), { kind: 'absent' })
+  assert.deepEqual(files.kindOf(join(dir, 'not-there')), { kind: 'absent' })
   assert.deepEqual(files.kindOf(join(dir, 'a-file')), { kind: 'file', ownerExecutes: false })
   assert.deepEqual(files.kindOf(join(dir, 'a-dir')), { kind: 'directory' })
   assert.deepEqual(files.kindOf(join(dir, 'a-link')), { kind: 'symlink', target: 'a-file' })
@@ -53,7 +53,7 @@ test('a failure other than absence throws with its own code', (t) => {
   const dir = place(t)
   writeFileSync(join(dir, 'a-file'), 'bytes')
   assert.throws(() => files.kindOf(join(dir, 'a-file', 'below')), { code: 'ENOTDIR' })
-  assert.throws(() => files.childrenOf(join(dir, 'nothing')), { code: 'ENOENT' })
+  assert.throws(() => files.childrenOf(join(dir, 'not-there')), { code: 'ENOENT' })
 })
 
 test('bytes, children and the real path are read as they are', (t) => {
@@ -64,7 +64,7 @@ test('bytes, children and the real path are read as they are', (t) => {
   assert.equal(Buffer.from(files.bytesOf(join(dir, 'a-file'))).toString(), 'bytes')
   assert.deepEqual([...files.childrenOf(dir)].sort(), ['a-file', 'self'])
   assert.equal(files.realPathOf(join(dir, 'self', 'a-file')), files.realPathOf(join(dir, 'a-file')))
-  assert.equal(files.realPathOf(join(dir, 'nothing')), null)
+  assert.equal(files.realPathOf(join(dir, 'not-there')), null)
 })
 
 // --- scratch --------------------------------------------------------------------

@@ -157,7 +157,7 @@ function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typ
     beats: NO_BEATS,
     root: home,
     documents: host.stores.documents,
-    stores: { crew: crewFilesDirectory(join(home, 'crew')) },
+    stores: { crew: crewFilesDirectory(join(home, 'crew-files')) },
   })
 }
 

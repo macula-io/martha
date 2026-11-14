@@ -414,7 +414,7 @@ export function recordMeshTree(request: MeshTreeRecordRequest): RecordedMeshTree
   const refusal = refusalOfLock(lock, { server: MESH_SERVER_PACKAGE, version: manifest.version, integrity, registry: recording.registry })
   if (refusal !== undefined) throw new Error(`${MESH_SERVER_PACKAGE} ${manifest.version} is not recorded: ${refusal}`)
 
-  const { files, environment_reads } = installedTreeOf(lock, manifest.version, { installed: join(scratch, 'tree'), npmHome }, recording)
+  const { files, environment_reads } = installedTreeOf(lock, manifest.version, { installed: join(scratch, 'installed-tree'), npmHome }, recording)
   return { server_version: manifest.version, integrity, settings, lock, files, environment_reads }
 }
 

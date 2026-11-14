@@ -39,7 +39,7 @@ function placeFor(t: TestContext) {
   const config = join(home, '.claude')
   const mainMemory = join(config, 'projects', '-work-main-clone', 'memory')
   const otherMemory = join(config, 'projects', '-work-other', 'memory')
-  const worktree = join(root, 'worktrees', 'main-clone-feature')
+  const worktree = join(root, 'some-worktrees', 'main-clone-feature')
   for (const dir of [mainMemory, otherMemory, worktree, join(config, 'rules')]) mkdirSync(dir, { recursive: true })
   return { root, home, config, mainMemory, otherMemory, worktree }
 }
@@ -801,7 +801,7 @@ test('a .git file naming a git directory outside the checkout is refused there, 
   assertAdmitted(places, place.worktree, place.home, join(place.worktree, 'src', 'x.ts'), 'an ordinary file in the checkout that named it')
 
   const shared = join(elsewhere, 'a-shared-git-dir')
-  const linked = join(place.root, 'worktrees', 'a-linked-worktree')
+  const linked = join(place.root, 'some-worktrees', 'a-linked-worktree')
   const worktreeGitDir = join(shared, 'worktrees', 'a-linked-worktree')
   mkdirSync(worktreeGitDir, { recursive: true })
   mkdirSync(join(shared, 'hooks'), { recursive: true })
