@@ -4,6 +4,7 @@
 // exact version. Every refusal leaves current where it was.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { floorRecordOf } from '../hold_the_version_floor/hold_the_version_floor.mjs'
@@ -211,6 +212,34 @@ test('a withdrawn install that fails leaves the record where it was: the lowered
   const w = await world(t, [{ ...old, layer: Buffer.from(old.layer).fill(7, 40, 41) }, at, carrier])
   await w.run({ version: '2.0.0' })
   await refusedWith(w.run({ version: '1.0.0', downgrade: true, withdrawalIn: '2.1.0' }), /the layer sha256:\S+ hashes to/)
+  assert.equal(w.held(), '2.0.0\n')
+  assert.equal(currentVersion(w), '2.0.0')
+})
+
+/**
+ * Makes the swap of current fail after the release is placed, and nothing else: a directory with a file in it at
+ * the temporary link swapLink makes beside current, so its symlink call meets EEXIST. The record's directory stays
+ * writable, so a floor written before the swap would land and be seen (martha#21 r=1, design section 6's mutant).
+ * @param {{ places: { current: string } }} w
+ */
+const blockTheSwap = (w) => {
+  const temporary = join(dirname(w.places.current), `.${basename(w.places.current)}.${process.pid}`)
+  mkdirSync(temporary)
+  writeFileSync(join(temporary, 'kept'), '')
+}
+
+test('a withdrawn install that fails at the swap of current leaves the record and current where they were', async (t) => {
+  const w = await aMachineAtTheFloor(t)
+  blockTheSwap(w)
+  await assert.rejects(w.run({ version: '1.0.0', downgrade: true, withdrawalIn: '2.1.0' }), { code: 'EEXIST' })
+  assert.equal(w.held(), '2.0.0\n')
+  assert.equal(currentVersion(w), '2.0.0')
+})
+
+test('an install raising the floor that fails at the swap of current leaves the record and current where they were', async (t) => {
+  const w = await aMachineAtTheFloor(t)
+  blockTheSwap(w)
+  await assert.rejects(w.run({ version: '3.0.0' }), { code: 'EEXIST' })
   assert.equal(w.held(), '2.0.0\n')
   assert.equal(currentVersion(w), '2.0.0')
 })
