@@ -5,7 +5,8 @@
 //
 // The launcher finds this machine's version floor from its own real path (martha#21, build ruling
 // issuecomment-6868833599, question 1): the record the real installer wrote must be the one the launcher's locator
-// finds from inside the placed tree, whatever XDG_DATA_HOME was at install and whatever it is at launch.
+// finds from the placed tree's real path, whatever XDG_DATA_HOME was at install, and the launcher holds to it whatever
+// XDG_DATA_HOME is at launch.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
@@ -62,22 +63,6 @@ async function theCommittedRelease (t) {
   return { installOn }
 }
 
-/**
- * `run` with XDG_DATA_HOME set to `value` (unset when undefined), put back afterwards.
- * @template T
- * @param {string | undefined} value
- * @param {() => T} run
- */
-function withXdgDataHome (value, run) {
-  const was = process.env[XDG]
-  if (value === undefined) delete process.env[XDG]
-  else process.env[XDG] = value
-  try { return run() } finally {
-    if (was === undefined) delete process.env[XDG]
-    else process.env[XDG] = was
-  }
-}
-
 test('the committed tree carries martha/bin/martha, and the command linked from it runs', async (t) => {
   const { installOn } = await theCommittedRelease(t)
   const { places } = await installOn(undefined)
@@ -89,40 +74,47 @@ test('the committed tree carries martha/bin/martha, and the command linked from 
   assert.equal(run.stdout, `${committed.version}\n`)
 })
 
-test('the launcher finds the record the real installer wrote, from its own real path, whatever XDG_DATA_HOME says', async (t) => {
+test('the launcher finds the record the real installer wrote, from its own real path, wherever XDG_DATA_HOME put it', async (t) => {
   const { installOn } = await theCommittedRelease(t)
-  const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))
-  t.after(() => removeTheTree(elsewhere))
-  /** @type {[string, string | undefined, (home: string) => string | undefined][]} */
+  /** @type {[string, string | undefined][]} */
   const cases = [
-    ['absolute', '<home>/data', (home) => join(home, 'data')],
-    ['relative, so ~/.local/share', 'relative', () => 'relative'],
-    ['unset, so ~/.local/share', undefined, () => undefined],
-    ['changed after the install', '<home>/data', () => elsewhere]
+    ['absolute', '<home>/data'],
+    ['relative, so ~/.local/share', 'relative'],
+    ['unset, so ~/.local/share', undefined]
   ]
-  for (const [name, atInstall, atLaunch] of cases) {
-    const { home, places } = await installOn(atInstall)
+  for (const [name, atInstall] of cases) {
+    const { places } = await installOn(atInstall)
     const written = floorRecordOf(places)
     assert.equal(readFileSync(written, 'utf8'), committedFloor(), `${name}: the installer wrote the committed floor`)
-    const found = withXdgDataHome(atLaunch(home), () => launchersRecordOf(join(places.current, 'martha')))
+    const found = launchersRecordOf(realpathSync(join(places.current, 'martha')))
     assert.equal(found, written, `${name}: the launcher finds the record the installer wrote`)
     assert.ok(existsSync(found ?? ''), `${name}: and it is there`)
   }
 })
 
-test('a placed release below this machine\'s record refuses to launch, and still says its version', async (t) => {
+test('a placed release below this machine\'s record refuses to launch whatever XDG_DATA_HOME says, and still says its version', async (t) => {
   const { installOn } = await theCommittedRelease(t)
-  const { home, places } = await installOn(undefined)
+  const { home, places } = await installOn('<home>/data')
+  const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))
+  t.after(() => removeTheTree(elsewhere))
   const committed = JSON.parse(execFileSync('git', ['show', 'HEAD:package.json'], { cwd: REPOSITORY, encoding: 'utf8' }))
   const record = floorRecordOf(places)
   const above = `${Number(committed.version.split('.')[0]) + 1}.0.0`
   writeFileSync(record, `${above}\n`)
   const command = join(places.binDir, 'martha')
-  const env = { PATH: process.env['PATH'], HOME: home }
-  const launched = spawnSync(process.execPath, [command, 'ls'], { encoding: 'utf8', env, cwd: home })
-  assert.equal(launched.status, 1, launched.stderr)
-  assert.equal(launched.stderr, `martha: this is Martha ${committed.version}, below ${above}, the version floor this machine holds (${record}); refused. Put the highest signed release back with: martha install\n`)
-  const asked = spawnSync(process.execPath, [command, '--version'], { encoding: 'utf8', env })
-  assert.equal(asked.status, 0, asked.stderr)
-  assert.equal(asked.stdout, `${committed.version}\n`)
+  /** @type {[string, Record<string, string>][]} */
+  const atLaunch = [
+    ['unset', {}],
+    ['changed after the install', { [XDG]: elsewhere }],
+    ['relative', { [XDG]: 'relative' }]
+  ]
+  for (const [name, xdg] of atLaunch) {
+    const env = { PATH: process.env['PATH'] ?? '', HOME: home, ...xdg }
+    const launched = spawnSync(process.execPath, [command, 'ls'], { encoding: 'utf8', env, cwd: home })
+    assert.equal(launched.status, 1, `${name}: ${launched.stderr}`)
+    assert.equal(launched.stderr, `martha: this is Martha ${committed.version}, below ${above}, the version floor this machine holds (${record}); refused. Put the highest signed release back with: martha install\n`, name)
+    const asked = spawnSync(process.execPath, [command, '--version'], { encoding: 'utf8', env })
+    assert.equal(asked.status, 0, `${name}: ${asked.stderr}`)
+    assert.equal(asked.stdout, `${committed.version}\n`, name)
+  }
 })

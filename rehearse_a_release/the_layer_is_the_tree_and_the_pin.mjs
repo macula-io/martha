@@ -1,9 +1,9 @@
-// What a release layer holds, and what it may hold (martha#84, martha#207): `git archive HEAD`, plus the one pin the
-// packer generates after the archive, at one path in the release's one folder.
+// What a release layer holds, and what it may hold (martha#84, martha#207, martha#21): `git archive HEAD`, plus the
+// two files the packer generates after the archive, in the release's one folder: the pin and the declared floor.
 //
-// The pin is not in the tree, so comparing the layer with the archive alone refused a correct release, and node's
-// deepEqual cut the Map holding the one difference at a fixed width, so the failure named no path at all. Here the
-// pin is set aside before the trees are compared, and every path that still differs is named.
+// Neither is in the tree, so comparing the layer with the archive alone refused a correct release, and node's
+// deepEqual cut the Map holding the difference at a fixed width, so the failure named no path at all. Here what the
+// packer writes is set aside before the trees are compared, and every path that still differs is named.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -15,15 +15,18 @@ export const PIN_IN_THE_LAYER = `${NAMES.releaseFolder}/${NAMES.pinFile}`
 /** Where a layer holds the floor the packer declared from floor.txt (martha#21), the other file it generates. */
 export const FLOOR_IN_THE_LAYER = `${NAMES.releaseFolder}/${NAMES.floorFile}`
 
+/** The paths the packer writes into a layer, and only those: everything else must be the committed tree. */
+const WRITTEN_BY_THE_PACKER = [PIN_IN_THE_LAYER, FLOOR_IN_THE_LAYER]
+
 /** At most this many paths are named in one refusal, so a tree that differs everywhere stays readable. */
 const NAMED_AT_MOST = 10
 
 /**
- * The layer's tree with the pin taken out: what is left must be the committed tree, path for path and byte for byte.
+ * The layer's tree with the pin and the floor taken out: what is left must be the committed tree, path for path and byte for byte.
  * @param {Map<string, string>} layer path -> hash, as treeOf reads them
  * @returns {Map<string, string>}
  */
-export const withoutWhatThePackerWrites = (layer) => new Map([...layer].filter(([path]) => path !== PIN_IN_THE_LAYER))
+export const withoutWhatThePackerWrites = (layer) => new Map([...layer].filter(([path]) => !WRITTEN_BY_THE_PACKER.includes(path)))
 
 /**
  * Every path on which two trees differ: what only `expected` holds, what only `layer` holds, and what both hold with
@@ -57,7 +60,7 @@ export function inWords ({ missing, extra, changed }) {
     { what: 'differing bytes', paths: changed }
   ].filter((part) => part.paths.length > 0)
   if (parts.length === 0) return ''
-  return `the layer is not the committed tree plus the pin: ${parts.map((part) => `${part.what} (${part.paths.length}): ${someOf(part.paths)}`).join('; ')}`
+  return `the layer is not the committed tree plus the pin and the floor: ${parts.map((part) => `${part.what} (${part.paths.length}): ${someOf(part.paths)}`).join('; ')}`
 }
 
 /**

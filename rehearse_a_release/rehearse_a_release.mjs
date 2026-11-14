@@ -87,7 +87,7 @@ try {
   const published = await pinFor({ repo: REPO })
   const fields = pinFieldsThatDiffer(pin, published)
   if (fields.length > 0) assert.fail(`the pin is not the installer npm serves: ${fields.join('; ')}`)
-  console.log(`4. the layer is the committed tree plus the pin, ${layerTree.size} entries, pinned to ${published.name}@${published.version}`)
+  console.log(`4. the layer is the committed tree plus the pin and the floor, ${layerTree.size} entries, pinned to ${published.name}@${published.version}`)
 } finally {
   removeEvenReadOnly(stage)
   removeEvenReadOnly(archived)

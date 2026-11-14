@@ -1,7 +1,7 @@
 {
   "name": "martha",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "A crew of coding agents. Core first; hosts are thin adapters.",
   "engines": {
@@ -76,7 +76,7 @@
       "src/launch_a_claude_code_member": 2810,
       "src/refuse_a_member_writing_owner_memory": 1081,
       "src/run_an_owner_signed_command": 562,
-      "src/run_the_martha_command": 457,
+      "src/run_the_martha_command": 452,
       "src/run_the_nodes_own_npm_alone": 164,
       "src/start_a_member": 241,
       "src/crew_files_directory": 155,

@@ -103,7 +103,7 @@ export const LOWEST_FLOOR = '0.0.0'
  *   withdrawal: the floor-withdrawal.json it carries, if any.
  */
 
-/** @param {string | { raw: string }} value @param {(v: any) => object} shape */
+/** @param {string | { raw: string } | { version: string, from: string }} value @param {(v: any) => object} shape */
 const jsonBody = (value, shape) => (typeof value === 'object' && 'raw' in value ? value.raw : JSON.stringify(shape(value)))
 
 /** @param {Shape} [shape] @returns {TarEntry[]} */
@@ -117,6 +117,13 @@ export const goodEntries = ({ command = true, floor = LOWEST_FLOOR, withdrawal }
   ...(floor === null ? [] : [{ name: `martha/${NAMES.floorFile}`, body: jsonBody(floor, (v) => ({ floor: v })) }]),
   ...(withdrawal === undefined ? [] : [{ name: `martha/${NAMES.withdrawalFile}`, body: jsonBody(withdrawal, (v) => v) }])
 ]
+
+/**
+ * The good entries with the floor and the withdrawal a test names, each left at goodEntries' own when not named.
+ * @param {Shape['floor']} floor
+ * @param {Shape['withdrawal']} withdrawal
+ */
+const shapedEntries = (floor, withdrawal) => goodEntries({ ...(floor !== undefined && { floor }), ...(withdrawal && { withdrawal }) })
 
 /** @param {string} text */
 const derUtf8 = (text) => { const b = Buffer.from(text); return Buffer.concat([Buffer.from([0x0c, b.length]), b]) }
@@ -135,7 +142,7 @@ export const oid = (id, text) => ({ oid: { id: id.split('.').map(Number) }, valu
  * @param {{ version?: string, entries?: TarEntry[], floor?: Shape['floor'], withdrawal?: Shape['withdrawal'], layerBytes?: Buffer, layerSize?: number, gzipped?: Buffer, mediaType?: string, padTo?: number }} [shape]
  * @returns {Release}
  */
-export function release ({ version = '1.2.0', floor, withdrawal, entries = goodEntries({ ...(floor !== undefined && { floor }), ...(withdrawal && { withdrawal }) }), layerBytes, layerSize, gzipped, mediaType, padTo } = {}) {
+export function release ({ version = '1.2.0', floor, withdrawal, entries = shapedEntries(floor, withdrawal), layerBytes, layerSize, gzipped, mediaType, padTo } = {}) {
   const honest = gzipped ?? gzipSync(tarOf(entries))
   const json = {
     schemaVersion: 2,

@@ -177,10 +177,10 @@ test('refused: a withdrawal whose release is unsigned, or signed for another rep
   ]
   for (const [, sign, pattern] of cases) {
     const w = await aMachineAtTheFloor(t, {
-      signed: ({ old, at, carrier }) => new Map([
+      signed: ({ old, at, carrier }) => new Map(/** @type {[string, any][]} */ ([
         [old.digest, { ref: 'refs/tags/v1.0.0' }], [at.digest, { ref: 'refs/tags/v2.0.0' }],
         ...(sign(carrier) ? [[carrier.digest, sign(carrier)]] : [])
-      ])
+      ]))
     })
     await refusedWith(w.run({ version: '1.0.0', downgrade: true, withdrawalIn: '2.1.0' }), pattern)
     assert.equal(currentVersion(w), '2.0.0')
