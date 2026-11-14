@@ -1,5 +1,5 @@
 {
   "_why": "The models the recorded Claude Code host accepts in a subagent's own `model` field, observed of its shipped declaration: `sdk-tools.d.ts`, `export interface AgentInput`, `model?: \"sonnet\" | \"opus\" | \"haiku\" | \"fable\"`. The host publishes no mapping from an alias to a full model id, so this is the whole vocabulary a crew may name, and a model Martha cannot spell is one it cannot hold a review to. Re-take: read that field out of the sdk-tools.d.ts shipped with the host version recorded in recorded_claude_code_host.json, and record that same version here (martha#315).",
-  "host_version": "2.1.323",
+  "host_version": "2.1.325",
   "aliases": ["sonnet", "opus", "haiku", "fable"]
 }
