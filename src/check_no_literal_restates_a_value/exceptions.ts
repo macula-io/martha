@@ -33,6 +33,7 @@ import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.t
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { THE_MODEL_KEY } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -118,6 +119,14 @@ const THE_GIT_SUBCOMMAND = 'git\'s own `config` subcommand, in a test that makes
  * matches nothing, and the gate says so by name.
  */
 const THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE = 'a word of its own that the settings key of the owner\'s file is spelled the same as'
+
+/**
+ * Why the gate's reading holds the old field's name by literal (martha#321): ../declare_crew imports that module,
+ * so importing the constant back would make the declaration read its own fields before they are initialized — which
+ * is the failure this entry exists instead of. The word is the declaration's own field, read off a file an earlier
+ * release wrote.
+ */
+const THE_OLD_GATE_FIELD = 'the declaration\'s own old gate field, read to keep a file an earlier release wrote declaring; the constant lives in declare_crew, which imports the module that reads it, so importing it back would read the declaration\'s fields before they are initialized'
 
 /** Why the host contract spells the standing items' source by literal (martha#317): a union member is a type. */
 const A_MEMBER_OF_THE_SOURCE_UNION = 'a member of the TurnSource union, which TypeScript holds by literal; the constant the crew\'s tools name it by is that same member'
@@ -218,6 +227,9 @@ export const EXCEPTIONS: readonly Exception[] = [
   // role's text sits in (martha#306). One English word names the field and the folder, and the field reader is not a
   // path: it is excused here, and a copy of the word anywhere else still fails.
   { value: ROLE_TEXTS_DIRECTORY, file: 'declare_crew/declare_crew.ts', reason: 'the declaration\'s mode.roles field, a list of role names, and not the roles/ directory a role\'s text sits in' },
+  // The gate's one old reading (martha#321): the field a file an earlier release wrote still declares by. The slice
+  // that reads it cannot import the constant, because declare_crew imports the slice.
+  { value: STRICT_GATE, file: 'read_the_gate_mode/read_the_gate_mode.ts', reason: THE_OLD_GATE_FIELD },
   // The five events the relay hears from the host (martha#313), each spelled out because the host's validator will take
   // nothing else there.
   { value: PERMISSION_REQUEST, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
