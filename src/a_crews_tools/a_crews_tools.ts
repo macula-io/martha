@@ -26,8 +26,10 @@ import {
   queueAnAsk,
   settleTheAsks,
   takeTheAsks,
+  theBranch,
   type TheOwnersMenus,
 } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { theBranchItRemoves } from '../read_the_tips_a_removal_covers/read_the_tips_a_removal_covers.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import {
@@ -670,7 +672,11 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: QUEUE_ASK_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: { ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' } },
+      properties: {
+        ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' },
+        repo: { type: 'string', description: 'When the ask would delete a branch: its repository, as owner/name' },
+        branch: { type: 'string', description: 'When the ask would delete a branch: the branch, so both tips the yes covers are recorded' },
+      },
       required: ['ask'],
     },
   },
@@ -1029,7 +1035,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD]: (args) => keepTheOwnersList(places, () => addAnAct(places.ledger, args, places.member)),
     [OWNER_TODO_DONE]: (args) => keepTheOwnersList(places, () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member })),
-    [QUEUE_ASK]: async (args) => asAnAnswer(await queueAnAsk(places.ledger, args, places.member)),
+    [QUEUE_ASK]: (args) => queueTheAsk(places, args),
     [LIST_ASKS]: async () => asAnAnswer(await listTheAsks(places.ledger)),
     [TAKE_ASKS]: () => theTakeOfTheAsks(places, state),
     [SETTLE_ASKS]: (args) => theSettlingOfTheAsks(places, state, args),
@@ -1038,6 +1044,20 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING]: async () => ({ answer: theStandingList(await theItemsThatStand(places), todayOf(places.ledger.clock.now())).join('\n') }),
     [WAIT_FOR_CI]: (args) => theCiWait(places, args),
   }
+}
+
+/**
+ * `queue_ask`, with the tips a branch removal covers when the ask names one (martha#391). The launcher reads them, in
+ * the clone the ask names, and the queue keeps them: an ask that named one copy of a branch and not the other cost the
+ * owner a second ask, because the yes covered only what the ask recorded.
+ */
+async function queueTheAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const removes = await theBranchItRemoves(
+    { processes: places.processes, clones: places.settings?.house_rules.clones, keepsTheBranch: theBranch },
+    args,
+  )
+  if (removes !== undefined && 'refused' in removes) return removes
+  return asAnAnswer(await queueAnAsk(places.ledger, args, places.member, removes))
 }
 
 /**
