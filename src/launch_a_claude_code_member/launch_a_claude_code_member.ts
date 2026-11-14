@@ -277,8 +277,16 @@ export const NOT_STARTED = 'The member is not started'
  */
 export const HOOK_SETTINGS_CHECK_MS = 1_000
 
-/** The signals that end the launcher without its 'exit' event, and so clean up on their own. */
-const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']
+/**
+ * The signals that end the launcher without its 'exit' event, and so clean up on their own.
+ *
+ * SIGHUP is the one a run delivers (martha#472): a probe, a recorded-host test or a by-hand check that starts a member
+ * hands it a throwaway home, and when that run ends its terminal hangs up, so the kernel sends SIGHUP to the session
+ * the launcher and its member run in. Unhandled, the launcher died of the hangup and the member, whose own host does
+ * not die of it, kept running under the throwaway home for days. SIGQUIT is the key beside it (Ctrl-\), which would
+ * otherwise leave the same member behind.
+ */
+const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT']
 
 /** Sends SIGKILL to a whole process group; a group already gone is no error. */
 function killGroup(group: number): void {

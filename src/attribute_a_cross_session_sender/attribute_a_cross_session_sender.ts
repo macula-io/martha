@@ -39,6 +39,7 @@
 // pid. The pid is dynamic and no owner can sign it; that binding stays martha#24.
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
+import { PID_NAMESPACE_FORM } from '../linux_process_identity/process_identity_from_proc.ts'
 import type { AttestedSender, KeyedRowStore, KeyedRows, Processes } from '../host_contract/host_contract.ts'
 
 /** One member the owner signed for: the name and node id a launch record must pair. */
@@ -61,6 +62,13 @@ export type MemberLaunch = {
    * reboot; the boot does not.
    */
   readonly process_started_at: string
+  /**
+   * The pid namespace the process runs in, as `readlink /proc/<pid>/ns/pid` gives it (martha#472). A pid means
+   * nothing outside the namespace it was read in, so a reader that finds this record from outside the member's
+   * namespace needs it to say which process the record's pid names. A record written before it was kept has none,
+   * and binds as it did.
+   */
+  readonly pid_namespace?: string
 } & WhereAndSince
 
 /**
@@ -87,7 +95,10 @@ export type MemberLaunchStore = KeyedRowStore
 export type MemberLaunchRecords = KeyedRows
 
 /** The host's view of which process holds a pid, boot included. */
-export type ProcessTable = Pick<Processes, 'identityOf'>
+export type ProcessTable = Pick<Processes, 'identityOf'> & {
+  /** The pid namespace this process runs in, or undefined when the kernel will not say (martha#472). */
+  readonly pidNamespace?: () => string | undefined
+}
 
 /** The node id a delivery's attested sender is bound to, or null for nobody. */
 export type Binder = (sender: AttestedSender | undefined) => string | null
@@ -107,6 +118,14 @@ export type LaunchRecorded = { readonly recorded: true } | { readonly recorded: 
 /** A member's name, as a record may carry it: it also names the member's record. */
 export const MEMBER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
+/** Why a launch cannot be recorded at all, from its member name, node id and pid; undefined when it can. */
+function theReasonNotToRecord(launched: Launched): string | undefined {
+  if (!MEMBER_NAME.test(launched.member_name)) return 'A member launch is not recorded: the member name is not a name a record can carry.'
+  if (!NODE_ID.test(launched.node_id)) return `A launch of ${launched.member_name} is not recorded: its node id is not a node id.`
+  if (!isPid(launched.pid)) return `A launch of ${launched.member_name} is not recorded: ${launched.pid} is not a process id.`
+  return undefined
+}
+
 /**
  * Record that the launcher started a member.
  *
@@ -116,15 +135,8 @@ export const MEMBER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
  * goes with it: one member, one process, one record.
  */
 export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessTable, launched: Launched): LaunchRecorded {
-  if (!MEMBER_NAME.test(launched.member_name)) {
-    return { recorded: false, refusal: 'A member launch is not recorded: the member name is not a name a record can carry.' }
-  }
-  if (!NODE_ID.test(launched.node_id)) {
-    return { recorded: false, refusal: `A launch of ${launched.member_name} is not recorded: its node id is not a node id.` }
-  }
-  if (!isPid(launched.pid)) {
-    return { recorded: false, refusal: `A launch of ${launched.member_name} is not recorded: ${launched.pid} is not a process id.` }
-  }
+  const unfit = theReasonNotToRecord(launched)
+  if (unfit !== undefined) return { recorded: false, refusal: unfit }
 
   const process_started_at = processes.identityOf(launched.pid)
   if (process_started_at === null) {
@@ -135,15 +147,23 @@ export function recordMemberLaunch(store: MemberLaunchStore, processes: ProcessT
   }
 
   const node_id = launched.node_id.toLowerCase()
+  const pid_namespace = processes.pidNamespace?.()
   for (const stale of launchesIn(store)) {
     if (stale.member_name !== launched.member_name && (stale.pid === launched.pid || stale.node_id === node_id)) {
       store.drop(stale.member_name)
     }
   }
 
-  const launch: MemberLaunch = { member_name: launched.member_name, node_id, pid: launched.pid, process_started_at, ...whereAndSinceOf(launched) }
+  const launch = theRecordOf(launched, node_id, process_started_at, pid_namespace)
   store.keep(launched.member_name, launch)
   return { recorded: true }
+}
+
+/** The record itself: the launcher's own reading of the process, and the member it names. */
+function theRecordOf(launched: Launched, node_id: string, process_started_at: string, pid_namespace: string | undefined): MemberLaunch {
+  // The namespace is read from the same table as the start time, so no caller passes it and no launch path can forget
+  // it (martha#472). It is this process's namespace, which is the member's: the member is this process's child.
+  return { member_name: launched.member_name, node_id, pid: launched.pid, process_started_at, ...(pid_namespace === undefined ? {} : { pid_namespace }), ...whereAndSinceOf(launched) }
 }
 
 /** The checkout and the start a launch named, and only those it named, so a record never holds an empty field. */
@@ -203,15 +223,25 @@ export function launchesIn(store: MemberLaunchRecords): readonly MemberLaunch[] 
 
 function isMemberLaunch(value: unknown): value is MemberLaunch {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const { member_name, node_id, pid, process_started_at } = value as Record<string, unknown>
+  const row = value as Record<string, unknown>
+  return isALaunchsShape(row) && isAPidNamespace(row['pid_namespace'])
+}
+
+/** Whether every field a launch record must hold is the shape it must be. */
+function isALaunchsShape(row: Record<string, unknown>): boolean {
   return (
-    isMemberName(member_name) &&
-    isLowercaseNodeId(node_id) &&
-    typeof pid === 'number' &&
-    isPid(pid) &&
-    typeof process_started_at === 'string' &&
-    process_started_at !== ''
+    isMemberName(row['member_name']) &&
+    isLowercaseNodeId(row['node_id']) &&
+    typeof row['pid'] === 'number' &&
+    isPid(row['pid']) &&
+    typeof row['process_started_at'] === 'string' &&
+    row['process_started_at'] !== ''
   )
+}
+
+/** A pid namespace as the kernel writes one, or none at all for a record written before they were kept. */
+function isAPidNamespace(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && PID_NAMESPACE_FORM.test(value))
 }
 
 function isMemberName(value: unknown): value is string {

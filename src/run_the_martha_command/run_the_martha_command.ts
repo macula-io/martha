@@ -42,6 +42,8 @@ import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_clau
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
+import { theLinesOf, whatARunLeft } from '../check_no_member_outlives_its_run/the_leftovers_a_run_left.ts'
+import { theKernelThisMachineShows, theOwnersHome } from '../check_no_member_outlives_its_run/the_kernel_this_machine_shows.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
@@ -281,6 +283,9 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
   for (const line of theCrewListed(crew, Date.now())) io.out(line)
+  // A member a run started and left running is no member of this crew's, and the owner should see it here rather than
+  // nowhere (martha#472). One line each, as the gate says it.
+  for (const line of theLinesOf(whatARunLeft(theKernelThisMachineShows('/proc', theOwnersHome())))) io.out(line)
   return EXIT_DONE
 }
 

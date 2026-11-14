@@ -2650,7 +2650,9 @@ function launcherProcess(
   return script
 }
 
-for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+// Every signal a launcher can be ended by without its own say, including the two a terminal's hangup and its quit key
+// send (martha#472): a launcher signalled directly cleans up exactly like one spoken to by martha stop.
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
   test(`${signal} to the launcher kills its member's group and leaves no socket or snapshot`, async (t) => {
     const place = placeFor(t)
     const fake = fakeClaude(place)
