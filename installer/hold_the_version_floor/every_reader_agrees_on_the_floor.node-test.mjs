@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { below, readTheRecord, recordedFloor } from '../../src/hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
+import { RELEASES, below, readTheRecord, recordedFloor } from '../../src/hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { NAMES } from '../keep_the_names_in_one_place/names.mjs'
 import { compareVersions } from '../read_the_release_registry/read_the_release_registry.mjs'
 import { Refused } from '../refuse_in_words/refuse_in_words.mjs'
@@ -63,7 +63,7 @@ const scratchIn = (t) => {
  */
 function aMachineHolding (t, text) {
   const data = scratchIn(t)
-  const places = /** @type {import('../place_the_release/place_the_release.mjs').Places} */ ({ releases: join(data, 'releases') })
+  const places = /** @type {import('../place_the_release/place_the_release.mjs').Places} */ ({ releases: join(data, RELEASES) })
   const record = floorRecordOf(places)
   if (text === null) mkdirSync(record)
   else if (text !== undefined) writeFileSync(record, text)
