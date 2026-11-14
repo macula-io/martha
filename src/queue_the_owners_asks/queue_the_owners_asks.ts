@@ -64,7 +64,6 @@ export const TAKE_ASKS = 'take_asks'
 /** The tool that takes a claimed batch off, once the owner answered it. */
 export const SETTLE_ASKS = 'settle_asks'
 
-
 /**
  * How long a taken batch holds its asks before they wait again: half an hour, named here and nowhere else, and quoted
  * by every description and answer that names it.

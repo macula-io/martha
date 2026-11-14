@@ -70,25 +70,30 @@ import { isInAType, lineOf, nodesOf, parseSource } from './parse_a_source.ts'
 export const SHORTEST_VALUE = 4
 
 /**
- * The smallest number this check reads where a declaration holds one (martha#441): a count and a magnitude are
- * written the same way, so a number below this one restates nothing. The tree holds `20`, `64` and `100` in dozens
- * of places and every one of them is a count, an index or a column; what it defines as a magnitude — a minute, a
- * deadline, a ceiling — is never below ten seconds.
+ * The smallest number this check reads where a declaration holds one (martha#441). The floor is on size, not on kind:
+ * below it the tree's numbers are the small ones it writes everywhere — `20`, `64`, `100` and a sub-second poll among
+ * them — where a copy cannot be told from a coincidence. At and above it sit the numbers the tree defines, whatever
+ * kind they are: a minute, a deadline, a ceiling, the longest text a message may carry, the modulus a petname's
+ * four-digit group turns over at.
  */
 export const SHORTEST_NUMBER = 10_000
 
 /**
- * Whether a number a declaration holds is one the tree defines (martha#441): a magnitude, never a count. Without
- * this floor every `0` and `2` in the tree would be a copy of some constant holding it.
+ * Whether a number a declaration holds is one the tree may define (martha#441): a number at or above the floor, never
+ * one below it. Without the floor every `0` and `2` in the tree would be a copy of some constant holding it.
  */
-const isAMagnitudeTheTreeDefines = (value: number): boolean => Math.abs(value) >= SHORTEST_NUMBER
+const isANumberTheTreeMayDefine = (value: number): boolean => Math.abs(value) >= SHORTEST_NUMBER
 
 /** The type a record's definition is marked with when its keys and values are shared values. */
 export const THE_MARKER = 'DefinesItsValues'
 
 /** A place that must name a value by literal, and why the word there means something else. */
 export interface Exception {
-  /** A number the tree defines is written as the constant that holds it, so this is a number where that constant is one. */
+  /**
+   * A value the tree defines, written as the constant that holds it, so the type here is that constant's: a sentence's
+   * value is a string, a number's is a number (martha#441). The check compares values, so it holds a number as the
+   * digits that constant defines, never as the number its caller happened to write.
+   */
   readonly value: string | number
   /** Relative to `src/`. */
   readonly file: string
@@ -236,7 +241,7 @@ function definitionsOfADeclaration(path: string, declaration: ts.VariableDeclara
   const value = valueText(declaration.initializer)
   if (value !== null) {
     // A number is a value here only where the tree defines a magnitude (martha#441).
-    if (isANumber(value) && !isAMagnitudeTheTreeDefines(asANumber(value))) return []
+    if (isANumber(value) && !isANumberTheTreeMayDefine(asANumber(value))) return []
     return [{ path, name: declaration.name.text, value, exported, node: declaration, alias: isAnAlias(declaration) }]
   }
   const record = exported ? markedRecordOf(declaration) : null
@@ -298,11 +303,19 @@ const isAValueLiteral = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstit
 const valueOfALiteral = (node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral): string =>
   ts.isNumericLiteral(node) ? `${NUMBER}${Number(node.text.replaceAll('_', ''))}` : node.text
 
-/** An exception's value as the check holds it: a number's as its own value, a string's as its text. */
-const asAValueTheCheckHolds = (value: string | number): string => (typeof value === 'number' ? `${NUMBER}${value}` : value)
-
 /** A value as a message writes it: a number's digits, a string's text. */
 const asTheMessageShowsIt = (value: string): string => (isANumber(value) ? value.slice(NUMBER.length) : value)
+
+/**
+ * A declared coincidence's value as the check holds it (martha#441): the reader hands a string it resolved, while a
+ * caller that names a number's constant hands that number, so a number becomes the value its digits are. Every entry
+ * the rule reads passes through here first, and a number that skipped it would match no finding.
+ */
+const theValueTheCheckHolds = (value: string | number): string => (typeof value === 'number' ? `${NUMBER}${value}` : value)
+
+/** The entries with their values as the check holds them, in the order they were declared. */
+const asTheCheckHoldsThem = (exceptions: readonly Exception[]): readonly Exception[] =>
+  exceptions.map((exception) => ({ ...exception, value: theValueTheCheckHolds(exception.value) }))
 
 /** A constant as a source declares it, with the line its value is written on. */
 export interface ConstantInSource {
@@ -447,17 +460,17 @@ function findingsAt(node: ts.Node, line: number, path: string, declared: readonl
 export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Finding[] {
   const reads = parseAll(sources)
   const declared = judge.defined ?? []
-  const exceptions = judge.exceptions ?? []
+  const exceptions = asTheCheckHoldsThem(judge.exceptions ?? [])
   const everyDefinition = reads.flatMap(definitionsIn)
   // A place the tree declares a coincidence holds its value for no USE to import (martha#441). The relay's beat cannot
   // import the core's minute, so the minute stays the one every other copy is told to name. A definition is still read
   // as one, and every holder still answers a definition's comparison: what a place means does not change what holds the
   // value, only what a copy elsewhere should import.
-  const definitions = everyDefinition.filter((definition) => !exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === definition.value && exception.file === definition.path))
+  const definitions = everyDefinition.filter((definition) => !exceptions.some((exception) => exception.value === definition.value && exception.file === definition.path))
   const judged = judge.judged
   const definitionAt = new Map(everyDefinition.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
   const isDeclaredACoincidence = (finding: Finding): boolean =>
-    exceptions.some((exception) => asAValueTheCheckHolds(exception.value) === finding.literal && exception.file === finding.path)
+    exceptions.some((exception) => exception.value === finding.literal && exception.file === finding.path)
   const isJudged = (finding: Finding): boolean =>
     judged === null || judged.has(at(finding.path, finding.line)) || declared.some((entry) => entry.value === finding.literal)
   return reads
@@ -484,7 +497,7 @@ export function exceptionsNotHeld<Entry extends Exception>(sources: readonly Cor
   const repeated = (exception: Exception, index: number): boolean =>
     exceptions.findIndex((each) => each.value === exception.value && each.file === exception.file) !== index
   return exceptions.filter((exception, index) =>
-    exception.reason.trim() === '' || repeated(exception, index) || !excused.has(`${asAValueTheCheckHolds(exception.value)}\u0000${exception.file}`))
+    exception.reason.trim() === '' || repeated(exception, index) || !excused.has(`${theValueTheCheckHolds(exception.value)}\u0000${exception.file}`))
 }
 
 /** What a finding whose value the change took away tells its author to do. */
