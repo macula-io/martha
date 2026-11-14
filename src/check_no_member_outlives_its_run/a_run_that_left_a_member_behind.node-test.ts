@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { itFails, theLinesOf, whatARunLeft, type WhatTheScanReads } from './the_leftovers_a_run_left.ts'
+import { NOT_OURS } from './the_kernel_this_machine_shows.ts'
 
 const OWNERS_HOME = '/home/owner'
 const RUN_HOME = '/tmp/martha-forgot'
@@ -93,9 +94,9 @@ test('a record written before the namespace was kept binds only inside the reade
 })
 
 test('a records directory this reader cannot vouch for is a line, and fails the gate (martha#472)', () => {
-  const found = whatARunLeft(theKernel({ recordsUnder: () => ({ cannot_tell: 'is not a directory of yours that only you may enter, so its launch records cannot be vouched for' }) }))
+  const found = whatARunLeft(theKernel({ recordsUnder: () => ({ cannot_tell: NOT_OURS }) }))
   assert.deepEqual(theLinesOf(found), [
-    'cannot tell whether 4133978 outlives its run: /tmp/martha-forgot is not a directory of yours that only you may enter, so its launch records cannot be vouched for',
+    `cannot tell whether 4133978 outlives its run: /tmp/martha-forgot ${NOT_OURS}`,
   ])
   assert.equal(itFails(found[0]!), true)
 })

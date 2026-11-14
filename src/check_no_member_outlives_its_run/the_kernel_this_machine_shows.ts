@@ -11,10 +11,10 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities, PID_NAMESPACE_FORM } from '../linux_process_identity/process_identity_from_proc.ts'
+import { LAUNCH_RECORDS_PLACE } from '../start_a_member/start_a_member.ts'
 import type { WhatTheScanReads } from './the_leftovers_a_run_left.ts'
 
-/** Where the launcher keeps a launch's records under a state root. */
-export const LAUNCH_RECORDS_PLACE = 'launches'
+
 
 /** The reason a records directory this reader will not vouch for is said as. */
 export const NOT_OURS = 'is not a directory of yours that only you may enter, so its launch records cannot be vouched for'

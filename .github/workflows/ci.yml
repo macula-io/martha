@@ -271,6 +271,22 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:host-ceilings
 
+  # A member a run left behind (martha#472): the check reads this machine's /proc, and a runner holds no members, so the
+  # job proves the check BITES rather than that it is quiet — its own --self-test starts a real child under a scratch
+  # home, writes that child's record with the launcher's own writer, and shows the line, the cannot-tell line and the
+  # silence. The bare check is the owner's to run on their own machine.
+  no-member-outlives-its-run:
+    name: no member outlives its run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-member-outlives-its-run -- --self-test
+
   # Martha's names are its own (martha#468): no file, folder, tool, marker or variable of Martha's may be a name
   # crew-code also gives something, or a person reading a path, a transcript or a tool name cannot tell which crew a
   # thing belongs to. It runs as a job and as a node test, so no range gate reads green while the check did not run.

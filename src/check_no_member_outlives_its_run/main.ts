@@ -22,7 +22,8 @@ import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outs
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { itFails, theLinesOf, whatARunLeft, type WhatARunLeft } from './the_leftovers_a_run_left.ts'
-import { LAUNCH_RECORDS_PLACE, theKernelThisMachineShows, theOwnersHome } from './the_kernel_this_machine_shows.ts'
+import { LAUNCH_RECORDS_PLACE } from '../start_a_member/start_a_member.ts'
+import { theKernelThisMachineShows, theOwnersHome } from './the_kernel_this_machine_shows.ts'
 
 const NAME = 'check_no_member_outlives_its_run'
 
