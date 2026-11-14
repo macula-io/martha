@@ -39,11 +39,20 @@
 //
 //   - a module specifier, which is a path and not a value;
 //   - a declared name — an object key, a member name, an enum member, a binding's
-//     property name — which names a property rather than carrying the value;
+//     property name — which names a property rather than carrying the value, and a
+//     property named where it is used, `'k' in x` and `x['k']`, since `x.k` is
+//     never judged either (part b, rule 2);
+//   - a literal in a type, `type T = 'a' | 'b'` or `kind: 'tree'`, which the
+//     compiler holds and which names a type, not a value (part b, rule 1);
+//   - a constant annotated with a named type, `IDLE: State = 'idle'`: it is an
+//     alias of a member that type defines, so it holds no value for a literal to
+//     restate, and a change that adds, keeps or drops one defines nothing. Turning
+//     a holder into an alias still takes its value away (R1), so the annotation
+//     is no way to silence its copies (part b, rule 3);
 //   - the initializer of the constant's own definition in its own module;
 //   - a value shorter than SHORTEST_VALUE, which is a word before it is a value;
 //   - a (value, file) the tree declares as a coincidence, with its reason. An
-//     exception that matches nothing, carries no reason, or repeats another is
+//     exception that excuses no finding, carries no reason, or repeats another is
 //     itself an error: the list can only shrink by an edit a reviewer reads.
 //
 // Out of reach, and left to review: a value built at run time (`'Ba' + 'sh'`, a
@@ -55,7 +64,7 @@
 import ts from 'typescript'
 
 import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
+import { isInAType, lineOf, nodesOf, parseSource } from './parse_a_source.ts'
 
 /** The shortest value this check reads: `env` and `id` are words before they are values. */
 export const SHORTEST_VALUE = 4
@@ -112,6 +121,8 @@ interface Definition {
   readonly node: ts.Node
   /** The marked record this is an entry of; undefined for a constant. */
   readonly record?: string
+  /** Annotated with a named type: an alias of a member that type defines, never a holder (rule 3 of part b). */
+  readonly alias: boolean
 }
 
 interface Read {
@@ -167,17 +178,24 @@ function entriesOf(path: string, record: string, object: ts.ObjectLiteralExpress
     if (!ts.isPropertyAssignment(entry)) return []
     const key = keyOf(entry)
     if (key === null) return []
-    const asKey: Definition = { path, name: `${record}.${key} (key)`, value: key, exported: true, node: entry.name, record }
+    const asKey: Definition = { path, name: `${record}.${key} (key)`, value: key, exported: true, node: entry.name, record, alias: false }
     const value = textOf(entry.initializer)
-    return value === null ? [asKey] : [asKey, { path, name: `${record}.${key}`, value, exported: true, node: entry.initializer, record }]
+    return value === null ? [asKey] : [asKey, { path, name: `${record}.${key}`, value, exported: true, node: entry.initializer, record, alias: false }]
   })
 }
+
+/**
+ * Whether a declaration is annotated with a named type: `IDLE: State = 'idle'` names
+ * a member the type `State` defines, so a literal `'idle'` elsewhere means that
+ * member and not this constant (rule 3 of part b).
+ */
+const isAnAlias = (declaration: ts.VariableDeclaration): boolean => declaration.type !== undefined && ts.isTypeReferenceNode(declaration.type)
 
 /** What one declaration defines: its own value, or the entries of the record it marks. */
 function definitionsOfADeclaration(path: string, declaration: ts.VariableDeclaration, exported: boolean): Definition[] {
   if (!ts.isIdentifier(declaration.name)) return []
   const value = textOf(declaration.initializer)
-  if (value !== null) return [{ path, name: declaration.name.text, value, exported, node: declaration }]
+  if (value !== null) return [{ path, name: declaration.name.text, value, exported, node: declaration, alias: isAnAlias(declaration) }]
   const record = exported ? markedRecordOf(declaration) : null
   return record === null ? [] : entriesOf(path, declaration.name.text, record)
 }
@@ -212,10 +230,17 @@ const DECLARATIONS_WITH_A_NAME: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.EnumMember,
 ])
 
-/** Whether a literal names a property rather than carrying a value. */
+/**
+ * Whether a literal names a property rather than carrying a value: a declared
+ * name, or a property named at the use site (rule 2 of part b) — the left side of
+ * `in` and the argument of an element access, since `x.owner` is never judged and
+ * `x['owner']` names the same property.
+ */
 const namesAProperty = (node: ts.Node): boolean => {
   const parent = node.parent
   if (ts.isBindingElement(parent)) return parent.propertyName === node
+  if (ts.isElementAccessExpression(parent)) return parent.argumentExpression === node
+  if (ts.isBinaryExpression(parent)) return parent.operatorToken.kind === ts.SyntaxKind.InKeyword && parent.left === node
   return DECLARATIONS_WITH_A_NAME.has(parent.kind) && (parent as ts.NamedDeclaration).name === node
 }
 
@@ -239,10 +264,11 @@ export interface ConstantInSource {
  */
 export function constantsIn(text: string, path: string): ConstantInSource[] {
   const { file } = parseSource(text, path)
-  return definitionsIn({ path, file }).map(({ name, value, exported, node, record }) => ({
+  return definitionsIn({ path, file }).map(({ name, value, exported, node, record, alias }) => ({
     name,
     value,
-    exported,
+    // An alias holds no value of its own, so a change that adds, keeps or drops one defines nothing (rule 3 of part b).
+    exported: exported && !alias,
     line: lineOf(file, ts.isVariableDeclaration(node) ? node.initializer ?? node : node),
     ...(record === undefined ? {} : { record }),
   }))
@@ -266,7 +292,7 @@ const byPlace = (a: Finding, b: Finding): number => (a.path === b.path ? a.line 
 /** The constants holding `value`: another module's first, a constant before a record's entry, then by module and name. */
 const holdersOf = (value: string, definitions: readonly Definition[], module: string): Definition[] =>
   definitions
-    .filter((definition) => definition.exported && definition.value === value)
+    .filter((definition) => definition.exported && !definition.alias && definition.value === value)
     .sort((a, b) =>
       Number(a.path === module) - Number(b.path === module) ||
       Number(a.record !== undefined) - Number(b.record !== undefined) ||
@@ -324,9 +350,9 @@ function findingsForAUse(path: string, line: number, literal: string, declared: 
   return holder === undefined ? [] : [findingAt(path, line, literal, { module: holder.path, name: holder.name }, 'restates_a_constant')]
 }
 
-/** The literals of a source that can carry a value: not a module's path, not a property's name. */
+/** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
-  nodesOf(file).filter(isALiteral).filter((node) => !namesAModule(node) && !namesAProperty(node))
+  nodesOf(file).filter(isALiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
 
 /** What one literal is, if it restates something. */
 function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
@@ -367,14 +393,18 @@ export function literalSitesJudged(sources: readonly CoreSource[], judged: Reado
   ).length
 }
 
-/** The exceptions that match nothing in this tree, carry no reason, repeat another, or name a folder a file is not. */
+/**
+ * The exceptions that excuse no finding in this tree, carry no reason, or repeat
+ * another. An entry is held only while the rule, run over the whole tree without
+ * the list, names its value in its file: a word the rule no longer judges there
+ * (a type, a property name, an alias's member) needs no excuse.
+ */
 export function exceptionsNotHeld(sources: readonly CoreSource[], exceptions: readonly Exception[]): Exception[] {
-  const reads = parseAll(sources)
-  const valuesIn = new Map(reads.map(({ path, file }) => [path, new Set(nodesOf(file).filter(isALiteral).filter((node) => !namesAModule(node)).map((node) => (node as ts.StringLiteral).text))]))
+  const excused = new Set(restatementsIn(sources, { judged: null }).map((finding) => `${finding.literal}\u0000${finding.path}`))
   const repeated = (exception: Exception, index: number): boolean =>
     exceptions.findIndex((each) => each.value === exception.value && each.file === exception.file) !== index
   return exceptions.filter((exception, index) =>
-    exception.reason.trim() === '' || repeated(exception, index) || valuesIn.get(exception.file)?.has(exception.value) !== true)
+    exception.reason.trim() === '' || repeated(exception, index) || !excused.has(`${exception.value}\u0000${exception.file}`))
 }
 
 /** What a finding whose value the change took away tells its author to do. */

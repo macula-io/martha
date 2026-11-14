@@ -161,13 +161,11 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: STANDING_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: STANDING_CLOSE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   { value: STANDING, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
-  { value: STANDING_ITEMS_SOURCE, file: 'host_contract/host_contract.ts', reason: A_MEMBER_OF_THE_SOURCE_UNION },
   // The socket the mod talks to its launcher over (martha#254): the name is read by the host from this very file, and
   // the host refuses a hooks module that gives `$.env.get` anything but a literal, an imported constant included
   // (#104) — so the copy of the name has to sit here, and this line is the one that says it is the same name.
   { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the host reads this name from the hooks module and refuses anything but a literal in $.env.get, an imported constant included (#104)' },
   { value: WHOLE_FILE_CONTENT, file: 'a_crews_tools/a_crews_tools.ts', reason: `the one argument the handover tool takes; ${THE_ARGUMENT_OF_A_WRITE}` },
-  { value: WHOLE_FILE_CONTENT, file: 'write_my_handover/write_my_handover.ts', reason: `the one argument this tool reads; ${THE_ARGUMENT_OF_A_WRITE}` },
   // The order's two decision words (martha#255 r=2 R1): the launcher names them as constants, so the mod's own copy of
   // each — it reads the answer and runs it, and a hooks module cannot import the constant — is held here. Reword either
   // on the launcher's side and this entry matches no literal in the mod, and the gate says so by name.
@@ -239,13 +237,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'claude_code_host/claude_code_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'declare_crew/declare_crew.ts', reason: THE_DECLARATIONS_MODEL_KEY },
-  { value: CARRY_A_MODEL, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
   { value: CARRY_A_MODEL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: THE_HOSTS_OWN_MODEL_FIELD },
-  { value: CARRY_A_MODEL, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: THE_ROWS_MODEL_FIELD },
   // The same spelling for the key a restore may touch in the owner's settings file (martha#359), in two files that mean
   // something else by it.
   { value: THE_MODEL_KEY, file: 'refresh_a_member/the_refresh_flow.ts', reason: `the word an order carries a model under, which this file holds as CARRY_A_MODEL; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
   { value: THE_MODEL_KEY, file: 'switch_a_members_model/switch_a_members_model.ts', reason: `the name of the place a crew keeps its model records in, which this file holds as MODEL_PLACE; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
-  { value: THE_MODEL_KEY, file: 'a_crews_tools/a_switch_leaves_the_owners_default_alone.node-test.ts', reason: THE_ROWS_MODEL_FIELD },
 ]
 

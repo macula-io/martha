@@ -106,18 +106,19 @@ test('a declared coincidence is left alone in its own file, and stays named in a
 
 test('an exception that matches nothing, carries no reason, or repeats another is an error itself', () => {
   const gitSubcommand = source('a_git/a_git.ts', "git(['config', 'user.email'])\n")
+  const config = source('a_config/a_config.ts', "export const CONFIG = 'config'\n")
   const live: Exception = { value: 'config', file: 'a_git/a_git.ts', reason: 'a git subcommand' }
 
-  assert.deepEqual(exceptionsNotHeld([gitSubcommand], [live]), [])
+  assert.deepEqual(exceptionsNotHeld([config, gitSubcommand], [live]), [])
   assert.deepEqual(
-    exceptionsNotHeld([gitSubcommand], [
+    exceptionsNotHeld([config, gitSubcommand], [
       { ...live, value: 'a-value-that-left-the-file' },
       { ...live, file: 'a_git/a_git.ts', reason: '  ' },
       { ...live, value: 'config', file: 'another/file.ts' },
     ]).length,
     3,
   )
-  assert.deepEqual(exceptionsNotHeld([gitSubcommand], [live, live]).length, 1, 'the second entry repeats the first')
+  assert.deepEqual(exceptionsNotHeld([config, gitSubcommand], [live, live]).length, 1, 'the second entry repeats the first')
 })
 
 test('the number of sites judged is the literals on those lines, so a gate can say what it looked at', () => {
@@ -138,4 +139,40 @@ test('the whole tree, judged everywhere, names every copy and nothing else', () 
   const found = restatementsIn(tree, { judged: null })
 
   assert.deepEqual(found.map((finding) => `${finding.path}:${finding.line}`), ['a_copy/a_copy.ts:1', 'a_user/a_user.ts:1'])
+})
+
+test('a literal in a type position names a type, not a value, and a value beside it is still named (rule 1 of part b)', () => {
+  const typed = source('a_user/a_user.ts', "type T = 'the-tool' | 'other-word'\nconst k: { readonly kind: 'the-tool' } = make()\ncall('the-tool')\n")
+
+  assert.deepEqual(restatementsIn([EXPORTER, typed], { judged: null }).map(lineOfAFinding), ["a_user/a_user.ts:3: 'the-tool' restates a_tool/a_tool.ts TOOL"])
+})
+
+test('a literal that names a property at the use site is skipped like a declared name (rule 2 of part b)', () => {
+  const used = source('a_user/a_user.ts', "const has = 'the-tool' in record\nconst got = record['the-tool']\ncall('the-tool')\n")
+
+  assert.deepEqual(restatementsIn([EXPORTER, used], { judged: null }).map(lineOfAFinding), ["a_user/a_user.ts:3: 'the-tool' restates a_tool/a_tool.ts TOOL"])
+})
+
+test('a constant annotated with a named type is an alias of that type\'s member, not a value to import (rule 3 of part b)', () => {
+  const alias = source('a_tool/a_tool.ts', "export const THE_TAG: Tag = 'the-tag'\n")
+  const plain = source('a_tool/a_tool.ts', "export const THE_TAG = 'the-tag'\n")
+  const user = source('a_user/a_user.ts', "send({ tag: 'the-tag' })\n")
+
+  assert.deepEqual(restatementsIn([alias, user], { judged: null }), [])
+  assert.deepEqual(restatementsIn([plain, user], { judged: null }).map(lineOfAFinding), ["a_user/a_user.ts:1: 'the-tag' restates a_tool/a_tool.ts THE_TAG"])
+})
+
+test('an alias that copies another module\'s exported value is still a copy (rule 3 keeps R2)', () => {
+  const alias = source('a_alias/a_alias.ts', "export const COPY: Tag = 'the-tool'\n")
+
+  assert.deepEqual(restatementsIn([EXPORTER, alias], { judged: null }).map(lineOfAFinding), ["a_alias/a_alias.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"])
+})
+
+test('an exception whose literal is no finding any more matches nothing, and is an error itself', () => {
+  const config = source('a_config/a_config.ts', "export const CONFIG = 'config'\n")
+  const typeOnly = source('a_git/a_git.ts', "type Sub = 'config' | 'push'\n")
+  const entry: Exception = { value: 'config', file: 'a_git/a_git.ts', reason: 'a git subcommand' }
+
+  assert.deepEqual(exceptionsNotHeld([config, typeOnly], [entry]), [entry])
+  assert.deepEqual(exceptionsNotHeld([typeOnly], [entry]), [entry], 'no constant holds the value, so nothing needs excusing')
 })
