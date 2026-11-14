@@ -5,7 +5,7 @@ import type { Exception } from '../../prove_the_core/no_literal_restates_a_value
 import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, THE_TOOLS_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { CARRY_THE_END } from '../end_a_running_turn/end_the_running_turn.ts'
-import { THE_NEXT_MESSAGE_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -127,5 +127,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_READS_THE_SOCKET_BY_LITERAL },
   { value: THE_CHANNEL_READ_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
 ]

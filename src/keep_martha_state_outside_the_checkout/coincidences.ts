@@ -4,7 +4,7 @@
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
-import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 /** Why `'tree'` is written by literal in an approval record (#289 part b). */
 const A_FIELD_OF_AN_APPROVAL = 'a field of an approval record, as the record is written and read back'

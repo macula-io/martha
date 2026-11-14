@@ -287,8 +287,8 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   const { snapshot_root, ...places } = request.places
   const crewStores = theCrewsStores(request.state, request.root)
   const owners = await finishAnySwitchBeforeTheHostStarts(request, crewStores)
-  // One raising for this launch, and one channel carrier over it: the carrier hears every turn the host takes in, so
-  // a message counts as taken in only when the host raised it back (martha#253).
+  // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
+  // reports the member's next main turn started (martha#253).
   const turns = turnsRaised()
   const channel = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } }
   const started = await launchClaudeCodeMember({
@@ -314,7 +314,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         root: request.root,
         documents: request.documents,
         stores: { crew: crewStores.crew },
-        carrier: carryingTo({ member: request.member, host: channel, turns }),
+        carrier: carryingTo({ member: request.member, host: channel }),
         sessions,
         // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
         // session writes is the one its successor inherits.

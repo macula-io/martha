@@ -4,7 +4,7 @@
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
-import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 /** Why `'tree'` is written by literal where a launcher reads a checkout (#289 part b). */
 export const THE_TAG_OF_A_READ_TREE = 'the tag of the union a checkout read returns, which TypeScript narrows on by literal; the constant of that word is a recorder\'s parameter'
