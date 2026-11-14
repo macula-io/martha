@@ -81,7 +81,7 @@
       "src/run_an_owner_signed_command": 569,
       "src/run_the_martha_command": 414,
       "src/run_the_nodes_own_npm_alone": 165,
-      "src/start_a_member": 245,
+      "src/start_a_member": 244,
       "src/crew_files_directory": 161,
       "src/dashboard_rows_directory": 103,
       "src/empty_directory_of_a_launch": 24,
@@ -93,8 +93,8 @@
     "sliceCap": 600,
     "sliceCeilings": {
       "src/a_crews_tools": 1293,
-      "src/probe_launch_hosts": 1142,
-      "src/refuse_launch_of_unapproved_config": 880,
+      "src/probe_launch_hosts": 1143,
+      "src/refuse_launch_of_unapproved_config": 881,
       "src/refresh_a_member": 878
     },
     "packageImports": {
