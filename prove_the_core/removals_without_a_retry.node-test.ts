@@ -69,7 +69,7 @@ test('the same removal is named through fs., through an element access, and thro
 
 test('the removal that retries, a removal of one file, and the same call inside a string or a comment are not named', () => {
   const allowed = [
-    `import { ${THE_REMOVAL_THAT_RETRIES} } from '../launch_a_claude_code_member/relay_copy.ts'\nexport const a = (home: string): void => { ${THE_REMOVAL_THAT_RETRIES}(home) }\n`,
+    `import { ${THE_REMOVAL_THAT_RETRIES} } from '../serve_the_relay_to_a_launch/relay_copy.ts'\nexport const a = (home: string): void => { ${THE_REMOVAL_THAT_RETRIES}(home) }\n`,
     "import { rmSync } from 'node:fs'\nexport const a = (file: string): void => { rmSync(file) }\n",
     "import { mkdtempSync } from 'node:fs'\nexport const a = 'rmSync(home, { recursive: true })'\n// rmSync(home, { recursive: true, force: true })\n",
   ]
