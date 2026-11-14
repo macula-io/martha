@@ -275,6 +275,12 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: [],
   },
   {
+    what: 'a coincidence entry the change adds in a slice named like a constant, whose file path names a source (martha#437, r=1)',
+    base: { 'a_crews_tools/a_crews_tools.ts': "export const WAKE_IT = 'wake_it'\n", 'wake_it/wake_it.ts': 'export const run = () => 0\n' },
+    head: { 'wake_it/coincidences.ts': "export const COINCIDENCES = [{ value: 'x', file: 'wake_it/wake_it.ts', reason: 'r' }]\nconst notes = 'wake_it/notes.md'\n" },
+    prints: ["wake_it/coincidences.ts:2: 'wake_it' (a path segment) restates a_crews_tools/a_crews_tools.ts WAKE_IT"],
+  },
+  {
     what: 'a marker imported under a second name',
     base: {},
     head: { 'a_tool/tools.ts': "import type { DefinesItsValues as D } from './marker.ts'\nexport const TOOLS = Object.freeze({ Edit: 'file_path' }) satisfies D\n" },

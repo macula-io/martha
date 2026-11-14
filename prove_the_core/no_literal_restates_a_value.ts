@@ -25,7 +25,10 @@
 //     `/` only: `join(checkout, '.git/config')` restates CONFIG as surely as
 //     `'config'` would, and `join(checkout, '.git', CONFIG)` is what the rule asks
 //     for (martha#437). A word inside prose is never split out, so prose stays a
-//     word;
+//     word, and a literal that is exactly the path of a source the check reads
+//     names that file as a module specifier does, so its segments are never
+//     judged: `file: 'wake_a_member/wake_a_member.ts'` in a slice's coincidences
+//     is the slice's directory, not the WAKE_A_MEMBER tool;
 //   - a *definition* whose value equals an exported constant of ANOTHER module,
 //     exported or not: three private `const X = 'node_modules'` beside
 //     `DEPENDENCIES` are three restatements, and `const T = 'Bash'` is the same
@@ -390,15 +393,15 @@ const findingsForTheSegments = (path: string, line: number, literal: string, dec
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
   nodesOf(file).filter(isALiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
 
-/** What one literal is, if it restates something. */
-function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
+/** What one literal is, if it restates something; `files` are the paths of the sources read, whose segments name directories, not values. */
+function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>, files: ReadonlySet<string>): Finding[] {
   const literal = (node as ts.StringLiteral).text
   if (literal.length < SHORTEST_VALUE) return []
   const definition = definitionAt.get(node)
   const whole = definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
     : findingsForADefinition(definition, line, declared, definitions)
-  return [...whole, ...findingsForTheSegments(path, line, literal, declared, definitions)]
+  return files.has(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, literal, declared, definitions)]
 }
 
 /**
@@ -412,13 +415,14 @@ export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Fi
   const declared = judge.defined ?? []
   const exceptions = judge.exceptions ?? []
   const judged = judge.judged
+  const files = new Set(reads.map((read) => read.path))
   const definitionAt = new Map(definitions.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
   const isDeclaredACoincidence = (finding: Finding): boolean =>
     exceptions.some((exception) => exception.value === finding.literal && exception.file === finding.path)
   const isJudged = (finding: Finding): boolean =>
     judged === null || judged.has(at(finding.path, finding.line)) || declared.some((entry) => entry.value === finding.literal)
   return reads
-    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, definitionAt)))
+    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, definitionAt, files)))
     .filter((finding) => !isDeclaredACoincidence(finding) && isJudged(finding))
     .sort(byPlace)
 }

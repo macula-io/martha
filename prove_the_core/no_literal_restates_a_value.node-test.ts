@@ -252,3 +252,13 @@ test('a value the change takes away is judged over the whole tree inside path li
 
   assert.deepEqual(restatementsIn([old], { judged: new Set(), defined }).map(lineOfAFinding), [`a_old/a_old.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG ${GONE}`])
 })
+
+test('a literal that is exactly the path of a source the check reads names that file, so its segments are not judged, and any other path still is (martha#437, r=1)', () => {
+  const tool = source('a_crews_tools/a_crews_tools.ts', "export const WAKE_IT = 'wake_it'\n")
+  const slice = source('wake_it/wake_it.ts', "export const run = () => 0\n")
+  const coincidences = source('wake_it/coincidences.ts', "export const COINCIDENCES = [{ value: 'x', file: 'wake_it/wake_it.ts', reason: 'r' }]\nconst notes = 'wake_it/notes.md'\n")
+
+  assert.deepEqual(restatementsIn([tool, slice, coincidences], { judged: null }).map(lineOfAFinding), [
+    "wake_it/coincidences.ts:2: 'wake_it' (a path segment) restates a_crews_tools/a_crews_tools.ts WAKE_IT",
+  ])
+})
