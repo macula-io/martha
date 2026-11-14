@@ -179,6 +179,46 @@ test('#415: a merge that moves both maps names both in the words its commit reco
   assert.equal(merged.ok.recorded, 'package.json martha.hostCeilings, martha.sliceCeilings (measured)')
 })
 
+// --- #410: a head that moves the cap, which no sum of the ceilings can stand on -----------------------------------
+
+const A_LOWERED_CAP = 500
+const A_SLICE_ABOVE_THE_CAP = 'src/big'
+const A_SLICE_THE_LOWER_CAP_NEEDS = 'src/mid'
+
+/** A manifest holding the core slices under `cap` (none at all when null), with one host directory at `ceiling`. */
+const slicedUnder = (cap: number | null, ceiling: number, slices: Readonly<Record<string, number>>): string =>
+  theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: ceiling }, slice_cap: cap, slice_ceilings: slices })
+
+test('#410: a head that lowers the cap is refused, because the other side measured its slices against the old one', () => {
+  // The probe from r=2: theirs lowers the cap and records src/mid at 550, which only the lower cap needs. Summed
+  // against the old cap the exception is dropped, and the landed tree then fails the slice check.
+  const refused = theMergeOf(
+    slicedUnder(THE_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(THE_CAP, 111, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(A_LOWERED_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700, [A_SLICE_THE_LOWER_CAP_NEEDS]: 550 }),
+  )
+  assert.equal(
+    refused,
+    `martha.sliceCap is ${String(THE_CAP)} and ${String(A_LOWERED_CAP)} across the three stages of the merge, so the core slices' ceilings were measured against no one cap: a head that moves it is merged by hand`,
+    'a cap one head moved was taken from the merge and every side summed against the other cap',
+  )
+})
+
+test('#410: a cap the base never held is refused too, though the two heads agree on it', () => {
+  // The base is one of the three stages: it held no cap, so neither head's slices were measured against the number
+  // the other stands at, and the sum would stand on none.
+  const refused = theMergeOf(
+    slicedUnder(null, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(THE_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+    slicedUnder(THE_CAP, 100, { [A_SLICE_ABOVE_THE_CAP]: 700 }),
+  )
+  assert.equal(
+    refused,
+    `martha.sliceCap is no cap and ${String(THE_CAP)} across the three stages of the merge, so the core slices' ceilings were measured against no one cap: a head that moves it is merged by hand`,
+    'a cap the base never held was summed as though the base had stood at it',
+  )
+})
+
 test('#410: a script one head adds, with both heads moving one slice ceiling, merges both', () => {
   const manifest = theManifestOfTheMerge(
     sliced({ [A_SLICE]: 1287 }),

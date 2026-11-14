@@ -21,6 +21,10 @@
 // at or under the cap drops the key. The cap is an upper bound for the absent side, so a merge where one side shrank a
 // slice under the cap and the other grew it past can leave the ceiling above the landed count; the check names that
 // headroom, and a record run on the branch fixes it.
+//
+// The sum stands on one cap for every stage, so a head that moves martha.sliceCap is refused (martha#410): its
+// exceptions were measured against another number, and summing them against ours would drop one that only the moved
+// cap needed. On main that pair is refused too, the cap differing outside the maps.
 
 import { basename } from 'node:path'
 
@@ -28,6 +32,7 @@ import { manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_
 import {
   ceilingsOf,
   CEILINGS_NAME,
+  SLICE_CAP_NAME,
   SLICE_CEILINGS_NAME,
   sliceCapOf,
   sliceCeilingsOf,
@@ -197,13 +202,31 @@ function theMapsThatDiffer(ours: Manifest, theirs: Manifest): string {
   return [...(hosts ? [CEILINGS_NAME] : []), ...(slices ? [SLICE_CEILINGS_NAME] : [])].join(', ')
 }
 
+/** The cap the three stages stand at, or why their slices' ceilings are summed against none: a side that moved the cap
+ * measured its slices against another number, so a sum would drop an exception it needed or invent one it never had. */
+function theCapTheThreeStandAt(base: Manifest, ours: Manifest, theirs: Manifest): Step<number | undefined> {
+  const caps = [sliceCapOf(base), sliceCapOf(ours), sliceCapOf(theirs)]
+  if (caps.every((cap) => cap === caps[0])) return { ok: caps[0] }
+  return {
+    refused: `${SLICE_CAP_NAME} is ${theCapsInWords(caps)} across the three stages of the merge, so the core slices' ceilings were measured against no one cap: a head that moves it is merged by hand`,
+  }
+}
+
+/** The caps a refusal names, in the order the stages hold them: `600 and 500`, a stage that declares none as `no cap`. */
+function theCapsInWords(caps: readonly (number | undefined)[]): string {
+  const words = [...new Set(caps)].map((cap) => (cap === undefined ? 'no cap' : String(cap)))
+  return `${words.slice(0, -1).join(', ')} and ${String(words[words.length - 1])}`
+}
+
 /** `ours` with both maps summed into it, the slices' only when a side carries that map, or why a map has no sum. */
 function theMapsWrittenInto(ours: string, base: Manifest, ours_manifest: Manifest, theirs: Manifest): Step<string> {
+  const cap = theCapTheThreeStandAt(base, ours_manifest, theirs)
+  if ('refused' in cap) return cap
   const summed = theCeilingsTheThreeBring(ceilingsOf(base), ceilingsOf(ours_manifest), ceilingsOf(theirs))
   if ('refused' in summed) return summed
   const with_hosts = withCeilings(ours, summed.ok)
   if (ours_manifest.martha?.sliceCeilings === undefined && theirs.martha?.sliceCeilings === undefined) return { ok: with_hosts }
-  const sliced = theSliceCeilingsTheThreeBring(sliceCapOf(ours_manifest), sliceCeilingsOf(base), sliceCeilingsOf(ours_manifest), sliceCeilingsOf(theirs))
+  const sliced = theSliceCeilingsTheThreeBring(cap.ok, sliceCeilingsOf(base), sliceCeilingsOf(ours_manifest), sliceCeilingsOf(theirs))
   if ('refused' in sliced) return sliced
   return { ok: withTheMap(with_hosts, THE_SLICE_CEILINGS_KEY, sliced.ok) }
 }
