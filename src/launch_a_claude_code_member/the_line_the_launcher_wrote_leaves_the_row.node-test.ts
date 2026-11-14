@@ -20,7 +20,7 @@ import { test, type TestContext } from 'node:test'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { DASHBOARD } from '../declare_crew/declare_crew.ts'
+import { DASHBOARD, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -53,7 +53,7 @@ const THE_OTHER_OWNERS_LINE = 'the owner’s default could not be put back; it i
 /** The moment the test's clock starts at, so a beat a write takes and one it never takes are told apart exactly. */
 const THE_MOMENT_TOLD = 1_700_000_000_000
 /** How long the member takes to report back, in the clock the test holds: no real time passes. */
-const THE_MEMBER_GOT_ROUND_TO_IT = 60_000
+const THE_MEMBER_GOT_ROUND_TO_IT = MINUTE_MS
 
 interface Places {
   readonly member: string

@@ -22,7 +22,7 @@
 
 import { join } from 'node:path'
 
-import { OWNER } from '../declare_crew/declare_crew.ts'
+import { OWNER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 
 /** Where a crew keeps its park markers, under the one crew store (martha#254 part 1). */
@@ -202,7 +202,7 @@ export function theNewestHandover(place: CrewPlace, stamps: HandoverStampStore, 
 }
 
 /** Two refreshes of one member inside this window are a storm, and a storm is parked, not refused. */
-export const STORM_WINDOW_MS = 30 * 60_000
+export const STORM_WINDOW_MS = 30 * MINUTE_MS
 
 /** How many refreshes inside the window are a storm. */
 export const STORM_THRESHOLD = 2
@@ -215,7 +215,7 @@ export function isAStorm(refreshed_at: readonly number[], now: number): boolean 
 
 /** The line a storm sends the Supervisor, once: which member, at which contexts, from which handover. */
 export function theStormLine(storm: { readonly member: string; readonly percents: readonly number[]; readonly file: string }): string {
-  const minutes = Math.round(STORM_WINDOW_MS / 60_000)
+  const minutes = Math.round(STORM_WINDOW_MS / MINUTE_MS)
   return (
     `${storm.member} was parked after ${storm.percents.length} refreshes inside ${minutes} minutes ` +
     `(at ${storm.percents.join('%, ')}%), the last from ${storm.file}. It stays parked until the owner or the Supervisor wakes it.`

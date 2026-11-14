@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { ACTS, OWNER } from '../declare_crew/declare_crew.ts'
+import { ACTS, OWNER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
@@ -253,7 +253,7 @@ test('#316: a focus on no row reveals the first', () => {
 })
 
 test('#316: the terminal prints every command in full under what it does, under the line saying a member wrote it', () => {
-  const row = theActAsked(anAct(), 'Pallas', NOW - 2 * 60_000)
+  const row = theActAsked(anAct(), 'Pallas', NOW - 2 * MINUTE_MS)
   assert.ok(!('refused' in row), 'the test could not build its row')
   const commands = anAct()['commands'] as { command: string; does: string }[]
   assert.deepEqual(theListForTheTerminal([row], NOW), [

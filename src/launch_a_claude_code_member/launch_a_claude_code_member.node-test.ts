@@ -73,6 +73,7 @@ import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_ru
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -1682,7 +1683,7 @@ test('a member with no owner to answer its host, whose relay never reports its s
   const fake = fakeClaude(place)
   const lines: string[] = []
   const session_start_deadline_ms = 300
-  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: 60_000 })
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS })
   if (!started.started) assert.fail(started.refusal)
   const stopped = await started.stopped
   assert.equal(stopped.signal, 'SIGKILL')
@@ -3085,7 +3086,7 @@ test('a member on the owner\'s terminal is not held to the deadline of a member 
 test('a member on the owner\'s terminal whose relay never reports its session start is stopped at the trust answer deadline, saying the host may still have been asking (#104 r=2)', async (t) => {
   const place = placeFor(t)
   const trust_answer_deadline_ms = 500
-  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms: 60_000, trust_answer_deadline_ms } })
+  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms: MINUTE_MS, trust_answer_deadline_ms } })
   await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
   const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
   assert.ok(why.includes(`within ${trust_answer_deadline_ms / 1000} s`), why)
@@ -3101,7 +3102,7 @@ test('a member on the owner\'s terminal in a folder the host\'s record already t
   const place = placeFor(t)
   hostTrustRecord(place, JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
   const session_start_deadline_ms = 300
-  const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+  const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
   await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
   const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
   assert.ok(why.includes(`within ${session_start_deadline_ms / 1000} s`), why)
@@ -3117,7 +3118,7 @@ test('a member on the owner\'s terminal whose owner passes the host its ignore-p
   const session_start_deadline_ms = 300
   const flag = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal.flags[0]
   assert.ok(flag !== undefined, 'the recording names no argument for the exit')
-  const terminal = await ownersTerminal(t, place, { args: [flag], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+  const terminal = await ownersTerminal(t, place, { args: [flag], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
   const member = Number(textIn(terminal.fake.readyFile))
   await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
   assert.equal(isAlive(member), true, 'the member still runs: the host was told to ignore its record, so it may ask')
@@ -3135,7 +3136,7 @@ for (const [what, record] of [
     const place = placeFor(t)
     hostTrustRecord(place, typeof record === 'function' ? record(place) : record)
     const session_start_deadline_ms = 300
-    const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+    const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
     const member = Number(textIn(terminal.fake.readyFile))
     await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
     assert.equal(isAlive(member), true, 'the member still runs')

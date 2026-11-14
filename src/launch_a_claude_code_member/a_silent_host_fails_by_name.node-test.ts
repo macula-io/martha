@@ -34,6 +34,7 @@ import {
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS, OPEN_WORK_MS, POLL_MS, waitWhileTheHostKeepsShowing, type ModelAttempt } from './wait_while_the_host_keeps_showing.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /** Looks a wait may take before the test calls it a wait that never gives up, rather than asking the harness.
  * Far above the slowest case here (ten budgets of looks, 12 000), so only a wait that never ends reaches it. */
@@ -81,7 +82,7 @@ test('#210: a host that goes silent fails by name, saying how long nothing came 
   const host = aHostOfTheTests()
   // The run began a minute before this wait did, and this is the run's third wait: the figure the red reports is the
   // run's own time, so it must count that minute and not start again at this wait (martha#210 r=1).
-  const run_started_at = host.now() - 60_000
+  const run_started_at = host.now() - MINUTE_MS
   const started = host.now()
   const why = await waitWhileTheHostKeepsShowing({
     what: 'model request 3',
@@ -276,7 +277,7 @@ test('#240: a call the launcher denied never opens, so nothing is named for it',
   journal.received('tool_called', THE_CALL).answered('deny', 'the call writes outside the checkout')
   // The wait opens a minute after the deny, so the figure the red reports is the time since the answer and not the
   // silence this wait has counted on its own (martha#240 r=1).
-  await host.sleep(60_000)
+  await host.sleep(MINUTE_MS)
   const why = await theRed(host, read)
   assert.ok(why !== undefined, 'a denied call and then nothing must still fail the wait')
   assert.match(why.message, /showed nothing new/, 'a denied call was spent as if something were running')
@@ -459,7 +460,7 @@ test('#264: the drive hands its waits the stand-in\'s record, so a real stall na
 
 test('#264: the red names the request still owed, not the one answered before it', async () => {
   const host = aHostOfTheTests()
-  const first = host.now() - 60_000
+  const first = host.now() - MINUTE_MS
   const owed = host.now() - 5_000
   const why = await theRedOfASilentRun(host, () => [
     { number: 1, received_at: first, answered_at: first + 100 },
