@@ -18,7 +18,10 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
@@ -34,13 +37,16 @@ import { A_HOLD_REFUSES } from '../hold_a_package_back_from_a_batch/hold_a_packa
 import { STANDING_CLOSE, closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
 import {
+  A_DRY_RUN,
   FAST_FORWARD_DESCRIPTION,
   LAND,
+  LAND_BATCH,
   LAND_BATCH_DESCRIPTION,
   REDONE_GENERATED,
   THE_CHECK_PROGRAM,
   THE_REDO_PROGRAM,
   THE_REDO_SCRIPT,
+  aDryRunIsAsked,
   fastForwardAfterTheOwnersYes,
   landingsOf,
   landPassedWorkAsOneBatch,
@@ -1194,4 +1200,90 @@ test('#339 T4: an answer from a redo program that cannot judge is no pass, so a 
   })
   const checked = await verifyRange(unjudged.host, { path: fixture.clone, base, tip, packages })
   assert.match(wordsOf(checked), new RegExp(`${THE_REDO_SCRIPT} did not judge it`))
+})
+
+// --- r=2: the dry run as the tool's call reaches it, the chain over ceilings, and a batch that lands nothing ---------
+
+/** The crew's tools over this fixture's host, as a member's session calls them: the ledger is the host's own rows. */
+function theToolsOver(fixture: Fixture, tests: HostForTests): CrewTools {
+  return crewToolsOver({
+    member: MEMBER,
+    ledger: { clock: tests.host.clock, stores: { rows: tests.host.stores.rows } },
+    beats: dashboardRowsIn(join(fixture.root, 'dashboard')),
+    root: fixture.root,
+    documents: { read: async () => '{}' },
+    stores: { crew: crewFilesDirectory(join(fixture.root, 'crew-files')) },
+    processes: tests.host.processes,
+  })
+}
+
+/** What the tool said, whether it answered or refused. */
+const theToolSaid = (said: { readonly answer: string } | { readonly refused: string }): string => ('answer' in said ? said.answer : said.refused)
+
+test('#339 r=2: land_batch with check 1, called as a session calls it, forecasts and writes nothing; 2 and "1" are refused; 0 lands (mutants U1: the tool drops check 1; U2: check 1 is read as no dry run)', async (t) => {
+  const fixture = aRepository(t)
+  const { packages, heads, pulls } = threePassedPackages(fixture)
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, pulls)), undefined, { npm: [], programs: [] })
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
+  const tools = theToolsOver(fixture, tests)
+  const before = whatTheCloneHolds(fixture)
+  const main_before = theOriginMain(fixture)
+
+  const forecast = await tools.answer(LAND_BATCH, { path: fixture.clone, packages, [A_DRY_RUN]: 1 }, 'session-339')
+  assert.ok('answer' in forecast, `the dry run was refused: ${theToolSaid(forecast)}`)
+  assert.ok(forecast.answer.includes(`- lands: ${at(packages, 0)} (PR 281)`), `the dry run did not forecast the first head: ${forecast.answer}`)
+  assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone')
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'the dry run pushed a land branch')
+  assert.equal(theOriginMain(fixture), main_before, 'the dry run moved main on the origin')
+
+  for (const refused of [2, '1']) {
+    const said = await tools.answer(LAND_BATCH, { path: fixture.clone, packages, [A_DRY_RUN]: refused }, 'session-339')
+    assert.ok('refused' in said, `check ${JSON.stringify(refused)} was not refused: ${theToolSaid(said)}`)
+    assert.match(said.refused, new RegExp(`^${A_DRY_RUN} is 1 for a dry run`))
+    assert.equal(whatTheCloneHolds(fixture), before, `check ${JSON.stringify(refused)} changed the clone`)
+    assert.deepEqual(theLandBranchesOnOrigin(fixture), [], `check ${JSON.stringify(refused)} pushed a land branch`)
+  }
+
+  const landed = await tools.answer(LAND_BATCH, { path: fixture.clone, packages, [A_DRY_RUN]: 0 }, 'session-339')
+  assert.ok('answer' in landed, `check 0 did not land: ${theToolSaid(landed)}`)
+  assert.equal(theLandBranchesOnOrigin(fixture).length, 1, 'check 0 is the landing, and it pushes one land branch')
+})
+
+test('#339 r=2: check 1 asks the dry run; 0 or left out asks the landing; anything else is refused by name (mutant U2)', () => {
+  assert.deepEqual(aDryRunIsAsked({ [A_DRY_RUN]: 1 }), { ok: true })
+  assert.deepEqual(aDryRunIsAsked({ [A_DRY_RUN]: 0 }), { ok: false })
+  assert.deepEqual(aDryRunIsAsked({}), { ok: false })
+  for (const refused of [2, '1', true, null]) assert.match(refusedBy(aDryRunIsAsked({ [A_DRY_RUN]: refused })), new RegExp(`^${A_DRY_RUN} is 1 for a dry run`))
+})
+
+test('#339 r=2: three heads that each raise one ceiling are chained over the ceilings, so the third is answered lands, redone (mutant U3: the chain without -X ours)', async (t) => {
+  // Without -X ours the dry run chains a tree with conflict markers in package.json, and the third head's clash in it
+  // reads as one by hand where the landing would redo it.
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, { 'package.json': aManifestWithScripts({}, { [AN_ADAPTER]: 2 }) })
+  const heads = [3, 4, 5].map((ceiling, entry) => aBranchWriting(fixture, `passed${String(entry)}`, base, { 'package.json': aManifestWithScripts({}, { [AN_ADAPTER]: ceiling }) }))
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const { packages, tests } = await theBatchOfTwo(fixture, heads, { npm: [], programs: [] })
+
+  const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  assert.ok('told' in forecast, `three heads clashing only in the ceilings were refused: ${wordsOf(forecast)}`)
+  assert.ok(forecast.told.includes(`- lands, redone: ${at(packages, 2)} (PR 283): package.json martha.hostCeilings (measured)`), `the third head is not answered lands, redone: ${forecast.told}`)
+})
+
+test('#339 r=2: a batch that leaves every head out pushes nothing and offers no range (mutant U6: the batch goes on with nothing landed)', async (t) => {
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, { [ONE_TOOL_FILE]: 'base\n' })
+  const head = aBranchWriting(fixture, 'passed0', base, { [ONE_TOOL_FILE]: 'head\n' })
+  aLandingOnMain(fixture, base, 376, { [ONE_TOOL_FILE]: 'main\n' })
+  const { packages, tests } = await theBatchOfTwo(fixture, [head], { npm: [], programs: [] })
+  const main_before = theOriginMain(fixture)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('refused' in landed, `a batch that landed nothing offered a range: ${wordsOf(landed)}`)
+  assert.match(landed.refused, /every package was left out/)
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that landed nothing pushed a land branch')
+  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a batch that landed nothing kept a land branch in the clone')
+  assert.equal(theOriginMain(fixture), main_before, 'a batch that landed nothing moved main')
 })
