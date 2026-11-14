@@ -8,6 +8,8 @@ import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_o
 import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, type OwnerMarkdownFile, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { TRASH_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
 //
@@ -25,7 +27,7 @@ const TRASH_BELOW = 'trash-below'
 
 export const TRASH_PROBE: Probe = {
   what: 'Claude Code as martha start starts it: the skill files under the owner skills folder, the one the host loads at the top of the trash and the one below an entry it does not',
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   command: (switches) => ({
     command: 'claude',
     args: ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose', PROMPT, ...switches.args],
@@ -40,7 +42,7 @@ export const TRASH_PROBE: Probe = {
   ],
   from_output: (_place: Place, printed: string) => {
     const listed = skillsListedIn(printed)
-    return { TRASH_TOP_LISTED: listed.includes('.trash'), TRASH_BELOW_LISTED: listed.includes('entry') }
+    return { TRASH_TOP_LISTED: listed.includes(TRASH_FOLDER), TRASH_BELOW_LISTED: listed.includes('entry') }
   },
   expected: { TRASH_TOP_LISTED: true, TRASH_BELOW_LISTED: false },
 }
@@ -71,7 +73,7 @@ const syncedPathsOf = (place: Place, files: readonly OwnerMarkdownFile[]): reado
 export const SYNCED_PROBES: readonly Probe[] = [
   {
     what: 'Claude Code as martha start starts it: two skills the host syncs from the owner account, each holding a backslash in a quoted description and no hook (martha#243)',
-    host: 'claude-code' as const,
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: () => {},
     planted: () => {},
@@ -83,7 +85,7 @@ export const SYNCED_PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code as martha start starts it: a synced skill whose frontmatter really declares a hook is refused, naming the file and the rule (martha#243)',
-    host: 'claude-code' as const,
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: () => {},
     planted: () => {},
@@ -95,7 +97,7 @@ export const SYNCED_PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as martha start starts it: the same synced skill with `syncClaudeAiSkills: false` in the owner's settings, which the host reads as off, so the gate lets the start through (martha#243)",
-    host: 'claude-code' as const,
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: () => {},
     planted: () => {},
@@ -146,7 +148,7 @@ export const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap(
     const target = (place: Place) => join(userScopeConfig(place), folder, 'probe-note.md')
     return {
       what: `Claude Code ${gated ? 'as martha start starts it, the permission rules the launch carries in the settings it reads' : 'by hand, with none of the launch\'s rules'}: a write into the ${folder} folder of the owner's config dir (martha#154)`,
-      host: 'claude-code',
+      host: CLAUDE_CODE,
       command: (switches, place) => ({
         command: 'claude',
         args: [

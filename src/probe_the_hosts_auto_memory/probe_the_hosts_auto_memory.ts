@@ -20,6 +20,7 @@ import {
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { HEADLESS_CLAUDE, PROMPT, put, RUN_TIMEOUT_MS } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { memoryTheHostLoadedFor } from './what_the_host_loaded.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 // --- auto-memory (martha#136) ------------------------------------------------
 // Claude Code loads `<config dir>/projects/<project key>/memory/` into every
@@ -133,7 +134,7 @@ function memoryLines(scratch: string, memory: string, main: string, start: strin
   put(folder, MEMORY_NOTE, `---\nname: codeword\ndescription: the codeword\n---\nThe codeword is ${codeword}.\n`)
   const planted = filesUnder(folder)
 
-  const where = { host: 'claude-code' as const, launch_dir: start, stop_dir: scratch }
+  const where = { host: CLAUDE_CODE, launch_dir: start, stop_dir: scratch }
   const prepared = prepareLaunch({ ...where, snapshot_root: join(scratch, 'snapshots'), approved_fingerprints: [fingerprintOf(readLaunchState(where, thisMachine))] }, thisMachine)
   if (!prepared.allow) return [['prepareLaunch allows the launch', prepared.refusal, true]]
   // Both runs pass the same switches; only the environment differs, so the control isolates the off switch.

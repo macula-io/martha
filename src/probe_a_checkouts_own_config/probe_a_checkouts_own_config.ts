@@ -17,6 +17,8 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -83,7 +85,7 @@ function plantFixedText(place: Place): void {
   put(place.checkout, INSTRUCTION_FILES.checkout, 'Probe instructions at the top.\n')
   put(place.checkout, join(NESTED_DIR, INSTRUCTION_FILES.checkout), 'Probe instructions below the top.\n')
   put(place.checkout, NESTED_FILE, 'a file below the top\n')
-  put(place.checkout, join('.claude', 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
+  put(place.checkout, join(MANAGED_MARKDOWN_FOLDER, 'agents', `${AGENT}.md`), `---\nname: ${AGENT}\ndescription: a probe agent\n---\nReply with the single word ok.\n`)
 }
 
 /**
@@ -133,7 +135,7 @@ const opencode = (...extra: readonly string[]): Command => (switches) => ({
 export const PROBES: readonly Probe[] = [
   {
     what: "Claude Code by hand, headless: a checkout's CLAUDE.md at the top and below it",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude(...READ_BELOW_CLAUDE),
     planted: (place) => {
       plantFixedText(place)
@@ -144,7 +146,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as Martha starts it, headless: a checkout's CLAUDE.md at the top and below it (A16)",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude(...READ_BELOW_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, instructionsHook(place)),
     planted: plantFixedText,
@@ -153,7 +155,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code by hand, headless: started as a checkout's agent",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeAsTheAgent(AGENT, ...HEADLESS_CLAUDE),
     planted: plantFixedText,
     expected: { AGENT_LOADED: true, AGENT_NOT_FOUND: false },
@@ -161,7 +163,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as Martha starts it, headless: started as a checkout's agent (A16)",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeAsTheAgent(AGENT, ...HEADLESS_CLAUDE),
     planted: plantFixedText,
     expected: { AGENT_LOADED: false, AGENT_NOT_FOUND: true },
@@ -169,7 +171,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code by hand, interactive health check: a project tool server',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude('mcp', 'list'),
     planted: (place) => put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER'))),
     // The list it prints is the proof it ran and read this checkout's config: the claim is about the server it did NOT
@@ -180,7 +182,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code by hand, headless: a project tool server and SessionStart hook',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     planted: (place) => {
       put(place.checkout, CLAUDE_SERVERS, claudeServer(PLANTED_SERVER_NAME, place.marker('PLANTED_SERVER')))
@@ -202,7 +204,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code as Martha starts it, headless: config rewritten after approval',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     // The prompt goes before the switches: `--mcp-config` takes every argument up to the next option.
     command: claude(...HEADLESS_CLAUDE, PROMPT),
     approved: (place) => {
@@ -245,7 +247,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: 'Claude Code as Martha starts it, headless: an after-call hook that only reports',
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeInItsOwnGroup(...ONE_CALL_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, claudeStopHooks(place, ONLY_REPORT)),
     planted: () => {},
@@ -254,7 +256,7 @@ export const PROBES: readonly Probe[] = [
   },
   {
     what: "Claude Code as Martha starts it, headless: the after-call hook waits for the launcher to SIGKILL the member's group",
-    host: 'claude-code',
+    host: CLAUDE_CODE,
     command: claudeInItsOwnGroup(...ONE_CALL_CLAUDE),
     approved: (place) => put(place.checkout, CLAUDE_SETTINGS, claudeStopHooks(place, KILL_THE_GROUP)),
     planted: () => {},

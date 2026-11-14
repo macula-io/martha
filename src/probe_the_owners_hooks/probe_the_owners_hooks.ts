@@ -16,6 +16,7 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
+import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 // --- the owner's user hooks and plugins (martha#121, finding 1) ---------------
 //
@@ -61,7 +62,7 @@ const ownerHookAndSwitch = (place: Place, key: string) =>
 export const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Probe[] => {
   const as = gated ? 'as martha start starts it, its settings gate included' : 'on the switches alone, its settings gate skipped'
   const refused = (marker: string) => (gated ? { [marker]: false, GATE_REFUSED: true } : { [marker]: true })
-  const common = { host: 'claude-code' as const, command: claude(...HEADLESS_CLAUDE, PROMPT), approved: () => {}, planted: () => {}, planned: true }
+  const common = { host: CLAUDE_CODE as typeof CLAUDE_CODE, command: claude(...HEADLESS_CLAUDE, PROMPT), approved: () => {}, planted: () => {}, planned: true }
   return [
     {
       ...common,
@@ -92,7 +93,7 @@ export const OWNER_PROBES: readonly Probe[] = [false, true].flatMap((gated): Pro
 /** Each key alone, gated: no hook in the file, so the only reason the launcher has to refuse is the key itself. */
 export const SWITCH_PROBES: readonly Probe[] = HOOK_KILLING_KEYS.map((key): Probe => ({
   what: `Claude Code as martha start starts it: ${key} alone in the owner's user settings, with no hook beside it`,
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   command: claude(...HEADLESS_CLAUDE, PROMPT),
   approved: () => {},
   planted: () => {},
@@ -140,7 +141,7 @@ export const MARKDOWN_HOOK_PROBES: readonly Probe[] = HOOKS_SPELLINGS.flatMap(({
     const name = `spelling-${ruleAt}-${at}.md`
     return {
       what: `Claude Code as martha start starts it: a user-scope agent whose frontmatter spells the hooks key as ${rule}, spelling ${at + 1}`,
-      host: 'claude-code' as const,
+      host: CLAUDE_CODE,
       command: claude(...HEADLESS_CLAUDE, PROMPT),
       approved: () => {},
       planted: () => {},
@@ -243,7 +244,7 @@ const HOST_KEY_CASES: ReadonlyArray<{
 
 export const HOST_KEY_PROBES: readonly Probe[] = HOST_KEY_CASES.map((one) => ({
   what: one.what,
-  host: 'claude-code' as const,
+  host: CLAUDE_CODE,
   command: claudeAsTheAgent(one.name, ...HEADLESS_CLAUDE),
   approved: () => {},
   planted: () => {},
