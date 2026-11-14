@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { CoreToolAnswer, CrewTools } from './a_crews_tools.ts'
 import { crewToolsOver } from './a_crews_tools.ts'
@@ -124,7 +124,7 @@ function aCrew(
     beats,
     root,
     documents: { read: (path: string) => readFile(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     ...(changes.processes === undefined ? {} : { processes: changes.processes }),
   })
   const at = (moment: number): void => started.advanceClock(moment - started.host.clock.now())

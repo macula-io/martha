@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -81,8 +81,8 @@ async function aMemberHandingOver(options: ACrewOptions) {
   const sessions = new Map([SESSION, SUCCESSOR].map((id) => [id, beginSession(records, id)] as const))
   const ledger = { clock: { now: () => clock.at }, stores: { rows } }
   const beats = dashboardRowsIn(join(home, 'row'))
-  const tools = crewToolsOver({ member: MEMBER, ledger, beats, root, documents, stores: { crew: crewFilesDirectory(crew) }, stamps: handoverStampsIn(crew), sessions: { of: (id) => sessions.get(id) } })
-  const place = refreshesPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const tools = crewToolsOver({ member: MEMBER, ledger, beats, root, documents, stores: { crew: keepTheCrewsFilesAsDirectories(crew) }, stamps: handoverStampsIn(crew), sessions: { of: (id) => sessions.get(id) } })
+  const place = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), 'the crew store refused the flow place')
 
   /** The order the mod is answered with, for the question put at `minute` after the ask. */

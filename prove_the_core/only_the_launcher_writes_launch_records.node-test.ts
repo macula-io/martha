@@ -30,7 +30,7 @@ const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_launc
 
 test('package.json declares the host glue and the host adapter, so the check knows what is not a slice', () => {
   assert.deepEqual(declaredHostGlue(repository), [
-    'crew_files_directory',
+    'keep_the_crews_files_as_directories',
     'empty_directory_of_a_launch',
     'linux_process_identity',
     'owners_settings_directory',

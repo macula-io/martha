@@ -3,7 +3,7 @@
 // A park has to outlive the session it is about: a clear, a restart or a refresh all replace the session, so a park kept
 // in one would be forgotten exactly when it matters. The marker is therefore a small file per member, in the crew store
 // every member reads, under the same rule every crew file is written by — and that writer is host glue behind the host
-// contract (src/crew_files_directory), so this slice decides and the host writes.
+// contract (src/keep_the_crews_files_as_directories), so this slice decides and the host writes.
 //
 // Who may park another member is answered from what the launcher already holds — the declaration it started its member
 // from — and not from who_may_act: that compares node ids against signed lists, and a solo crew has neither (r=3).

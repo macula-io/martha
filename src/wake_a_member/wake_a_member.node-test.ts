@@ -6,7 +6,7 @@
 // failed to start is still parked, and the owner can try again.
 //
 // The handover is written here by the host's own write (../write_my_handover) and stamped into the crew's own stamp
-// store (../crew_files_directory), so what the wake reads is the file a launch would have left, at the path the host
+// store (../keep_the_crews_files_as_directories), so what the wake reads is the file a launch would have left, at the path the host
 // chose, with the stamp the host wrote.
 
 import assert from 'node:assert/strict'
@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
@@ -53,7 +53,7 @@ let crewsSoFar = 0
 const aWakeHost = () => {
   crewsSoFar += 1
   const itsOwn = join(home, 'state', 'crews', `a-key-${crewsSoFar}`)
-  return { stores: hostForTests({ crew: crewFilesDirectory(itsOwn) }).host.stores, stamps: handoverStampsIn(itsOwn) }
+  return { stores: hostForTests({ crew: keepTheCrewsFilesAsDirectories(itsOwn) }).host.stores, stamps: handoverStampsIn(itsOwn) }
 }
 
 /** A start that records what it was asked, and says what the test told it to. */

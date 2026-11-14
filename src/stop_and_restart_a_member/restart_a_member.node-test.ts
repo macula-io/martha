@@ -2,7 +2,7 @@
 // starts the member again, who may ask through the tool, and the storm window that stops a restart loop.
 //
 // The requests and the handovers are kept in the crew store the host really composes on a disk
-// (../crew_files_directory), and the handovers are written and stamped by the host's own write (../write_my_handover),
+// (../keep_the_crews_files_as_directories), and the handovers are written and stamped by the host's own write (../write_my_handover),
 // so what the hold reads is what a launch would have left. The processes and the start are the test's.
 
 import assert from 'node:assert/strict'
@@ -13,7 +13,7 @@ import { after, mock, test } from 'node:test'
 
 import { launchesIn, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, KeyedRow, Processes, RowStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
@@ -49,7 +49,7 @@ const LAUNCH = { pid: 101, process_started_at: 'boot:1' }
 let crews = 0
 function aCrew() {
   const directory = join(home, `crew-${++crews}`)
-  const crew = crewFilesDirectory(directory)
+  const crew = keepTheCrewsFilesAsDirectories(directory)
   const lifecycle = crew.place(LIFECYCLE_PLACE)
   if ('refusal' in lifecycle) throw new Error(lifecycle.refusal)
   return { crew, lifecycle, stamps: handoverStampsIn(directory) }

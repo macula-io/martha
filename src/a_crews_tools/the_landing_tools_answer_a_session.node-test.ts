@@ -15,7 +15,7 @@ import { test, type TestContext } from 'node:test'
 
 import { theRangeACallNames, VERIFY_RANGE, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
@@ -97,7 +97,7 @@ function aPlaceOf(t: TestContext, run: (request: ProcessRequest) => Promise<Proc
     beats: dashboardRowsIn(join(root, DASHBOARD)),
     root: checkout,
     documents: { read: async () => '{}' },
-    stores: { crew: crewFilesDirectory(join(root, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(root, 'crew-files')) },
     ...(held.processes ? { processes: host.processes } : {}),
     ...(held.settings ? { settings } : {}),
   })

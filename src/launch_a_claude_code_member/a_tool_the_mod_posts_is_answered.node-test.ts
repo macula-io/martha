@@ -32,7 +32,7 @@ import { memberRelay } from './answer_the_relay.ts'
 import { serveTheRelay } from './serve_the_relay.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { removeTheTree } from './relay_copy.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'
@@ -65,7 +65,7 @@ function toolsIn(place: { readonly home: string; readonly checkout: string; read
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
   })
 }
 

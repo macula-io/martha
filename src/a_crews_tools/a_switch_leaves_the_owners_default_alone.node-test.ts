@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
@@ -107,7 +107,7 @@ async function aCrew(owners: Record<string, unknown> | null = OWNERS_SETTINGS): 
     beats,
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
     owners_settings: owners_place,
@@ -126,7 +126,7 @@ function declareTheModels(root: string): void {
 
 /** This member's record, as a later launch and the owner read it. */
 function theRecordOf(crew: string): ModelMarker | null {
-  const place = modelPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = modelPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), `the crew's store refused its model place: ${'refusal' in place ? place.refusal : ''}`)
   const read = theModelOf(place, MEMBER)
   if (read.kind === 'unreadable') assert.fail(read.refusal)
@@ -554,12 +554,12 @@ test('a record a launch cannot finish puts its line in the member\'s own row, no
   const marker = theRecordOf(crew.crew)
   assert.ok(marker !== null, 'the test could not read the record of the member\'s switch')
   const record = await aRecordTheWaitNeverSaw(crew)
-  theOwnersDefaultKept({ stores: { crew: crewFilesDirectory(crew.crew) } }, MEMBER, marker, record)
+  theOwnersDefaultKept({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } }, MEMBER, marker, record)
   // The owner's own change since, so the launch cannot finish the record by either hash it holds.
   writeFileSync(crew.settings_file, THE_OWNERS_EDIT)
   const said = await finishTheOwnersDefaultAtLaunch({
     member: MEMBER,
-    host: { stores: { crew: crewFilesDirectory(crew.crew) } },
+    host: { stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } },
     owners: crew.owners,
     beats: crew.beats,
   })

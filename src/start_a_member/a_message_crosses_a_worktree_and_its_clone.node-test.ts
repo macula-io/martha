@@ -22,7 +22,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { launcherPlacesOf } from './start_a_member.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 
@@ -71,7 +71,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
     return held
   }
   const crewOf = (member: string, root: string): ReturnType<typeof crewToolsOver> =>
-    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew-files')) }, carrier: carrierOf(member) })
+    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'crew-files')) }, carrier: carrierOf(member) })
 
   const sent = await crewOf('Builder', worktree).answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
   assert.ok('answer' in sent, `the send from the worktree was not answered: ${JSON.stringify(sent)}`)

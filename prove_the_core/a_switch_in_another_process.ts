@@ -14,7 +14,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { crewFilesDirectory } from '../src/crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../src/owners_settings_directory/owners_settings_directory.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../src/declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -80,7 +80,7 @@ async function theCrewTools(): Promise<ReturnType<typeof crewToolsOver>> {
     beats: dashboardRowsIn(join(its.home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     models: [its.own_model, its.review_model],
     launched_on: its.own_model,
     owners_settings: { config_dir: its.config_dir, file: its.settings_file, store: ownersSettingsIn(its.settings_file, its.lock_root) },

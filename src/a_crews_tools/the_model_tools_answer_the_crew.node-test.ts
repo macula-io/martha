@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
@@ -109,7 +109,7 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
     beats,
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
     owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
@@ -119,7 +119,7 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
 
 /** This member's model record, as a later session and the owner read it. */
 function theRecordOf(crew: string): TheModel {
-  const place = modelPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = modelPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), `the crew's store refused its model place: ${'refusal' in place ? place.refusal : ''}`)
   return theModelOf(place, MEMBER)
 }

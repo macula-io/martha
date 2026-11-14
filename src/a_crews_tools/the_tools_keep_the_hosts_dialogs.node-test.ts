@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -85,7 +85,7 @@ function aMemberOnDisk(t: { after(fn: () => void): void }): AMemberOnDisk {
     beats,
     root,
     documents,
-    stores: { crew: crewFilesDirectory(join(place, 'the-crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place, 'the-crew-store')) },
   })
   const theLauncher = theOwnersScreen({
     beats,

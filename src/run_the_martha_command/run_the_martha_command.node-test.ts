@@ -24,7 +24,7 @@ import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/rela
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
@@ -411,9 +411,9 @@ test('martha wake starts the member on its newest handover, and the prompt it is
   assert.ok(!('refusal' in crew), `the test could not reach the crew's store: ${'refusal' in crew ? crew.refusal : ''}`)
   const stamps = handoverStampsIn(crew.path)
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
-  const written = writeMyHandover({ stores: { crew: crewFilesDirectory(crew.path) } }, { member, content, at, stamps, session })
+  const written = writeMyHandover({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } }, { member, content, at, stamps, session })
   assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${JSON.stringify(written)}`)
-  const handovers = crewFilesDirectory(crew.path).place(HANDOVERS_PLACE)
+  const handovers = keepTheCrewsFilesAsDirectories(crew.path).place(HANDOVERS_PLACE)
   assert.ok(!('refusal' in handovers), 'the crew store refused its handovers place')
   const file = join(handovers.path, theHandoverFile(member, at))
 

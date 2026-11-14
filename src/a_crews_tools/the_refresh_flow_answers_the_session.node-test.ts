@@ -2,7 +2,7 @@
 // mod asks, and the one act it is answered with.
 //
 // Nothing here decides anything of its own: the tool writes what the core says to write, where the core says, and the
-// question is answered by the flow. The crew's own store is the real one on this disk (../crew_files_directory), so the
+// question is answered by the flow. The crew's own store is the real one on this disk (../keep_the_crews_files_as_directories), so the
 // handover read back is the file a launched member would have left, and the stamp is the host's own.
 
 import assert from 'node:assert/strict'
@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -102,7 +102,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     stamps: handoverStampsIn(crew),
     sessions: { of: (id) => held.get(id) },
   })
@@ -151,7 +151,7 @@ test('#255: write_my_handover is one of the crew’s tools, and its answer is th
   const { tools, crew, clock } = await aCrewOfTools('builder')
   const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules\nwhat runs' }, 'a-session')
   assert.deepEqual(answered, { answer: CREW_HANDOVER_WRITTEN })
-  const place = { stores: { crew: crewFilesDirectory(crew) } }.stores.crew.place(HANDOVERS_PLACE)
+  const place = { stores: { crew: keepTheCrewsFilesAsDirectories(crew) } }.stores.crew.place(HANDOVERS_PLACE)
   assert.ok(!('refusal' in place), 'the crew store refused the handovers place')
   const written = place.read(`HANDOVER_${new Date(clock.at).toISOString().slice(0, 10)}_builder.md`)
   assert.ok(written !== undefined && !('refusal' in written), 'the tool wrote no handover file')
@@ -203,7 +203,7 @@ test('#255: refresh_this_session asks for a refresh, and the next question is an
 
 test('#255: the clear is told with the session it was told in, so its successor inherits that one', async () => {
   const { tools, crew, clock } = await aCrewOfTools('builder')
-  const place = refreshesPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), 'the crew store refused the flow place')
   const flow = aFlowStarting({ trigger: 'at_the_limit', reason: 'its context reached the handover limit', at: clock.at, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
   assert.equal(keepTheFlow(place, 'builder', flow), undefined)
@@ -222,7 +222,7 @@ test('#255: the clear is told with the session it was told in, so its successor 
 
 test('#255: a handover written before the flow asked is sent back, not cleared', async () => {
   const { tools, crew, clock } = await aCrewOfTools('builder')
-  const place = refreshesPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place))
   // The member writes its handover first, then a flow asks for one: the file predates the ask, so it is not this
   // flow's handover and nothing is cleared on it.

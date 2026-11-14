@@ -5,7 +5,7 @@
 // its predecessor reached, so a threshold measured from zero asks again on the very first report, clears, and resumes
 // into the same size. A decline is measured exactly as an ask is, which is the same rule applied to the answer.
 //
-// The flow's own file is driven through the crew store the host really composes on a disk (../crew_files_directory), so
+// The flow's own file is driven through the crew store the host really composes on a disk (../keep_the_crews_files_as_directories), so
 // what a launcher reads back is the file it would have left.
 
 import assert from 'node:assert/strict'
@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
@@ -131,7 +131,7 @@ test('#255: a flow past its window is stalled, and one inside it is not', () => 
 })
 
 test('#255: a flow is kept whole in the crew’s own store, and read back as it was written', () => {
-  const host = hostForTests({ crew: crewFilesDirectory(crew) })
+  const host = hostForTests({ crew: keepTheCrewsFilesAsDirectories(crew) })
   const place = refreshesPlace(host.host)
   assert.ok(!('refusal' in place), `the crew's store refused the flow place: ${'refusal' in place ? place.refusal : ''}`)
   assert.equal(theFlowOf(place, 'builder'), undefined)
@@ -146,7 +146,7 @@ test('#255: a flow is kept whole in the crew’s own store, and read back as it 
 })
 
 test('#255: a flow file that is not one is a refusal, never read as no flow', () => {
-  const host = hostForTests({ crew: crewFilesDirectory(join(home, 'other-crew')) })
+  const host = hostForTests({ crew: keepTheCrewsFilesAsDirectories(join(home, 'other-crew')) })
   const place = refreshesPlace(host.host)
   assert.ok(!('refusal' in place), 'the crew store refused the flow place')
   place.keep(theRefreshFile('builder'), 'not a flow at all\n')

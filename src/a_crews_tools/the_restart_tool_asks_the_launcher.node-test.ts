@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -50,7 +50,7 @@ async function aCrewOfTools(member: string, options: { grant?: readonly string[]
   }
   mkdirSync(join(home, 'its-rows'), { mode: 0o700 })
   const rows = rowStreamsDirectory(join(home, 'its-rows'))
-  const lifecycle = crewFilesDirectory(crew).place(LIFECYCLE_PLACE)
+  const lifecycle = keepTheCrewsFilesAsDirectories(crew).place(LIFECYCLE_PLACE)
   const host: StoppingHost = {
     stores: { lifecycle, rows },
     launches: () => [],
@@ -64,7 +64,7 @@ async function aCrewOfTools(member: string, options: { grant?: readonly string[]
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     ...(options.lifecycle === false ? {} : { lifecycle: host }),
   })
   return { tools, lifecycle }

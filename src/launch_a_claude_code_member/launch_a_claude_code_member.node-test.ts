@@ -66,7 +66,7 @@ import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUs
 import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
@@ -1145,7 +1145,7 @@ test('a session starting on a package is handed its predecessor\'s unfinished ac
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
   })
   // The predecessor's row: the member holds a package, and says so where the launcher reads it.
   const kept = dashboardRowsIn(place.dashboard).change(member, () => ({
@@ -1191,7 +1191,7 @@ test('a session starting on no package is handed nothing, and its start is taken
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
   })
 
   const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
