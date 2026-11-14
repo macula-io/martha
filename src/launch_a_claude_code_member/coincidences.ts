@@ -7,7 +7,7 @@ import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_check
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
-import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 /** Why `'.json'` is written by literal in a filter (#289 part b). */
 export const ANY_JSON_FILE = 'a filter on any JSON file; the constant of that word is the suffix of the relay\'s journal'

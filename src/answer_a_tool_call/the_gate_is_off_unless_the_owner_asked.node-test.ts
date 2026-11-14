@@ -37,6 +37,7 @@ import {
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from './answer_a_tool_call.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const names = claudeCodeToolNames
 
@@ -64,7 +65,7 @@ type Asked = Parameters<typeof answerToolCall>[0]
 
 /** A shell call, answered the way the host asks it. */
 const bash = (session: Asked['session'], more: Partial<Asked> = {}): ToolCallAnswer =>
-  answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine, ...more })
+  answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, ...more })
 
 const denied = (answer: ToolCallAnswer, why: string): string => {
   assert.notEqual(answer, undefined, `${why}: the tool call was allowed, and it must be refused`)

@@ -63,31 +63,31 @@ const denied = (answer: ToolCallAnswer): string => {
 test('a session that took in a stranger may not run a shell, this turn or the next', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'cross_session' }, bindNothing)
 
-  const first = denied(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch, host: thisMachine }))
+  const first = denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine }))
   assert.match(first, /nothing executes/i)
 
   const nextTurn = takeInTurn(tainted, { source: 'mcp_result' }, bindNothing)
-  denied(answerToolCall({ names, tool: 'Bash', session: nextTurn, policy, launch, host: thisMachine }))
+  denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: nextTurn, policy, launch, host: thisMachine }))
 })
 
 test('a fresh session under a new id lets the crew work again', () => {
   const records = store()
   const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'cross_session' }, bindNothing)
-  denied(answerToolCall({ names, tool: 'Bash', session: tainted, policy, launch, host: thisMachine }))
+  denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine }))
 
   const fresh = beginSession(records, 's-2')
-  assert.equal(answerToolCall({ names, tool: 'Bash', session: fresh, policy, launch, host: thisMachine }), undefined)
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: fresh, policy, launch, host: thisMachine }), undefined)
 })
 
 test('a compaction keeps the id, and so does not let the crew work again', () => {
   const records = store()
   rememberSession(records, takeInTurn(beginSession(records, 's-1'), { source: 'ring' }, bindNothing))
-  denied(answerToolCall({ names, tool: 'Bash', session: resumeSession(records, 's-1'), policy, launch, host: thisMachine }))
+  denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: resumeSession(records, 's-1'), policy, launch, host: thisMachine }))
 })
 
 test('an unreadable record refuses the shell and says so', () => {
   const resumed = resumeSession(store(), 'a-session-the-store-never-saw')
-  const answer = denied(answerToolCall({ names, tool: 'Bash', session: resumed, policy, launch, host: thisMachine }))
+  const answer = denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: resumed, policy, launch, host: thisMachine }))
 
   assert.match(answer, /record/i)
   assert.match(answer, /cannot be read/i)
@@ -104,7 +104,7 @@ test('a record kept across a restart carries the taint with it', () => {
   const tainted = takeInTurn(beginSession(records, 's-1'), { source: 'ring' }, bindNothing)
   rememberSession(records, tainted)
 
-  denied(answerToolCall({ names, tool: 'Bash', session: resumeSession(records, 's-1'), policy, launch, host: thisMachine }))
+  denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: resumeSession(records, 's-1'), policy, launch, host: thisMachine }))
 })
 
 test('the refusal a host returns names what to do', () => {
@@ -131,12 +131,12 @@ test('a turn the policy names may run a shell straight away', () => {
     source: 'crew_room',
     from_identity: supervisor_identity,
   }, bindNothing)
-  assert.equal(answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine }), undefined)
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine }), undefined)
 })
 
 test('every tool that executes is refused, by whatever name the host uses', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  for (const tool of ['Bash', 'bash', 'patch', 'MultiEdit', 'Agent', 'SendMessage', 'NeverSeenTool']) {
+  for (const tool of [CLAUDE_CODE_SHELL_TOOL, 'bash', 'patch', 'MultiEdit', 'Agent', 'SendMessage', 'NeverSeenTool']) {
     denied(answerToolCall({ names, tool, session: tainted, policy, launch, host: thisMachine }))
   }
 })

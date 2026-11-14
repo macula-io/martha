@@ -181,3 +181,31 @@ test('an exception whose literal is no finding any more matches nothing, and is 
   assert.deepEqual(exceptionsNotHeld([config, typeOnly], [entry]), [entry])
   assert.deepEqual(exceptionsNotHeld([typeOnly], [entry]), [entry], 'no constant holds the value, so nothing needs excusing')
 })
+
+// A change that adds an exported constant a holder in another module already holds made a second copy, and the
+// copy is the NEW line: before, the change's own definition was never judged, so the finding fell on the old
+// holder, where that file's exception excused it (martha#289 part b, stage 2).
+const A_SECOND_HOLDER = source('a_new/a_new.ts', "export const AGAIN = 'the-tool'\n")
+const ADDS_A_SECOND_HOLDER: DefinedByTheChange[] = [{ value: 'the-tool', module: 'a_new/a_new.ts', name: 'AGAIN' }]
+
+test('a new exported definition of a value another module still holds is named on the NEW line, and the old file\'s exception does not excuse it', () => {
+  const oldFileExcused: Exception = { value: 'the-tool', file: 'a_tool/a_tool.ts', reason: 'a word of its own in the old file' }
+
+  const found = restatementsIn([EXPORTER, A_SECOND_HOLDER], { judged: everyLine(A_SECOND_HOLDER), defined: ADDS_A_SECOND_HOLDER, exceptions: [oldFileExcused] })
+
+  assert.deepEqual(found.map(lineOfAFinding), ["a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"])
+  assert.equal(found[0]?.rule, 'defines_an_exported_value')
+})
+
+test('a planted coincidence: only an exception in the NEW file excuses a second holder, and the old holder is never named for it', () => {
+  const newFileExcused: Exception = { value: 'the-tool', file: 'a_new/a_new.ts', reason: 'the same word, meaning something else here' }
+
+  assert.deepEqual(restatementsIn([EXPORTER, A_SECOND_HOLDER], { judged: everyLine(A_SECOND_HOLDER), defined: ADDS_A_SECOND_HOLDER, exceptions: [newFileExcused] }), [])
+})
+
+test('a move is unchanged: the constant leaves one module for another, and nothing is named', () => {
+  const movedTo = source('a_new/a_new.ts', "export const TOOL = 'the-tool'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'the-tool', module: 'a_new/a_new.ts', name: 'TOOL' }, { value: 'the-tool', module: 'a_tool/a_tool.ts', name: 'TOOL' }]
+
+  assert.deepEqual(restatementsIn([movedTo], { judged: everyLine(movedTo), defined }), [])
+})

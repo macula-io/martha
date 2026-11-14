@@ -3,6 +3,7 @@ import { test } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import {
   OWNER_AT_THE_TERMINAL,
   refuseExecutionAfterUngatedText,
@@ -33,7 +34,7 @@ const store = (): SessionRecordStore => {
 }
 
 const shellAllowed = (session: { gate: Session }) =>
-  refuseExecutionAfterUngatedText({ tool: 'Bash', session: session.gate, policy }).allow
+  refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: session.gate, policy }).allow
 
 // --- the seam and the registry agree, derived rather than listed --------------
 
