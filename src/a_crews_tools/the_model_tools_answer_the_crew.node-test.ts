@@ -171,6 +171,18 @@ test('#315: the switch is answered as one model order, and the next question car
   assert.notEqual((await theOrderTheModGets(crew)).carry, CARRY_A_MODEL, 'the same switch was handed over twice')
 })
 
+test('#311: a beat taken while the turn runs carries no model order and leaves the switch for the turn\'s end (mutant: ask for a switch on every empty order)', async () => {
+  const crew = await aCrewOfTools()
+  await switched(crew.tools)
+  crew.aTurnLater()
+  const beat = await crew.tools.answer(THE_REFRESH_ASK, { ...questionOf('the-running-turn'), turn_running: 1 }, 'a-session')
+  assert.ok('answer' in beat, `the flow refused the beat: ${'refused' in beat ? beat.refused : ''}`)
+  assert.notEqual((JSON.parse(beat.answer) as Record<string, unknown>)['carry'], CARRY_A_MODEL, 'a model switch was ordered inside a running turn')
+  const record = theRecordOf(crew.crew)
+  assert.equal(record.kind === 'switched' ? record.marker.directed : null, false, 'the beat spent the switch, so the turn\'s end has none to order')
+  assert.deepEqual(await theOrderTheModGets(crew), { carry: CARRY_A_MODEL, model: THE_REVIEWER_MODEL }, 'the switch was not ordered at the turn\'s end')
+})
+
 test('#315: a member that parks is brought home on the next turn\'s order (mutant: the park trigger removed)', async () => {
   const crew = await aCrewOfTools()
   await switched(crew.tools)

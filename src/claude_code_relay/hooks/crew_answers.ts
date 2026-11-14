@@ -19,6 +19,7 @@ export type TheOrder =
   | { readonly carry: 'submit'; readonly text: string }
   | { readonly carry: 'clear' }
   | { readonly carry: 'model'; readonly model: string }
+  | { readonly carry: 'end_the_turn'; readonly turn_id: string }
   | { readonly carry: 'none' }
 
 /**
@@ -29,6 +30,7 @@ export type TheOrder =
 const CARRY_A_TEXT = 'submit'
 const CARRY_THE_CLEAR = 'clear'
 const CARRY_A_MODEL = 'model'
+const CARRY_THE_END = 'end_the_turn'
 
 /**
  * The two acts a model switch is made of, as the mod holds them (martha#315): the host's own command, and the report
@@ -57,7 +59,8 @@ export async function switchTheModelOnTheHost(host: TheModelSwitchHost, model: s
   await host.noteTheModel(model)
 }
 
-/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */export interface ThePaneShown {
+/** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
+export interface ThePaneShown {
   readonly header: string
   readonly lines: readonly string[]
   readonly open_at_start: boolean
@@ -77,7 +80,7 @@ export const PANE_CHROME_ROWS = 3
 /** The order the launcher's answer carries, or null when it is not one this mod knows. */
 export function orderIn(said: string): TheOrder | null {
   try {
-    const parsed = JSON.parse(said) as { readonly carry?: unknown; readonly text?: unknown; readonly model?: unknown }
+    const parsed = JSON.parse(said) as AnOrderOnTheWire
     return orderOf(parsed)
   } catch {
     return null
@@ -85,12 +88,23 @@ export function orderIn(said: string): TheOrder | null {
 }
 
 /** One order, read field by field: the words it carries its act under, and the one field that act needs. */
-function orderOf(parsed: { readonly carry?: unknown; readonly text?: unknown; readonly model?: unknown }): TheOrder | null {
+type AnOrderOnTheWire = { readonly carry?: unknown; readonly text?: unknown; readonly model?: unknown; readonly turn_id?: unknown }
+
+/**
+ * The one field each order that needs one carries: a text submits its text, a model order names the model, and an end
+ * names the turn it ends (martha#311). An order missing its field is not one this mod can carry out.
+ */
+const THE_FIELD_AN_ORDER_NEEDS = new Map<unknown, 'text' | 'model' | 'turn_id'>([
+  [CARRY_A_TEXT, 'text'],
+  [CARRY_A_MODEL, 'model'],
+  [CARRY_THE_END, 'turn_id'],
+])
+
+function orderOf(parsed: AnOrderOnTheWire): TheOrder | null {
   if (parsed.carry === CARRY_THE_CLEAR || parsed.carry === 'none') return { carry: parsed.carry }
-  if (parsed.carry === CARRY_A_TEXT && typeof parsed.text === 'string' && parsed.text !== '') return { carry: CARRY_A_TEXT, text: parsed.text }
-  // A model order names the model it switches to; one that names none is not an order this mod can carry out.
-  if (parsed.carry === CARRY_A_MODEL && typeof parsed.model === 'string' && parsed.model !== '') return { carry: CARRY_A_MODEL, model: parsed.model }
-  return null
+  const field = THE_FIELD_AN_ORDER_NEEDS.get(parsed.carry)
+  const value = field === undefined ? undefined : parsed[field]
+  return field !== undefined && typeof value === 'string' && value !== '' ? ({ carry: parsed.carry, [field]: value } as TheOrder) : null
 }
 
 /** What the pane draws, from the answer the launcher gives, or null when the answer is not one it can draw. */
@@ -107,40 +121,30 @@ export function paneIn(said: string): ThePaneShown | null {
 
 /**
  * The owner's to-do list as the pane draws it (martha#316): the launcher's `TodoPane` in
- * ../../keep_the_owners_todo_list, which this copy cannot import. Only the focused row is revealed, and only a
- * revealed row carries the text a copy puts on the clipboard; ./crew_answers.node-test.ts holds the two shapes together.
+ * ../../keep_the_owners_todo_list, which this copy cannot import. The launcher decides how every line reads (martha#311)
+ * and the pane draws them as they come; only the revealed row carries the text a copy puts on the clipboard, and
+ * ./crew_answers.node-test.ts holds the two shapes together.
  */
 export interface TheOwnersListShown {
   readonly heading: string
   readonly claim: string
   readonly focus: string
   readonly next: string
-  readonly rows: readonly TheOwnersRowShown[]
-  /** The Supervisor's standing items under the list (martha#317): a heading and one line each, or none. */
-  readonly standing: readonly string[]
+  /** Every line under the claim, the Supervisor's standing items last (martha#317): its words, how it is set, or the copy. */
+  readonly drawn: readonly { readonly text: string; readonly bold: boolean; readonly dim: boolean; readonly copy: boolean }[]
+  readonly copy: string
   readonly lines: number
 }
 
-/** One row of the owner's list as the pane draws it. */
-export interface TheOwnersRowShown {
-  readonly id: string
-  readonly heading: string
-  readonly goal: string
-  readonly revealed: boolean
-  readonly acts: readonly { readonly does: string; readonly line: string }[]
-  readonly copy: string
-}
-
-/** Whether the standing part of an answer is lines the pane can draw (martha#317). */
-const areLines = (standing: unknown): standing is readonly string[] => Array.isArray(standing) && standing.every((line) => typeof line === 'string')
+/** Whether the drawn part of an answer is lines the pane can draw. */
+const areLines = (drawn: unknown): drawn is TheOwnersListShown['drawn'] => Array.isArray(drawn) && drawn.every((line: { text?: unknown } | null) => typeof line?.text === 'string')
 
 /** The owner's list from the launcher's answer, or null when it is not one the pane can draw. */
 export function theOwnersListIn(said: string): TheOwnersListShown | null {
   try {
-    const parsed = JSON.parse(said) as Partial<TheOwnersListShown>
-    const { heading, claim, focus, next, rows, standing, lines } = parsed
-    if (typeof heading !== 'string' || typeof claim !== 'string' || typeof focus !== 'string' || typeof next !== 'string' || !areLines(standing)) return null
-    return Array.isArray(rows) && typeof lines === 'number' ? { heading, claim, focus, next, rows, standing, lines } : null
+    const { heading, claim, focus, next, drawn, copy, lines } = JSON.parse(said) as Partial<TheOwnersListShown>
+    if (typeof heading !== 'string' || typeof claim !== 'string' || typeof focus !== 'string' || typeof next !== 'string' || typeof copy !== 'string') return null
+    return areLines(drawn) && typeof lines === 'number' ? { heading, claim, focus, next, drawn, copy, lines } : null
   } catch {
     return null
   }
