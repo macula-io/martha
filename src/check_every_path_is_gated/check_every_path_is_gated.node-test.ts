@@ -18,7 +18,7 @@ import {
   startFreshSession,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshAnswerShapes, gapsInMeshTools, gapsInPromptOrigins, gapsInRingResultKeys, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -444,10 +444,10 @@ test('a planted session event the declaration does not list turns the check red,
 })
 
 test('a declared session event the host stops emitting turns the check red, by name', () => {
-  const emitted = EMITTED.filter((event) => event !== CREW_REFRESH)
+  const emitted = EMITTED.filter((event) => event !== THE_REFRESH_THE_MOD_RUNS)
   const gaps = gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, emitted)
   assert.equal(gaps.length, 1)
-  assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+  assert.match(gaps[0]?.path ?? '', new RegExp(THE_REFRESH_THE_MOD_RUNS))
 })
 
 const STAMPED = Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources)

@@ -20,14 +20,14 @@ import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_che
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { readLedger, REFRESH_FORCED, type ActAnnouncedRow, type ActConcludedRow, type LedgerRow } from '../log_ledger/log_ledger.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { OWNER_DIALOGS_FIELD } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { A_TOOL_WAS_STILL_RUNNING, CARRY_THE_END, THE_TURN_ENDED } from '../end_a_running_turn/end_the_running_turn.ts'
 import { A_TOOL_WHILE_THE_END_IS_HELD } from '../end_a_running_turn/hold_the_end.ts'
-import { CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { FORCED_ENDS } from '../end_a_running_turn/end_a_running_turn.ts'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
@@ -116,7 +116,7 @@ async function aMemberHandingOver(options: ACrewOptions) {
     /** The member writes its handover, naming what it holds. */
     writesItsHandover: async () => {
       const written = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: `first rules; what runs; ${options.holds ?? 'no package'}` }, SESSION)
-      assert.deepEqual(written, { answer: CREW_HANDOVER_WRITTEN }, 'the handover could not be written')
+      assert.deepEqual(written, { answer: THE_HANDOVER_WRITTEN }, 'the handover could not be written')
     },
     flow: (): ARefresh => {
       const read = theFlowOf(place, MEMBER)
@@ -166,7 +166,7 @@ test('#311: ceiling 40, the end ordered at minute 40 ends its turn at 41, the ha
   assert.equal(member.flow().phase, 'handing_over', 'the ended turn\'s own end abandoned the flow the end was for')
   assert.deepEqual([member.flow().forced?.ends, member.flow().at], [1, member.minute(41)], 'the end did not count once, from the turn\'s end')
   await member.writesItsHandover()
-  assert.deepEqual(await member.turnEnded(45, CREW_HANDOVER_WRITTEN, 'the-handover-turn'), { carry: CARRY_THE_CLEAR }, 'a handover written after the end did not clear')
+  assert.deepEqual(await member.turnEnded(45, THE_HANDOVER_WRITTEN, 'the-handover-turn'), { carry: CARRY_THE_CLEAR }, 'a handover written after the end did not clear')
 })
 
 test('#311 placement ruling: a subagent\'s turn ending neither concludes the end nor drops its hold (mutant: drop on any turn end)', async () => {
@@ -193,7 +193,7 @@ test('#311 ruling D: an end due while a tool runs is held, rides on that tool\'s
 test('#311: a handover written after the window passed, with no end at all, is still judged (mutant: judge the stall before the answer)', async () => {
   const member = await aMemberHandingOver({ ceiling_minutes: 60 })
   await member.writesItsHandover()
-  assert.deepEqual(await member.turnEnded(45, CREW_HANDOVER_WRITTEN), { carry: CARRY_THE_CLEAR }, 'the window threw away a handover that was written')
+  assert.deepEqual(await member.turnEnded(45, THE_HANDOVER_WRITTEN), { carry: CARRY_THE_CLEAR }, 'the window threw away a handover that was written')
 })
 
 test('#311: a new session while an end is pending drops it and judges the stall from the ask', async () => {
@@ -231,7 +231,7 @@ test('#311: an end whose outcome never arrives stays open, and the successor is 
   assert.deepEqual(await member.beat(10), theEndOf(THE_TURN))
   // The launcher dies here: no outcome is ever reported. The handover runs anyway, and the session is cleared.
   await member.writesItsHandover()
-  assert.deepEqual(await member.turnEnded(11, CREW_HANDOVER_WRITTEN, 'the-handover-turn'), { carry: CARRY_THE_CLEAR })
+  assert.deepEqual(await member.turnEnded(11, THE_HANDOVER_WRITTEN, 'the-handover-turn'), { carry: CARRY_THE_CLEAR })
   const resumed = await member.opens(12, SUCCESSOR)
   assert.equal(resumed['carry'], CARRY_A_TEXT, 'the successor was not resumed')
   assert.ok(String(resumed['text']).includes(REFRESH_FORCED), `the successor's resume prompt does not name the end left open: ${String(resumed['text'])}`)

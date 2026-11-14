@@ -13,6 +13,7 @@ import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -77,6 +78,8 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: REFRESH_THIS_SESSION, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   // The Supervisor's who-is-free tool (martha#319): the same reason, one more tool the mod answers by a literal.
   { value: WHO_IS_FREE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
+  // The progress tool, under Martha's own name since #468: the mod answers it by a literal, for the same reason.
+  { value: REPORT_WHERE_THE_WORK_STANDS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },
   // The owner's to-do list (martha#316): the mod answers its two tools by literal, as above, and asks the launcher for
   // the list under a name held by literal for the reason the refresh ask is.
   { value: OWNER_TODO_ADD, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE },

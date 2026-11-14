@@ -4,7 +4,7 @@
 // A `/clear` the mod ran starts a new session id, and the host reports that start as a `clear` — declared `fresh`. On
 // its own that is a wipe: the successor would read a handover written by a tainted predecessor with an empty record, and
 // the taint would be laundered by the crew's own rhythm. So while the crew's flow is clearing, the first event that
-// names the new session makes it a `crew_refresh` with the recorded predecessor, and a later `clear` start for a
+// names the new session makes it a `martha_refresh` with the recorded predecessor, and a later `clear` start for a
 // session already made leaves it alone.
 
 import assert from 'node:assert/strict'

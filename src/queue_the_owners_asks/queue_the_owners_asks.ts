@@ -1,8 +1,8 @@
 // The owner's ask queue (martha#313, the queue half).
 //
 // This exists so a routine yes/no ask from a member reaches the owner as one batch instead of one interruption each:
-// `queue_ask` puts a question in the queue, `list_asks` only looks, `take_asks` claims every waiting ask as one batch
-// for a single multi-select menu, and `settle_asks` takes that batch off once the owner has answered it.
+// `ask_the_owner` puts a question in the queue, `see_the_owners_asks` only looks, `take_the_owners_asks` claims every waiting ask as one batch
+// for a single multi-select menu, and `settle_the_owners_asks` takes that batch off once the owner has answered it.
 //
 // Nothing is moved on disk. The queue is an append-only stream in the crew's row streams (martha#254 R1): an ask is one
 // row, a take another, a settle a third, and what waits is the fold of the three. An ask's id, and a batch's, is the
@@ -28,7 +28,7 @@
 // the ordinary way to get one is a member who asked and was then renamed or removed from the declaration.
 //
 // An ask that would delete a branch carries the tips the yes covers (martha#391, ../read_the_tips_a_removal_covers):
-// the launcher reads both copies, the row keeps them, and the line `take_asks` and `list_asks` show names them, so the
+// the launcher reads both copies, the row keeps them, and the line `take_the_owners_asks` and `see_the_owners_asks` show names them, so the
 // one menu the ask reaches offers every tip the deletion removes. The branch is held to the question's own rule on its
 // way in and on its way out, because it reaches the same menu.
 
@@ -53,16 +53,16 @@ export const ASKS_TAKEN = 'asks_taken'
 export const ASKS_SETTLED = 'asks_settled'
 
 /** The tool a member queues a routine ask with. */
-export const QUEUE_ASK = 'queue_ask'
+export const QUEUE_ASK = 'ask_the_owner'
 
 /** The tool that shows what waits, and takes nothing. */
-export const LIST_ASKS = 'list_asks'
+export const LIST_ASKS = 'see_the_owners_asks'
 
 /** The tool that claims every waiting ask for one menu. */
-export const TAKE_ASKS = 'take_asks'
+export const TAKE_ASKS = 'take_the_owners_asks'
 
 /** The tool that takes a claimed batch off, once the owner answered it. */
-export const SETTLE_ASKS = 'settle_asks'
+export const SETTLE_ASKS = 'settle_the_owners_asks'
 
 /**
  * How long a taken batch holds its asks before they wait again: half an hour, named here and nowhere else, and quoted
@@ -76,22 +76,22 @@ export const MAX_ASK = 300
 /** The claim window as the words that quote it. */
 export const THE_WINDOW = `${String(ASK_CLAIM_MS / MINUTE_MS)} minutes`
 
-/** What `queue_ask` says it is for: one routine ask, queued, and never a menu of its own. */
+/** What `ask_the_owner` says it is for: one routine ask, queued, and never a menu of its own. */
 export const QUEUE_ASK_DESCRIPTION =
   'Queue a routine yes/no ask for the owner instead of opening a menu for it. The session that offers asks hands them over ' +
   "in one menu. Never queue part of a change: a change's asks go in one menu. An ask that would delete a branch names " +
   'repo and branch too, so the ask records every tip the yes removes and the owner is not asked twice. The answer is ' +
   'queued, how many wait, and to carry on.'
 
-/** What `list_asks` says it is for: it only looks. */
+/** What `see_the_owners_asks` says it is for: it only looks. */
 export const LIST_ASKS_DESCRIPTION = 'List the asks waiting for the owner, oldest first. It only looks: nothing is taken and nothing is offered.'
 
-/** What `take_asks` says it is for: one batch, one menu, and the window that puts it back. */
+/** What `take_the_owners_asks` says it is for: one batch, one menu, and the window that puts it back. */
 export const TAKE_ASKS_DESCRIPTION =
   "Take every ask waiting for the owner, oldest first, as one batch to offer in a single multi-select menu. Each ask's id " +
   `goes into its menu option. A batch not settled within ${THE_WINDOW} puts its asks back in the queue.`
 
-/** What `settle_asks` says it is for: the batch off, with what the owner ticked. */
+/** What `settle_the_owners_asks` says it is for: the batch off, with what the owner ticked. */
 export const SETTLE_ASKS_DESCRIPTION =
   "Take a batch off the owner's ask queue once the owner has answered it, with the ids they ticked. Refused unless a menu " +
   `closed in this session since the batch was taken, and a settle after ${THE_WINDOW} still removes them.`
@@ -296,7 +296,7 @@ const theLineOf = (ask: AnAsk): string =>
   `- ${String(ask.id)} (from ${ask.asked_by}): ${ask.question}${ask.removes === undefined ? '' : ` ${theTipsItRemoves(ask.removes)}`}`
 
 /**
- * `queue_ask`: the ask kept against the member the launcher started, never a name the call chose. The answer says how
+ * `ask_the_owner`: the ask kept against the member the launcher started, never a name the call chose. The answer says how
  * many wait and tells the member to carry on, because opening a menu for it is what the queue exists to avoid.
  *
  * `removes` is the branch an ask would delete and the tip each copy of it stands at, read by the launcher
@@ -331,7 +331,7 @@ export async function queueAnAsk(
   return { told: `Queued for the owner; ${String(waiting)} ${waiting === 1 ? 'ask' : 'asks'} waiting.${both} Do not open a menu for it; carry on.` }
 }
 
-/** `list_asks`: every ask waiting, oldest first, and nothing taken. */
+/** `see_the_owners_asks`: every ask waiting, oldest first, and nothing taken. */
 export async function listTheAsks(host: LedgerHost): Promise<AskAnswer> {
   const now = host.clock.now()
   const { waiting, claim } = theQueueIn(await host.stores.rows.read(OWNER_ASKS_STREAM), now)
@@ -341,14 +341,14 @@ export async function listTheAsks(host: LedgerHost): Promise<AskAnswer> {
   return { told: [...offered, ...listed].join('\n') }
 }
 
-/** The line `list_asks` says of a batch the owner is looking at: it is taken, and how many asks it holds. */
+/** The line `see_the_owners_asks` says of a batch the owner is looking at: it is taken, and how many asks it holds. */
 const withTheOwner = (claim: ABatch): string =>
   `Batch ${String(claim.id)} is taken and not settled: ${String(claim.asks.length)} ask(s) are with the owner.`
 
 /**
- * `take_asks`: every waiting ask this crew still declares claimed as one batch, or why nothing was. A batch already
+ * `take_the_owners_asks`: every waiting ask this crew still declares claimed as one batch, or why nothing was. A batch already
  * taken inside its window is refused — the owner is still looking at it — and every ask is admitted by the queue's own
- * gate before any of it is handed over, so a row nobody wrote through `queue_ask` is never in a menu. An ask the gate
+ * gate before any of it is handed over, so a row nobody wrote through `ask_the_owner` is never in a menu. An ask the gate
  * refuses is skipped and named in the answer rather than stopping the take: the ordinary way to get one is a member who
  * asked and was then renamed or removed from the declaration, and one such ask must not hold up everyone else's.
  */
@@ -387,7 +387,7 @@ function theHeldBatch(queue: TheQueue, now: number): string | undefined {
   )
 }
 
-/** What `take_asks` answers: one batch, each ask with its id for a menu option, and how to settle it. */
+/** What `take_the_owners_asks` answers: one batch, each ask with its id for a menu option, and how to settle it. */
 function theBatchOffered(waiting: readonly AnAsk[], batch: number, skipped: readonly AnAsk[], members: readonly string[]): string {
   const one = waiting.length === 1
   return [
@@ -412,7 +412,7 @@ function theSkipsOffered(skipped: readonly AnAsk[], members: readonly string[]):
 /** The batch a call names, or why it is not one this queue may settle: an id it never took, or one a settle already names. */
 function theBatchACallNames(args: Readonly<Record<string, unknown>>, stored: readonly StoredRow[]): { readonly batch: ABatch } | { readonly refused: string } {
   const batch = args['batch']
-  if (!isPosition(batch)) return { refused: 'batch is the id take_asks answered, as a whole number' }
+  if (!isPosition(batch)) return { refused: 'batch is the id take_the_owners_asks answered, as a whole number' }
   const rows = theRowsIn(stored)
   const held = rows.batches.find((one) => one.id === batch)
   if (held === undefined) return { refused: `batch ${String(batch)} is not a batch this queue took` }
@@ -431,7 +431,7 @@ function theTickedIn(args: Readonly<Record<string, unknown>>, claim: ABatch): re
 }
 
 /**
- * `settle_asks`: the batch off, with what the owner ticked, and the rest waiting again. Refused unless a menu closed in
+ * `settle_the_owners_asks`: the batch off, with what the owner ticked, and the rest waiting again. Refused unless a menu closed in
  * the session that took the batch since it took it, and refused for a session the table does not let settle.
  */
 export async function settleTheAsks(
@@ -458,12 +458,12 @@ export async function settleTheAsks(
 /** Why no menu closed since the batch was taken, or undefined when one did: the one thing a settle stands on. */
 function noMenuClosed(menus: TheOwnersMenus | undefined, batch: ABatch): string | undefined {
   if (menus === undefined) {
-    return `settle_asks is refused: this launch keeps no record of menus, so nothing shows batch ${String(batch.id)} was ever offered.`
+    return `settle_the_owners_asks is refused: this launch keeps no record of menus, so nothing shows batch ${String(batch.id)} was ever offered.`
   }
   const closed = menus.closedAt(batch.session)
   if (closed !== null && closed > batch.at) return undefined
   return (
-    `settle_asks is refused: no menu has closed in the session that took batch ${String(batch.id)} since it was taken, so ` +
+    `settle_the_owners_asks is refused: no menu has closed in the session that took batch ${String(batch.id)} since it was taken, so ` +
     'nobody has offered it to the owner. Offer the batch as one menu, then settle it.'
   )
 }

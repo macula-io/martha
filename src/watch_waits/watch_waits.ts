@@ -20,7 +20,7 @@
 
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { BUSY, lastSaidAt, type Nudge, type NudgeInput, type ReviewWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** One wait: `from` waits on `to` for `what`, since `since`. */

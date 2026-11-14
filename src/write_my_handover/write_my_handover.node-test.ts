@@ -24,7 +24,7 @@ import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take
 import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import {
   HANDOVERS_PLACE,
-  CREW_HANDOVER_WRITTEN,
+  THE_HANDOVER_WRITTEN,
   handoversPlace,
   theHandoverFile,
   theHandoverPrompt,
@@ -83,7 +83,7 @@ test('#255: the host writes the handover at the path it chose, whole, and stamps
 
   const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps, session: predecessor })
 
-  assert.equal(said, CREW_HANDOVER_WRITTEN, 'the answer a member reads is the one word the flow waits for')
+  assert.equal(said, THE_HANDOVER_WRITTEN, 'the answer a member reads is the one word the flow waits for')
   const file = theHandoverFile(MEMBER, AT)
   assert.equal(file, `MARTHA_HANDOVER_${THE_DAY}_${MEMBER}.md`, 'the handover file is named for the day and the member, and by nothing the member chose')
   const written = join(thePlace(host), file)
@@ -137,7 +137,7 @@ test('#255: the stamp carries the moment the handover is named for, never the cl
 
   const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: longAgo, stamps, session })
 
-  assert.equal(said, CREW_HANDOVER_WRITTEN)
+  assert.equal(said, THE_HANDOVER_WRITTEN)
   const file = theHandoverFile(MEMBER, longAgo)
   assert.equal(file, 'MARTHA_HANDOVER_2001-02-03_builder.md', 'the file is not named for the day it is stamped for')
   assert.equal(
@@ -221,13 +221,13 @@ test('#255: a handover missing the line of a package the row holds is sent back 
 test('#255: the send-back note names what was missing and the word to answer with', () => {
   const note = theSendBackNote(['no line naming synthetic-owner/repo#7'])
   assert.ok(note.includes('no line naming synthetic-owner/repo#7'), 'the note does not say what was missing')
-  assert.ok(note.includes(CREW_HANDOVER_WRITTEN), 'the note does not say which word to answer with')
+  assert.ok(note.includes(THE_HANDOVER_WRITTEN), 'the note does not say which word to answer with')
 })
 
 test('#255: the handover prompt names the limit and the tool, and asks for the word', () => {
   const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2 })
   assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
   assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
-  assert.ok(atTheLimit.includes(CREW_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
+  assert.ok(atTheLimit.includes(THE_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
   assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30 }).includes('handover limit'), 'a task’s end reads as the limit')
 })

@@ -21,10 +21,10 @@ import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
-export const CREW_HANDOVER_WRITTEN = 'MARTHA-HANDOVER-WRITTEN'
+export const THE_HANDOVER_WRITTEN = 'MARTHA-HANDOVER-WRITTEN'
 
 /** The word a member answers a handover ask it may not take, with one line saying which ground it gives. */
-export const CREW_REFRESH_DECLINED = 'MARTHA-REFRESH-DECLINED'
+export const THE_REFRESH_DECLINED = 'MARTHA-REFRESH-DECLINED'
 
 /**
  * The tool a member calls to hand over (martha#255): the name the launcher registers and the mod answers. Spelled
@@ -81,7 +81,7 @@ export function writeMyHandover(host: HandingOverHost, handing: HandingOver): st
   )
   // A file no stamp was kept for is nobody's handover, so nothing will be cleared or woken from it; the member is told
   // rather than shown the word, and the next handover replaces the file rather than leaving two to choose between.
-  return unstamped ?? CREW_HANDOVER_WRITTEN
+  return unstamped ?? THE_HANDOVER_WRITTEN
 }
 
 /** What a member's own tool call is answered over: the host's store, the host's stamps, and the session it came from. */
@@ -144,10 +144,10 @@ export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly
   const grounds = asking.at_limit ? `Only if ${THE_LIMIT_GROUND},` : `If ${DECLINE_GROUNDS.join('; ')},`
   return [
     ...first,
-    `${grounds} answer exactly ${CREW_REFRESH_DECLINED} and one line saying which ground it is.`,
+    `${grounds} answer exactly ${THE_REFRESH_DECLINED} and one line saying which ground it is.`,
     `Otherwise write your handover with the ${WRITE_MY_HANDOVER_TOOL} tool, in the shape the practice gives: first rules;`,
     'what runs; open items in order; pending decisions; gotchas; and one line for each package your row says you hold,',
-    `carrying its branch and tip sha or "nothing committed". Then answer exactly ${CREW_HANDOVER_WRITTEN}.`,
+    `carrying its branch and tip sha or "nothing committed". Then answer exactly ${THE_HANDOVER_WRITTEN}.`,
   ].join(' ')
 }
 
@@ -155,7 +155,7 @@ export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly
 export function theSendBackNote(missing: readonly string[]): string {
   return (
     `Your handover is not accepted yet: ${missing.join('; ')}. Write it again with the ${WRITE_MY_HANDOVER_TOOL} tool, ` +
-    `then answer exactly ${CREW_HANDOVER_WRITTEN}.`
+    `then answer exactly ${THE_HANDOVER_WRITTEN}.`
   )
 }
 

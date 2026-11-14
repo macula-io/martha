@@ -32,7 +32,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
   CLAUDE_CODE_TOOL_RESULT_ROWS,
@@ -561,14 +561,14 @@ export function handedAtThisStart(crewText: string | undefined, theLine: string 
 
 /**
  * The start the crew's own refresh makes of a session, when this start is the successor's (martha#255): one the crew's
- * flow says it cleared from is started as `crew_refresh` with that predecessor, whatever the host called it. So a
+ * flow says it cleared from is started as `martha_refresh` with that predecessor, whatever the host called it. So a
  * `clear` after a refresh can never wipe the record the successor inherited. A session this launch already holds never
  * reaches here — its start was answered as taken — and one it holds is refused a predecessor by
  * `theRefreshTheSessionInherits`, so the refresh that made it stands.
  */
 async function asTheCrewsRefresh(state: RelayState, reported: SessionStart): Promise<SessionStart> {
   const predecessor = await theRefreshTheSessionInherits(state, reported.session_id)
-  return predecessor === null ? reported : { event: CREW_REFRESH, session_id: reported.session_id, predecessor_id: predecessor }
+  return predecessor === null ? reported : { event: THE_REFRESH_THE_MOD_RUNS, session_id: reported.session_id, predecessor_id: predecessor }
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -592,7 +592,7 @@ async function takeInARefreshedSession(state: RelayState, session_id: string): P
   if (predecessor === null) return undefined
   await state.place.records.load(session_id)
   const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: CREW_REFRESH,
+    event: THE_REFRESH_THE_MOD_RUNS,
     session_id,
     predecessor_id: predecessor,
   })
