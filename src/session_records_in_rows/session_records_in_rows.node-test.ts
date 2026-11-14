@@ -10,10 +10,10 @@ import { test } from 'node:test'
 import { recordDigestOf, releaseStreamOf, releasesIn, type ReleaseMark } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
 import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { recordOf, sessionRecordsIn, SESSION_RECORD_STREAM } from './session_records_in_rows.ts'
+import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from './session_records_in_rows.ts'
 
 const SESSION = 'the-session'
-const STREAM = `${SESSION_RECORD_STREAM}${SESSION}`
+const STREAM = sessionRecordStreamOf(SESSION)
 
 /** Rows kept in memory, one list per stream: the same shape the stores answer with, without a disk. */
 function rowsInMemory(streams: Readonly<Record<string, readonly Row[]>> = {}): RowStore {

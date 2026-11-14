@@ -94,15 +94,36 @@ function entryBlocksOf (e) {
   return body.length && carries ? [head, padded(body)] : [head]
 }
 
-/** @param {{ command?: boolean }} [shape] @returns {TarEntry[]} */
-export const goodEntries = ({ command = true } = {}) => [
+/** The floor a fixture release declares unless a test names another: below every version a test installs. */
+export const LOWEST_FLOOR = '0.0.0'
+
+/**
+ * @typedef {{ command?: boolean, floor?: string | { raw: string } | null, withdrawal?: { version: string, from: string } | { raw: string } }} Shape
+ *   floor: the version its floor.json declares, `{ raw }` for bytes a test writes itself, null for no floor.json;
+ *   withdrawal: the floor-withdrawal.json it carries, if any.
+ */
+
+/** @param {string | { raw: string } | { version: string, from: string }} value @param {(v: any) => object} shape */
+const jsonBody = (value, shape) => (typeof value === 'object' && 'raw' in value ? value.raw : JSON.stringify(shape(value)))
+
+/** @param {Shape} [shape] @returns {TarEntry[]} */
+export const goodEntries = ({ command = true, floor = LOWEST_FLOOR, withdrawal } = {}) => [
   { name: 'martha/', type: '5', mode: 0o755 },
   { name: 'martha/README.md', body: '# Martha\n' },
   { name: 'martha/docs', type: '2', target: 'README.md' },
   ...(command
     ? [{ name: 'martha/bin/', type: '5', mode: 0o755 }, { name: 'martha/bin/martha', body: '#!/bin/sh\necho martha\n', mode: 0o755 }]
-    : [])
+    : []),
+  ...(floor === null ? [] : [{ name: `martha/${NAMES.floorFile}`, body: jsonBody(floor, (v) => ({ floor: v })) }]),
+  ...(withdrawal === undefined ? [] : [{ name: `martha/${NAMES.withdrawalFile}`, body: jsonBody(withdrawal, (v) => v) }])
 ]
+
+/**
+ * The good entries with the floor and the withdrawal a test names, each left at goodEntries' own when not named.
+ * @param {Shape['floor']} floor
+ * @param {Shape['withdrawal']} withdrawal
+ */
+const shapedEntries = (floor, withdrawal) => goodEntries({ ...(floor !== undefined && { floor }), ...(withdrawal && { withdrawal }) })
 
 /** @param {string} text */
 const derUtf8 = (text) => { const b = Buffer.from(text); return Buffer.concat([Buffer.from([0x0c, b.length]), b]) }
@@ -117,10 +138,11 @@ export const oid = (id, text) => ({ oid: { id: id.split('.').map(Number) }, valu
  * A release as the registry serves it. The manifest always names the honest layer: `layerBytes` serves other bytes
  * under its digest (a tampered layer), `layerSize` makes the manifest claim another size, `gzipped` replaces the
  * honest layer outright (a bomb), `mediaType` gives the manifest another type, `padTo` pads the manifest's bytes.
- * @param {{ version?: string, entries?: TarEntry[], layerBytes?: Buffer, layerSize?: number, gzipped?: Buffer, mediaType?: string, padTo?: number }} [shape]
+ * `floor` and `withdrawal` shape the good entries, as goodEntries takes them, when `entries` is not given.
+ * @param {{ version?: string, entries?: TarEntry[], floor?: Shape['floor'], withdrawal?: Shape['withdrawal'], layerBytes?: Buffer, layerSize?: number, gzipped?: Buffer, mediaType?: string, padTo?: number }} [shape]
  * @returns {Release}
  */
-export function release ({ version = '1.2.0', entries = goodEntries(), layerBytes, layerSize, gzipped, mediaType, padTo } = {}) {
+export function release ({ version = '1.2.0', floor, withdrawal, entries = shapedEntries(floor, withdrawal), layerBytes, layerSize, gzipped, mediaType, padTo } = {}) {
   const honest = gzipped ?? gzipSync(tarOf(entries))
   const json = {
     schemaVersion: 2,

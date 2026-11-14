@@ -216,14 +216,19 @@
 <text class="t-desc" x="680" y="1492">one code line over its ceiling, by name;</text>
 <text class="t-desc" x="680" y="1508">check_every_recorded_host_test_is_run</text>
 <text class="t-desc" x="680" y="1524">names a recorded-host case no CI job runs</text>
-<rect class="b-cmp" x="32" y="1554" width="300" height="148" rx="10"/>
+<rect class="b-cmp" x="32" y="1554" width="300" height="228" rx="10"/>
 <text class="t-code" x="48" y="1582">install_the_pinned_installer</text>
 <text class="t-type" x="48" y="1600">[the installer this release pins]</text>
 <text class="t-desc" x="48" y="1624">martha install: reads the pin from the</text>
 <text class="t-desc" x="48" y="1640">running release, fetches exactly that</text>
 <text class="t-desc" x="48" y="1656">installer version through run_the_nodes_</text>
 <text class="t-desc" x="48" y="1672">own_npm_alone, refuses other bytes, and</text>
-<text class="t-desc" x="48" y="1688">runs it with the words unchanged</text>
+<text class="t-desc" x="48" y="1688">runs it with the words unchanged;</text>
+<text class="t-desc" x="48" y="1704">read_the_words_of_martha_install says</text>
+<text class="t-desc" x="48" y="1720">which words it takes, and hold_the_</text>
+<text class="t-desc" x="48" y="1736">launch_to_the_version_floor refuses</text>
+<text class="t-desc" x="48" y="1752">every other act of a release below the</text>
+<text class="t-desc" x="48" y="1768">floor this machine holds (martha#21)</text>
 <rect class="b-cmp" x="348" y="1554" width="300" height="164" rx="10"/>
 <text class="t-code" x="364" y="1582">run_the_nodes_own_npm_alone</text>
 <text class="t-type" x="364" y="1600">[npm, and nothing of the machine's]</text>
