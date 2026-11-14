@@ -29,8 +29,12 @@ const ONE_ACT_MS = 30_000
 /** The folder the committed tree is unpacked into inside its placed release; the locator takes any name. */
 const TREE = 'committed-tree'
 
-/** The committed tree's own command, as a path inside the tree. */
-const COMMAND = join('bin', 'martha')
+/** The committed tree's own command, as a path inside the tree: the one file its bin/ carries. */
+function theCommand(): string {
+  const carried = execFileSync('git', ['ls-files', 'bin'], { cwd: REPOSITORY, encoding: 'utf8' }).split('\n').filter((file) => file !== '')
+  assert.equal(carried.length, 1, `bin/ carries one command: ${carried.join(' ')}`)
+  return carried[0]!
+}
 
 /** The committed tree, placed as a release under `data` (its version is any: the locator reads only the shape). */
 function placedCommittedTree(data: string): string {
@@ -47,7 +51,8 @@ test('below this machine\'s record every act but --version and install is refuse
   t.after(() => removeTheTree(home))
   const tree = placedCommittedTree(join(home, 'data'))
   const env = { PATH: process.env['PATH'] ?? '', HOME: home }
-  const run = (words: readonly string[]) => spawnSync(process.execPath, [join(tree, COMMAND), ...words], { encoding: 'utf8', env, cwd: home, timeout: ONE_ACT_MS })
+  const command = join(tree, theCommand())
+  const run = (words: readonly string[]) => spawnSync(process.execPath, [command, ...words], { encoding: 'utf8', env, cwd: home, timeout: ONE_ACT_MS })
   const record = floorRecordOf(tree)
   assert.ok(record !== undefined, `the placed tree has a record: ${tree}`)
   const asked = run(['--version'])
