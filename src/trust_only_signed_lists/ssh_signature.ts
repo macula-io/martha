@@ -30,7 +30,10 @@ export const SK_ED25519 = 'sk-ssh-ed25519@openssh.com'
 /** Flag bit an authenticator sets when the owner touched it. */
 export const USER_PRESENT = 0x01
 
-const HASHES: Readonly<Record<string, string>> = { sha256: 'sha256', sha512: 'sha512' }
+/** The hash a hardware key signs with, as ssh names it in a signature. */
+export const SSH_SHA512 = 'sha512'
+
+const HASHES: Readonly<Record<string, string>> = { sha256: 'sha256', sha512: SSH_SHA512 }
 
 /** The 12 bytes that turn a raw Ed25519 key into an SPKI DER key node can load. */
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex')

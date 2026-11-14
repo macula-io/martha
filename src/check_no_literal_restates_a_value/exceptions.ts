@@ -163,7 +163,7 @@ const A_ROLE_A_TEST_CREW_DECLARES = 'the role a test crew declares; a role is th
 /** Why each store's glue holds its own staging prefix (#289 part b). */
 const MACHINE_GLUE_HOLDS_ITS_OWN = 'machine glue imports only the host contract and its own files, so each store\'s glue holds its own staging prefix'
 /** Why `'sha512'` is written by literal for an ssh signature (#289 part b). */
-const SSHS_OWN_HASH_NAME = 'ssh\'s own name for the hash a signature uses; the constant of that word names the hash of a recorded tree'
+const SSHS_OWN_HASH_NAME = 'ssh\'s name for the hash a signature uses (SSH_SHA512) and the hash of a recorded tree (TREE_HASH) are two meanings spelled alike, each defined once in its own slice'
 /** Why an ssh key type is written by literal among the public addresses (#289 part b). */
 const A_KEY_TYPE_IS_A_PUBLIC_ADDRESS = 'a key type listed as a public address that posted text may carry; the constant of that word is the type the signature reader accepts'
 /** Why `'.jsonl'` is written by literal where a probe reads the host (#289 part b). */
@@ -358,8 +358,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: REFRESH_FIELD, file: 'refresh_a_member/refresh_a_member.ts', reason: TWO_REFRESH_WORDS },
   { value: CREW_ROWS_PLACE, file: 'claude_code_host/claude_code_host.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
   { value: CREW_ROWS_PLACE, file: 'host_contract/host_contract.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
-  { value: TREE_HASH, file: 'trust_only_signed_lists/sign_like_a_hardware_key.ts', reason: SSHS_OWN_HASH_NAME },
   { value: TREE_HASH, file: 'trust_only_signed_lists/ssh_signature.ts', reason: SSHS_OWN_HASH_NAME },
+  { value: TREE_HASH, file: 'prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts', reason: SSHS_OWN_HASH_NAME },
   { value: SK_ED25519, file: 'check_nothing_private_gets_in/declared.ts', reason: A_KEY_TYPE_IS_A_PUBLIC_ADDRESS },
   { value: SUPERVISOR, file: 'declare_crew/declare_crew.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
   { value: SUPERVISOR, file: 'park_and_wake_a_member/park_and_wake_a_member.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
