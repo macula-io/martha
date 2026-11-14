@@ -9,14 +9,12 @@
 // The file kinds are the other kind: `.json` is a kind of file this check reads and, in another slice, the suffix a
 // journal is kept under — the same letters, two meanings.
 
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { DEPENDENCIES, LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RELAY_JOURNAL_SUFFIX } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { CREW_HANDOVER_WRITTEN, CREW_REFRESH_DECLINED } from '../write_my_handover/write_my_handover.ts'
 
 /** Why the inventory's own words are spelled by the table rather than imported (martha#468). */
@@ -40,21 +38,11 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: LOCK, file: JUDGE, reason: A_NAME_NO_WALK_READS },
   { value: CREW_CODE_DECLARATION_DIRECTORY, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_FILE, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: QUEUE_ASK, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: LIST_ASKS, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: TAKE_ASKS, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: SETTLE_ASKS, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: CREW_REFRESH, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_HANDOVER_WRITTEN, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_REFRESH_DECLINED, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: GATE_AUDIT_PLACE, file: TABLE, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_DIRECTORY, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_CODE_DECLARATION_FILE, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: QUEUE_ASK, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: LIST_ASKS, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: TAKE_ASKS, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: SETTLE_ASKS, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
-  { value: CREW_REFRESH, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_HANDOVER_WRITTEN, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: CREW_REFRESH_DECLINED, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },
   { value: GATE_AUDIT_PLACE, file: EXCEPTIONS, reason: THE_INVENTORY_SPELLS_THE_NAME },

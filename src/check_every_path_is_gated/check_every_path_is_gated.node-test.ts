@@ -447,7 +447,7 @@ test('a declared session event the host stops emitting turns the check red, by n
   const emitted = EMITTED.filter((event) => event !== CREW_REFRESH)
   const gaps = gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, emitted)
   assert.equal(gaps.length, 1)
-  assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+  assert.match(gaps[0]?.path ?? '', new RegExp(CREW_REFRESH))
 })
 
 const STAMPED = Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources)

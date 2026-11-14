@@ -36,6 +36,7 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RELAY_SOCKET_NAME } from './relay_directory.ts'
 import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 
 const MEMBER = 'Pallas'
 const SESSION = 'session-254'
@@ -101,10 +102,10 @@ test('a tool call posted by the mod is answered by the core\'s slice, and the ro
   )
   t.after(() => server.close())
 
-  const mine = await crew.answer('report_progress', { task: 'Build the crew store', step: 2, of: 6, package: 'macula-io/martha#254' }, SESSION)
+  const mine = await crew.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'Build the crew store', step: 2, of: 6, package: 'macula-io/martha#254' }, SESSION)
   assert.ok('answer' in mine, 'the slice answers the report')
 
-  const posted = await post(socket_path, TOOL_ANSWER_PATH, toolCallBody(SESSION, 'report_progress', { task: 'Build the crew store', step: 2, of: 6, package: 'macula-io/martha#254' }))
+  const posted = await post(socket_path, TOOL_ANSWER_PATH, toolCallBody(SESSION, REPORT_WHERE_THE_WORK_STANDS, { task: 'Build the crew store', step: 2, of: 6, package: 'macula-io/martha#254' }))
   assert.equal(posted.status, 200, posted.text)
   assert.deepEqual(JSON.parse(posted.text), mine, 'what the mod posts is answered with the slice\'s own words, unchanged')
 
@@ -118,9 +119,9 @@ test('#380: a beat landing behind the row held is dropped whole, and the row kee
   let now = 1_000
   const crew = toolsIn(place, () => now)
 
-  assert.ok('answer' in (await crew.answer('report_progress', { task: 'the newer report', step: 2, of: 3 }, SESSION)))
+  assert.ok('answer' in (await crew.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the newer report', step: 2, of: 3 }, SESSION)))
   now = 900
-  assert.ok('answer' in (await crew.answer('report_progress', { task: 'a beat landing late', step: 1, of: 3 }, SESSION)))
+  assert.ok('answer' in (await crew.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'a beat landing late', step: 1, of: 3 }, SESSION)))
 
   const row = dashboardRowsIn(place.dashboard).read(MEMBER)
   assert.equal(row?.task, 'the newer report', 'a beat landing late took back the row the newer beat put there')

@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { OFFER_OWNER_ASKS, OWNER } from '../declare_crew/declare_crew.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
@@ -110,7 +110,7 @@ test('an ask with no text is refused, so nothing empty reaches a menu', async ()
   assert.deepEqual(await waitingIn(host), [])
 })
 
-test('list_asks shows what waits and takes nothing', async () => {
+test('see_the_owners_asks shows what waits and takes nothing', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   const told = TOLD(await listTheAsks(host.host))
@@ -135,8 +135,8 @@ test('an ask that removes a branch keeps every tip the yes covers, and names bot
   const [row] = await host.host.stores.rows.read(OWNER_ASKS_STREAM)
   assert.deepEqual(row?.row['removes'], THE_TWO_TIPS, 'both tips are on the row: the yes covers what the ask recorded, and nothing else')
 
-  assert.match(TOLD(await listTheAsks(host.host)), new RegExp(`^- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? ${THE_TIPS_SAID.replace(/[.?]/g, (one) => `\\${one}`)}$`, 'm'), 'list_asks names both tips')
-  assert.match(TOLD(await taking(host, LEAD, 'session-lead')), new RegExp(THE_TIPS_SAID.replace(/[.?]/g, (one) => `\\${one}`)), 'take_asks, which the menu is built from, names both tips')
+  assert.match(TOLD(await listTheAsks(host.host)), new RegExp(`^- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? ${THE_TIPS_SAID.replace(/[.?]/g, (one) => `\\${one}`)}$`, 'm'), 'see_the_owners_asks names both tips')
+  assert.match(TOLD(await taking(host, LEAD, 'session-lead')), new RegExp(THE_TIPS_SAID.replace(/[.?]/g, (one) => `\\${one}`)), 'take_the_owners_asks, which the menu is built from, names both tips')
 })
 
 test('a branch reaches a menu under the question\'s own rule: stripped on the way in, and refused by the gate when it is raw (mutant: the branch gate removed)', async () => {

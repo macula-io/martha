@@ -1,4 +1,5 @@
-// `report_progress`: what a member says about its own work, and what of it is recorded (martha#254).
+// `report_where_the_work_stands`: what a member says about its own work, and what of it is recorded (martha#254,
+// renamed from crew-code's own tool name in martha#468).
 //
 // This exists so a member moves its own row on the owner's dashboard, and so the row says only what the member can
 // honestly say about itself. A report is a member's own word: it is never refused for naming a stranger (a misspelt
@@ -18,6 +19,9 @@
 
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { STATES, type Progress, type State, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+
+/** The name the tool is registered under (martha#468): one act, and not the name of any tool crew-code registers. */
+export const REPORT_WHERE_THE_WORK_STANDS = 'report_where_the_work_stands'
 
 /** The longest a task is kept: the number the tool's own description quotes, and the number its words are cut at. */
 export const TASK_CHARACTERS = 80
@@ -185,7 +189,7 @@ function toldOf(taken: ProgressTaken, notRecorded: string | undefined): string {
 }
 
 /** The tool's own description, which quotes the limit its words are cut at (martha#254 r=1 R2, test 14). */
-export const REPORT_PROGRESS_DESCRIPTION =
+export const REPORT_WHERE_THE_WORK_STANDS_DESCRIPTION =
   `Report progress on your current assigned task to the crew dashboard the owner watches. ` +
   `Call it when you start a task (step 0), after each meaningful step, and once when done (step equal to of). ` +
   `The task is kept to ${TASK_CHARACTERS} characters and a longer one is cut there. ` +

@@ -11,7 +11,7 @@
 import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import type { TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { isAStorm, parkAMember, parkedPlace, theNewestHandover, theParkOf, theStormLine, type AHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'

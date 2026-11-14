@@ -363,7 +363,7 @@ test('on the same session, a turn that only claims the owner\'s typing still tak
   }
 })
 
-test('a fresh start allows the shell; fork and a claimed crew_refresh start lost, whatever the input claims', async (t) => {
+test('a fresh start allows the shell; fork and a claimed martha_refresh start lost, whatever the input claims', async (t) => {
   const { relay, rows } = answering(placeFor(t))
   await relay.answer('session_started', start('startup'))
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)

@@ -325,7 +325,7 @@ test('the adapter opens no transcript, whatever a hook input names', async (t) =
 
 // --- T7: the session events come from the host's own schema -------------------------
 
-test('the emitted session events equal the host schema\'s SessionStart sources plus crew_refresh', () => {
+test('the emitted session events equal the host schema\'s SessionStart sources plus martha_refresh', () => {
   const sources = sessionStartSourcesOf(RECORDED_HOST.session_start_schema)
   assert.ok(sources.includes('fork'), 'the recorded host sends fork')
   assert.deepEqual(CLAUDE_CODE_EMITTED_SESSION_EVENTS, [...sources, CREW_REFRESH])
@@ -526,12 +526,12 @@ test('a case the reader does not know, anywhere in the mapper\'s switch, fails t
 
 // --- T8: a refresh is never claimed ---------------------------------------------------
 
-test('a turn or a hook input that claims crew_refresh or a predecessor id does not change the session\'s record', (t) => {
+test('a turn or a hook input that claims martha_refresh or a predecessor id does not change the session\'s record', (t) => {
   const store = sessions()
   const tainted = takeInTurn(beginSession(store, 'old'), { source: 'web' }, bindNothing)
   store.write('old', tainted.gate)
 
-  // A hook input naming crew_refresh, with a predecessor: no host sends it, so it is no refresh.
+  // A hook input naming martha_refresh, with a predecessor: no host sends it, so it is no refresh.
   const claimed = sessionStartOf({ hook_event_name: 'SessionStart', session_id: 'new', source: CREW_REFRESH, predecessor_id: 'old' })
   assert.equal('predecessor_id' in claimed, false)
   const started = startSession(store, CLAUDE_CODE_SESSION_EVENTS, claimed)

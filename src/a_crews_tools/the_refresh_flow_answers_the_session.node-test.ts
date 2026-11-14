@@ -19,7 +19,7 @@ import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
@@ -123,7 +123,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
     ask: (session, percent, answer = '') => answerWith(session, percent, answer, false),
     report: async (task, step, of) => {
       clock.at += 1_000
-      const answered = await tools.answer('report_progress', { task, step, of }, 'a-session')
+      const answered = await tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task, step, of }, 'a-session')
       assert.ok('answer' in answered, `a report was refused: ${'refused' in answered ? answered.refused : ''}`)
     },
   }

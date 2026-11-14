@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { REPORT_PROGRESS_DESCRIPTION, TASK_CHARACTERS, takeProgress, cutTask, type TheCrew } from './report_progress.ts'
+import { REPORT_WHERE_THE_WORK_STANDS_DESCRIPTION, TASK_CHARACTERS, takeProgress, cutTask, type TheCrew } from './report_where_the_work_stands.ts'
 
 const CREW: TheCrew = { owner: 'raf', members: ['Vesta', 'Uranus'] }
 const NO_WAIT_BEFORE = { waits: null, holds: '' }
@@ -50,7 +50,7 @@ test('a report naming a name nobody on the crew has is recorded, with a warning 
 })
 
 test('the tool description quotes the limit, and a task is cut at exactly that many characters (test 14)', () => {
-  assert.ok(REPORT_PROGRESS_DESCRIPTION.includes(`kept to ${TASK_CHARACTERS} characters`), 'the description quotes the constant, not a number of its own')
+  assert.ok(REPORT_WHERE_THE_WORK_STANDS_DESCRIPTION.includes(`kept to ${TASK_CHARACTERS} characters`), 'the description quotes the constant, not a number of its own')
   const oneWordTooLong = 'x'.repeat(TASK_CHARACTERS + 40)
   assert.equal(cutTask(oneWordTooLong).length, TASK_CHARACTERS, 'words with no space between them are cut at the limit itself')
   assert.equal(cutTask('x'.repeat(TASK_CHARACTERS)).length, TASK_CHARACTERS, 'a task at the limit is kept whole')

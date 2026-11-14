@@ -22,16 +22,26 @@ export type CrewCodeName =
   | { readonly kind: 'runs_on'; readonly text: string; readonly what: string }
   | { readonly kind: 'family'; readonly pattern: RegExp; readonly what: string }
 
+// crew-code's own names for the tools and the refresh word whose names Martha took in #468 (rows 3-8). Each is a
+// literal of this table's own, never the constant of the tool it names: a table built from those would follow a rename
+// silently and could no longer say that the old name came back.
+export const CREW_CODES_PROGRESS_TOOL = 'report_progress'
+export const CREW_CODES_ASK_TOOL = 'queue_ask'
+export const CREW_CODES_LIST_TOOL = 'list_asks'
+export const CREW_CODES_TAKE_TOOL = 'take_asks'
+export const CREW_CODES_SETTLE_TOOL = 'settle_asks'
+export const CREW_CODES_REFRESH_WORD = 'crew_refresh'
+
 /** Every name crew-code gives something, as #468's inventory lists them. */
 export const CREW_CODE_NAMES: readonly CrewCodeName[] = [
   { kind: 'literal', text: '.crew', what: "crew-code's declaration folder" },
   { kind: 'literal', text: 'crew.json', what: "crew-code's declaration file" },
-  { kind: 'literal', text: 'report_progress', what: "crew-code's progress tool" },
-  { kind: 'literal', text: 'queue_ask', what: "crew-code's tool for queueing an ask" },
-  { kind: 'literal', text: 'list_asks', what: "crew-code's tool for listing asks" },
-  { kind: 'literal', text: 'take_asks', what: "crew-code's tool for taking asks" },
-  { kind: 'literal', text: 'settle_asks', what: "crew-code's tool for settling asks" },
-  { kind: 'literal', text: 'crew_refresh', what: "crew-code's tool for refreshing a session" },
+  { kind: 'literal', text: CREW_CODES_PROGRESS_TOOL, what: "crew-code's progress tool" },
+  { kind: 'literal', text: CREW_CODES_ASK_TOOL, what: "crew-code's tool for queueing an ask" },
+  { kind: 'literal', text: CREW_CODES_LIST_TOOL, what: "crew-code's tool for listing asks" },
+  { kind: 'literal', text: CREW_CODES_TAKE_TOOL, what: "crew-code's tool for taking asks" },
+  { kind: 'literal', text: CREW_CODES_SETTLE_TOOL, what: "crew-code's tool for settling asks" },
+  { kind: 'literal', text: CREW_CODES_REFRESH_WORD, what: "crew-code's tool for refreshing a session" },
   { kind: 'literal', text: 'CREW-HANDOVER-WRITTEN', what: "crew-code's handover marker" },
   { kind: 'literal', text: 'CREW-REFRESH-DECLINED', what: "crew-code's declined-refresh marker" },
   { kind: 'literal', text: 'gate_would_refuse', what: "crew-code's folder for what its gate would refuse" },

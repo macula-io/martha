@@ -561,7 +561,7 @@ export function handedAtThisStart(crewText: string | undefined, theLine: string 
 
 /**
  * The start the crew's own refresh makes of a session, when this start is the successor's (martha#255): one the crew's
- * flow says it cleared from is started as `crew_refresh` with that predecessor, whatever the host called it. So a
+ * flow says it cleared from is started as `martha_refresh` with that predecessor, whatever the host called it. So a
  * `clear` after a refresh can never wipe the record the successor inherited. A session this launch already holds never
  * reaches here — its start was answered as taken — and one it holds is refused a predecessor by
  * `theRefreshTheSessionInherits`, so the refresh that made it stands.

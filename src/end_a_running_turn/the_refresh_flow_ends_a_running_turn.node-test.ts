@@ -20,7 +20,7 @@ import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_che
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { readLedger, REFRESH_FORCED, type ActAnnouncedRow, type ActConcludedRow, type LedgerRow } from '../log_ledger/log_ledger.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { OWNER_DIALOGS_FIELD } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
