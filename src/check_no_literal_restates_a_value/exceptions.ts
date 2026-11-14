@@ -27,7 +27,7 @@ import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.t
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, STANDING_ITEMS_SOURCE, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
+import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -96,8 +96,6 @@ const THE_HOST_NAMES_ITS_HOOKS = 'the host\'s plugin validator refuses an on(...
  */
 const THE_HOSTS_OWN_MODEL_FIELD = 'the host\'s own name for the argument that carries a model, in the Agent schema it declares and in the request body it sends: recorded host data, not the word an order carries a model under'
 
-/** Why `model` is written by literal for the dashboard (martha#315): it is the row's own field, read and written by it. */
-const THE_ROWS_MODEL_FIELD = 'the row\'s own field for the model a session runs on, which the dashboard reads back and writes'
 
 /** Why `model` is written by literal for the declaration (martha#315): it is the key a member's own model is declared under. */
 const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'
@@ -119,8 +117,6 @@ const THE_GIT_SUBCOMMAND = 'git\'s own `config` subcommand, in a test that makes
  */
 const THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE = 'a word of its own that the settings key of the owner\'s file is spelled the same as'
 
-/** Why the host contract spells the standing items' source by literal (martha#317): a union member is a type. */
-const A_MEMBER_OF_THE_SOURCE_UNION = 'a member of the TurnSource union, which TypeScript holds by literal; the constant the crew\'s tools name it by is that same member'
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
