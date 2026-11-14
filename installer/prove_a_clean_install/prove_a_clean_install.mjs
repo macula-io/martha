@@ -282,7 +282,7 @@ const fromTheRelease = ({ release }, ...path) => import(join(release, TOP, 'src'
 async function startTheCrew ({ run, work, box, places, installed, plant, running }) {
   const { hostAnswers } = await fromTheRelease(installed, 'drive_the_recorded_host', 'host_stand_in.ts')
   const { newShortRelayRoot } = await fromTheRelease(installed, 'drive_the_recorded_host', 'short_relay_root.ts')
-  const { RELAY_PLUGIN_DIR } = await fromTheRelease(installed, 'launch_a_claude_code_member', 'launch_a_claude_code_member.ts')
+  const { RELAY_PLUGIN_DIR } = await fromTheRelease(installed, 'ask_the_host_what_it_loads', 'what_the_host_loads.ts')
   const { startedLine } = await fromTheRelease(installed, 'run_the_martha_command', 'run_the_martha_command.ts')
   const { RELAY_FILES, RELAY_COPY_NAME } = await fromTheRelease(installed, 'serve_the_relay_to_a_launch', 'relay_copy.ts')
   const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string }> }} */ (await fromTheRelease(installed, 'declare_a_solo_crew', 'declare_a_solo_crew.ts'))
