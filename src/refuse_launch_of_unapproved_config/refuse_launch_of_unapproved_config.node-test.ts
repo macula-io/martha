@@ -873,3 +873,10 @@ test('#306 r=4: the crew text is carried under the name the crew wrote, and no o
     'the crew text the launch carries is keyed by a path the compose never looks up',
   )
 })
+
+// The one place the switch is spelled as Claude Code spells it (martha#289, Uranus's observation on PR 480): every
+// other test imports MCP_CONFIG_SWITCH and so agrees with any spelling of it, and the relay job, which runs the real
+// host, should not be the only thing that notices a misspelt one.
+test('the switch that names the approved servers is spelled as Claude Code reads it', () => {
+  assert.equal(MCP_CONFIG_SWITCH, '--mcp-config')
+})
