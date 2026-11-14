@@ -23,7 +23,7 @@ export type TheOrder =
 
 /**
  * The words an order carries its act under. They are literals because a hooks module imports only its own files, and
- * src/check_no_literal_restates_a_value/exceptions.ts declares each one against the core's constant (martha#255 r=2,
+ * src/claude_code_relay/coincidences.ts declares each one against the core's constant (martha#255 r=2,
  * #315).
  */
 const CARRY_A_TEXT = 'submit'

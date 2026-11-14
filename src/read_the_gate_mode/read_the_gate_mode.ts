@@ -106,7 +106,7 @@ function withoutTheNewFields(
 ): GateSetting | GateRefused {
   if (audited !== undefined) return namedOf([], audited, members)
   // The one upgrade reading: an old file's boolean still declares, and `true` is the owner asking for the gate.
-  // Named by literal, and declared in ../check_no_literal_restates_a_value/exceptions.ts: ../declare_crew imports this
+  // Named by literal, and declared in ./coincidences.ts: ../declare_crew imports this
   // module, so importing its constant back would let it read its own fields before they are initialized.
   return houseRules?.[STRICT_GATE] === true
     ? { kind: 'every-member', mode: 'enforced' }

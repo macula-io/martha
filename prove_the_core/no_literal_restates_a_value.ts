@@ -399,7 +399,7 @@ export function literalSitesJudged(sources: readonly CoreSource[], judged: Reado
  * the list, names its value in its file: a word the rule no longer judges there
  * (a type, a property name, an alias's member) needs no excuse.
  */
-export function exceptionsNotHeld(sources: readonly CoreSource[], exceptions: readonly Exception[]): Exception[] {
+export function exceptionsNotHeld<Entry extends Exception>(sources: readonly CoreSource[], exceptions: readonly Entry[]): Entry[] {
   const excused = new Set(restatementsIn(sources, { judged: null }).map((finding) => `${finding.literal}\u0000${finding.path}`))
   const repeated = (exception: Exception, index: number): boolean =>
     exceptions.findIndex((each) => each.value === exception.value && each.file === exception.file) !== index

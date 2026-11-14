@@ -476,7 +476,7 @@ async function settingsOrNull(places: TheRefreshPlaces): Promise<CrewSettings | 
  * The word an order carries a text under (martha#255): the one the mod answers by submitting it as a prompt.
  *
  * The mod holds no import of the core — the host installs it as a copy of its own folder — so its copy of this word is
- * declared an exception in src/check_no_literal_restates_a_value/exceptions.ts, and a reworded order makes that entry
+ * declared a coincidence in src/claude_code_relay/coincidences.ts, and a reworded order makes that entry
  * stale and the gate red by name (r=2 R1).
  */
 export const CARRY_A_TEXT = 'submit'
