@@ -119,10 +119,11 @@ export interface RelayJournal {
   received(event: RelayEvent, body: unknown): JournalEntry
   /**
    * Something the launcher did on no event of the host's, where a run has nowhere else to read it: what happened, under
-   * `event`'s name, and why. A member not being told is the case this exists for (martha#430): the store refused the
-   * line, so the journal is the only place that says the member's half of it did not happen.
+   * `event`'s name, why, and — when it is about one of the host's calls — the call's own id (martha#430). A member not
+   * being told is the case this exists for: the store refused the line, so the journal is the only place that says the
+   * member's half of it did not happen, and which review's call it was about.
    */
-  noted(event: string, why: string): void
+  noted(event: string, why: string, tool_use_id?: string): void
 }
 
 /** The receipt of one event, answered once. */
@@ -274,7 +275,7 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
   pruneOldJournals(directory)
   keep()
   return {
-    noted: (event, why) => write({ at: isoOf(now()), phase: 'noted', event, why }),
+    noted: (event, why, tool_use_id) => write({ at: isoOf(now()), phase: 'noted', event, why, ...(tool_use_id === undefined ? {} : { tool_use_id }) }),
     received: (event, body) => {
       const at = now()
       const call = callIn(body)

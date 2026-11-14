@@ -163,8 +163,12 @@ export interface MemberRelayPlace {
 export interface TheMembersTelling {
   /** The member's row: the line goes where the owner's dashboard reads what is waiting. */
   theRow(line: string): void
-  /** The member's own session: the line is handed to it as a turn, through the crew's own channel. */
-  theMember(line: string): Promise<void>
+  /**
+   * The member's own session: the line is handed to it as a turn, through the crew's own channel. `call` is the host's
+   * id for the review the line is about, when the line is about one, so a refusal can be written down against it
+   * (martha#430).
+   */
+  theMember(line: string, call?: string): Promise<void>
   /**
    * The line this launcher put in the row leaves it again (martha#390 r=1): the member has taken the matter up, so what
    * needed the owner no longer does. Only this launcher's own line goes — a line another owner wrote stays where it is.

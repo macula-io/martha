@@ -121,8 +121,8 @@ test('the line names the model and repeats the host\'s own words (martha#390)', 
 // --- what the table keeps, and for how long (martha#430) ------------------------------------------------------------------
 
 /** A telling that writes down what it was told, so a case can see the row told and the member told as they happened. */
-function aTellingThatWritesDown(told: string[]): { readonly theRow: (line: string) => void; readonly theMember: (line: string) => Promise<void> } {
-  return { theRow: (line) => void told.push(`row: ${line}`), theMember: async (line) => void told.push(`member: ${line}`) }
+function aTellingThatWritesDown(told: string[]): { readonly theRow: (line: string) => void; readonly theMember: (line: string, call: string) => Promise<void> } {
+  return { theRow: (line) => void told.push(`row: ${line}`), theMember: async (line, call) => void told.push(`member: ${line} (call ${call})`) }
 }
 
 test('the call is forgotten once the line about it is written, so the same stop is not put in the row twice (martha#430)', async () => {
@@ -130,6 +130,8 @@ test('the call is forgotten once the line about it is written, so the same stop 
   const told: string[] = []
   await nameTheFailedReviewIn(spawns, THE_HOSTS_TEXT, READ, aTellingThatWritesDown(told))
   assert.equal(told.length, 2, `the row and the member were not both told: ${JSON.stringify(told)}`)
+  // The review's call goes with the line to the member, so a store that refuses it can be written down against the call.
+  assert.ok(told.at(1)?.endsWith(`(call ${THE_CALLS_ID})`) === true, `the member was not handed the review's call: ${String(told.at(1))}`)
   assert.equal(spawns.theSpawn(THE_CALLS_ID), undefined, 'the review this launcher allowed still stands after its line was written')
 
   // The host repeating the same envelope names nothing now: one stop is one line, not a second one for the same stop.

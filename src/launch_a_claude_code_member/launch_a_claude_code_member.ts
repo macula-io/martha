@@ -838,7 +838,7 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
         return next
       })
     },
-    theMember: (line) =>
+    theMember: (line, call) =>
       appendToTheChannel(
         { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(places.rows) } },
         // The program's own name, and never a member's: the word is spelled here rather than defined as a value, because
@@ -848,8 +848,8 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
       ).then(
         () => undefined,
         // The member's half of the telling did not happen, and the journal is the only place a run can read that it did
-        // not (martha#430).
-        (why: unknown) => places.journal?.noted(A_TELLING_THAT_DID_NOT_REACH, why instanceof Error ? why.message : String(why)),
+        // not (martha#430): the line says which review's call it was about, so a run can put the two halves together.
+        (why: unknown) => places.journal?.noted(A_TELLING_THAT_DID_NOT_REACH, why instanceof Error ? why.message : String(why), call),
       ),
     takeTheLineBack: () => {
       const line = wrote

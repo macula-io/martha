@@ -145,12 +145,15 @@ function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): 
   })
 }
 
+/** The host's own id for the member's review, which a refused telling is written down against (martha#430). */
+const THE_CALLS_ID = 'toolu_the_review'
+
 /** The member's review: the subagent spawn the crew's rule reads as one of its reviews. */
 const theReview = () => ({
   session_id: SESSION,
   call: {
     tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!,
-    tool_use_id: 'toolu_the_review',
+    tool_use_id: THE_CALLS_ID,
     [CLAUDE_CODE_SUBAGENT_SPAWN.type_field]: 'Explore',
     [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch',
   },
@@ -231,15 +234,16 @@ test('#430: a telling the member\'s store refuses is written down in the journal
   const journal = relayJournalKeptIn(journals, 'launch-of-the-test')
   const telling = theMembersTelling({ ...places, rows: blocked, journal })
 
-  await telling.theMember(THE_LINE)
+  await telling.theMember(THE_LINE, THE_CALLS_ID)
 
   const written = readTheNewestRelayJournal(journals).events
   const noted = written.at(-1)
   assert.equal(noted?.phase, 'noted', `the refused telling left no line of its own in the journal: ${JSON.stringify(written)}`)
   assert.equal(noted?.event, A_TELLING_THAT_DID_NOT_REACH, 'the journal line does not say what the launcher could not do')
+  assert.equal(noted?.tool_use_id, THE_CALLS_ID, 'the journal line does not name the review\'s call, so a run cannot put the two halves together')
   assert.ok((noted?.why ?? '') !== '', 'the journal line carries none of the store\'s own words for the refusal')
 
   // The refusal is the member's half only: the member is not told twice, and nothing is thrown at the caller that told it.
-  const again = await telling.theMember(THE_LINE)
+  const again = await telling.theMember(THE_LINE, THE_CALLS_ID)
   assert.equal(again, undefined, 'a refused telling answered with something other than nothing')
 })

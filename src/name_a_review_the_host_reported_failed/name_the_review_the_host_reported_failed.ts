@@ -146,8 +146,11 @@ export const theLineAboutIt = (failed: TheFailedReview): string => `review on ${
 export interface WhereTheFailedReviewIsTold {
   /** The row the owner reads, which says what needs them. */
   readonly theRow: (line: string) => void
-  /** The member's own session, through the crew's channel; a store that refuses it is the telling's to write down. */
-  readonly theMember: (line: string) => Promise<void>
+  /**
+   * The member's own session, through the crew's channel; a store that refuses it is the telling's to write down. The
+   * review's call is handed over so that writing it down can name it (martha#430).
+   */
+  readonly theMember: (line: string, call: string) => Promise<void>
 }
 
 /**
@@ -167,7 +170,7 @@ export async function nameTheFailedReviewIn(
   if (failed === undefined) return
   const line = theLineAboutIt(failed)
   where.theRow(line)
-  await where.theMember(line)
+  await where.theMember(line, failed.tool_use_id)
   spawns.forget(failed.tool_use_id)
 }
 
