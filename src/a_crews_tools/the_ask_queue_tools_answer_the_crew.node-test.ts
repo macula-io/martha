@@ -194,6 +194,8 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
     [REVIEW_MINUTES]: null,
     [PERSON_MINUTES]: null,
   },
+  // Off: these tests ask about the tips a removal covers, and the gate is not theirs (martha#321).
+  gate: { kind: 'off' },
   channel_read_seconds: 30,
 })
 
