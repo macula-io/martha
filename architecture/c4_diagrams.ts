@@ -602,6 +602,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: "npm run probe:launch's rows about the host's auto-memory; the command never loads them",
   },
   {
+    name: 'drive_the_recorded_host',
+    why: 'the harness the recorded-host tests drive: a recorded host stood up with a script, and the waits its runs need; no member ever loads it',
+  },
+  {
     name: 'record_mesh_answers',
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
@@ -686,8 +690,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
       desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] },
-    { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member'], type: '[the launcher]', code: true,
-      desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners, and hand_a_', 'crew_message_to_its_member hands one', 'message at a time and counts it taken', 'in; run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] },
+    { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member', 'answer_the_relay', 'ask_the_host_what_it_loads', 'end_a_launch', 'keep_the_relays_journal', 'place_the_hosts_settings', 'serve_the_relay_to_a_launch', 'start_the_member_on_the_owners_terminal', 'sweep_leftover_launch_directories'], type: '[the launcher]', code: true,
+      desc: ['The launch itself: Martha\'s places, the', 'approved snapshot and the launch record', 'written before the host starts.', 'place_the_hosts_settings settles what the', 'host reads, ask_the_host_what_it_loads', 'proves it loads the relay copy, and', 'serve_the_relay_to_a_launch makes the', 'socket and the copy; answer_the_relay', 'answers the relay\'s events on it,', 'keep_the_relays_journal keeps what the', 'launch did, and end_a_launch starts the', 'host in its own process group and cleans', 'up when it ends. start_the_member_on_', 'the_owners_terminal gives it the owner\'s', 'terminal, sweep_leftover_launch_', 'directories takes a dead launch\'s', 'directories away; raise_a_turn_to_the_', 'member raises each kept turn to its', 'listeners, hand_a_crew_message_to_its_', 'member hands one message at a time and', 'counts it taken in, and run_an_owner_', 'signed_command runs a shape the owner', 'signed on a verified copy, in a sandbox'] },
     { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'judge_a_checkouts_tree', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git', 'empty_directory_of_a_launch'], type: '[the launch gate]', code: true,
       desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; judge_a_checkouts_tree', 'reads and judges a checkout\'s tree;', 'refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries, and', 'empty_directory_of_a_launch the place', 'their hooks are pointed at'] },
   ],
