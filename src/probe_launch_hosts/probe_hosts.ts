@@ -38,7 +38,7 @@ import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_se
 import { printedText } from '../probe_the_owners_own_folders/the_write_the_host_was_refused.ts'
 import { hookSettingsOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { absencesWithoutAHostProof, judgeRow, type RowClaims } from './an_absence_row_proves_the_host_ran.ts'
-import { NO_PLACE, ownerSettingsPath, put, RUN_TIMEOUT_MS, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
+import { NO_PLACE, NO_SWITCHES, ownerSettingsPath, put, RUN_TIMEOUT_MS, turnBudgetsOf, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { PROBES } from '../probe_a_checkouts_own_config/probe_a_checkouts_own_config.ts'
 import {
   HOST_KEY_PROBES,
@@ -55,8 +55,6 @@ function version(command: string): string {
   const run = spawnSync(command, ['--version'], { encoding: 'utf8' })
   return run.error === undefined ? run.stdout.trim().split('\n')[0] ?? '' : `not installed (${run.error.message})`
 }
-
-const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
 
 /** The environment a probe's host inherits: the owner's own config folder when it has one, and no plugin folder from the developer's shell. */
 function environmentOf(probe: Probe, place: Place): Record<string, string | undefined> {
@@ -248,11 +246,7 @@ export const ALL_PROBES: readonly Probe[] = [
  * commands the probe really builds rather than a constant restated beside it (martha#223).
  */
 export function turnBudgets(): readonly { readonly what: string; readonly maxTurns: number | undefined }[] {
-  return ALL_PROBES.map((probe) => {
-    const { args } = probe.command(NO_SWITCHES, NO_PLACE)
-    const at = args.indexOf('--max-turns')
-    return { what: probe.what, maxTurns: at < 0 ? undefined : Number(args[at + 1]) }
-  })
+  return turnBudgetsOf(ALL_PROBES)
 }
 
 /** Everything the run does once its rows exist. A test imports the rows, so none of this may run on import. */

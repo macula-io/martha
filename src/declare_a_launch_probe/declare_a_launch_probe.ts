@@ -131,3 +131,25 @@ export const claude = (...extra: readonly string[]): Command => (switches) => ({
 
 export const OWNER_CONFIG = 'owner-config'
 export const ownerSettingsPath = (place: Place) => join(place.scratch, OWNER_CONFIG, USER_SETTINGS_FILE)
+
+/** The switches of a start by hand, and of reading a row's command without starting it: none. */
+export const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
+
+/** The fewest turns a row may start the model with: one to spend, and one to answer or finish in (martha#223). */
+export const ROOM_TO_FINISH = 2
+
+/**
+ * The turn budget each row starts the model with, by the row's own words, so a test reads the
+ * commands the probe really builds rather than a constant restated beside it (martha#223).
+ */
+export function turnBudgetsOf(rows: readonly Probe[]): readonly { readonly what: string; readonly maxTurns: number | undefined }[] {
+  return rows.map((probe) => {
+    const { args } = probe.command(NO_SWITCHES, NO_PLACE)
+    const at = args.indexOf('--max-turns')
+    return { what: probe.what, maxTurns: at < 0 ? undefined : Number(args[at + 1]) }
+  })
+}
+
+/** The rows among these that start the model with less room than ROOM_TO_FINISH (martha#223). */
+export const rowsWithoutRoomToFinish = (rows: readonly Probe[]) =>
+  turnBudgetsOf(rows).filter((row) => row.maxTurns !== undefined && row.maxTurns < ROOM_TO_FINISH)
