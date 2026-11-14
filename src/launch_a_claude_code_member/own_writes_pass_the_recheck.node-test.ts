@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
 import { openState, ownWritesKeptForLaunch, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -162,7 +162,7 @@ test("a member's own Write of a new file keeps the shell: what it wrote itself i
   const place = checkoutFor(t)
   await started(place)
   assert.deepEqual(await wrote(place, 'hello.txt', 'hello\n'), TAKEN_REPLY)
-  assert.deepEqual(await place.relay.answer('tool_called', call('Bash', { command: 'ls' })), ALLOW_REPLY)
+  assert.deepEqual(await place.relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
   assert.deepEqual(place.stops, [])
 })
 
@@ -223,7 +223,7 @@ test("a Bash call's changes are never own writes: it is stopped, naming the path
   await started(place)
   writeFileSync(join(place.checkout, 'README.md'), 'changed by a command\n')
   const why = MOVED('README.md')
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'echo changed > README.md' })), STOPPING(why))
+  assert.deepEqual(await place.relay.answer('tool_answered', call(CLAUDE_CODE_SHELL_TOOL, { command: 'echo changed > README.md' })), STOPPING(why))
   assert.deepEqual(place.stops, [why])
   assert.deepEqual(allOwnWrites(place.state), { writes: [], unread: [] })
 })
@@ -318,7 +318,7 @@ test('a branch checked out mid-session that drops the config and adds a file sto
   await started(place)
   git(place.checkout, 'checkout', '-q', 'outsider')
   const why = MOVED('planted.sh')
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'git checkout outsider' })), STOPPING(why))
+  assert.deepEqual(await place.relay.answer('tool_answered', call(CLAUDE_CODE_SHELL_TOOL, { command: 'git checkout outsider' })), STOPPING(why))
   assert.deepEqual(place.stops, [why])
 })
 
@@ -330,7 +330,7 @@ test('a checkout git can no longer read mid-session stops the member, even with 
   const why =
     "The checkout no longer matches what the owner approved, and git can no longer read it as a checkout below the owner's home, so the member's own writes cannot be told from anyone else's. " +
     `Run martha approve, read what it shows, and answer yes; then martha start ${MEMBER}.`
-  assert.deepEqual(await place.relay.answer('tool_answered', call('Bash', { command: 'rm -rf .git' })), STOPPING(why))
+  assert.deepEqual(await place.relay.answer('tool_answered', call(CLAUDE_CODE_SHELL_TOOL, { command: 'rm -rf .git' })), STOPPING(why))
 })
 
 test('a file the member deleted passes: removing a file plants nothing', async (t) => {

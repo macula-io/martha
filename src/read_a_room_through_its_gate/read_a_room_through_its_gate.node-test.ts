@@ -26,6 +26,7 @@ import {
 } from './read_a_room_through_its_gate.ts'
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const names = claudeCodeToolNames
 
@@ -73,7 +74,7 @@ const read = (room: ReadableRoom, envelopes: readonly RoomEnvelope[]) =>
   readRoomThroughItsGate({ session: beginSession(store(), 's-1'), room, envelopes, rosters, self_node_id: self })
 
 const executes = (session: ReturnType<typeof read>['session']) =>
-  answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine }) === undefined
+  answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine }) === undefined
 
 // --- the raw reads are refused, under any namespace, tainted or not -----------
 
@@ -133,7 +134,7 @@ test('every mesh tool on the allow-list runs in a clean session', () => {
 })
 
 test('a tool of another server is not judged by the mesh allow-list', () => {
-  for (const tool of ['Read', 'Bash', 'mcp__crew__crew_mail_read', 'mcp__someplugin__read_inbox']) {
+  for (const tool of ['Read', CLAUDE_CODE_SHELL_TOOL, 'mcp__crew__crew_mail_read', 'mcp__someplugin__read_inbox']) {
     assert.equal(isRawMeshRead(tool, {}, names), false, tool)
   }
 })
@@ -188,7 +189,7 @@ test('an allowed mesh_call runs, and once its result is taken in, Bash is refuse
   const tool = 'mcp__macula__mesh_call'
   assert.equal(answerToolCall({ names, tool, session: clean, policy, input: {}, launch, host: thisMachine }), undefined)
   const after = takeInTurn(clean, { source: 'mcp_result' }, bindNothing)
-  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: after, policy, launch, host: thisMachine }), undefined)
+  assert.notEqual(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: after, policy, launch, host: thisMachine }), undefined)
 })
 
 test('a raw read is no longer on the list of tools a tainted session may call', () => {

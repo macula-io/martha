@@ -12,6 +12,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const names = claudeCodeToolNames
 
@@ -71,7 +72,7 @@ const assertRefusedOnOpenCode = (tool: string, { clean, tainted }: BothKinds) =>
 
 test('the tools that widen a member reach are refused in a clean and in a tainted session, under every namespace', () => {
   const sessions = sessionsOfBothKinds()
-  assert.notEqual(answerToolCall({ names, tool: 'Bash', session: sessions.tainted, policy, launch, host: thisMachine }), undefined, 'the session is tainted')
+  assert.notEqual(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: sessions.tainted, policy, launch, host: thisMachine }), undefined, 'the session is tainted')
   for (const prefix of NAMESPACES) {
     for (const own of REQUIRED_REACH_TOOLS) assertRefusedForTheOwner(`${prefix}${own}`, sessions)
   }

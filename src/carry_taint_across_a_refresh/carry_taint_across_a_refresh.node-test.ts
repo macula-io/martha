@@ -23,6 +23,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { releaseMarkFor } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 const names = claudeCodeToolNames
 
@@ -54,7 +55,7 @@ const stampStore = (): HandoverStampStore & { readonly all: Map<string, Handover
   return { all, read: (file) => all.get(file), write: (file, stamp) => void all.set(file, stamp) }
 }
 
-const executes = (session: HostSession) => answerToolCall({ names, tool: 'Bash', session, policy, launch, host: thisMachine }) === undefined
+const executes = (session: HostSession) => answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine }) === undefined
 
 const handover = { file: 'handover-of-a-member.md', content: 'where the work stands' }
 

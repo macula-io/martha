@@ -14,6 +14,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
 import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import {
   binderOverLaunches,
   bindNothing,
@@ -51,7 +52,7 @@ const sessions = (): SessionRecordStore => {
 }
 
 const shellAllowed = (session: { gate: Session }) =>
-  refuseExecutionAfterUngatedText({ tool: 'Bash', session: session.gate, policy }).allow
+  refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: session.gate, policy }).allow
 
 /** A binder over Pluto's launch, with Pluto's process still running. */
 const plutoIsRunning = (): Binder => {
