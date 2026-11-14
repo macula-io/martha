@@ -127,7 +127,7 @@ function closedDirectory(path: string): string | undefined {
 
 /**
  * The directory one project's state is kept in: the state root and the sha256 of the project's real path. A reader
- * outside the launcher — a run watching a member's journal (../launch_a_claude_code_member/drive_the_recorded_host) —
+ * outside the launcher — a run watching a member's journal (../drive_the_recorded_host/drive_the_recorded_host.ts) —
  * derives the same path from the checkout it made, and no one has to be told it.
  */
 export function projectStateDirectory(state_root: string, root: string): string {

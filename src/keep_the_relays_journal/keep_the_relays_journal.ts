@@ -9,7 +9,7 @@
 // id and tool where the body carries them, and its time. Two lines give three stretches — the launcher deciding, the
 // tool running, the launcher answering — and a run that goes quiet in one of them can name which. The journal also
 // keeps the calls the launcher allowed and has not seen answered, so an open tool is not read as silence
-// (../launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts reads all of it).
+// (../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts reads all of it).
 //
 // A launcher also notes what it did on no event of the host's, where a run has nowhere else to read it (martha#430): a
 // telling that did not reach a member leaves the member's channel store's own refusal in the journal, so the one thing

@@ -1,7 +1,7 @@
 // The settings that keep a checkout from running code through a member's
 // ordinary commands (martha#24, option 3), each read back by the real tool.
 // The end-to-end proof, a planted checkout and a launched member, is
-// ../launch_a_claude_code_member/run_nothing_a_checkout_planted.node-test.ts.
+// ../drive_the_recorded_host/run_nothing_a_checkout_planted.node-test.ts.
 // Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'

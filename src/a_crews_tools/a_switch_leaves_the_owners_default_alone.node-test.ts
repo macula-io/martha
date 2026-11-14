@@ -8,7 +8,7 @@
 // These are the tests of the mechanism itself, at the launcher's own seam: the production tools, the production order
 // and report asks, and the real lock, over a real settings file in a real config directory. The only stand-in is the
 // host's save, which a test writes the way the host writes one. The end-to-end proof on the recorded host is
-// ../launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts.
+// ../drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts.
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'

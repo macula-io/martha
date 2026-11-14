@@ -9,7 +9,7 @@
 //
 // The launch is the real one: `martha init`, `martha approve` and `martha start`, twice, on one checkout where both
 // members share one crew's streams. Only the models are stand-ins
-// (../src/launch_a_claude_code_member/drive_the_recorded_host): the reviewer's first turn calls the host's own agent
+// (../src/drive_the_recorded_host/drive_the_recorded_host.ts): the reviewer's first turn calls the host's own agent
 // tool, and the stand-in answers that agent's request while the member's turn is still open.
 //
 // The order is what this observes: the builder says its hand-off while the reviewer is inside its subagent, so a member

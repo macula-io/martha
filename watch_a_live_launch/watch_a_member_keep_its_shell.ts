@@ -7,7 +7,7 @@
 //
 // The launch is the real one: `martha init`, `martha approve` and `martha start` on the checkout this makes, the mesh
 // server its approved config pins, and a peer on the mesh that answers a hello. Only the model is a stand-in
-// (../src/launch_a_claude_code_member/drive_the_recorded_host). The strict gate is on, because a gate that is off can
+// (../src/drive_the_recorded_host/drive_the_recorded_host.ts). The strict gate is on, because a gate that is off can
 // never refuse and would make this observation say nothing.
 //
 // TWO LAUNCHES, because the gate refuses executable text after a ring's answer, by design (martha#51: no node id hands a

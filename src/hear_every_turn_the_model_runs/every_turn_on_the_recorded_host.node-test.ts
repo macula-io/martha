@@ -1,7 +1,7 @@
 // On the recorded host, the launcher hears every main turn the member's model runs (martha#440).
 //
 // The real `martha` command, the real Claude Code at the recorded version, the real relay, mod and launcher; only the
-// model is a stand-in (../launch_a_claude_code_member/drive_the_recorded_host.ts). The cases skip on
+// model is a stand-in (../drive_the_recorded_host/drive_the_recorded_host.ts). The cases skip on
 // RECORDED_HOST_SKIP: ci.yml's relay job runs them with the recorded host, as
 // prove_the_relay_loads/recorded_host_runs.json lists.
 //
