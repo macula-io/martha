@@ -181,7 +181,7 @@
 <text class="t-desc" x="48" y="1250">member has; read_a_room_through_its_gate</text>
 <text class="t-desc" x="48" y="1266">gives the mesh server's tools, and refuse_</text>
 <text class="t-desc" x="48" y="1282">widening_a_member_reach refuses the rest</text>
-<rect class="b-cmp" x="348" y="1148" width="300" height="246" rx="10"/>
+<rect class="b-cmp" x="348" y="1148" width="300" height="294" rx="10"/>
 <text class="t-code" x="364" y="1176">claude_code_host,</text>
 <text class="t-code" x="364" y="1194">claude_code_relay</text>
 <text class="t-type" x="364" y="1212">[the Claude Code host]</text>
@@ -194,7 +194,10 @@
 <text class="t-desc" x="364" y="1332">owner_memory keeps a member's writes</text>
 <text class="t-desc" x="364" y="1348">out of the owner's memory, and find_</text>
 <text class="t-desc" x="364" y="1364">what_a_later_git_run_reads reads what</text>
-<text class="t-desc" x="364" y="1380">a later git run would read</text>
+<text class="t-desc" x="364" y="1380">a later git run would read;</text>
+<text class="t-desc" x="364" y="1396">hear_every_turn_the_model_runs hears</text>
+<text class="t-desc" x="364" y="1412">each turn the model runs, whatever</text>
+<text class="t-desc" x="364" y="1428">started it</text>
 <rect class="b-cmp" x="664" y="1148" width="300" height="390" rx="10"/>
 <text class="t-code" x="680" y="1176">check_nothing_private_gets_in,</text>
 <text class="t-code" x="680" y="1194">check_every_link_resolves</text>
