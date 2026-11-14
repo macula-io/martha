@@ -61,14 +61,14 @@ import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import {
   nudgesOf,
-  reviewWaitsIn,
   theNudgesGoTo,
   theNudgesPartLines,
+  theWaitsTheClosesLeave,
   windowsOf,
-  type ReviewWait,
   type SentMessage,
+  type WhatEndsAWait,
 } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { landingsOf, type LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { headNudges } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import {
@@ -1325,39 +1325,20 @@ async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows
   if (!receivers.some((receiver) => receiver.toLowerCase() === places.member.toLowerCase())) return []
   const channel = await readTheChannel(places.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
-  const waits = await theWaitsTheClosesLeave(places, messages, receivers)
+  const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(places, messages))
   const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(places, waits)
   return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads)]), settings)
 }
 
-/**
- * The review waits left once the landings and the issues GitHub closed have ended theirs (martha#320). The closes the
- * record holds end their waits first, so GitHub is asked only about a package that still waits: one with no close kept,
- * or one handed off again since its close. A package closed once and not handed off since costs no call again.
- */
-async function theWaitsTheClosesLeave(places: CrewToolPlaces, messages: readonly SentMessage[], receivers: readonly string[]): Promise<readonly ReviewWait[]> {
+/** What ends a wait besides the channel's lines, for nudge_the_supervisor to apply (martha#415): the landings the ledgers
+ * keep, the closes the budget's record holds, and GitHub's reader of new ones when this launch holds processes. */
+async function whatEndsAWaitIn(places: CrewToolPlaces, messages: readonly SentMessage[]): Promise<WhatEndsAWait> {
   const landings = await landingsOf(places.ledger, packagesNamed(messages))
   const recorded = theClosesRecorded(places.stores.crew.place(GITHUB_BUDGET_PLACE))
-  const open = reviewWaitsIn(messages, [...landings, ...theEndsOf(recorded)], receivers)
-  const closes = await theClosesOfTheWaiters(places, open, recorded)
-  return reviewWaitsIn(messages, [...landings, ...theEndsOf(closes)], receivers)
-}
-
-/** A close, read as the fact a landing is: the package and the moment its waits from before it end. */
-const theEndsOf = (closes: Readonly<Record<string, number>>): readonly LandedPackage[] =>
-  Object.entries(closes).map(([package_name, at]) => ({ package: package_name, at }))
-
-/** The closes of the packages still waiting, read through the crew's GitHub budget, or the ones the record already held
- * when this launch holds no processes to ask with, nothing waits, or the budget refused. */
-async function theClosesOfTheWaiters(
-  places: CrewToolPlaces,
-  waits: readonly ReviewWait[],
-  recorded: Readonly<Record<string, number>>,
-): Promise<Readonly<Record<string, number>>> {
-  if (places.processes === undefined || waits.length === 0) return recorded
-  const closes = await theClosesOfTheWaits(theGithubSpenderOf({ ...places, processes: places.processes }), waits.map((wait) => wait.package))
-  return 'refusal' in closes ? recorded : closes
+  if (places.processes === undefined) return { landings, recorded }
+  const spender = theGithubSpenderOf({ ...places, processes: places.processes })
+  return { landings, recorded, read: (packages) => theClosesOfTheWaits(spender, packages) }
 }
 
 /**
