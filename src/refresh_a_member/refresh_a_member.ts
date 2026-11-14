@@ -311,25 +311,6 @@ export function aFlowStalled(flow: ARefresh, now: number): boolean {
   return now - flow.at >= FLOW_WINDOW_MS
 }
 
-/**
- * The line a decline at the limit sends the Supervisor, once: the member is past the limit, has not handed over, and
- * says why it cannot. Sent as the storm's is, so the Supervisor hears it without watching the dashboard.
- */
-export function theLimitLine(refusal: { readonly member: string; readonly percent: number; readonly said: string }): string {
-  return (
-    `${refusal.member} is at ${refusal.percent}% of its context, past the ${HANDOVER_LIMIT_PERCENT}% handover limit, and has not handed over: ` +
-    `it declined at the limit, saying ${refusal.said}. It is asked again when it finishes a task.`
-  )
-}
-
-/** The line a refresh someone asked for that ends abandoned sends the Supervisor, once. */
-export function theAskedLine(refusal: { readonly member: string; readonly why: string }): string {
-  return (
-    `${refusal.member} was asked to refresh and could not hand over: ${refusal.why}. ` +
-    'The flow is abandoned with that reason on its row, and that instruction asks nothing more of it.'
-  )
-}
-
 /** The flow as the phase its send-back leaves it in: asked again, with what was missing kept for the row. */
 export function theFlowSentBack(flow: ARefresh, missing: readonly string[], at: number): ARefresh {
   return { ...flow, phase: 'handing_over', at, asked_at: at, sent_back: flow.sent_back + 1, missing }
