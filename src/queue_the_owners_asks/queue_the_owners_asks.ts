@@ -26,12 +26,18 @@
 // new way text reaches a session, so ../inbound_paths holds a row for it and this slice's gate stands on that row. An
 // ask that gate refuses is never handed over, and never stops the take: it is skipped and named in the answer, because
 // the ordinary way to get one is a member who asked and was then renamed or removed from the declaration.
+//
+// An ask that would delete a branch carries the tips the yes covers (martha#391, ../read_the_tips_a_removal_covers):
+// the launcher reads both copies, the row keeps them, and the line `take_asks` and `list_asks` show names them, so the
+// one menu the ask reaches offers every tip the deletion removes. The branch is held to the question's own rule on its
+// way in and on its way out, because it reaches the same menu.
 
 import { OFFER_OWNER_ASKS, OWNER, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import type { Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { CONTROL } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
+import { A_COMMIT_ID, type ABranchItRemoves, theTipsItRemoves } from '../read_the_tips_a_removal_covers/read_the_tips_a_removal_covers.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 
 /** The stream the owner's asks live in, in the crew's row streams. */
@@ -75,8 +81,9 @@ export const THE_WINDOW = `${String(ASK_CLAIM_MS / MINUTE_MS)} minutes`
 /** What `queue_ask` says it is for: one routine ask, queued, and never a menu of its own. */
 export const QUEUE_ASK_DESCRIPTION =
   'Queue a routine yes/no ask for the owner instead of opening a menu for it. The session that offers asks hands them over ' +
-  "in one menu. Never queue part of a change: a change's asks go in one menu. The answer is queued, how many wait, and to " +
-  'carry on.'
+  "in one menu. Never queue part of a change: a change's asks go in one menu. An ask that would delete a branch names " +
+  'repo and branch too, so the ask records every tip the yes removes and the owner is not asked twice. The answer is ' +
+  'queued, how many wait, and to carry on.'
 
 /** What `list_asks` says it is for: it only looks. */
 export const LIST_ASKS_DESCRIPTION = 'List the asks waiting for the owner, oldest first. It only looks: nothing is taken and nothing is offered.'
@@ -97,6 +104,8 @@ export interface AnAsk {
   readonly question: string
   readonly asked_by: string
   readonly since: number
+  /** The branch the ask would remove and the tips the yes covers, when it would remove one (martha#391). */
+  readonly removes?: ABranchItRemoves
 }
 
 /** One batch: the asks it claimed, and who took it in which session. */
@@ -124,11 +133,36 @@ export type AskAnswer = { readonly told: string } | { readonly refused: string }
 /** Whether `value` is a whole number at or above zero, as a stream position is. */
 const isPosition = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0
 
+/** Whether `value` is a tip this launcher read: a commit id, or nothing, which says that copy is not there. */
+const isATipOrNothing = (value: unknown): value is string | null =>
+  value === null || (typeof value === 'string' && A_COMMIT_ID.test(value))
+
+/**
+ * The removal a stored row says its ask covers, read back: absent when the row names none, and `malformed` when it names
+ * one this queue never wrote. The shape is the reader's business, as the question's own type is; the branch's text is
+ * the gate's business below, because it is delivered to another session and a shape is not what repaints a row.
+ */
+function theRemovalIn(held: unknown): ABranchItRemoves | undefined | 'malformed' {
+  if (held === undefined) return undefined
+  const { branch, local_tip, origin_tip } = (held ?? {}) as Readonly<Record<string, unknown>>
+  if (typeof branch !== 'string' || !isATipOrNothing(local_tip) || !isATipOrNothing(origin_tip)) return 'malformed'
+  if (local_tip === null && origin_tip === null) return 'malformed'
+  return { branch, local_tip, origin_tip }
+}
+
 /** The ask a stored row holds, or null when it is no row of this queue. */
 function askIn({ position, row }: StoredRow): AnAsk | null {
   if (row['kind'] !== ASK_QUEUED || typeof row['question'] !== 'string' || typeof row['asked_by'] !== 'string') return null
   if (typeof row['since'] !== 'number') return null
-  return { id: position, question: row['question'], asked_by: row['asked_by'], since: row['since'] }
+  const removes = theRemovalIn(row['removes'])
+  if (removes === 'malformed') return null
+  return {
+    id: position,
+    question: row['question'],
+    asked_by: row['asked_by'],
+    since: row['since'],
+    ...(removes === undefined ? {} : { removes }),
+  }
 }
 
 /** The batch a stored row holds, or null when it is no take of this queue. */
@@ -223,6 +257,17 @@ const A_HIDDEN_CHARACTER = new RegExp(CONTROL.source, 'gu')
 /** The question as the queue keeps it: the owner's characters only, no control or hidden one, and capped. */
 export const theQuestion = (text: string): string => text.replace(A_HIDDEN_CHARACTER, '').trim().slice(0, MAX_ASK)
 
+/**
+ * The branch a removal names, as the queue keeps it: the question's own rule, read once and used twice, because the
+ * branch reaches the same menu the question does (martha#391).
+ */
+export const theBranch = (text: string): string => theQuestion(text)
+
+/** Why a branch named for removal is not one this queue keeps, or undefined when it is: a removal names a branch. */
+function branchRefusal(named: string): string | undefined {
+  return named === '' ? 'the branch this ask removes is empty once its hidden characters are taken out: name the branch, as git names it' : undefined
+}
+
 /** Why `raw` is not a question this queue keeps, or undefined when it is: a call says what it asks, in text. */
 function questionRefusal(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return 'ask is missing: say the question, answerable yes or no, naming exactly what would be done'
@@ -248,22 +293,44 @@ async function appendAtLength(host: LedgerHost, row: Row, length: number, told: 
   }
 }
 
-/** The line one ask reads as, wherever it is shown: its id, who asked, and the question itself. */
-const theLineOf = (ask: AnAsk): string => `- ${String(ask.id)} (from ${ask.asked_by}): ${ask.question}`
+/** The line one ask reads as, wherever it is shown: its id, who asked, the question itself, and the tips a removal covers. */
+const theLineOf = (ask: AnAsk): string =>
+  `- ${String(ask.id)} (from ${ask.asked_by}): ${ask.question}${ask.removes === undefined ? '' : ` ${theTipsItRemoves(ask.removes)}`}`
 
 /**
  * `queue_ask`: the ask kept against the member the launcher started, never a name the call chose. The answer says how
  * many wait and tells the member to carry on, because opening a menu for it is what the queue exists to avoid.
+ *
+ * `removes` is the branch an ask would delete and the tip each copy of it stands at, read by the launcher
+ * (../read_the_tips_a_removal_covers); the row keeps both, because a yes to a branch deletion that named one copy
+ * deleted that one and left the other (martha#391, the owner's second ask on 2026-11-13). The clone's tip and
+ * origin's are often the same, and when they are not, both are on the row and both are named in the answer, so the one
+ * menu the ask reaches offers every tip the deletion removes.
  */
-export async function queueAnAsk(host: LedgerHost, args: Readonly<Record<string, unknown>>, asked_by: string): Promise<AskAnswer> {
+export async function queueAnAsk(
+  host: LedgerHost,
+  args: Readonly<Record<string, unknown>>,
+  asked_by: string,
+  removes?: ABranchItRemoves,
+): Promise<AskAnswer> {
   const refused = questionRefusal(args['ask'])
   if (refused !== undefined) return { refused }
+  const kept = removes === undefined ? undefined : { ...removes, branch: theBranch(removes.branch) }
+  const branchRefused = kept === undefined ? undefined : branchRefusal(kept.branch)
+  if (branchRefused !== undefined) return { refused: branchRefused }
   const stored = await host.stores.rows.read(OWNER_ASKS_STREAM)
-  const row = { kind: ASK_QUEUED, question: theQuestion(args['ask'] as string), asked_by, since: host.clock.now() }
-  const kept = await appendAtLength(host, row, stored.length, '')
-  if ('refused' in kept) return kept
+  const row = {
+    kind: ASK_QUEUED,
+    question: theQuestion(args['ask'] as string),
+    asked_by,
+    since: host.clock.now(),
+    ...(kept === undefined ? {} : { removes: kept }),
+  }
+  const wrote = await appendAtLength(host, row, stored.length, '')
+  if ('refused' in wrote) return wrote
   const waiting = theQueueIn(await host.stores.rows.read(OWNER_ASKS_STREAM), host.clock.now()).waiting.length
-  return { told: `Queued for the owner; ${String(waiting)} ${waiting === 1 ? 'ask' : 'asks'} waiting. Do not open a menu for it; carry on.` }
+  const both = kept === undefined ? '' : ` ${theTipsItRemoves(kept)}`
+  return { told: `Queued for the owner; ${String(waiting)} ${waiting === 1 ? 'ask' : 'asks'} waiting.${both} Do not open a menu for it; carry on.` }
 }
 
 /** `list_asks`: every ask waiting, oldest first, and nothing taken. */
@@ -443,5 +510,16 @@ export function whyNotAdmitted(ask: AnAsk, members: readonly string[]): string |
   if (!members.includes(ask.asked_by)) return `its asker ${JSON.stringify(ask.asked_by)} is not a member this crew's launcher started`
   if (ask.question.length > MAX_ASK) return `its text is longer than ${String(MAX_ASK)} characters`
   if (CONTROL.test(ask.question)) return 'its text carries a control or hidden character'
-  return ask.question === '' ? 'its text is empty' : undefined
+  if (ask.question === '') return 'its text is empty'
+  return ask.removes === undefined ? undefined : whyTheBranchIsRefused(ask.removes.branch)
+}
+
+/**
+ * Why the branch a removal names may not be handed over, in the gate's own words: the question's own rule, applied to
+ * the branch, which reaches the same menu (martha#391). A row a shell wrote straight into the stream is refused here.
+ */
+function whyTheBranchIsRefused(branch: string): string | undefined {
+  if (branch.length > MAX_ASK) return `its branch is longer than ${String(MAX_ASK)} characters`
+  if (CONTROL.test(branch)) return 'its branch carries a control or hidden character'
+  return branch === '' ? 'its branch is empty' : undefined
 }

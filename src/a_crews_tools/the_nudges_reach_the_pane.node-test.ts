@@ -199,11 +199,22 @@ test('r=2 R2: a member the crew parked is drawn as parked, however busy its row 
   assert.deepEqual(drawn.filter((line) => line.includes(OTHER)), [], `a parked member was drawn as stalled: ${JSON.stringify(drawn)}`)
 })
 
-/** A GitHub that answers what a head read asks, and keeps every call the crew made through it. */
-function aCountedGithub(): { readonly asked: readonly string[][]; readonly processes: HostContract['processes'] } {
+/** What `gh issue view` says of an issue that is open, and of one GitHub closed at `closed_at`. */
+const AN_OPEN_ISSUE: ProcessOutcome = { exit_code: 0, stdout: JSON.stringify({ state: 'OPEN', closedAt: null }), stderr: '' }
+const aClosedIssue = (closed_at: number): ProcessOutcome => ({ exit_code: 0, stdout: JSON.stringify({ state: 'CLOSED', closedAt: new Date(closed_at).toISOString() }), stderr: '' })
+
+/** Whether a call the crew made read an issue's state. */
+const readsAnIssue = (args: readonly string[]): boolean => args[0] === 'issue'
+
+/**
+ * A GitHub that answers what a head read asks, answers an issue's state with what `issue` says at that moment (open,
+ * unless a test says otherwise), and keeps every call the crew made through it.
+ */
+function aCountedGithub(issue: () => ProcessOutcome = () => AN_OPEN_ISSUE): { readonly asked: readonly string[][]; readonly processes: HostContract['processes'] } {
   const asked: string[][] = []
   const run = async (request: ProcessRequest): Promise<ProcessOutcome> => {
     asked.push([...request.args])
+    if (readsAnIssue(request.args)) return issue()
     if (request.args.includes('rate_limit')) {
       const reset = Math.trunc((Date.now() + HOUR) / 1000)
       return { exit_code: 0, stdout: JSON.stringify({ resources: { core: { remaining: 4_000, reset } } }), stderr: '' }
@@ -221,7 +232,7 @@ test('#320 B: only the receiver\'s launcher asks GitHub, and what it asks is spe
 
   await crew.tools.answer('see_the_crew', {}, 'a-session')
   assert.ok(github.asked.length > 0, 'the receiver\'s pane asked GitHub nothing, so no head can ever move')
-  assert.ok(github.asked.every((args) => args.includes('rate_limit') || args.includes('pr')), `something other than the budget's own reads reached GitHub: ${JSON.stringify(github.asked)}`)
+  assert.ok(github.asked.every((args) => args.includes('rate_limit') || args.includes('pr') || readsAnIssue(args)), `something other than the budget's own reads reached GitHub: ${JSON.stringify(github.asked)}`)
 })
 
 test('#320 B: a member that reads no nudges asks GitHub nothing', async (t) => {
@@ -244,4 +255,65 @@ test('#320 B: a hand-off whose pull request has moved off its tip is drawn as a 
   const heads = drawn.filter((line) => line.startsWith('- head: '))
   assert.equal(heads.length, 1, `the moved head was not drawn: ${JSON.stringify(drawn)}`)
   assert.match(heads[0] ?? '', /#320/, 'the head drawn is not the hand-off\'s package')
+})
+
+// A wait that ends when its package's issue closes (martha#320, its last part). The close is GitHub's, read through the
+// crew's budget by the receiver's launcher, and it ends the waits that began before it the way a landing does.
+
+/** The review and head lines the pane draws for a package. */
+const theWaitsDrawnFor = (drawn: readonly string[], package_name: string): readonly string[] =>
+  drawn.filter((line) => (line.startsWith('- review: ') || line.startsWith('- head: ')) && line.includes(package_name))
+
+test('#320 close: an issue closed after its hand-off ends the wait, and the moved head with it', async (t) => {
+  const github = aCountedGithub(() => aClosedIssue(NOW - HOUR))
+  const crew = aCrew(t, { processes: github.processes })
+  crew.at(NOW - 2 * HOUR)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 2 * HOUR })
+  crew.at(NOW)
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.deepEqual(theWaitsDrawnFor(drawn, '#320'), [], `a package whose issue closed after its hand-off is still drawn as waiting: ${JSON.stringify(drawn)}`)
+})
+
+test('#320 close: a hand-off made after the issue closed waits on its own', async (t) => {
+  const github = aCountedGithub(() => aClosedIssue(NOW - 3 * HOUR))
+  const crew = aCrew(t, { processes: github.processes })
+  crew.at(NOW - 2 * HOUR)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 2 * HOUR })
+  crew.at(NOW)
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.equal(drawn.filter((line) => line.startsWith('- review: ') && line.includes('#320')).length, 1, `a hand-off after the close was ended by it: ${JSON.stringify(drawn)}`)
+})
+
+test('#320 close: a package whose close is kept and that nobody handed off since is not asked about again', async (t) => {
+  const github = aCountedGithub(() => aClosedIssue(NOW - 3 * HOUR))
+  const crew = aCrew(t, { processes: github.processes })
+  crew.at(NOW - 4 * HOUR)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 4 * HOUR })
+  crew.at(NOW - 2 * HOUR)
+  await crew.tools.answer('see_the_crew', {}, 'a-session')
+  assert.equal(github.asked.filter(readsAnIssue).length, 1, 'the first redraw did not read the issue of the package waiting')
+  crew.at(NOW)
+
+  await crew.tools.answer('see_the_crew', {}, 'a-session')
+  assert.equal(github.asked.filter(readsAnIssue).length, 1, 'a package already kept as closed, with no hand-off since, was read again')
+})
+
+test('#320 close: an issue closed, handed off again and closed again ends the second wait too', async (t) => {
+  let closed_at = NOW - 5 * HOUR
+  const github = aCountedGithub(() => aClosedIssue(closed_at))
+  const crew = aCrew(t, { processes: github.processes })
+  crew.at(NOW - 6 * HOUR)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320'), sent_at: NOW - 6 * HOUR })
+  crew.at(NOW - 4 * HOUR)
+  await crew.tools.answer('see_the_crew', {}, 'a-session')
+  // The issue is reopened and the work handed off again, then the issue closes a second time.
+  crew.at(NOW - 3 * HOUR)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#320', 2), sent_at: NOW - 3 * HOUR })
+  closed_at = NOW - HOUR
+  crew.at(NOW)
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.deepEqual(theWaitsDrawnFor(drawn, '#320'), [], `the hand-off after the first close was never asked about again, and outlived the second: ${JSON.stringify(drawn)}`)
 })

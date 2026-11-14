@@ -26,10 +26,12 @@
 //   - the green a wait found on a sha, so the next member's wait on that sha makes no call at all;
 //   - the head last seen on a package's pull request, so a read GitHub did not answer keeps the last flag rather than
 //     clearing it (../nudge_the_supervisor reads it as its head kind);
+//   - the moment GitHub last closed each waiting package's issue, the latest one only: a close ends the waits that began
+//     before it and nothing undoes it, so a reopen leaves it and a read GitHub did not answer keeps it;
 //   - how many reads one sha's wait has spent, so a wait that will not end stops costing calls.
 //
 // Every GitHub read of package B goes through spendTheGithubBudget: the runs on a sha, the head of a package's pull
-// request, and the rate limit itself. Nothing outside this directory names `gh` with `run list` or `run watch`, and
+// request, the state of a package's issue, and the rate limit itself. Nothing outside this directory names `gh` with `run list` or `run watch`, and
 // prove_the_core/one_place_asks_github fails by name when something does.
 //
 // The numbers are named once, here: a floor of five hundred calls left, a minute of backoff that doubles to five, and
@@ -99,6 +101,8 @@ export interface TheBudget {
   readonly greens: Readonly<Record<string, GreenRun>>
   readonly heads: Readonly<Record<string, AHead>>
   readonly reads: Readonly<Record<string, number>>
+  /** When GitHub last closed each package's issue, in milliseconds since the epoch, keyed by the work package. */
+  readonly closes: Readonly<Record<string, number>>
 }
 
 /** What a crew that has spent nothing holds. */
@@ -112,6 +116,7 @@ export const A_FRESH_BUDGET: TheBudget = {
   greens: {},
   heads: {},
   reads: {},
+  closes: {},
 }
 
 /** What the budget says about one call, before any is made. */
@@ -271,21 +276,30 @@ export function theBudgetIn(place: CrewPlace | Refused): TheBudget | Refused {
 
 /**
  * The budget `text` holds, or undefined when it holds none: every field of it, or it is nobody's budget. A record
- * written before a thing had a wait of its own holds no waits table, and reads as a crew that has not read anything yet.
+ * written before a thing had a wait of its own holds no waits table, and one written before closes were kept holds no
+ * closes table; each reads as a crew that has not read that yet, so a record a launch before this one left still spends.
  */
 function aBudgetFrom(text: string): TheBudget | undefined {
   const held = aRecordIn(text)
   if (held === undefined) return undefined
   const counts = theCountsIn(held)
   if (counts === undefined) return undefined
-  const { greens, heads, reads, waits } = held
+  const { greens, heads, reads } = held
   if (!isAGreenTable(greens) || !isAHeadTable(heads) || !isAReadTable(reads)) return undefined
-  if (waits !== undefined && !isAWaitTable(waits)) return undefined
-  return { ...counts, waits: waits ?? {}, greens, heads, reads }
+  const waits = aTableALaterRecordAdded(held['waits'], isAWaitTable)
+  const closes = aTableALaterRecordAdded(held['closes'], isACloseTable)
+  if (waits === undefined || closes === undefined) return undefined
+  return { ...counts, waits, greens, heads, reads, closes }
+}
+
+/** A table an older record may not hold: empty when it is missing, undefined when it is there and not that table. */
+function aTableALaterRecordAdded<T>(value: unknown, isATableOf: (value: unknown) => value is Record<string, T>): Readonly<Record<string, T>> | undefined {
+  if (value === undefined) return {}
+  return isATableOf(value) ? value : undefined
 }
 
 /** The budget's five numbers, apart from the tables it holds. */
-type TheCounts = Omit<TheBudget, 'waits' | 'greens' | 'heads' | 'reads'>
+type TheCounts = Omit<TheBudget, 'waits' | 'greens' | 'heads' | 'reads' | 'closes'>
 
 /** Those five numbers as a record holds them, or undefined when one of them is not a count it could hold. */
 function theCountsIn(held: Record<string, unknown>): TheCounts | undefined {
@@ -311,6 +325,9 @@ const isAReadTable = (value: unknown): value is Record<string, number> => {
   const table = asARecord(value)
   return table !== undefined && Object.values(table).every(isACount)
 }
+
+/** A table of closes holds a moment for each package, as a read table holds a count for each sha. */
+const isACloseTable = (value: unknown): value is Record<string, number> => isAReadTable(value)
 
 /** Whether every entry of a table the store wrote holds what the table says it does. */
 function isATable(value: unknown, each: (one: Record<string, unknown>) => boolean): boolean {
@@ -530,3 +547,80 @@ function aListIn(text: string): readonly unknown[] | undefined {
 /** Whether `text` names `number` as a package number: `#143` in it yes, `#1434` and `x143` no. */
 export const namesTheWholeNumber = (text: unknown, number: number): boolean =>
   typeof text === 'string' && new RegExp(`(?<![0-9])#${String(number)}(?![0-9])`).test(text)
+
+/** What a read of a package's issue came to: closed at a moment GitHub names, open, or nothing the crew can go on. */
+export type IssueRead =
+  | { readonly kind: 'closed'; readonly closed_at: number }
+  | { readonly kind: 'open' }
+  | { readonly kind: 'cannot_tell'; readonly refusal: string }
+
+/** GitHub's words for an issue's state, as `gh issue view --json state` answers them. Private: they are GitHub's. */
+const ISSUE_CLOSED = 'CLOSED'
+const ISSUE_OPEN = 'OPEN'
+
+/**
+ * What the issue read of a package waits under: its own key, apart from the head read's bare package name, so the head
+ * read of a redraw never holds the issue read of the same package on that redraw.
+ */
+const theIssueWaitOf = (work_package: string): string => `${work_package} issue`
+
+/**
+ * Whether GitHub has closed the issue `number` names, and when, spent through the crew's budget and spaced by that
+ * issue's own wait. The number is passed to `gh` as itself, never matched in text. The moment is GitHub's clock, and the
+ * hand-offs it is set against are this machine's: a hand-off sent seconds after a close, on a clock running behind,
+ * reads as before it and is ended. That errs toward silence on an issue that is closed, and is left as it is.
+ */
+export async function readTheStateOfAPackagesIssue(
+  spender: TheGithubSpender,
+  ask: { readonly repo: string; readonly number: number },
+): Promise<IssueRead> {
+  const args = ['issue', 'view', String(ask.number), '--repo', ask.repo, '--json', 'state,closedAt']
+  const spent = await spendTheGithubBudget(spender, args, theIssueWaitOf(`${ask.repo}#${String(ask.number)}`))
+  if ('refusal' in spent) return { kind: 'cannot_tell', refusal: spent.refusal }
+  if (spent.said.exit_code !== 0) return { kind: 'cannot_tell', refusal: `GitHub could not say whether ${ask.repo}#${String(ask.number)} is closed: ${saidBy(spent.said)}.` }
+  return theIssueStateIn(spent.said.stdout) ?? { kind: 'cannot_tell', refusal: `GitHub answered for ${ask.repo}#${String(ask.number)} with something this cannot read.` }
+}
+
+/** The state `gh issue view` answered, or undefined when it is not one this reads: a close with no moment is not one. */
+function theIssueStateIn(text: string): IssueRead | undefined {
+  const issue = aRecordIn(text)
+  if (issue?.['state'] === ISSUE_OPEN) return { kind: 'open' }
+  if (issue?.['state'] !== ISSUE_CLOSED || typeof issue['closedAt'] !== 'string') return undefined
+  const closed_at = Date.parse(issue['closedAt'])
+  return isACount(closed_at) && closed_at > 0 ? { kind: 'closed', closed_at } : undefined
+}
+
+/** The budget with the close of `package` kept at `closed_at`, unless the one it holds is as late or later. */
+export function keepTheClose(budget: TheBudget, work_package: string, closed_at: number): TheBudget {
+  const held = budget.closes[work_package]
+  if (held !== undefined && held >= closed_at) return budget
+  return { ...budget, closes: { ...budget.closes, [work_package]: closed_at } }
+}
+
+/** The closes the crew's record holds, without asking GitHub anything; none when the record cannot be read. */
+export function theClosesRecorded(place: CrewPlace | Refused): Readonly<Record<string, number>> {
+  const held = theBudgetIn(place)
+  return 'refusal' in held ? {} : held.closes
+}
+
+/**
+ * The closes of the packages a crew waits on, each issue read through the budget. A close is kept on the record the read
+ * itself left, so the call it spent and the wait it began are kept with it. An open issue, and a read GitHub did not
+ * answer, leave the close the record held: a close ends the waits before it, and a reopen does not bring them back.
+ */
+export async function theClosesOfTheWaits(
+  spender: TheGithubSpender,
+  work_packages: readonly string[],
+): Promise<Readonly<Record<string, number>> | Refused> {
+  const place = spender.place
+  if ('refusal' in place) return place
+  for (const work_package of [...new Set(work_packages)]) {
+    const read = await readTheStateOfAPackagesIssue(spender, { repo: repoOf(work_package), number: numberOf(work_package) })
+    if (read.kind !== 'closed') continue
+    const held = theBudgetIn(place)
+    if ('refusal' in held) return held
+    keepTheBudget(place, keepTheClose(held, work_package, read.closed_at))
+  }
+  const last = theBudgetIn(place)
+  return 'refusal' in last ? last : last.closes
+}
