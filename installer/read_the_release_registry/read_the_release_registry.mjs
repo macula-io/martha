@@ -35,16 +35,19 @@ export const isVersion = (v) => typeof v === 'string' && SEMVER.test(v)
 export const isDigest = (d) => typeof d === 'string' && DIGEST.test(d)
 
 /**
- * -1, 0 or 1, as a sort comparator, for two X.Y.Z versions.
+ * -1, 0 or 1, as a sort comparator, for two X.Y.Z versions. Each part is a whole number, exact at any length: a float
+ * would read 9007199254740993 as ...992. The launcher's below and the packer's below order them the same way, held by
+ * hold_the_version_floor/every_reader_agrees_on_the_floor.node-test.mjs (martha#433).
  * @param {string} a
  * @param {string} b
  */
 export const compareVersions = (a, b) => {
-  const numbers = (/** @type {string} */ v) => (v.match(SEMVER) ?? []).slice(1).map(Number)
+  const numbers = (/** @type {string} */ v) => (v.match(SEMVER) ?? []).slice(1).map(BigInt)
   const x = numbers(a)
   const y = numbers(b)
   const at = x.findIndex((n, i) => n !== y[i])
-  return at < 0 ? 0 : Math.sign((x[at] ?? 0) - (y[at] ?? 0))
+  if (at < 0) return 0
+  return (x[at] ?? 0n) < (y[at] ?? 0n) ? -1 : 1
 }
 
 /**

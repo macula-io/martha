@@ -9,7 +9,7 @@
 #   - a floor.json already in the tree: it is generated here, never committed;
 #   - a floor-withdrawal.json that is not { "version": "X.Y.Z", "from": "X.Y.Z" }, that lowers nothing, or whose
 #     `from` is below floor.txt: once the floor has risen past it, a withdrawal is dead and never ships.
-# Versions are compared as numbers, so 0.10.0 is above 0.9.0. The release and the dry run both reach this through
+# Versions are compared as whole numbers, so 0.10.0 is above 0.9.0. The release and the dry run both reach this through
 # pack_a_release.sh. The file names come from the installer's package.json (installer/keep_the_names_in_one_place).
 #
 # Exit: 0 declared, 1 refused, 2 not how it is used.
@@ -29,15 +29,30 @@ project_floor="floor.txt"
 
 refuse () { echo "declare_the_floor: $*" >&2; exit 1; }
 
-# below A B: A is a lower version than B, compared part by part as numbers.
+# digits N: the part N without its leading zeros, so two parts compare as whole numbers at any length: bash's own
+# arithmetic wraps past 2^63-1.
+digits () {
+  local part="${1#"${1%%[!0]*}"}"
+  echo "${part:-0}"
+}
+
+# below A B: A is a lower version than B, compared part by part as whole numbers: a longer part is the larger, and two
+# of one length compare digit by digit. The installer's compareVersions and the launcher's below order them the same
+# way, held by installer/hold_the_version_floor/every_reader_agrees_on_the_floor.node-test.mjs (martha#433).
 below () {
   local -a a b
   IFS=. read -r -a a <<<"$1"
   IFS=. read -r -a b <<<"$2"
-  local i
+  local i x y LC_ALL=C
   for i in 0 1 2; do
-    (( 10#${a[i]} < 10#${b[i]} )) && return 0
-    (( 10#${a[i]} > 10#${b[i]} )) && return 1
+    x="$(digits "${a[i]}")"
+    y="$(digits "${b[i]}")"
+    if (( ${#x} != ${#y} )); then
+      (( ${#x} < ${#y} )) && return 0
+      return 1
+    fi
+    [[ "${x}" < "${y}" ]] && return 0
+    [[ "${x}" > "${y}" ]] && return 1
   done
   return 1
 }
