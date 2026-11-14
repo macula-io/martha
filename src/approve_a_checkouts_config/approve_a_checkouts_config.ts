@@ -34,13 +34,13 @@ import {
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import {
-  CLAUDE_CODE,
   decideLaunch,
   fingerprintOf,
   readLaunchState,
   type ConfigEntry,
   type LaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
 
 /** The one answer that approves. */
 export const YES = 'yes'

@@ -24,6 +24,7 @@ import {
   switchesThatRunNothingFromACheckout,
 } from './refuse_code_a_checkout_runs_itself.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-runs-nothing-'))
@@ -38,7 +39,7 @@ function gitConfigGet(env: Record<string, string>, cwd: string, key: string): st
 test('git reads every setting back as written, a path with a quote and a bang included', (t) => {
   const dir = scratch(t)
   const empty = join(dir, "it's here!")
-  const env = launchEnvironment({ PATH: process.env.PATH }, switchesThatRunNothingFromACheckout({}, empty))
+  const env = launchEnvironment({ PATH: process.env.PATH }, switchesThatRunNothingFromACheckout({}, empty), CLAUDE_CODE)
   assert.equal(gitConfigGet(env, dir, 'core.hooksPath'), empty)
   assert.equal(gitConfigGet(env, dir, 'core.fsmonitor'), 'false')
   for (const event of GIT_HOOK_EVENTS) assert.equal(gitConfigGet(env, dir, `hook.${event}.enabled`), 'false', event)
@@ -53,7 +54,7 @@ test('the owner\'s own command-scope git settings are kept, and ours come after 
     GIT_CONFIG_VALUE_0: '/from-count',
     [GIT_SETTINGS_VARIABLE]: "'user.name'='The Owner' 'core.hooksPath'='/from-parameters'",
   }
-  const env = launchEnvironment(inherited, switchesThatRunNothingFromACheckout(inherited, join(dir, 'empty')))
+  const env = launchEnvironment(inherited, switchesThatRunNothingFromACheckout(inherited, join(dir, 'empty')), CLAUDE_CODE)
   assert.equal(gitConfigGet(env, dir, 'user.name'), 'The Owner')
   assert.equal(gitConfigGet(env, dir, 'core.hooksPath'), join(dir, 'empty'))
   assert.equal(env.GIT_CONFIG_COUNT, '1', 'the owner\'s numbered settings are left alone')
@@ -72,7 +73,7 @@ test('npm sees scripts off: every inherited spelling is dropped, and a checkout\
     npm_config_ignore_scripts_elsewhere: 'kept',
   }
   const switches = switchesThatRunNothingFromACheckout(inherited, join(dir, 'empty'))
-  const env = launchEnvironment(inherited, switches)
+  const env = launchEnvironment(inherited, switches, CLAUDE_CODE)
   assert.deepEqual(
     Object.keys(env).filter((name) => /^npm_config_ignore/i.test(name)).sort(),
     [NPM_SCRIPTS_OFF_VARIABLE, 'npm_config_ignore_scripts_elsewhere'].sort(),
@@ -92,7 +93,7 @@ test("npm runs the member's own git: every inherited spelling is dropped, and a 
     Npm_Config_Git: './planted-git',
     npm_config_git_tag_version: 'kept',
   }
-  const env = launchEnvironment(inherited, switchesThatRunNothingFromACheckout(inherited, join(dir, 'empty')))
+  const env = launchEnvironment(inherited, switchesThatRunNothingFromACheckout(inherited, join(dir, 'empty')), CLAUDE_CODE)
   assert.deepEqual(
     Object.keys(env).filter((name) => npmSettingOf(name) === npmSettingOf(NPM_GIT_VARIABLE)),
     [NPM_GIT_VARIABLE],

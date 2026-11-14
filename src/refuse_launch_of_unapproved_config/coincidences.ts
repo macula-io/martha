@@ -4,7 +4,7 @@
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 import { THE_TAG_OF_A_READ_TREE } from '../judge_a_checkouts_tree/coincidences.ts'
-import { MCP_CONFIG_SWITCH } from './refuse_launch_of_unapproved_config.ts'
+import { MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
 
 /** Why one test spells the switch out: the host's spelling is a fact outside this tree, and an import would agree with a typo. */
 const THE_HOSTS_SPELLING_PINNED = 'the one test that pins the switch to the spelling Claude Code reads; importing the constant there would agree with any misspelling of it'

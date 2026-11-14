@@ -15,7 +15,8 @@ import {
   signalAGroupOnThisMachine as signalGroup,
 } from './files_and_processes_on_this_machine.ts'
 import { linuxProcessIdentities } from './process_identity_from_proc.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
 
 function place(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-machine-'))

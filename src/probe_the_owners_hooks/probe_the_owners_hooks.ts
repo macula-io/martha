@@ -16,7 +16,7 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
-import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
 
 // --- the owner's user hooks and plugins (martha#121, finding 1) ---------------
 //

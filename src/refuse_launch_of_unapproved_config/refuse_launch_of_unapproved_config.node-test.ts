@@ -9,7 +9,6 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { readCheckoutTree } from '../judge_a_checkouts_tree/checkout_tree.ts'
 
 import {
-  CLAUDE_CODE,
   decideLaunch,
   fingerprintOf,
   CLAUDE_MEMORY_ELSEWHERE,
@@ -25,7 +24,6 @@ import {
   startedWithOf,
   startedWithTheSwitches,
   type Host,
-  MCP_CONFIG_SWITCH,
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -33,6 +31,7 @@ import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { DECLARATION_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -510,7 +509,7 @@ test('an OpenCode launch keeps project config off whatever the inherited environ
     OPENCODE_CONFIG_DIR: join(place.checkout, '.opencode'),
     PATH: '/usr/bin',
   }
-  const env = launchEnvironment(inherited, prepared.switches)
+  const env = launchEnvironment(inherited, prepared.switches, CLAUDE_CODE)
   assert.equal(env.OPENCODE_CONFIG_PROJECT_DISABLE, '1')
   assert.equal(env.OPENCODE_DISABLE_PROJECT_CONFIG, '1')
   assert.equal(Object.hasOwn(env, 'OPENCODE_CONFIG_CONTENT'), false)
@@ -526,7 +525,7 @@ test('a Claude Code launch drops an inherited CLAUDE_CODE_SHELL_PREFIX, which wo
     const { prepared } = prepare(CLAUDE_CODE, place, approved ? approve(CLAUDE_CODE, place) : [])
     assert.equal(prepared.allow, true)
     if (!prepared.allow) return
-    const env = launchEnvironment({ CLAUDE_CODE_SHELL_PREFIX: join(place.checkout, 'wrap.sh'), PATH: '/usr/bin' }, prepared.switches)
+    const env = launchEnvironment({ CLAUDE_CODE_SHELL_PREFIX: join(place.checkout, 'wrap.sh'), PATH: '/usr/bin' }, prepared.switches, CLAUDE_CODE)
     assert.equal(Object.hasOwn(env, 'CLAUDE_CODE_SHELL_PREFIX'), false, approved ? 'with config carried' : 'with no config')
     assert.equal(env.PATH, '/usr/bin', 'the rest of the environment is kept')
   }
@@ -543,7 +542,7 @@ test('a Claude Code launch turns the host\'s auto-memory off and drops every var
     assert.equal(prepared.allow, true)
     if (!prepared.allow) return
     const inherited = { [offName]: '0', ...Object.fromEntries(CLAUDE_MEMORY_ELSEWHERE.map((name) => [name, join(place.checkout, name)])), PATH: '/usr/bin' }
-    const env = launchEnvironment(inherited, prepared.switches)
+    const env = launchEnvironment(inherited, prepared.switches, CLAUDE_CODE)
     const shape = approved ? 'with config carried' : 'with no config'
     assert.equal(env[offName], offValue, `${shape}: the inherited value never wins`)
     for (const name of CLAUDE_MEMORY_ELSEWHERE) assert.equal(Object.hasOwn(env, name), false, `${shape}: ${name}`)

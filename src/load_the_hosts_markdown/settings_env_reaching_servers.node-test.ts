@@ -4,8 +4,9 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { CLAUDE_CODE_OWN_VARIABLES, environmentFromSettings, userSettingsPath, USER_SETTINGS_FILE, CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
+import { CLAUDE_CODE_OWN_VARIABLES, environmentFromSettings, userSettingsPath, USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
 import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_FOLDER } from '../claude_code_host/claude_code_facts.ts'
 
 const ALLOWED = ['HOME', 'PATH', 'MACULA_MESH_REALMS']
 const USER = '/owner/.claude/settings.json'

@@ -37,14 +37,12 @@ import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_resu
 import type { ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
-  CLAUDE_CODE,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   type ConfigEntry,
   type Host,
   type LaunchGate,
   type LaunchRequest,
-  MCP_CONFIG_SWITCH,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { undeclaredPromptOrigins, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
@@ -61,6 +59,7 @@ import {
   WORDLESS_TOOLS,
   type RecordedMeshAnswerShape,
 } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
 
 export interface Gap {
   readonly path: string

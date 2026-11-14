@@ -24,7 +24,7 @@ import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { releaseMarkFor } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 

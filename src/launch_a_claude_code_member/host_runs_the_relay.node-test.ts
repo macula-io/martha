@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { CLAUDE_SERVERS, HOSTS, MCP_CONFIG_SWITCH } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_SERVERS, HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   firstValidatorError,
@@ -22,6 +22,7 @@ import {
 } from './host_runs_the_relay.ts'
 import { hostAnswers, LOADS_THE_RELAY, refusesTheRelay } from './host_stand_in.ts'
 import { removeTheTree } from './relay_copy.ts'
+import { MCP_CONFIG_SWITCH } from '../claude_code_host/claude_code_facts.ts'
 
 function placeFor(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-host-'))

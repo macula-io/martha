@@ -21,6 +21,7 @@ import { launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_
 import { blobAsGitAdds } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { readTheCheckoutOnce } from '../run_an_owner_signed_command/read_the_checkout_once.ts'
 import { MARTHAS_OWN_GIT_SETTINGS, marthasOwnGitArgs, marthasOwnGitSettingsArgs } from './run_marthas_own_git.ts'
+import { CLAUDE_CODE } from '../claude_code_host/claude_code_facts.ts'
 
 /** The one setting this package adds: a bare repository git was not told about is refused. */
 const THE_SWITCH = 'safe.bareRepository'
@@ -86,7 +87,7 @@ test('the switch stays off the member\'s environment, where a bare checkout is a
   mkdirSync(join(dir, 'empty'), { recursive: true })
   // The environment a launch gives the member: the switches that keep a checkout
   // from running code, and nothing of Martha's own git settings among them.
-  const env = launchEnvironment({ PATH: process.env['PATH'] }, switchesThatRunNothingFromACheckout({ PATH: process.env['PATH'] }, join(dir, 'empty')))
+  const env = launchEnvironment({ PATH: process.env['PATH'] }, switchesThatRunNothingFromACheckout({ PATH: process.env['PATH'] }, join(dir, 'empty')), CLAUDE_CODE)
   assert.ok(!(env[GIT_SETTINGS_VARIABLE] ?? '').includes(THE_SWITCH), `the member\'s git settings do not carry ${THE_SWITCH} (${env[GIT_SETTINGS_VARIABLE] ?? ''})`)
   // And a member's own git in a directory that is a bare checkout still answers:
   // moving the switch into the launch environment is what this test fails on.
