@@ -37,7 +37,8 @@ export const floorRecordOf = (places) => join(dirname(places.releases), FLOOR_RE
 const codeOf = (error) => /** @type {{ code?: unknown }} */ (error)?.code
 
 /**
- * The floor this machine holds, or undefined when it holds none yet.
+ * The floor this machine holds, or undefined when it holds none yet. The launcher's recordedFloor reads the record
+ * alike, in the same words, held by every_reader_agrees_on_the_floor.node-test.mjs (martha#433).
  * @param {import('../place_the_release/place_the_release.mjs').Places} places
  * @returns {Promise<string | undefined>}
  */

@@ -49,18 +49,25 @@ export function floorRecordOf(realTree: string): string | undefined {
   return join(dirname(releases), FLOOR_RECORD)
 }
 
-/** The version's three parts as numbers. */
-const partsOf = (version: string): number[] => (VERSION.exec(version) ?? []).slice(1).map(Number)
+/**
+ * The version's three parts as whole numbers, exact at any length: a float would read 9007199254740993 as ...992.
+ * The installer's compareVersions and the packer's below read them the same way, held by
+ * installer/hold_the_version_floor/every_reader_agrees_on_the_floor.node-test.mjs (martha#433).
+ */
+const partsOf = (version: string): bigint[] => (VERSION.exec(version) ?? []).slice(1).map(BigInt)
 
-/** Whether `a` is a lower version than `b`, compared part by part as numbers. */
-function below(a: string, b: string): boolean {
+/** Whether `a` is a lower version than `b`, compared part by part as whole numbers. */
+export function below(a: string, b: string): boolean {
   const [x, y] = [partsOf(a), partsOf(b)]
   const at = x.findIndex((part, i) => part !== y[i])
-  return at >= 0 && (x[at] ?? 0) < (y[at] ?? 0)
+  return at >= 0 && (x[at] ?? 0n) < (y[at] ?? 0n)
 }
 
-/** The floor `record` holds, from what reading it gave; undefined when there is none yet; or why it cannot be read. */
-function recordedFloor(record: string, read: TheRecordRead): string | undefined | { readonly refusal: string } {
+/**
+ * The floor `record` holds, from what reading it gave; undefined when there is none yet; or why it cannot be read.
+ * The installer's machineFloor reads it alike, in the same words (martha#433).
+ */
+export function recordedFloor(record: string, read: TheRecordRead): string | undefined | { readonly refusal: string } {
   if ('code' in read) {
     if (read.code === NO_RECORD) return undefined
     return { refusal: `${record}, this machine's version floor, could not be read (${read.code}); refused, never read as no floor` }
