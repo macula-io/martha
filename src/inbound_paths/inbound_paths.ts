@@ -358,7 +358,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A21',
-    what: "an ask a member queued for the owner, handed to the session that takes the batch and offers it as one menu: the queue_ask tools' question, which reaches another member's model as the launcher's own answer to take_asks (martha#313, ../queue_the_owners_asks). The seam records that answer on B2, the row every MCP tool's result is taken in on; this row is the path its gate stands on, and no source of its own (../take_in_a_turn). Not closed: a row written into the crew's ask stream by a shell of the same OS user, which the gate refuses by name when it is taken but which is in the stream the session reads",
+    what: "an ask a member queued for the owner, handed to the session that takes the batch and offers it as one menu: the queue_ask tools' question, and, when the ask would delete a branch, the branch and the tip each copy of it stands at (martha#391, ../read_the_tips_a_removal_covers), all of which reach another member's model as the launcher's own answer to take_asks (martha#313, ../queue_the_owners_asks). The seam records that answer on B2, the row every MCP tool's result is taken in on; this row is the path its gate stands on, and no source of its own (../take_in_a_turn). Not closed: a row written into the crew's ask stream by a shell of the same OS user, which the gate refuses by name when it is taken but which is in the stream the session reads",
     klass: 'delivered',
     control: { kind: 'ask-gate', gate: 'a-crews-own-asker' },
     attestation: 'none',
