@@ -219,6 +219,8 @@ export const EXCEPTIONS: readonly Exception[] = [
   // Martha. The crew's state directory is named the same word and means nothing here: this fixture stands in for a
   // real host's event, and the test reads only the origin's kind.
   { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/a_prompt_the_relay_takes_in_is_raised.node-test.ts', reason: 'the plugin name a host puts in an origin, not the crew state directory name: the words are the same and the meanings are not' },
+  // The command a placed release carries, bin/martha, run by its path inside the committed tree (martha#426).
+  { value: STATE_ROOT_NAME, file: 'run_the_martha_command/every_act_is_held_to_the_floor.node-test.ts', reason: 'the file name of the command the tree carries in bin/, not the crew state directory name: the words are the same and the meanings are not' },
   // The dashboard's own word for a parked member (martha#320). It is the row's state, and shares its spelling with
   // PARKED_PLACE, the name of the place a crew keeps its park markers in: the two are different names for different
   // things, and a park is read by both — the marker and the row the member itself wrote.
