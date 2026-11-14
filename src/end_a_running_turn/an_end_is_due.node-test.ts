@@ -9,22 +9,20 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { aFlowStarting, HANDOVER_LIMIT_PERCENT, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import {
-  aFlowStarting,
   anEndIsDue,
   anEndOutlived,
   CONTEXT_FULL_PERCENT,
   FORCED_ENDS,
-  HANDOVER_LIMIT_PERCENT,
   theFlowEnded,
   theFlowEnding,
   theFlowEndExpired,
   theFlowGivenUp,
   theFlowNotEnded,
   type AnEndPending,
-  type ARefresh,
   type TheRunningTurn,
-} from './refresh_a_member.ts'
+} from './end_a_running_turn.ts'
 
 /** The crew's ceiling when its file names none. */
 const CEILING_MS = HANDOVER_CEILING_MINUTES_WHEN_UNNAMED * MINUTE_MS
