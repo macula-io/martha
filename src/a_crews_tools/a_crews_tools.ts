@@ -180,8 +180,8 @@ export const RESTART_A_MEMBER = 'restart_a_member'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
- * refreshed session is recorded with: the SessionStart source value keeps its own name, `CREW_REFRESH`, because a
- * ledger already holds it and the host's vocabulary names it.
+ * refreshed session is recorded with: the SessionStart source value keeps a name of its own, `CREW_REFRESH`, whose
+ * value is `martha_refresh` since #468 took crew-code's tool name off it.
  */
 export const REFRESH_THIS_SESSION = 'refresh_this_session'
 

@@ -495,7 +495,7 @@ The rules the seam keeps, and a host must not work around:
   the successor would start clean and read what its tainted predecessor wrote.
   So the host declares every event that starts a session
   (`CLAUDE_CODE_SESSION_EVENTS`): the `/clear` the crew's mod ran itself is
-  `crew_refresh`, an inheritance from the predecessor's id, which the mod knows
+  `martha_refresh`, an inheritance from the predecessor's id, which the mod knows
   and the model never supplies. A `resume` under a new id has no record, and
   has lost it; so does a `fork`, which the host sends as its own SessionStart
   `source` and which carries its parent's context under a new id. Only
