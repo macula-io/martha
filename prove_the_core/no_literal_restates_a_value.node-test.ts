@@ -209,3 +209,24 @@ test('a move is unchanged: the constant leaves one module for another, and nothi
 
   assert.deepEqual(restatementsIn([movedTo], { judged: everyLine(movedTo), defined }), [])
 })
+
+test('two new exported definitions of one new value, in two new modules, are each named against the other', () => {
+  const one = source('a_one/a_one.ts', "export const ONE = 'a-brand-new-word'\n")
+  const two = source('a_two/a_two.ts', "export const TWO = 'a-brand-new-word'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'a-brand-new-word', module: 'a_one/a_one.ts', name: 'ONE' }, { value: 'a-brand-new-word', module: 'a_two/a_two.ts', name: 'TWO' }]
+
+  assert.deepEqual(restatementsIn([one, two], { judged: everyLine(one, two), defined }).map(lineOfAFinding), [
+    "a_one/a_one.ts:1: 'a-brand-new-word' restates a_two/a_two.ts TWO",
+    "a_two/a_two.ts:1: 'a-brand-new-word' restates a_one/a_one.ts ONE",
+  ])
+})
+
+test('a new exported definition is named against the holder that held its value before, ahead of another holder the change adds', () => {
+  const sortsFirst = source('a_aaa/a_aaa.ts', "export const FIRST = 'the-tool'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'the-tool', module: 'a_aaa/a_aaa.ts', name: 'FIRST' }, ...ADDS_A_SECOND_HOLDER]
+
+  assert.deepEqual(restatementsIn([EXPORTER, A_SECOND_HOLDER, sortsFirst], { judged: everyLine(A_SECOND_HOLDER, sortsFirst), defined }).map(lineOfAFinding), [
+    "a_aaa/a_aaa.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
+    "a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
+  ])
+})

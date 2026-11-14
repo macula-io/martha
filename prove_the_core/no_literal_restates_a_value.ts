@@ -318,7 +318,9 @@ const namedFor = (holder: Definition | undefined, fromTheChange: DefinedByTheCha
  * What a literal that DEFINES a constant is: a copy of another module's value
  * (R2), a copy of a value the change defines (R1), or the definition itself. The
  * constant the change itself defines is not a copy of the value it defines, but
- * it is a copy of another module's holder that held the value before the change.
+ * it is a copy of another module's holder that held the value before the change,
+ * or, when none did, of another module's holder the same change adds: two new
+ * modules holding one new value are each named against the other.
  *
  * Against a value the change defines, a definition is a copy wherever it sits,
  * its own module included, unless it is itself an exported holder of that value
@@ -330,7 +332,7 @@ function findingsForADefinition(definition: Definition, line: number, declared: 
   const isDefinedByTheChange = (one: Definition): boolean => declared.some((entry) => entry.value === one.value && entry.module === one.path && entry.name === one.name)
   const holders = holdersOf(definition.value, definitions, definition.path)
   const heldBefore = holders.filter((each) => each.path !== definition.path && !isDefinedByTheChange(each))
-  if (isDefinedByTheChange(definition)) return namedAgainst(definition, line, heldBefore[0])
+  if (isDefinedByTheChange(definition)) return namedAgainst(definition, line, heldBefore[0] ?? holders.find((each) => each.path !== definition.path))
   const isACopyAgainst = (module: string): boolean => module !== definition.path || !definition.exported
   const isAHolder = definition.exported && !definition.alias
   const holdsANewDefinition = (entry: DefinedByTheChange): boolean => holders.some((each) => each.path === entry.module && each.name === entry.name)

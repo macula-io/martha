@@ -46,6 +46,7 @@
 //      false one, counts (whatAPromptCarries).
 
 import type { Arrival, TurnSource } from '../host_contract/host_contract.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** What each origin kind a host sends means, as a turn source. */
 export interface HostPromptOrigins {
@@ -83,7 +84,7 @@ export function whatAPromptCarries(prompt: { readonly command?: unknown; readonl
  * recorded_claude_code_host.json names the version).
  */
 export const CLAUDE_CODE_PROMPT_ORIGINS: HostPromptOrigins = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   sources: {
     // The owner's own typing, stamped by the engine (rules 3 and 5).
     composer: 'owner_typed',

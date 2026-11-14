@@ -33,6 +33,7 @@ import {
   CREW_REFRESH,
   RECORDED_HOST,
 } from './recorded_claude_code_host.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 // Synthetic ids only: this repository is public.
 const OTHER_MEMBER_SOCKET = 'uds:/run/user/1000/cc-socks/4102.sock'
@@ -177,7 +178,7 @@ test('a called tool\'s own name is what follows the last __ of an mcp__ name', (
 test('the core judges a Claude Code mesh tool by its own name when the hook passes host.tools', (t) => {
   const { adapter } = adapterIn(t)
   const launch_dir = scratch(t)
-  const launch: ApprovedLaunch = { host: 'claude-code', launch_dir, stop_dir: launch_dir, approved_fingerprints: [] }
+  const launch: ApprovedLaunch = { host: CLAUDE_CODE, launch_dir, stop_dir: launch_dir, approved_fingerprints: [] }
   const callOf = (tool: string, names: { ownNameOf(called: string): string }) =>
     answerToolCall({
       tool,

@@ -37,6 +37,7 @@ import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_resu
 import type { ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
+  CLAUDE_CODE,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   type ConfigEntry,
@@ -416,7 +417,7 @@ function claimedControlGap(
 
 // A host the launch probes use, its first listed file, and a second one: the
 // probes are built from the module's own lists, never a restated file name.
-const PROBE_HOST: Host = 'claude-code'
+const PROBE_HOST: Host = CLAUDE_CODE
 const [SERVERS, SETTINGS] = LAUNCH_FILES_OF_HOST[PROBE_HOST]
 
 const sha = (digit: string) => digit.repeat(64)

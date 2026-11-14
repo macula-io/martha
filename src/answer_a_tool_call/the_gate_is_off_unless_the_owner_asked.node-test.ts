@@ -25,7 +25,7 @@ import {
   type Policy,
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   beginSession,
   PATH_OF_SOURCE,
@@ -48,10 +48,10 @@ const checkout = join(launch_home, 'work')
 mkdirSync(checkout)
 writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: checkout,
   stop_dir: launch_home,
-  approved_fingerprints: [fingerprintOf(readLaunchState({ host: 'claude-code', launch_dir: checkout, stop_dir: launch_home }, thisMachine))],
+  approved_fingerprints: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: launch_home }, thisMachine))],
 }
 
 const policy: Policy = { may_send_executable_text: [] }

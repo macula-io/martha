@@ -13,9 +13,9 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
+  CLAUDE_CODE,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   readLaunchState,

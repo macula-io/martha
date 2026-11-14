@@ -117,6 +117,7 @@ import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_serve
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
+  CLAUDE_CODE,
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
   claudeSettingsSwitches,
@@ -167,9 +168,6 @@ export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', im
 
 /** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
 export const EMPTY_DIRECTORY_NAME = 'nothing'
-
-/** The host this launcher starts. */
-export const CLAUDE_CODE = 'claude-code'
 
 /** Where the launcher keeps a member's files: directories this user owns. */
 export interface LauncherPlaces {

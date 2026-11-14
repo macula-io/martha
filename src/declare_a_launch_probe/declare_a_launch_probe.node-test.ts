@@ -8,7 +8,6 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import {
   claude,
   claudeAsTheAgent,
@@ -22,6 +21,7 @@ import {
   turnBudgetsOf,
   type Probe,
 } from './declare_a_launch_probe.ts'
+import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 const SWITCHES = { ...NO_SWITCHES, args: ['--a-switch', 'its-value'] }
 
