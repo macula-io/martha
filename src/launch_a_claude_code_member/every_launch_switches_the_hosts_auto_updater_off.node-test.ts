@@ -71,7 +71,7 @@ function aRunnableFile(home: string, name: string): string {
   return path
 }
 
-test("the member and probe launches switch each host's own auto-updater off", () => {
+test('the member and probe launches switch the host auto-updater off', () => {
   for (const host of EVERY_HOST) {
     assertTheUpdaterIsOff(`the ${host} member and probe launch (launchEnvironment)`, launchEnvironment({ HOME: '/an-owner-home' }, NO_SWITCHES, host), host)
   }
