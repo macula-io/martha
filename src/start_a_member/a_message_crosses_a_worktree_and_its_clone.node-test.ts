@@ -71,7 +71,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
     return held
   }
   const crewOf = (member: string, root: string): ReturnType<typeof crewToolsOver> =>
-    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew')) }, carrier: carrierOf(member) })
+    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew-files')) }, carrier: carrierOf(member) })
 
   const sent = await crewOf('Builder', worktree).answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
   assert.ok('answer' in sent, `the send from the worktree was not answered: ${JSON.stringify(sent)}`)
