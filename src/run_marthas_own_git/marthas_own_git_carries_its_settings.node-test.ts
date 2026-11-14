@@ -104,9 +104,13 @@ test('the switch stays off the member\'s environment, where a bare checkout is a
 /** What starts git: the command the host contract is given, or a process call whose first argument is git. */
 const STARTS_GIT = [/(?:^|[^\w.])command:\s*(['"])git\1/, /(?:^|[^\w.])(?:spawn|spawnSync|exec|execFile|execFileSync|execSync)\(\s*(['"`])git(?:\1\s*[,)]|\s)/]
 
+/** Why a probe script starts git: the probe runner and the auto-memory rows both make their own scratch repository. */
+const A_PROBES_OWN_SCRATCH = 'probe scripts that git init a scratch repository they made themselves'
+
 /** The files that start git for a reason of their own, and are not Martha's runs on a member's choice. */
 const OUTSIDE: Readonly<Record<string, string>> = {
-  'src/probe_launch_hosts/probe_hosts.ts': 'probe scripts that git init a scratch repository they made themselves',
+  'src/probe_launch_hosts/probe_hosts.ts': A_PROBES_OWN_SCRATCH,
+  'src/probe_the_hosts_auto_memory/probe_the_hosts_auto_memory.ts': A_PROBES_OWN_SCRATCH,
   'src/check_nothing_private_gets_in/read_sources.ts': 'the repository\'s own check, reading this repo\'s sources and never a member\'s tree',
 }
 

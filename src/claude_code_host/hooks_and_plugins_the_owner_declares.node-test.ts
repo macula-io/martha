@@ -177,7 +177,7 @@ test('a frontmatter that opens and never closes is refused as cannot-be-told; a 
 })
 
 // Two spellings the list above deliberately leaves out, because the host does
-// not read either as the key `hooks`: the probe rows in ../probe_launch_hosts
+// not read either as the key `hooks`: the probe rows in ../probe_the_owners_hooks
 // record what it does with each (martha#174). A widening of the list that
 // refuses one of them fails here, and the plain key beside them is refused here,
 // so this check is shown to be able to tell the two answers apart.
