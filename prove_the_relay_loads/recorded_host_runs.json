@@ -34,5 +34,10 @@
     "file": "src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts",
     "cases": 2,
     "proves": "a member's switch in this host leaves the owner's own default alone (martha#359)"
+  },
+  {
+    "file": "src/hear_every_turn_the_model_runs/every_turn_on_the_recorded_host.node-test.ts",
+    "cases": 3,
+    "proves": "the launcher hears every main turn the model runs, one the mod's timer submitted included, each recorded once (martha#440)"
   }
 ]
