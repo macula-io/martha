@@ -389,6 +389,31 @@ test('a host whose bundle exports a name the guard calls from two modules cannot
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
 })
 
+test('a host whose module declares a function the guard reaches two ways cannot be read, naming the part (martha#412 r=2)', (t) => {
+  const last = GUARD.functions.at(-1)?.function ?? ''
+  const name = /^function\*? ?([\w$]+)\(/.exec(last)?.[1] ?? ''
+  assert.notEqual(name, '', 'the recorded guard reaches a function')
+  // The last function's module is the bundle's last, so a second, different declaration of it lands in that module.
+  const twice = `${guardModules(GUARD)}function ${name}(){return!(${String(GUARD.functions.length)})}`
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, managed_folder_guard_calls: twice }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+})
+
+test('a host whose loader assigns a name its managed-folder guard reads two ways cannot be read, naming the part (martha#412 r=2)', (t) => {
+  const loader = RECORDED_HOST.markdown_loader
+  const guard = /\[\(([^?]+)\?Promise\.resolve\(\[\]\)/.exec(loader)?.[1] ?? ''
+  const read = [...guard.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$(])/g)].map((match) => match[1] ?? '')
+  const assigned = read.map((name) => new RegExp(`,${name.replaceAll('$', '\\$')}=(?![=>])([^,;]+)`).exec(loader)).find((match) => match !== null)
+  assert.ok(assigned !== undefined && assigned !== null, 'the recorded guard reads a name its loader assigns')
+  const [assignment, expression = ''] = assigned
+  const name = assignment.slice(1, assignment.indexOf('='))
+  const twoWays = loader.replace(assignment, `${assignment},${name}=!(${expression})`)
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, markdown_loader: twoWays }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+})
+
 // memory_off is restated by hand, so nothing derives it (martha#136); --check holds it to the host's code instead
 // (martha#412), so a host that changed the guard it quotes fails by the field rather than only by a test elsewhere.
 test('a host whose memory guard, on check or hosted-mode variable is not the one restated fails the check naming memory_off (martha#412)', (t) => {
