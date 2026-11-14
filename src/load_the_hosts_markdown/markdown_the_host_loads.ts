@@ -28,7 +28,7 @@
 //     here; the path itself is the one the session's own init reports at launch,
 //     since the host resolves it after the settings env blocks.
 
-import { closingBrace } from './settings_that_turn_hooks_off.ts'
+import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
 
 /** What the host binary says about the markdown it loads, as recorded. */

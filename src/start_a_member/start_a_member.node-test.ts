@@ -44,7 +44,7 @@ import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.
 import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -445,7 +445,7 @@ test("a member started with Martha's own prompt carries it after the owner's arg
   await declared(place)
   const fake = aClaudeThatWritesEachCall(place)
   const args = ['--effort', 'high']
-  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
+  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/MARTHA_HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
   const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args, initial_prompt: prompt })
   assert.ok(started.started, started.started ? '' : started.refusal)
   await until('the fake host to write the arguments it was started as a member with', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)

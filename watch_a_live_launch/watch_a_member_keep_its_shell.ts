@@ -29,7 +29,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../src/claude_code_host/claude_code_host.ts'
-import { PINNED_TRANSPORT } from '../src/claude_code_host/mesh_server_install.ts'
+import { PINNED_TRANSPORT } from '../src/install_the_mesh_server_for_claude_code/mesh_server_install.ts'
 import { STRICT_GATE } from '../src/declare_crew/declare_crew.ts'
 import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
 import { driveTheRecordedHost, plainTextOf, type ModelRequest, type ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
