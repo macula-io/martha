@@ -339,7 +339,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A19',
-    what: "the crew text the launcher hands a session as it starts (martha#306): who the member is, the crew's practice when the crew switched it on, the member's role text, the mode's text, the lines it sends, and the crew's conventions — from Martha's own texts and from the crew's files under .crew/",
+    what: "the crew text the launcher hands a session as it starts (martha#306): who the member is, the crew's practice when the crew switched it on, the member's role text, the mode's text, the lines it sends, and the crew's conventions — from Martha's own texts and from the crew's files under .martha/",
     klass: 'delivered',
     control: {
       kind: 'approved-text',

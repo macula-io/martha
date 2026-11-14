@@ -9,6 +9,8 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
+  CREW_CODE_DECLARATION_DIRECTORY,
+  CREW_CODE_DECLARATION_FILE,
   HANDOVER_CEILING_MINUTES_LEAST,
   HANDOVER_CEILING_MINUTES_MOST,
   HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
@@ -29,7 +31,7 @@ import {
 } from './declare_crew.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
-const root = '/crew-project'
+const root = '/martha-project'
 const crew_directory = join(root, DECLARATION_DIRECTORY)
 const declaration_path = join(crew_directory, DECLARATION_FILE)
 
@@ -158,6 +160,20 @@ test('the declaration is read exactly once, and using the settings reads nothing
 })
 
 // --- 3. no silent default -----------------------------------------------------
+
+test('#468: a checkout still holding crew-code\'s declaration is refused by name, not as a plain absence', async () => {
+  const crewCodeDeclaration = join(root, CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE)
+  const { store } = storeOf({ [crewCodeDeclaration]: JSON.stringify(solo) })
+  await assert.rejects(declareCrew(store, root, HOST_MODELS), (error: unknown) => {
+    assert.ok(error instanceof DeclarationRefused)
+    assert.equal(error.file, declaration_path)
+    assert.equal(error.field, null)
+    // The message names the file found and the file Martha reads, so a person can move one to the other.
+    assert.ok(error.message.includes(crewCodeDeclaration), error.message)
+    assert.ok(error.message.includes(declaration_path), error.message)
+    return true
+  })
+})
 
 test('a missing declaration is refused by its file, never replaced by a default', async () => {
   const { store } = storeOf({})

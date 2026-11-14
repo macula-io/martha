@@ -66,7 +66,7 @@ test('#253: what a member took in is kept per member, by position', async () => 
   const position = await appendToTheChannel(channel, message('A', ['B'], 'a hand-off'))
   await keepTakenIn(channel, 'B', position)
 
-  assert.equal(takenStreamOf('B'), 'crew_channel_taken/B')
+  assert.equal(takenStreamOf('B'), `${CHANNEL_STREAM}_taken/B`, 'a member\'s take-in stream does not hang off the channel\'s own stream')
   assert.deepEqual([...(await takenInBy(channel, 'B'))], [position])
   assert.deepEqual([...(await takenInBy(channel, 'C'))], [], 'one member taking a message in said nothing about another')
 })

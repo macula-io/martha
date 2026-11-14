@@ -271,6 +271,37 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:host-ceilings
 
+  # Martha's names are its own (martha#468): no file, folder, tool, marker or variable of Martha's may be a name
+  # crew-code also gives something, or a person reading a path, a transcript or a tool name cannot tell which crew a
+  # thing belongs to. It runs as a job and as a node test, so no range gate reads green while the check did not run.
+  #
+  # The planted tree holds the job to its bite: one name crew-code owns, written outside the checkout, must exit 1 with
+  # that name and its line printed. Exit 2 is "could not look", which must never read as a bite either. The plants that
+  # empty the table and drop a file kind are in the node test, where each fails by its own name.
+  names:
+    name: Martha's names are its own
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:marthas-names
+      - name: the check bites
+        run: |
+          mkdir -p "${{ runner.temp }}/names-self-test/src"
+          printf "export const tool = 'report_progress'\n" > "${{ runner.temp }}/names-self-test/src/planted.ts"
+          status=0
+          npm run --silent check:marthas-names -- --root "${{ runner.temp }}/names-self-test" \
+            > "${{ runner.temp }}/names-self-test/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then
+            cat "${{ runner.temp }}/names-self-test/verdict.txt"
+            exit 1
+          fi
+          grep -q "planted.ts:1: 'report_progress'" "${{ runner.temp }}/names-self-test/verdict.txt"
+
   # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
   # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the

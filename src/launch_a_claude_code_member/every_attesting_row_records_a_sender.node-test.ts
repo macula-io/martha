@@ -165,7 +165,7 @@ function ingestionsTheRoomReadsRecord(): readonly Ingestion[] {
   const store: SessionRecordStore = { read: () => undefined, write: () => {} }
   const envelopes = [{ message_id: 'm-1', from_node_id: MEMBER, to_node_ids: [OTHER_MEMBER], kind: 'message' as const, attested: true, text: 'hello' }]
   const rosters = { crew: { member_node_ids: [MEMBER] }, shared: { member_node_ids: [MEMBER] } }
-  return (['crew_room', 'shared_room'] as const).flatMap(
+  return (['channel_message', 'shared_room'] as const).flatMap(
     (room) =>
       readRoomThroughItsGate({
         session: beginSession(store, `read-${room}`),

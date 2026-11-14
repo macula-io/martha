@@ -393,7 +393,7 @@ export type TurnOrigin = 'harness_delivery' | 'owner'
 
 /** Every way text reaches a session, in the words a host would use for it. */
 export type TurnSource =
-  | 'crew_room'
+  | 'channel_message'
   | 'shared_room'
   | 'backlog_digest'
   | 'ring'

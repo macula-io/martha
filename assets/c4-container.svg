@@ -73,7 +73,7 @@
 <text class="t-desc" x="48" y="664">drawn below</text>
 <rect class="b-dat" x="332" y="76" width="268" height="120" rx="10"/>
 <text class="t-name" x="348" y="104">the crew declaration</text>
-<text class="t-type" x="348" y="122">[.crew/crew.json]</text>
+<text class="t-type" x="348" y="122">[.martha/martha.json]</text>
 <text class="t-desc" x="348" y="146">Who is on the crew, and the mode's</text>
 <text class="t-desc" x="348" y="162">table of who may do what; written</text>
 <text class="t-desc" x="348" y="178">once by init, never written over</text>

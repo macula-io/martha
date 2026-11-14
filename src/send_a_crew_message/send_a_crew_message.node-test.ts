@@ -4,7 +4,7 @@
 // roster answered with the roster and nothing written, and — when the member holds a package — the send announced
 // and concluded in that package's ledger, so a member refreshed mid-send finds an act it never saw confirmed.
 
-import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -150,7 +150,7 @@ const NO_BEATS: DashboardStore = { read: () => null, change: () => ({ kept: fals
 function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typeof crewToolsOver> {
   const home = mkdtempSync(join(tmpdir(), 'martha-253-say-'))
   t.after(() => removeTheTree(home))
-  const { host } = hostForTests({ now: 1_000, documents: { [join(home, '.crew', 'crew.json')]: JSON.stringify(DECLARATION) } })
+  const { host } = hostForTests({ now: 1_000, documents: { [join(home, DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify(DECLARATION) } })
   return crewToolsOver({
     member: 'Builder',
     ledger: { clock: host.clock, stores: { rows: host.stores.rows } },

@@ -33,7 +33,7 @@ const home = mkdtempSync(join(tmpdir(), 'martha-tools-dialogs-'))
 after(() => removeTheTree(home))
 
 // A made-up project root: this repository is public, so no real path appears here.
-const root = '/crew-project'
+const root = '/martha-project'
 const BUILDER = 'Builder1'
 const SESSION = 'session-builder'
 const team = {

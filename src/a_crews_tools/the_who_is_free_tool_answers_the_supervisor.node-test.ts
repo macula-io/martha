@@ -27,7 +27,7 @@ after(() => removeTheTree(home))
 mkdirSync(join(home, 'row'))
 
 // A made-up project root: this repository is public, so no real path appears here.
-const root = '/crew-project'
+const root = '/martha-project'
 const LEAD = 'Lead'
 const BUILDER = 'Builder1'
 const REVIEWER = 'Reviewer1'

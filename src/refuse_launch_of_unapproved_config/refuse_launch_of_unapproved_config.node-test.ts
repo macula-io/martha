@@ -741,7 +741,7 @@ test('#306: an edit to the crew text makes the next launch stale until the owner
 test('#306: a crew text file git ignores is an entry all the same, so an edit under .gitignore is caught too', (t) => {
   const place = scratch(t)
   put(place.checkout, '.mcp.json', server('echo hi'))
-  put(place.checkout, '.gitignore', '.crew/\n')
+  put(place.checkout, '.gitignore', `${DECLARATION_DIRECTORY}/\n`)
   put(place.checkout, CONVENTIONS, 'Read the register first.\n')
   commitAll(place.checkout, 'a crew that keeps its text out of git')
   const crew = crewPlace(place, join(place.checkout, CONVENTIONS))

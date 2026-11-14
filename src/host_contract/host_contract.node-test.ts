@@ -176,7 +176,7 @@ test('a turn handed to the model is delivered, and an arriving turn reaches ever
   const heard: string[] = []
   host.delivery.onTurn((turn) => heard.push(`first:${turn.text}`))
   host.delivery.onTurn((turn) => heard.push(`second:${turn.text}`))
-  arrive({ text: 'hello', arrival: { source: 'crew_room' } })
+  arrive({ text: 'hello', arrival: { source: 'channel_message' } })
   assert.deepEqual(heard, ['first:hello', 'second:hello'])
 })
 

@@ -129,7 +129,7 @@ test('the member may still read the text it is not allowed to act on', () => {
 
 test('a turn the policy names may run a shell straight away', () => {
   const session = takeInTurn(beginSession(store(), 's-1'), {
-    source: 'crew_room',
+    source: 'channel_message',
     from_identity: supervisor_identity,
   }, bindNothing)
   assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine }), undefined)
