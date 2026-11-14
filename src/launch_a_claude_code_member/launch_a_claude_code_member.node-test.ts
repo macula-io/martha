@@ -69,6 +69,7 @@ import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/re
 import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -451,7 +452,7 @@ test('a file read outside the approved tree takes the shell, naming B4 (martha#1
     { what: 'a notebook in another clone', tool: NOTEBOOK_EDIT_TOOL, input: { notebook_path: join(clone, 'n.ipynb') } },
     { what: 'a search of another clone', tool: 'Grep', input: { path: clone, pattern: 'run' } },
     { what: 'a glob of another clone', tool: 'Glob', input: { path: clone, pattern: '*' } },
-    { what: 'a file in git\'s own directory', tool: 'Read', input: { file_path: join(place.checkout, '.git', 'config') } },
+    { what: 'a file in git\'s own directory', tool: 'Read', input: { file_path: join(place.checkout, '.git', CONFIG) } },
     { what: 'a relative path, which names no place', tool: 'Read', input: { file_path: 'README.md' } },
     { what: 'a read that names no file', tool: 'Read', input: {} },
     { what: 'a search that names no path', tool: 'Grep', input: { pattern: 'run' } },

@@ -101,7 +101,7 @@ import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off
 import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import type { ProtectedConfigPlaces } from '../claude_code_host/protected_config_places.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
-import { whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 
@@ -235,7 +235,7 @@ export const XDG_CONFIG_HOME_VARIABLE = 'XDG_CONFIG_HOME'
 /** The user-level git config file, under the home git reads it from. */
 const OWNERS_GITCONFIG = '.gitconfig'
 /** The user-level git config file's path under `$XDG_CONFIG_HOME` (and under `~/.config` when that is unset). */
-const GIT_CONFIG_UNDER_XDG = ['git', 'config'] as const
+const GIT_CONFIG_UNDER_XDG = ['git', CONFIG] as const
 /** The file in a worktree's git dir that names the git dir it shares, relative to its own. */
 const COMMONDIR = 'commondir'
 
