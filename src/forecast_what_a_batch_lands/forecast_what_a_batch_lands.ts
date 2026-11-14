@@ -8,7 +8,7 @@
 // Each path a merge clashes in is classified by the redo program itself (`redo:generated -- --classify`), the one place
 // its rule is spelled, run through npm in the clone because a slice may not import a program. Each pull request gets one
 // of these answers:
-// - lands;
+// - lands: a forecast, since the merged tree is never on disk here and the landing still holds it to its ceilings;
 // - lands, redone: the redo's words for what it would redo. This is a forecast: the redraw, the ceilings check, and the
 //   type check and the suite before the push still run on the real landing;
 // - clashes by hand: the paths, and what each clashes with: an earlier pull request of the batch, or the landing on the
@@ -16,24 +16,28 @@
 // - left out with another: its head holds the head of a pull request that clashes by hand, so landing it would land that
 //   one's unreviewed resolution too.
 //
-// A pull request that clashes by hand is left out of the chain, as the real landing leaves it out. Told when every one
-// lands; refused, naming each that does not, otherwise.
+// A pull request that clashes by hand is left out of the chain, as the real landing leaves it out. The rule that leaves a
+// head out with another, the words that name a clash and the length of a sha are the landing's own, imported, never
+// spelled again here (martha#423). Told when every one lands; refused, naming each that does not, otherwise.
 
 import { findTheWorkTheseVerdictsPassed, type LandedWork } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import {
   mergedInMemory,
   whatEachPathClashesWith,
-  type AFirstParent,
   type AMergeInMemory,
   type AStep,
   type TheStages,
 } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import {
+  SHORT_SHA,
+  THE_CEILINGS_STILL_AHEAD,
   THE_REDO_SCRIPT,
+  aFirstParentNamed,
   theBatchMayStart,
   theCloneSaysWhoCommits,
-  thePullRequestALandingNames,
+  theClashesSaid,
+  theLeftOutHeadItHolds,
   type LandingHost,
   type Landing,
   type TheBatch,
@@ -41,9 +45,6 @@ import {
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-
-/** How much of a sha an answer shows. */
-const SHORT_SHA = 7
 
 /** What a stage the classifier is handed reads when that side has no such file. */
 const NO_STAGE = '-'
@@ -115,18 +116,9 @@ async function theForecastOf(host: LandingHost, clone: TheClone, chain: TheChain
   const sorted = await theClashSorted(host, clone.path, merged.ok)
   if ('refused' in sorted) return sorted
   if (sorted.ok.by_hand.length === 0) return theChainGrown(host, clone.path, chain, one, merged.ok, sorted.ok.redone)
-  const traced = await whatEachPathClashesWith(host, clone.path, one.head, chain.steps, sorted.ok.by_hand, nameAFirstParent)
+  const traced = await whatEachPathClashesWith(host, clone.path, one.head, chain.steps, sorted.ok.by_hand, aFirstParentNamed)
   if ('refused' in traced) return traced
   return { ok: { forecast: { clashes: one, with: traced.ok, redone: sorted.ok.redone }, chain: { ...chain, left_out: [...chain.left_out, one] } } }
-}
-
-/** The head of a pull request left out that this one's head holds, if any: landing it would land that one too. */
-async function theLeftOutHeadItHolds(host: LandingHost, path: string, left_out: readonly LandedWork[], one: LandedWork): Promise<LandedWork | undefined> {
-  for (const earlier of left_out) {
-    const holds = await git(host, path, ['merge-base', '--is-ancestor', earlier.head, one.head])
-    if (holds.exit_code === 0) return earlier
-  }
-  return undefined
 }
 
 /** The paths a merge clashed in, split by the redo program: its words for each it redoes, and those it does not. */
@@ -165,12 +157,6 @@ async function theChainGrown(host: LandingHost, path: string, chain: TheChain, o
   return { ok: { forecast: { lands: one, redone }, chain: { ...chain, tip, steps: [...chain.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } } }
 }
 
-/** A first-parent commit of the default branch, as a clash names it: the pull request its landing merged, or its sha. */
-function nameAFirstParent(commit: AFirstParent): string {
-  const pr = thePullRequestALandingNames(commit.subject)
-  return pr === undefined ? `the commit ${short(commit.commit)}` : `PR ${String(pr)}`
-}
-
 /** The dry run's answer: one line per pull request, told when every one lands and refused when one does not. */
 function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[]): Landing {
   const head = `The dry run of ${String(forecasts.length)} package(s) onto ${clone.default_branch} at ${short(base)} (${NOTHING_WRITTEN}):`
@@ -183,7 +169,7 @@ function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[
 function aLine(forecast: AForecast): string {
   if ('lands' in forecast) {
     const named = theWork(forecast.lands)
-    return forecast.redone.length === 0 ? `- lands: ${named}` : `- lands, redone: ${named}: ${forecast.redone.join('; ')} (${STILL_AHEAD})`
+    return forecast.redone.length === 0 ? `- lands: ${named} (${THE_CEILINGS_STILL_AHEAD})` : `- lands, redone: ${named}: ${forecast.redone.join('; ')} (${STILL_AHEAD})`
   }
   if ('clashes' in forecast) {
     const redone = forecast.redone.length === 0 ? '' : ` (it would redo ${forecast.redone.join('; ')})`
@@ -192,17 +178,11 @@ function aLine(forecast: AForecast): string {
   return `- left out with PR ${String(forecast.inside.pr)}: ${theWork(forecast.left_out)} holds its head, so it would land that one's clash too`
 }
 
-/** Each path a pull request clashes in, grouped by what it clashes with, in the order they were found. */
-function theClashesSaid(clashes: ReadonlyMap<string, string>): string {
-  const by_whom = new Map<string, string[]>()
-  for (const [path, whom] of clashes) by_whom.set(whom, [...(by_whom.get(whom) ?? []), path])
-  return [...by_whom].map(([whom, paths]) => `${paths.join(', ')} with ${whom}`).join('; ')
-}
 
 /** A pull request as an answer names it. */
 const theWork = (one: LandedWork): string => `${one.package} (PR ${String(one.pr)})`
 
-/** The first seven characters of a sha. */
+/** A sha as an answer shows it. */
 const short = (sha: string): string => sha.slice(0, SHORT_SHA)
 
 /** git run in `cwd`, with Martha's own settings in front of its arguments. */

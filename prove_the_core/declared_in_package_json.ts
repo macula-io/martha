@@ -26,6 +26,10 @@ export interface Manifest {
     readonly decisionFiles?: readonly string[]
     /** How many code lines each host directory may hold, by the directory package.json declares (martha#322). */
     readonly hostCeilings?: Readonly<Record<string, number>>
+    /** How many code lines any core slice may hold (martha#415). */
+    readonly sliceCap?: number
+    /** The core slices measured above the cap, each at its own ceiling (martha#415). */
+    readonly sliceCeilings?: Readonly<Record<string, number>>
     readonly packageImports?: Readonly<Record<string, string>>
     readonly loaderImports?: Readonly<Record<string, string>>
   }

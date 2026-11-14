@@ -9,7 +9,7 @@ import { test } from 'node:test'
 
 import { ROW_NOT_DURABLE, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { recordOf, SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
+import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseStreamOf, releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { A_RELEASE_NEEDS_THE_OWNERS_TERMINAL, releaseAHeldMember, toldOfARelease } from './release_a_held_member.ts'
@@ -50,7 +50,7 @@ const strangerText: Ingestion = { path: 'A2', from_node_id: 'a-node-the-policy-d
 
 /** The crew's rows, holding one live session's record and no release for it. */
 const rowsHolding = (raw: readonly Ingestion[] = [strangerText]) =>
-  rowsInMemory({ [`${SESSION_RECORD_STREAM}${SESSION}`]: [{ ingested: raw as unknown as Row[] } as Row] })
+  rowsInMemory({ [sessionRecordStreamOf(SESSION)]: [{ ingested: raw as unknown as Row[] } as Row] })
 
 const asked = (rows: RowStore, more: Partial<Parameters<typeof releaseAHeldMember>[0]> = {}) => ({
   member: MEMBER,
@@ -80,12 +80,12 @@ test('#321: a release writes one mark on the release stream, clearing the whole 
   assert.equal(marks[0]?.through, 2)
   assert.equal(marks[0]?.by, OWNER_AT_THE_TERMINAL)
   assert.equal(
-    rows.kept.has(`${SESSION_RECORD_STREAM}${SESSION}`),
+    rows.kept.has(sessionRecordStreamOf(SESSION)),
     true,
     'the release wrote somewhere other than its own stream',
   )
   assert.deepEqual(
-    recordOf(rows.kept.get(`${SESSION_RECORD_STREAM}${SESSION}`)!.at(-1) as Row).ingested.length,
+    recordOf(rows.kept.get(sessionRecordStreamOf(SESSION))!.at(-1) as Row).ingested.length,
     2,
     'the release rewrote the session record instead of marking it',
   )
@@ -123,7 +123,7 @@ test('#321: a member whose record holds no arrival is told so, and nothing is wr
 })
 
 test('#321: a record that reads as lost is never released, because nobody can say what it holds', async () => {
-  const rows = rowsInMemory({ [`${SESSION_RECORD_STREAM}${SESSION}`]: [{ ingested: 'not a record' } as unknown as Row] })
+  const rows = rowsInMemory({ [sessionRecordStreamOf(SESSION)]: [{ ingested: 'not a record' } as unknown as Row] })
   const release = await releaseAHeldMember(asked(rows))
   assert.equal(release.released, false)
   assert.match(toldOfARelease(release), /reads as lost/)
@@ -146,4 +146,16 @@ test('#321: a mark that could not be kept is no release, and says so', async () 
   const release = await releaseAHeldMember(asked(broken))
   assert.equal(release.released, false)
   assert.match(toldOfARelease(release), /ROW_NOT_DURABLE/)
+})
+
+test('#424: the release clears the record the launcher wrote, because both name the session’s stream one way', async () => {
+  const rows = rowsInMemory()
+  const launcher = sessionRecordsIn(rows)
+  await launcher.load(SESSION)
+  launcher.store.write(SESSION, { ingested: [strangerText] })
+  await launcher.flush(SESSION)
+  const release = await releaseAHeldMember(asked(rows))
+  assert.equal(release.released, true, `the release read another stream than the launcher wrote: ${toldOfARelease(release)}`)
+  if (!release.released) return
+  assert.equal(release.cleared, 1)
 })

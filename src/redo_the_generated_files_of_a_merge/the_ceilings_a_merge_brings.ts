@@ -1,24 +1,41 @@
 // The ceilings a merge of two passed heads brings (martha#381, martha#410).
 //
 // A batch lands one passed head, then the next, and two heads that both moved the same host directory's ceiling clash in
-// package.json. That file is not wholly generated: only martha.hostCeilings is. So the map is merged here rather than
-// taken from one side — each ceiling stands at the base plus what each review added to it, `base + (ours - base) +
-// (theirs - base)`, read from the three stages a conflicted merge keeps. A ceiling equals its own directory's count
-// exactly (../check_a_host_directory_stays_under_its_ceiling/record_the_ceilings.ts), so the sum is what the two
+// package.json. That file is not wholly generated: only the maps a landing sums are. So each of them is merged here
+// rather than taken from one side — each ceiling stands at the base plus what each review added to it, `base + (ours -
+// base) + (theirs - base)`, read from the three stages a conflicted merge keeps. A ceiling equals its own directory's
+// count exactly (../check_a_host_directory_stays_under_its_ceiling/record_the_ceilings.ts), so the sum is what the two
 // reviewed changes amount to, and no number a review did not see is ever written.
 //
-// Outside the map the file is what git's own merge of the three stages writes (./the_merge_of_three_texts): a part one
-// head changed and the other left alone merges, and only a file the merge itself clashes in outside the map was never
-// generated. What that merge writes must read back as one manifest before it is written anywhere — a merge of lines can
-// settle the same key twice, which JSON reads as the last of them.
+// Outside those maps the file is what git's own merge of the three stages writes (./the_merge_of_three_texts): a part
+// one head changed and the other left alone merges, and only a file the merge itself clashes in outside the maps was
+// never generated. What that merge writes must read back as one manifest before it is written anywhere — a merge of
+// lines can settle the same key twice, which JSON reads as the last of them.
 //
-// A key that is not a number on all three stages has no sum, and a file the merge clashes in outside the map was never
+// A key that is not a number on all three stages has no sum, and a file the merge clashes in outside the maps was never
 // generated: both are refused, in the words a landing prints when it stops.
+//
+// martha.sliceCeilings is summed the same way (martha#415), with two more rules, because there an exception appearing or
+// disappearing is routine: a slice that shrinks under martha.sliceCap loses its exception, and one that grows past it
+// gains one. So a key absent on a side stands at the cap on that side, which keeps the sum defined, and a merged value
+// at or under the cap drops the key. The cap is an upper bound for the absent side, so a merge where one side shrank a
+// slice under the cap and the other grew it past can leave the ceiling above the landed count; the check names that
+// headroom, and a record run on the branch fixes it.
 
 import { basename } from 'node:path'
 
 import { manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
-import { ceilingsOf, CEILINGS_NAME, THE_CEILINGS_KEY, withCeilings } from '../../prove_the_core/the_host_ceilings.ts'
+import {
+  ceilingsOf,
+  CEILINGS_NAME,
+  SLICE_CEILINGS_NAME,
+  sliceCapOf,
+  sliceCeilingsOf,
+  THE_CEILINGS_KEY,
+  THE_SLICE_CEILINGS_KEY,
+  withCeilings,
+  withTheMap,
+} from '../../prove_the_core/the_host_ceilings.ts'
 import { theMergeOfThreeTexts } from './the_merge_of_three_texts.ts'
 
 /** What a merge's ceilings come to: the package.json to write, and the words a landing's commit records of it. */
@@ -29,13 +46,29 @@ export interface ThePackageJsonAMergeBrings {
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
+/** The two maps a merge sums (martha#415): the host directories' ceilings, and the core slices' above the cap. */
+const THE_SUMMED_MAPS: readonly { readonly key: string; readonly name: string }[] = [
+  { key: THE_CEILINGS_KEY, name: CEILINGS_NAME },
+  { key: THE_SLICE_CEILINGS_KEY, name: SLICE_CEILINGS_NAME },
+]
+
+/** The keys those maps stand under, inside `martha`. */
+const THE_SUMMED_KEYS: readonly string[] = THE_SUMMED_MAPS.map((map) => map.key)
+
+/** What a refusal names as the part of package.json a landing writes itself. */
+export const THE_SUMMED_NAMES: string = THE_SUMMED_MAPS.map((map) => map.name).join(' and ')
+
 /**
- * The manifest with its ceilings map emptied, as one text: the file the two sides hold outside the map, one key to a
- * line so a merge of the two finds what each side changed there. The map keeps its place — emptied, every side holds it
- * the same, so the merge passes it through where it stands and the numbers are written over it afterwards.
+ * The manifest with every summed map it carries emptied in place, as one text: the file the two sides hold outside the
+ * maps, one key to a line so a merge of the two finds what each side changed there. A map keeps its place — emptied,
+ * every side holds it the same, so the merge passes it through where it stands and the numbers are written over it
+ * afterwards. A map a side does not carry is left out, so no key is added to the file.
  */
-function withTheCeilingsEmptied(manifest: Manifest): string {
-  const martha = manifest.martha === undefined ? undefined : { ...manifest.martha, [THE_CEILINGS_KEY]: {} }
+function withTheSummedMapsEmptied(manifest: Manifest): string {
+  const martha =
+    manifest.martha === undefined
+      ? undefined
+      : Object.fromEntries(Object.entries(manifest.martha).map(([key, held]) => [key, THE_SUMMED_KEYS.includes(key) ? {} : held]))
   return `${JSON.stringify({ ...manifest, martha }, null, 2)}\n`
 }
 
@@ -49,16 +82,16 @@ function aManifestIn(text: string, stage: string): Step<Manifest> {
 }
 
 /**
- * Whether two package.json texts are the same file once the ceilings map is taken out of each (martha#339): what the
- * range gate's judge asks of a landed manifest against what the merge of the reviewed heads writes. Refused when either
- * is not JSON.
+ * Whether two package.json texts are the same file once every map a merge sums is taken out of each (martha#339): what
+ * the range gate's judge asks of a landed manifest against what the merge of the reviewed heads writes. Refused when
+ * either is not JSON.
  */
 export function theSameOutsideTheCeilings(one: string, other: string): Step<boolean> {
   const first = aManifestIn(one, 'the landed manifest')
   if ('refused' in first) return first
   const second = aManifestIn(other, 'the merged manifest')
   if ('refused' in second) return second
-  return { ok: withTheCeilingsEmptied(first.ok) === withTheCeilingsEmptied(second.ok) }
+  return { ok: withTheSummedMapsEmptied(first.ok) === withTheSummedMapsEmptied(second.ok) }
 }
 
 /** One directory's ceiling in the merged map: both sides' number when they agree, and their sum from the base when not. */
@@ -95,6 +128,38 @@ function theCeilingsTheThreeBring(
   return { ok: next }
 }
 
+/** One core slice's ceiling in the merged map (martha#415): a side without the key stands at the cap, and a merged value
+ * at or under the cap is no exception, so the key is dropped. */
+function theCeilingOnOneSlice(
+  slice: string,
+  cap: number,
+  base: Readonly<Record<string, number>>,
+  ours: Readonly<Record<string, number>>,
+  theirs: Readonly<Record<string, number>>,
+): number | undefined {
+  const mine = ours[slice] ?? cap
+  const other = theirs[slice] ?? cap
+  const from = base[slice] ?? cap
+  const merged = mine === other ? mine : from + (mine - from) + (other - from)
+  return merged > cap ? merged : undefined
+}
+
+/** The core slices' exceptions the merged map takes, or why it cannot: with no cap, a side without a key has no value. */
+function theSliceCeilingsTheThreeBring(
+  cap: number | undefined,
+  base: Readonly<Record<string, number>>,
+  ours: Readonly<Record<string, number>>,
+  theirs: Readonly<Record<string, number>>,
+): Step<Record<string, number>> {
+  if (cap === undefined) return theCeilingsTheThreeBring(base, ours, theirs)
+  const next: Record<string, number> = {}
+  for (const slice of new Set([...Object.keys(ours), ...Object.keys(theirs)])) {
+    const ceiling = theCeilingOnOneSlice(slice, cap, base, ours, theirs)
+    if (ceiling !== undefined) next[slice] = ceiling
+  }
+  return { ok: next }
+}
+
 /** What the merge wrote, read back: the manifest it is, or why it is not one a landing may write. */
 function aManifestThatReadsBackAsItself(text: string, the_manifest: string): Step<Manifest> {
   try {
@@ -104,24 +169,43 @@ function aManifestThatReadsBackAsItself(text: string, the_manifest: string): Ste
     // the text is not JSON at all, which the refusal below already says
   }
   return {
-    refused: `${the_manifest} is not one manifest outside ${CEILINGS_NAME} once the two sides are merged, so the clash is not one this redoes`,
+    refused: `${the_manifest} is not one manifest outside ${THE_SUMMED_NAMES} once the two sides are merged, so the clash is not one this redoes`,
   }
 }
 
-/** The manifest the merge writes outside the ceilings map, or why there is none. */
-function theManifestOutsideTheCeilingsAMergeWrites(
+/** The manifest the merge writes outside the summed maps, or why there is none. */
+function theManifestOutsideTheSummedMapsAMergeWrites(
   the_manifest: string,
   base: Manifest,
   ours: Manifest,
   theirs: Manifest,
 ): Step<string> {
-  const merged = theMergeOfThreeTexts([withTheCeilingsEmptied(ours), withTheCeilingsEmptied(base), withTheCeilingsEmptied(theirs)])
+  const merged = theMergeOfThreeTexts([withTheSummedMapsEmptied(ours), withTheSummedMapsEmptied(base), withTheSummedMapsEmptied(theirs)])
   if ('refused' in merged) return merged
   if ('clashed' in merged) {
-    return { refused: `${the_manifest} differs outside ${CEILINGS_NAME}, so the clash is not one this redoes` }
+    return { refused: `${the_manifest} differs outside ${THE_SUMMED_NAMES}, so the clash is not one this redoes` }
   }
   const read = aManifestThatReadsBackAsItself(merged.ok, the_manifest)
   return 'refused' in read ? read : { ok: merged.ok }
+}
+
+/** The maps the two sides differ in, by the names a landing's commit records: the host map when neither does. */
+function theMapsThatDiffer(ours: Manifest, theirs: Manifest): string {
+  const differ = (a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>): boolean => JSON.stringify(a) !== JSON.stringify(b)
+  const slices = differ(sliceCeilingsOf(ours), sliceCeilingsOf(theirs))
+  const hosts = differ(ceilingsOf(ours), ceilingsOf(theirs)) || !slices
+  return [...(hosts ? [CEILINGS_NAME] : []), ...(slices ? [SLICE_CEILINGS_NAME] : [])].join(', ')
+}
+
+/** `ours` with both maps summed into it, the slices' only when a side carries that map, or why a map has no sum. */
+function theMapsWrittenInto(ours: string, base: Manifest, ours_manifest: Manifest, theirs: Manifest): Step<string> {
+  const summed = theCeilingsTheThreeBring(ceilingsOf(base), ceilingsOf(ours_manifest), ceilingsOf(theirs))
+  if ('refused' in summed) return summed
+  const with_hosts = withCeilings(ours, summed.ok)
+  if (ours_manifest.martha?.sliceCeilings === undefined && theirs.martha?.sliceCeilings === undefined) return { ok: with_hosts }
+  const sliced = theSliceCeilingsTheThreeBring(sliceCapOf(ours_manifest), sliceCeilingsOf(base), sliceCeilingsOf(ours_manifest), sliceCeilingsOf(theirs))
+  if ('refused' in sliced) return sliced
+  return { ok: withTheMap(with_hosts, THE_SLICE_CEILINGS_KEY, sliced.ok) }
 }
 
 /**
@@ -142,9 +226,9 @@ export function thePackageJsonOfAMerge(
   if (base_manifest === undefined || ours_manifest === undefined || theirs_manifest === undefined) {
     return { refused: `${the_manifest} could not be read at all three stages of the merge` }
   }
-  const outside = theManifestOutsideTheCeilingsAMergeWrites(the_manifest, base_manifest, ours_manifest, theirs_manifest)
+  const outside = theManifestOutsideTheSummedMapsAMergeWrites(the_manifest, base_manifest, ours_manifest, theirs_manifest)
   if ('refused' in outside) return outside
-  const summed = theCeilingsTheThreeBring(ceilingsOf(base_manifest), ceilingsOf(ours_manifest), ceilingsOf(theirs_manifest))
-  if ('refused' in summed) return summed
-  return { ok: { text: withCeilings(outside.ok, summed.ok), recorded: `${the_manifest} ${CEILINGS_NAME} (measured)` } }
+  const text = theMapsWrittenInto(outside.ok, base_manifest, ours_manifest, theirs_manifest)
+  if ('refused' in text) return text
+  return { ok: { text: text.ok, recorded: `${the_manifest} ${theMapsThatDiffer(ours_manifest, theirs_manifest)} (measured)` } }
 }

@@ -34,7 +34,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare
 import { crewKeyOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
+import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -154,7 +154,7 @@ test('martha release on a terminal clears the live session’s record and answer
   aLiveSessionRow(place, 'builder', session)
   const rows = rowStreamsDirectory(theCrewsRows(place))
   return (async () => {
-    await rows.append(`${SESSION_RECORD_STREAM}${session}`, { ingested: [{ path: 'A2', from_node_id: 'a-stranger' }] })
+    await rows.append(sessionRecordStreamOf(session), { ingested: [{ path: 'A2', from_node_id: 'a-stranger' }] })
     const run = marthaOnATerminal(place, {}, 'release', 'builder')
     assert.equal(run.status, EXIT_DONE, run.said)
     assert.match(run.said, /Released builder: cleared 1 arrival/)
@@ -370,6 +370,15 @@ test('martha install with a switch it does not know is a usage error, and the us
   assert.equal(run.status, EXIT_USAGE)
   assert.ok(USAGE.includes('martha install'), USAGE)
   assert.doesNotMatch(run.err, /installer pin/)
+})
+
+test('martha install passes --withdrawal-in <version> through to the pinned installer, and the usage names it (martha#21)', (t) => {
+  // It reaches the pin, so the words were taken as a way the command is used and handed on, not refused here.
+  const run = martha(placeFor(t, { checkout: false }), 'install', '1.0.0', '--downgrade', '--withdrawal-in', '2.1.0')
+  assert.equal(run.status, EXIT_REFUSED)
+  assert.match(run.said, /installer pin/)
+  assert.ok(USAGE.includes('martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>]'), USAGE)
+  assert.equal(martha(placeFor(t), 'install', '1.0.0', '--withdrawal-in').status, EXIT_USAGE, '--withdrawal-in takes a value')
 })
 
 /**

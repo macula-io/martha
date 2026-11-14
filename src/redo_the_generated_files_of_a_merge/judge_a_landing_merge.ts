@@ -17,10 +17,9 @@
 import { A_JUDGED_MERGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { whatAMergeTreeWrote, type AMergeInMemory } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { REDONE_GENERATED } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
-import { CEILINGS_NAME } from '../../prove_the_core/the_host_ceilings.ts'
 import { classifyAClashedPath, theManifestStages } from './classify_a_clashed_path.ts'
 import { gitRan, gitSaid, saidBy } from './git_in_the_repository.ts'
-import { thePackageJsonOfAMerge, theSameOutsideTheCeilings } from './the_ceilings_a_merge_brings.ts'
+import { THE_SUMMED_NAMES, thePackageJsonOfAMerge, theSameOutsideTheCeilings } from './the_ceilings_a_merge_brings.ts'
 import { THE_WORDS_BETWEEN, theManifestAsGitNamesIt } from './the_generated_files.ts'
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
@@ -95,7 +94,7 @@ function theManifestIsTheOneTheMergeWrites(repository: string, merge: string, cl
   const same = theSameOutsideTheCeilings(landed, written.ok.text)
   if ('refused' in same) return same
   if (same.ok) return { ok: true }
-  return { refused: `${the_manifest}, outside ${CEILINGS_NAME}, is not what merging the two reviewed heads writes` }
+  return { refused: `${the_manifest}, outside ${THE_SUMMED_NAMES}, is not what merging the two reviewed heads writes` }
 }
 
 /**
