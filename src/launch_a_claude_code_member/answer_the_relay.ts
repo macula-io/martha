@@ -12,6 +12,7 @@
 // |---|---|
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
+// | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message that no heard prompt started (its text, or a slash command's line), `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
 // | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
 // | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
@@ -47,6 +48,7 @@ import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
@@ -214,6 +216,8 @@ interface RelayState {
   readonly broken: Map<string, string>
   /** The agents this host has started under a session, by the id the host stamps (martha#170). */
   readonly agents: Map<string, AgentRun>
+  /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
+  readonly everyTurn: HearingEveryTurn
   /** The review calls this launcher allowed, by the host's id for the call, and what it resolved to (martha#390). */
   readonly reviews: TheReviewSpawns
 }
@@ -308,9 +312,17 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     sessions,
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
+    everyTurn: hearingEveryTurn({ keep: async (id, arrival) => keepATurn(state, id, arrival), ...place, now }),
     reviews: reviewSpawnsRemembered(),
   }
   let queue: Promise<unknown> = Promise.resolve()
+
+  /** Runs `work` after every event already queued, so it reads the record the one before it wrote. */
+  const inOrder = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = queue.then(work)
+    queue = next.catch(() => undefined)
+    return next
+  }
 
   const stop = (why: string): RelayReply => stopMember(place, why)
 
@@ -346,17 +358,15 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
       // The receipt line is stamped here, synchronously, before the event queues: an event waiting its turn is timed
       // from when it arrived rather than from when the queue reached it (martha#240).
       const journaled = place.journal?.received(event, body)
-      const next = queue.then(async () => {
+      return inOrder(async () => {
         const reply = await answerOne(event, body)
         // Written before the answer goes back, so an event this launcher has answered is on disk at once.
         journaled?.answered(journalAnswerOf(reply), refusalReasonOf(reply))
         return reply
       })
-      queue = next.catch(() => undefined)
-      return next
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
-    answerTool: async (body) => answerACoreTool(state, body),
+    answerTool: async (body) => answerAToolAndHearItsTurn(state, body, inOrder),
   }
 
   /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
@@ -412,6 +422,23 @@ async function answerACoreTool(state: RelayState, body: unknown): Promise<Answer
   const why = await takeInARefreshedSession(state, call.session_id)
   if (why !== undefined) return { refused: why }
   return place.crew.answer(call.tool, call.args, call.session_id)
+}
+
+/**
+ * A tool call the mod posted, answered; and a main turn's start it reported, recorded among the host's events after the
+ * carrier decided what the turn took in (martha#440): the record follows that decision, never one of its own.
+ */
+async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrder: (work: () => Promise<void>) => Promise<void>): Promise<Answered | Refused> {
+  const answer = await answerACoreTool(state, body)
+  const start = state.everyTurn.startIn(body, answer)
+  if (start !== undefined) await inOrder(async () => state.everyTurn.recorded(start))
+  return answer
+}
+
+/** Takes a turn the host never raised as a prompt into its session's record (martha#440); false when it was not kept. */
+async function keepATurn(state: RelayState, session_id: string, arrival: Arrival): Promise<boolean> {
+  const session = sessionNamed(state, session_id)
+  return typeof session !== 'string' && (await keep(state, takeInTurn(session, arrival, state.place.binder))) === undefined
 }
 
 /** A tool call's three fields, or undefined when the body is not one. */
@@ -598,6 +625,8 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   if (why !== undefined) return refused(why)
+  // Heard, so the turn it starts (or the running turn it is folded into) is in the record already (martha#440).
+  state.everyTurn.heard(session.id, { text: body.text, command: theCommandNamed(body.command) })
   // A dialog an earlier turn left open is dropped as this turn starts (martha#313): a prompt nobody answered cannot pin
   // the row at "needs you" for the rest of the session. Only a prompt this launcher took in starts a turn.
   state.place.screen?.heard(session.id, { said: 'turn-started' }, now())

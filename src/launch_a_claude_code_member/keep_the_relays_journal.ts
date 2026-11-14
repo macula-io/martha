@@ -118,12 +118,18 @@ export interface RelayJournal {
   /** The event arrived, before it queues: the line is stamped on this journal's own clock, like every other line. */
   received(event: RelayEvent, body: unknown): JournalEntry
   /**
-   * Something the launcher did on no event of the host's, where a run has nowhere else to read it: what happened, under
-   * `event`'s name, why, and — when it is about one of the host's calls — the call's own id (martha#430). A member not
-   * being told is the case this exists for: the store refused the line, so the journal is the only place that says the
-   * member's half of it did not happen, and which review's call it was about.
+   * Something the launcher took in that no relay event carried, as one answered line with its words (martha#440: a
+   * turn of unnamed source, heard from the mod's turn-start report): the record says what it was, this says it ran.
    */
-  noted(event: string, why: string, tool_use_id?: string): void
+  noted(event: string, why: string): void
+  /**
+   * Something the launcher set out to do and could not finish, where a run has nowhere else to read it: what it could
+   * not do, under `event`'s name, why, and — when it is about one of the host's calls — the call's own id (martha#430).
+   * A member not being told is the case this exists for: the store refused the line, so the journal is the only place
+   * that says the member's half of it did not happen, and which review's call it was about. It is a different line from
+   * `noted`: that one says the launcher took something in, this one says it did not manage to hand it on.
+   */
+  notedWhatItCouldNotFinish(event: string, why: string, tool_use_id?: string): void
 }
 
 /** The receipt of one event, answered once. */
@@ -275,7 +281,7 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
   pruneOldJournals(directory)
   keep()
   return {
-    noted: (event, why, tool_use_id) => write({ at: isoOf(now()), phase: 'noted', event, why, ...(tool_use_id === undefined ? {} : { tool_use_id }) }),
+    notedWhatItCouldNotFinish: (event, why, tool_use_id) => write({ at: isoOf(now()), phase: 'noted', event, why, ...(tool_use_id === undefined ? {} : { tool_use_id }) }),
     received: (event, body) => {
       const at = now()
       const call = callIn(body)
@@ -295,6 +301,11 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
           write(answerLineOf(event, call, answer, why, received_at, now_at))
         },
       }
+    },
+    noted: (event, why) => {
+      writing.written += 1
+      writing.events.push({ at: isoOf(now()), phase: 'answered', event, answer: 'taken', why })
+      keep()
     },
   }
 }

@@ -849,7 +849,7 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
         () => undefined,
         // The member's half of the telling did not happen, and the journal is the only place a run can read that it did
         // not (martha#430): the line says which review's call it was about, so a run can put the two halves together.
-        (why: unknown) => places.journal?.noted(A_TELLING_THAT_DID_NOT_REACH, why instanceof Error ? why.message : String(why), call),
+        (why: unknown) => places.journal?.notedWhatItCouldNotFinish(A_TELLING_THAT_DID_NOT_REACH, why instanceof Error ? why.message : String(why), call),
       ),
     takeTheLineBack: () => {
       const line = wrote

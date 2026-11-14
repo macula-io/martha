@@ -133,6 +133,12 @@ export function arrivalOfPrompt(declared: HostPromptOrigins, kind: string, carri
   return { source: source === 'owner_typed' && !typedOnly ? SOURCE_OF_TYPING_THAT_CARRIES_MORE : source }
 }
 
+/**
+ * Where a prompt a plugin submitted came from, with nothing beside its text: a crew mod's handed message among them,
+ * which the launcher records this way when the host never raised it to the mod's `prompt.submit` (martha#440).
+ */
+export const ARRIVAL_OF_A_PLUGINS_PROMPT: Arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, 'plugin', { command: false, meta: false })
+
 /** The origin kinds a host sends that its declaration does not list. */
 export function undeclaredPromptOrigins(declared: HostPromptOrigins, emitted: readonly string[]): readonly string[] {
   return emitted.filter((kind) => !Object.hasOwn(declared.sources, kind))
