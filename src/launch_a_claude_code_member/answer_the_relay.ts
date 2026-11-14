@@ -52,7 +52,7 @@ import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_laun
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { bodyOfAToolCall, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import { type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -385,6 +385,15 @@ async function answerACoreTool(state: RelayState, body: unknown): Promise<Answer
   const why = await takeInARefreshedSession(state, call.session_id)
   if (why !== undefined) return { refused: why }
   return place.crew.answer(call.tool, call.args, call.session_id)
+}
+
+/** A tool call's three fields, or undefined when the body is not one. */
+function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const { session_id, tool, args } = body as Record<string, unknown>
+  if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
+  return { session_id, tool, args: args as Readonly<Record<string, unknown>> }
 }
 
 /** What a mesh tool's result is taken in as: its row, and the node id the result itself attests where the row's station attestation is really there (martha#247). */

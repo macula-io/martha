@@ -97,6 +97,52 @@ export interface TheSessionsQuestion {
   readonly turn_running: boolean
 }
 
+/** The host's own reading of a session (martha#255), as the mod hands it over untouched. */
+interface AHostsUsage {
+  readonly context?: { readonly percent?: number | null }
+  readonly cost?: { readonly usd?: number | null }
+}
+
+/** The host's usage, read as the object it is, or undefined when what arrived is not one. */
+function usageIn(args: Readonly<Record<string, unknown>>): AHostsUsage | undefined {
+  const usage = args['usage']
+  return typeof usage === 'object' && usage !== null ? (usage as AHostsUsage) : undefined
+}
+
+/**
+ * A share of the context limit as the host reports it, or 0 when it reports none this launcher can trust (martha#255).
+ * The host's own number is taken as it comes: a session that says nothing about its context has not reached a limit.
+ */
+function aPercentOf(usage: AHostsUsage | undefined): number {
+  const percent = usage?.context?.percent
+  return typeof percent === 'number' && Number.isFinite(percent) ? percent : 0
+}
+
+/** What the session has cost as the host reports it, or null when it reports nothing this launcher can trust. */
+function aCostOf(usage: AHostsUsage | undefined): number | null {
+  const cost = usage?.cost?.usd
+  return typeof cost === 'number' ? cost : null
+}
+
+/** What each field of the question must be, and what is said when it is not: read in order, the first miss refused. */
+const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => string | undefined)[] = [
+  (args) => (typeof args['turn_id'] === 'string' && typeof args['answer'] === 'string' ? undefined : 'the refresh question carries no turn, or no answer for one'),
+  // The beat's mark (martha#311): 1 while the main turn runs, and nothing else; a mod sending another value is not one
+  // this launcher reads, and a beat read as a turn's end would judge the stall the beat must not.
+  (args) => (args['turn_running'] === undefined || args['turn_running'] === 1 ? undefined : 'the refresh question marks a running turn with something other than 1'),
+]
+
+/** The question the refresh flow is answered on, read strictly: a shape this launcher does not know is refused. */
+export function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
+  const refused = QUESTION_FIELDS.map((holds) => holds(args)).find((said) => said !== undefined)
+  if (refused !== undefined) return refused
+  const usage = usageIn(args)
+  const turn_id = args['turn_id'] as string
+  // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
+  // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
+  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
+}
+
 /** Everything this flow is decided over: the crew's store, the member's row, and the declaration. */
 export interface TheRefreshPlaces {
   readonly member: string
@@ -681,3 +727,9 @@ export function theOrderOf(act: TheAct): TheOrder {
   if (act.act === CARRY_THE_END) return { carry: CARRY_THE_END, turn_id: act.turn_id }
   return act.act === CARRY_THE_CLEAR ? { carry: CARRY_THE_CLEAR } : { carry: 'none' }
 }
+
+/**
+ * Whether the crew's model may be switched after this order (martha#311): only when the flow orders nothing, and never
+ * on a beat taken while the turn runs, since a switch cannot run inside a turn; it waits for the turn's end.
+ */
+export const aSwitchMayFollow = (order: TheOrder, question: TheSessionsQuestion): boolean => order.carry === 'none' && !question.turn_running

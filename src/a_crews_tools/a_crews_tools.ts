@@ -85,7 +85,7 @@ import {
 import { WAIT_FOR_CI, WAIT_FOR_CI_DESCRIPTION, A_COMMIT, theAnswerOf, waitForCi, type TheCiWait } from '../wait_for_ci/wait_for_ci.ts'
 import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
-import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
+import { aSwitchMayFollow, askAMemberToRefresh, theOrderOf, theQuestionIn, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import { holdingTheEnds, type TheEndsHold } from '../refresh_a_member/hold_the_end.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theHandoverAToolWrote, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
@@ -801,18 +801,6 @@ interface SessionState {
   readonly ends: TheEndsHold
 }
 
-/**
- * A crew tool call as the mod posts it (martha#254): its session, the tool's own name and its arguments, or undefined
- * when the body is not one. Read here, beside the tools it names, so the launcher only hands it on.
- */
-export function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
-  if (typeof body !== 'object' || body === null) return undefined
-  const { session_id, tool, args } = body as Record<string, unknown>
-  if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
-  if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
-  return { session_id, tool, args: args as Readonly<Record<string, unknown>> }
-}
-
 /** The tools a member can call, over the place its launcher gave it. */
 export function crewToolsOver(places: CrewToolPlaces): CrewTools {
   // The menus this launch's host closes, heard by its relay through noteTheCallsAnswer (martha#313): a settle of the
@@ -961,8 +949,7 @@ async function theSessionsAct(
   await closeTheGuardNoOneReported(places, state)
   const act: TheAct = await theRefreshAct(refreshPlacesOf(places, state), question)
   const ordered = theOrderOf(act)
-  // A beat asks while the turn runs (martha#311), and a model switch cannot run inside a turn: it waits for the turn's end.
-  const switching = ordered.carry === 'none' && !question.turn_running ? await theModelOrder(places, state) : null
+  const switching = aSwitchMayFollow(ordered, question) ? await theModelOrder(places, state) : null
   keepWhatTheSessionSaid(places, state, question, act)
   return { answer: JSON.stringify(switching ?? ordered) }
 }
@@ -1425,52 +1412,6 @@ async function whoIsFreeOf(places: CrewToolPlaces, args: Readonly<Record<string,
     now: places.ledger.clock.now(),
     member: textOf(args['member']),
   })
-}
-
-/** The host's own reading of a session (martha#255), as the mod hands it over untouched. */
-interface AHostsUsage {
-  readonly context?: { readonly percent?: number | null }
-  readonly cost?: { readonly usd?: number | null }
-}
-
-/** The host's usage, read as the object it is, or undefined when what arrived is not one. */
-function usageIn(args: Readonly<Record<string, unknown>>): AHostsUsage | undefined {
-  const usage = args['usage']
-  return typeof usage === 'object' && usage !== null ? (usage as AHostsUsage) : undefined
-}
-
-/**
- * A share of the context limit as the host reports it, or 0 when it reports none this launcher can trust (martha#255).
- * The host's own number is taken as it comes: a session that says nothing about its context has not reached a limit.
- */
-function aPercentOf(usage: AHostsUsage | undefined): number {
-  const percent = usage?.context?.percent
-  return typeof percent === 'number' && Number.isFinite(percent) ? percent : 0
-}
-
-/** What the session has cost as the host reports it, or null when it reports nothing this launcher can trust. */
-function aCostOf(usage: AHostsUsage | undefined): number | null {
-  const cost = usage?.cost?.usd
-  return typeof cost === 'number' ? cost : null
-}
-
-/** What each field of the question must be, and what is said when it is not: read in order, the first miss refused. */
-const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => string | undefined)[] = [
-  (args) => (typeof args['turn_id'] === 'string' && typeof args['answer'] === 'string' ? undefined : 'the refresh question carries no turn, or no answer for one'),
-  // The beat's mark (martha#311): 1 while the main turn runs, and nothing else; a mod sending another value is not one
-  // this launcher reads, and a beat read as a turn's end would judge the stall the beat must not.
-  (args) => (args['turn_running'] === undefined || args['turn_running'] === 1 ? undefined : 'the refresh question marks a running turn with something other than 1'),
-]
-
-/** The question the refresh flow is answered on, read strictly: a shape this launcher does not know is refused. */
-function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
-  const refused = QUESTION_FIELDS.map((holds) => holds(args)).find((said) => said !== undefined)
-  if (refused !== undefined) return refused
-  const usage = usageIn(args)
-  const turn_id = args['turn_id'] as string
-  // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
-  // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
-  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
 }
 
 /**
