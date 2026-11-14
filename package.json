@@ -96,7 +96,6 @@
     "sliceCeilings": {
       "src/a_crews_tools": 1290,
       "src/probe_launch_hosts": 1142,
-      "src/refuse_launch_of_unapproved_config": 880,
       "src/refresh_a_member": 878
     },
     "packageImports": {
