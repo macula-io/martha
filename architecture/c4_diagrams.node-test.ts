@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join, relative } from 'node:path'
 import {
-  aCountInWords,
+  aCountInWords, THE_COUNTS_IN_WORDS,
   ASSETS, components, containers, DIAGRAMS, LEFT_OUT, PACKAGE_BOXES, ROOM_SLICES_WHICH_LOAD,
 } from './c4_diagrams.ts'
 import type { DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
@@ -308,18 +308,32 @@ test('a component box stands for directories that are in src/, and names each on
   }
 })
 
-/** `The five `, say, for every count up to twelve except the one a box already holds, and the digits. */
-const theCountsABoxDoesNotHold = (held: number): readonly string[] => {
-  const upToTwelve = Array.from({ length: 13 }, (_, stated) => stated)
-  const inWords = upToTwelve.filter((stated) => stated !== held).map((stated) => `The ${aCountInWords(stated)} `)
-  return [...inWords, ...upToTwelve.map((stated) => `The ${String(stated)} `)]
+/**
+ * The counts a box may state, in the words the page writes them and as the digit each word stands at:
+ * "no" and "one" are left out because they are ordinary prose in a box far more often than they are a
+ * count of what the box holds ("one package").
+ */
+const THE_COUNTS_A_BOX_MAY_STATE: readonly string[] = THE_COUNTS_IN_WORDS
+  .map((word, at) => ({ word, at }))
+  .filter(({ word }) => word !== 'no' && word !== 'one')
+  .flatMap(({ word, at }) => [word, String(at)])
+
+/**
+ * Every count a text states, whatever its spelling: any of those words, or digits, before a plural noun —
+ * "five tools", "Its five tools", "the 6 tools" — in any case, and across a line break, because the text
+ * handed in has a space where the page broke the line.
+ */
+const theCountsStatedIn = (said: string): readonly string[] => {
+  const pattern = new RegExp(`\\b(${THE_COUNTS_A_BOX_MAY_STATE.join('|')})\\s+([A-Za-z]+s)(?![A-Za-z])`, 'gi')
+  return [...said.matchAll(pattern)].map((found) => found[1]!.toLowerCase())
 }
 
-test('a box that says how many things it holds says the count it holds', () => {
+test('a box states no count of what it holds but the one it holds, in any spelling and on any line', () => {
   for (const box of components().coverage) {
-    assert.ok(!box.text.includes('{count}'), `${box.name} draws the placeholder where a count belongs`)
-    const wrong = theCountsABoxDoesNotHold(box.names.length).filter((said) => box.text.includes(said))
-    assert.equal(wrong.length, 0, `${box.name} holds ${box.names.length} names and says ${wrong.join(', ')}`)
+    assert.ok(!box.said.includes('{count}'), `${box.name} draws the placeholder where a count belongs`)
+    const held = aCountInWords(box.names.length)
+    const wrong = theCountsStatedIn(box.said).filter((said) => said !== held && said !== String(box.names.length))
+    assert.equal(wrong.length, 0, `${box.name} holds ${box.names.length} names and states ${wrong.join(', ')}`)
   }
 })
 

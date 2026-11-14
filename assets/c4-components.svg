@@ -346,7 +346,7 @@
 <text class="t-type" x="48" y="2656">[a member's model, and the owner's]</text>
 <text class="t-desc" x="48" y="2680">switch_a_members_model keeps the model a</text>
 <text class="t-desc" x="48" y="2696">member runs on for one package, in the</text>
-<text class="t-desc" x="48" y="2712">crew's own store, and the three ways back;</text>
+<text class="t-desc" x="48" y="2712">crew's own store, and the ways back;</text>
 <text class="t-desc" x="48" y="2728">put_the_owners_model_back undoes what a</text>
 <text class="t-desc" x="48" y="2744">switch does to the owner's own default:</text>
 <text class="t-desc" x="48" y="2760">the lock, the snapshot, the wait on the</text>

@@ -194,6 +194,11 @@ export interface BoxCoverage {
   readonly names: readonly string[]
   /** The title, the type and every description line, joined, so a name split over two lines is still found. */
   readonly text: string
+  /**
+   * The same pieces as a reader reads them, one space between: a name split over two lines and a count
+   * split over two lines both stay whole here, which joining them shut together would hide.
+   */
+  readonly said: string
 }
 
 /** A text as it was drawn: its baseline, and the width the estimate above gives it. */
@@ -362,7 +367,12 @@ class Diagram {
     this.parts.push(`<rect class="${b.kind}" x="${b.x}" y="${b.y}" width="${b.w}" height="${h}" rx="10"/>`)
     const tx = b.person ? b.x + 44 : b.x + 16
     if (b.person) this.parts.push(`<circle class="head" cx="${b.x + 26}" cy="${b.y + 24}" r="9"/>`)
-    if (b.names) this.coverage.push({ name: b.name, names: b.names, text: [b.name, b.type, ...b.desc].join('') })
+    if (b.names) this.coverage.push({
+      name: b.name,
+      names: b.names,
+      text: [b.name, b.type, ...b.desc].join(''),
+      said: [b.name, b.type, ...b.desc].join(' '),
+    })
     // A slice name longer than its box is broken at the underscore nearest its middle, so the name stays
     // readable as the directory it is: keep_martha_state_outside_ / the_checkout.
     const lines = nameLines(b.name, b.code === true, b.w - 32)
@@ -616,12 +626,17 @@ function inRows(
 }
 
 /**
- * A count written out in words, for the one place a box's prose says how many things it holds
- * (martha#407). Past twelve the count is the number itself, so a word never has to be invented.
+ * Every count the page writes out, in order from none: the range a box may state is this list's own,
+ * never a number written beside it (martha#407). Past its end the count is the number itself, so no
+ * word has to be invented.
  */
+export const THE_COUNTS_IN_WORDS = [
+  'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+] as const
+
+/** A count written out in words, for the one place a box's prose says how many things it holds. */
 export function aCountInWords(count: number): string {
-  const words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
-  return words[count] ?? String(count)
+  return THE_COUNTS_IN_WORDS[count] ?? String(count)
 }
 
 /** Where a box's description says how many things it holds, in place of writing the number itself. */
@@ -706,7 +721,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model'], type: '[a member\'s model, and the owner\'s]', code: true,
-      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the three ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
+      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model'] },
   ],
 ]
 
