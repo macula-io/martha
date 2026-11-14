@@ -16,10 +16,9 @@ import { test } from 'node:test'
 
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { carryingTo, THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { launcherPlacesOf } from './start_a_member.ts'
@@ -64,19 +63,26 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const declaredAt = (root: string): string => join(root, '.crew', 'crew.json')
   const { host } = hostForTests({ now: 1_000, documents: { [declaredAt(clone)]: DECLARATION, [declaredAt(worktree)]: DECLARATION } })
   const channel = { clock: host.clock, stores: { rows: rowStreamsDirectory(inTheClone.rows) } }
-  const turns = turnsRaised()
+  // One carrier per member, as one launch holds one: the turn start the mod reports reaches the carrier that handed.
+  const carriers = new Map<string, MessageCarrier>()
+  const carrierOf = (member: string): MessageCarrier => {
+    const held = carriers.get(member) ?? carryingTo({ member, host: channel })
+    carriers.set(member, held)
+    return held
+  }
   const crewOf = (member: string, root: string): ReturnType<typeof crewToolsOver> =>
-    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew')) }, carrier: carryingTo({ member, host: channel, turns }) })
+    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew')) }, carrier: carrierOf(member) })
 
   const sent = await crewOf('Builder', worktree).answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
   assert.ok('answer' in sent, `the send from the worktree was not answered: ${JSON.stringify(sent)}`)
 
-  const handed = await crewOf('Reviewer', clone).answer('take_a_crew_message', {}, 'session-b')
+  const handed = await crewOf('Reviewer', clone).answer(THE_NEXT_MESSAGE_ASK, {}, 'session-b')
   assert.ok('answer' in handed)
   assert.equal(handed.answer, '[crew #0] Builder: a hand-off, in words')
 
-  turns.prompted(handed.answer, 'plugin', { command: false, meta: false })
-  await new Promise((resolve) => setImmediate(resolve))
+  // The mod reports the reviewer's next main turn starting, which is the turn the handed message is queued into.
+  const started = await crewOf('Reviewer', clone).answer(THE_TURN_STARTED_ASK, {}, 'session-b')
+  assert.ok('answer' in started, `the turn start was not answered: ${JSON.stringify(started)}`)
 
   const receipts = await crewOf('Builder', worktree).answer(READ_THE_RECEIPTS, {}, 'session-a')
   assert.ok('answer' in receipts)

@@ -92,7 +92,7 @@
     },
     "sliceCap": 600,
     "sliceCeilings": {
-      "src/a_crews_tools": 1279,
+      "src/a_crews_tools": 1276,
       "src/probe_launch_hosts": 1133,
       "src/refuse_launch_of_unapproved_config": 867,
       "src/refresh_a_member": 869,
