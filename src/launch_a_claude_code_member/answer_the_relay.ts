@@ -45,9 +45,8 @@ import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contr
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
-import { ARRIVAL_OF_A_PLUGINS_PROMPT, arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { THE_TURN_STARTED_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import { A_TURN_OF_UNNAMED_SOURCE, heardSinceTheLastStart, type AMainTurnStart, type HeardSinceTheLastStart } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
+import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { hearingEveryTurn, type HearingEveryTurn } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
@@ -193,8 +192,8 @@ interface RelayState {
   readonly broken: Map<string, string>
   /** The agents this host has started under a session, by the id the host stamps (martha#170). */
   readonly agents: Map<string, AgentRun>
-  /** The prompts heard per session since its last main turn start, which that start is decided against (martha#440). */
-  readonly heard: HeardSinceTheLastStart
+  /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
+  readonly everyTurn: HearingEveryTurn
 }
 
 /**
@@ -287,7 +286,7 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     sessions,
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
-    heard: heardSinceTheLastStart(),
+    everyTurn: hearingEveryTurn({ keep: async (id, arrival) => keepATurn(state, id, arrival), ...place, now }),
   }
   let queue: Promise<unknown> = Promise.resolve()
 
@@ -399,43 +398,20 @@ async function answerACoreTool(state: RelayState, body: unknown): Promise<Answer
 }
 
 /**
- * A tool call the mod posted, answered; and when it reported a main turn's start, that start recorded in the order of
- * the events around it, after the carrier decided what the turn took in (martha#440): the record follows that
- * decision, never one of its own.
+ * A tool call the mod posted, answered; and a main turn's start it reported, recorded among the host's events after the
+ * carrier decided what the turn took in (martha#440): the record follows that decision, never one of its own.
  */
 async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrder: (work: () => Promise<void>) => Promise<void>): Promise<Answered | Refused> {
   const answer = await answerACoreTool(state, body)
-  const start = aMainTurnStartIn(body, answer)
-  if (start !== undefined) await inOrder(async () => hearAMainTurnStart(state, start))
+  const start = state.everyTurn.startIn(body, answer)
+  if (start !== undefined) await inOrder(async () => state.everyTurn.recorded(start))
   return answer
 }
 
-/** The main turn start a call reported, with what the carrier answered it took in; undefined for any other call. */
-function aMainTurnStartIn(body: unknown, answer: Answered | Refused): (AMainTurnStart & { readonly session_id: string }) | undefined {
-  const call = bodyOfAToolCall(body)
-  if (call === undefined || call.tool !== THE_TURN_STARTED_ASK || !('answer' in answer)) return undefined
-  // A subagent's turn is part of the member's own turn: the host stamps it with its agent, and it records nothing.
-  if (call.args['agentId'] !== undefined) return undefined
-  const text = call.args['text']
-  return { session_id: call.session_id, text: typeof text === 'string' ? text : '', taken: answer.answer }
-}
-
-/**
- * A main turn started (martha#440): the crew message `prompt.submit` never heard is recorded as that message, and a
- * turn of unnamed source as one, from an origin the launcher cannot name; a turn already heard adds nothing. Each is
- * recorded on the path a heard prompt takes: the record kept, the screen told a turn started, the turn raised once.
- */
-async function hearAMainTurnStart(state: RelayState, start: AMainTurnStart & { readonly session_id: string }): Promise<void> {
-  const decided = state.heard.aMainTurnStarted(start.session_id, start)
-  if (decided.records === 'heard already') return
-  const session = sessionNamed(state, start.session_id)
-  if (typeof session === 'string') return
-  const crewMessage = decided.records === 'the crew message'
-  const arrival: Arrival = crewMessage ? ARRIVAL_OF_A_PLUGINS_PROMPT : { source: SOURCE_OF_AN_UNKNOWN_ORIGIN }
-  if ((await keep(state, takeInTurn(session, arrival, state.place.binder))) !== undefined) return
-  state.place.screen?.heard(session.id, { said: 'turn-started' }, now())
-  if (crewMessage) state.place.turns?.arrived({ text: decided.text, arrival })
-  else state.place.journal?.noted(THE_TURN_STARTED_ASK, A_TURN_OF_UNNAMED_SOURCE)
+/** Takes a turn the host never raised as a prompt into its session's record (martha#440); false when it was not kept. */
+async function keepATurn(state: RelayState, session_id: string, arrival: Arrival): Promise<boolean> {
+  const session = sessionNamed(state, session_id)
+  return typeof session !== 'string' && (await keep(state, takeInTurn(session, arrival, state.place.binder))) === undefined
 }
 
 /** A tool call's three fields, or undefined when the body is not one. */
@@ -623,7 +599,7 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
   if (why !== undefined) return refused(why)
   // Heard, so the turn it starts (or the running turn it is folded into) is in the record already (martha#440).
-  state.heard.heard(session.id, body.text)
+  state.everyTurn.heard(session.id, body.text)
   // A dialog an earlier turn left open is dropped as this turn starts (martha#313): a prompt nobody answered cannot pin
   // the row at "needs you" for the rest of the session. Only a prompt this launcher took in starts a turn.
   state.place.screen?.heard(session.id, { said: 'turn-started' }, now())
