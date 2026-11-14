@@ -16,6 +16,7 @@
 // The task's own limit is defined once, here, and read by the tool's description, by the cut, and by the test: the
 // number the model is told is exactly the number its words are cut at (martha#254 r=1 R2).
 
+import { OWNER } from '../declare_crew/declare_crew.ts'
 import { STATES, type Progress, type State, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The longest a task is kept: the number the tool's own description quotes, and the number its words are cut at. */
@@ -27,9 +28,6 @@ export type Phase = (typeof PHASES)[number]
 
 /** The phases as the row's state. */
 export const STATE_OF_PHASE: Readonly<Record<Phase, State>> = { working: 'working', reviewing: 'reviewing' }
-
-/** The owner, as a wait names them. */
-export const OWNER = 'owner'
 
 /** The Supervisor, as a wait names them. */
 export const SUPERVISOR = 'supervisor'
