@@ -2465,12 +2465,49 @@ async function pidsCarrying(relay_root: string): Promise<number[]> {
   return found
 }
 
-/** Waits, within cleanup's own bound, for every process that still carries this relay root to be gone (martha#216). */
-async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<void> {
+/**
+ * What one look at the place sees: every pid that still carries its relay root, and the launcher, which carries none
+ * (martha#216). A look reads the processes that exist when it begins, so it is a photograph, never a watch.
+ */
+type ALook = () => Promise<number[]>
+
+/**
+ * Waits, within cleanup's own bound, for nothing to carry the relay root any more, and answers the pids that outlast
+ * the wait: those are the ones a test left behind (martha#216).
+ *
+ * The bound is on how long a process is waited for, never on how long a look may take: a look reads every process's
+ * environment, and one caught in `exec` holds the look for up to CLEANUP_SETTLE_MS (martha#85), so a busy machine can
+ * spend the whole bound inside one look and end the wait on a photograph taken before anything was looked for.
+ *
+ * A look that finds nothing is followed by one more (martha#466): the photograph it took is of the processes that
+ * existed when it began, so a process forked while it ran is in neither its list nor the one before it, and believing
+ * the first quiet photograph failed a run on a process that was only on its way out.
+ */
+async function waitForNothingToCarry(look: ALook): Promise<number[]> {
   const deadline = Date.now() + CLEANUP_SETTLE_MS * 4
-  const stillHere = async (): Promise<boolean> =>
-    alsoGone.some((pid) => pid > 1 && isAlive(pid)) || (await pidsCarrying(relay_root)).length > 0
-  while (Date.now() < deadline && (await stillHere())) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  while (Date.now() < deadline) {
+    if (await nothingCarriesTwice(look)) return []
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+  return look()
+}
+
+/**
+ * Whether two looks in a row found nothing. The second is taken after the first has ended, so a process forked while
+ * the first ran — which that look's own list does not hold — is seen by it (martha#466). A first look that finds
+ * something is answered without a second: it is not quiet, and the wait goes on.
+ */
+async function nothingCarriesTwice(look: ALook): Promise<boolean> {
+  if ((await look()).length > 0) return false
+  return (await look()).length === 0
+}
+
+/** Waits for every process that still carries this relay root to be gone, and answers the ones that outlast it. */
+async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<number[]> {
+  return waitForNothingToCarry(async () => [
+    ...(await pidsCarrying(relay_root)),
+    ...alsoGone.filter((pid) => pid > 1 && isAlive(pid)),
+  ])
 }
 
 /**
@@ -2506,16 +2543,15 @@ async function killWhateverNamesTheHome(home: string): Promise<void> {
  *
  * Whatever still holds the home when it is due is killed here, so a red run never leaves a member behind, and the test
  * then fails by name naming those pids: a home that goes under a running host is never again only an occasioned
- * ENOTEMPTY (martha#216).
+ * ENOTEMPTY (martha#216). A pid is named only once it has outlasted the wait that the look before it began: a process
+ * that is on its way out is waited for, never named (martha#466).
  */
 async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: readonly number[] = []): Promise<void> {
-  await noProcessCarries(place.relay_root, alsoGone)
-  const left = (await pidsCarrying(place.relay_root)).filter((pid) => !alsoGone.includes(pid))
-  const launcherLeft = alsoGone.filter((pid) => pid > 1 && isAlive(pid))
+  const left = await noProcessCarries(place.relay_root, alsoGone)
   await killGroupsCarrying(place.relay_root)
   removeTheTree(place.home)
-  if (left.length > 0 || launcherLeft.length > 0) {
-    throw new Error(`the place's home was due for removal while ${[...left, ...launcherLeft].join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
+  if (left.length > 0) {
+    throw new Error(`the place's home was due for removal while ${left.join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
   }
 }
 
@@ -2528,6 +2564,37 @@ const thePlaceGoesWithItsProcesses = (t: TestContext, place: Place): void => {
   place.aRemovalIsRegistered()
   t.after(() => theHomeGoes(place))
 }
+
+test('a quiet look is not a watch: a second look in a row is what ends the wait (martha#466)', async () => {
+  // One look reads the processes that exist when it begins, so a quiet one may simply have been taken before the one
+  // that was leaving was forked. The wait may end only on two quiet looks in a row, so a place that is quiet every
+  // time is looked at exactly twice: a wait that stopped on the first quiet look would take one.
+  let looks = 0
+  const left = await waitForNothingToCarry(async () => {
+    looks += 1
+    return []
+  })
+  assert.deepEqual(left, [])
+  assert.equal(looks, 2, 'the wait ended on one quiet look, which is the photograph that can miss a process forked while it ran')
+})
+
+test('the removal waits for a process that is only on its way out, and does not name it (martha#466)', async () => {
+  // The looks a busy machine can hand the wait: the first quiet, then — in the one look that closes the window a
+  // photograph leaves — a process that is already leaving, gone by the look after. Nothing was left behind, so nothing
+  // is named, and a run that changed nothing is not failed for it. The first quiet look is not believed, which is what
+  // lets the second one see the process at all.
+  const looks = [[], [41234], []]
+  let at = 0
+  const left = await waitForNothingToCarry(async () => looks[at++] ?? [])
+  assert.deepEqual(left, [])
+  assert.ok(at > 1, 'the wait ended on the first quiet look and so never saw the process the look after it found')
+})
+
+test('the removal names a process that outlasts its wait (martha#216)', async () => {
+  // A member a test never stopped is there every time the wait looks: it is named, never passed over.
+  const left = await waitForNothingToCarry(async () => [41234])
+  assert.deepEqual(left, [41234])
+})
 
 /**
  * A launcher in a process of its own, started on this place, that says when its
