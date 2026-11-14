@@ -24,11 +24,13 @@ import { MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import type { CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
+import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge. */
-export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock'] as const
+export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head'] as const
 export type NudgeKind = (typeof NUDGE_KINDS)[number]
 
 /**
@@ -53,12 +55,14 @@ export interface NudgeWindows {
   readonly person_ms: number
 }
 
-/** A HANDOFF that no answer has followed: the package, who sent it, who it reached, and when. */
+/** A HANDOFF that no answer has followed: the package, who sent it, who it reached, when, and the tip it named. */
 export interface ReviewWait {
   readonly package: string
   readonly from: string
   readonly to: readonly string[]
   readonly at: number
+  /** The tip the HAND-OFF named, as forty hex digits; '' when the hand-off named a design rather than a range. */
+  readonly tip: string
 }
 
 /** A message of the crew's channel, as this rule reads it: who sent it, who it is for, what it said, and when. */
@@ -93,12 +97,15 @@ const reachesAReviewer = (to: Addressee, receivers: readonly string[]): boolean 
   return to.some((name) => !isAReceiver(name, receivers))
 }
 
-/** The crew-line verbs a message starts with, as `readACrewLine` names them. */
-const verbOf = (text: string): { verb: string; package: string } | null => {
+/** The crew-line verbs a message starts with, as `readACrewLine` names them, with the tip the line named. */
+const verbOf = (text: string): { verb: string; package: string; tip: string } | null => {
   const read = readACrewLine(text)
   if (!('line' in read) || read.line === null) return null
-  return { verb: read.line.verb, package: read.line.package }
+  return { verb: read.line.verb, package: read.line.package, tip: tipOf(read.line) }
 }
+
+/** The tip a crew line named: the end of its range, or '' for a line that carried a design instead of one. */
+const tipOf = (line: CrewLineRead): string => (line.words[1] ?? '').split('..')[1] ?? ''
 
 /** One fact a wait is read from, in the moment it happened: a line of the channel, or a landing the ledger keeps. */
 interface TheFact {
@@ -131,7 +138,13 @@ const theWaitAMessageLeaves = (message: SentMessage, waits: Map<string, ReviewWa
   const line = verbOf(message.text)
   if (line === null) return
   if (line.verb === 'HANDOFF' && reachesAReviewer(message.to, receivers)) {
-    waits.set(line.package, { package: line.package, from: message.from, to: toTheWholeCrew(message.to) ? [] : message.to, at: message.sent_at })
+    waits.set(line.package, {
+      package: line.package,
+      from: message.from,
+      to: toTheWholeCrew(message.to) ? [] : message.to,
+      at: message.sent_at,
+      tip: line.tip,
+    })
     return
   }
   if ((ANSWERING_VERBS as readonly string[]).includes(line.verb)) waits.delete(line.package)
@@ -143,7 +156,8 @@ const theWaitAMessageLeaves = (message: SentMessage, waits: Map<string, ReviewWa
  * moment it happened — the channel's own messages, and the landings the ledgers keep with their time — so a verdict that
  * arrived before a hand-off cannot answer it, and a landing ends only the waits that began before it. That order is what
  * two packages of one issue need: they share a name, so a set of landed names would silence the second one's hand-off
- * for good once the first landed.
+ * for good once the first landed. An issue GitHub closed is handed in among the landings, at the moment it closed: it
+ * ends the waits before it the same way, and a hand-off made after it waits on its own.
  */
 export function reviewWaitsIn(messages: readonly SentMessage[], landings: readonly LandedPackage[], receivers: readonly string[]): readonly ReviewWait[] {
   const waits = new Map<string, ReviewWait>()
@@ -226,6 +240,19 @@ function ownerNudges(input: NudgeInput): Nudge[] {
 /** Whether a wait names the owner rather than a member of the crew: a row names the owner by the crew's own word, and a
  * row that spells the owner's name means the same person. */
 const isTheOwner = (name: string, input: NudgeInput): boolean => same(name, OWNER) || same(name, input.owner)
+
+/**
+ * Hand-offs whose pull request no longer stands at the tip the hand-off named (martha#320, package B): the reviewer is
+ * reading a head the builder has since moved. A package GitHub shows no head for, and one the budget could not ask
+ * about, are not nudged — a read that could not be made is not the same fact as a head that moved.
+ */
+export function headNudges(waits: readonly ReviewWait[], heads: Readonly<Record<string, AHead>>): Nudge[] {
+  return waits.flatMap((wait) => {
+    const heard = heads[wait.package]
+    if (heard === undefined || wait.tip === '' || heard.head === wait.tip) return []
+    return [{ kind: 'head' as const, member: wait.from, package: wait.package, since: heard.at }]
+  })
+}
 
 /**
  * One member, one line: a member that waits on a person past the window has usually stopped

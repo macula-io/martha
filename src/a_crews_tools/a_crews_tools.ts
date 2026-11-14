@@ -26,8 +26,10 @@ import {
   queueAnAsk,
   settleTheAsks,
   takeTheAsks,
+  theBranch,
   type TheOwnersMenus,
 } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { theBranchItRemoves } from '../read_the_tips_a_removal_covers/read_the_tips_a_removal_covers.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
 import { theRangeACallNames, VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import {
@@ -41,6 +43,7 @@ import {
   theFastForwardACallNames,
 } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import {
+  REPO,
   WORKTREE_FINISH,
   WORKTREE_FINISH_DESCRIPTION,
   WORKTREE_OPEN,
@@ -52,7 +55,7 @@ import {
 } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_NEXT_MESSAGE_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
@@ -62,10 +65,22 @@ import {
   theNudgesGoTo,
   theNudgesPartLines,
   windowsOf,
+  type ReviewWait,
   type SentMessage,
 } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { landingsOf, type LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
+import { headNudges } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import {
+  GITHUB_BUDGET_PLACE,
+  theClosesOfTheWaits,
+  theClosesRecorded,
+  theHeadsOfTheWaits,
+  type AHead,
+  type TheGithubSpender,
+} from '../spend_the_github_budget/spend_the_github_budget.ts'
+import { WAIT_FOR_CI, WAIT_FOR_CI_DESCRIPTION, A_COMMIT, theAnswerOf, waitForCi, type TheCiWait } from '../wait_for_ci/wait_for_ci.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { theFlowOf, refreshesPlace } from '../refresh_a_member/refresh_a_member.ts'
 import { askAMemberToRefresh, theOrderOf, theRefreshAct, THE_REFRESH_ASK, type TheAct, type TheSessionsQuestion } from '../refresh_a_member/the_refresh_flow.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -94,10 +109,22 @@ import {
   returnAMemberHome,
   switchAMembersModel,
   theModelOf,
+  theOwnersDefaultKept,
   theSwitchACallAsks,
   theSwitchDirected,
+  theSwitchRefused,
   type ModelMarker,
 } from '../switch_a_members_model/switch_a_members_model.ts'
+import {
+  guardTheOwnersDefault,
+  putTheOwnersModelBack,
+  theSaveInTheFile,
+  theSaveSeenNow,
+  theSaveThatNeverShowed,
+  type TheSaveSeen,
+  type AGuardedSwitch,
+  type OwnersDefaultPlace,
+} from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { isAReview, reviewModelRefusal, type ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { CARRY_A_MODEL, type TheOrder } from '../refresh_a_member/the_refresh_flow.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
@@ -196,6 +223,7 @@ export const CREW_TOOL_NAMES = [
   STANDING_ADD,
   STANDING_CLOSE,
   STANDING,
+  WAIT_FOR_CI,
 ] as const
 export type CrewToolName = (typeof CREW_TOOL_NAMES)[number]
 
@@ -254,6 +282,12 @@ export interface CrewToolPlaces {
    * which model runs it, as the adapter records it. A place given none holds no review to the crew's reviewer model.
    */
   readonly spawn?: ASpawnedAgent
+  /**
+   * The owner's own settings file, and where the one lock that guards it lives (martha#359): the file the host's model
+   * command saves the switched model into as the owner's default. A launch given none refuses a switch by name, because
+   * a switch that cannot be put back would leave the owner's every new session on the member's model.
+   */
+  readonly owners_settings?: OwnersDefaultPlace | Refused
   /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
@@ -652,7 +686,11 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: QUEUE_ASK_DESCRIPTION,
     inputSchema: {
       type: 'object',
-      properties: { ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' } },
+      properties: {
+        ask: { type: 'string', description: 'The question, answerable yes or no, naming exactly what would be done' },
+        repo: { type: 'string', description: 'When the ask would delete a branch: its repository, as owner/name' },
+        branch: { type: 'string', description: 'When the ask would delete a branch: the branch, so both tips the yes covers are recorded' },
+      },
       required: ['ask'],
     },
   },
@@ -689,6 +727,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
         item: { type: 'string', description: 'held: what is held back, in one line' },
         reason: { type: 'string', description: 'held: why, in one line' },
         until: { type: 'string', description: 'held: a YYYY-MM-DD day first, or the condition that ends the hold' },
+        package: { type: 'string', description: 'held, when the hold is on a package: owner/repo#n, as a batch names it; a batch that lands it is refused' },
         owes: { type: 'string', description: 'awaiting: who owes it' },
         what: { type: 'string', description: 'awaiting: what they owe' },
         rule: { type: 'string', description: 'decided: the rule, in one line' },
@@ -716,6 +755,18 @@ export const CREW_TOOLS: readonly CrewTool[] = [
     description: STANDING_DESCRIPTION,
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: WAIT_FOR_CI,
+    description: WAIT_FOR_CI_DESCRIPTION,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string', description: 'The repository, owner/name' },
+        sha: { type: 'string', description: 'The commit whose runs count: the tip you were handed' },
+      },
+      required: ['repo', 'sha'],
+    },
+  },
 ]
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
@@ -730,6 +781,19 @@ interface SessionState {
   row_model: string
   /** The share each session began at, by session id (martha#255): every refresh threshold is measured from it. */
   readonly began_at: Map<string, number>
+  /**
+   * The owner's settings one switch has guarded and not yet put back (martha#359): the lock it holds, the record to
+   * keep, and the file's bytes as they were. It is taken when the order goes out and released when the host reports, so
+   * a second switch waits for it rather than building its record on the first one's half-finished work.
+   */
+  guarded: AGuardedSwitch | null
+  /**
+   * What the owner's file needs of the owner, for the turn's one row write (martha#359): a reason and the line the row
+   * said before it, so a switch that was not put back is said once, in the row the turn already writes, and a finished
+   * one takes its own line away. It is folded into that write rather than written beside it: a beat taken at the same
+   * clock value as the row already there is dropped whole.
+   */
+  owner_needs: TheOwnersDefaultTold | null
 }
 
 /** The tools a member can call, over the place its launcher gave it. */
@@ -742,6 +806,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     session: '',
     row_model: held.launched_on ?? '',
     began_at: held.began_at ?? new Map<string, number>(),
+    guarded: null,
+    owner_needs: null,
   }
   const handlers = handlersOver(held, state)
 
@@ -795,7 +861,7 @@ async function answerAnAskOfTheMods(
   if (name === THE_CHANNEL_READ_ASK) return await theChannelReadAsk(places)
   if (name === THE_NEXT_MESSAGE_ASK) return await theNextMessageAsk(places)
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
-  if (name === THE_MODEL_REPORT_ASK) return theModelReported(places, state, args)
+  if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoAsk(places, args)
   return undefined
 }
@@ -872,16 +938,14 @@ async function theSessionsAct(
 ): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
+  // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
+  // again, so a guard still open here is one no session is coming back for. It is closed without waiting — the host's
+  // save may still land, and the record it leaves is what the next launch finishes.
+  await closeTheGuardNoOneReported(places, state)
   const act: TheAct = await theRefreshAct(refreshPlacesOf(places, state), question)
-  keepWhatTheSessionSaid(places, state, question, act)
-  // One order a turn, and none of them dropped (martha#315 r=2): the flow keeps the act it answers with as its own
-  // state — the handover prompt's flow is written in handing_over and the ask that started it is taken up here — so a
-  // model order sent in its place is a prompt the member never gets, and every later turn is answered `none`. The act
-  // goes out as the flow wrote it; a model record still waiting to be directed keeps its `directed: false` and is
-  // directed on the next turn's question, one turn later and never lost.
   const ordered = theOrderOf(act)
-  if (ordered.carry !== 'none') return { answer: JSON.stringify(ordered) }
-  const switching = await theModelOrder(places)
+  const switching = ordered.carry === 'none' ? await theModelOrder(places, state) : null
+  keepWhatTheSessionSaid(places, state, question, act)
   return { answer: JSON.stringify(switching ?? ordered) }
 }
 
@@ -987,14 +1051,29 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WORKTREE_FINISH]: (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD]: (args) => keepTheOwnersList(places, () => addAnAct(places.ledger, args, places.member)),
     [OWNER_TODO_DONE]: (args) => keepTheOwnersList(places, () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member })),
-    [QUEUE_ASK]: async (args) => asAnAnswer(await queueAnAsk(places.ledger, args, places.member)),
+    [QUEUE_ASK]: (args) => queueTheAsk(places, args),
     [LIST_ASKS]: async () => asAnAnswer(await listTheAsks(places.ledger)),
     [TAKE_ASKS]: () => theTakeOfTheAsks(places, state),
     [SETTLE_ASKS]: (args) => theSettlingOfTheAsks(places, state, args),
     [STANDING_ADD]: (args) => keepTheStandingItems(places, () => recordAStandingItem(places.ledger, args, places.member)),
     [STANDING_CLOSE]: (args) => keepTheStandingItems(places, () => closeAStandingItem(places.ledger, args, places.member)),
     [STANDING]: async () => ({ answer: theStandingList(await theItemsThatStand(places), todayOf(places.ledger.clock.now())).join('\n') }),
+    [WAIT_FOR_CI]: (args) => theCiWait(places, args),
   }
+}
+
+/**
+ * `queue_ask`, with the tips a branch removal covers when the ask names one (martha#391). The launcher reads them, in
+ * the clone the ask names, and the queue keeps them: an ask that named one copy of a branch and not the other cost the
+ * owner a second ask, because the yes covered only what the ask recorded.
+ */
+async function queueTheAsk(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const removes = await theBranchItRemoves(
+    { processes: places.processes, clones: places.settings?.house_rules.clones, keepsTheBranch: theBranch },
+    args,
+  )
+  if (removes !== undefined && 'refused' in removes) return removes
+  return asAnAnswer(await queueAnAsk(places.ledger, args, places.member, removes))
 }
 
 /**
@@ -1080,6 +1159,37 @@ async function fastForwardOntoTheApprovedTip(places: CrewToolPlaces, args: Reado
   if ('refused' in asked) return { refused: asked.refused }
   if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
   return asAnAnswer(await fastForwardAfterTheOwnersYes(actingHost({ ...places, processes: places.processes }), places.member, asked.ok))
+}
+
+/**
+ * The crew's GitHub budget, as a tool spends from it (martha#320, package B): the crew's own place for the record, the
+ * ledger's clock, and `gh` run in the checkout every other acting tool runs it in.
+ */
+function theGithubSpenderOf(places: CrewToolPlaces & { readonly processes: HostContract['processes'] }): TheGithubSpender {
+  const processes = places.processes
+  return {
+    place: places.stores.crew.place(GITHUB_BUDGET_PLACE),
+    clock: places.ledger.clock,
+    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root }),
+  }
+}
+
+/** `wait_for_ci`: the CI on one sha, read through the crew's one GitHub budget (martha#320, package B). */
+async function theCiWait(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const asked = theCiWaitACallNames(args)
+  if ('refused' in asked) return { refused: asked.refused }
+  if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
+  const outcome = await waitForCi(theGithubSpenderOf({ ...places, processes: places.processes }), asked.ok)
+  return { answer: theAnswerOf(outcome, asked.ok.sha) }
+}
+
+/** The wait a call names, or why it names none: a repository as owner/name, and a commit of forty hex digits. */
+function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { readonly ok: TheCiWait } | { readonly refused: string } {
+  const repo = textOf(args['repo'])
+  const sha = textOf(args['sha'])
+  if (!REPO.test(repo)) return { refused: `a CI wait names its repository as owner/name; read ${JSON.stringify(repo)}.` }
+  if (!A_COMMIT.test(sha)) return { refused: `a CI wait names the commit whose runs count, as forty hex digits; read ${JSON.stringify(sha)}.` }
+  return { ok: { repo, sha } }
 }
 
 /**
@@ -1228,9 +1338,50 @@ async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows
   if (!receivers.some((receiver) => receiver.toLowerCase() === places.member.toLowerCase())) return []
   const channel = await readTheChannel(places.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
-  const waits = reviewWaitsIn(messages, await landingsOf(places.ledger, packagesNamed(messages)), receivers)
+  const waits = await theWaitsTheClosesLeave(places, messages, receivers)
   const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
-  return theNudgesPartLines(nudgesOf(input, deadlockNudges(input)), settings)
+  const heads = await theHeadsOfTheWaiters(places, waits)
+  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads)]), settings)
+}
+
+/**
+ * The review waits left once the landings and the issues GitHub closed have ended theirs (martha#320). The closes the
+ * record holds end their waits first, so GitHub is asked only about a package that still waits: one with no close kept,
+ * or one handed off again since its close. A package closed once and not handed off since costs no call again.
+ */
+async function theWaitsTheClosesLeave(places: CrewToolPlaces, messages: readonly SentMessage[], receivers: readonly string[]): Promise<readonly ReviewWait[]> {
+  const landings = await landingsOf(places.ledger, packagesNamed(messages))
+  const recorded = theClosesRecorded(places.stores.crew.place(GITHUB_BUDGET_PLACE))
+  const open = reviewWaitsIn(messages, [...landings, ...theEndsOf(recorded)], receivers)
+  const closes = await theClosesOfTheWaiters(places, open, recorded)
+  return reviewWaitsIn(messages, [...landings, ...theEndsOf(closes)], receivers)
+}
+
+/** A close, read as the fact a landing is: the package and the moment its waits from before it end. */
+const theEndsOf = (closes: Readonly<Record<string, number>>): readonly LandedPackage[] =>
+  Object.entries(closes).map(([package_name, at]) => ({ package: package_name, at }))
+
+/** The closes of the packages still waiting, read through the crew's GitHub budget, or the ones the record already held
+ * when this launch holds no processes to ask with, nothing waits, or the budget refused. */
+async function theClosesOfTheWaiters(
+  places: CrewToolPlaces,
+  waits: readonly ReviewWait[],
+  recorded: Readonly<Record<string, number>>,
+): Promise<Readonly<Record<string, number>>> {
+  if (places.processes === undefined || waits.length === 0) return recorded
+  const closes = await theClosesOfTheWaits(theGithubSpenderOf({ ...places, processes: places.processes }), waits.map((wait) => wait.package))
+  return 'refusal' in closes ? recorded : closes
+}
+
+/**
+ * The heads the crew's waiting packages stand at, read through the crew's GitHub budget (martha#320, package B), or
+ * none when this launch holds no processes to ask with. A read GitHub cannot answer leaves the head it last showed, so
+ * the flag a failed read cannot clear is the one that was true.
+ */
+async function theHeadsOfTheWaiters(places: CrewToolPlaces, waits: readonly { readonly package: string }[]): Promise<Readonly<Record<string, AHead>>> {
+  if (places.processes === undefined || waits.length === 0) return {}
+  const heads = await theHeadsOfTheWaits(theGithubSpenderOf({ ...places, processes: places.processes }), waits.map((wait) => wait.package))
+  return 'refusal' in heads ? {} : heads
 }
 
 /** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
@@ -1322,10 +1473,20 @@ function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: stri
 function keepWhatTheSessionSaid(places: CrewToolPlaces, state: SessionState, question: TheSessionsQuestion, act: TheAct): void {
   writeRow(places, state, (row) => ({
     ...row,
+    needs: theNeedsAfter(state, row),
     session: question.session_id,
     host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd },
     ...(act.refresh === undefined ? {} : { refresh: act.refresh }),
   }))
+}
+
+/** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */
+function theNeedsAfter(state: SessionState, row: DashboardRow): string {
+  const told = state.owner_needs
+  if (told === null) return row.needs
+  state.owner_needs = null
+  if (told.why !== '') return told.why
+  return told.before.includes(row.needs) ? '' : row.needs
 }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
@@ -1493,27 +1654,154 @@ async function keepTheModelCheckpoint(places: CrewToolPlaces, package_name: stri
  * Every model in a record is one the declaration names, because a switch is refused for a member that declares none
  * (r=2), so there is no model here that cannot be spelled as the host's command argument.
  */
-async function theModelOrder(places: CrewToolPlaces): Promise<TheOrder | null> {
+async function theModelOrder(places: CrewToolPlaces, state: SessionState): Promise<TheOrder | null> {
   const place = modelPlace(places)
   if ('refusal' in place) return null
   const current = theModelOf(place, places.member)
   if (current.kind === 'unreadable') return null
   const marker = current.kind === 'switched' ? current.marker : current.last_marker
   if (marker === null || marker.directed) return null
-  const model = marker.switched ? marker.model : marker.home
-  return 'refusal' in theSwitchDirected(places, places.member, marker) ? null : { carry: CARRY_A_MODEL, model }
+  // One switch at a time (martha#359, R2): a switch whose host report has not come back yet still holds the owner's
+  // lock, and this one waits for a later turn rather than against itself.
+  if (state.guarded !== null) return null
+  const ordered = await guardedOrder(places, state, marker)
+  return ordered
 }
+
+/**
+ * The order, with the owner's default guarded first (martha#359): the lock taken and the file snapshotted before the
+ * order goes out, and the record kept beside the model record before the host runs anything. A guard that cannot be
+ * taken refuses the switch — the record goes back to where the member is, and the owner reads why in its row.
+ *
+ * A record an earlier switch left open goes to the guard with it (r=2): this switch is then built on the owner's own
+ * model rather than on the member's, which is what the file says while that record is open.
+ */
+async function guardedOrder(places: CrewToolPlaces, state: SessionState, marker: ModelMarker): Promise<TheOrder | null> {
+  const owners = places.owners_settings
+  if (owners === undefined) return refuseTheSwitch(places, state, marker, noOwnersSettings(places))
+  if ('refusal' in owners) return refuseTheSwitch(places, state, marker, owners.refusal)
+  // The model the host is asked to save: the one save this switch waits for, and the one it may have to undo.
+  const model = marker.switched ? marker.model : marker.home
+  const guard = await guardTheOwnersDefault(owners, model, marker.settings)
+  if ('refusal' in guard) return refuseTheSwitch(places, state, marker, guard.refusal)
+  const kept = theOwnersDefaultKept(places, places.member, marker, guard.record)
+  if ('refusal' in kept) {
+    guard.lock.release()
+    return null
+  }
+  const directed = theSwitchDirected(places, places.member, kept)
+  if ('refusal' in directed) {
+    guard.lock.release()
+    return null
+  }
+  state.guarded = guard
+  return { carry: CARRY_A_MODEL, model }
+}
+
+/** A switch the launcher will not make, in the member's own row: the member stayed where it was, and the owner is told. */
+function refuseTheSwitch(places: CrewToolPlaces, state: SessionState, marker: ModelMarker, why: string): null {
+  theSwitchRefused(places, places.member, marker, why, new Date(places.ledger.clock.now()))
+  state.owner_needs = { why, before: [] }
+  return null
+}
+
+/** Why a switch is refused when the launch cannot name the owner's settings file: the one file it would have to undo. */
+const noOwnersSettings = (places: CrewToolPlaces): string =>
+  `this launch cannot name the settings file Claude Code saves a model into, so a switch to ${places.member} could not be undone and none was made`
 
 /**
  * What the mod says once the host's model command resolved (martha#315): the model this session runs on, written into
  * the row. It is the only writer of a switched model, so the row never says a switch the host has not made.
+ *
+ * It is also where the owner's default is put back (martha#359): the host's save is waited for in the file, never
+ * assumed from this answer, and the record a crash would need is kept before the restore. What was not put back is said
+ * in the row's `needs` and in this answer, which is all the member is told — the mod carries this answer no further.
  */
-function theModelReported(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
+async function theModelReported(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
   const model = textOf(args['model'])
   if (model === '') return { refused: 'a session reporting its model names it, and this one named none' }
+  const putBack = await theOwnersDefaultPutBack(places, state)
   state.row_model = model
-  writeRow(places, state, (row) => row)
-  return { answer: `Noted: this row says ${model}.` }
+  writeRow(places, state, (row) => rowAfterASwitch(row, putBack))
+  const noted = `Noted: this row says ${model}.`
+  return { answer: putBack.why === '' ? noted : `${noted} ${putBack.why}` }
+}
+
+/** What a switch left for the owner: the line that needs them, and every line the row may still say of it, so it can be cleared. */
+interface TheOwnersDefaultTold {
+  readonly why: string
+  /**
+   * The lines this switch is answerable for in the row (martha#359 r=3): the one its own record carries, and the one an
+   * open record it settled left there. The row's line goes when it is one of these and nothing needs the owner any more.
+   */
+  readonly before: readonly string[]
+}
+
+/**
+ * Steps 4 to 6 of a switch (martha#359), in the launcher's own process: wait for the file to show the host's save, keep
+ * the record before the restore, put the owner's model back when nothing else moved, and give the lock back. A switch
+ * whose save never showed keeps its record: the next launch finishes it by the hash the record holds.
+ */
+async function theOwnersDefaultPutBack(places: CrewToolPlaces, state: SessionState): Promise<TheOwnersDefaultTold> {
+  const guard = state.guarded
+  state.guarded = null
+  const owners = places.owners_settings
+  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: [] }
+  try {
+    return theOwnersDefaultAnswered(places, owners, guard, await theSaveInTheFile(owners, guard))
+  } finally {
+    guard.lock.release()
+  }
+}
+
+/**
+ * A guard whose report never came, closed at the next turn's question (martha#359): one look at the file, the restore
+ * if the host's save is there, and the record kept when it is not, so the next launch finishes what this session
+ * cannot. The lock is given back either way, so a host that never reports does not stop every later switch.
+ */
+async function closeTheGuardNoOneReported(places: CrewToolPlaces, state: SessionState): Promise<TheOwnersDefaultTold> {
+  const guard = state.guarded
+  state.guarded = null
+  const owners = places.owners_settings
+  if (guard === null || owners === undefined || 'refusal' in owners) return { why: '', before: [] }
+  try {
+    const told = theOwnersDefaultAnswered(places, owners, guard, theSaveSeenNow(owners, guard) ?? theSaveThatNeverShowed(owners, guard))
+    state.owner_needs = told
+    return told
+  } finally {
+    guard.lock.release()
+  }
+}
+
+/** The restore itself, over one guarded switch and what the file showed of it: the record kept, and the row's line. */
+function theOwnersDefaultAnswered(places: CrewToolPlaces, owners: OwnersDefaultPlace, guard: AGuardedSwitch, seen: TheSaveSeen): TheOwnersDefaultTold {
+  const place = modelPlace(places)
+  if ('refusal' in place) return { why: seen.why, before: [] }
+  const current = theModelOf(place, places.member)
+  const marker = current.kind === 'switched' ? current.marker : current.kind === 'home' ? current.last_marker : null
+  if (marker === null) return { why: seen.why, before: [] }
+  const before = linesTheRowMaySay(marker.settings?.why ?? '', guard)
+  if (!seen.moved) {
+    theOwnersDefaultKept(places, places.member, marker, seen.record)
+    return { why: seen.why, before }
+  }
+  const after = putTheOwnersModelBack(owners, guard, seen.record)
+  theOwnersDefaultKept(places, places.member, marker, after.record)
+  return { why: after.why, before }
+}
+
+/**
+ * Every line this switch is answerable for in the row (martha#359 r=3): the line its own record carries, and the line an
+ * open record it settled left there. The two differ when the guard's recovery refused and wrote a fresh reason over the
+ * open one — the row keeps the older line until the switch that settled the record takes it away.
+ */
+const linesTheRowMaySay = (fromTheRecord: string, guard: AGuardedSwitch): readonly string[] =>
+  fromTheRecord === guard.settled ? [fromTheRecord] : [fromTheRecord, ...(guard.settled === undefined ? [] : [guard.settled])]
+
+/** The row after a switch: the model reported, and the line that needs the owner when the file was not put back. */
+function rowAfterASwitch(row: DashboardRow, told: TheOwnersDefaultTold): DashboardRow {
+  if (told.why !== '') return { ...row, needs: told.why }
+  return told.before.includes(row.needs) ? { ...row, needs: '' } : row
 }
 
 /**

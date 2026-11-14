@@ -29,9 +29,13 @@ import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { SUPERVISOR } from '../report_progress/report_progress.ts'
 import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { A_HOLD_REFUSES } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
+import { STANDING_CLOSE, closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
 import {
+  FAST_FORWARD_DESCRIPTION,
   LAND,
+  LAND_BATCH_DESCRIPTION,
   THE_CHECK_PROGRAM,
   THE_REDO_PROGRAM,
   THE_REDO_SCRIPT,
@@ -863,4 +867,102 @@ test('#381: the programs the landing runs are the ones package.json runs them by
     `node ${THE_CHECK_PROGRAM}`,
     `package.json's ${HOST_CEILINGS_SCRIPT} does not run the program the landing runs`,
   )
+})
+
+// --- a held package stops a batch before anything runs (martha#364) ------------------------------------------------
+
+/** A host whose processes fail the test if anything is run: a batch a hold stops runs no git and asks no GitHub. */
+function aHostThatMayRunNothing(rows?: RowStore): { readonly tests: HostForTests; readonly ran: ProcessRequest[] } {
+  const ran: ProcessRequest[] = []
+  const run = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    ran.push(request)
+    return { exit_code: 1, stdout: '', stderr: 'a held batch ran this' }
+  }
+  return { tests: aHostOver(run, rows), ran }
+}
+
+/** A hold on `work_package`, recorded through the standing items' own tool, by the Supervisor. */
+async function aHoldOn(host: HostForTests['host'], id: string, work_package: string | undefined, until = 'the demo is over'): Promise<void> {
+  const call = { kind: 'held', id, item: 'the restart PR', reason: 'lands after the demo', until, ...(work_package === undefined ? {} : { package: work_package }) }
+  const recorded = await recordAStandingItem(host, call, SUPERVISOR)
+  assert.ok('told' in recorded, `the hold was not recorded: ${JSON.stringify(recorded)}`)
+}
+
+test('#364: a held package in a batch refuses it, naming the hold and the package, and runs no git at all (mutant: drop the check; move it after the fetch)', async () => {
+  const work_package = 'macula-io/martha#364'
+  const { tests, ran } = aHostThatMayRunNothing()
+  await aHoldOn(tests.host, 'hold-martha-364', work_package)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: '/no/clone/is/read', packages: ['macula-io/martha#1', work_package] })
+  assert.ok('refused' in landed, `a batch holding a held package was not refused: ${wordsOf(landed)}`)
+  assert.match(landed.refused, /nothing was landed/)
+  assert.ok(landed.refused.includes('hold-martha-364'), `the refusal did not name the hold: ${landed.refused}`)
+  assert.ok(landed.refused.includes(work_package), `the refusal did not name the package: ${landed.refused}`)
+  assert.ok(landed.refused.includes(STANDING_CLOSE), `the refusal did not say how a hold is closed: ${landed.refused}`)
+  assert.deepEqual(ran.map((request) => request.args.join(' ')), [], 'a batch a hold stops ran something before it refused')
+})
+
+test('#364: the hold closed with its evidence, the same batch lands', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const passed = threePassedPackages(fixture)
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, passed.pulls)))
+  for (const [entry, work_package] of passed.packages.entries()) await aPassedVerdict(tests, work_package, base, at(passed.heads, entry))
+  const held = at(passed.packages, 1)
+  await aHoldOn(tests.host, 'hold-second', held)
+
+  const stopped = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: passed.packages })
+  assert.ok('refused' in stopped, `the batch landed with ${held} held: ${wordsOf(stopped)}`)
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a held batch pushed a land branch')
+
+  const closed = await closeAStandingItem(tests.host, { id: 'hold-second', evidence: 'the demo is over' }, SUPERVISOR)
+  assert.ok('told' in closed, `the hold was not closed: ${JSON.stringify(closed)}`)
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: passed.packages })
+  assert.ok('told' in landed, `the batch was refused after its hold was closed: ${wordsOf(landed)}`)
+  assert.equal(theLandBranchesOnOrigin(fixture).length, 1, 'the batch did not land once its hold was closed')
+})
+
+test('#364: a hold whose day has come still stops the batch: only a close ends a hold (mutant: treat DUE as released)', async () => {
+  const { tests, ran } = aHostThatMayRunNothing()
+  await aHoldOn(tests.host, 'hold-due', 'macula-io/martha#7', '2026-11-01')
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: '/no/clone/is/read', packages: ['macula-io/martha#7'] })
+  assert.ok('refused' in landed, `a batch whose hold is due landed: ${wordsOf(landed)}`)
+  assert.ok(landed.refused.includes('hold-due'))
+  assert.deepEqual(ran, [], 'a batch a due hold stops ran something')
+})
+
+test('#364: the holds that cannot be read refuse the batch, and nothing runs (mutant: let an unreadable stream through)', async () => {
+  const rows: RowStore = {
+    append: async () => {
+      throw new Error('this store keeps nothing')
+    },
+    read: async () => {
+      throw new Error('the standing stream is unreadable')
+    },
+  }
+  const { tests, ran } = aHostThatMayRunNothing(rows)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: '/no/clone/is/read', packages: ['macula-io/martha#7'] })
+  assert.ok('refused' in landed, `a batch that could not read the holds landed: ${wordsOf(landed)}`)
+  assert.match(landed.refused, /holds could not be read/)
+  assert.match(landed.refused, /the standing stream is unreadable/)
+  assert.deepEqual(ran, [], 'a batch that could not read its holds ran something')
+})
+
+test('#364: the fast-forward of a held package is refused before its push is announced or sent (mutant: drop the check from the fast-forward)', async () => {
+  const work_package = 'macula-io/martha#364'
+  const { tests, ran } = aHostThatMayRunNothing()
+  await aHoldOn(tests.host, 'hold-martha-364', work_package)
+
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [work_package] })
+  assert.ok('refused' in forwarded, `the fast-forward of a held package ran: ${wordsOf(forwarded)}`)
+  assert.match(forwarded.refused, /nothing was pushed/)
+  assert.ok(forwarded.refused.includes('hold-martha-364') && forwarded.refused.includes(work_package))
+  assert.deepEqual(ran, [], 'the fast-forward of a held package ran git')
+  assert.deepEqual(await readLedger(tests.host, work_package), [], 'the fast-forward of a held package announced a push in its ledger')
+})
+
+test('#364: both tools say an open hold on a listed package refuses the call', () => {
+  for (const description of [LAND_BATCH_DESCRIPTION, FAST_FORWARD_DESCRIPTION]) assert.ok(description.includes(A_HOLD_REFUSES), `a landing tool does not say a hold refuses it: ${description}`)
 })

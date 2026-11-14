@@ -40,6 +40,7 @@
     "hostGlue": [
       "src/crew_files_directory",
       "src/linux_process_identity",
+      "src/owners_settings_directory",
       "src/row_streams_directory"
     ],
     "hostAdapters": [
@@ -66,7 +67,7 @@
     "hostCeilings": {
       "src/approve_a_checkouts_config": 69,
       "src/claude_code_host": 1513,
-      "src/claude_code_relay": 722,
+      "src/claude_code_relay": 724,
       "src/declare_a_solo_crew": 84,
       "src/install_the_pinned_installer": 124,
       "src/install_the_recorded_mesh_server": 312,
@@ -77,12 +78,13 @@
       "src/run_an_owner_signed_command": 562,
       "src/run_the_martha_command": 457,
       "src/run_the_nodes_own_npm_alone": 164,
-      "src/start_a_member": 224,
+      "src/start_a_member": 241,
       "src/crew_files_directory": 155,
       "src/dashboard_rows_directory": 103,
       "src/hear_the_hosts_dialogs": 40,
       "src/linux_process_identity": 274,
-      "src/row_streams_directory": 159
+      "src/row_streams_directory": 159,
+      "src/owners_settings_directory": 173
     },
     "packageImports": {
       "typescript": "prove_the_core",
