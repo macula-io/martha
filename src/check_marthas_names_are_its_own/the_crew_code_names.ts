@@ -22,6 +22,12 @@ export type CrewCodeName =
   | { readonly kind: 'runs_on'; readonly text: string; readonly what: string }
   | { readonly kind: 'family'; readonly pattern: RegExp; readonly what: string }
 
+// crew-code's two markers, as literals of this table's own: Martha took her own words for them in #468 (rows 9-10),
+// and a table built from Martha's constants would follow a rename silently and could no longer say what the old name
+// was.
+export const CREW_CODES_HANDOVER_MARKER = 'CREW-HANDOVER-WRITTEN'
+export const CREW_CODES_REFRESH_DECLINED_MARKER = 'CREW-REFRESH-DECLINED'
+
 /** Every name crew-code gives something, as #468's inventory lists them. */
 export const CREW_CODE_NAMES: readonly CrewCodeName[] = [
   { kind: 'literal', text: '.crew', what: "crew-code's declaration folder" },
@@ -32,8 +38,8 @@ export const CREW_CODE_NAMES: readonly CrewCodeName[] = [
   { kind: 'literal', text: 'take_asks', what: "crew-code's tool for taking asks" },
   { kind: 'literal', text: 'settle_asks', what: "crew-code's tool for settling asks" },
   { kind: 'literal', text: 'crew_refresh', what: "crew-code's tool for refreshing a session" },
-  { kind: 'literal', text: 'CREW-HANDOVER-WRITTEN', what: "crew-code's handover marker" },
-  { kind: 'literal', text: 'CREW-REFRESH-DECLINED', what: "crew-code's declined-refresh marker" },
+  { kind: 'literal', text: CREW_CODES_HANDOVER_MARKER, what: "crew-code's handover marker" },
+  { kind: 'literal', text: CREW_CODES_REFRESH_DECLINED_MARKER, what: "crew-code's declined-refresh marker" },
   { kind: 'literal', text: 'gate_would_refuse', what: "crew-code's folder for what its gate would refuse" },
   { kind: 'family', pattern: /^HANDOVER_\d{4}-\d{2}-\d{2}_/, what: "crew-code's handover file name" },
   { kind: 'family', pattern: /^mcp__crew__/, what: "crew-code's server name in a tool call" },

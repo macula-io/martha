@@ -445,7 +445,7 @@ test("a member started with Martha's own prompt carries it after the owner's arg
   await declared(place)
   const fake = aClaudeThatWritesEachCall(place)
   const args = ['--effort', 'high']
-  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
+  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/MARTHA_HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
   const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args, initial_prompt: prompt })
   assert.ok(started.started, started.started ? '' : started.refusal)
   await until('the fake host to write the arguments it was started as a member with', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
