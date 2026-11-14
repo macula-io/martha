@@ -1,10 +1,10 @@
 // The config text's own syntax, pinned on the parser directly (martha#443 part 3 follow-up).
 //
-// These were the two cases in the guard's test file that called `entriesInText` itself, moved beside the parser they
-// prove so that a person changing the parser reads its cases in its own directory. What needs a checkout and the
-// guard's own refusal stays beside the guard, in
-// ../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.node-test.ts: this file is no
-// assertion changed, only where it stands.
+// These are the two cases that called `entriesInText` itself out of the guard's test file: they moved beside the
+// parser they prove, so a person changing the parser reads its cases in its own directory. What needs a checkout and
+// the guard's refusal stays beside the guard, in
+// ../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.node-test.ts. No assertion changed:
+// what moved, moved whole.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
