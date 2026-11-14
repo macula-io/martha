@@ -44,6 +44,7 @@ import {
   LAND_BATCH,
   LAND_BATCH_DESCRIPTION,
   REDONE_GENERATED,
+  THE_CEILINGS_STILL_AHEAD,
   THE_CHECK_PROGRAM,
   THE_REDO_PROGRAM,
   THE_REDO_SCRIPT,
@@ -100,8 +101,8 @@ function aRepository(t: TestContext): Fixture {
   gitIn(seed, 'init', '--quiet', '--initial-branch=main')
   writeFileSync(join(seed, 'shared.txt'), 'one\n')
   // A landing's tree carries a package.json, and the ceilings it declares are read from the tree it merges: a fixture
-  // without one is a tree no landing could hold to them.
-  writeFileSync(manifestPathOf(seed), '{"type":"module"}\n')
+  // without one is a tree no landing could hold to them, and one without a cap on its core slices fails by name (#415).
+  writeFileSync(manifestPathOf(seed), theManifestOfAPlantedTree({}))
   commitIn(seed, 'the first commit')
   gitIn(seed, 'remote', 'add', 'origin', origin)
   gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
@@ -853,7 +854,8 @@ test('#381 #339: a package.json that differs outside the ceilings is not a gener
   assert.match(words, /package\.json differs outside/, `the answer did not say what the clash was: ${words}`)
 })
 
-test('#381 #339: two heads merge cleanly and leave the tree over a ceiling: the second is taken back off and left out, naming the directory', async (t) => {
+/** Two heads that each merge cleanly and each raise one ceiling to 3, so together they leave the adapter at 4 lines. */
+async function twoHeadsOverACeilingTogether(t: TestContext) {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
@@ -870,12 +872,26 @@ test('#381 #339: two heads merge cleanly and leave the tree over a ceiling: the 
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 3 } }),
   })
   gitIn(fixture.clone, 'checkout', '--quiet', 'main')
-  const runs: TheRuns = { npm: [], programs: [] }
-  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], { npm: [], programs: [] })
+  return { fixture, base, ours, packages, tests }
+}
 
+test('#381 #339: two heads merge cleanly and leave the tree over a ceiling: the second is taken back off and left out, naming the directory', async (t) => {
+  const { fixture, base, ours, packages, tests } = await twoHeadsOverACeilingTogether(t)
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
   const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
   assert.ok(words.includes(`${AN_ADAPTER}: 4 lines of code, ceiling 3`), `the answer did not name the directory that is over its ceiling: ${words}`)
+})
+
+test('#423: the dry run of two heads the landing leaves one of out on the ceilings answers each lands only as a forecast that still faces them (mutant: a plain lands)', async (t) => {
+  // The same batch as the test above, where the landing leaves PR 282 out: the dry run merges in memory, has no tree on
+  // disk to measure, and so may not answer a plain "lands" for a head the landing it forecasts can leave out.
+  const { fixture, packages, tests } = await twoHeadsOverACeilingTogether(t)
+  const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  const words = wordsOf(forecast)
+  for (const [entry, pr] of [281, 282].entries()) {
+    assert.ok(words.includes(`- lands: ${at(packages, entry)} (PR ${String(pr)}) (${THE_CEILINGS_STILL_AHEAD})`), `PR ${String(pr)} is not answered lands as a forecast that still faces the ceilings: ${words}`)
+  }
 })
 
 test('#381: the programs the landing runs are the ones package.json runs them by, in the scripts it names', () => {

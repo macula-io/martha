@@ -13,11 +13,30 @@
 // A key that is not a number on all three stages has no sum, and a file the two
 // sides differ in anywhere outside the map was never generated: both are refused,
 // in the words a landing prints when it stops.
+//
+// martha.sliceCeilings is summed the same way (martha#415), with two more rules,
+// because there an exception appearing or disappearing is routine: a slice that
+// shrinks under martha.sliceCap loses its exception, and one that grows past it
+// gains one. So a key absent on a side stands at the cap on that side, which keeps
+// the sum defined, and a merged value at or under the cap drops the key. The cap
+// is an upper bound for the absent side, so a merge where one side shrank a slice
+// under the cap and the other grew it past can leave the ceiling above the landed
+// count; the check names that headroom, and a record run on the branch fixes it.
 
 import { basename } from 'node:path'
 
 import { manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
-import { ceilingsOf, CEILINGS_NAME, THE_CEILINGS_KEY, withCeilings } from '../../prove_the_core/the_host_ceilings.ts'
+import {
+  ceilingsOf,
+  CEILINGS_NAME,
+  SLICE_CEILINGS_NAME,
+  sliceCapOf,
+  sliceCeilingsOf,
+  THE_CEILINGS_KEY,
+  THE_SLICE_CEILINGS_KEY,
+  withCeilings,
+  withTheMap,
+} from '../../prove_the_core/the_host_ceilings.ts'
 
 /** What a merge's ceilings come to: the package.json to write, and the words a landing's commit records of it. */
 export interface ThePackageJsonAMergeBrings {
@@ -27,9 +46,12 @@ export interface ThePackageJsonAMergeBrings {
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
-/** The manifest with its ceilings map taken out, as one text: what the two sides agree on when only the map clashed. */
+/** The two maps a merge sums: the host directories' ceilings, and the core slices' above the cap (martha#415). */
+const THE_SUMMED_KEYS: readonly string[] = [THE_CEILINGS_KEY, THE_SLICE_CEILINGS_KEY]
+
+/** The manifest with its ceilings maps taken out, as one text: what the two sides agree on when only the maps clashed. */
 function withoutTheCeilings(manifest: Manifest): string {
-  const martha = Object.fromEntries(Object.entries(manifest.martha ?? {}).filter(([key]) => key !== THE_CEILINGS_KEY))
+  const martha = Object.fromEntries(Object.entries(manifest.martha ?? {}).filter(([key]) => !THE_SUMMED_KEYS.includes(key)))
   return JSON.stringify({ ...manifest, martha })
 }
 
@@ -88,6 +110,57 @@ function theCeilingsTheThreeBring(
   return { ok: next }
 }
 
+/** One core slice's ceiling in the merged map (martha#415): a side without the key stands at the cap, and a merged value at
+ * or under the cap is no exception, so the key is dropped. */
+function theCeilingOnOneSlice(
+  slice: string,
+  cap: number,
+  base: Readonly<Record<string, number>>,
+  ours: Readonly<Record<string, number>>,
+  theirs: Readonly<Record<string, number>>,
+): number | undefined {
+  const mine = ours[slice] ?? cap
+  const other = theirs[slice] ?? cap
+  const from = base[slice] ?? cap
+  const merged = mine === other ? mine : from + (mine - from) + (other - from)
+  return merged > cap ? merged : undefined
+}
+
+/** The core slices' exceptions the merged map takes, or why it cannot: with no cap, a side without a key has no value. */
+function theSliceCeilingsTheThreeBring(
+  cap: number | undefined,
+  base: Readonly<Record<string, number>>,
+  ours: Readonly<Record<string, number>>,
+  theirs: Readonly<Record<string, number>>,
+): Step<Record<string, number>> {
+  if (cap === undefined) return theCeilingsTheThreeBring(base, ours, theirs)
+  const next: Record<string, number> = {}
+  for (const slice of new Set([...Object.keys(ours), ...Object.keys(theirs)])) {
+    const ceiling = theCeilingOnOneSlice(slice, cap, base, ours, theirs)
+    if (ceiling !== undefined) next[slice] = ceiling
+  }
+  return { ok: next }
+}
+
+/** The maps the two sides differ in, by the names a landing's commit records: the host map when neither does. */
+function theMapsThatDiffer(ours: Manifest, theirs: Manifest): string {
+  const differ = (a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>): boolean => JSON.stringify(a) !== JSON.stringify(b)
+  const slices = differ(sliceCeilingsOf(ours), sliceCeilingsOf(theirs))
+  const hosts = differ(ceilingsOf(ours), ceilingsOf(theirs)) || !slices
+  return [...(hosts ? [CEILINGS_NAME] : []), ...(slices ? [SLICE_CEILINGS_NAME] : [])].join(', ')
+}
+
+/** `ours` with both maps summed into it, the slices' only when a side carries that map, or why a map has no sum. */
+function theMapsWrittenInto(ours: string, base: Manifest, ours_manifest: Manifest, theirs: Manifest): Step<string> {
+  const summed = theCeilingsTheThreeBring(ceilingsOf(base), ceilingsOf(ours_manifest), ceilingsOf(theirs))
+  if ('refused' in summed) return summed
+  const with_hosts = withCeilings(ours, summed.ok)
+  if (ours_manifest.martha?.sliceCeilings === undefined && theirs.martha?.sliceCeilings === undefined) return { ok: with_hosts }
+  const sliced = theSliceCeilingsTheThreeBring(sliceCapOf(ours_manifest), sliceCeilingsOf(base), sliceCeilingsOf(ours_manifest), sliceCeilingsOf(theirs))
+  if ('refused' in sliced) return sliced
+  return { ok: withTheMap(with_hosts, THE_SLICE_CEILINGS_KEY, sliced.ok) }
+}
+
 /**
  * package.json as the merge of `theirs` into `ours`, with the ceilings summed, or why this clash is not one a landing
  * redoes. `repository` is where the manifest's own name is read from, never spelled here.
@@ -109,7 +182,7 @@ export function thePackageJsonOfAMerge(
   if (withoutTheCeilings(ours_manifest) !== withoutTheCeilings(theirs_manifest)) {
     return { refused: `${the_manifest} differs outside ${CEILINGS_NAME}, so the clash is not one this redoes` }
   }
-  const summed = theCeilingsTheThreeBring(ceilingsOf(base_manifest), ceilingsOf(ours_manifest), ceilingsOf(theirs_manifest))
-  if ('refused' in summed) return summed
-  return { ok: { text: withCeilings(ours, summed.ok), recorded: `${the_manifest} ${CEILINGS_NAME} (measured)` } }
+  const text = theMapsWrittenInto(ours, base_manifest, ours_manifest, theirs_manifest)
+  if ('refused' in text) return text
+  return { ok: { text: text.ok, recorded: `${the_manifest} ${theMapsThatDiffer(ours_manifest, theirs_manifest)} (measured)` } }
 }
