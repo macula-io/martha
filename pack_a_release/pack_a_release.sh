@@ -8,10 +8,11 @@
 #
 # It then pins the installer (martha#84): installer/pin_the_installer/pin_the_installer.mjs writes
 # <folder>/installer.json from npm's provenance for the installer version this tree carries, so a release that
-# cannot be pinned is never built, and the pin is inside the signed layer.
+# cannot be pinned is never built, and the pin is inside the signed layer. Then declare_the_floor.sh writes the
+# version floor the release declares, <folder>/floor.json, from floor.txt (martha#21).
 #
-# Exit: 0 laid out, 1 refused (a version the tree does not carry, a runtime dependency, a pin that cannot be made),
-# 2 the context could not be made.
+# Exit: 0 laid out, 1 refused (a version the tree does not carry, a runtime dependency, a pin that cannot be made,
+# a floor above the release or a dead withdrawal), 2 the context could not be made.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -43,6 +44,9 @@ git -C "${REPO}" archive --format=tar --prefix="${folder}/" HEAD | tar -x -C "${
 # A pin is generated here, from what npm serves, and never packed with the tree (martha#84).
 [[ ! -e "${context}/${folder}/${pin_file}" ]] || { echo "pack_a_release: ${pin_file} was packed; a release's pin is generated, never committed" >&2; exit 2; }
 node "${REPO}/installer/pin_the_installer/pin_the_installer.mjs" "${context}" || exit 1
+# The floor this release declares, from the tree's floor.txt, into the signed layer (martha#21); a floor above this
+# release or a dead withdrawal stops the release here, and the dry run, which packs through this script.
+"${HERE}/declare_the_floor.sh" "${version}" "${context}/${folder}" || exit 1
 
 cat > "${context}/Containerfile" <<CONTAINERFILE
 FROM scratch
