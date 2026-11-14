@@ -14,7 +14,7 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 /** The host's key for a project folder: every character that is not a letter or a digit becomes `-`. */
 export function projectKeyOf(folder: string): string {

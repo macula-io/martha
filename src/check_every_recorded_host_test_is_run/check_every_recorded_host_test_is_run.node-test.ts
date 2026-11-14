@@ -16,7 +16,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { describe, judgeTheRuns, MARKER, type RecordedHostRun, type TestFile } from './check_every_recorded_host_test_is_run.ts'
 import { readTheRuns, readTheTestFiles, runsFrom } from './read_the_runs_and_the_tests.ts'
 import { recordedHost, whyNoRunUnder } from './recorded_host_skip.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 const REPOSITORY = join(import.meta.dirname, '..', '..')
 

@@ -3,7 +3,7 @@
 
 import { dirname, join } from 'node:path'
 
-import { HOOKS_SPELLINGS, PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { HOOKS_SPELLINGS, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   claude,
