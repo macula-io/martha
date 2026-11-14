@@ -6,12 +6,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { CLAUDE_SERVERS, HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_SERVERS, HOSTS, MCP_CONFIG_SWITCH } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   firstValidatorError,
   initQuestionArgs,
-  MCP_CONFIG_SWITCH,
   SESSION_INIT_ARGS,
   HOST_TRUST_RECORD_FILE,
   hostTrustsTheFolder,

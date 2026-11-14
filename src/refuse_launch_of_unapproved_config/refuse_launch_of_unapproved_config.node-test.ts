@@ -25,6 +25,7 @@ import {
   startedWithOf,
   startedWithTheSwitches,
   type Host,
+  MCP_CONFIG_SWITCH,
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -32,7 +33,6 @@ import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { DECLARATION_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.

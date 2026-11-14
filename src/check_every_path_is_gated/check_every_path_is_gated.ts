@@ -44,6 +44,7 @@ import {
   type Host,
   type LaunchGate,
   type LaunchRequest,
+  MCP_CONFIG_SWITCH,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { undeclaredPromptOrigins, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
@@ -60,7 +61,6 @@ import {
   WORDLESS_TOOLS,
   type RecordedMeshAnswerShape,
 } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
-import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 export interface Gap {
   readonly path: string

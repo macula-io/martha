@@ -104,14 +104,11 @@ import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_chec
 import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
+import { REMOTE_MEMORY_ROOT, MEMORY_FOLDER_OVERRIDE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const
 
-/** The variable that moves the folder of every project's memory under another root. */
-export const REMOTE_MEMORY_ROOT = 'CLAUDE_CODE_REMOTE_MEMORY_DIR'
-/** The variable that names one folder memory is read from and written to instead. */
-export const MEMORY_FOLDER_OVERRIDE = 'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE'
 /** The settings key that names the folder memory lives in. */
 export const MEMORY_DIRECTORY_KEY = 'autoMemoryDirectory'
 

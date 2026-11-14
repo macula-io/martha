@@ -52,8 +52,6 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
-import { REMOTE_MEMORY_ROOT, MEMORY_FOLDER_OVERRIDE } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { MCP_CONFIG_SWITCH } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 
 
 export type { LaunchHost }
@@ -102,6 +100,15 @@ export function launchEnvironment(
 
 /** Claude Code's name as a host: its key in the tables below, and the host the launcher starts. */
 export const CLAUDE_CODE = 'claude-code' as const
+
+/** The variable that moves the folder of every project's memory under another root. */
+export const REMOTE_MEMORY_ROOT = 'CLAUDE_CODE_REMOTE_MEMORY_DIR'
+
+/** The variable that names one folder memory is read from and written to instead. */
+export const MEMORY_FOLDER_OVERRIDE = 'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE'
+
+/** The switch that names a file of tool servers for the host to start. The init question is asked without it. */
+export const MCP_CONFIG_SWITCH = '--mcp-config'
 
 /**
  * The files and directories each host reads from a project directory to start

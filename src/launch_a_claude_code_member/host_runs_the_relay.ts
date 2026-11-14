@@ -45,6 +45,7 @@ import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { isatty } from 'node:tty'
 
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { MCP_CONFIG_SWITCH } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /**
  * How long one question to the host may take. The load check reads the relay's
@@ -256,8 +257,6 @@ export async function hostVersionLine(binary: string, env: NodeJS.ProcessEnv, cw
  */
 export const SESSION_INIT_ARGS = ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--no-session-persistence'] as const
 
-/** The switch that names a file of tool servers for the host to start. The init question is asked without it. */
-export const MCP_CONFIG_SWITCH = '--mcp-config'
 
 /**
  * The arguments the session-init question is asked with (martha#154 r=2): the switches the member's host starts on,

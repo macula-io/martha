@@ -22,19 +22,18 @@ import {
   hostLinesNamingARule,
   LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
-  MEMORY_FOLDER_OVERRIDE,
   memoryDenyRules,
   namesInTheRecording,
   ownerMemoryPlaces,
   placesTheHostProtects,
   PROTECTED_NAME_OWNERS,
-  REMOTE_MEMORY_ROOT,
   writesTheOwnersMemory,
   type OwnerMemoryPlaces,
   type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { SKILLS_KIND, MANAGED_MARKDOWN_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
 function placeFor(t: TestContext) {
