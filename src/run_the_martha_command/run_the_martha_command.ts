@@ -27,7 +27,7 @@ import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
-import { floorRecordOf, launchBelowTheFloor, readTheRecord } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
+import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -47,7 +47,6 @@ import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The command ended as asked. */
 export const EXIT_DONE = 0
@@ -130,10 +129,7 @@ function belowTheFloor(): string | undefined {
 }
 
 /** The version of the release this command is part of. */
-function version(): string {
-  const manifest = JSON.parse(readFileSync(join(releaseTree(), MANIFEST), 'utf8')) as { version?: unknown }
-  return String(manifest.version)
-}
+const version = (): string => releaseVersionOf(releaseTree(), (path) => readFileSync(path, 'utf8'))
 
 async function init(io: CommandIo, places: Places): Promise<number> {
   const owner = gitSays(places.root, 'config', 'user.name') ?? null
