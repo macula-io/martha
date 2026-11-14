@@ -28,6 +28,7 @@ import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS, type RecordedRingResultKey
 import { ADMITS, MESH_GOODBYE, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type RecordedMeshAnswerShape } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -729,7 +730,7 @@ function standInNow(t: TestContext): (probe: ConfigPathProbe) => PathProbe {
     const top = mkdtempSync(join(tmpdir(), 'martha-192-probe-'))
     made.push(top)
     mkdirSync(join(top, '.git'), { recursive: true })
-    writeFileSync(join(top, '.git', 'config'), `${probe.config.join('\n')}\n`)
+    writeFileSync(join(top, '.git', CONFIG), `${probe.config.join('\n')}\n`)
     return { admits: probe.admits, what: probe.what, path: join(top, probe.writes), cwd: top, home: top }
   }
 }
