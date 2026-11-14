@@ -4,8 +4,8 @@
 // This exists because the row's `needs` is one slot, shared with every other line the owner is told — a model switch's
 // own (martha#359) above all — and a line nobody takes back sits there for the rest of the row's life: the member runs
 // the review again, it passes, and the owner's dashboard still says the stopped review is what needs them. Both rules
-// are the telling's, and the second also holds across the launcher's own act, so a stopped review can never hide a
-// switch the owner has to answer for.
+// are the row's own now (../show_dashboard_beat), and the second also holds across the launcher's own act, so a stopped
+// review can never hide a switch the owner has to answer for.
 //
 // What only a relay-level test can prove is that the launcher's own allow is the act that takes the line back: the
 // review rule is stubbed here, and a relay that stopped calling it would leave the first case's line standing.
