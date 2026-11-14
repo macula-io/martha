@@ -5,7 +5,7 @@
 // has. A message is written the moment its row is in the channel; it is taken in by a member when that member's own
 // stream holds its position.
 
-import { type ChannelHost, readTheChannel, takenInBy } from '../keep_the_crew_channel/crew_channel.ts'
+import { type ChannelHost, readTheChannel, takenInBy, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 
 /** The name the crew registers this tool under (martha#343): what became of what you sent. */
 export const READ_THE_RECEIPTS = 'read_the_receipts'
@@ -27,9 +27,9 @@ export async function whatBecameOfWhatISent(host: ChannelHost, member: string, r
 
   const lines: string[] = []
   for (const { position, message } of messages) {
-    const forThem = message.to === 'crew' ? roster.filter((name) => name !== member) : message.to
+    const forThem = message.to === THE_WHOLE_CREW ? roster.filter((name) => name !== member) : message.to
     const states = await Promise.all(forThem.map(async (name) => ((await takenInBy(host, name)).has(position) ? `taken in by ${name}` : `not yet taken in by ${name}`)))
-    lines.push(`message ${position} to ${message.to === 'crew' ? 'the whole crew' : message.to.join(', ')}: ${[WRITTEN, ...states].join(', ')}`)
+    lines.push(`message ${position} to ${message.to === THE_WHOLE_CREW ? 'the whole crew' : message.to.join(', ')}: ${[WRITTEN, ...states].join(', ')}`)
   }
   return lines.join('\n')
 }

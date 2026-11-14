@@ -74,7 +74,7 @@
     ],
     "hostCeilings": {
       "src/approve_a_checkouts_config": 76,
-      "src/claude_code_host": 491,
+      "src/claude_code_host": 489,
       "src/claude_code_relay": 797,
       "src/cut_the_rules_from_the_host_binary": 378,
       "src/declare_a_solo_crew": 84,

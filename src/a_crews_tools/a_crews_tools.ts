@@ -60,7 +60,7 @@ import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_t
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import {
   nudgesOf,
@@ -498,7 +498,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       properties: {
         to: {
           description: "Who it is for: a list of this crew's members' names, or \"crew\" for every member but you",
-          anyOf: [{ type: 'string', enum: ['crew'] }, { type: 'array', items: { type: 'string' }, minItems: 1 }],
+          anyOf: [{ type: 'string', enum: [THE_WHOLE_CREW] }, { type: 'array', items: { type: 'string' }, minItems: 1 }],
         },
         text: { type: 'string', description: 'What you say. A HANDOFF or VERDICT line is read from its first line' },
       },
