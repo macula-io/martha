@@ -10,6 +10,7 @@ import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from './recorded_claude_code_host.ts'
 import { hookSettingsWatch, markdownFolders } from './settings_that_turn_hooks_off.ts'
+import { USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
 
 const USER = '/owner/.claude/settings.json'
 const HOOK = { matcher: '', hooks: [{ type: 'command', command: 'echo from-the-owner' }] }
@@ -258,7 +259,7 @@ test('a synced skill is refused with the remedy its owner can carry out, and any
 test('the watch refuses a hooked agent, skill or command in each user and managed folder the host loads, a synced skill included, and lets it go once removed', (t) => {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
-  const user = join(root, 'conf-dir', 'settings.json')
+  const user = join(root, 'conf-dir', USER_SETTINGS_FILE)
   const watch = hookSettingsWatch({ user, home: root, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
   const folders = markdownFolders(user, managed, CLAUDE_CODE_OWNERS_MARKDOWN.kinds)
   assert.equal(folders.length, 2 * CLAUDE_CODE_OWNERS_MARKDOWN.kinds.length)
@@ -278,7 +279,7 @@ test('the watch refuses a hooked agent, skill or command in each user and manage
 test('the watch follows a link to a folder, reads only .md files, and refuses a folder it cannot read', (t) => {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
-  const user = join(root, 'conf-dir', 'settings.json')
+  const user = join(root, 'conf-dir', USER_SETTINGS_FILE)
   const watch = hookSettingsWatch({ user, home: root, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
   const [agents] = markdownFolders(user, managed, CLAUDE_CODE_OWNERS_MARKDOWN.kinds)
   assert.ok(agents !== undefined)
@@ -308,7 +309,7 @@ test('the watch follows a link to a folder, reads only .md files, and refuses a 
 function watchOver(t: TestContext, settings: unknown) {
   const root = scratch(t)
   const managed = { dir: join(root, 'managed'), file: 'managed.json', drop_in: 'drop-in' }
-  const user = join(root, 'conf-dir', 'settings.json')
+  const user = join(root, 'conf-dir', USER_SETTINGS_FILE)
   mkdirSync(dirname(user), { recursive: true })
   writeFileSync(user, JSON.stringify(settings))
   const approved = join(root, 'approved.json')

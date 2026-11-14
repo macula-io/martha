@@ -27,17 +27,28 @@ import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.t
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
-import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
+import { PARK_A_MEMBER, REFRESH_THIS_SESSION, RESTART_A_MEMBER, RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_CHANNEL_READ_ASK, THE_MODEL_REPORT_ASK, THE_TOOLS_ASK, WAKE_A_MEMBER } from '../a_crews_tools/a_crews_tools.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
+import { CREW_ROWS_PLACE, OWN_WRITES_SUFFIX, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { OWNER, ROLE_TEXTS_DIRECTORY, WORKTREES } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { THE_MODEL_KEY } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
+import { EMPTY_DIRECTORY_NAME } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { RELAY_JOURNAL_SUFFIX } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
+import { REFRESHES_PLACE } from '../refresh_a_member/refresh_a_member.ts'
+import { REFRESH_FIELD } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { RUN_IN_BACKGROUND } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
+import { SK_ED25519 } from '../trust_only_signed_lists/ssh_signature.ts'
+import { STAGING_PREFIX } from '../crew_files_directory/crew_files_directory.ts'
+import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { THE_NEXT_MESSAGE_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { TREE_HASH } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 
 /**
  * Why the relay's mod names these three by literal (martha#255): the host installs
@@ -107,7 +118,7 @@ const THE_KIND_OF_A_PARK = 'the tag of the ThePark union, which TypeScript narro
  * sets its identity, and the constant of that name is the file a git directory keeps its settings in, which the test
  * neither reads nor writes.
  */
-const THE_GIT_SUBCOMMAND = 'git\'s own `config` subcommand, in a test that makes a throwaway repository; the constant of that name is the file a git directory keeps its settings in'
+const A_TOOLS_OWN_SUBCOMMAND = 'a tool\'s own `config` subcommand (git\'s, npm\'s, opencode\'s), in a test or a probe that drives it; the constant of that name is the file a git directory keeps its settings in'
 
 /**
  * Why `model` is written by literal beside the settings key of the same spelling (martha#359): the key a restore may
@@ -116,6 +127,55 @@ const THE_GIT_SUBCOMMAND = 'git\'s own `config` subcommand, in a test that makes
  * matches nothing, and the gate says so by name.
  */
 const THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE = 'a word of its own that the settings key of the owner\'s file is spelled the same as'
+
+// The coincidences of #289 part (b), as Uranus ruled them on the whole-tree report: a
+// word that something else owns, kept, with the family it belongs to. A word that
+// could be any other word was renamed instead, never excused.
+
+/** The value of OPEN_THE_PANE, which lives in a hooks module (.tsx) that nothing outside the relay can import, so this list holds it once, here. */
+const THE_WHOLE_CREW = 'crew'
+/** Why this list spells the whole-crew word itself (#289 part b). */
+const THE_PANES_CONSTANT_CANNOT_BE_IMPORTED = 'the whole-crew word, held once for the entries below: the constant of that value is the pane command in a .tsx hooks module, which nothing outside the relay can import'
+/** Why `'crew'` is written by literal where a message is addressed (#289 part b). */
+const THE_WHOLE_CREW_ADDRESSEE = 'the addressee that means every member, a member of the Addressee union compared at run time; the constant of that word is the command that opens the pane'
+/** Why a store's name is written by literal in a test of the host contract (#289 part b). */
+const A_STORE_THE_CONTRACT_NAMES = 'the name of a store the host contract declares, listed as the host holds them; the constant of that word is a folder of the crew\'s state'
+/** Why `'crew'` is written by literal in a signed list (#289 part b). */
+const A_FIELD_OF_A_SIGNED_LIST = 'a field a signed list document carries, named as its signature covers it'
+/** Why `'tree'` is written by literal where a launcher reads a checkout (#289 part b). */
+const THE_TAG_OF_A_READ_TREE = 'the tag of the union a checkout read returns, which TypeScript narrows on by literal; the constant of that word is a recorder\'s parameter'
+/** Why `'tree'` is written by literal in an approval record (#289 part b). */
+const A_FIELD_OF_AN_APPROVAL = 'a field of an approval record, as the record is written and read back'
+/** Why `'nothing'` is written by literal where an approval is told (#289 part b). */
+const THE_TAG_OF_NOTHING_TO_APPROVE = 'the tag of an approval outcome with nothing to approve, a union member TypeScript narrows on; the constant of that word is the name of an empty folder'
+/** Why `'parked'` is written by literal among a row's states (#289 part b). */
+const A_STATE_OF_A_ROW = 'a state a dashboard row can be in, listed in STATES; the crew\'s park place is named the same word and is not this'
+/** Why `'owner'` is written by literal in the declaration (#289 part b). */
+const A_FIELD_OF_THE_DECLARATION = 'a field of the crew declaration, as its schema names it and as a refusal names the field'
+/** Why `'owner'` is written by literal as a turn's origin (#289 part b). */
+const THE_OWNER_AS_A_TURNS_ORIGIN = 'a member of the TurnOrigin union, compared at run time; the constant of that word is the role of the crew\'s owner'
+/** Why the relay socket's name is written by literal in register.ts (#289 part b, as for crew.tsx in martha#254). */
+const THE_HOST_READS_THE_SOCKET_BY_LITERAL = 'the host reads this name from the hooks module and refuses anything but a literal in $.env.get, an imported constant included (#104)'
+/** Why `'martha'` is written by literal for the repository, the command or the plugin (#289 part b). */
+const THE_REPOSITORYS_OWN_NAME = 'the repository\'s, its command\'s or its plugin\'s own name; the constant of that word is the folder Martha keeps its state under'
+/** Why a role name is written by literal in a test crew (#289 part b). */
+const A_ROLE_A_TEST_CREW_DECLARES = 'the role a test crew declares; a role is the declaration\'s own word, and the constant of that word is the role report_progress reads'
+/** Why each store's glue holds its own staging prefix (#289 part b). */
+const MACHINE_GLUE_HOLDS_ITS_OWN = 'machine glue imports only the host contract and its own files, so each store\'s glue holds its own staging prefix'
+/** Why `'sha512'` is written by literal for an ssh signature (#289 part b). */
+const SSHS_OWN_HASH_NAME = 'ssh\'s own name for the hash a signature uses; the constant of that word names the hash of a recorded tree'
+/** Why an ssh key type is written by literal among the public addresses (#289 part b). */
+const A_KEY_TYPE_IS_A_PUBLIC_ADDRESS = 'a key type listed as a public address that posted text may carry; the constant of that word is the type the signature reader accepts'
+/** Why `'.jsonl'` is written by literal where a probe reads the host (#289 part b). */
+const THE_HOSTS_TRANSCRIPT_SUFFIX = 'Claude Code\'s own suffix for a session transcript, which a probe reads; the constant of that word is the suffix of the launcher\'s own-writes records'
+/** Why `'.json'` is written by literal in a filter (#289 part b). */
+const ANY_JSON_FILE = 'a filter on any JSON file; the constant of that word is the suffix of the relay\'s journal'
+/** Why a test's title equals a constant (#289 part b). */
+const A_TEST_TITLED_WITH_ITS_RULE = 'a test\'s title, which states in words the rule the constant names'
+/** Why `'worktrees'` is written by literal inside a git directory (#289 part b). */
+const GITS_OWN_WORKTREES_FOLDER = 'git\'s own folder for linked worktrees inside a git directory; the constant of that word is the crew\'s house rule for where worktrees go'
+/** Why the two `'refresh'` constants stay apart (#289 part b). */
+const TWO_REFRESH_WORDS = 'a row\'s refresh field and the folder of refresh records are two meanings spelled alike, each defined once in its own slice'
 
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
@@ -221,10 +281,10 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: TOOL_CHECK, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
-  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: THE_GIT_SUBCOMMAND },
-  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts', reason: THE_GIT_SUBCOMMAND },
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   // The same git subcommand, in the permission-prompt run's throwaway repository (martha#363).
-  { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: THE_GIT_SUBCOMMAND },
+  { value: CONFIG, file: 'launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   // The word `model` in the model-switch work (martha#315), in five files that each mean a field of their own by it.
   { value: CLAUDE_CODE_SHELL_TOOL, file: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.node-test.ts', reason: 'a call to a tool that spawns no subagent, named as the host names its shell: what the test needs is a real tool the rule must not hold' },
   { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
@@ -238,5 +298,82 @@ export const EXCEPTIONS: readonly Exception[] = [
   // something else by it.
   { value: THE_MODEL_KEY, file: 'refresh_a_member/the_refresh_flow.ts', reason: `the word an order carries a model under, which this file holds as CARRY_A_MODEL; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
   { value: THE_MODEL_KEY, file: 'switch_a_members_model/switch_a_members_model.ts', reason: `the name of the place a crew keeps its model records in, which this file holds as MODEL_PLACE; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
+  // #289 part (b), by Uranus's ruling: one entry per file and word.
+  { value: RELAY_JOURNAL_SUFFIX, file: 'claude_code_host/settings_that_turn_hooks_off.ts', reason: ANY_JSON_FILE },
+  { value: RELAY_JOURNAL_SUFFIX, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: ANY_JSON_FILE },
+  { value: OWN_WRITES_SUFFIX, file: 'probe_launch_hosts/probe_hosts.ts', reason: THE_HOSTS_TRANSCRIPT_SUFFIX },
+  { value: STAGING_PREFIX, file: 'crew_files_directory/crew_files_directory.ts', reason: MACHINE_GLUE_HOLDS_ITS_OWN },
+  { value: STAGING_PREFIX, file: 'linux_process_identity/launch_records_directory.ts', reason: MACHINE_GLUE_HOLDS_ITS_OWN },
+  { value: STAGING_PREFIX, file: 'row_streams_directory/row_streams_directory.ts', reason: MACHINE_GLUE_HOLDS_ITS_OWN },
+  { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_READS_THE_SOCKET_BY_LITERAL },
+  { value: RUN_IN_BACKGROUND, file: 'keep_the_shell_for_an_owner_signed_command/keep_the_shell.node-test.ts', reason: A_TEST_TITLED_WITH_ITS_RULE },
+  { value: THE_CHANNEL_READ_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_CHANNEL_READ_ASK, file: 'declare_crew/declare_crew.ts', reason: A_FIELD_OF_THE_DECLARATION },
+  { value: CONFIG, file: 'check_no_test_the_base_passed_goes_missing/check_no_test_the_base_passed_goes_missing.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'keep_martha_state_outside_the_checkout/crew_state_directory.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'land_passed_work_as_one_batch/land_passed_work_as_one_batch.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'launch_a_claude_code_member/run_nothing_a_checkout_planted.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'probe_launch_hosts/probe_hosts.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'refuse_launch_of_unapproved_config/the_launcher_judges_the_tree.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'run_an_owner_signed_command/run_a_signed_shape.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'run_an_owner_signed_command/signed_base.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'run_the_martha_command/run_the_martha_command.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: THE_WHOLE_CREW, file: 'a_crews_tools/a_crews_tools.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'claude_code_host/claude_code_host.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
+  { value: THE_WHOLE_CREW, file: 'hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.node-test.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'host_contract/host_contract.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
+  { value: THE_WHOLE_CREW, file: 'keep_the_crew_channel/crew_channel.node-test.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'keep_the_crew_channel/crew_channel.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'send_a_crew_message/send_a_crew_message.node-test.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'send_a_crew_message/send_a_crew_message.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'show_what_a_message_became/show_what_a_message_became.node-test.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'show_what_a_message_became/show_what_a_message_became.ts', reason: THE_WHOLE_CREW_ADDRESSEE },
+  { value: THE_WHOLE_CREW, file: 'trust_only_signed_lists/trust_only_signed_lists.ts', reason: A_FIELD_OF_A_SIGNED_LIST },
+  { value: STATE_ROOT_NAME, file: 'check_nothing_private_gets_in/check_nothing_private_gets_in.node-test.ts', reason: THE_REPOSITORYS_OWN_NAME },
+  { value: STATE_ROOT_NAME, file: 'check_nothing_private_gets_in/declared.ts', reason: THE_REPOSITORYS_OWN_NAME },
+  { value: STATE_ROOT_NAME, file: 'check_posted_text_carries_nothing_private/check_posted_text_carries_nothing_private.node-test.ts', reason: THE_REPOSITORYS_OWN_NAME },
+  { value: STATE_ROOT_NAME, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_REPOSITORYS_OWN_NAME },
+  { value: STATE_ROOT_NAME, file: 'launch_a_claude_code_member/drive_the_recorded_host.ts', reason: THE_REPOSITORYS_OWN_NAME },
+  { value: STATE_ROOT_NAME, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_REPOSITORYS_OWN_NAME },
+  { value: CARRY_A_MODEL, file: 'put_the_owners_model_back/the_owners_settings_file.ts', reason: THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE },
+  { value: EMPTY_DIRECTORY_NAME, file: 'approve_a_checkouts_config/approve_a_checkouts_config.node-test.ts', reason: THE_TAG_OF_NOTHING_TO_APPROVE },
+  { value: EMPTY_DIRECTORY_NAME, file: 'approve_a_checkouts_config/approve_a_checkouts_config.ts', reason: THE_TAG_OF_NOTHING_TO_APPROVE },
+  { value: EMPTY_DIRECTORY_NAME, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_TAG_OF_NOTHING_TO_APPROVE },
+  { value: OWNER, file: 'attribute_a_cross_session_sender/attribute_a_cross_session_sender.node-test.ts', reason: THE_OWNER_AS_A_TURNS_ORIGIN },
+  { value: OWNER, file: 'declare_crew/declare_crew.node-test.ts', reason: A_FIELD_OF_THE_DECLARATION },
+  { value: OWNER, file: 'declare_crew/declare_crew.ts', reason: A_FIELD_OF_THE_DECLARATION },
+  { value: OWNER, file: 'take_in_a_turn/take_in_a_turn.node-test.ts', reason: THE_OWNER_AS_A_TURNS_ORIGIN },
+  { value: OWNER, file: 'trust_only_framed_envelopes/trust_only_framed_envelopes.node-test.ts', reason: THE_OWNER_AS_A_TURNS_ORIGIN },
+  { value: OWNER, file: 'trust_only_framed_envelopes/trust_only_framed_envelopes.ts', reason: THE_OWNER_AS_A_TURNS_ORIGIN },
+  { value: PARKED_PLACE, file: 'park_and_wake_a_member/park_and_wake_a_member.node-test.ts', reason: THE_KIND_OF_A_PARK },
+  { value: PARKED_PLACE, file: 'park_and_wake_a_member/park_and_wake_a_member.ts', reason: THE_KIND_OF_A_PARK },
+  { value: PARKED_PLACE, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: A_STATE_OF_A_ROW },
+  { value: PARKED_PLACE, file: 'wake_a_member/wake_a_member.node-test.ts', reason: THE_KIND_OF_A_PARK },
+  { value: PARKED_PLACE, file: 'wake_a_member/wake_a_member.ts', reason: THE_KIND_OF_A_PARK },
+  { value: REFRESHES_PLACE, file: 'show_dashboard_beat/show_dashboard_beat.ts', reason: TWO_REFRESH_WORDS },
+  { value: REFRESH_FIELD, file: 'refresh_a_member/refresh_a_member.ts', reason: TWO_REFRESH_WORDS },
+  { value: CREW_ROWS_PLACE, file: 'claude_code_host/claude_code_host.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
+  { value: CREW_ROWS_PLACE, file: 'host_contract/host_contract.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
+  { value: TREE_HASH, file: 'trust_only_signed_lists/sign_like_a_hardware_key.ts', reason: SSHS_OWN_HASH_NAME },
+  { value: TREE_HASH, file: 'trust_only_signed_lists/ssh_signature.ts', reason: SSHS_OWN_HASH_NAME },
+  { value: SK_ED25519, file: 'check_nothing_private_gets_in/declared.ts', reason: A_KEY_TYPE_IS_A_PUBLIC_ADDRESS },
+  { value: SUPERVISOR, file: 'declare_crew/declare_crew.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
+  { value: SUPERVISOR, file: 'park_and_wake_a_member/park_and_wake_a_member.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
+  { value: SUPERVISOR, file: 'wake_a_member/wake_a_member.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
+  { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: TREE_PARAMETER, file: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', reason: A_FIELD_OF_AN_APPROVAL },
+  { value: TREE_PARAMETER, file: 'refuse_launch_of_unapproved_config/checkout_tree.ts', reason: THE_TAG_OF_A_READ_TREE },
+  { value: TREE_PARAMETER, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.node-test.ts', reason: THE_TAG_OF_A_READ_TREE },
+  { value: TREE_PARAMETER, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts', reason: THE_TAG_OF_A_READ_TREE },
+  { value: TREE_PARAMETER, file: 'refuse_launch_of_unapproved_config/the_launcher_judges_the_tree.node-test.ts', reason: THE_TAG_OF_A_READ_TREE },
+  { value: TREE_PARAMETER, file: 'refuse_launch_of_unapproved_config/the_launcher_judges_the_tree.ts', reason: `${THE_TAG_OF_A_READ_TREE}, and git's own object type in hash-object -t` },
+  { value: TREE_PARAMETER, file: 'take_in_a_tool_result/take_in_a_tool_result.node-test.ts', reason: THE_TAG_OF_A_READ_TREE },
+  { value: TREE_PARAMETER, file: 'take_in_a_tool_result/take_in_a_tool_result.ts', reason: THE_TAG_OF_A_READ_TREE },
+  { value: WORKTREES, file: 'refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.node-test.ts', reason: GITS_OWN_WORKTREES_FOLDER },
+  { value: THE_WHOLE_CREW, file: 'check_no_literal_restates_a_value/exceptions.ts', reason: THE_PANES_CONSTANT_CANNOT_BE_IMPORTED },
 ]
-

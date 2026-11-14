@@ -30,6 +30,7 @@ import { argv, exit, stderr } from 'node:process'
 
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { MESH_TREE_RECORDING } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { ANSWERS_A_RING, MESH_HELLO, RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 
@@ -235,7 +236,7 @@ try {
     stderr.write(`${MESH_SERVER_PACKAGE} ${tree.server_version} has no recorded bin ${serverBin}: record the version's tools first (npm run record:mesh-tools)\n`)
     exit(1)
   }
-  const server_file = join(scratch, 'installed-tree', 'node_modules', MESH_SERVER_PACKAGE, bin)
+  const server_file = join(scratch, 'installed-tree', DEPENDENCIES, MESH_SERVER_PACKAGE, bin)
   const code = join(scratch, 'extracted', 'package')
   const recorded = await record(server_file, tree.server_version, tree.integrity, code, scratch)
   const next = withVersion(KEY_RECORDING, recorded)
