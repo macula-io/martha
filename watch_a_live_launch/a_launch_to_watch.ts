@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
-import { INSTALL_WITHOUT_ASKING, PACKAGE_SWITCH, PINNED_INSTALLER } from '../src/claude_code_host/mesh_server_install.ts'
+import { INSTALL_WITHOUT_ASKING, PACKAGE_SWITCH, PINNED_INSTALLER } from '../src/install_the_mesh_server_for_claude_code/mesh_server_install.ts'
 import { YES } from '../src/approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../src/declare_crew/declare_crew.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../src/read_a_room_through_its_gate/mesh_server_tools.ts'

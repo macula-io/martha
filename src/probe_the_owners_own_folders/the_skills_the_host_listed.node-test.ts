@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
-import { TRASH_FOLDER } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
+import { TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 
 const init = (skills: unknown) => JSON.stringify({ type: 'system', subtype: 'init', skills })
 

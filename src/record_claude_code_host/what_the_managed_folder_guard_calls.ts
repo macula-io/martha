@@ -18,10 +18,10 @@
 // name declared twice in one module, or exported by no module or by two, cannot
 // be told and is refused.
 
-import { closingBrace } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { loaderIn } from '../claude_code_host/markdown_the_host_loads.ts'
-import { CHUNK } from '../claude_code_host/protected_config_places.ts'
-import { CLAUDE_FOLDER } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
+import { loaderIn } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
+import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
+import { CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 /** One function the guard reaches, whole, and the entry each name it calls binds to. */
 export interface GuardFunction {

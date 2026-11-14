@@ -34,7 +34,7 @@
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import { MESH_SERVER_PACKAGE } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { loadsPlugins, PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
+import { loadsPlugins, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { meshServerInstallsIn } from './mesh_server_install.ts'
 
 /** The settings keys that make the host run something whose output can reach the model. */

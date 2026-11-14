@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { realPathOf } from '../claude_code_host/settings_that_turn_hooks_off.ts'
+import { realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { GIT_SETTINGS_VARIABLE, switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
