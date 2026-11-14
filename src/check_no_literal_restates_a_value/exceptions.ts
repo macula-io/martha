@@ -20,7 +20,7 @@ import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
-import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { A_DRY_RUN, FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { THE_REFRESH_ASK, CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
@@ -33,6 +33,7 @@ import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.t
 import { CREW_ROWS_PLACE, OWN_WRITES_SUFFIX, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER, ROLE_TEXTS_DIRECTORY, WORKTREES } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
+import { STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { THE_MODEL_KEY } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -177,6 +178,20 @@ const GITS_OWN_WORKTREES_FOLDER = 'git\'s own folder for linked worktrees inside
 /** Why the two `'refresh'` constants stay apart (#289 part b). */
 const TWO_REFRESH_WORDS = 'a row\'s refresh field and the folder of refresh records are two meanings spelled alike, each defined once in its own slice'
 
+/**
+ * Why the gate's reading holds the old field's name by literal (martha#321): ../declare_crew imports that module,
+ * so importing the constant back would make the declaration read its own fields before they are initialized — which
+ * is the failure this entry exists instead of. The word is the declaration's own field, read off a file an earlier
+ * release wrote.
+ */
+const THE_OLD_GATE_FIELD = 'the declaration\'s own old gate field, read to keep a file an earlier release wrote declaring; the constant lives in declare_crew, which imports the module that reads it, so importing it back would read the declaration\'s fields before they are initialized'
+
+/**
+ * Why the owner's to-do list spells `check` by literal beside land_batch's dry-run argument of that spelling
+ * (martha#339): there it is the tag of the DoneBy union, which TypeScript narrows on by literal, and the argument an act's
+ * own check is given by, neither of which is a batch's dry run.
+ */
+const AN_ACTS_OWN_CHECK = 'the to-do list\'s own word for the check that closes an act, a union tag and an argument of its own; land_batch\'s dry-run argument is spelled the same and is not this'
 export const EXCEPTIONS: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
   // value, so the value is written as the constant that holds it: a literal here
@@ -272,6 +287,9 @@ export const EXCEPTIONS: readonly Exception[] = [
   // role's text sits in (martha#306). One English word names the field and the folder, and the field reader is not a
   // path: it is excused here, and a copy of the word anywhere else still fails.
   { value: ROLE_TEXTS_DIRECTORY, file: 'declare_crew/declare_crew.ts', reason: 'the declaration\'s mode.roles field, a list of role names, and not the roles/ directory a role\'s text sits in' },
+  // The gate's one old reading (martha#321): the field a file an earlier release wrote still declares by. The slice
+  // that reads it cannot import the constant, because declare_crew imports the slice.
+  { value: STRICT_GATE, file: 'read_the_gate_mode/read_the_gate_mode.ts', reason: THE_OLD_GATE_FIELD },
   // The five events the relay hears from the host (martha#313), each spelled out because the host's validator will take
   // nothing else there.
   { value: PERMISSION_REQUEST, file: 'claude_code_relay/hooks/register.ts', reason: THE_HOST_NAMES_ITS_HOOKS },
@@ -376,4 +394,7 @@ export const EXCEPTIONS: readonly Exception[] = [
   { value: TREE_PARAMETER, file: 'take_in_a_tool_result/take_in_a_tool_result.ts', reason: THE_TAG_OF_A_READ_TREE },
   { value: WORKTREES, file: 'refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.node-test.ts', reason: GITS_OWN_WORKTREES_FOLDER },
   { value: THE_WHOLE_CREW, file: 'check_no_literal_restates_a_value/exceptions.ts', reason: THE_PANES_CONSTANT_CANNOT_BE_IMPORTED },
+  // land_batch's dry-run argument (martha#339) is spelled as the to-do list's own `check`, which means something else.
+  { value: A_DRY_RUN, file: 'keep_the_owners_todo_list/keep_the_owners_todo_list.ts', reason: AN_ACTS_OWN_CHECK },
+  { value: A_DRY_RUN, file: 'keep_the_owners_todo_list/keep_the_owners_todo_list.node-test.ts', reason: AN_ACTS_OWN_CHECK },
 ]
