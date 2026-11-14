@@ -316,8 +316,9 @@ const namedFor = (holder: Definition | undefined, fromTheChange: DefinedByTheCha
 
 /**
  * What a literal that DEFINES a constant is: a copy of another module's value
- * (R2), a copy of a value the change defines (R1), or the definition itself — and
- * the constant the change itself defines is the one definition that is not a copy.
+ * (R2), a copy of a value the change defines (R1), or the definition itself. The
+ * constant the change itself defines is not a copy of the value it defines, but
+ * it is a copy of another module's holder that held the value before the change.
  *
  * Against a value the change defines, a definition is a copy wherever it sits,
  * its own module included, unless it is itself an exported holder of that value
@@ -326,18 +327,29 @@ const namedFor = (holder: Definition | undefined, fromTheChange: DefinedByTheCha
  * is a copy of it.
  */
 function findingsForADefinition(definition: Definition, line: number, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] {
-  const isItsOwnDefinition = declared.some((entry) => entry.value === definition.value && entry.module === definition.path && entry.name === definition.name)
-  if (isItsOwnDefinition) return []
+  const isDefinedByTheChange = (one: Definition): boolean => declared.some((entry) => entry.value === one.value && entry.module === one.path && entry.name === one.name)
   const holders = holdersOf(definition.value, definitions, definition.path)
+  const heldBefore = holders.filter((each) => each.path !== definition.path && !isDefinedByTheChange(each))
+  if (isDefinedByTheChange(definition)) return namedAgainst(definition, line, heldBefore[0])
   const isACopyAgainst = (module: string): boolean => module !== definition.path || !definition.exported
-  const fromTheChange = declared.find((entry) => entry.value === definition.value && isACopyAgainst(entry.module))
+  const isAHolder = definition.exported && !definition.alias
+  const holdsANewDefinition = (entry: DefinedByTheChange): boolean => holders.some((each) => each.path === entry.module && each.name === entry.name)
+  const fromTheChange = declared.find((entry) => entry.value === definition.value && isACopyAgainst(entry.module) && !(isAHolder && holdsANewDefinition(entry)))
   if (fromTheChange !== undefined) {
     const { constant, gone } = namedFor(holders.find((each) => isACopyAgainst(each.path)), fromTheChange)
     return [findingAt(definition.path, line, definition.value, constant, 'restates_a_value_the_change_defines', gone)]
   }
-  const holder = holders.find((each) => each.path !== definition.path)
-  return holder === undefined ? [] : [findingAt(definition.path, line, definition.value, { module: holder.path, name: holder.name }, 'defines_an_exported_value')]
+  return namedAgainst(definition, line, heldBefore[0])
 }
+
+/**
+ * A definition against the holder that held its value before the change. A new
+ * exported definition of a value another module still holds is the copy, named
+ * on its own line, so only an exception in its own file can excuse it; the old
+ * holder is never named for it (martha#289 part b, stage 2).
+ */
+const namedAgainst = (definition: Definition, line: number, holder: Definition | undefined): Finding[] =>
+  holder === undefined ? [] : [findingAt(definition.path, line, definition.value, { module: holder.path, name: holder.name }, 'defines_an_exported_value')]
 
 /** What a literal that USES a value is: a copy of the constant holding it, or of the value the change defines. */
 function findingsForAUse(path: string, line: number, literal: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] {

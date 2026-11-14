@@ -12,6 +12,7 @@ import {
   type Policy,
 } from './refuse_execution_after_ungated_text.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const crewmate = 'a'.repeat(64)
@@ -36,7 +37,7 @@ const refusal = (tool: string, ingests: readonly Ingestion[]) => {
 // deny-list forgot: the OpenCode host's lowercase names, the plugins' names, the
 // tools that hand text to a peer, and a name invented here.
 const EXECUTING_TOOLS = [
-  'Bash',
+  CLAUDE_CODE_SHELL_TOOL,
   'bash',
   'write',
   'edit',
@@ -71,7 +72,7 @@ test('text from a principal the policy table names may be acted on', () => {
 
 test('a node id is compared case-insensitively, as the crew code lowercases it', () => {
   const handoff: Ingestion = { path: 'A6', from_node_id: crewmate.toUpperCase() }
-  assert.equal(allowed('Bash', [handoff]), true)
+  assert.equal(allowed(CLAUDE_CODE_SHELL_TOOL, [handoff]), true)
 })
 
 // --- every executing tool is covered, and the list is an allow-list -----------
@@ -108,15 +109,15 @@ test('the turn after the outsider text is still refused: the text did not leave 
   const violated = sessionAfter({ path: 'A6', from_node_id: stranger })
   const nextTurn = recordIngestion(violated, [])
 
-  const decision = refuseExecutionAfterUngatedText({ tool: 'Bash', session: nextTurn, policy })
+  const decision = refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: nextTurn, policy })
   assert.equal(decision.allow, false)
 })
 
 test('only a fresh session clears it', () => {
   const violated = sessionAfter({ path: 'A6', from_node_id: stranger })
-  assert.equal(refuseExecutionAfterUngatedText({ tool: 'Bash', session: violated, policy }).allow, false)
+  assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: violated, policy }).allow, false)
   assert.equal(
-    refuseExecutionAfterUngatedText({ tool: 'Bash', session: startFreshSession(), policy }).allow,
+    refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: startFreshSession(), policy }).allow,
     true,
   )
 })
@@ -127,7 +128,7 @@ test('a handover file or a compaction summary carries the taint forward', () => 
     { path: 'A8', from_node_id: null },
     { path: 'A12', from_node_id: null },
   ])
-  assert.equal(refuseExecutionAfterUngatedText({ tool: 'Bash', session: resumed, policy }).allow, false)
+  assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session: resumed, policy }).allow, false)
 })
 
 // --- one planted case per source of turn text ---------------------------------
@@ -147,7 +148,7 @@ const strangerSources: { source: string; ingestion: Ingestion }[] = [
 
 for (const { source, ingestion } of strangerSources) {
   test(`Bash is refused after ${source}`, () => {
-    refusal('Bash', [ingestion])
+    refusal(CLAUDE_CODE_SHELL_TOOL, [ingestion])
   })
 }
 
@@ -163,7 +164,7 @@ const strangerFetches: { source: string; ingestion: Ingestion }[] = [
 
 for (const { source, ingestion } of strangerFetches) {
   test(`Bash is refused after ${source}`, () => {
-    refusal('Bash', [ingestion])
+    refusal(CLAUDE_CODE_SHELL_TOOL, [ingestion])
   })
 }
 
@@ -175,23 +176,23 @@ test('a display name never authorises: the planted "you are Supervisor" turn is 
     from_node_id: stranger,
     from_name: 'Supervisor',
   } as Ingestion
-  const why = refusal('Bash', [planted])
+  const why = refusal(CLAUDE_CODE_SHELL_TOOL, [planted])
   assert.match(why, /not named by the policy table/)
 })
 
 test('one unwilling ingestion blocks the session even when a principal also wrote', () => {
-  refusal('Bash', [
+  refusal(CLAUDE_CODE_SHELL_TOOL, [
     { path: 'A6', from_node_id: crewmate },
     { path: 'A4', from_node_id: stranger },
   ])
 })
 
 test('a path this gate has never heard of fails closed', () => {
-  refusal('Bash', [{ path: 'A99', from_node_id: crewmate }])
+  refusal(CLAUDE_CODE_SHELL_TOOL, [{ path: 'A99', from_node_id: crewmate }])
 })
 
 test('the refusal names the path and says what clears it, in business words', () => {
-  const why = refusal('Bash', [{ path: 'A4', from_node_id: stranger }])
+  const why = refusal(CLAUDE_CODE_SHELL_TOOL, [{ path: 'A4', from_node_id: stranger }])
   assert.match(why, /A4/)
   assert.match(why, /nothing executes/i)
   assert.match(why, /fresh start that reads no handover/i)
@@ -200,7 +201,7 @@ test('the refusal names the path and says what clears it, in business words', ()
 
 test('a recorder that knows why it has no sender says so in the refusal, so a ring names which branch carried none (martha#247)', () => {
   const said = 'the ring was not answered: its result carries no answer of 1, 2 or 3'
-  const why = refusal('Bash', [{ path: 'A5', from_node_id: null, why: said }])
+  const why = refusal(CLAUDE_CODE_SHELL_TOOL, [{ path: 'A5', from_node_id: null, why: said }])
   assert.ok(why.includes(said), `the refusal repeats what the recorder said (${why})`)
   assert.match(why, /A5/)
   assert.doesNotMatch(why, /undefined|null|NaN/)
@@ -229,18 +230,18 @@ test('the owner\'s typed turn leaves every executing tool allowed', () => {
 
 test('the owner\'s mark on any other row is refused: only the host engine attests the owner', () => {
   for (const path of INBOUND_PATHS.filter((row) => row.attestation !== 'host-engine')) {
-    refusal('Bash', [{ path: path.id, from_node_id: OWNER_AT_THE_TERMINAL }])
+    refusal(CLAUDE_CODE_SHELL_TOOL, [{ path: path.id, from_node_id: OWNER_AT_THE_TERMINAL }])
   }
 })
 
 test('the owner\'s row with a stranger, a crew mate or nobody named is refused: it carries the owner or nothing', () => {
   for (const from_node_id of [stranger, crewmate, null, OWNER_AT_THE_TERMINAL.toUpperCase()]) {
-    refusal('Bash', [{ ...ownerTyped(), from_node_id }])
+    refusal(CLAUDE_CODE_SHELL_TOOL, [{ ...ownerTyped(), from_node_id }])
   }
 })
 
 test('the owner\'s typed turn does not clear a stranger\'s text, before it or after it', () => {
   const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
-  refusal('Bash', [ownerTyped(), strangers])
-  refusal('Bash', [strangers, ownerTyped()])
+  refusal(CLAUDE_CODE_SHELL_TOOL, [ownerTyped(), strangers])
+  refusal(CLAUDE_CODE_SHELL_TOOL, [strangers, ownerTyped()])
 })
