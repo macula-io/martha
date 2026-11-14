@@ -582,6 +582,26 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
   {
+    name: 'declare_a_launch_probe',
+    why: 'what one row of npm run probe:launch is, shared by its rows and its runner; the command never loads it',
+  },
+  {
+    name: 'probe_a_checkouts_own_config',
+    why: "npm run probe:launch's rows about a checkout's own config; the command never loads them",
+  },
+  {
+    name: 'probe_the_owners_hooks',
+    why: "npm run probe:launch's rows about the owner's hooks; the command never loads them",
+  },
+  {
+    name: 'probe_the_owners_own_folders',
+    why: "npm run probe:launch's rows about the owner's own folders; the command never loads them",
+  },
+  {
+    name: 'probe_the_hosts_auto_memory',
+    why: "npm run probe:launch's rows about the host's auto-memory; the command never loads them",
+  },
+  {
     name: 'record_mesh_answers',
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
