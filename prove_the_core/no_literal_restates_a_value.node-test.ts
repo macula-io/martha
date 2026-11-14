@@ -182,6 +182,18 @@ test('an exception whose literal is no finding any more matches nothing, and is 
   assert.deepEqual(exceptionsNotHeld([typeOnly], [entry]), [entry], 'no constant holds the value, so nothing needs excusing')
 })
 
+test('a coincidence that names a number\'s constant holds the value that constant defines (martha#441)', () => {
+  const minute = source('a_tool/a_tool.ts', 'export const MINUTE = 60_000\n')
+  const copy = source('a_user/a_user.ts', 'const wait = 60_000\n')
+  // The entry names the tree's minute by the number it holds, as a coincidence file does: a number here, not the
+  // string the reader would hand the rule. It has to reach the rule as the value the constant defines, or it excuses
+  // nothing — one test for each place an entry enters.
+  const entry: Exception = { value: 60_000, file: 'a_user/a_user.ts', reason: 'a wait of its own, not the tree\'s minute' }
+
+  assert.deepEqual(restatementsIn([minute, copy], { judged: everyLine(copy), exceptions: [entry] }), [])
+  assert.deepEqual(exceptionsNotHeld([minute, copy], [entry]), [], 'the entry excuses a finding, so it is held')
+})
+
 // A change that adds an exported constant a holder in another module already holds made a second copy, and the
 // copy is the NEW line: before, the change's own definition was never judged, so the finding fell on the old
 // holder, where that file's exception excused it (martha#289 part b, stage 2).

@@ -8,6 +8,7 @@ import { test } from 'node:test'
 
 import { OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, seeTheCrew, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 const CREW = { members: [{ name: 'Vesta' }, { name: 'Uranus' }, { name: 'Terra' }] }
 const NOW = 1_762_900_000_000
@@ -63,13 +64,13 @@ test('a member waiting on somebody keeps that wait, and a member that needs the 
   const seen = seeTheCrew(
     CREW,
     {
-      Vesta: beat('Vesta', NOW - 500, { state: 'waiting', waits: { on: 'Supervisor', for: 'a verdict', since: NOW - 60_000 } }),
+      Vesta: beat('Vesta', NOW - 500, { state: 'waiting', waits: { on: 'Supervisor', for: 'a verdict', since: NOW - MINUTE_MS } }),
       Uranus: beat('Uranus', NOW - 500, { state: 'needs-you', needs: 'a menu: land or hold' }),
     },
     NOW,
   )
 
-  assert.deepEqual(seen.rows[0]!.waits, { on: 'Supervisor', for: 'a verdict', since: NOW - 60_000 }, 'the wait is shown as the member recorded it')
+  assert.deepEqual(seen.rows[0]!.waits, { on: 'Supervisor', for: 'a verdict', since: NOW - MINUTE_MS }, 'the wait is shown as the member recorded it')
   assert.equal(seen.rows[1]!.needs, 'a menu: land or hold', 'what needs the owner is shown as the member said it')
   assert.deepEqual(seen.counts, { members: 3, online: 2, working: 0, waiting: 1, needs_you: 1 }, 'a wait and a need are each counted')
 })
