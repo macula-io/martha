@@ -153,7 +153,7 @@ import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_scree
 import { NO_BELLS, theBellsTheOwnerDeclared } from '../ring_the_owner/ring_the_owner.ts'
 import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
-import { relayJournalKeptIn } from './keep_the_relays_journal.ts'
+import { relayJournalKeptIn, type RelayJournal } from './keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
 import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -784,9 +784,10 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  * by what the host asks, and the bell that change is worth, rung on the terminal this launcher was started on.
  */
 function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
+  const journal = relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID())
   return {
-    journal: relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()),
-    telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows }),
+    journal,
+    telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows, journal }),
     screen: theOwnersScreen({
       beats: dashboardRowsIn(launch.places.dashboard),
       member: launch.member_name,
@@ -805,7 +806,12 @@ export interface TheTellingPlaces {
   readonly member: string
   readonly dashboard: string
   readonly rows: string
+  /** The launch's journal, where a telling that did not reach the member is written down rather than swallowed (martha#430). */
+  readonly journal?: RelayJournal
 }
+
+/** The journal's own name for a line of Martha's that the member's channel store refused (martha#430). */
+export const A_TELLING_THAT_DID_NOT_REACH = 'a telling that did not reach the member'
 
 /**
  * Where a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member's own session,
@@ -839,7 +845,12 @@ export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
         // eleven places in the tree spell it for something else — a repository, a state directory, an installed binary, a
         // test's command word — and a constant of it would make every one of them stale at once (martha#390 r=4).
         { from: 'martha', to: [places.member], text: line, sent_at: Date.now() },
-      ).then(() => undefined),
+      ).then(
+        () => undefined,
+        // The member's half of the telling did not happen, and the journal is the only place a run can read that it did
+        // not (martha#430).
+        (why: unknown) => places.journal?.noted(A_TELLING_THAT_DID_NOT_REACH, why instanceof Error ? why.message : String(why)),
+      ),
     takeTheLineBack: () => {
       const line = wrote
       if (line === null) return
