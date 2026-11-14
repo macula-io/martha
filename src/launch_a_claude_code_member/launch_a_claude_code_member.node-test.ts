@@ -2551,12 +2551,12 @@ function launcherProcess(
   writeFileSync(
     script,
     [
-      `import { CLAUDE_CODE, launchClaudeCodeMember } from ${JSON.stringify(launchModule)}`,
+      `import { launchClaudeCodeMember } from ${JSON.stringify(launchModule)}`,
       `const place = ${JSON.stringify(place)}`,
       'const started = await launchClaudeCodeMember({',
       "  member_name: 'Mercury',",
       `  node_id: ${JSON.stringify(NODE_ID)},`,
-      '  place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },',
+      `  place: { host: ${JSON.stringify(CLAUDE_CODE)}, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },`,
       '  policy: { may_send_executable_text: [] },',
       '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
