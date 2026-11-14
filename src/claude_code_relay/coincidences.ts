@@ -20,7 +20,8 @@ import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { RELAY_SOCKET_VARIABLE, PANE } from './hooks/relay_protocol.ts'
+import { REFRESH_BEAT_MS } from './hooks/crew_turn_beat.ts'
+import { PANE, RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 /** Why the five landing tools are named by literal in the hooks module (martha#256), as one wording for all five. */
 const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal'
@@ -128,4 +129,11 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: PANE, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: 'the pane\'s id and the command that opens it are the program\'s own name; the same word names the folder Martha keeps her state under' },
+  // The relay's beat, which is a minute too (martha#441): a hooks module imports only its own files, so the relay cannot
+  // import the core's MINUTE_MS, and its beat is the same duration under its own name.
+  { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name' },
+  // The relay's own half-minute wait (martha#441): this file is the protocol both sides of a launch read, so it imports
+  // nothing, and its wait for the launcher to check a checkout's tree is the same half minute as the launcher's wait
+  // for a host answer and not the same deadline.
+  { value: RELAY_DEADLINE_MS, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: 'the relay\'s wait for the launcher to check a checkout\'s tree; the launcher\'s wait for a host answer is the same half minute and not the same deadline, and a hooks module imports only its own files' },
 ]

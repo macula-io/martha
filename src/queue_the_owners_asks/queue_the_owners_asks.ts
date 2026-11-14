@@ -32,7 +32,7 @@
 // one menu the ask reaches offers every tip the deletion removes. The branch is held to the question's own rule on its
 // way in and on its way out, because it reaches the same menu.
 
-import { OFFER_OWNER_ASKS, OWNER, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
+import { OFFER_OWNER_ASKS, OWNER, whoTheTableGrants, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { CONTROL } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -63,8 +63,6 @@ export const TAKE_ASKS = 'take_the_owners_asks'
 
 /** The tool that takes a claimed batch off, once the owner answered it. */
 export const SETTLE_ASKS = 'settle_the_owners_asks'
-
-const MINUTE_MS = 60_000
 
 /**
  * How long a taken batch holds its asks before they wait again: half an hour, named here and nowhere else, and quoted

@@ -3,8 +3,10 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
+import { HOST_ANSWER_TIMEOUT_MS } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
+import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
 
 /**
  * Why the handover's one argument is named by literal (martha#255): it is the
@@ -23,4 +25,8 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
   { value: CARRY_A_MODEL, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the argument the two model tools take and read back, as their own schemas declare it; the order\'s carry word is a different word spelled the same' },
   { value: PARKED_PLACE, file: 'a_crews_tools/a_crews_tools.ts', reason: 'the word a park\'s answer says a member is now in, in the line the member is told; the constant of that name is the place a crew keeps a park marker in' },
+  // A test's bound on another process's step, and a figure its own clock makes (martha#441): each is the same number as
+  // a value the tree defines and neither is that value.
+  { value: HOST_ANSWER_TIMEOUT_MS, file: 'a_crews_tools/a_switch_leaves_the_owners_default_alone.node-test.ts', reason: 'how long a step of another process may take before a test calls it stuck; the tree\'s half minute is a launch\'s wait for a host answer, which this test does not drive' },
+  { value: LONGEST_MESSAGE, file: 'a_crews_tools/the_who_is_free_tool_answers_the_supervisor.node-test.ts', reason: 'the elapsed time a report is given, as two beats of the test\'s own clock make it; the tree\'s twenty thousand is the longest text one message may carry' },
 ]

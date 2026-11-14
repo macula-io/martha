@@ -17,6 +17,7 @@
 import type { AnEndPending } from '../end_a_running_turn/end_a_running_turn.ts'
 import type { CrewPlace, CrewStore, Refused } from '../host_contract/host_contract.ts'
 import type { TheAct } from './the_refresh_flow.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /** The act that does nothing, which is most of them. */
 export const NO_ACT: TheAct = { act: 'none' }
@@ -35,7 +36,7 @@ export const HANDOVER_LIMIT_PERCENT = 70
 export const REFRESH_MARGIN_PERCENT = 10
 
 /** How long a flow may sit in one phase before it is abandoned, once, with the reason on the row. */
-export const FLOW_WINDOW_MS = 30 * 60_000
+export const FLOW_WINDOW_MS = 30 * MINUTE_MS
 
 /** What started a flow: the limit always, a finished task when the crew switched it on, or someone asking. */
 export type RefreshTrigger = 'at_the_limit' | 'after_a_task' | 'asked'
