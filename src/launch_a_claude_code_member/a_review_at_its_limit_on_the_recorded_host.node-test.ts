@@ -25,6 +25,7 @@ import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_t
 import { CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
+import { CONFIG } from '../refuse_a_member_writing_owner_memory/git_config_a_later_run_reads.ts'
 import { addressedTo, readTheChannel, type PlacedMessage } from '../keep_the_crew_channel/crew_channel.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -32,6 +33,12 @@ import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_da
 import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, stateHomeUnder, whatTheLaunchSaw } from './drive_the_recorded_host.ts'
 import { removeTheTree } from './relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
+
+/**
+ * The name Martha signs a line of its own with, read from the manifest that names the program rather than spelled here:
+ * the sender is pinned exactly, so a line from another member or another word fails this case (martha#390 r=4).
+ */
+const THE_PROGRAMS_NAME = (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { readonly name: string }).name
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -86,7 +93,7 @@ function approvedProjectWithModels(t: TestContext): Project {
   git(checkout, 'init', '-q', '.')
   // The owner's name for the crew is read from the checkout's own git identity, which is written here rather than set
   // with a `git config` call: this file spells no subcommand of its own, and the identity has to outlive the helper.
-  appendFileSync(join(checkout, '.git/config'), `[user]\n\tname = ${GIT_NAME}\n\temail = ${GIT_EMAIL}\n`)
+  appendFileSync(join(checkout, '.git', CONFIG), `[user]\n\tname = ${GIT_NAME}\n\temail = ${GIT_EMAIL}\n`)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
   const place = { claude: recordedHost(), home, checkout }
@@ -191,7 +198,7 @@ test('on the recorded host a review the reviewer model refused is named to the m
   // The member is told through the crew's channel, by Martha's own name and to this member, in the same words the owner
   // reads on the row: a member that never looks at the dashboard still learns its review stopped.
   const theLine = told.needs
-  const mine = (await theChannelOf(project)).filter(({ message }) => message.from !== MEMBER && addressedTo(message, MEMBER) && message.text === theLine)
-  assert.equal(mine.length, 1, `the crew's channel holds ${mine.length} line(s) not from ${MEMBER} itself, to ${MEMBER}, in the row's own words: ${JSON.stringify(mine)}`)
+  const mine = (await theChannelOf(project)).filter(({ message }) => message.from === THE_PROGRAMS_NAME && addressedTo(message, MEMBER) && message.text === theLine)
+  assert.equal(mine.length, 1, `the crew's channel holds ${mine.length} line(s) from the program itself, to ${MEMBER}, in the row's own words: ${JSON.stringify(mine)}`)
   assert.equal(mine.at(0)?.message.text, theLine, 'the member was told something other than what the owner\'s row says')
 })
