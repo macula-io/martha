@@ -16,7 +16,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -84,6 +84,9 @@ function approvedProjectWithModels(t: TestContext): Project {
     writeFileSync(join(checkout, path), text)
   }
   git(checkout, 'init', '-q', '.')
+  // The owner's name for the crew is read from the checkout's own git identity, which is written here rather than set
+  // with a `git config` call: this file spells no subcommand of its own, and the identity has to outlive the helper.
+  appendFileSync(join(checkout, '.git/config'), `[user]\n\tname = ${GIT_NAME}\n\temail = ${GIT_EMAIL}\n`)
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'start')
   const place = { claude: recordedHost(), home, checkout }
