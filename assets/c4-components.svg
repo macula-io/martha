@@ -405,11 +405,11 @@
 <text class="t-desc" x="48" y="3212">settings_directory, that file whole;</text>
 <text class="t-desc" x="48" y="3228">run_reviews_on_the_review_model refuses a</text>
 <text class="t-desc" x="48" y="3244">review spawn that names no reviewer model;</text>
-<text class="t-desc" x="48" y="3260">read_a_failed_agents_report cuts the</text>
-<text class="t-desc" x="48" y="3276">host's failed-agent report from its own</text>
-<text class="t-desc" x="48" y="3292">text, and name_a_review_the_host_</text>
-<text class="t-desc" x="48" y="3308">reported_failed names that review, on the</text>
-<text class="t-desc" x="48" y="3324">model it ran on and in the host's words</text>
+<text class="t-desc" x="48" y="3260">name_a_review_the_host_reported_failed</text>
+<text class="t-desc" x="48" y="3276">names a review the host reports failed,</text>
+<text class="t-desc" x="48" y="3292">from the report claude_code_host cuts</text>
+<text class="t-desc" x="48" y="3308">from the host's own text, on the model it</text>
+<text class="t-desc" x="48" y="3324">ran on and in the host's words</text>
 <text class="t-desc" x="48" y="3340">(martha#390)</text>
 <rect class="bound" x="16" y="40" width="968" height="3338" rx="12"/>
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>

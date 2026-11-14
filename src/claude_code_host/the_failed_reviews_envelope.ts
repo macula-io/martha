@@ -2,7 +2,7 @@
 //
 // Two recordings, held together here and never in the slice that decides on them. The NAMES — the notification's own
 // name, the status, tool-use and summary elements, and the word that says an agent failed — are cut from the recorded
-// host binary (../read_a_failed_agents_report/read_a_failed_agents_report.ts): a host that renames one fails the drift job by name. The SAMPLE is
+// host binary (./read_a_failed_agents_report.ts): a host that renames one fails the drift job by name. The SAMPLE is
 // the text one run produced at a named host version (recorded_failed_review.json), and it is what says the names the
 // binary gives are the ones the envelope really carries.
 //
@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 
 import { whatTheEnvelopeNoLongerHolds, theElementIn, type TheReportTheHostWrites } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { CLAUDE_CODE_FAILED_AGENTS_REPORT } from './recorded_claude_code_host.ts'
-import { theReportToRead } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import { theReportToRead } from './read_a_failed_agents_report.ts'
 
 /** The report this host writes for a failed agent, in the names and the word its own binary gives them. */
 export const THE_HOSTS_FAILED_REVIEW: TheReportTheHostWrites = theReportToRead(CLAUDE_CODE_FAILED_AGENTS_REPORT)

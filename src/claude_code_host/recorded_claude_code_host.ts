@@ -18,7 +18,7 @@ import type { OwnersMarkdown } from '../load_the_hosts_markdown/hooks_and_plugin
 import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
-import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from './read_a_failed_agents_report.ts'
 
 export { THE_REFRESH_THE_MOD_RUNS }
 
