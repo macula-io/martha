@@ -22,8 +22,11 @@ export const CHANNEL_STREAM = 'martha_channel'
  * the channel's own stream, so the two names cannot drift apart (martha#468). */
 export const takenStreamOf = (member: string): string => `${CHANNEL_STREAM}_taken/${member}`
 
+/** The addressee that means every member of the crew, and not one of them. */
+export const THE_WHOLE_CREW = 'crew'
+
 /** Who a message is for: the members it names, or the whole crew. */
-export type Addressee = readonly string[] | 'crew'
+export type Addressee = readonly string[] | typeof THE_WHOLE_CREW
 
 /** One message of the crew's channel, as it is kept. */
 export interface ChannelRow {
@@ -53,7 +56,7 @@ const isText = (value: unknown): value is string => typeof value === 'string'
 export function isChannelRow(row: Row): row is Row & ChannelRow {
   if (!isText(row['from']) || !isText(row['text']) || typeof row['sent_at'] !== 'number') return false
   const to = row['to']
-  return to === 'crew' || (Array.isArray(to) && to.every(isText))
+  return to === THE_WHOLE_CREW || (Array.isArray(to) && to.every(isText))
 }
 
 /** Appends one message to the channel and answers its position, the message's id. */
@@ -88,7 +91,7 @@ export async function readTheChannel(host: ChannelHost): Promise<readonly Placed
 
 /** Whether a message is for this member: it names the member, or it names the whole crew. */
 export function addressedTo(message: Pick<ChannelRow, 'to'>, member: string): boolean {
-  return message.to === 'crew' || message.to.includes(member)
+  return message.to === THE_WHOLE_CREW || message.to.includes(member)
 }
 
 /** Records that a member took one message in. */

@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
@@ -25,6 +25,7 @@ import { crewSubdirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_
 import { stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { removeTheTree } from './relay_copy.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 
 

@@ -28,7 +28,6 @@ export interface DeclaredException {
 /** Every place a crew-code name may stand, until the rename that takes it away. */
 export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/answer_a_tool_call/answer_a_tool_call.node-test.ts', text: 'mcp__crew__crew_mail_send', reason: "a peer program's own tool call, which this test proves Martha does not answer", removed_by: STAYS },
-  { path: 'src/audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts', text: 'gate_would_refuse', reason: "Martha's gate-audit folder still carries crew-code's name", removed_by: 'the state-folder PR (martha#468 wave 4) — row 12' },
   { path: 'src/check_marthas_names_are_its_own/check_marthas_names_are_its_own.node-test.ts', text: 'crew_channel_taken/', reason: "the check's own planted case, which must spell the name to prove the check finds it", removed_by: STAYS },
   { path: 'src/check_marthas_names_are_its_own/check_marthas_names_are_its_own.node-test.ts', text: 'crew_other', reason: "the check's own planted case, which must spell the name to prove the check finds it", removed_by: STAYS },
   { path: 'src/check_marthas_names_are_its_own/check_marthas_names_are_its_own.node-test.ts', text: 'crew_roster', reason: "the check's own planted case, which must spell the name to prove the check finds it", removed_by: STAYS },
@@ -36,5 +35,4 @@ export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/declare_crew/declare_crew.ts', text: 'crew.json', reason: "the refusal that tells a person their checkout still holds crew-code's declaration names this file", removed_by: STAYS },
   { path: 'src/read_a_room_through_its_gate/read_a_room_through_its_gate.node-test.ts', text: 'mcp__crew__crew_mail_read', reason: "a peer program's own tool call, which this test proves Martha does not answer", removed_by: STAYS },
   { path: 'src/refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.node-test.ts', text: 'crew_restart', reason: "a tool crew-code's host really registers, which this test proves Martha refuses like any other name that executes", removed_by: STAYS },
-  { path: 'src/trust_only_signed_lists/trust_only_signed_lists.node-test.ts', text: 'crew_roster', reason: "Martha's signed-list kind still carries crew-code's tool name", removed_by: "the signed-list-kind PR (martha#468, after the inventory's rows)" },
 ]

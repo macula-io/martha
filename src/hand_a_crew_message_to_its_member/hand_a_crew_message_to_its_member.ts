@@ -20,7 +20,7 @@
 // a session that ends before that turn starts writes nothing, so the next session's carrier hands the message again.
 // Being late is acceptable; being lost is not, and neither is being read ten times.
 
-import { type ChannelHost, addressedTo, keepTakenIn, readTheChannel, takenInBy } from '../keep_the_crew_channel/crew_channel.ts'
+import { type ChannelHost, addressedTo, keepTakenIn, readTheChannel, takenInBy, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 
 /** What the mod asks the launcher for: the next message this member has not taken in (martha#253). */
 export const THE_NEXT_MESSAGE_ASK = 'take_a_crew_message'
@@ -102,5 +102,5 @@ export async function answerAChannelAsk(
 }
 
 /** Whether a message is this member's to take in: the whole crew's, or its own by name — never its own send to the crew. */
-const forThisMember = (message: { readonly from: string; readonly to: readonly string[] | 'crew' }, member: string): boolean =>
-  message.to === 'crew' ? message.from !== member : addressedTo(message, member)
+const forThisMember = (message: { readonly from: string; readonly to: readonly string[] | typeof THE_WHOLE_CREW }, member: string): boolean =>
+  message.to === THE_WHOLE_CREW ? message.from !== member : addressedTo(message, member)

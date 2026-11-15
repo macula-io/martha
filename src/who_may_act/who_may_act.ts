@@ -32,7 +32,7 @@ import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a
 /** The actions the crew lets only the supervisor take, in business words. */
 export const SUPERVISOR_ONLY_ACTIONS = [
   'assign_work',
-  'read_crew_roster',
+  'read_martha_roster',
   VERIFY_RANGE,
   'open_crew_room',
   RESTART_MEMBER,

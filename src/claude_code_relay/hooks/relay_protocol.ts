@@ -26,6 +26,9 @@ export const RELAY_DEADLINE_MS = 30_000
 /** The host part of every request: the socket is the address, the URL only names the event. */
 export const RELAY_ORIGIN = 'http://martha-launcher'
 
+/** The pane's id, and the word the owner types to open it (martha#468 row 13): the host names one by the other. */
+export const PANE = 'martha'
+
 /** The events the relay forwards, and the path each is posted to. */
 export const RELAY_PATHS = {
   session_started: '/session-started',

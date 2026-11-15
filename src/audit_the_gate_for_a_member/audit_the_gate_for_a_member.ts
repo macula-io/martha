@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import type { Refused } from '../host_contract/host_contract.ts'
 
 /** The folder inside the crew's own state directory that holds one file per audited member. */
-export const GATE_AUDIT_PLACE = 'gate_would_refuse'
+export const GATE_AUDIT_PLACE = 'gate-would-refuse'
 
 /**
  * The crew's own state files, as the host keeps them: a slice names a file and the host writes or reads it, so no
@@ -38,7 +38,7 @@ export interface StateLines {
 
 /** One member's audit lines, and the folder they live in. */
 export interface GateAuditPlace {
-  /** `<crew>/gate_would_refuse`, made 0700 with the crew's place. */
+  /** `<crew>/gate-would-refuse`, made 0700 with the crew's place. */
   readonly directory: string
   /** The member whose calls are audited. */
   readonly member: string

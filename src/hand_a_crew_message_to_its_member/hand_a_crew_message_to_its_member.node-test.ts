@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { appendToTheChannel, readTheChannel, takenInBy, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
+import { appendToTheChannel, readTheChannel, takenInBy, THE_WHOLE_CREW, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { carryingTo, framed, type MessageCarrier } from './hand_a_crew_message_to_its_member.ts'
 
 /** One crew's channel, and a carrier for any member over it. */
@@ -25,7 +25,7 @@ const bench = (): Bench => {
   return { host: channel, carrierFor: (member) => carryingTo({ member, host: channel }) }
 }
 
-const say = (bench: Bench, from: string, to: readonly string[] | 'crew', text: string): Promise<number> =>
+const say = (bench: Bench, from: string, to: readonly string[] | typeof THE_WHOLE_CREW, text: string): Promise<number> =>
   appendToTheChannel(bench.host, { from, to, text, sent_at: 9_000 })
 
 
@@ -77,7 +77,7 @@ test('#253: a message to one member is handed to that member alone', async () =>
 
 test('#253: a message to the crew reaches every member but the sender', async () => {
   const b = bench()
-  await say(b, 'A', 'crew', 'a remark')
+  await say(b, 'A', THE_WHOLE_CREW, 'a remark')
 
   assert.equal(await b.carrierFor('B').next(), framed(0, 'A', 'a remark'))
   assert.equal(await b.carrierFor('C').next(), framed(0, 'A', 'a remark'))

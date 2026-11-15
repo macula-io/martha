@@ -69,7 +69,7 @@ function environmentOf(probe: Probe, place: Place): Record<string, string | unde
 /** The launcher's settings gate on this planned launch: undefined when it passes, else its refusal. */
 function gateRefusal(probe: Probe, inherited: Record<string, string | undefined>, prepared: Extract<ReturnType<typeof prepareLaunch>, { readonly allow: true }>): string | undefined {
   if (probe.gate_names === undefined) return undefined
-  const gate = hookSettingsOf(launchEnvironment(inherited, prepared.switches), [], prepared)
+  const gate = hookSettingsOf(launchEnvironment(inherited, prepared.switches, probe.host), [], prepared)
   return typeof gate === 'string' ? gate : undefined
 }
 
@@ -166,7 +166,7 @@ function oneRunOfAProbe(probe: Probe): RunResult | string {
 
     const { command, args } = probe.command(switches, place)
     // Read the project folders of the config dir this host will use, not of the developer's own.
-    const host_env = launchEnvironment(inherited, switches)
+    const host_env = launchEnvironment(inherited, switches, probe.host)
     before = theProjectFoldersThere(host_env)
     const run = runTheHost(command, args, {
       cwd: checkout,

@@ -2,7 +2,7 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { THE_WHOLE_CREW } from '../keep_the_crew_channel/coincidences.ts'
+import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { TREE_HASH } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 
 /** Why `'crew'` is written by literal in a signed list (#289 part b). */
