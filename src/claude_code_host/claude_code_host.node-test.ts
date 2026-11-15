@@ -10,12 +10,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import {
-  CLAUDE_CODE_SESSION_EVENTS,
-  startSession,
-  undeclaredSessionEvents,
-  type HostSessionEvents,
-} from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, startSession, undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { gapsInPromptOrigins, gapsInSessionEvents } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
