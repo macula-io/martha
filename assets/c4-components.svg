@@ -187,7 +187,7 @@
 <text class="t-desc" x="48" y="1282">member has; read_a_room_through_its_gate</text>
 <text class="t-desc" x="48" y="1298">gives the mesh server's tools, and refuse_</text>
 <text class="t-desc" x="48" y="1314">widening_a_member_reach refuses the rest</text>
-<rect class="b-cmp" x="348" y="1180" width="300" height="374" rx="10"/>
+<rect class="b-cmp" x="348" y="1180" width="300" height="406" rx="10"/>
 <text class="t-code" x="364" y="1208">claude_code_host,</text>
 <text class="t-code" x="364" y="1226">claude_code_relay</text>
 <text class="t-type" x="364" y="1244">[the Claude Code host]</text>
@@ -208,7 +208,9 @@
 <text class="t-desc" x="364" y="1492">owner_memory keeps a member's writes</text>
 <text class="t-desc" x="364" y="1508">out of the owner's memory, and find_</text>
 <text class="t-desc" x="364" y="1524">what_a_later_git_run_reads reads what a</text>
-<text class="t-desc" x="364" y="1540">later git run would read</text>
+<text class="t-desc" x="364" y="1540">later git run would read; read_what_</text>
+<text class="t-desc" x="364" y="1556">claude_code_says_of_an_agent reads what</text>
+<text class="t-desc" x="364" y="1572">the host says of an agent that failed</text>
 <rect class="b-cmp" x="664" y="1180" width="300" height="454" rx="10"/>
 <text class="t-code" x="680" y="1208">check_nothing_private_gets_in,</text>
 <text class="t-code" x="680" y="1226">check_every_link_resolves</text>
