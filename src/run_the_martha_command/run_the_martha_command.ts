@@ -284,8 +284,9 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
   for (const line of theCrewListed(crew, Date.now())) io.out(line)
-  // A member a run started and left running is no member of this crew's, and the owner should see it here (martha#472).
-  for (const line of theLeftoversShown(theReadingsThisMachineGives('/proc', THE_PLACES_A_STATE_ROOT_KEEPS))) io.out(line)
+  // A member a run started and left running is no member of this crew's: it is no line of the list, which is one line
+  // per declared member, so it is a notice beside it (martha#472).
+  for (const line of theLeftoversShown(theReadingsThisMachineGives('/proc', THE_PLACES_A_STATE_ROOT_KEEPS))) io.err(line)
   return EXIT_DONE
 }
 

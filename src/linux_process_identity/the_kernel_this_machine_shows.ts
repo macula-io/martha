@@ -15,7 +15,7 @@ import { launchRecordsUnder, type TheStatesConventions } from './launch_records_
 import { linuxProcessIdentities, PID_NAMESPACE_FORM } from './process_identity_from_proc.ts'
 
 /** Every process of this user the kernel lists, as pids. */
-export function everyProcessOfThisUser(proc_root: string): readonly number[] {
+function everyProcessOfThisUser(proc_root: string): readonly number[] {
   const mine = getuid?.()
   return readdirSync(proc_root)
     .filter((entry) => /^\d+$/.test(entry))
@@ -30,7 +30,7 @@ export function everyProcessOfThisUser(proc_root: string): readonly number[] {
 }
 
 /** A process's environment, as the kernel gives it, or why this reader cannot have it. */
-export function environmentReadIn(proc_root: string, pid: number): { readonly env: Record<string, string> } | { readonly cannot_tell: string } {
+function environmentReadIn(proc_root: string, pid: number): { readonly env: Record<string, string> } | { readonly cannot_tell: string } {
   try {
     const raw = readFileSync(join(proc_root, String(pid), 'environ'), 'utf8')
     const pairs = raw.split('\0').flatMap((entry) => {
@@ -44,7 +44,7 @@ export function environmentReadIn(proc_root: string, pid: number): { readonly en
 }
 
 /** The pid namespace a process runs in, as `readlink /proc/<pid>/ns/pid` gives it, or undefined when it will not say. */
-export function namespaceOf(proc_root: string, pid: number): string | undefined {
+function namespaceOf(proc_root: string, pid: number): string | undefined {
   try {
     const named = readlinkSync(join(proc_root, String(pid), 'ns', 'pid')).trim()
     return PID_NAMESPACE_FORM.test(named) ? named : undefined
@@ -54,7 +54,7 @@ export function namespaceOf(proc_root: string, pid: number): string | undefined 
 }
 
 /** The last entry of the kernel's `NSpid` line: the pid a process has in its own namespace. */
-export function ownPidOf(proc_root: string, pid: number): number | undefined {
+function ownPidOf(proc_root: string, pid: number): number | undefined {
   try {
     const line = /^NSpid:\s+(.+)$/m.exec(readFileSync(join(proc_root, String(pid), 'status'), 'utf8'))?.[1]
     const last = (line ?? '').trim().split(/\s+/).filter((one) => /^\d+$/.test(one)).at(-1)
@@ -65,7 +65,7 @@ export function ownPidOf(proc_root: string, pid: number): number | undefined {
 }
 
 /** Whether the kernel holds this pid for a process that has already ended: its state is Z. */
-export function isAZombie(proc_root: string, pid: number): boolean {
+function isAZombie(proc_root: string, pid: number): boolean {
   try {
     const stat = readFileSync(join(proc_root, String(pid), 'stat'), 'utf8')
     return /\)\s+Z\s/.test(stat)

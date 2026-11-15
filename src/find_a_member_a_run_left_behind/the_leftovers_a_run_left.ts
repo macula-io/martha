@@ -37,7 +37,6 @@
 
 import { launchesIn, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { FileTree, KeyedRow } from '../host_contract/host_contract.ts'
-import { stateRootOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** A member that runs under a home no session of the owner's uses: the line the gate fails on and `martha ls` shows. */
 export interface AMemberLeftBehind {
@@ -88,8 +87,8 @@ export interface WhatTheScanReads {
   readonly ownPidOf: (pid: number) => number | undefined
   /** The identity a launch record compares, or null when the kernel will not say. */
   readonly identityOf: (pid: number) => string | null
-  /** Every project's launch records under a state root, or why this reader will not vouch for one of its places. */
-  readonly recordsUnder: (state_root: string) => { readonly projects: readonly RecordsOfAProject[] } | { readonly cannot_tell: string }
+  /** Every project's launch records under a home's state root, or why this reader will not vouch for one of its places. */
+  readonly recordsUnder: (home: string, xdg_state_home: string | undefined) => { readonly projects: readonly RecordsOfAProject[] } | { readonly cannot_tell: string }
   /** The owner's home, from the password database: the one home that is never a run's. */
   readonly owners_home: string
   /** The pid namespace this reader is in, to compare a record's with. */
@@ -147,7 +146,7 @@ function theFindingsFor(pid: number, reads: WhatTheScanReads): readonly WhatARun
   const home = environment.env['HOME']
   // No home to place it by is no evidence of a run's home: nothing is said of it.
   if (home === undefined || samePlace(reads, home, reads.owners_home)) return []
-  const records = reads.recordsUnder(stateRootOf(home, environment.env['XDG_STATE_HOME']))
+  const records = reads.recordsUnder(home, environment.env['XDG_STATE_HOME'])
   if ('cannot_tell' in records) return [{ kind: 'cannot_tell', pid, why: records.cannot_tell }]
   return records.projects.flatMap((project) => theFindingsIn(project, pid, home, asTheKernelShowsIt(pid, reads)))
 }

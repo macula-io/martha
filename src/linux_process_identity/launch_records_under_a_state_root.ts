@@ -20,6 +20,8 @@ import { launchRecordsDirectory } from './launch_records_directory.ts'
 
 /** The crew's own conventions a state root is read by: what this file may not decide, and may not import. */
 export interface TheStatesConventions {
+  /** Where a home's own environment puts its state root, and under what name. */
+  readonly state_root_of: (home: string, xdg_state_home: string | undefined) => string
   /** The directory inside a project's state that holds the launcher's records. */
   readonly records_place: string
   /** The mode of a directory only its owner may enter. */
@@ -41,10 +43,11 @@ export const NOT_OURS = 'is not a directory of yours that only you may enter, so
 /** The bits of a mode that say who may read, write and enter. */
 const PERMISSION_BITS = 0o777
 
-/** A reader of the launch records a state root holds, for the crew's conventions `the_state` names. The state root
- * itself is the caller's to name: where it is is the state's to decide, not this machine's. */
+/** A reader of the launch records a home's state root holds, for the crew's conventions `the_state` names. Where a
+ * home's state root is comes from `the_state` too: it is the state's to decide, not this machine's. */
 export function launchRecordsUnder(the_state: TheStatesConventions) {
-  return (state_root: string): RecordsUnder => {
+  return (home: string, xdg_state_home: string | undefined): RecordsUnder => {
+    const state_root = the_state.state_root_of(home, xdg_state_home)
     const projects: RecordsOfAProject[] = []
     for (const entry of projectsIn(state_root)) {
       const directory = join(state_root, entry, the_state.records_place)

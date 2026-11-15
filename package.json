@@ -75,7 +75,7 @@
     ],
     "hostCeilings": {
       "src/approve_a_checkouts_config": 76,
-      "src/claude_code_host": 493,
+      "src/claude_code_host": 494,
       "src/claude_code_relay": 800,
       "src/cut_the_rules_from_the_host_binary": 378,
       "src/declare_a_solo_crew": 84,
@@ -83,7 +83,7 @@
       "src/install_the_pinned_installer": 122,
       "src/install_the_recorded_mesh_server": 310,
       "src/install_the_mesh_server_for_claude_code": 133,
-      "src/keep_martha_state_outside_the_checkout": 436,
+      "src/keep_martha_state_outside_the_checkout": 437,
       "src/keep_what_the_owner_signed": 97,
       "src/launch_a_claude_code_member": 2956,
       "src/list_stop_and_restart_the_crew": 90,
@@ -98,7 +98,7 @@
       "src/dashboard_rows_directory": 103,
       "src/empty_directory_of_a_launch": 24,
       "src/hear_the_hosts_dialogs": 40,
-      "src/linux_process_identity": 406,
+      "src/linux_process_identity": 408,
       "src/row_streams_directory": 165,
       "src/owners_settings_directory": 173
     },
