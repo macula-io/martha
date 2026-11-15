@@ -497,7 +497,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       type: 'object',
       properties: {
         to: {
-          description: "Who it is for: a list of this crew's members' names, or \"crew\" for every member but you",
+          description: `Who it is for: a list of this crew's members' names, or "${THE_WHOLE_CREW}" for every member but you`,
           anyOf: [{ type: 'string', enum: [THE_WHOLE_CREW] }, { type: 'array', items: { type: 'string' }, minItems: 1 }],
         },
         text: { type: 'string', description: 'What you say. A HANDOFF or VERDICT line is read from its first line' },

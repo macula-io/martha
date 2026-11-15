@@ -8,6 +8,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import type { Row } from '../host_contract/host_contract.ts'
 import {
   CHANNEL_STREAM,
   addressedTo,
@@ -60,6 +61,16 @@ test('#253: a message names a member, or the whole crew, and nobody else hears i
   assert.equal(addressedTo(message('A', ['B'], 'to B'), 'C'), false)
   assert.equal(addressedTo(message('A', THE_WHOLE_CREW, 'to all'), 'C'), true)
   assert.equal(addressedTo(message('A', ['B', 'C'], 'to two'), 'C'), true)
+})
+
+// The word as a stored row carries it (martha#468): a row on disk says `to: 'crew'`, and the channel must read it as the
+// whole crew rather than drop it. Spelled out here on purpose — an import would agree with any spelling of the constant,
+// so the pin is the literal, declared in ./coincidences.ts.
+test('#468: a stored row that says the whole-crew word is a channel row, and is for every member', () => {
+  const stored: Row = { from: 'A', to: 'crew', text: 'to all', sent_at: 4_242 }
+  assert.equal(isChannelRow(stored), true)
+  assert.equal(addressedTo({ to: 'crew' }, 'B'), true)
+  assert.equal(addressedTo({ to: 'crew' }, 'C'), true)
 })
 
 test('#253: what a member took in is kept per member, by position', async () => {
