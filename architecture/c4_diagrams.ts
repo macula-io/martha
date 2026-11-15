@@ -613,6 +613,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     name: 'record_claude_code_host',
     why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
   },
+  {
+    name: 'check_no_member_outlives_its_run',
+    why: 'a script run by hand, npm run check:no-member-outlives-its-run, over this machine\'s /proc; find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program',
+  },
 ]
 
 /**
@@ -676,8 +680,8 @@ function withItsCountDrawn(b: LooseBox): LooseBox {
 /** The Component page's boxes, row by row and column by column: inRows places them. */
 const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
-    { col: 0, kind: 'b-sys', name: 'run_the_martha_command', names: ['run_the_martha_command', 'list_stop_and_restart_the_crew', 'release_a_held_member'], type: '[the acts]', code: true,
-      desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, release <member>,', 'gate, --version: the words checked first,', 'a refusal on stderr with the command that', 'fixes it, 0 / 1 / 2. release_a_held_member', 'is the owner\'s release of a held member,', 'and list_stop_and_restart_the_crew is', 'martha ls, stop and restart\'s wiring here'] },
+    { col: 0, kind: 'b-sys', name: 'run_the_martha_command', names: ['run_the_martha_command', 'list_stop_and_restart_the_crew', 'release_a_held_member', 'show_the_owners_text_safely', 'find_a_member_a_run_left_behind'], type: '[the acts]', code: true,
+      desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, release <member>,', 'gate, --version: the words checked first,', 'a refusal on stderr with the command that', 'fixes it, 0 / 1 / 2. release_a_held_member', 'is the owner\'s release of a held member,', 'and list_stop_and_restart_the_crew is', 'martha ls, stop and restart\'s wiring here;', 'show_the_owners_text_safely writes every', 'terminal control out before the owner', 'reads it, and find_a_member_a_run_left_', 'behind names a member a run started and', 'left running, by its name and the time', 'it started'] },
     { col: 1, kind: 'b-cmp', name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
       desc: ['Reads .martha/martha.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] },
     { col: 2, kind: 'b-cmp', name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,

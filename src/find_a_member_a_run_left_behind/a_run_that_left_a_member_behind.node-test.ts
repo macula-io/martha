@@ -1,21 +1,23 @@
 // What a run left behind, as the scan reads it (martha#472): every case here is a reading the kernel could give, handed
-// in, so the rule is pinned without a process of the test's own. The gate's own entry is proven against the real kernel
-// by its `--self-test`.
+// in, so the rule is pinned without a process of the test's own. That a record a run really wrote is named when this
+// machine's kernel is read is linux_process_identity/a_member_a_run_left_behind.node-test.ts's, which starts a child.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { itFails, theLinesOf, whatARunLeft, type WhatTheScanReads } from './the_leftovers_a_run_left.ts'
-import { NOT_OURS } from './the_kernel_this_machine_shows.ts'
+import { NOT_OURS } from '../linux_process_identity/launch_records_under_a_state_root.ts'
+import { itFails, NOT_A_LAUNCH, theLinesOf, whatARunLeft, type RecordsOfAProject, type WhatTheScanReads } from './the_leftovers_a_run_left.ts'
 
 const OWNERS_HOME = '/home/owner'
 const RUN_HOME = '/tmp/martha-forgot'
 const READERS_NAMESPACE = 'pid:[4026531836]'
+const PROJECT = '/tmp/martha-forgot/.local/state/martha/2f1c'
+const RECORDS = join(PROJECT, 'launches')
 
 const record = (over: Partial<MemberLaunch> = {}): MemberLaunch => ({
   member_name: 'Jupiter',
@@ -26,6 +28,11 @@ const record = (over: Partial<MemberLaunch> = {}): MemberLaunch => ({
   ...over,
 })
 
+/** The rows one project's records directory holds, as the store hands them back: each row under its own key. */
+const rowsOf = (...launches: readonly MemberLaunch[]): readonly RecordsOfAProject[] => [
+  { where: RECORDS, rows: launches.map((launch) => ({ key: launch.member_name, row: launch })) },
+]
+
 /** The kernel as one case needs it: one process, its environment and identity, and the records its home holds. */
 function theKernel(over: Partial<WhatTheScanReads> & { readonly env?: Record<string, string> } = {}): WhatTheScanReads {
   const { env = { HOME: RUN_HOME }, ...rest } = over
@@ -35,9 +42,16 @@ function theKernel(over: Partial<WhatTheScanReads> & { readonly env?: Record<str
     namespaceOf: () => READERS_NAMESPACE,
     ownPidOf: () => 4133978,
     identityOf: () => '3f2a1b4c-0000-4000-8000-000000000000/230362097',
-    recordsUnder: () => ({ launches: [record()] }),
+    recordsUnder: () => ({ projects: rowsOf(record()) }),
     owners_home: OWNERS_HOME,
     readers_namespace: READERS_NAMESPACE,
+    realPathOf: (path) => {
+      try {
+        return realpathSync(path)
+      } catch {
+        return null
+      }
+    },
     ...rest,
   }
 }
@@ -75,30 +89,45 @@ test('a member in another pid namespace is matched by the namespace and the pid 
       namespaceOf: () => 'pid:[4026532111]',
       // The last NSpid entry is the pid inside the member's own namespace; the pid /proc shows is another.
       ownPidOf: () => 42,
-      recordsUnder: () => ({ launches: [inner] }),
+      recordsUnder: () => ({ projects: rowsOf(inner) }),
     }),
   )
   assert.equal(found.length, 1)
   assert.equal(found[0]?.kind, 'left_behind')
 
   // The outer pid is what /proc shows; matching on it would name nothing.
-  const wrong = whatARunLeft(theKernel({ namespaceOf: () => 'pid:[4026532111]', ownPidOf: () => 4133978, recordsUnder: () => ({ launches: [inner] }) }))
+  const wrong = whatARunLeft(theKernel({ namespaceOf: () => 'pid:[4026532111]', ownPidOf: () => 4133978, recordsUnder: () => ({ projects: rowsOf(inner) }) }))
   assert.deepEqual(wrong, [])
 })
 
 test('a record written before the namespace was kept binds only inside the reader\'s own namespace (martha#472)', () => {
   const older: MemberLaunch = { member_name: 'Jupiter', node_id: 'a'.repeat(64), pid: 4133978, process_started_at: '3f2a1b4c-0000-4000-8000-000000000000/230362097' }
-  assert.equal(whatARunLeft(theKernel({ recordsUnder: () => ({ launches: [older] }) })).length, 1)
-  const elsewhere = whatARunLeft(theKernel({ namespaceOf: () => 'pid:[4026532111]', recordsUnder: () => ({ launches: [older] }) }))
+  assert.equal(whatARunLeft(theKernel({ recordsUnder: () => ({ projects: rowsOf(older) }) })).length, 1)
+  const elsewhere = whatARunLeft(theKernel({ namespaceOf: () => 'pid:[4026532111]', recordsUnder: () => ({ projects: rowsOf(older) }) }))
   assert.deepEqual(elsewhere, [], 'a bare pid from another namespace is not this process')
 })
 
 test('a records directory this reader cannot vouch for is a line, and fails the gate (martha#472)', () => {
-  const found = whatARunLeft(theKernel({ recordsUnder: () => ({ cannot_tell: NOT_OURS }) }))
-  assert.deepEqual(theLinesOf(found), [
-    `cannot tell whether 4133978 outlives its run: /tmp/martha-forgot ${NOT_OURS}`,
-  ])
+  const found = whatARunLeft(theKernel({ recordsUnder: () => ({ cannot_tell: `${RECORDS} ${NOT_OURS}` }) }))
+  assert.deepEqual(theLinesOf(found), [`cannot tell whether 4133978 outlives its run: ${RECORDS} ${NOT_OURS}`])
   assert.equal(itFails(found[0]!), true)
+})
+
+test('a records directory holding a row that is not a launch is a line, and fails the gate (martha#472)', () => {
+  const found = whatARunLeft(theKernel({ recordsUnder: () => ({ projects: [{ where: RECORDS, rows: [{ key: 'Jupiter', row: { member_name: 'Jupiter' } }] }] }) }))
+  assert.deepEqual(theLinesOf(found), [`cannot tell whether 4133978 outlives its run: ${RECORDS} ${NOT_A_LAUNCH}`])
+  assert.equal(itFails(found[0]!), true)
+})
+
+test('a member is named from any project the home\'s state root holds (martha#472)', () => {
+  const other: RecordsOfAProject = { where: '/tmp/martha-forgot/.local/state/martha/9a04/launches', rows: [] }
+  const found = whatARunLeft(theKernel({ recordsUnder: () => ({ projects: [other, ...rowsOf(record())] }) }))
+  assert.equal(found.length, 1, 'one project without records says nothing about the one that holds them')
+  assert.equal(found[0]?.kind, 'left_behind')
+})
+
+test('a home whose state root holds no records names nobody (martha#472)', () => {
+  assert.deepEqual(whatARunLeft(theKernel({ recordsUnder: () => ({ projects: [] }) })), [])
 })
 
 test('a process whose environment cannot be read is said and counted, and does not fail the gate (martha#472)', () => {

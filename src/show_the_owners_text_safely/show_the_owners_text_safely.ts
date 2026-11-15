@@ -1,7 +1,11 @@
 // The text Martha shows the owner, shown safely (a pure move out of the command adapter, which is at its ceiling):
 // a terminal would act on some of what a path, a member's name or a kept approval may hold rather than show it.
 
-import type { CommandIo } from '../run_the_martha_command/run_the_martha_command.ts'
+/** The lines an owner is shown, and nothing else: what this slice needs of the terminal, so it asks no adapter for it. */
+export interface LinesShownToTheOwner {
+  out(line: string): void
+  err(line: string): void
+}
 
 /**
  * What a terminal would act on rather than show: C0 and C1 controls, DEL, the bidirectional marks (left-to-right,
@@ -18,9 +22,9 @@ export function shownSafely(line: string): string {
 }
 
 /** The io with every line it shows escaped: a path, a member's name or a kept approval may hold anything. */
-export const showingSafely = (io: CommandIo): CommandIo => ({
+export const showingSafely = <Shown extends LinesShownToTheOwner>(io: Shown): Shown => ({
   ...io,
-  out: (line) => io.out(shownSafely(line)),
-  err: (line) => io.err(shownSafely(line)),
+  out: (line: string) => io.out(shownSafely(line)),
+  err: (line: string) => io.err(shownSafely(line)),
 })
 

@@ -78,7 +78,7 @@ fall behind the code.
 
 | Component | What it does |
 |---|---|
-| `run_the_martha_command` | The acts (`init`, `approve`, `start`, `run`, `install`, `pin-key`, `keep-shapes`, `--version`), and the words they are used with: a refusal on stderr names the command that fixes it, and the exit status says which kind it was. |
+| `run_the_martha_command` | The acts (`init`, `approve`, `start`, `run`, `install`, `pin-key`, `keep-shapes`, `--version`), and the words they are used with: a refusal on stderr names the command that fixes it, and the exit status says which kind it was. `ls`, `stop` and `restart` are wired here beside it, the owner's text is shown with every terminal control written out, and `ls` names a member a run started and left running (martha#472). |
 | `declare_a_solo_crew`, `declare_crew` | Reads `.martha/martha.json` once into typed settings, and writes it only where there is none. `who_may_act` holds the mode's table. |
 | `approve_a_checkouts_config` | Names what would start code, asks on the owner's own terminal, and keeps the fingerprint it was given. |
 | `start_a_member`, `pass_only_switches_that_load_no_config` | Refuses no terminal, an unknown name and a stale approval; then names the approval it starts on. `pass_only_switches_that_load_no_config` is what the owner's `--` words pass: an allow-list of the switches that load no config, code or permission, and any other word is refused by name. |
@@ -143,6 +143,7 @@ box:
 | `probe_the_owners_own_folders` | The rows of `npm run probe:launch` about the owner's own folders: the skills trash, the synced skills, and a write into each folder the host loads the owner's text from. The `martha` command never loads them. |
 | `probe_the_hosts_auto_memory` | The rows of `npm run probe:launch` about Claude Code's auto-memory, in a plain checkout and in a worktree. The `martha` command never loads them. |
 | `record_claude_code_host` | A script run by hand, `npm run record:claude-code-host`, when the coding tool is upgraded. The adapter reads the recording it writes; the script itself never runs. |
+| `check_no_member_outlives_its_run` | A script run by hand, `npm run check:no-member-outlives-its-run`, over this machine's `/proc`: it exits 0 when no member outlives a run, 1 on one it names or a place it could not tell about, 2 when it cannot look (martha#472). `find_a_member_a_run_left_behind` is what it reads with, and `martha ls` shows the same lines without loading the program. |
 | `redo_the_generated_files_of_a_merge` | A program `land_batch` runs, `npm run redo:generated`, over a clone whose batch clashes only in a C4 picture or the host ceilings (martha#381). It redraws the picture and merges the ceilings; the core runs it and never loads it. Two more modes answer for its rule without merging (martha#339): `--classify` tells the dry run whether one clashed path is redone, and `--judge` tells `verify_range` whether a landing merge that clashed is what the redo makes and nothing more. |
 
 ## Keeping the pictures true

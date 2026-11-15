@@ -39,7 +39,6 @@
 // pid. The pid is dynamic and no owner can sign it; that binding stays martha#24.
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
-import { PID_NAMESPACE_FORM } from '../linux_process_identity/process_identity_from_proc.ts'
 import type { AttestedSender, KeyedRowStore, KeyedRows, Processes } from '../host_contract/host_contract.ts'
 
 /** One member the owner signed for: the name and node id a launch record must pair. */
@@ -239,9 +238,11 @@ function isALaunchsShape(row: Record<string, unknown>): boolean {
   )
 }
 
-/** A pid namespace as the kernel writes one, or none at all for a record written before they were kept. */
+/** A pid namespace as the kernel writes one, or none at all for a record written before they were kept. The shape is
+ * this file's, not the kernel's: a reader compares the field with the namespace it read for a process, so a value that
+ * names no namespace names no process, and what a namespace looks like is this machine's to say (martha#472). */
 function isAPidNamespace(value: unknown): boolean {
-  return value === undefined || (typeof value === 'string' && PID_NAMESPACE_FORM.test(value))
+  return value === undefined || (typeof value === 'string' && value !== '')
 }
 
 function isMemberName(value: unknown): value is string {

@@ -31,7 +31,7 @@ import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } f
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, STATE_ROOT_NAME, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, stateRootOf, THE_PLACES_A_STATE_ROOT_KEEPS, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -43,8 +43,8 @@ import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_t
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { showingSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
-import { theLinesOf, whatARunLeft } from '../check_no_member_outlives_its_run/the_leftovers_a_run_left.ts'
-import { theKernelThisMachineShows, theOwnersHome } from '../check_no_member_outlives_its_run/the_kernel_this_machine_shows.ts'
+import { theLeftoversShown } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
+import { theReadingsThisMachineGives } from '../linux_process_identity/the_kernel_this_machine_shows.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
@@ -117,7 +117,7 @@ function placesOf(io: CommandIo): Places | string {
   if (home === undefined) return 'HOME is not set to an absolute path, so Martha cannot tell where your home is.'
   const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel')
   if (root === undefined) return `${io.cwd} is not inside a git checkout. Run martha in the checkout your crew works in.`
-  const state_root = join(absolute(io.env['XDG_STATE_HOME']) ?? join(home, '.local', 'state'), STATE_ROOT_NAME)
+  const state_root = stateRootOf(home, absolute(io.env['XDG_STATE_HOME']))
   const state = openState(state_root, root)
   return 'refusal' in state ? state.refusal : { root, home, state }
 }
@@ -285,7 +285,7 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   if (typeof crew === 'string') return refused(io, crew)
   for (const line of theCrewListed(crew, Date.now())) io.out(line)
   // A member a run started and left running is no member of this crew's, and the owner should see it here (martha#472).
-  for (const line of theLinesOf(whatARunLeft(theKernelThisMachineShows('/proc', theOwnersHome())).filter((one) => one.kind === 'left_behind'))) io.out(line)
+  for (const line of theLeftoversShown(theReadingsThisMachineGives('/proc', THE_PLACES_A_STATE_ROOT_KEEPS))) io.out(line)
   return EXIT_DONE
 }
 
