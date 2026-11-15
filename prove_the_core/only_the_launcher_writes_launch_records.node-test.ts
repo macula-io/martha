@@ -53,6 +53,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'launch_a_claude_code_member',
     'list_stop_and_restart_the_crew',
     'load_the_hosts_markdown',
+    'read_a_kernel_and_a_home',
     'refuse_a_member_writing_owner_memory',
     'refuse_settings_that_turn_hooks_off',
     'run_an_owner_signed_command',

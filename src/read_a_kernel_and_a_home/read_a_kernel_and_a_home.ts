@@ -10,6 +10,10 @@
 // of another home is given. It sits here rather than in the crew's own state module because that module is at its
 // ceiling and nothing rises for this package (martha#463's rule, and the 11-14 rule that only the launcher may rise).
 //
+// This is a host adapter, not machine glue: glue may import only the host contract and its own files
+// (prove_the_core/no_setting_outside_the_declaration), and this folder composes linux_process_identity's readings of a
+// process tree with the crew state's own conventions, which is what an adapter is for.
+//
 // The records place is a member of THE_PLACES_A_STATE_ROOT_KEEPS rather than a constant of its own: a constant would
 // make every test's scratch directory named 'launches' a restated value, in folders that may not rise, while the
 // launcher and this reader both take the place from the one record below.
