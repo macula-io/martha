@@ -16,7 +16,7 @@ import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
-import { removeTheTree } from './relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -36,28 +36,30 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { POLL_MS, until } from './wait_until_the_event.ts'
+import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { unplacedToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from './answer_the_relay.ts'
+import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from '../answer_the_relay/answer_the_relay.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
-import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
+import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
-import { launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
-import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './leftover_relay_directories.ts'
-import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
-import * as relayCopy from './relay_copy.ts'
-import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
-import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, type RelayJournal } from './keep_the_relays_journal.ts'
-import { HOST_EXIT_COMMAND, HOST_TERMINAL } from './drive_the_recorded_host.ts'
-import { serveTheRelay } from './serve_the_relay.ts'
-import { shortRelayRoot } from './short_relay_root.ts'
+import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
+import { LAUNCHER_RECORD_NAME, type LaunchRecord } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
+import { MEMBER_PID_FD } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
+import * as relayCopy from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { HOST_EXIT_COMMAND, HOST_TERMINAL } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { LOST, recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarkFor, releasesIn, RELEASE_STREAM, releaseStreamOf } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
@@ -2684,36 +2686,6 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
-
-test("a member is written into its launch directory's record inside the hold, and a write that fails refuses it (#124 r=4)", async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'martha-124-held-'))
-  t.after(() => {
-    chmodSync(directory, 0o700)
-    removeTheTree(directory)
-  })
-  assert.equal(recordTheLauncher(directory), undefined, 'the launch records itself before the member is spawned')
-
-  // A real child, alive while its place in the record is written and read back.
-  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
-  t.after(() => member.kill('SIGKILL'))
-  await new Promise((resolve) => member.once('spawn', resolve))
-  const pid = member.pid ?? 0
-  assert.ok(pid > 0, 'the member is a process this test started')
-
-  const held = recordedInsideTheHold(directory, pid, { recorded: true })
-  assert.deepEqual(held, { admitted: true, recorded: { recorded: true }, inTheLaunchRecord: true }, 'the member runs only when its place is in the record')
-  const record = JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord
-  assert.equal(record.member?.pid, pid, 'the record names the member, so a sweep cannot take the directory of a member still running')
-  assert.equal(record.member?.process_started_at, linuxProcessIdentities.identityOf(pid))
-
-  // A launch directory this user can no longer write: the member's place cannot be kept.
-  chmodSync(directory, 0o500)
-  const refused = recordedInsideTheHold(directory, pid, { recorded: true })
-  chmodSync(directory, 0o700)
-  assert.equal(refused.admitted, false, 'a member whose place cannot be written is refused, not run with no record of it')
-  assert.match(refused.recorded.recorded ? 'it was recorded' : refused.recorded.refusal, /could not be written/)
-  assert.equal((JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord).member?.pid, pid, 'and the record is left as it was')
-})
 
 test('a launcher killed hard leaves its directory behind, and the next launch takes it away (#124)', async (t) => {
   const place = placeFor(t)

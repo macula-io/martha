@@ -6,7 +6,7 @@ import { THE_TAG_OF_NOTHING_TO_APPROVE } from '../approve_a_checkouts_config/coi
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { EMPTY_DIRECTORY_NAME } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { HOST_ANSWER_TIMEOUT_MS } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
+import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 

@@ -14,7 +14,7 @@ import { CLAUDE_CODE_SESSION_EVENTS, startSession, undeclaredSessionEvents, type
 import { gapsInPromptOrigins, gapsInSessionEvents } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'

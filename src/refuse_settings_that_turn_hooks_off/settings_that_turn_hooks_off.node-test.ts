@@ -9,7 +9,7 @@ import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from '../claude_code_host/recorded_claude_code_host.ts'
 import type { HookSwitches } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { hookSettingsWatch, namesTheOwnersSettings, settingsTurningHooksOff } from './settings_that_turn_hooks_off.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'

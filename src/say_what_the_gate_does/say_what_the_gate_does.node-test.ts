@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */

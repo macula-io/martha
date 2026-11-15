@@ -23,7 +23,7 @@ import { test, type TestContext } from 'node:test'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewSettings, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { readLedger } from '../log_ledger/log_ledger.ts'
 import {
   NO_LAYOUT,

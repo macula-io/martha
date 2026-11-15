@@ -17,7 +17,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS } from '../declare_c
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'

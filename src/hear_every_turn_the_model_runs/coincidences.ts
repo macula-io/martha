@@ -3,7 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { HOST_SILENCE_MS } from '../launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
+import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 

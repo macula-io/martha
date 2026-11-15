@@ -17,7 +17,7 @@ import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_cr
 import { OWNER, RESTART_MEMBER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, KeyedRow, Processes, RowStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'

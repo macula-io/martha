@@ -12,7 +12,7 @@ import { basename, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { fakeNpmRegistry, sha512Of, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { INSTALLER_ENTRY, installThePinnedInstaller, PIN_FILE, TEMP_DIR_PREFIX, type InstallOutcome, type InstallRequest, type Pin } from './install_the_pinned_installer.ts'

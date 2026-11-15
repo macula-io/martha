@@ -9,7 +9,7 @@
 //   - ../say_what_the_gate_does, which reads them for the owner and for nobody else;
 //   - ../start_a_member, which makes the crew's folder for it beside the dashboard's own;
 //   - ../answer_a_tool_call, which writes the line before an audited call runs;
-//   - ../launch_a_claude_code_member, which hands that folder from the launch to the relay as a place.
+//   - ../answer_the_relay, which hands that folder from the launch to the relay as a place.
 //
 // A sixth file naming the audit fails here by name, before anybody has to notice it in review. The one exception is a
 // slice's `coincidences.ts` (martha#289): it declares a word it spells like a constant held elsewhere, a check reads it as
@@ -36,7 +36,7 @@ const MAY_NAME_THE_AUDIT: readonly string[] = [
   'src/say_what_the_gate_does/',
   'src/start_a_member/',
   'src/answer_a_tool_call/',
-  'src/launch_a_claude_code_member/',
+  'src/answer_the_relay/',
 ]
 
 /** The lines of one source's imports that name the audit, each as `<path>:<line>`. */

@@ -5,7 +5,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type RunCopy } from './run_in_a_sandbox.ts'
 import { SANDBOX_REQUIRED_VARIABLE, skipWithoutTheSandbox } from './sandbox_under_test.ts'

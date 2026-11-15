@@ -8,7 +8,7 @@ import type { DeliveryGate, RoomRosters } from '../admit_a_room_message/admit_a_
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { gapsInGateCoverage } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { DELIVERY_GATES, INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import { PATH_OF_SOURCE, beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'

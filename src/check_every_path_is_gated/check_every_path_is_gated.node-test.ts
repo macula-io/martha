@@ -5,7 +5,7 @@ import { join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { ARGUMENT_GATES, ASK_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   admitsLaunch,
   fingerprintOf,

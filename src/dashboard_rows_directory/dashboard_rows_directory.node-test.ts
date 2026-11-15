@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowFileNameOf, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { dashboardRowsIn } from './dashboard_rows_directory.ts'
 import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'

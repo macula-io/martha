@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree, type Planted } from './a_tree_whose_ceilings_a_test_reads.ts'
 import { describe, RECORD_COMMAND } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { judgeTheTree } from './judge_the_tree.ts'

@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { CREW_TOOL_NAMES, crewToolsOver, THE_TOOLS_ASK } from './a_crews_tools.ts'

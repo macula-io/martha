@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { readCheckoutTree } from '../judge_a_checkouts_tree/checkout_tree.ts'
 
 import {
