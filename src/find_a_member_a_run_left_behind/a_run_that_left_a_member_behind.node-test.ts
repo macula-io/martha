@@ -1,6 +1,7 @@
 // What a run left behind, as the scan reads it (martha#472): every case here is a reading the kernel could give, handed
 // in, so the rule is pinned without a process of the test's own. That a record a run really wrote is named when this
-// machine's kernel is read is linux_process_identity/a_member_a_run_left_behind.node-test.ts's, which starts a child.
+// machine's kernel is read is read_a_kernel_and_a_home/a_member_a_run_left_behind.node-test.ts's, which starts a child
+// and runs the gate over the real /proc.
 
 import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync, symlinkSync } from 'node:fs'

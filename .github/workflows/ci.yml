@@ -274,7 +274,8 @@ jobs:
   # A member a run left behind (martha#472): the check reads this machine's /proc, so every job here is a run of it over
   # a machine that holds no member of a run's, and answers 0. That it BITES is a test's, not a job's: a launch record
   # names a real child of the test's own, killed and shown gone, in
-  # linux_process_identity/a_member_a_run_left_behind.node-test.ts, which the suite runs.
+  # read_a_kernel_and_a_home/a_member_a_run_left_behind.node-test.ts, which runs this gate over the real /proc beside
+  # a real child, and which the suite runs.
   no-member-outlives-its-run:
     name: no member outlives its run
     runs-on: ubuntu-latest

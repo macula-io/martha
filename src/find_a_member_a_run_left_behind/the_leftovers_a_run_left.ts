@@ -21,9 +21,11 @@
 // Nothing here reads the machine. Every reading it needs — the kernel's processes, a home's records, the path a
 // spelling names — is handed to it, so the same rule is pinned by a test that has no processes and no home of its own.
 //
-// Silence is earned, never assumed. A records directory this reader cannot vouch for, an environment it cannot read and
-// a kernel that will not name a process each say so in a line of their own and fail the gate: `unknown` is never clean,
-// the rule the process lookups already keep.
+// Silence is earned, never assumed. A records directory this reader cannot vouch for and a kernel that will not name a
+// process each say so in a line of their own and fail the gate: `unknown` is never clean, the rule the process lookups
+// already keep. An own-uid process whose environment the kernel will not give is the one exception, because it is
+// evidence of nothing: it is said and counted, and it does not fail the gate (five of them always exist on a crew host,
+// and a gate that always fails tells nobody anything).
 //
 // What this does not see, stated rather than left to be discovered:
 //   - a process the launcher never recorded: a test that spawns a host itself, bypassing `martha start`;

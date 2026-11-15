@@ -2,9 +2,10 @@
 // handed.
 //
 // A runner holds no members, so the gate's quiet answer proves nothing on its own: that it BITES on a member a run left
-// behind is find_a_member_a_run_left_behind's (over readings handed in) and linux_process_identity's (over this
-// machine's own kernel, with a real child and a real record). What is pinned here is the gate's wiring: that it reads
-// the kernel it is given — every answer from that one tree — reports every line of it, and answers 0, 1 or 2.
+// behind is find_a_member_a_run_left_behind's (over readings handed in) and read_a_kernel_and_a_home's (over this
+// machine's own kernel, with a real child, a real record and this gate's own entry point). What is pinned here is the
+// gate's wiring: that it reads the kernel it is given — every answer from that one tree — reports every line of it, and
+// answers 0, 1 or 2.
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
