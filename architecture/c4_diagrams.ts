@@ -698,8 +698,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-dat', name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory', 'dashboard_rows_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
       desc: ['One directory per project, named by a', 'hash of its path: approvals, launches,', 'keep_what_the_owner_signed;', 'row_streams_directory appends rows', 'as files; dashboard_rows_directory', 'writes the owner\'s row for a member as', 'one file, renamed into place whole'] },
-    { col: 1, kind: 'b-cmp', name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
-      desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] },
+    { col: 1, kind: 'b-cmp', name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity', 'read_a_kernel_and_a_home'], type: '[the host contract, and this machine]', code: true,
+      desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine, and', 'read_a_kernel_and_a_home adds a whole', 'process tree\'s readings and the launch', 'records a home\'s state root keeps'] },
     { col: 2, kind: 'b-cmp', name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'record_ring_results', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
       desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'record_ring_results rings one server', 'with another and keeps the keys,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] },
   ],

@@ -126,14 +126,17 @@
 <text class="t-desc" x="48" y="808">as files; dashboard_rows_directory</text>
 <text class="t-desc" x="48" y="824">writes the owner's row for a member as</text>
 <text class="t-desc" x="48" y="840">one file, renamed into place whole</text>
-<rect class="b-cmp" x="348" y="656" width="300" height="150" rx="10"/>
+<rect class="b-cmp" x="348" y="656" width="300" height="198" rx="10"/>
 <text class="t-code" x="364" y="684">host_contract,</text>
 <text class="t-code" x="364" y="702">linux_process_identity</text>
 <text class="t-type" x="364" y="720">[the host contract, and this machine]</text>
 <text class="t-desc" x="364" y="744">What the core may ask of a coding tool:</text>
 <text class="t-desc" x="364" y="760">a clock, stores, running a process,</text>
 <text class="t-desc" x="364" y="776">delivery in and out; linux_process_identity</text>
-<text class="t-desc" x="364" y="792">answers all of it for this machine</text>
+<text class="t-desc" x="364" y="792">answers all of it for this machine, and</text>
+<text class="t-desc" x="364" y="808">read_a_kernel_and_a_home adds a whole</text>
+<text class="t-desc" x="364" y="824">process tree's readings and the launch</text>
+<text class="t-desc" x="364" y="840">records a home's state root keeps</text>
 <rect class="b-cmp" x="664" y="656" width="300" height="164" rx="10"/>
 <text class="t-code" x="680" y="684">install_the_recorded_mesh_server</text>
 <text class="t-type" x="680" y="702">[recorded trees]</text>

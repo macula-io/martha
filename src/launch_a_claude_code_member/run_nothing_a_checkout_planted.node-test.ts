@@ -34,7 +34,6 @@ import { removeTheTree } from './relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
 import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { LAUNCH_RECORDS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
@@ -270,7 +269,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('row-streams'), dashboard: closed('dashboard-rows'), launch_records: closed(LAUNCH_RECORDS_PLACE), relay_root, mesh_servers: closed('mesh-servers'), relay_journal: closed('the-relay-journal') },
+      places: { rows: closed('row-streams'), dashboard: closed('dashboard-rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers'), relay_journal: closed('the-relay-journal') },
       command: member,
       args: [],
       ...ownersSettings(place),

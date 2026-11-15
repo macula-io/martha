@@ -2,7 +2,7 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { CREW_ROWS_PLACE, LAUNCH_RECORDS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/coincidences.ts'
 
 /** Why a store's name is written by literal in a test of the host contract (#289 part b). */
@@ -14,5 +14,4 @@ export const THE_OWNER_AS_A_TURNS_ORIGIN = 'a member of the TurnOrigin union, co
 export const COINCIDENCES: readonly Exception[] = [
   { value: THE_WHOLE_CREW, file: 'host_contract/host_contract.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
   { value: CREW_ROWS_PLACE, file: 'host_contract/host_contract.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
-  { value: LAUNCH_RECORDS_PLACE, file: 'host_contract/host_contract.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
 ]

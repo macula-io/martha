@@ -15,8 +15,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { itFails, theLinesOf, whatARunLeft, type WhatARunLeft } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
-import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { theReadingsThisMachineGives } from '../linux_process_identity/the_kernel_this_machine_shows.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS, theReadingsThisMachineGives } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 
 const NAME = 'check_no_member_outlives_its_run'
 

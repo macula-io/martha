@@ -10,15 +10,15 @@ import { test } from 'node:test'
 
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import type { MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { LAUNCH_RECORDS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { NOT_OURS } from '../linux_process_identity/launch_records_under_a_state_root.ts'
+import { NOT_OURS } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { itFails, NOT_A_LAUNCH, theLinesOf, whatARunLeft, type RecordsOfAProject, type WhatTheScanReads } from './the_leftovers_a_run_left.ts'
 
 const OWNERS_HOME = '/home/owner'
 const RUN_HOME = '/tmp/martha-forgot'
 const READERS_NAMESPACE = 'pid:[4026531836]'
 const PROJECT = '/tmp/martha-forgot/.local/state/martha/2f1c'
-const RECORDS = join(PROJECT, LAUNCH_RECORDS_PLACE)
+const RECORDS = join(PROJECT, THE_PLACES_A_STATE_ROOT_KEEPS.records_place)
 
 const record = (over: Partial<MemberLaunch> = {}): MemberLaunch => ({
   member_name: 'Jupiter',

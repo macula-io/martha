@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { getuid } from 'node:process'
 
 import type { KeyedRow } from '../host_contract/host_contract.ts'
-import { launchRecordsDirectory } from './launch_records_directory.ts'
+import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 
 /** The crew's own conventions a state root is read by: what this file may not decide, and may not import. */
 export interface TheStatesConventions {

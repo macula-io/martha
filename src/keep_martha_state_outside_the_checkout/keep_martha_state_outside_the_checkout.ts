@@ -73,29 +73,6 @@ export const MEMBERS_FILE = 'members.json'
 /** The owner's approvals, one JSON line each. */
 export const APPROVALS_FILE = 'approvals.jsonl'
 
-/** The directory inside a project's state that holds the launcher's launch records, one file per member (martha#42, #472). */
-export const LAUNCH_RECORDS_PLACE = 'launches'
-
-/**
- * The state root a home's own environment names: `$XDG_STATE_HOME/martha`, else `$HOME/.local/state/martha`. One
- * definition, so a reader of another home's state (martha#472) cannot look somewhere the owner's own Martha never
- * writes. An XDG_STATE_HOME that is set but empty names no place, as an unset one does.
- */
-export const stateRootOf = (home: string, xdg_state_home: string | undefined): string =>
-  join(xdg_state_home === undefined || xdg_state_home === '' ? join(home, '.local', 'state') : xdg_state_home, STATE_ROOT_NAME)
-
-/**
- * How a reader of another home's state root reads it (martha#472): the place inside a project its launch records are
- * kept, and the mode of a directory only its owner may enter. The reader that applies them is the machine's
- * (linux_process_identity/launch_records_under_a_state_root.ts); the values are this state's, so a reader can never
- * disagree with the state it reads.
- */
-export const THE_PLACES_A_STATE_ROOT_KEEPS = {
-  state_root_of: stateRootOf,
-  records_place: LAUNCH_RECORDS_PLACE,
-  only_its_owner_may_enter: STATE_DIRECTORY_MODE,
-} as const
-
 /** The directory inside Martha's state that holds each launch's own writes, one file per launch (martha#132, #162). */
 export const OWN_WRITES_PLACE = 'own-writes'
 

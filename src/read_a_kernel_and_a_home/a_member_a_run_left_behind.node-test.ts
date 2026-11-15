@@ -5,9 +5,9 @@
 // /proc: the record the launcher wrote names a member that is still running, and stops naming it once it has stopped.
 // That is the case the whole package exists for, and no reading handed in can prove it.
 //
-// It lives in the glue's own directory because a launch record is written only by the launcher, the contract or the
-// glue (prove_the_core/only_the_launcher_writes_launch_records), and a machine's kernel and a home's state root are
-// this directory's business.
+// It lives in the machine's own directory beside the readings it drives: a launch record is written only by the
+// launcher, the contract or the host glue (prove_the_core/only_the_launcher_writes_launch_records), and this directory
+// is the glue that reads a machine's kernel and a home's state root.
 
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -19,10 +19,10 @@ import { test } from 'node:test'
 import { launchesIn, recordMemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { itFails, theLinesOf, whatARunLeft } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
-import { LAUNCH_RECORDS_PLACE, STATE_DIRECTORY_MODE, STATE_ROOT_NAME, THE_PLACES_A_STATE_ROOT_KEEPS } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { launchRecordsDirectory } from './launch_records_directory.ts'
-import { theReadingsThisMachineGives } from './the_kernel_this_machine_shows.ts'
-import { linuxProcessIdentities } from './process_identity_from_proc.ts'
+import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
+import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS, theReadingsThisMachineGives } from './read_a_kernel_and_a_home.ts'
 
 const PROJECT = 'a-project-of-this-run'
 
@@ -32,7 +32,7 @@ const theReadings = () => theReadingsThisMachineGives('/proc', THE_PLACES_A_STAT
 test('a member a run started, still running under a run\'s home, is named on this machine\'s own kernel (martha#472)', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'martha-472-'))
   const home = join(scratch, 'run-home')
-  const records = join(home, '.local', 'state', STATE_ROOT_NAME, PROJECT, LAUNCH_RECORDS_PLACE)
+  const records = join(home, '.local', 'state', STATE_ROOT_NAME, PROJECT, THE_PLACES_A_STATE_ROOT_KEEPS.records_place)
   let child: ChildProcess | undefined
   try {
     mkdirSync(records, { recursive: true, mode: STATE_DIRECTORY_MODE })

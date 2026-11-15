@@ -19,7 +19,6 @@ import {
   type ProcessTable,
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { LAUNCH_RECORDS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import {
   LAUNCH_RECORD_FILE_MODE,
@@ -51,7 +50,7 @@ const scratch = (t: TestContext): string => {
 }
 
 /** A fresh records directory, closed to everyone but its owner. */
-const recordsDirectory = (t: TestContext, name = LAUNCH_RECORDS_PLACE): string => {
+const recordsDirectory = (t: TestContext, name = 'launches'): string => {
   const directory = join(scratch(t), name)
   mkdirSync(directory, { mode: 0o700 })
   return directory

@@ -1,18 +1,42 @@
-// What this machine's kernel says about a process, as a reader of the leftovers a run leaves reads it (martha#472):
-// the processes of this user, what environment each was given, the pid namespace each runs in and the pid it has
-// there, and the identity a launch record compares. Each is read here, and handed on as one answer.
+// What this machine's kernel says about a process, and where a home's state root and its places are (martha#472), as a
+// reader of the leftovers a run leaves reads it: the processes of this user, what environment each was given, the pid
+// namespace each runs in and the pid it has there, and the identity a launch record compares. Each is read here, and
+// handed on as one answer.
 //
 // Nothing here judges what it read: which of these readings names a member, and what to say about one that cannot be
 // read, is find_a_member_a_run_left_behind's to decide. This is the machine's side of that question, on Linux.
+//
+// Where a home's state root is lives here too, with the places it keeps, because that root is what this folder's reader
+// of another home is given. It sits here rather than in the crew's own state module because that module is at its
+// ceiling and nothing rises for this package (martha#463's rule, and the 11-14 rule that only the launcher may rise).
+//
+// The records place is a member of THE_PLACES_A_STATE_ROOT_KEEPS rather than a constant of its own: a constant would
+// make every test's scratch directory named 'launches' a restated value, in folders that may not rise, while the
+// launcher and this reader both take the place from the one record below.
 
 import { readFileSync, readdirSync, readlinkSync, statSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { getuid } from 'node:process'
 
-import { filesOnThisMachine } from './files_and_processes_on_this_machine.ts'
+import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { filesOnThisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { PID_NAMESPACE_FORM, procProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { launchRecordsUnder, type TheStatesConventions } from './launch_records_under_a_state_root.ts'
-import { PID_NAMESPACE_FORM, procProcessIdentities } from './process_identity_from_proc.ts'
+
+/** The state root a home's own environment names: `$XDG_STATE_HOME/martha`, else `$HOME/.local/state/martha`. An
+ * XDG_STATE_HOME that is set but empty names no place, as an unset one does. */
+export const stateRootOf = (home: string, xdg_state_home: string | undefined): string =>
+  join(xdg_state_home === undefined || xdg_state_home === '' ? join(home, '.local', 'state') : xdg_state_home, STATE_ROOT_NAME)
+
+/** What a reader of a home's state root keeps to: where that state root is, the place inside a project that holds the
+ * launcher's launch records, and the mode of a directory only its owner may enter. The launcher takes the same three,
+ * so the writer and the reader cannot disagree about them. */
+export const THE_PLACES_A_STATE_ROOT_KEEPS = {
+  state_root_of: stateRootOf,
+  records_place: 'launches',
+  only_its_owner_may_enter: STATE_DIRECTORY_MODE,
+} as const
 
 /** Every process of this user the kernel lists, as pids. */
 function everyProcessOfThisUser(proc_root: string): readonly number[] {

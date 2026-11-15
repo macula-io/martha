@@ -4,7 +4,7 @@
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { A_STORE_THE_CONTRACT_NAMES } from '../host_contract/coincidences.ts'
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
-import { CREW_ROWS_PLACE, LAUNCH_RECORDS_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CREW_ROWS_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/coincidences.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 
@@ -29,5 +29,4 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_WHOLE_CREW, file: 'claude_code_host/claude_code_host.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
   { value: STATE_ROOT_NAME, file: 'claude_code_host/claude_code_host.node-test.ts', reason: THE_REPOSITORYS_OWN_NAME },
   { value: CREW_ROWS_PLACE, file: 'claude_code_host/claude_code_host.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
-  { value: LAUNCH_RECORDS_PLACE, file: 'claude_code_host/claude_code_host.node-test.ts', reason: A_STORE_THE_CONTRACT_NAMES },
 ]

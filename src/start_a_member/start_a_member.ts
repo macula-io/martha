@@ -51,7 +51,6 @@ import {
   crewRowsDirectory,
   crewStateDirectory,
   crewSubdirectory,
-  LAUNCH_RECORDS_PLACE,
   nodeIdsFor,
   PERMISSION_BITS,
   readApprovals,
@@ -83,6 +82,7 @@ import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
 import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { CLAUDE_CODE, theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
@@ -95,7 +95,7 @@ export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; re
 
 /** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names
  * them: the rows are the crew's, not a checkout's (martha#254 R1). */
-const STATE_PLACES = [LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
+const STATE_PLACES = [THE_PLACES_A_STATE_ROOT_KEEPS.records_place, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
