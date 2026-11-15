@@ -35,5 +35,4 @@ export const EXCEPTIONS: readonly DeclaredException[] = [
   { path: 'src/declare_crew/declare_crew.ts', text: 'crew.json', reason: "the refusal that tells a person their checkout still holds crew-code's declaration names this file", removed_by: STAYS },
   { path: 'src/read_a_room_through_its_gate/read_a_room_through_its_gate.node-test.ts', text: 'mcp__crew__crew_mail_read', reason: "a peer program's own tool call, which this test proves Martha does not answer", removed_by: STAYS },
   { path: 'src/refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.node-test.ts', text: 'crew_restart', reason: "a tool crew-code's host really registers, which this test proves Martha refuses like any other name that executes", removed_by: STAYS },
-  { path: 'src/trust_only_signed_lists/trust_only_signed_lists.node-test.ts', text: 'crew_roster', reason: "Martha's signed-list kind still carries crew-code's tool name", removed_by: "the signed-list-kind PR (martha#468, after the inventory's rows)" },
 ]
