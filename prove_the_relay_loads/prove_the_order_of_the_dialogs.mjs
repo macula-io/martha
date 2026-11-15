@@ -26,10 +26,11 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 // martha#460 r=1: the host is driven under a home of its own, so it must start with the auto-updater off or it would
-// install the owner's global Claude Code over itself. The switch is one definition, in the launch module; it is spread
-// here from there rather than typed, so a change to it reaches this run and a run that drops it fails
-// every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name.
-import { THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+// install the owner's global Claude Code over itself. The switch is Claude Code's row's env_last, in the launch module;
+// it is spread here from there rather than typed, so a change to it reaches this run and a run that drops it fails
+// every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name (martha#474).
+import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
@@ -143,7 +144,7 @@ const waitFor = (shown, needle, ms) => settles(() => shown().includes(needle), m
 async function driveTheHost(out, places, base_url) {
   const child = spawn('script', ['-qefc', `'${join(places.home, 'bin', 'claude')}' --permission-mode default --plugin-dir '${places.plugin}'`, '/dev/null'], {
     cwd: places.checkout,
-    env: { HOME: places.home, PATH: [join(places.home, 'bin'), join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color', ANTHROPIC_BASE_URL: base_url, ANTHROPIC_API_KEY: STAND_IN_KEY, ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF },
+    env: { HOME: places.home, PATH: [join(places.home, 'bin'), join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'), TERM: 'xterm-256color', ANTHROPIC_BASE_URL: base_url, ANTHROPIC_API_KEY: STAND_IN_KEY, ...HOSTS[CLAUDE_CODE].env_last },
   })
   let drawn = ''
   const t0 = Date.now()

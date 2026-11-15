@@ -33,7 +33,7 @@ import {
   THE_REFRESH_THE_MOD_RUNS,
   RECORDED_HOST,
 } from './recorded_claude_code_host.ts'
-import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // Synthetic ids only: this repository is public.
 const OTHER_MEMBER_SOCKET = 'uds:/run/user/1000/cc-socks/4102.sock'

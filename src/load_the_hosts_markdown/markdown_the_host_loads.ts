@@ -29,7 +29,7 @@
 //     since the host resolves it after the settings env blocks.
 
 import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
-import { CLAUDE_FOLDER } from './settings_env_reaching_servers.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** What the host binary says about the markdown it loads, as recorded. */
 export interface MarkdownTheHostLoads {

@@ -25,7 +25,7 @@ import {
   type Policy,
   type Session,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { CLAUDE_CODE, fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   beginSession,
   PATH_OF_SOURCE,
@@ -38,6 +38,7 @@ import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result
 
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from './answer_a_tool_call.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 
