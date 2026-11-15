@@ -93,7 +93,8 @@ export const NOT_A_TERMINAL =
 /** The launcher's places, and where its approved snapshots go. */
 export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; readonly relay_journal: string }
 
-/** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
+/** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names
+ * them: the rows are the crew's, not a checkout's (martha#254 R1). */
 const STATE_PLACES = [LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */

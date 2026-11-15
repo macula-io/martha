@@ -27,4 +27,3 @@ export const showingSafely = <Shown extends LinesShownToTheOwner>(io: Shown): Sh
   out: (line: string) => io.out(shownSafely(line)),
   err: (line: string) => io.err(shownSafely(line)),
 })
-
