@@ -1,7 +1,7 @@
 // What the Claude Code host answers an Agent call with, as this build reads it (martha#390, martha#463).
 //
-// The answer's shape is the host's: a second host answers its own way, so the read lives here, beside the host's other
-// knowledge, and the slice that names a failed review (../name_a_review_the_host_reported_failed) is handed the model as
+// The answer's shape is the host's: a second host answers its own way, so the read lives here, in a host folder of its own
+// (martha#463), and the slice that names a failed review (../name_a_review_the_host_reported_failed) is handed the model as
 // a string. The fields read are declared once, so the core's check (prove_the_core/no_host_bundle_read_in_the_core.ts)
 // names a core slice that reads one of them itself.
 

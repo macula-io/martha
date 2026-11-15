@@ -67,14 +67,16 @@
       "src/run_an_owner_signed_command",
       "src/run_the_martha_command",
       "src/run_the_nodes_own_npm_alone",
-      "src/start_a_member"
+      "src/start_a_member",
+      "src/read_what_claude_code_says_of_an_agent"
     ],
     "decisionFiles": [
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
     ],
     "hostCeilings": {
       "src/approve_a_checkouts_config": 76,
-      "src/claude_code_host": 604,
+      "src/claude_code_host": 493,
+      "src/read_what_claude_code_says_of_an_agent": 111,
       "src/claude_code_relay": 800,
       "src/cut_the_rules_from_the_host_binary": 378,
       "src/declare_a_solo_crew": 84,

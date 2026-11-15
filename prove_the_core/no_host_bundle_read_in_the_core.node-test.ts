@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { CLAUDE_CODE_ANSWER_FIELDS } from '../src/claude_code_host/the_agent_calls_answer.ts'
+import { CLAUDE_CODE_ANSWER_FIELDS } from '../src/read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
 import { coreSources } from './core_sources.ts'
 import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
 import { CUTS_A_BUNDLE, hostReadsInTheCore, lineOfAHostRead, READS_AN_ANSWER, type WhatIsNotASlice } from './no_host_bundle_read_in_the_core.ts'

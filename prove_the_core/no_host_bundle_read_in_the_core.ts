@@ -11,7 +11,7 @@
 //     this is what cutting it looks like; source that is not minified is matched by an identifier's own shape
 //     (`[A-Za-z_$][\w$]*`), which this check leaves alone.
 //   - a FIELD OF A HOST'S ANSWER: a name the Claude Code host declares as one of its answer's own fields
-//     (CLAUDE_CODE_ANSWER_FIELDS, in ../src/claude_code_host/the_agent_calls_answer.ts), spelt as a property, a
+//     (CLAUDE_CODE_ANSWER_FIELDS, in ../src/read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts), spelt as a property, a
 //     binding, a type member or a string in a core slice. The list is the host's, read where the host reads it, so a
 //     field the host's reader takes up is refused in the core the day it is added.
 //

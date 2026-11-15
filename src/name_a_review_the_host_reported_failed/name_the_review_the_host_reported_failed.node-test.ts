@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { THE_FAILED_TASK_STATUS } from '../claude_code_host/read_a_failed_agents_report.ts'
+import { THE_FAILED_TASK_STATUS } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import {
   nameTheFailedReviewIn,
   REVIEWS_REMEMBERED,
@@ -31,7 +31,7 @@ const THE_REVIEWER_MODEL = 'opus'
 const ANOTHER_MODEL = 'sonnet'
 const RESOLVED = 'claude-opus-5-5'
 
-/** The host's own names for the envelope, as its binary gives them (../claude_code_host/read_a_failed_agents_report). */
+/** The host's own names for the envelope, as its binary gives them (../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report). */
 const THE_REPORT: TheReportTheHostWrites = { notification: 'task-notification', status: 'status', tool_use: 'tool-use-id', summary: 'summary', failed: THE_FAILED_TASK_STATUS }
 
 /** The id of the Agent call the envelope names: the review that failed. */
