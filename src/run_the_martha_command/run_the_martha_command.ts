@@ -42,6 +42,9 @@ import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_clau
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
+import { showingSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import { theLinesOf, whatARunLeft } from '../check_no_member_outlives_its_run/the_leftovers_a_run_left.ts'
+import { theKernelThisMachineShows, theOwnersHome } from '../check_no_member_outlives_its_run/the_kernel_this_machine_shows.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
@@ -281,6 +284,8 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
   for (const line of theCrewListed(crew, Date.now())) io.out(line)
+  // A member a run started and left running is no member of this crew's, and the owner should see it here (martha#472).
+  for (const line of theLinesOf(whatARunLeft(theKernelThisMachineShows('/proc', theOwnersHome())).filter((one) => one.kind === 'left_behind'))) io.out(line)
   return EXIT_DONE
 }
 
@@ -449,27 +454,6 @@ function actOfOne(act: string, argv: readonly string[]): Asked | undefined {
   const argument = argv[1]
   return argv.length === 2 && argument !== undefined && argument !== '' ? { act, args: [argument] } : undefined
 }
-
-/**
- * What a terminal would act on rather than show: C0 and C1 controls, DEL, the bidirectional marks (left-to-right,
- * right-to-left, the Arabic letter mark), overrides and isolates, and the line and paragraph separators.
- */
-const TERMINAL_CONTROL = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu
-
-/** `line` with every terminal control written out as an escape, so nothing Martha shows can move, erase or reorder what the owner reads. */
-export function shownSafely(line: string): string {
-  return line.replace(TERMINAL_CONTROL, (control) => {
-    const code = control.codePointAt(0)!
-    return code <= 0xff ? `\\x${code.toString(16).padStart(2, '0')}` : `\\u${code.toString(16).padStart(4, '0')}`
-  })
-}
-
-/** The io with every line it shows escaped: a path, a member's name or a kept approval may hold anything. */
-const showingSafely = (io: CommandIo): CommandIo => ({
-  ...io,
-  out: (line) => io.out(shownSafely(line)),
-  err: (line) => io.err(shownSafely(line)),
-})
 
 /** Runs the command `argv` names; resolves to the status it ends with. */
 export async function runMarthaCommand(argv: readonly string[], unescaped: CommandIo): Promise<number> {

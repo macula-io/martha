@@ -11,10 +11,12 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities, PID_NAMESPACE_FORM } from '../linux_process_identity/process_identity_from_proc.ts'
-import { LAUNCH_RECORDS_PLACE } from '../start_a_member/start_a_member.ts'
 import type { WhatTheScanReads } from './the_leftovers_a_run_left.ts'
 
 
+
+/** Where the launcher keeps a launch's records under a state root. */
+const RECORDS_PLACE = 'launches'
 
 /** The reason a records directory this reader will not vouch for is said as. */
 export const NOT_OURS = 'is not a directory of yours that only you may enter, so its launch records cannot be vouched for'
@@ -48,9 +50,14 @@ export function ownPidOf(proc_root: string, pid: number): number | undefined {
   }
 }
 
+/** Where a home's launch records are: the state root its own environment names, as the launcher wrote it. */
+export function recordsDirectoryUnder(home: string, xdg_state_home: string | undefined): string {
+  return join(xdg_state_home ?? join(home, '.local', 'state'), STATE_ROOT_NAME, RECORDS_PLACE)
+}
+
 /** The records a home's state root holds, or why this reader will not vouch for them. */
 export function recordsUnder(home: string, xdg_state_home: string | undefined): { readonly launches: ReturnType<typeof launchesIn> } | { readonly cannot_tell: string } {
-  const directory = join(xdg_state_home ?? join(home, '.local', 'state'), STATE_ROOT_NAME, LAUNCH_RECORDS_PLACE)
+  const directory = recordsDirectoryUnder(home, xdg_state_home)
   let found
   try {
     found = statSync(directory)

@@ -18,12 +18,11 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { launchesIn, recordMemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { STATE_DIRECTORY_MODE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { itFails, theLinesOf, whatARunLeft, type WhatARunLeft } from './the_leftovers_a_run_left.ts'
-import { LAUNCH_RECORDS_PLACE } from '../start_a_member/start_a_member.ts'
-import { theKernelThisMachineShows, theOwnersHome } from './the_kernel_this_machine_shows.ts'
+import { recordsDirectoryUnder, theKernelThisMachineShows, theOwnersHome } from './the_kernel_this_machine_shows.ts'
 
 const NAME = 'check_no_member_outlives_its_run'
 
@@ -60,7 +59,7 @@ function theGate(proc_root: string, owners_home: string): number {
 function theSelfTest(): number {
   const scratch = mkdtempSync(join(tmpdir(), 'martha-472-'))
   const home = join(scratch, 'run-home')
-  const records = join(home, '.local', 'state', STATE_ROOT_NAME, LAUNCH_RECORDS_PLACE)
+  const records = recordsDirectoryUnder(home, undefined)
   const child = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 1000)'], { stdio: 'ignore', env: aRunsEnvironment(home) })
   try {
     if (child.pid === undefined) return failed('the child the self-test starts has no pid')

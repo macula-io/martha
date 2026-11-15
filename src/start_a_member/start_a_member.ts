@@ -94,7 +94,7 @@ export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; re
 
 /** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
 /** The directory inside Martha's state that holds the launcher's launch records. */
-export const LAUNCH_RECORDS_PLACE = 'launches'
+const LAUNCH_RECORDS_PLACE = 'launches'
 
 /** Everything the launcher keeps per checkout: the rows are the crew's, not a checkout's (martha#254 R1). */
 const STATE_PLACES = [LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
