@@ -19,6 +19,7 @@
     "check:host-ceilings": "node src/check_a_host_directory_stays_under_its_ceiling/main.ts",
     "check:restated-values": "node src/check_no_literal_restates_a_value/main.ts",
     "check:recorded-host-runs": "node src/check_every_recorded_host_test_is_run/main.ts",
+    "check:no-member-outlives-its-run": "node src/check_no_member_outlives_its_run/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
@@ -62,6 +63,7 @@
       "src/launch_a_claude_code_member",
       "src/list_stop_and_restart_the_crew",
       "src/load_the_hosts_markdown",
+      "src/read_a_kernel_and_a_home",
       "src/refuse_a_member_writing_owner_memory",
       "src/refuse_settings_that_turn_hooks_off",
       "src/run_an_owner_signed_command",
@@ -90,7 +92,7 @@
       "src/refuse_a_member_writing_owner_memory": 593,
       "src/refuse_settings_that_turn_hooks_off": 209,
       "src/run_an_owner_signed_command": 569,
-      "src/run_the_martha_command": 413,
+      "src/run_the_martha_command": 405,
       "src/run_the_nodes_own_npm_alone": 170,
       "src/start_a_member": 244,
       "src/keep_the_crews_files_as_directories": 161,
@@ -99,7 +101,8 @@
       "src/hear_the_hosts_dialogs": 40,
       "src/linux_process_identity": 280,
       "src/row_streams_directory": 165,
-      "src/owners_settings_directory": 173
+      "src/owners_settings_directory": 173,
+      "src/read_a_kernel_and_a_home": 137
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
