@@ -43,7 +43,7 @@ import {
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { nameTheFailedReviewIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
-import { resolvedModelIn } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
+import { keepWhatTheReviewResolvedTo } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
@@ -767,16 +767,6 @@ async function noteTheReviewThisLauncherLetThrough(state: RelayState, call: { re
 }
 
 /**
- * Keeps the model the host said a kept review call resolved to (martha#390): the call's answer carries the agent's own
- * model, and that — never a name out of the host's prose — is what a line about the review names it by.
- */
-function noteWhatTheReviewResolvedTo(state: RelayState, call: { readonly id: string | undefined }, answer: unknown): void {
-  if (call.id === undefined || state.reviews.theSpawn(call.id) === undefined) return
-  const resolved = resolvedModelIn(answer)
-  if (resolved !== undefined) state.reviews.resolved(call.id, resolved)
-}
-
-/**
  * The host's own report of a review that failed, named to the member and its row (martha#390): the envelope's fixed
  * fields decide it, the model is the one the allowed call resolved to, and the host's summary is repeated verbatim.
  * Nothing relaunches the review, and no second model is chosen anywhere.
@@ -869,7 +859,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
-  noteWhatTheReviewResolvedTo(state, call, body.answer)
+  keepWhatTheReviewResolvedTo(state.reviews, call.id, body.answer)
   // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears.
   place.crew?.noteTheCallsAnswer({ tool: call.tool }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
