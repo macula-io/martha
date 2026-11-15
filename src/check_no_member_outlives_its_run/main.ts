@@ -14,7 +14,7 @@ import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
-import { theLinesOf, itFails, whatARunLeft, type WhatARunLeft } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
+import { itFails, theLinesOf, whatARunLeft, type WhatARunLeft } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theReadingsThisMachineGives } from '../linux_process_identity/the_kernel_this_machine_shows.ts'
 

@@ -12,7 +12,7 @@ import { getuid } from 'node:process'
 
 import { filesOnThisMachine } from './files_and_processes_on_this_machine.ts'
 import { launchRecordsUnder, type TheStatesConventions } from './launch_records_under_a_state_root.ts'
-import { linuxProcessIdentities, PID_NAMESPACE_FORM } from './process_identity_from_proc.ts'
+import { PID_NAMESPACE_FORM, procProcessIdentities } from './process_identity_from_proc.ts'
 
 /** Every process of this user the kernel lists, as pids. */
 function everyProcessOfThisUser(proc_root: string): readonly number[] {
@@ -77,8 +77,13 @@ function isAZombie(proc_root: string, pid: number): boolean {
 /** The owner's home, from the password database: the one home that is never a run's. */
 export const theOwnersHome = (): string => userInfo().homedir
 
-/** What the kernel of this machine says about every process of this user, as one reader. */
+/**
+ * What the kernel under `proc_root` says about every process of this user, as one reader. Every answer comes from that
+ * one tree — the processes, their start times and their namespaces — so a reader handed another tree reads that tree
+ * and not half of this machine's.
+ */
 export function theProcessesOfThisMachineShow(proc_root: string) {
+  const identities = procProcessIdentities(proc_root)
   return {
     pids: everyProcessOfThisUser(proc_root),
     environmentOf: (pid: number) => {
@@ -86,13 +91,13 @@ export function theProcessesOfThisMachineShow(proc_root: string) {
       if ('env' in read) return read
       // A process that ended between being listed and being read holds no member, and neither does a zombie: a member
       // that has read its end is a member that stopped. Both are read as no environment at all and said nothing of.
-      if (linuxProcessIdentities.identityOf(pid) === null || isAZombie(proc_root, pid)) return { env: {} }
+      if (identities.identityOf(pid) === null || isAZombie(proc_root, pid)) return { env: {} }
       return read
     },
     namespaceOf: (pid: number) => namespaceOf(proc_root, pid),
     ownPidOf: (pid: number) => ownPidOf(proc_root, pid),
-    identityOf: (pid: number) => linuxProcessIdentities.identityOf(pid),
-    readers_namespace: linuxProcessIdentities.pidNamespace(),
+    identityOf: (pid: number) => identities.identityOf(pid),
+    readers_namespace: identities.pidNamespace(),
   }
 }
 
