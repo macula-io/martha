@@ -73,6 +73,7 @@ import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_ru
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { LAUNCH_RECORDS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -170,7 +171,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     checkout,
     rows: closed('row-streams'),
     dashboard: closed('dashboard-rows'),
-    launch_records: closed('launches'),
+    launch_records: closed(LAUNCH_RECORDS_PLACE),
     relay_root,
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),

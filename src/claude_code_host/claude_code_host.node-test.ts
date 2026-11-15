@@ -34,6 +34,7 @@ import {
   RECORDED_HOST,
 } from './recorded_claude_code_host.ts'
 import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { LAUNCH_RECORDS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 // Synthetic ids only: this repository is public.
 const OTHER_MEMBER_SOCKET = 'uds:/run/user/1000/cc-socks/4102.sock'
@@ -59,7 +60,7 @@ const recordedEngine = (now = 1_700_000_000_000) => {
 
 const adapterIn = (t: TestContext) => {
   const root = scratch(t)
-  const places = { rows: join(root, 'row-streams'), launch_records: join(root, 'launches'), crew: join(root, 'crew-files') }
+  const places = { rows: join(root, 'row-streams'), launch_records: join(root, LAUNCH_RECORDS_PLACE), crew: join(root, 'crew-files') }
   mkdirSync(places.rows, { mode: 0o700 })
   mkdirSync(places.launch_records, { mode: 0o700 })
   const recorded = recordedEngine()
