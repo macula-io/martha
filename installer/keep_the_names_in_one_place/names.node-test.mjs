@@ -10,7 +10,7 @@ import { basename, dirname, join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { readSigners } from '../verify_the_release_signature/verify_the_release_signature.mjs'
 import { NAMES } from './names.mjs'
 

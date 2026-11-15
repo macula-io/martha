@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../src/launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   differences,
   FLOOR_IN_THE_LAYER,

@@ -17,7 +17,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 
 host="$("${HERE}/install_the_recorded_host.sh" "${WORK}/host")"
-variable="$(sed -n "s/^export const RECORDED_HOST_VARIABLE = '\([A-Z_]*\)'$/\1/p" "${HERE}/../src/launch_a_claude_code_member/drive_the_recorded_host.ts")"
+variable="$(sed -n "s/^export const RECORDED_HOST_VARIABLE = '\([A-Z_]*\)'$/\1/p" "${HERE}/../src/drive_the_recorded_host/drive_the_recorded_host.ts")"
 [[ -n "${variable}" ]] || { echo "watch_a_member_keep_its_shell: the drive names no RECORDED_HOST_VARIABLE" >&2; exit 2; }
 
 status=0

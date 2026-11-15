@@ -3,7 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
-import { HOST_ANSWER_TIMEOUT_MS } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
+import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'

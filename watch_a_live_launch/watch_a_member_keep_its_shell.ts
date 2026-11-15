@@ -7,7 +7,7 @@
 //
 // The launch is the real one: `martha init`, `martha approve` and `martha start` on the checkout this makes, the mesh
 // server its approved config pins, and a peer on the mesh that answers a hello. Only the model is a stand-in
-// (../src/launch_a_claude_code_member/drive_the_recorded_host). The strict gate is on, because a gate that is off can
+// (../src/drive_the_recorded_host/drive_the_recorded_host.ts). The strict gate is on, because a gate that is off can
 // never refuse and would make this observation say nothing.
 //
 // TWO LAUNCHES, because the gate refuses executable text after a ring's answer, by design (martha#51: no node id hands a
@@ -32,8 +32,8 @@ import { CLAUDE_CODE_SHELL_TOOL } from '../src/claude_code_host/claude_code_host
 import { PINNED_TRANSPORT } from '../src/install_the_mesh_server_for_claude_code/mesh_server_install.ts'
 import { STRICT_GATE } from '../src/declare_crew/declare_crew.ts'
 import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
-import { driveTheRecordedHost, plainTextOf, type ModelRequest, type ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { HOST_SILENCE_MS } from '../src/launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
+import { driveTheRecordedHost, plainTextOf, type ModelRequest, type ScriptedTurn } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { HOST_SILENCE_MS } from '../src/drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { MESH_HELLO, RINGS_AND_RETURNS_THE_ANSWER } from '../src/read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { ANSWERS_THAT_ANSWERED } from '../src/read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { PATH_OF_SOURCE } from '../src/take_in_a_turn/take_in_a_turn.ts'

@@ -19,7 +19,7 @@ import {
   type ProcessTable,
 } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   LAUNCH_RECORD_FILE_MODE,
   LAUNCH_RECORD_SUFFIX,

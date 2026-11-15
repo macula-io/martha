@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { HOST_SILENCE_MS } from '../launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
+import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 
 export const COINCIDENCES: readonly Exception[] = [
   // The timeout the control run gives npm (martha#441): a bound on one npm run of the test's own, not the silence budget

@@ -11,7 +11,7 @@ import { join, sep } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 import { describe, judgeTheRuns, MARKER, type RecordedHostRun, type TestFile } from './check_every_recorded_host_test_is_run.ts'
 import { readTheRuns, readTheTestFiles, runsFrom } from './read_the_runs_and_the_tests.ts'

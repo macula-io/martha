@@ -12,7 +12,7 @@ import { test, type TestContext } from 'node:test'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, OWNER } from '../declare_crew/declare_crew.ts'
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import { nodeIdsFor, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { declareSoloCrew, SOLO_MEMBERS } from './declare_a_solo_crew.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */

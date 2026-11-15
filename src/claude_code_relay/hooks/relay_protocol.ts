@@ -162,7 +162,7 @@ const isReason = (value: unknown): value is string => typeof value === 'string' 
  * The largest answer the relay sends the launcher for a tool call (martha#129, design step 4.3). The launcher compares
  * the whole answer with the one a signed run's receipt builds, so it needs the answer itself; past this the relay
  * sends the call without it, and the call records A13 rather than a body the launcher stops the member over
- * (LARGEST_RELAY_BODY, in ../../launch_a_claude_code_member/serve_the_relay.ts, is 32 MiB for the whole body).
+ * (LARGEST_RELAY_BODY, in ../../serve_the_relay_to_a_launch/serve_the_relay.ts, is 32 MiB for the whole body).
  */
 export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
 

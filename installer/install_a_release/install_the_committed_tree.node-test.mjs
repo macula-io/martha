@@ -16,7 +16,7 @@ import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
 
 import { floorRecordOf as launchersRecordOf } from '../../src/hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { floorRecordOf } from '../hold_the_version_floor/hold_the_version_floor.mjs'
 import { SIGNER, release, removeEvenReadOnly, serveRegistry, sigstoreStandIn } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { installRelease, placesOnThisMachine } from './install_a_release.mjs'

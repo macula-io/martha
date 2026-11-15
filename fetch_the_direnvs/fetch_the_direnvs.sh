@@ -8,7 +8,7 @@
 # direnv comes from its own release tag instead, held to the sha256 named for it.
 #
 # Each digest is written once, in .github/workflows/ci.yml, and never restated here: this script is given it.
-# The two versions are deliberate (src/launch_a_claude_code_member/direnvs_under_test.ts): 2.38 and later stop on
+# The two versions are deliberate (src/drive_the_recorded_host/direnvs_under_test.ts): 2.38 and later stop on
 # DIRENV_DISABLE, and an older direnv has only the DIRENV_CONFIG fallback, so both doors are proven.
 #
 # Usage: fetch_the_direnvs.sh --to <dir> (--version <tag> --sha256 <sha256:hex>)+

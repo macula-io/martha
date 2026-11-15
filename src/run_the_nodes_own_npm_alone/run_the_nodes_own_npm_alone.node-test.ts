@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { fakeNpmRegistry, type FakePackage, type FakeRegistry } from './fake_npm_registry.ts'
 import type { Ran } from './run_the_nodes_own_npm_alone.ts'
 import { NPM_RUNS_WITH, npmBesideNode, runIsolatedNpm } from './run_the_nodes_own_npm_alone.ts'

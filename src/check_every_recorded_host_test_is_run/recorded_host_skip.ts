@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { sep } from 'node:path'
 import process from 'node:process'
 
-import { RECORDED_HOST_VARIABLE } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
+import { RECORDED_HOST_VARIABLE } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**

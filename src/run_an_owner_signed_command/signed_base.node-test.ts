@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { SIGNED_BASE_REPOSITORY, BASE_REF, openSignedBase } from './signed_base.ts'
 import { LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 

@@ -85,42 +85,27 @@
 // `$`. Nor does it read the approvals or the policy itself: the caller passes
 // them, until the crew's declaration (port map step 2) holds them.
 
-import { type ChildProcess, spawn, type StdioOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
+import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
-import { fileURLToPath } from 'node:url'
 
-import {
-  bindNothing,
-  type LaunchRecorded,
-  recordMemberLaunch,
-  recordMemberStopped,
-} from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { meshServerInstallsIn } from '../install_the_mesh_server_for_claude_code/mesh_server_install.ts'
-import { environmentFromSettings, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { pluginDirsIn } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
-import { dropInFiles, hookSettingsWatch, safeModeIn, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
-import { hostLinesNamingARule, memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
-import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { meshServerEnvironments, placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
-import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { meshServerEnvironments } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { MESH_SERVER_PACKAGE, refusalOfInstalledMeshServers } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
-  claudeSettingsSwitches,
   launchEnvironment,
   prepareLaunch,
   startedWithOf,
@@ -133,39 +118,47 @@ import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
-import { memberRelay, type MemberRelay, type MemberRelayPlace, type TheMembersTelling } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace, type TheMembersTelling } from '../answer_the_relay/answer_the_relay.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   hostTrustsTheFolder,
-  hostVersionLine,
-  outputStylesDirTheHostReports,
   ownerCanAnswerTheHost,
-  refusalToLoadTheRelay,
-  resolvedHostCommand,
   SESSION_START_DEADLINE_MS,
   TRUST_ANSWER_DEADLINE_MS,
-  whatTheHostSaysWithTheseSettings,
-} from './host_runs_the_relay.ts'
+} from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { hostThatRunsTheRelay, RELAY_PLUGIN_DIR, rulesTheHostMatches } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
+import {
+  cleanUpIfTheLauncherEnds,
+  killGroup,
+  NOT_STARTED,
+  startedMember,
+  whatTheHostStartsWith,
+  whenTheMemberStops,
+  type Starting,
+} from '../end_a_launch/end_a_launch.ts'
+import {
+  hostSettingsOf,
+  meshServerUnproved,
+  ownerMemoryOf,
+  settingsDenyingOwnerMemory,
+  settingsEnvironment,
+} from '../place_the_hosts_settings/the_hosts_settings.ts'
 import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
-import { type ForegroundJob, isOnTheOwnersTerminal, startForegroundJob } from './member_on_the_owners_terminal.ts'
+import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithTheLine, theRowWithoutTheLineItWrote } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NO_BELLS, theBellsTheOwnerDeclared } from '../ring_the_owner/ring_the_owner.ts'
-import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from './leftover_relay_directories.ts'
-import { copyTheRelay, RELAY_COPY_NAME } from './relay_copy.ts'
-import { relayJournalKeptIn, type RelayJournal } from './keep_the_relays_journal.ts'
-import { makeRelayDirectory, type RelayDirectory } from './relay_directory.ts'
-import { type RelayServer, serveTheRelay } from './serve_the_relay.ts'
+import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
+import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-
-/** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
-export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
 
 /** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
 export const EMPTY_DIRECTORY_NAME = 'nothing'
@@ -266,9 +259,6 @@ export type MemberStarted =
     }
   | { readonly started: false; readonly refusal: string }
 
-/** The start of every refusal: the member was not started. */
-export const NOT_STARTED = 'The member is not started'
-
 /**
  * How often, in ms, the launcher reads the settings files the host reads again
  * while a member runs, apart from any hook: the host may drop its hooks as soon
@@ -277,247 +267,8 @@ export const NOT_STARTED = 'The member is not started'
  */
 export const HOOK_SETTINGS_CHECK_MS = 1_000
 
-/**
- * The signals that end the launcher without its 'exit' event, and so clean up on their own.
- *
- * SIGHUP is the one a run delivers (martha#472): a probe, a recorded-host test or a by-hand check that starts a member
- * hands it a throwaway home, and when that run ends its terminal hangs up, so the kernel sends SIGHUP to the session
- * the launcher and its member run in. Unhandled, the launcher died of the hangup and the member, whose own host does
- * not die of it, kept running under the throwaway home for days. SIGQUIT is the key beside it (Ctrl-\), which would
- * otherwise leave the same member behind.
- */
-const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT']
-
-/** Sends SIGKILL to a whole process group; a group already gone is no error. */
-function killGroup(group: number): void {
-  try {
-    process.kill(-group, 'SIGKILL')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
-  }
-}
-
-/**
- * How a spawned member's start ended: the pid the launcher kills the group of,
- * or why there is none. On the owner's terminal the job-control shell says it
- * (member_on_the_owners_terminal.ts); detached, the member is the spawned child.
- */
-async function memberStartOf(
-  command: string,
-  spawned: Error | undefined,
-  job: ForegroundJob<RecordedWhileHeld> | undefined,
-  childPid: number | undefined,
-  record: (pid: number) => LaunchRecorded,
-): Promise<RecordedStart> {
-  if (spawned !== undefined) return { refusal: `${command} could not be started (${spawned.message}).` }
-  if (job !== undefined) {
-    const held = await job.member
-    if ('refusal' in held) return held
-    const { recorded, inTheLaunchRecord } = held.admission
-    return { pid: held.pid, recorded, inTheLaunchRecord }
-  }
-  // Read on the spawn, with no turn of the event loop since, so this process
-  // has not reaped the child yet and the kernel still answers for its pid.
-  return childPid === undefined
-    ? { refusal: `${command} could not be started (no pid).` }
-    : { pid: childPid, recorded: record(childPid), inTheLaunchRecord: false }
-}
-
-/** A member held on the owner's terminal, recorded before it may run: it runs only when the record holds. */
-interface RecordedWhileHeld {
-  readonly admitted: boolean
-  readonly recorded: LaunchRecorded
-  /** Whether the launch directory's own record already names the member, put there inside this hold. */
-  readonly inTheLaunchRecord: boolean
-}
-
-/**
- * The member's place in its launch directory's record, written while the hold
- * still holds it (#124). A launcher killed at any point after the member exists
- * then leaves a record that names it, and a sweep cannot take away a running
- * member's directory. The member is admitted only when this says it is recorded,
- * so a write that fails refuses the member instead of leaving its directory
- * unrecorded; a launch record that could not be kept refuses it just the same.
- */
-export function recordedInsideTheHold(directory: string, pid: number, recorded: LaunchRecorded): RecordedWhileHeld {
-  if (!recorded.recorded) return { admitted: false, recorded, inTheLaunchRecord: false }
-  const whyNotRecorded = recordTheMember(directory, pid)
-  return whyNotRecorded === undefined
-    ? { admitted: true, recorded, inTheLaunchRecord: true }
-    : { admitted: false, recorded: { recorded: false, refusal: whyNotRecorded }, inTheLaunchRecord: false }
-}
-
-/** How a member's start ends: its pid, which is also its group's id, and its launch record; or why it did not start. */
-type RecordedStart =
-  | { readonly pid: number; readonly recorded: LaunchRecorded; readonly inTheLaunchRecord: boolean }
-  | { readonly refusal: string }
-
-/**
- * Why the mesh server the approved server config installs is not proved, or
- * undefined when it is a recorded version started as a bin it has, or none is
- * installed (martha#49).
- */
-function meshServerUnproved(serverConfig: Uint8Array | undefined): string | undefined {
-  if (serverConfig === undefined) return undefined
-  const installed = meshServerInstallsIn(new TextDecoder().decode(serverConfig), MESH_SERVER_PACKAGE)
-  return 'refusal' in installed ? installed.refusal : refusalOfInstalledMeshServers(installed.installs)
-}
-
-/**
- * Rewrites the approved server config in the snapshot so each mesh server
- * starts from its recorded tree by path, with an environment built from the
- * one the host is given; why it cannot, or undefined (martha#65).
- */
-function meshServersPlaced(
-  serverConfig: Uint8Array | undefined,
-  launch: ClaudeCodeMemberLaunch,
-  snapshotDir: string,
-  hostEnvironment: Readonly<Record<string, string | undefined>>,
-): string | undefined {
-  if (serverConfig === undefined) return undefined
-  const placed = placeRecordedMeshServers({
-    serverConfig: new TextDecoder().decode(serverConfig),
-    root: launch.places.mesh_servers,
-    hostEnvironment,
-    ...(launch.mesh_trees === undefined ? {} : { recording: launch.mesh_trees }),
-  })
-  if ('refusal' in placed) return placed.refusal
-  writeFileSync(join(snapshotDir, CLAUDE_SERVERS), placed.config)
-  return undefined
-}
-
-/**
- * What the settings files the host loads add to every server's environment:
- * the owner's user settings, then the approved --settings copy; or why the
- * launch is refused (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers).
- */
-function settingsEnvironment(
-  hostEnv: Readonly<Record<string, string | undefined>>,
-  approvedSettings: Uint8Array | undefined,
-  snapshotDir: string,
-  knownSettings: readonly string[],
-): { readonly env: Readonly<Record<string, string>> } | { readonly refusal: string } {
-  const user = userSettingsPath(hostEnv)
-  if ('refusal' in user) return user
-  return environmentFromSettings(
-    [
-      { path: user.path, text: existsSync(user.path) ? readFileSync(user.path, 'utf8') : undefined },
-      { path: join(snapshotDir, CLAUDE_SETTINGS), text: approvedSettings === undefined ? undefined : new TextDecoder().decode(approvedSettings) },
-    ],
-    [...SERVER_NEEDS, ...knownSettings],
-  )
-}
-
-/**
- * The settings files the member's host reads, watched for a key that turns
- * Martha's relay off: the owner's user settings, the --settings copy the host
- * starts with (the approved one, or the launch's own, settingsDenyingOwnerMemory),
- * and the managed settings (martha#122), and for a hook or plugin the owner's
- * or the managed ones declare (martha#121); or why the launch is refused: one
- * of them sets such a key or declares one, the environment or the owner's
- * arguments switch safe mode on or name a plugin folder, or the user settings
- * file cannot be told. Exported so npm run probe:launch runs this very gate.
- */
-export function hookSettingsOf(
-  hostEnv: Readonly<Record<string, string | undefined>>,
-  args: readonly string[],
-  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
-  managed: ManagedSettingsPlace = RECORDED_HOST.managed_settings,
-  approved: string | undefined = prepared.carried_files[CLAUDE_SETTINGS] === undefined ? undefined : join(prepared.snapshot_dir, CLAUDE_SETTINGS),
-): HookSettingsWatch | string {
-  const user = userSettingsPath(hostEnv)
-  if ('refusal' in user) return user.refusal
-  const safeMode = safeModeIn(hostEnv, args, CLAUDE_CODE_HOOK_SWITCHES.safe_mode)
-  if (safeMode !== undefined) return safeMode
-  const pluginDirs = pluginDirsIn(hostEnv)
-  if (pluginDirs !== undefined) return pluginDirs
-  const watch = hookSettingsWatch({
-    user: user.path,
-    home: hostHome(hostEnv),
-    approved,
-    managed,
-    switches: CLAUDE_CODE_HOOK_SWITCHES,
-    markdown: CLAUDE_CODE_OWNERS_MARKDOWN,
-  })
-  return watch.check() ?? watch
-}
-
-/** The host's home, which a leading `~` resolves against: its HOME, as userSettingsPath reads it. */
-const hostHome = (hostEnv: Readonly<Record<string, string | undefined>>): string => hostEnv.HOME ?? homedir()
-
-/**
- * Where the owner's sessions load memory, instructions and their own text from: the launcher's config dir and the
- * member's, each project's own folder, the folders the host loads markdown and output styles from, the folder the
- * member's own session init reported for output styles, the folders the launcher's environment moves memory to, and
- * each memory folder the policy, user and carried settings name (martha#136, martha#154); or why the user settings
- * file cannot be told.
- */
-function ownerMemoryOf(
-  launch: ClaudeCodeMemberLaunch,
-  hostEnv: Readonly<Record<string, string | undefined>>,
-  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
-  reported_output_styles_dir: string,
-): OwnerMemoryPlaces | string {
-  const user = userSettingsPath(hostEnv)
-  if ('refusal' in user) return user.refusal
-  const managed = launch.managed_settings ?? RECORDED_HOST.managed_settings
-  return ownerMemoryPlaces({
-    launcher_env: launch.inherited,
-    member_env: hostEnv,
-    home: hostHome(hostEnv),
-    launch_dir: launch.place.launch_dir,
-    settings_files: [
-      join(managed.dir, managed.file),
-      ...dropInFiles(join(managed.dir, managed.drop_in)),
-      user.path,
-      ...(prepared.carried_files[CLAUDE_SETTINGS] === undefined ? [] : [join(prepared.snapshot_dir, CLAUDE_SETTINGS)]),
-    ],
-    user_scope: {
-      markdown_kinds: RECORDED_HOST.markdown_kinds,
-      output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-      reported_output_styles_dir,
-    },
-  })
-}
-
-/**
- * Writes the settings the host starts with into the snapshot: the approved
- * --settings copy, or a file of its own when none is carried, with the rules
- * that refuse the host's own writes into the owner's memory added to its
- * permissions.deny (martha#136). Returns the file and the switches that name it
- * when none was carried; or why the approved copy cannot take the rules.
- */
-function settingsDenyingOwnerMemory(
-  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
-  ownerMemory: OwnerMemoryPlaces,
-): { readonly path: string; readonly args: readonly string[] } | { readonly refusal: string } {
-  const path = join(prepared.snapshot_dir, CLAUDE_SETTINGS)
-  const approved = prepared.carried_files[CLAUDE_SETTINGS]
-  const settings = settingsWithMemoryDenied(
-    approved === undefined ? undefined : new TextDecoder().decode(approved),
-    memoryDenyRules(ownerMemory),
-    CLAUDE_SETTINGS,
-  )
-  if ('refusal' in settings) return settings
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, settings.text)
-  return { path, args: approved === undefined ? claudeSettingsSwitches(path).args : [] }
-}
-
-/**
- * The watch on every settings file for a key that turns Martha's relay off (martha#122); or the refusal. The launch's
- * own --settings copy is watched at the path it is written to, whether or not the host is started with it.
- */
-function hostSettingsOf(
-  launch: ClaudeCodeMemberLaunch,
-  hostEnv: Readonly<Record<string, string | undefined>>,
-  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
-): HookSettingsWatch | string {
-  return hookSettingsOf(hostEnv, launch.args, prepared, launch.managed_settings, join(prepared.snapshot_dir, CLAUDE_SETTINGS))
-}
-
 /** A launch the gate allowed, with what the member's environment is built from. */
-interface ReadyLaunch {
+export interface ReadyLaunch {
   readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
   /** Removes the approved copies. */
   removeSnapshot(): void
@@ -531,7 +282,7 @@ interface ReadyLaunch {
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
-interface LaunchMade extends ReadyLaunch {
+export interface LaunchMade extends ReadyLaunch {
   /** The file the host's command resolved to: what the checks ran, and what the member runs (host_runs_the_relay.ts). */
   readonly binary: string
   readonly relayDirectory: Extract<RelayDirectory, { readonly made: true }>
@@ -605,95 +356,6 @@ async function placesAwayFromTheOwner(
   if ('refusal' in startSettings) return startSettings
   const unmatched = await rulesTheHostMatches(launch, ready, host.binary, ownerMemory)
   return unmatched === undefined ? { ownerMemory, settingsArgs: startSettings.args } : { refusal: unmatched }
-}
-
-/**
- * Step 2d: the host's own answer about the rules that keep a member out of the owner's memory (martha#226). The host
- * says in its own words which rules its file permission checks never match: on the terminal at a session's start, and
- * on the standard error of a run that is not a terminal, which is how it is asked here. One line naming a rule this
- * launch wrote refuses the launch -- the rule closes nothing on that host, and the gate's own refusal of a file tool's
- * call is not the layer the host was given -- and the refusal repeats the host's line, so the owner reads what the host
- * said rather than this launcher's reading of it.
- */
-async function rulesTheHostMatches(
-  launch: ClaudeCodeMemberLaunch,
-  ready: ReadyLaunch,
-  binary: string,
-  ownerMemory: OwnerMemoryPlaces,
-): Promise<string | undefined> {
-  const rules = memoryDenyRules(ownerMemory)
-  const asked = initQuestionSettings(ready.prepared, RULE_CHECK_SETTINGS, rules)
-  if ('refusal' in asked) return asked.refusal
-  const printed = await whatTheHostSaysWithTheseSettings(binary, ready.prepared.switches.args, asked.path, ready.hostEnv, launch.place.launch_dir)
-  if ('failure' in printed) {
-    return `the host could not be asked whether its file permission checks match the rules that keep a member out of the owner's memory (${printed.failure}), and a member is not started on rules it was not told it honours (martha#226)`
-  }
-  const named = hostLinesNamingARule(`${printed.stdout}\n${printed.stderr}`, rules)
-  if (named.length === 0) return undefined
-  const which = named.length === 1 ? 'a rule that keeps' : `${named.length} rules that keep`
-  return `the host says ${which} a member out of the owner's memory can never match, so a member is not started with that place open: ${named.join(' | ')} (martha#226)`
-}
-
-/** The settings file the session-init question is asked with: hooks off, and nothing else (martha#154 r=2). */
-const INIT_QUESTION_SETTINGS = 'martha-init-question.json'
-
-/** The settings file the host's own answer about the launch's rules is asked with (martha#226). */
-const RULE_CHECK_SETTINGS = 'martha-rules-the-host-must-honour.json'
-
-/**
- * The settings file that turns every hook off for a question to the host, by the key the recording names (martha#154
- * r=2), with `rules` added to its `permissions.deny`; or why the question cannot be asked safely. A question that reads
- * the owner's settings can run their hooks, and a hook runs whatever it names, with the launcher's environment and
- * before the launch placed anything; asked with this file, the question still reads those settings -- the `env` block
- * that may move the config dir included -- and runs no hook of theirs. Deny rules start nothing, so the rules the
- * launch adds ride the same file (martha#226).
- */
-function initQuestionSettings(
-  prepared: Extract<PreparedLaunch, { readonly allow: true }>,
-  name: string = INIT_QUESTION_SETTINGS,
-  rules: readonly string[] = [],
-): { readonly path: string } | { readonly refusal: string } {
-  const keys = CLAUDE_CODE_HOOK_SWITCHES.every_source
-  if (keys.length === 0) {
-    return { refusal: 'the recording names no key that turns every hook off from any settings file, so the session-init question cannot be asked without running the owner\'s hooks (martha#154)' }
-  }
-  const hooksOff = JSON.stringify(Object.fromEntries(keys.map((key) => [key, true])))
-  // A question about the styles asks with hooks off and nothing else; one about the rules carries them too.
-  const settings = rules.length === 0 ? { text: hooksOff } : settingsWithMemoryDenied(hooksOff, rules, name)
-  if ('refusal' in settings) return settings
-  const path = join(prepared.snapshot_dir, name)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, settings.text)
-  return { path }
-}
-
-/**
- * Step 2b: the file the host's command resolves to, which must load the launch's copy of the relay, and the folder
- * it reports for the owner's user output styles (martha#154); or the refusal. A host of another version than the
- * recording is told to the owner and refuses nothing (host_runs_the_relay.ts).
- */
-async function hostThatRunsTheRelay(
-  launch: ClaudeCodeMemberLaunch,
-  ready: ReadyLaunch,
-  pluginDir: string,
-): Promise<{ readonly binary: string; readonly reported_output_styles_dir: string } | string> {
-  const cwd = launch.place.launch_dir
-  const resolved = resolvedHostCommand(launch.command, ready.hostEnv.PATH, cwd)
-  if ('refusal' in resolved) return `${NOT_STARTED}: ${resolved.refusal}`
-  const env = ready.hostEnv
-  // The folder the member's host will load: the launch's copy, never the installed relay (martha#117).
-  const refused = await refusalToLoadTheRelay(resolved.binary, pluginDir, env, cwd, RELAY_PLUGIN_DIR)
-  if (refused !== undefined) return `${NOT_STARTED}: ${refused}`
-  const drift = await hostVersionLine(resolved.binary, env, cwd)
-  if (drift !== undefined) launch.tellOwner(drift)
-  // The styles folder the member's own session reports, asked with the switches its host starts on so the settings
-  // env blocks that move it are applied -- and with no server named and hooks off, so the question starts nothing
-  // (martha#154 r=2).
-  const hooksOff = initQuestionSettings(ready.prepared)
-  if ('refusal' in hooksOff) return `${NOT_STARTED}: ${hooksOff.refusal}`
-  const reported = await outputStylesDirTheHostReports(resolved.binary, ready.prepared.switches.args, hooksOff.path, env, cwd)
-  if ('refusal' in reported) return `${NOT_STARTED}: ${reported.refusal}`
-  return { binary: resolved.binary, reported_output_styles_dir: reported.dir }
 }
 
 /** Step 2: the relay socket's directory, the empty directory and the relay's copy inside it; or the refusal, with all gone. */
@@ -928,180 +590,6 @@ async function servedRelay(
   } catch (error) {
     return `${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`
   }
-}
-
-/** Closes the relay's server and removes the socket directory and the snapshot, in that order. */
-async function removeWhatTheLaunchMade(made: LaunchMade): Promise<void> {
-  await made.server.close()
-  made.relayDirectory.remove()
-  made.removeSnapshot()
-}
-
-/** A member that started: its process, its pid, and whether the launcher recorded it while it was held. */
-interface StartedMember {
-  readonly child: ChildProcess
-  readonly pid: number
-  readonly recorded: LaunchRecorded
-  readonly launchRecords: ReturnType<typeof launchRecordsDirectory>
-}
-
-/** What the host is spawned with: its arguments, and its environment with the relay's socket. */
-interface Starting {
-  readonly args: readonly string[]
-  readonly env: Readonly<Record<string, string>>
-}
-
-/**
- * The arguments and the environment the host starts with, built once (martha#135). The relay records what the
- * declaration names out of them, and `spawn` gets them unchanged.
- */
-function whatTheHostStartsWith(
-  launch: ClaudeCodeMemberLaunch,
-  made: Pick<LaunchMade, 'prepared' | 'hostEnv' | 'relayDirectory' | 'emptyDirectory' | 'settingsArgs' | 'pluginDir'>,
-): Starting {
-  return {
-    args: [...launch.args, ...made.prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir],
-    env: {
-      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory), CLAUDE_CODE),
-      [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
-    },
-  }
-}
-
-/** Step 4: `claude` in a process group of its own; or why it did not start, with everything the launch made gone. */
-async function startedMember(
-  launch: ClaudeCodeMemberLaunch,
-  made: LaunchMade,
-  starting: Starting,
-): Promise<StartedMember | string> {
-  const { prepared, relayDirectory } = made
-  const { args: memberArgs, env } = starting
-  // The host hands a server its own environment and then the settings files' env,
-  // so the server's is built from both.
-  const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, { ...env, ...made.settingsEnv })
-  if (placed !== undefined) {
-    await removeWhatTheLaunchMade(made)
-    return `${NOT_STARTED}: ${placed}`
-  }
-  const launchRecords = launchRecordsDirectory(launch.places.launch_records)
-  const record = (pid: number): LaunchRecorded =>
-    recordMemberLaunch(launchRecords, linuxProcessIdentities, {
-      member_name: launch.member_name,
-      node_id: launch.node_id,
-      pid,
-      checkout: launch.place.launch_dir,
-      started_at: new Date().toISOString(),
-    })
-  // The member is held until its callback says yes, so its place in the launch
-  // directory's record is written inside the same hold: a launcher killed in
-  // between then leaves a record that already names its member (#124).
-  const job = isOnTheOwnersTerminal(launch.stdio)
-    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid) =>
-        recordedInsideTheHold(relayDirectory.directory, pid, record(pid)),
-      )
-    : undefined
-  // On the owner's terminal `child` is the job-control shell: it exits once the
-  // member has and the terminal is given back, so its exit is the member's.
-  const child = job?.shell ?? spawn(made.binary, memberArgs, { cwd: launch.place.launch_dir, env, detached: true, stdio: launch.stdio })
-
-  const spawned = await new Promise<Error | undefined>((resolve) => {
-    child.once('spawn', () => resolve(undefined))
-    child.once('error', resolve)
-  })
-  const start = await memberStartOf(launch.command, spawned, job, child.pid, record)
-  if ('refusal' in start) {
-    await endTheLaunch(child, made)
-    return `${NOT_STARTED}: ${start.refusal}`
-  }
-  // A member the hold already put in the launch directory's record needs no second write.
-  const memberError = start.inTheLaunchRecord ? undefined : await recordTheStartedMember(relayDirectory.directory, start.pid, child, made)
-  if (memberError !== undefined) return memberError
-  return { child, pid: start.pid, recorded: start.recorded, launchRecords }
-}
-
-/**
- * Adds the started member to the launch directory's record, so a sweep keeps it
- * while either the launcher or the member lives; or ends the launch and says why.
- * A member holds that directory as much as its launcher does: it can outlive a
- * launcher killed hard, and its host still loads the relay from that copy
- * (leftover_relay_directories.ts).
- */
-async function recordTheStartedMember(
-  directory: string,
-  member: number,
-  child: ChildProcess,
-  made: LaunchMade,
-): Promise<string | undefined> {
-  const recorded = recordTheMember(directory, member)
-  if (recorded === undefined) return undefined
-  await endTheLaunch(child, made)
-  return `${NOT_STARTED}: ${recorded}`
-}
-
-/** Kills the member's process if it still runs, and removes everything the launch made. */
-async function endTheLaunch(child: ChildProcess, made: LaunchMade): Promise<void> {
-  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-  await removeWhatTheLaunchMade(made)
-}
-
-/**
- * Kills the member's group and removes both directories if the launcher exits
- * first, or is ended by SIGTERM or SIGINT; returns what takes those handlers off.
- */
-function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => void {
-  const onLauncherExit = (): void => {
-    killGroup(pid)
-    made.relayDirectory.remove()
-    made.removeSnapshot()
-  }
-  process.once('exit', onLauncherExit)
-  // SIGTERM and SIGINT end the process without 'exit', so each cleans up too.
-  // The signal is raised again once this launcher's handlers are off, unless
-  // some other part of the process still listens for it, so it still ends the
-  // launcher the way it would have.
-  const onLauncherSignal = (signal: NodeJS.Signals): void => {
-    offLauncherEnd()
-    onLauncherExit()
-    // A `once` listener registered before this one has already been removed
-    // when this runs, so it counts as 0 here: the signal is raised again before
-    // that listener's own asynchronous shutdown can finish. A part of the
-    // process that needs one must keep listening with `on`.
-    if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
-  }
-  const offLauncherEnd = (): void => {
-    process.off('exit', onLauncherExit)
-    for (const signal of LAUNCHER_END_SIGNALS) process.off(signal, onLauncherSignal)
-  }
-  for (const signal of LAUNCHER_END_SIGNALS) process.once(signal, onLauncherSignal)
-  return offLauncherEnd
-}
-
-/**
- * Settles once the member exited and everything the launch made is gone: its
- * group killed, its launch record dropped, the server closed, both directories
- * removed and the launcher's own end handlers off.
- */
-function whenTheMemberStops(
-  child: ChildProcess,
-  pid: number,
-  launch: ClaudeCodeMemberLaunch,
-  launchRecords: ReturnType<typeof launchRecordsDirectory>,
-  made: LaunchMade,
-  offLauncherEnd: () => void,
-  ended: () => string | null,
-): Promise<MemberStopped> {
-  return new Promise<MemberStopped>((resolve) => {
-    child.once('exit', (exit_code, signal) => {
-      void (async () => {
-        const stopped_because = ended()
-        killGroup(pid)
-        recordMemberStopped(launchRecords, launch.member_name)
-        await removeWhatTheLaunchMade(made)
-        offLauncherEnd()
-        resolve({ exit_code, signal, stopped_because })
-      })()
-    })
-  })
 }
 
 /** Why a member is stopped whose relay did not report its session's start: the backstop's deadline and reason (#104). */

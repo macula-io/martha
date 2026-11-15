@@ -14,7 +14,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { MESH_SERVER_PACKAGE, type RecordedMeshServer } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import {
   KNOWN_ENVIRONMENT_READS,

@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { ledgerStreamOf, readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { keepTheMilestone, CREW_LOG_EVENTS, MILESTONE_OF_EVENT, theLineAStartingSessionIsHanded, whatWasSent, noteWhatBecameOfAnAct } from './keep_the_ledger.ts'

@@ -150,7 +150,7 @@ jobs:
       # the older version Ubuntu ships for the second, which has only the
       # fallback. MARTHA_TESTS_DIRENV names both, and a test fails by name when
       # either is missing, so CI never drops the door
-      # (src/launch_a_claude_code_member/direnvs_under_test.ts).
+      # (src/drive_the_recorded_host/direnvs_under_test.ts).
       #
       # Both come from their GitHub releases rather than the Ubuntu archive: on
       # 2026-11-11 a hosted runner could not resolve archive.ubuntu.com, and this

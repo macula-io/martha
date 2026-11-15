@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { NOT_OURS } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'

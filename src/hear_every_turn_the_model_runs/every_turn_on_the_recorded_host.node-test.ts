@@ -1,7 +1,7 @@
 // On the recorded host, the launcher hears every main turn the member's model runs (martha#440).
 //
 // The real `martha` command, the real Claude Code at the recorded version, the real relay, mod and launcher; only the
-// model is a stand-in (../launch_a_claude_code_member/drive_the_recorded_host.ts). The cases skip on
+// model is a stand-in (../drive_the_recorded_host/drive_the_recorded_host.ts). The cases skip on
 // RECORDED_HOST_SKIP: ci.yml's relay job runs them with the recorded host, as
 // prove_the_relay_loads/recorded_host_runs.json lists.
 //
@@ -36,10 +36,10 @@ import {
   type ModelRequest,
   type RecordedHostRun,
   type TheOwnersHands,
-} from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+} from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 // The run's silence budget is the one the launcher gives a host that shows nothing new (martha#441): named once, there.
-import { HOST_SILENCE_MS } from '../launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
+import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'

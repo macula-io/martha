@@ -9,7 +9,7 @@ import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../src/launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { manifestOf, PACKAGES, testCommandsOf } from './declared_in_package_json.ts'
 import { testRunFlagsOf } from './every_test_run_ends.ts'
 import {

@@ -5,7 +5,7 @@
 // under a recorded version number (register row B1).
 //
 // The approved server config says `npx -y [-p] <package>@<x.y.z> [<bin>]`
-// (../claude_code_host/mesh_server_install.ts). npx would decide where the bytes
+// (../install_the_mesh_server_for_claude_code/mesh_server_install.ts). npx would decide where the bytes
 // come from: the registry a user or global .npmrc names, a project .npmrc, a
 // matching package already in a node_modules above the checkout, or one under
 // the global prefix. None of those is approved. So the mesh server's entry is

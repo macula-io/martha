@@ -11,7 +11,7 @@ import { test, type TestContext } from 'node:test'
 
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { ACT_NOT_SENT, ActNotSent, ledgerStreamOf, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { ROW_FILE_MODE, rowFileNameOf, rowStreamsDirectory, streamDirectoryNameOf } from './row_streams_directory.ts'
 

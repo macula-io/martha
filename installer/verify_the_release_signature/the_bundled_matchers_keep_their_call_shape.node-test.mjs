@@ -8,7 +8,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { removeTheTree } from '../../src/launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const require = createRequire(import.meta.url)
 // The two call sites, resolved from the installer the way the bundled sigstore resolves them. DelegatedRole is not in

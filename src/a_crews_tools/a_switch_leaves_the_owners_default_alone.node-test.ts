@@ -8,7 +8,7 @@
 // These are the tests of the mechanism itself, at the launcher's own seam: the production tools, the production order
 // and report asks, and the real lock, over a real settings file in a real config directory. The only stand-in is the
 // host's save, which a test writes the way the host writes one. The end-to-end proof on the recorded host is
-// ../launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts.
+// ../drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts.
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -26,7 +26,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, MINUTE_MS } from
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { modelPlace, theModelOf, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import {

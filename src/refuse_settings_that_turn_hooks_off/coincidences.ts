@@ -4,7 +4,7 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { ANY_JSON_FILE } from '../launch_a_claude_code_member/coincidences.ts'
-import { RELAY_JOURNAL_SUFFIX } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
+import { RELAY_JOURNAL_SUFFIX } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 
 export const COINCIDENCES: readonly Exception[] = [
   // The drop-in folder holds any .json file the host reads, not the relay's own journal.

@@ -6,7 +6,7 @@
     "proves": "a launch leaves the installed relay folder as it was (martha#117)"
   },
   {
-    "file": "src/launch_a_claude_code_member/own_writes_on_the_recorded_host.node-test.ts",
+    "file": "src/drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts",
     "cases": 5,
     "proves": "a member's own writes do not stop it and an outsider's change does (martha#132)"
   },
@@ -16,27 +16,27 @@
     "proves": "the host matches every rule the launch writes, and names an inert twin of one (martha#226)"
   },
   {
-    "file": "src/launch_a_claude_code_member/a_review_at_its_limit_on_the_recorded_host.node-test.ts",
+    "file": "src/drive_the_recorded_host/a_review_at_its_limit_on_the_recorded_host.node-test.ts",
     "cases": 1,
     "proves": "a review the reviewer model refused is named to the member and its row (martha#390)"
   },
   {
-    "file": "src/launch_a_claude_code_member/a_switch_on_the_recorded_host.node-test.ts",
+    "file": "src/drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts",
     "cases": 2,
     "proves": "a member switches its model in this host and a review off the reviewer model is refused (martha#315)"
   },
   {
-    "file": "src/launch_a_claude_code_member/a_permission_prompt_on_the_recorded_host.node-test.ts",
+    "file": "src/drive_the_recorded_host/a_permission_prompt_on_the_recorded_host.node-test.ts",
     "cases": 1,
     "proves": "a permission prompt reaches the owner's row and clears once the owner answers it (martha#363)"
   },
   {
-    "file": "src/launch_a_claude_code_member/an_end_on_the_recorded_host.node-test.ts",
+    "file": "src/drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts",
     "cases": 1,
     "proves": "the host ends a running turn on the launcher's order and the handover queued behind it runs (martha#311)"
   },
   {
-    "file": "src/launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts",
+    "file": "src/drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts",
     "cases": 2,
     "proves": "a member's switch in this host leaves the owner's own default alone (martha#359)"
   },

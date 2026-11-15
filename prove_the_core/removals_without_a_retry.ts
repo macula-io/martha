@@ -128,7 +128,7 @@ export function removalsWithoutARetry(sources: readonly CoreSource[]): RemovalWi
 // --- the one removal keeps its retry ---------------------------------------------------
 
 /** Where the one removal is defined, and the constants that bound it. */
-export const THE_ONE_REMOVAL = 'src/launch_a_claude_code_member/relay_copy.ts'
+export const THE_ONE_REMOVAL = 'src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 /** The removal the whole suite goes through. */
 const THE_REMOVAL = 'removeTheTree'
