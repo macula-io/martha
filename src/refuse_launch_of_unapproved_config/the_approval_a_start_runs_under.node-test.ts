@@ -15,13 +15,13 @@ import { test, type TestContext } from 'node:test'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
-  CLAUDE_CODE,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   readLaunchState,
   theApprovalInUse,
   type LaunchPlace,
 } from './refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The file a checkout uses to start a tool server: config that starts code by itself. */
 const [SERVERS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]

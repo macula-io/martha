@@ -8,9 +8,10 @@
 // npm environment, so the package's postinstall never runs and the stub is what stays. Measured on the crew host:
 // sixteen such installs in half an hour, each one within a second of a launch.
 //
-// The switch is one definition (`THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF`), and these cases call the two builders
-// a host can be started with, so a launch path that stops carrying it fails by name here rather than on the owner's
-// machine. Two more launches start a host themselves, outside those builders — the relay-loads check-bites leg and the
+// Each host's switch is its own row's `env_last` in HOSTS (martha#474), and these cases call the two builders a host can
+// be started with, so a launch path that stops carrying it fails by name here rather than on the owner's machine. Two
+// cases pin the switches to the spelling each host reads, since every other case reads them from the row and so would
+// agree with a misspelt one. Two more launches start a host themselves, outside those builders — the relay-loads check-bites leg and the
 // dialog-order probe — and they are read here for the same switch (martha#460 r=1). Nothing here starts a host: both
 // builders are pure, so this runs in every CI run.
 
@@ -23,10 +24,12 @@ import { test, type TestContext } from 'node:test'
 import { environmentOf } from './drive_the_recorded_host.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
+  HOSTS,
   launchEnvironment,
-  THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF,
+  type Host,
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The switches a launch that adds nothing asks for: what the member and probe launches start from. */
 const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
@@ -34,12 +37,17 @@ const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
 /** The stand-in's address for a run that never reaches it: nothing listens there, and nothing here connects. */
 const AN_ADDRESS_NOTHING_ANSWERS = 'http://127.0.0.1:9'
 
-/** The names and values the switch is made of, so a case cannot restate one and drift from the definition. */
-const THE_SWITCH = Object.entries(THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF)
+/** Every host Martha has a launch row for. */
+const EVERY_HOST = Object.keys(HOSTS) as Host[]
 
-/** Every entry of the definition is in `environment`, or the message names the launch that starts a host without it. */
-function assertTheUpdaterIsOff(launch: string, environment: Readonly<Record<string, string>>): void {
-  for (const [name, value] of THE_SWITCH) {
+/** The names and values a host's switch is made of, so a case cannot restate one and drift from the row. */
+const theSwitchOf = (host: Host): [string, string][] => Object.entries(HOSTS[host].env_last)
+
+/** Every entry of `host`'s switch is in `environment`, or the message names the launch that starts it without it. */
+function assertTheUpdaterIsOff(launch: string, environment: Readonly<Record<string, string>>, host: Host = CLAUDE_CODE): void {
+  const the_switch = theSwitchOf(host)
+  assert.ok(the_switch.length > 0, `${host} has no auto-updater switch in its row's env_last, so a launch of it would update itself`)
+  for (const [name, value] of the_switch) {
     assert.equal(
       environment[name],
       value,
@@ -64,7 +72,19 @@ function aRunnableFile(home: string, name: string): string {
 }
 
 test('the member and probe launches switch the host auto-updater off', () => {
-  assertTheUpdaterIsOff('the member and probe launch (launchEnvironment)', launchEnvironment({ HOME: '/an-owner-home' }, NO_SWITCHES))
+  for (const host of EVERY_HOST) {
+    assertTheUpdaterIsOff(`the ${host} member and probe launch (launchEnvironment)`, launchEnvironment({ HOME: '/an-owner-home' }, NO_SWITCHES, host), host)
+  }
+})
+
+// The one place each switch is spelled as its host reads it (martha#474): every other case reads the row, so a
+// misspelt name or value there would pass all of them and bring back the install over the owner's own copy.
+test("Claude Code's auto-updater switch is spelled as Claude Code reads it", () => {
+  assert.deepEqual(HOSTS[CLAUDE_CODE].env_last, { DISABLE_AUTOUPDATER: '1' })
+})
+
+test("OpenCode's auto-updater switch is spelled as OpenCode reads it", () => {
+  assert.deepEqual(HOSTS.opencode.env_last, { OPENCODE_DISABLE_AUTOUPDATE: '1' })
 })
 
 test('the recorded host run switches the host auto-updater off', (t) => {
@@ -75,15 +95,17 @@ test('the recorded host run switches the host auto-updater off', (t) => {
 })
 
 test('neither an inherited value nor a switch can turn the updater back on inside a run', () => {
-  const only = THE_SWITCH[0]
-  assert.ok(only !== undefined, 'the switch is at least one variable to turn off')
-  const [name, value] = only
-  const foreign = { HOME: '/an-owner-home', [name]: '0' }
-  const switched: HostSwitches = { args: [], env: { [name]: '0' }, env_dropped: [] }
+  for (const host of EVERY_HOST) {
+    const only = theSwitchOf(host)[0]
+    assert.ok(only !== undefined, `${host}'s switch is at least one variable to turn off`)
+    const [name, value] = only
+    const foreign = { HOME: '/an-owner-home', [name]: '0' }
+    const switched: HostSwitches = { args: [], env: { [name]: '0' }, env_dropped: [] }
 
-  assertTheUpdaterIsOff('a launch inheriting an owner who switched it on', launchEnvironment(foreign, NO_SWITCHES))
-  assertTheUpdaterIsOff('a launch whose switches name another value', launchEnvironment(foreign, switched))
-  assert.equal(launchEnvironment(foreign, switched)[name], value, 'the launch decides this, not the owner environment it inherits')
+    assertTheUpdaterIsOff(`a ${host} launch inheriting an owner who switched it on`, launchEnvironment(foreign, NO_SWITCHES, host), host)
+    assertTheUpdaterIsOff(`a ${host} launch whose switches name another value`, launchEnvironment(foreign, switched, host), host)
+    assert.equal(launchEnvironment(foreign, switched, host)[name], value, 'the launch decides this, not the owner environment it inherits')
+  }
 })
 
 // The two launches below start a host themselves rather than through a builder, so no case above can reach them. Each
@@ -103,8 +125,8 @@ test('the relay-loads check-bites leg switches the host auto-updater off', () =>
 
   assert.match(
     file,
-    /THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF/,
-    `${run} starts a host under its own home, so it must take the switch from THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF; it does not name the definition`,
+    /HOSTS\[f\.CLAUDE_CODE\]\.env_last/,
+    `${run} starts a host under its own home, so it must take the switch from Claude Code's row's env_last; it does not name the row`,
   )
   const launch = theLineHolding(run, file, 'env -i')
   assert.match(
@@ -120,13 +142,13 @@ test('the host-drift and local re-record run switches the host auto-updater off'
 
   assert.match(
     file,
-    /import\s*\{[^}]*THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF[^}]*\}\s*from\s*'[^']*refuse_launch_of_unapproved_config\.ts'/,
-    `${run} starts a host under its own home, so it must take the switch from THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF in the launch module; it does not`,
+    /import\s*\{[^}]*\bHOSTS\b[^}]*\}\s*from\s*'[^']*refuse_launch_of_unapproved_config\.ts'/,
+    `${run} starts a host under its own home, so it must take the switch from the HOSTS rows in the launch module; it does not`,
   )
   const launch = theLineHolding(run, file, 'HOME: places.home,')
   assert.match(
     launch,
-    /\.\.\.THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF\s*\}/,
+    /\.\.\.HOSTS\[CLAUDE_CODE\]\.env_last\s*\}/,
     `${run} starts a host under its own home, so its environment must spread the switch last; it starts it without that`,
   )
 })

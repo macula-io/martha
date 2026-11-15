@@ -85,14 +85,14 @@
       "src/answer_the_relay": 565,
       "src/approve_a_checkouts_config": 76,
       "src/ask_the_host_what_it_loads": 284,
-      "src/claude_code_host": 493,
+      "src/claude_code_host": 489,
       "src/claude_code_relay": 800,
       "src/cut_the_rules_from_the_host_binary": 378,
       "src/dashboard_rows_directory": 103,
       "src/declare_a_solo_crew": 84,
-      "src/drive_the_recorded_host": 590,
+      "src/drive_the_recorded_host": 591,
       "src/empty_directory_of_a_launch": 24,
-      "src/end_a_launch": 177,
+      "src/end_a_launch": 178,
       "src/find_what_a_later_git_run_reads": 494,
       "src/hear_the_hosts_dialogs": 40,
       "src/install_the_mesh_server_for_claude_code": 133,
@@ -115,7 +115,7 @@
       "src/run_the_martha_command": 413,
       "src/run_the_nodes_own_npm_alone": 170,
       "src/serve_the_relay_to_a_launch": 244,
-      "src/start_a_member": 244,
+      "src/start_a_member": 245,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153
     },
@@ -128,7 +128,7 @@
     },
     "sliceCap": 600,
     "sliceCeilings": {
-      "src/a_crews_tools": 1284
+      "src/a_crews_tools": 1282
     },
     "packageImports": {
       "typescript": "prove_the_core",

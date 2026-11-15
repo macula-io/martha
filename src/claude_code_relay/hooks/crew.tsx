@@ -10,16 +10,10 @@
 // socket in the environment and the shapes in ./relay_protocol.ts are all this file knows.
 
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
-import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
+import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
-
-/** The pane's id, as the host names one. */
-export const PANE = 'crew'
-
-/** What the owner types to open the pane. */
-export const OPEN_THE_PANE = 'crew'
 
 /** Why a tool call has no answer: the member was started by hand, or the launcher could not be heard. */
 const NOT_OURS = 'Martha is not running this session, so it answers no tool'
@@ -300,7 +294,7 @@ async function openThePane($: CrewEngine): Promise<void> {
   const heard = await hearTheLauncher($, 'see_the_crew', {})
   const shown = 'said' in heard ? paneIn(heard.said) : null
   const list = await theOwnersList($)
-  await $.ui.open({ id: PANE, title: 'Crew', rows: (shown === null ? PANE_CHROME_ROWS : shown.rows) + (list === null ? 1 : list.lines) })
+  await $.ui.open({ id: PANE, title: 'Martha', rows: (shown === null ? PANE_CHROME_ROWS : shown.rows) + (list === null ? 1 : list.lines) })
   if (shown !== null) startRedrawing($, shown.redraw_ms)
 }
 
@@ -407,7 +401,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
 
-  on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
+  on('command.run', { command: PANE }, async ($: CrewEngine) => {
     await openThePane($)
     return { text: '' }
   })

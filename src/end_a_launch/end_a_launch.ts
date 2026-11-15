@@ -12,6 +12,7 @@
 // (the launcher, and the one that asks the host what it loads) both import this one, so none of them imports another
 // back: a pure move keeps the import graph one way.
 
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { type ChildProcess, spawn } from 'node:child_process'
 import process from 'node:process'
 
@@ -128,7 +129,7 @@ export function whatTheHostStartsWith(
   return {
     args: [...launch.args, ...made.prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir],
     env: {
-      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory)),
+      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory), CLAUDE_CODE),
       [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
     },
   }

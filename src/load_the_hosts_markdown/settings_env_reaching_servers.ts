@@ -28,6 +28,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** One of Claude Code's own variables, which its settings may carry and the mesh server never reads. */
 export interface ClaudeCodeOwnVariable {
@@ -52,9 +53,6 @@ export const CLAUDE_CODE_OWN_VARIABLES: readonly ClaudeCodeOwnVariable[] = [
 
 /** Where Claude Code reads the owner's user settings: CLAUDE_CONFIG_DIR, else ~/.claude. */
 export const USER_SETTINGS_FILE = 'settings.json'
-/** The folder Claude Code keeps its own files in, under what holds them: the home when CLAUDE_CONFIG_DIR says
- * nothing, a project, and the managed folder, whose markdown folders the recorded loader joins under it. */
-export const CLAUDE_FOLDER = '.claude'
 
 /**
  * The user settings file the host started with this environment reads; or a

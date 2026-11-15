@@ -9,7 +9,7 @@ import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, type OwnerMarkdownF
 import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
 import { TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
 //

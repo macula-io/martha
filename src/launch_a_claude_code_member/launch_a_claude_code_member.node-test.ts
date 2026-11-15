@@ -31,7 +31,7 @@ import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_throu
 import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { CLAUDE_CODE, CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith, MCP_CONFIG_SWITCH } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
@@ -70,10 +70,11 @@ import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */

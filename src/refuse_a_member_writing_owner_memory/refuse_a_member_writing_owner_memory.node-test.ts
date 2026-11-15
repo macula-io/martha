@@ -8,7 +8,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_LEGACY_GLOBAL_CONFIG_FILES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { HOST_TRUST_RECORD_FILE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { namesTheOwnersSettings, realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { CONFIG_WORKTREE, CONFIG, SHELL_DEPTH_CAP } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
@@ -33,7 +33,7 @@ import {
 } from './refuse_a_member_writing_owner_memory.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
 function placeFor(t: TestContext) {

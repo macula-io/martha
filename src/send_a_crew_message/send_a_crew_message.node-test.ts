@@ -17,7 +17,7 @@ import { crewToolsOver, CREW_TOOL_NAMES, THE_TOOLS_ASK } from '../a_crews_tools/
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
-import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { readLedger, ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
@@ -60,10 +60,10 @@ test('#253: a message to one member is one row, addressed to that member only', 
 
 test('#253: "crew" addresses every member, and is kept as the crew rather than as a list', async () => {
   const channel = channelHost()
-  await sendACrewMessage(channel, sending({ to: 'crew', text: 'a remark to all' }))
+  await sendACrewMessage(channel, sending({ to: THE_WHOLE_CREW, text: 'a remark to all' }))
 
   const [kept] = await readTheChannel(channel)
-  assert.equal(kept?.message.to, 'crew')
+  assert.equal(kept?.message.to, THE_WHOLE_CREW)
 })
 
 test('#253: a name off the roster is answered with the roster, and nothing is written', async () => {
@@ -126,7 +126,7 @@ test('#253: a member holding no package still sends, and says nothing was announ
 
 test('#253: addresses are read from the argument, and a name is never built from its text', () => {
   assert.deepEqual(addresseesOf(['Reviewer'], ROSTER), ['Reviewer'])
-  assert.equal(addresseesOf('crew', ROSTER), 'crew')
+  assert.equal(addresseesOf(THE_WHOLE_CREW, ROSTER), THE_WHOLE_CREW)
   assert.deepEqual(addresseesOf(['Builder', 'Reviewer'], ROSTER), ['Builder', 'Reviewer'])
 })
 

@@ -48,7 +48,7 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `launchEnvironment(inherited, switches)`, then the
+//      environment is `launchEnvironment(inherited, switches, host)`, then the
 //      settings that keep a checkout from running its hooks, install scripts
 //      and .envrc through the member's own commands (martha#24), plus the
 //      socket's path. Before it starts, each mesh server entry of the approved
@@ -97,13 +97,13 @@ import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { meshServerEnvironments } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
-  CLAUDE_CODE,
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
   launchEnvironment,
@@ -317,7 +317,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     removeSnapshot()
     return `${NOT_STARTED}: ${unproved}`
   }
-  const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
+  const hostEnv = launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE)
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
   const hookSettings = hostSettingsOf(launch, hostEnv, prepared)
   if (typeof hookSettings === 'string') {

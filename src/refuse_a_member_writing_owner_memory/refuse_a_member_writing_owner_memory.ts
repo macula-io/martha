@@ -95,7 +95,7 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
-import { USER_SETTINGS_FILE, userSettingsPath, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import { FILE_ARGUMENTS } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { HOST_TRUST_RECORD_FILE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
@@ -104,7 +104,7 @@ import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_chec
 import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
-import { REMOTE_MEMORY_ROOT, MEMORY_FOLDER_OVERRIDE } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const

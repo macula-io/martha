@@ -72,7 +72,7 @@ export const TRUST_LIST_NAMESPACE = 'martha-trust-list'
 
 /** Each list a gate trusts, and the field its node ids live in. */
 export const LIST_FIELD = {
-  crew_roster: 'member_node_ids',
+  martha_roster: 'member_node_ids',
   shared_roster: 'member_node_ids',
   policy: 'may_send_executable_text',
   supervisors: 'supervisor_node_ids',

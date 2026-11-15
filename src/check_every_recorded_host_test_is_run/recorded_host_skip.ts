@@ -10,7 +10,7 @@ import { sep } from 'node:path'
 import process from 'node:process'
 
 import { RECORDED_HOST_VARIABLE } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
-import { CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**
  * The list of runs the relay job makes with the recorded host: one entry per test file that drives it (and name
