@@ -14,7 +14,7 @@ import { after, mock, test } from 'node:test'
 import { launchesIn, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { OWNER, RESTART_MEMBER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, KeyedRow, Processes, RowStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -125,7 +125,7 @@ const ended = (why: string) => ({ started: true as const, pid: LAUNCH.pid, stopp
 test('#312 test 4: a restart starts the member again on the wake\'s prompt, naming the newest handover by stamp time', async () => {
   const crew = aCrew()
   const older = handedOver(crew, new Date(START - 2 * 86_400_000))
-  const newest = handedOver(crew, new Date(START - 60_000))
+  const newest = handedOver(crew, new Date(START - MINUTE_MS))
   const request = keepARestart(crew.lifecycle)
   const { rows } = anAskingHost(crew.lifecycle, {})
   const { host, asked } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('ended for good') }], rows)
@@ -143,7 +143,7 @@ test('#312 test 4: a restart starts the member again on the wake\'s prompt, nami
 
 test('#312 r=2: the launcher answers which handover the member was started on', async () => {
   const crew = aCrew()
-  const newest = handedOver(crew, new Date(START - 60_000))
+  const newest = handedOver(crew, new Date(START - MINUTE_MS))
   keepARestart(crew.lifecycle)
   const { rows } = anAskingHost(crew.lifecycle, {})
   const { host } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('done') }], rows)
@@ -213,7 +213,7 @@ test('#312 r=2: a ledger that fails after a refused start says the member was no
 
 test('#312 test 4: a fresh restart carries no handover', async () => {
   const crew = aCrew()
-  handedOver(crew, new Date(START - 60_000))
+  handedOver(crew, new Date(START - MINUTE_MS))
   keepARestart(crew.lifecycle, { fresh: true })
   const { rows } = anAskingHost(crew.lifecycle, {})
   const { host, asked } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('done') }], rows)

@@ -38,6 +38,8 @@ import {
   type TheOwnersHands,
 } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+// The run's silence budget is the one the launcher gives a host that shows nothing new (martha#441): named once, there.
+import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -59,7 +61,6 @@ const SETTLED_MS = 3_000
 /** A tool still running while the owner types: long enough to type into, done well inside the shell tool's limit. */
 const THE_LONG_TOOL = 'node -e "setTimeout(() => {}, 15000)"'
 const THE_SHELL_LIMIT_MS = 120_000
-const SILENCE_MS = 120_000
 const END = { text: 'Done.' }
 /** What the owner pastes: long enough that the host holds it as a pasted text, not as typing. */
 const PASTED = Array.from({ length: 30 }, (_, line) => `line ${line + 1} of the notes the owner pastes`).join('\n')
@@ -171,7 +172,7 @@ const countOf = (paths: readonly string[], path: string): number => paths.filter
 
 /** Drives the run, failing with what the launch saw when it stopped short. */
 async function ran(project: Project, run: Omit<RecordedHostRun, 'claude' | 'home' | 'checkout' | 'member' | 'owner_turn' | 'silence_ms'>) {
-  const done = await driveTheRecordedHost({ claude: recordedHost(), ...project, member: MEMBER, owner_turn: OWNER_TURN, silence_ms: SILENCE_MS, ...run }).catch((error: unknown) => {
+  const done = await driveTheRecordedHost({ claude: recordedHost(), ...project, member: MEMBER, owner_turn: OWNER_TURN, silence_ms: HOST_SILENCE_MS, ...run }).catch((error: unknown) => {
     throw new Error(`the run did not end as a member does: ${String(error).split('\n')[0]}`, { cause: whatTheLaunchSaw(error) })
   })
   assert.equal(done.exit_code, 0, `the member did not end as the owner ended it:\n${plainTextOf(done.shown).slice(-3000)}`)
