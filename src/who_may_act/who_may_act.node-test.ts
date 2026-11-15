@@ -98,7 +98,7 @@ test('taking the owner\'s asks is not on the list: the declaration\'s table deci
 test('the list is exactly the six supervisor-only tools the crew has today', () => {
   assert.deepEqual(
     [...SUPERVISOR_ONLY_ACTIONS].sort(),
-    ['assign_work', 'complete_todo', 'open_crew_room', 'read_crew_roster', RESTART_MEMBER, VERIFY_RANGE],
+    ['assign_work', 'complete_todo', 'open_crew_room', 'read_martha_roster', RESTART_MEMBER, VERIFY_RANGE],
   )
 })
 

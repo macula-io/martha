@@ -30,7 +30,8 @@ import { removeTheTree } from './relay_copy.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**
  * The state home a run's processes find Martha's state in, under the home the run is given. Exported so a run that
@@ -233,9 +234,9 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
     XDG_RUNTIME_DIR: runtime,
     ANTHROPIC_BASE_URL: base_url,
     ANTHROPIC_API_KEY: STAND_IN_KEY,
-    // Last, as every launch environment spreads it (refuse_launch_of_unapproved_config): nothing above it can turn the
-    // auto-updater back on inside a run (martha#460 r=1).
-    ...THE_LAUNCHED_HOSTS_AUTO_UPDATER_SWITCHED_OFF,
+    // Last, from Claude Code's own row, as every launch environment spreads it (refuse_launch_of_unapproved_config):
+    // nothing above it can turn the auto-updater back on inside a run (martha#460 r=1, martha#474).
+    ...HOSTS[CLAUDE_CODE].env_last,
   }
 }
 

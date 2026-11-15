@@ -37,6 +37,11 @@ export const CREW_CODES_REFRESH_WORD = 'crew_refresh'
 // was.
 export const CREW_CODES_HANDOVER_MARKER = 'CREW-HANDOVER-WRITTEN'
 export const CREW_CODES_REFRESH_DECLINED_MARKER = 'CREW-REFRESH-DECLINED'
+
+// crew-code's name for the folder its gate audits into, as a literal of this table's own (martha#468 row 12): Martha's
+// folder took another spelling, and the table must still be able to say that the old one came back.
+export const CREW_CODES_GATE_AUDIT_PLACE = 'gate_would_refuse'
+
 /** Every name crew-code gives something, as #468's inventory lists them. */
 export const CREW_CODE_NAMES: readonly CrewCodeName[] = [
   { kind: 'literal', text: '.crew', what: "crew-code's declaration folder" },
@@ -49,7 +54,7 @@ export const CREW_CODE_NAMES: readonly CrewCodeName[] = [
   { kind: 'literal', text: CREW_CODES_REFRESH_WORD, what: "crew-code's tool for refreshing a session" },
   { kind: 'literal', text: CREW_CODES_HANDOVER_MARKER, what: "crew-code's handover marker" },
   { kind: 'literal', text: CREW_CODES_REFRESH_DECLINED_MARKER, what: "crew-code's declined-refresh marker" },
-  { kind: 'literal', text: 'gate_would_refuse', what: "crew-code's folder for what its gate would refuse" },
+  { kind: 'literal', text: CREW_CODES_GATE_AUDIT_PLACE, what: "crew-code's folder for what its gate would refuse" },
   { kind: 'family', pattern: /^HANDOVER_\d{4}-\d{2}-\d{2}_/, what: "crew-code's handover file name" },
   { kind: 'family', pattern: /^mcp__crew__/, what: "crew-code's server name in a tool call" },
   { kind: 'family', pattern: /^\/crew-[a-z-]+$/, what: "crew-code's slash command" },

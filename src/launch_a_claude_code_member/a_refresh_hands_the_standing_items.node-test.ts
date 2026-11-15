@@ -21,13 +21,14 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { STANDING_ADD, STANDING_HEADING } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { CLAUDE_CODE, startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { memberRelay } from './answer_the_relay.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from './relay_copy.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const NOW = Date.UTC(2026, 10, 13, 9, 0, 0)
 

@@ -48,7 +48,7 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `launchEnvironment(inherited, switches)`, then the
+//      environment is `launchEnvironment(inherited, switches, host)`, then the
 //      settings that keep a checkout from running its hooks, install scripts
 //      and .envrc through the member's own commands (martha#24), plus the
 //      socket's path. Before it starts, each mesh server entry of the approved
@@ -118,7 +118,6 @@ import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_serve
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
-  CLAUDE_CODE,
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
   claudeSettingsSwitches,
@@ -163,6 +162,7 @@ import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The installed relay plugin's folder, which each launch copies; the host is given the copy (relay_copy.ts). */
 export const RELAY_PLUGIN_DIR = fileURLToPath(new URL('../claude_code_relay', import.meta.url))
@@ -566,7 +566,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     removeSnapshot()
     return `${NOT_STARTED}: ${unproved}`
   }
-  const hostEnv = launchEnvironment(launch.inherited, prepared.switches)
+  const hostEnv = launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE)
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
   const hookSettings = hostSettingsOf(launch, hostEnv, prepared)
   if (typeof hookSettings === 'string') {
@@ -962,7 +962,7 @@ function whatTheHostStartsWith(
   return {
     args: [...launch.args, ...made.prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir],
     env: {
-      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory)),
+      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory), CLAUDE_CODE),
       [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
     },
   }

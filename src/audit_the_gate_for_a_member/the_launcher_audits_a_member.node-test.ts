@@ -15,11 +15,11 @@ import { test, type TestContext } from 'node:test'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { USER_SETTINGS_FILE, CLAUDE_FOLDER } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { CLAUDE_CODE, startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
@@ -31,6 +31,7 @@ import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the
 const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
 import { GATE_AUDIT_PLACE, theLinesIn } from './audit_the_gate_for_a_member.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 interface Places {
   readonly home: string

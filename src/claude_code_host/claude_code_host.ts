@@ -56,11 +56,7 @@ import { readFileSync } from 'node:fs'
 import { bindNothing, type Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import {
-  readingOnly,
-  type HostContract,
-  type Tool,
-} from '../host_contract/host_contract.ts'
+import { readingOnly, type HostContract, type Tool } from '../host_contract/host_contract.ts'
 import { filesOnThisMachine, scratchOnThisMachine, thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'

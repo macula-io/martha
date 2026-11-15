@@ -21,7 +21,7 @@ import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_mes
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { REFRESH_BEAT_MS } from './hooks/crew_turn_beat.ts'
-import { RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
+import { PANE, RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
 /** Why the five landing tools are named by literal in the hooks module (martha#256), as one wording for all five. */
 const A_HOOKS_MODULE = 'a hooks module imports only its own files, and the host refuses a tool named by anything but a literal'
@@ -128,6 +128,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${THE_RELAY_CANNOT_IMPORT}` },
+  { value: PANE, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: 'the pane\'s id and the command that opens it are the program\'s own name; the same word names the folder Martha keeps her state under' },
   // The relay's beat, which is a minute too (martha#441): a hooks module imports only its own files, so the relay cannot
   // import the core's MINUTE_MS, and its beat is the same duration under its own name.
   { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name' },
