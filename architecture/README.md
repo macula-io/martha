@@ -4,6 +4,10 @@ This page shows, in three pictures, what Martha talks to, what it is made of, an
 what its code is made of, drawn from the code that is here rather than from the
 design it grew from.
 
+The loop a member runs inside a package — task, context, tools, failure,
+verification and state — is in
+[the agent control loop](../docs/agent-control-loop.md).
+
 > **Status: the launcher is built, and the crew's own tools with it.** The `martha`
 > command (`init`, `approve`, `start`, and the `run`, `install`, `pin-key`, `keep-shapes`
 > and `--version` words beside them), the approval and launch gates and the relay are in
