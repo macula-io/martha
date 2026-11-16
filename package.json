@@ -134,9 +134,7 @@
       "src/probe_the_owners_own_folders": "src/probe_launch_hosts"
     },
     "sliceCap": 600,
-    "sliceCeilings": {
-      "src/a_crews_tools": 1282
-    },
+    "sliceCeilings": {},
     "packageImports": {
       "typescript": "prove_the_core",
       "eslint": "prove_the_core",

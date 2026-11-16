@@ -23,7 +23,8 @@ import { refuseExecutionAfterUngatedText, recordIngestion, startFreshSession } f
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
 import { LIFECYCLE_PLACE, theRequestOf, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-import { CREW_TOOL_NAMES, RESTART_A_MEMBER, crewToolsOver } from './a_crews_tools.ts'
+import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
+import { CREW_TOOL_NAMES, crewToolsOver } from './a_crews_tools.ts'
 
 const HOST_MODELS = ['opus', 'fable']
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-restart-tool-'))

@@ -240,6 +240,21 @@ export function aDryRunIsAsked(args: Readonly<Record<string, unknown>>): Step<bo
   return no(`${A_DRY_RUN} is 1 for a dry run that writes nothing, or 0 (or left out) for the landing.`)
 }
 
+/** What a call of `land_batch` names: the batch, and whether the call is its dry run (martha#339). */
+export interface TheLanding {
+  readonly batch: TheBatch
+  readonly dry: boolean
+}
+
+/** Everything a call of `land_batch` names, read in one go, or the first thing it names wrong (martha#339, #443 part 5
+ *  r=2): the tools slice reads a call's every argument before it asks this launch for the processes it acts with. */
+export function theLandingACallNames(args: Readonly<Record<string, unknown>>): Step<TheLanding> {
+  const batch = theBatchACallNames(args)
+  if ('refused' in batch) return batch
+  const dry = aDryRunIsAsked(args)
+  return 'refused' in dry ? dry : { ok: { batch: batch.ok, dry: dry.ok } }
+}
+
 /** What `fast_forward_after_the_owners_yes` says it is for (martha#256). */
 export const FAST_FORWARD_DESCRIPTION =
   `Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the range was checked. ${A_HOLD_REFUSES}`

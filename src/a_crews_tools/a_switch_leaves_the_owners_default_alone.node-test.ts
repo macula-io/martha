@@ -44,8 +44,9 @@ import {
 } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { CARRY_A_MODEL, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { theOwnersDefaultKept } from '../switch_a_members_model/switch_a_members_model.ts'
+import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 /** The models a crew names: this member's own, and the one every review runs on. */
 const HOST_MODELS = ['sonnet', 'fable']
