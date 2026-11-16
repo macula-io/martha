@@ -25,7 +25,7 @@ import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { linuxProcessIdentities, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
@@ -2444,7 +2444,7 @@ async function carriesRelayRoot(pid: number, relay_root: string, read: ProcRead 
  */
 async function killGroupsCarrying(relay_root: string): Promise<void> {
   const own = groupOf(process.pid)
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
     if (!(await carriesRelayRoot(pid, relay_root))) continue
@@ -2461,7 +2461,7 @@ async function killGroupsCarrying(relay_root: string): Promise<void> {
 /** Every process this user has that names this relay root in its environment. */
 async function pidsCarrying(relay_root: string): Promise<number[]> {
   const found: number[] = []
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
     if (await carriesRelayRoot(pid, relay_root)) found.push(pid)
@@ -2521,7 +2521,7 @@ async function noProcessCarries(relay_root: string, alsoGone: readonly number[])
  * (martha#216 r=3).
  */
 async function killWhateverNamesTheHome(home: string): Promise<void> {
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
     let line = ''

@@ -15,7 +15,9 @@ import { join } from 'node:path'
 import { getuid } from 'node:process'
 
 import { filesOnThisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { PID_NAMESPACE_FORM, procProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { PID_NAMESPACE_FORM, PROC_ROOT, procProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { theLeftoversShown } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
 import { launchRecordsUnder, type TheStatesConventions } from './launch_records_under_a_state_root.ts'
 
 /** Every process of this user the kernel lists, as pids. */
@@ -119,3 +121,8 @@ export function theReadingsThisMachineGives(proc_root: string, the_state: TheSta
     realPathOf: filesOnThisMachine.realPathOf,
   }
 }
+
+/** The notice `martha ls` gives beside its list (martha#472): every member a run left behind, as this machine's live
+ * kernel shows it, read under the state root's own places. */
+export const theLeftoversThisMachineShows = (): readonly string[] =>
+  theLeftoversShown(theReadingsThisMachineGives(PROC_ROOT, THE_PLACES_A_STATE_ROOT_KEEPS))
