@@ -18,6 +18,7 @@ import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owner
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
+import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
@@ -64,6 +65,8 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: REFRESH_THIS_SESSION, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The Supervisor's who-is-free tool (martha#319): the same reason, one more tool the mod answers by a literal.
   { value: WHO_IS_FREE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The Supervisor's unheld-work tool (martha#319 package B): one more tool the mod answers by a literal.
+  { value: UNHELD_WORK, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The progress tool, under Martha's own name since #468: the mod answers it by a literal, for the same reason.
   { value: REPORT_WHERE_THE_WORK_STANDS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The owner's to-do list (martha#316): the mod answers its two tools by literal, as above, and asks the launcher for

@@ -9,9 +9,10 @@ import type { Processes, TheCrewFilesStores } from '../host_contract/host_contra
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { headNudges, nudgesOf, theNudgesGoTo, theNudgesPartLines, theWaitsTheClosesLeave, windowsOf, type SentMessage, type WhatEndsAWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { parkedPlace, theParkOf } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { headNudges, nudgesOf, packagesNamedIn, theNudgesGoTo, theNudgesPartLines, theWaitsTheClosesLeave, windowsOf, type SentMessage, type WhatEndsAWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { theParkedMembers } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
+import { theUnheldNudgesFor } from '../nudge_an_idle_crew/nudge_an_idle_crew.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { GITHUB_BUDGET_PLACE, theClosesOfTheWaits, theClosesRecorded, theGithubSpenderOf, theHeadsOfTheWaits, type AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
@@ -62,15 +63,16 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
   const channel = await readTheChannel(asked.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
   const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(asked, messages))
-  const input = { rows: Object.values(asked.rows), waits, parked: parkedMembersOf(asked), windows: windowsOf(settings.house_rules), now: asked.now, owner: settings.owner, receivers }
+  const input = { rows: Object.values(asked.rows), waits, parked: theParkedMembers({ stores: asked.stores }, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules), now: asked.now, owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(asked, waits)
-  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads)]), settings)
+  const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn(asked), rows: input.rows, parked: input.parked, receivers })
+  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld]), settings)
 }
 
 /** What ends a wait besides the channel's lines, for nudge_the_supervisor to apply (martha#415): the landings the ledgers
  * keep, the closes the budget's record holds, and GitHub's reader of new ones when this launch holds processes. */
 async function whatEndsAWaitIn(asked: SeeTheCrewAsked, messages: readonly SentMessage[]): Promise<WhatEndsAWait> {
-  const landings = await landingsOf(asked.ledger, packagesNamed(messages))
+  const landings = await landingsOf(asked.ledger, packagesNamedIn(messages))
   const recorded = theClosesRecorded(asked.stores.crew.place(GITHUB_BUDGET_PLACE))
   if (asked.processes === undefined) return { landings, recorded }
   const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock })
@@ -87,24 +89,4 @@ async function theHeadsOfTheWaiters(asked: SeeTheCrewAsked, waits: readonly { re
   const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock })
   const heads = await theHeadsOfTheWaits(spender, waits.map((wait) => wait.package))
   return 'refusal' in heads ? {} : heads
-}
-
-/** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
-function packagesNamed(messages: readonly SentMessage[]): readonly string[] {
-  const named = messages.flatMap((message) => {
-    const read = readACrewLine(message.text)
-    return 'line' in read && read.line !== null ? [read.line.package] : []
-  })
-  return [...new Set(named)]
-}
-
-/** The members whose park marker says they are parked, or none when the crew's store will not answer (martha#255): a
- * store that cannot say is not the same fact as a member nobody parked, and a reader that cannot say reads no park. */
-function parkedMembersOf(asked: SeeTheCrewAsked): readonly string[] {
-  const place = parkedPlace({ stores: asked.stores })
-  if ('refusal' in place) return []
-  return asked.settings.members.flatMap((member) => {
-    const park = theParkOf(place, member.name)
-    return 'marker' in park && park.marker.parked ? [member.name] : []
-  })
 }
