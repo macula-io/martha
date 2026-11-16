@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import type { LedgerHost } from './log_ledger.ts'
+import type { LedgerHost, OutwardAct, RecoveryDecision } from './log_ledger.ts'
 import {
   ACT_NOT_SENT,
   CONCLUDE_ATTEMPTS,
@@ -14,8 +14,10 @@ import {
   concludeAct,
   ledgerStreamOf,
   noteMilestone,
+  noteRecovery,
   readLedger,
   sendOutwardAct,
+  theAttemptsOn,
 } from './log_ledger.ts'
 
 // Synthetic names, never a real one: this repository is public.
@@ -263,6 +265,59 @@ test('a row the ledger does not know is refused on reading, never skipped', asyn
   // Another writer on the same store, through the stream the ledger names.
   await host.stores.rows.append(ledgerStreamOf(work.package), { kind: 'something_else' })
   await assert.rejects(readLedger(host, work.package), /row 1 of synthetic-owner\/repo#7 is not a ledger row/)
+})
+
+// --- the recovery a package decided (martha#512) --------------------------------
+
+const aRecovery = (decision: RecoveryDecision, act: OutwardAct = push) => ({
+  ...work,
+  act,
+  failure: { class: 'check_red', evidence: 'exit 128' },
+  inspection: { read: 'origin', found: 'the branch is still there' },
+  decision,
+})
+
+test('a recovery is kept with what it was decided on: the act, the class, the reading and the decision', async () => {
+  const { host } = hostForTests({ now: 7 })
+  await noteRecovery(host, aRecovery('retried_once'))
+  assert.deepEqual(await readLedger(host, work.package), [
+    {
+      kind: 'recovery_decided',
+      package: work.package,
+      member: work.member,
+      at: 7,
+      act: push,
+      failure: { class: 'check_red', evidence: 'exit 128' },
+      inspection: { read: 'origin', found: 'the branch is still there' },
+      decision: 'retried_once',
+    },
+  ])
+})
+
+test('the attempts a package spent are counted per act, and only the ones that sent it again', async () => {
+  const { host } = hostForTests()
+  const other = { kind: 'push', what: 'origin another-branch' } as const
+  await noteRecovery(host, aRecovery('retried_once'))
+  await noteRecovery(host, aRecovery('paused'))
+  await noteRecovery(host, aRecovery('retried_once', other))
+  const rows = await readLedger(host, work.package)
+  assert.equal(theAttemptsOn(rows, push), 1, 'the pause is not an attempt, and the other act is not this one')
+  assert.equal(theAttemptsOn(rows, other), 1)
+})
+
+test('a recovery row the ledger cannot read is refused, never skipped', async () => {
+  const { host } = hostForTests()
+  await host.stores.rows.append(ledgerStreamOf(work.package), {
+    kind: 'recovery_decided',
+    package: work.package,
+    member: work.member,
+    at: 0,
+    act: push,
+    failure: { class: 'check_red' },
+    inspection: { read: 'origin', found: 'the branch is still there' },
+    decision: 'retried_once',
+  })
+  await assert.rejects(readLedger(host, work.package), /row 0 of synthetic-owner\/repo#7 is not a ledger row/)
 })
 
 // --- package names and streams --------------------------------------------------
