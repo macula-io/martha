@@ -184,7 +184,7 @@ test('#364: a ruling never lifts a hold, and rulings alone stop no batch: the on
   assert.ok(held.refused.includes('hold-1'))
 })
 
-test('no answer of a landing tool reaches the standing items', () => {
+test('no answer of a landing tool in the crew\'s tools reaches the standing items', () => {
   for (const { file, name } of THE_LANDING_ANSWERS) {
     const tools = readFileSync(join(SOURCE, file), 'utf8')
     const start = tools.indexOf(`async function ${name}(`)
