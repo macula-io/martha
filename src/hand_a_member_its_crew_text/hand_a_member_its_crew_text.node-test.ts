@@ -52,6 +52,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     gate: { kind: 'off' },
     channel_read_seconds: 30,
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
+    backlog: null,
   }
 }
 

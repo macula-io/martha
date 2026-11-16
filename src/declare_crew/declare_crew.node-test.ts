@@ -8,6 +8,7 @@ import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
+  BACKLOG,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   CREW_CODE_DECLARATION_DIRECTORY,
   CREW_CODE_DECLARATION_FILE,
@@ -475,4 +476,24 @@ test('#320: the windows a crew declares are the ones its settings carry', async 
     [settings.house_rules.stalled_minutes, settings.house_rules.review_minutes, settings.house_rules.person_minutes],
     [60, 45, 30],
   )
+})
+
+test('#319 B test 6: a backlog that names no idle_minutes is refused, naming the field, and is never given a default', async () => {
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'] } }, `${BACKLOG}.idle_minutes`)
+  const { settings } = declare({ ...solo, [BACKLOG]: { places: ['macula-io'] } })
+  await assert.rejects(settings, /idle_minutes is missing: a backlog names how long a member may sit idle beside unheld work, 0 for no nudge/)
+})
+
+test('#319 B: a backlog names at least one organisation or owner/repo, and a whole number of idle minutes', async () => {
+  await refusedWith({ ...solo, [BACKLOG]: { places: [], idle_minutes: 30 } }, `${BACKLOG}.places`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io/martha/extra'], idle_minutes: 30 } }, `${BACKLOG}.places`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: -1 } }, `${BACKLOG}.idle_minutes`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 1.5 } }, `${BACKLOG}.idle_minutes`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 30, every: 5 } }, `${BACKLOG}.every`)
+  await refusedWith({ ...solo, [BACKLOG]: ['macula-io'] }, BACKLOG)
+})
+
+test('#319 B: a declaration without a backlog has none, and one with it reads its places and window, 0 included', async () => {
+  assert.equal((await declare(solo).settings).backlog, null)
+  assert.deepEqual((await declare({ ...solo, [BACKLOG]: { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 } }).settings).backlog, { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 })
 })
