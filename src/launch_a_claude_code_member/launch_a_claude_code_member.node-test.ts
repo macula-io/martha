@@ -2810,6 +2810,12 @@ test('a run that closes its lifeline takes its member down with it, leaving no r
   assert.equal(isAlive(child), true)
   // The launcher took the pipe in close-on-exec and closed the number it was handed: nothing the member runs holds it.
   assert.deepEqual(holdersInGroupOf(groupOf(member) ?? member, lifeline.path), [])
+  // And the member is handed no variable naming it (#472 r=3): the number it would name is one the launcher has closed,
+  // so a tool server or a nested `martha start` reading it would be told of a run it cannot read. The rest of the run's
+  // own environment is inherited, which is what says this environment was read at all.
+  const environment = readFileSync(`/proc/${member}/environ`, 'utf8').split('\0')
+  assert.equal(environment.some((named) => named.startsWith(`${RUN_LIFELINE_VARIABLE}=`)), false, `the member is handed no variable naming the pipe: ${JSON.stringify(environment)}`)
+  assert.equal(environment.some((named) => named.startsWith('PATH=')), true, 'and inherits the run\'s own environment besides it')
   assert.equal(readdirSync(place.relay_root).length, 1, 'the launch has its relay directory while it runs')
   assert.equal(readdirSync(place.snapshot_root).length, 1)
   assert.equal(readdirSync(place.launch_records).length, 1)

@@ -16,6 +16,10 @@ import { takeTheLaunchOffTheDisk, THE_RUN_IS_GONE, theRunsLifeline, type TheRuns
 
 /** What a launch records of its run, for the hold that decides whether a member may run at all (#472). */
 export interface WhatTheRunWatches {
+  /**
+   * Whether the run that asked for this launch has gone (#472), read by the hold before a member is admitted: a launch
+   * given no lifeline is never told, which is every launch an owner's own terminal starts.
+   */
   readonly theRunIsGone?: () => boolean
 }
 
