@@ -30,9 +30,9 @@ import { PANE, RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_pr
 /**
  * Why the relay holds by literal what it cannot import, as one wording for every entry below: the host installs the
  * relay as a copy of its own folder, so a hooks module imports only its own files; and where the host reads such a name
- * itself — a tool's name (martha#256, martha#343), the event an `on(...)` names (martha#313), the command it runs
- * (martha#255 r=2, martha#315), what `$.env.get` returns (#104) — it refuses anything but a string literal, an imported
- * constant included. Each entry keeps its own part of it as its phrase or as the comment above it.
+ * itself — a tool's name (martha#256, martha#343), the event an `on(...)` names (martha#313), what `$.env.get` returns
+ * (#104) — it refuses anything but a string literal, an imported constant included. Each entry keeps its own part of it
+ * as its phrase or as the comment above it.
  */
 const A_HOOKS_MODULE_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module imports only its own files and holds by literal what it cannot import; and where the host reads such a name itself, a tool\'s name, the event an on(...) names, or what $.env.get returns, it refuses anything but a string literal, an imported constant included (#104)'
 
