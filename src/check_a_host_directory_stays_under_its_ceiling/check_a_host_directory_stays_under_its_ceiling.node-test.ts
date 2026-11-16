@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
+import { COINCIDENCE_FILE } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree, type Planted } from './a_tree_whose_ceilings_a_test_reads.ts'
 import { describe, RECORD_COMMAND } from './check_a_host_directory_stays_under_its_ceiling.ts'
@@ -213,4 +214,32 @@ test('#415: after recording, a tree whose slice shrank under the cap passes', as
   const recorded = withLoweredSliceCeilings(readFileSync(manifestPathOf(root), 'utf8'), (await judgeTheTree(root)).slices)
   writeFileSync(manifestPathOf(root), recorded.text)
   assert.deepEqual(await sliceFindingsIn(root), [])
+})
+
+// --- #522: a slice's coincidence declarations spend none of what it may hold ---------------------------------------
+
+/** A coincidence file that grew by many lines of code: what declaring coincidences adds to a slice. */
+const MANY_DECLARATIONS = TWO_LINES.repeat(40)
+
+test('#522: growth only in a coincidence file keeps a host directory and a core slice within, and growth elsewhere fails by name', async (t) => {
+  const grown = {
+    'src/an_adapter/an_adapter.ts': TWO_LINES,
+    [`src/an_adapter/${COINCIDENCE_FILE}`]: MANY_DECLARATIONS,
+    'src/big/b.ts': THREE_LINES,
+    [`src/big/${COINCIDENCE_FILE}`]: MANY_DECLARATIONS,
+  }
+  const held = { adapters: ['src/an_adapter'], ceilings: { 'src/an_adapter': 2 }, slice_cap: 1, slice_ceilings: { 'src/big': 3 } }
+  const within = craft(t, { ...held, files: grown })
+  assert.deepEqual(await findingsIn(within), [], 'the adapter declares coincidences and stays at its ceiling')
+  assert.deepEqual(await sliceFindingsIn(within), [], 'the slice declares coincidences and stays at its ceiling')
+
+  const elsewhere = craft(t, {
+    ...held,
+    files: { ...grown, 'src/an_adapter/more.ts': 'export const c = 3\n', 'src/big/more.ts': 'export const d = 4\n' },
+  })
+  assert.deepEqual(await findingsIn(elsewhere), [
+    'src/an_adapter: 3 lines of code, ceiling 2 (martha.hostCeilings)\n' +
+      '  an adapter composes slices of the core; a decision inside it belongs in a slice',
+  ])
+  assert.deepEqual(await sliceFindingsIn(elsewhere), [`src/big: 4 lines of code, ceiling 3 (martha.sliceCeilings)\n${MOVE_IT}`])
 })
