@@ -22,7 +22,8 @@ import { CREW_ROWS_PLACE, openState } from '../src/keep_martha_state_outside_the
 import { dashboardRowsIn } from '../src/dashboard_rows_directory/dashboard_rows_directory.ts'
 import { rowStreamsDirectory } from '../src/row_streams_directory/row_streams_directory.ts'
 import { THE_REFRESH_ASK } from '../src/refresh_a_member/the_refresh_flow.ts'
-import { SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, crewToolsOver } from '../src/a_crews_tools/a_crews_tools.ts'
+import { THE_MODEL_REPORT_ASK, crewToolsOver } from '../src/a_crews_tools/a_crews_tools.ts'
+import { SWITCH_YOUR_MODEL } from '../src/switch_a_members_model/the_switch_tools.ts'
 
 /** What the test tells this process to be: one crew, one member, one model, and where the owner's file is. */
 interface ItsPart {

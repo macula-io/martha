@@ -22,7 +22,8 @@ import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contr
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
-import { crewToolsOver, PARK_A_MEMBER, type CoreToolAnswer, type CrewTools } from './a_crews_tools.ts'
+import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
+import { crewToolsOver, type CoreToolAnswer, type CrewTools } from './a_crews_tools.ts'
 
 const NOW = Date.parse('2026-11-16T12:00:00Z')
 const IDLE_MINUTES = 30
