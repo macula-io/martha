@@ -15,7 +15,7 @@
 //   - the REASON is the envelope's summary element, repeated verbatim. Martha adds no reading of its own to it.
 //
 // WHICH NAMES those elements have is not this slice's to say: a host renames them, and a name typed here would go stale
-// silently. The report the host writes is cut from the recorded host binary (../read_a_failed_agents_report/
+// silently. The report the host writes is cut from the recorded host binary (../claude_code_host/
 // read_a_failed_agents_report.ts) and handed in, the way the review-model rule is handed the host's spawn description
 // (../run_reviews_on_the_review_model). This slice reads no disk and knows no host: it decides on what it is given.
 
@@ -172,16 +172,6 @@ export async function nameTheFailedReviewIn(
   where.theRow(line)
   await where.theMember(line, failed.tool_use_id)
   spawns.forget(failed.tool_use_id)
-}
-
-/**
- * The model the host answered an agent's call with, or undefined when the answer carries none (martha#390): the agent's
- * own model, never one read out of the host's prose. The answer's own shape is the host's, which is why it is read here
- * and not in the launcher that only passes it on.
- */
-export function resolvedModelIn(answer: unknown): string | undefined {
-  const resolved = (answer as { readonly result?: { readonly resolvedModel?: unknown } } | null | undefined)?.result?.resolvedModel
-  return typeof resolved === 'string' && resolved !== '' ? resolved : undefined
 }
 
 /** What one element of the host's envelope holds, or undefined when the text holds no such element. */

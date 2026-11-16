@@ -59,6 +59,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'list_stop_and_restart_the_crew',
     'load_the_hosts_markdown',
     'place_the_hosts_settings',
+    'read_a_kernel_and_a_home',
     'refuse_a_member_writing_owner_memory',
     'refuse_settings_that_turn_hooks_off',
     'run_an_owner_signed_command',
@@ -68,6 +69,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'start_a_member',
     'start_the_member_on_the_owners_terminal',
     'sweep_leftover_launch_directories',
+    'read_what_claude_code_says_of_an_agent',
   ])
 })
 

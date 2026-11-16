@@ -271,6 +271,23 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:host-ceilings
 
+  # A member a run left behind (martha#472): the check reads this machine's /proc, so every job here is a run of it over
+  # a machine that holds no member of a run's, and answers 0. That it BITES is a test's, not a job's: a launch record
+  # names a real child of the test's own, killed and shown gone, in
+  # read_a_kernel_and_a_home/a_member_a_run_left_behind.node-test.ts, which runs this gate over the real /proc beside
+  # a real child, and which the suite runs.
+  no-member-outlives-its-run:
+    name: no member outlives its run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-member-outlives-its-run
+
   # Martha's names are its own (martha#468): no file, folder, tool, marker or variable of Martha's may be a name
   # crew-code also gives something, or a person reading a path, a transcript or a tool name cannot tell which crew a
   # thing belongs to. It runs as a job and as a node test, so no range gate reads green while the check did not run.
