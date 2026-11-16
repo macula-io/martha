@@ -69,6 +69,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'start_a_member',
     'start_the_member_on_the_owners_terminal',
     'sweep_leftover_launch_directories',
+    'read_what_claude_code_says_of_an_agent',
   ])
 })
 

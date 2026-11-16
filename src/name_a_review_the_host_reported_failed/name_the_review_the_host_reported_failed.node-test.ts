@@ -13,10 +13,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { THE_FAILED_TASK_STATUS } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import { THE_FAILED_TASK_STATUS } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import {
   nameTheFailedReviewIn,
-  resolvedModelIn,
   REVIEWS_REMEMBERED,
   reviewSpawnsRemembered,
   theFailedReviewIn,
@@ -32,7 +31,7 @@ const THE_REVIEWER_MODEL = 'opus'
 const ANOTHER_MODEL = 'sonnet'
 const RESOLVED = 'claude-opus-5-5'
 
-/** The host's own names for the envelope, as its binary gives them (../read_a_failed_agents_report/read_a_failed_agents_report). */
+/** The host's own names for the envelope, as its binary gives them (../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report). */
 const THE_REPORT: TheReportTheHostWrites = { notification: 'task-notification', status: 'status', tool_use: 'tool-use-id', summary: 'summary', failed: THE_FAILED_TASK_STATUS }
 
 /** The id of the Agent call the envelope names: the review that failed. */
@@ -181,13 +180,4 @@ test('the table holds the newest reviews and no more, so a launch spawning revie
   spawns.remember(theCalls[0] ?? '', THE_REVIEWER_MODEL)
   assert.notEqual(spawns.theSpawn(theCalls[1] ?? ''), undefined, 'a review remembered again was dropped as though it were the oldest')
   assert.equal(spawns.theSpawn(theCalls[2] ?? ''), undefined, 'the bound dropped a review that was not the oldest, so a stop still to be reported can go unnamed')
-})
-
-test('the model the call resolved to is read from the host\'s answer and nowhere else (martha#430)', () => {
-  assert.equal(resolvedModelIn({ result: { resolvedModel: RESOLVED } }), RESOLVED, 'the model the host answered with was not read')
-  assert.equal(resolvedModelIn({ result: { resolvedModel: '' } }), undefined, 'an empty model was read as one')
-  assert.equal(resolvedModelIn({ result: {} }), undefined, 'an answer with no model was read as one')
-  assert.equal(resolvedModelIn({}), undefined, 'an answer with no result was read as one')
-  assert.equal(resolvedModelIn(null), undefined, 'a null answer was read as one')
-  assert.equal(resolvedModelIn('claude-opus-5-5'), undefined, 'an answer that is not an object was read as one')
 })
