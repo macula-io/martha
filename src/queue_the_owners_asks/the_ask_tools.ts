@@ -69,17 +69,26 @@ export const SETTLE_ASKS_TOOL = {
   },
 }
 
-/** What the asks are answered over: the queue's stream, this member and session, and where a removal's tips are read. */
+/** What the asks are answered over: the queue's stream, this member and session, and where a removal's tips are read.
+ *
+ * It names no declaration: `ask_the_owner` and `list_the_owners_asks` answer a launch that cannot read one, as the
+ * base's own handlers did (martha#443 part 5 r=2), and only the two tools that offer or close a batch are handed the
+ * table that says who may (TheOfferingAsked, below).
+ */
 export interface TheAsksAsked {
   readonly ledger: LedgerHost
   readonly member: string
-  readonly settings: CrewSettings
   /** The session the call came from: a batch is taken in it and a menu closes in it. */
   readonly session: string
   readonly menus: TheOwnersMenus | undefined
   readonly processes?: Processes
   /** The owner's clone directory, when the declaration names one, where a removal's two tips are read. */
   readonly clones: string | null | undefined
+}
+
+/** What the two tools that take and settle the asks are handed: the queue's place, and the crew's own table. */
+export interface TheOfferingAsked extends TheAsksAsked {
+  readonly settings: CrewSettings
 }
 
 /** What the tools answer: what the queue said, or why this member may not offer or settle. */
@@ -104,20 +113,20 @@ export async function listTheOwnersAsks(asked: TheAsksAsked): Promise<AToolAnswe
 }
 
 /** What the two tools that take and settle the owner's asks need: this crew's declaration, and this session's id. */
-const theOffering = (asked: TheAsksAsked) => ({
+const theOffering = (asked: TheOfferingAsked) => ({
   member: asked.member,
   session: asked.session,
   declaration: asked.settings,
 })
 
 /** `take_the_owners_asks`: every waiting ask claimed for one menu, or why nothing was (martha#313). */
-export async function theTakeOfTheAsks(asked: TheAsksAsked): Promise<AToolAnswer> {
+export async function theTakeOfTheAsks(asked: TheOfferingAsked): Promise<AToolAnswer> {
   const taken = await takeTheAsks(asked.ledger, theOffering(asked))
   return 'told' in taken ? { answer: taken.told } : { refused: taken.refused }
 }
 
 /** `settle_the_owners_asks`: the batch off, with the ids the owner ticked, or why not (martha#313). */
-export async function theSettlingOfTheAsks(asked: TheAsksAsked, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
+export async function theSettlingOfTheAsks(asked: TheOfferingAsked, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
   const settled = await settleTheAsks(asked.ledger, { ...theOffering(asked), menus: asked.menus }, args)
   return 'told' in settled ? { answer: settled.told } : { refused: settled.refused }
 }

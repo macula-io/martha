@@ -13,11 +13,10 @@ import {
   FAST_FORWARD_DESCRIPTION,
   LAND_BATCH,
   LAND_BATCH_DESCRIPTION,
-  aDryRunIsAsked,
   fastForwardAfterTheOwnersYes,
   landPassedWorkAsOneBatch,
-  theBatchACallNames,
-  theFastForwardACallNames,
+  type TheBatch,
+  type TheFastForward,
 } from './land_passed_work_as_one_batch.ts'
 
 /** What `land_batch` takes: the clone, the packages, and whether the call is a dry run (martha#339). */
@@ -49,25 +48,26 @@ export const FAST_FORWARD_TOOL = {
 /** What the tools answer: what the landing said it did, or why nothing was landed. */
 type AToolAnswer = { readonly answer: string } | { readonly refused: string }
 
-/** `land_batch`: the batch a call names, landed as one integration branch by the slice that cuts it (martha#256), or its
- * dry run with `check` 1, which writes nothing (martha#339). */
-export async function landTheBatchOver(host: RangeCheckHost, member: string, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
-  const asked = theBatchACallNames(args)
-  if ('refused' in asked) return { refused: asked.refused }
-  const dry_run = aDryRunIsAsked(args)
-  if ('refused' in dry_run) return { refused: dry_run.refused }
-  if (dry_run.ok) {
-    const forecast = await forecastWhatABatchLands(host, asked.ok)
+/**
+ * `land_batch`: the batch a call names, landed as one integration branch by the slice that cuts it (martha#256), or its
+ * dry run with `check` 1, which writes nothing (martha#339).
+ *
+ * The batch and the dry run are handed in already read (theBatchACallNames, aDryRunIsAsked), because the tools slice
+ * reads a call's arguments before it asks this launch for the processes it acts with (martha#443 part 5 r=2): a call
+ * whose arguments are wrong is answered by those arguments even in a launch that could not act.
+ */
+export async function landTheBatchOver(host: RangeCheckHost, member: string, asked: TheBatch, dry_run: boolean): Promise<AToolAnswer> {
+  if (dry_run) {
+    const forecast = await forecastWhatABatchLands(host, asked)
     return 'told' in forecast ? { answer: forecast.told } : { refused: forecast.refused }
   }
-  const landed = await landPassedWorkAsOneBatch(host, member, asked.ok)
+  const landed = await landPassedWorkAsOneBatch(host, member, asked)
   return 'told' in landed ? { answer: landed.told } : { refused: landed.refused }
 }
 
-/** `fast_forward_after_the_owners_yes`: the default branch moved onto the approved tip (martha#256). */
-export async function fastForwardOntoTheApprovedTipOver(host: RangeCheckHost, member: string, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
-  const asked = theFastForwardACallNames(args)
-  if ('refused' in asked) return { refused: asked.refused }
-  const moved = await fastForwardAfterTheOwnersYes(host, member, asked.ok)
+/** `fast_forward_after_the_owners_yes`: the default branch moved onto the approved tip (martha#256), the range read as
+ *  verify_range reads it, before the launch is asked for the processes it acts with (martha#443 part 5 r=2). */
+export async function fastForwardOntoTheApprovedTipOver(host: RangeCheckHost, member: string, asked: TheFastForward): Promise<AToolAnswer> {
+  const moved = await fastForwardAfterTheOwnersYes(host, member, asked)
   return 'told' in moved ? { answer: moved.told } : { refused: moved.refused }
 }

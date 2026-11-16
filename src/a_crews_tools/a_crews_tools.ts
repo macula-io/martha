@@ -20,6 +20,7 @@ import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_t
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
+import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE_TOOL, NOTE_WHAT_BECAME_TOOL, WHAT_WAS_SENT_TOOL, logTheMilestone, noteTheActsOutcome, whatTheMemberSent } from '../keep_the_ledger/the_ledger_tools.ts'
 import { THE_OWNERS_TODO_ASK, addAnAct, closeAnAct } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -27,6 +28,7 @@ import { OWNER_TODO_ADD_TOOL, OWNER_TODO_DONE_TOOL, keepTheOwnersList, startSwee
 import { closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { STANDING_ADD_TOOL, STANDING_CLOSE_TOOL, STANDING_TOOL, keepTheStandingItems, theStandingToolOver } from '../keep_the_supervisors_standing_items/the_standing_tools.ts'
 import { FAST_FORWARD_TOOL, LAND_BATCH_TOOL, fastForwardOntoTheApprovedTipOver, landTheBatchOver } from '../land_passed_work_as_one_batch/the_landing_tools.ts'
+import { theFastForwardACallNames, theLandingACallNames } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { finishAWorktree, openAWorktree, type WorktreeAnswer, type WorktreesRequest } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
@@ -45,6 +47,7 @@ import {
   theSettlingOfTheAsks,
   theTakeOfTheAsks,
   type TheAsksAsked,
+  type TheOfferingAsked,
 } from '../queue_the_owners_asks/the_ask_tools.ts'
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import {
@@ -80,7 +83,7 @@ import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
-import { WAIT_FOR_CI_TOOL, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
+import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 
 /**
@@ -124,6 +127,9 @@ export interface CrewTool {
 
 /** The answer to a tool call: what the slice said, or why the name is not one the crew has. */
 export type CoreToolAnswer = { readonly answer: string } | { readonly refused: string }
+
+/** What a tool's call named, read by the slice that owns the tool: what it names, or why the call is refused. */
+type AnAsked<Asked> = { readonly ok: Asked } | { readonly refused: string }
 
 /** What the tools are given: whose row it is, where the crew's place is, and how the declaration is read. */
 export interface CrewToolPlaces {
@@ -490,15 +496,20 @@ const theStandingAsked = (places: CrewToolPlaces, settings: CrewSettings) => ({
 })
 
 /** What the owner's asks' tools are handed: the stream, this member and session, the table, and a removal's clone. */
-const theAsksAsked = (places: CrewToolPlaces, state: SessionState, settings: CrewSettings): TheAsksAsked => ({
+const theAsksAsked = (places: CrewToolPlaces, state: SessionState): TheAsksAsked => ({
   ledger: places.ledger,
   member: places.member,
-  settings,
   session: state.session,
   menus: places.menus,
   ...(places.processes === undefined ? {} : { processes: places.processes }),
   // The clone a branch removal is read in is the one the launch was declared with, as every acting tool reads it.
   clones: places.settings?.house_rules.clones,
+})
+
+/** What the two tools that take and settle the asks are handed: the queue's place, and the declaration that says who may. */
+const theOfferingAsked = (places: CrewToolPlaces, state: SessionState, settings: CrewSettings): TheOfferingAsked => ({
+  ...theAsksAsked(places, state),
+  settings,
 })
 
 /** What `who_is_free` is answered over: the declaration's rows laid out, and the park each member's marker says. */
@@ -544,10 +555,19 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
       } satisfies AParkAsked,
       act,
     )
-  const acting =
-    (act: (host: Pick<HostContract, 'processes'> & LedgerHost, args: Readonly<Record<string, unknown>>) => Promise<CoreToolAnswer>): AHandler =>
-    async (args) =>
-      places.processes === undefined ? { refused: NO_ACTING_PLACE } : act(actingHost({ ...places, processes: places.processes }), args)
+  /**
+   * An acting tool's answer, in the order the base's own handlers had it (martha#256, #443 part 5 r=2): the call's
+   * arguments are read first, by the slice that owns the tool, and this launch is asked for the processes it acts with
+   * only after them. A call whose arguments are wrong is answered by them even here, where nothing could be acted on.
+   */
+  const actingOn = async <Asked>(
+    asked: AnAsked<Asked>,
+    act: (on: CrewToolPlaces & { readonly processes: HostContract['processes'] }, ok: Asked) => Promise<CoreToolAnswer>,
+  ): Promise<CoreToolAnswer> => {
+    if ('refused' in asked) return { refused: asked.refused }
+    if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
+    return act({ ...places, processes: places.processes }, asked.ok)
+  }
   return {
     [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) => reportProgressOver(theProgressAsked(places, state, declared), args)),
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }),
@@ -564,21 +584,24 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [RETURN_TO_YOUR_OWN_MODEL_TOOL.name]: async (args) => returnToYourOwnModelOver(triggerPlaceOf(places), args),
     [WRITE_MY_HANDOVER_SCHEMA.name]: async (args) => theHandoverToolOver(theHandoverAsked(places, state), args),
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
-    [VERIFY_RANGE_TOOL.name]: acting(async (host, args) => verifyTheRangeOver(host, args)),
-    [LAND_BATCH_TOOL.name]: acting(async (host, args) => landTheBatchOver(host, places.member, args)),
-    [FAST_FORWARD_TOOL.name]: acting(async (host, args) => fastForwardOntoTheApprovedTipOver(host, places.member, args)),
+    [VERIFY_RANGE_TOOL.name]: (args) => actingOn(theRangeACallNames(args), (on, asked) => verifyTheRangeOver(actingHost(on), asked)),
+    [LAND_BATCH_TOOL.name]: (args) =>
+      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
+    [FAST_FORWARD_TOOL.name]: (args) =>
+      actingOn(theFastForwardACallNames(args), (on, asked) => fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked)),
     [WORKTREE_OPEN_TOOL.name]: async (args) => aWorktreeTool(places, openAWorktree, args),
     [WORKTREE_FINISH_TOOL.name]: async (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheOwnersList(theOwnersListAsked(places, declared.settings), () => addAnAct(places.ledger, args, places.member))),
     [OWNER_TODO_DONE_TOOL.name]: declaring(places, async (declared, args) => keepTheOwnersList(theOwnersListAsked(places, declared.settings), () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member }))),
-    [QUEUE_ASK_TOOL.name]: declaring(places, async (declared, args) => queueTheAsk(theAsksAsked(places, state, declared.settings), args)),
-    [LIST_ASKS_TOOL.name]: declaring(places, async (declared) => listTheOwnersAsks(theAsksAsked(places, state, declared.settings))),
-    [TAKE_ASKS_TOOL.name]: declaring(places, async (declared) => theTakeOfTheAsks(theAsksAsked(places, state, declared.settings))),
-    [SETTLE_ASKS_TOOL.name]: declaring(places, async (declared, args) => theSettlingOfTheAsks(theAsksAsked(places, state, declared.settings), args)),
+    [QUEUE_ASK_TOOL.name]: async (args) => queueTheAsk(theAsksAsked(places, state), args),
+    [LIST_ASKS_TOOL.name]: async () => listTheOwnersAsks(theAsksAsked(places, state)),
+    [TAKE_ASKS_TOOL.name]: declaring(places, async (declared) => theTakeOfTheAsks(theOfferingAsked(places, state, declared.settings))),
+    [SETTLE_ASKS_TOOL.name]: declaring(places, async (declared, args) => theSettlingOfTheAsks(theOfferingAsked(places, state, declared.settings), args)),
     [STANDING_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => recordAStandingItem(places.ledger, args, places.member))),
     [STANDING_CLOSE_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => closeAStandingItem(places.ledger, args, places.member))),
-    [STANDING_TOOL.name]: declaring(places, async (declared) => theStandingToolOver(theStandingAsked(places, declared.settings))),
-    [WAIT_FOR_CI_TOOL.name]: async (args) => theCiWaitOf(places, args),
+    [STANDING_TOOL.name]: async () => theStandingToolOver({ ledger: places.ledger, now: places.ledger.clock.now() }),
+    [WAIT_FOR_CI_TOOL.name]: (args) =>
+      actingOn(theCiWaitACallNames(args), (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock }), asked)),
   }
 }
 
@@ -638,13 +661,6 @@ const theHandoverAsked = (places: CrewToolPlaces, state: SessionState) => ({
   member: places.member,
   now: () => places.ledger.clock.now(),
 })
-
-/** `wait_for_ci`: the CI on one sha, read through the crew's one GitHub budget, or the refusal of a place that cannot act. */
-async function theCiWaitOf(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
-  if (places.processes === undefined) return { refused: NO_ACTING_PLACE }
-  const spender = theGithubSpenderOf({ stores: places.stores, root: places.root, processes: places.processes, clock: places.ledger.clock })
-  return theCiWaitOver(spender, args)
-}
 
 /** `refresh_this_session`: a member asked to refresh is told its handover is expected, or why no refresh is asked for. */
 async function theRefreshAskedOf(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {

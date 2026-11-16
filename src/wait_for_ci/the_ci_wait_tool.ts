@@ -1,8 +1,9 @@
 // The `wait_for_ci` tool (martha#320 package B, #443 part 5): what it takes, and what a wait reads.
 //
 // A wait names one commit, and every read of it goes through the crew's one GitHub budget: the tools slice
-// (../a_crews_tools) builds the spender and keeps only the table that calls this. A launch that holds no processes
-// refuses the tool before it reaches here (martha#256).
+// (../a_crews_tools) builds the spender and keeps only the table that calls this. The tools slice also reads the call's
+// arguments first, and asks this launch for its processes only after them (martha#443 part 5 r=2): a call that names no
+// repository is answered by that, even in a launch that could not act, which is the order the base's handler had.
 
 import { REPO } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import type { TheGithubSpender } from '../spend_the_github_budget/spend_the_github_budget.ts'
@@ -25,16 +26,14 @@ export const WAIT_FOR_CI_TOOL = {
 /** What the tool answers: what the runs on the commit came to, or why the call named no wait. */
 type AToolAnswer = { readonly answer: string } | { readonly refused: string }
 
-/** `wait_for_ci`: the CI on one sha, read through the crew's one GitHub budget. */
-export async function theCiWaitOver(spender: TheGithubSpender, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
-  const asked = theCiWaitACallNames(args)
-  if ('refused' in asked) return { refused: asked.refused }
-  const outcome = await waitForCi(spender, asked.ok)
-  return { answer: theAnswerOf(outcome, asked.ok.sha) }
+/** `wait_for_ci`: the CI on one sha, read through the crew's one GitHub budget, for a wait already read. */
+export async function theCiWaitOver(spender: TheGithubSpender, asked: TheCiWait): Promise<AToolAnswer> {
+  const outcome = await waitForCi(spender, asked)
+  return { answer: theAnswerOf(outcome, asked.sha) }
 }
 
 /** The wait a call names, or why it names none: a repository as owner/name, and a commit of forty hex digits. */
-function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { readonly ok: TheCiWait } | { readonly refused: string } {
+export function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { readonly ok: TheCiWait } | { readonly refused: string } {
   const repo = typeof args['repo'] === 'string' ? args['repo'].trim() : ''
   const sha = typeof args['sha'] === 'string' ? args['sha'].trim() : ''
   if (!REPO.test(repo)) return { refused: `a CI wait names its repository as owner/name; read ${JSON.stringify(repo)}.` }

@@ -5,7 +5,7 @@
 // The tools slice (../a_crews_tools) keeps only the table that calls this.
 
 import { A_PACKAGE } from '../keep_the_ledger/the_ledger_tools.ts'
-import { VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, theRangeACallNames, verifyRange, type RangeCheckHost } from './check_a_range_before_the_owner_says_yes.ts'
+import { VERIFY_RANGE, VERIFY_RANGE_DESCRIPTION, verifyRange, type RangeCheckHost, type TheRange } from './check_a_range_before_the_owner_says_yes.ts'
 
 /** The clone a tool works in (martha#256): where the repository is on this machine, never a URL. */
 export const A_CLONE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The clone to work in, as a path on this machine' }
@@ -42,10 +42,14 @@ export const VERIFY_RANGE_TOOL = {
 /** What the tool answers: the one menu line the range came to, or why the call or the range was refused. */
 type AToolAnswer = { readonly answer: string } | { readonly refused: string }
 
-/** `verify_range`: the range a call names, checked by the slice that reads it and writes nothing (martha#256). */
-export async function verifyTheRangeOver(host: RangeCheckHost, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
-  const asked = theRangeACallNames(args)
-  if ('refused' in asked) return { refused: asked.refused }
-  const checked = await verifyRange(host, asked.ok)
+/**
+ * `verify_range`: the range a call names, checked by the slice that reads it and writes nothing (martha#256).
+ *
+ * The call's arguments are handed in already read (theRangeACallNames, above), because the tools slice reads them
+ * before it asks this launch for the processes it acts with (martha#443 part 5 r=2): a call whose arguments are wrong
+ * is answered by those arguments even in a launch that could not act, which is the order the base's handler had.
+ */
+export async function verifyTheRangeOver(host: RangeCheckHost, asked: TheRange): Promise<AToolAnswer> {
+  const checked = await verifyRange(host, asked)
   return 'told' in checked ? { answer: checked.told } : { refused: checked.refused }
 }

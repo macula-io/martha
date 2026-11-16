@@ -98,7 +98,10 @@ export async function keepTheStandingItems(asked: TheStandingAsked, act: () => P
   return { refused: `${asked.member} may not record or close standing items: this crew's table lets ${granted.join(', ') || 'nobody'} assign work, and only they may. Nothing was written; ${STANDING} reads them.` }
 }
 
-/** `standing`: the items that stand, one line each, as the member reads them. */
-export async function theStandingToolOver(asked: TheStandingAsked): Promise<AToolAnswer> {
+/** `standing`: the items that stand, one line each, as the member reads them.
+ *
+ * The rows and the day are all it is handed: reading the items needs no declaration, so a launch that cannot read one
+ * still lists them, as the base's own handler did (martha#443 part 5 r=2). */
+export async function theStandingToolOver(asked: Pick<TheStandingAsked, 'ledger' | 'now'>): Promise<AToolAnswer> {
   return { answer: theStandingList(await theStandingItemsOf(asked.ledger), todayOf(asked.now)).join('\n') }
 }
