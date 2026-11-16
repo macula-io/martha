@@ -44,6 +44,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
+import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
 import {
   OWNER_AT_THE_TERMINAL,
   recordIngestion,
@@ -160,6 +161,7 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
   'A19', // the crew text the launcher hands at a session's start is the owner's approved bytes, not a sender's words (martha#306)
+  UNHELD_WORK_PATH, // the unheld_work answer is a crew tool's MCP result, taken in on B2 like every other (martha#319)
   // a row no text reaches the model on is never taken in: it says why in its control (B1, B8, A16)
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'no-text-reaches-the-model').map((path) => path.id),
   // an answer read as the member's own is never taken in either: the rule says every leaf

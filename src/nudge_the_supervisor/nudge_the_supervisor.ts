@@ -30,7 +30,7 @@ import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge. */
-export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head'] as const
+export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld'] as const
 export type NudgeKind = (typeof NUDGE_KINDS)[number]
 
 /**
@@ -46,6 +46,8 @@ export interface Nudge {
   readonly since: number
   /** The member's own words about what holds it up, for a pane only. Never a nudge line. */
   readonly said?: string
+  /** For an `unheld` nudge (../nudge_an_idle_crew): how many issues nobody in the crew holds. A count, never their text. */
+  readonly unheld?: number
 }
 
 /** The windows a crew declared, in milliseconds. Zero turns that kind of nudge off. */
@@ -167,6 +169,15 @@ export function reviewWaitsIn(messages: readonly SentMessage[], landings: readon
     else if (fact.message !== null) theWaitAMessageLeaves(fact.message, waits, receivers)
   }
   return [...waits.values()]
+}
+
+/** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
+export function packagesNamedIn(messages: readonly SentMessage[]): readonly string[] {
+  const named = messages.flatMap((message) => {
+    const read = readACrewLine(message.text)
+    return 'line' in read && read.line !== null ? [read.line.package] : []
+  })
+  return [...new Set(named)]
 }
 
 /** What reads the closes of the packages still waiting (martha#320): GitHub through the crew's budget, or its refusal. */
@@ -347,7 +358,8 @@ export function theNudgeLine(nudge: Nudge, crew: TheDeclaredNames): string | nul
   const package_name = WORK_PACKAGE.test(nudge.package) ? nudge.package : ''
   if (nudge.package !== '' && package_name === '') return null
   const on = package_name === '' ? '' : ` on ${package_name}`
-  return `- ${nudge.kind}: ${member}${on}, since ${clockOf(nudge.since)}`
+  const beside = nudge.unheld === undefined ? '' : ` idle beside ${String(nudge.unheld)} issues nobody holds`
+  return `- ${nudge.kind}: ${member}${on}${beside}, since ${clockOf(nudge.since)}`
 }
 
 /**
