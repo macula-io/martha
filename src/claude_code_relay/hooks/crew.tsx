@@ -405,10 +405,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
 
-  on('command.run', { command: PANE }, async ($: CrewEngine) => {
-    await openThePane($)
-    return { text: '' }
-  })
+  // The pane's own command opens it and answers nothing: the drawing is `ui.render`'s (martha#313).
+  on('command.run', { command: PANE }, async ($: CrewEngine) => { await openThePane($); return { text: '' } })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 
