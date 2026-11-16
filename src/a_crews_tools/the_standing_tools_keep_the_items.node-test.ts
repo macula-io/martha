@@ -153,8 +153,12 @@ const THE_LANDING_SLICES = [
   'find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts',
 ]
 
-/** The function in the crew's tools that answers each landing tool, which must not reach the stream either. */
-const THE_LANDING_ANSWERS = ['verifyTheRange', 'landTheBatch', 'fastForwardOntoTheApprovedTip']
+/** The answer each landing tool's own slice gives, which must not reach the stream either (martha#443 part 5). */
+const THE_LANDING_ANSWERS = [
+  { file: 'check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts', name: 'verifyTheRangeOver' },
+  { file: 'land_passed_work_as_one_batch/the_landing_tools.ts', name: 'landTheBatchOver' },
+  { file: 'land_passed_work_as_one_batch/the_landing_tools.ts', name: 'fastForwardOntoTheApprovedTipOver' },
+]
 
 const SOURCE = join(import.meta.dirname, '..')
 
@@ -181,10 +185,10 @@ test('#364: a ruling never lifts a hold, and rulings alone stop no batch: the on
 })
 
 test('no answer of a landing tool in the crew\'s tools reaches the standing items', () => {
-  const tools = readFileSync(join(SOURCE, 'a_crews_tools', 'a_crews_tools.ts'), 'utf8')
-  for (const name of THE_LANDING_ANSWERS) {
+  for (const { file, name } of THE_LANDING_ANSWERS) {
+    const tools = readFileSync(join(SOURCE, file), 'utf8')
     const start = tools.indexOf(`async function ${name}(`)
-    assert.ok(start >= 0, `${name} is not in the crew's tools`)
+    assert.ok(start >= 0, `${name} is not in ${file}`)
     const body = tools.slice(start, tools.indexOf('\n}\n', start))
     for (const reach of ['theItemsThatStand', 'STANDING_STREAM', 'theStandingItems']) assert.ok(!body.includes(reach), `${name} reaches ${reach}`)
   }
