@@ -40,12 +40,12 @@
   "martha": {
     "hostContract": "src/host_contract",
     "hostGlue": [
-      "src/end_a_launch_when_its_run_ends",
       "src/keep_the_crews_files_as_directories",
       "src/empty_directory_of_a_launch",
       "src/linux_process_identity",
       "src/owners_settings_directory",
-      "src/row_streams_directory"
+      "src/row_streams_directory",
+      "src/end_a_launch_when_its_run_ends"
     ],
     "hostAdapters": [
       "src/answer_the_relay",
