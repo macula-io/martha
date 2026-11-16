@@ -6,8 +6,7 @@
 // is unheld", which is the one answer a failed read cannot give.
 
 import { BACKLOG, MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, ProcessOutcome, Processes, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
-import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
+import type { CrewPlace, CrewStore, ProcessOutcome, Refused } from '../host_contract/host_contract.ts'
 import { readTheBacklog, type AnIssue } from './find_the_unheld_work.ts'
 
 /** Where a crew keeps its backlog read and its idle clock, under the one crew store: named after the declaration's key. */
@@ -94,22 +93,8 @@ export interface TheBacklogReader {
   readonly now: number
 }
 
-/** The places a launch reads the backlog from: the crew's stores, the checkout `gh` runs in, its processes when it holds
- * any, and the clock. */
-export interface TheBacklogsPlaces {
-  readonly stores: TheCrewFilesStores
-  readonly root: string
-  readonly processes?: Processes
-  readonly ledger: { readonly clock: { readonly now: () => number } }
-}
-
-/** The reader over a launch's places: the crew's backlog place, `gh` through the crew's GitHub budget only when the
- * launch holds processes (undefined outside a launcher), and the time. */
-export function theBacklogReaderIn(on: TheBacklogsPlaces): TheBacklogReader {
-  const { stores, root, processes, ledger } = on
-  const run = processes === undefined ? undefined : theGithubSpenderOf({ stores, root, processes, clock: ledger.clock }).run
-  return { place: stores.crew.place(BACKLOG_PLACE), run, now: ledger.clock.now() }
-}
+/** The reader over the crew's store: its backlog place, how `gh` runs (undefined outside a launcher), and the time. */
+export const theBacklogReaderOver = (crew: CrewStore, run: TheBacklogReader['run'], now: number): TheBacklogReader => ({ place: crew.place(BACKLOG_PLACE), run, now })
 
 /**
  * The backlog as the crew holds it now: the kept read, refreshed first when a read is due and this launch can run `gh`.

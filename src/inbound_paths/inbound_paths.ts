@@ -15,7 +15,7 @@ import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admi
 import { admitsAnAskToTheOwner } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_tool.ts'
+import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
 
 /**
  * How the path reaches the member.

@@ -44,7 +44,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
-import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_tool.ts'
+import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
 import {
   OWNER_AT_THE_TERMINAL,
   recordIngestion,

@@ -5,7 +5,8 @@ import { test } from 'node:test'
 
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { BACKLOG_READ_INTERVAL_MS, THE_READ_FILE, theBacklogNow, type TheBacklogReader } from './keep_the_backlog_read.ts'
-import { UNHELD_WORK_PATH, unheldWorkOver, type UnheldWorkAsked } from './unheld_work_tool.ts'
+import { unheldWorkOver, type UnheldWorkAsked } from './unheld_work_tool.ts'
+import { UNHELD_WORK_PATH } from './unheld_work_path.ts'
 import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 

@@ -6,7 +6,7 @@
 //
 // The answer carries issue titles and Purpose lines, which are text other people wrote. It reaches the model as this
 // tool's MCP result, which the seam takes in on B2 like every other result; ../inbound_paths names the path as
-// UNHELD_WORK_PATH so the table says where that text comes from.
+// UNHELD_WORK_PATH (./unheld_work_path) so the table says where that text comes from.
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { mayKeepTheOwnersList } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -16,9 +16,6 @@ import { theBacklogNow, type TheBacklogReader, type TheKeptRead } from './keep_t
 
 /** The name the tool is registered under. */
 export const UNHELD_WORK = 'unheld_work'
-
-/** The inbound path the answer's issue text arrives on, in ../inbound_paths. */
-export const UNHELD_WORK_PATH = 'B10'
 
 /** The tool as the crew's tools list it. */
 export const UNHELD_WORK_TOOL = {
