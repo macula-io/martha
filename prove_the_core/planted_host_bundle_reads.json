@@ -1,0 +1,25 @@
+{
+  "_why": "Planted slice sources for prove_the_core/no_host_bundle_read_in_the_core (martha#463). Each caught text is named on line 1 when it sits in a core slice, and left alone where the core's rules do not judge it. They live in JSON so that no walk of the core's code reads them as code.",
+  "caught": {
+    "a regular expression over a minifier's names": "const BUILDER = /function ([\\w$]+)\\(/g\n",
+    "the dollar first in the class": "const BUILDER = /let [$\\w]+=/\n",
+    "a string a pattern is built from": "const NAME = '[\\\\w$]+'\n",
+    "a template a pattern is built from": "const at = (x: string) => new RegExp(`let ${x}=[\\\\w$]+;`)\n",
+    "the answer's field, read as a property": "const model = (answer as any).result.resolvedModel\n",
+    "the answer's field, read by a string": "const model = (answer as any).result['resolvedModel']\n",
+    "the answer's field, destructured": "const { resolvedModel } = (answer as any).result\n",
+    "the answer's field, as a type's member": "type Answer = { readonly result?: { readonly resolvedModel?: string } }\n"
+  },
+  "quiet": [
+    "const IDENTIFIER = /[A-Za-z_$][\\w$]*/g\n",
+    "const WORD = /\\w+/\n",
+    "// a comment may name [\\w$]+ and resolvedModel\nconst x = 1\n",
+    "const model = (answer as any).result.model\n"
+  ],
+  "not_judged": [
+    "claude_code_host/planted_in_an_adapter.ts",
+    "record_claude_code_host/planted_in_a_program.ts",
+    "a_planted_slice/planted.node-test.ts",
+    "a_planted_slice/coincidences.ts"
+  ]
+}

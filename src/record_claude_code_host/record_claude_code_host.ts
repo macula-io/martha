@@ -30,7 +30,7 @@ import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules
 import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
 import { protectedConfigPlacesIn } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
-import { failedAgentsReportIn } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 import { managedFolderGuardCallsIn } from './what_the_managed_folder_guard_calls.ts'
 
