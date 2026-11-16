@@ -2743,7 +2743,7 @@ function groupOfOrNothing(pid: number): number | undefined {
 
 /** Every process in `group`, as the kernel lists them. */
 function pidsInGroup(group: number): number[] {
-  return readdirSync('/proc')
+  return readdirSync(PROC_ROOT)
     .map(Number)
     .filter((pid) => Number.isInteger(pid) && pid > 1 && groupOfOrNothing(pid) === group)
 }
