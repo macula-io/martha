@@ -365,6 +365,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A22',
+    what: "a package's contract, handed to a member at its start and after a refresh (martha#513): the goal, every acceptance criterion with where its evidence is, the actions the package allows, its budget and what done means, read from the newest `contract_kept` row of the crew's `ledger/<package>` stream and handed only to the member whose row holds that package. The block is written by the Supervisor through `keep_the_package_contract`, which reads the brief the Supervisor names, so the text a member is handed is text a member of this crew put in the stream. Not closed: a process of the same OS user can append to the stream (martha#1 decision 2's residual), which is why the line is taken in rather than exempt, and a brief read from a path the Supervisor named is that file's bytes, as A20's items are the stream's",
+    klass: 'delivered',
+    control: { kind: 'shell-gate' },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
     what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',

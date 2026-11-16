@@ -70,13 +70,26 @@ const ACT_CONCLUDED = 'act_concluded'
 const RECOVERY_DECIDED = 'recovery_decided'
 
 /**
+ * The row a package's contract is kept on (martha#513): the version the package is held to, and the contract it holds.
+ *
+ * It is a row of the package's own append-only stream so that "a change is a new version, never an edit" is the store's
+ * rule and not a writer's promise: a second contract is a second row, and the one before it stands. A package reads its
+ * newest, and every later session reads the same one.
+ *
+ * The contract's own words are not judged here. The slice that writes a contract (../keep_the_package_contract) owns
+ * its vocabulary, and this file owning it too would be the same decision kept twice; so the ledger holds the version,
+ * a digest of the block and that block's own lines, which the slice reads back by the rule it was written by.
+ */
+export const CONTRACT_KEPT = 'contract_kept'
+
+/**
  * The kinds of row the ledger writes.
  *
  * `recovery_decided` is the fourth (martha#512): what a package did about an act that failed, kept beside the act's own
  * two rows because it is a fact about the package and outlives the session that decided it. A successor reads the
  * attempt it paid for from there, so a restart or a refresh cannot buy a second one.
  */
-export const LEDGER_ROW_KINDS = [...MILESTONES, ACT_ANNOUNCED, ACT_CONCLUDED, RECOVERY_DECIDED] as const
+export const LEDGER_ROW_KINDS = [...MILESTONES, ACT_ANNOUNCED, ACT_CONCLUDED, RECOVERY_DECIDED, CONTRACT_KEPT] as const
 
 /** An outward act: its kind, and what it acts on, in the member's own words. */
 export type OutwardAct = {
@@ -138,10 +151,25 @@ export type RecoveryRow = RowCommon & {
   readonly decision: RecoveryDecision
 }
 
-export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow | RecoveryRow
+/**
+ * One version of a package's contract (martha#513): which version, a digest of the block it was read from, and the
+ * block's own lines, so a later session reads the contract by the rule it was read by. A version is 1 for the first, and
+ * one more than the version before it; a package whose newest row carries the digest a caller holds is already at it.
+ */
+export type ContractKeptRow = RowCommon & {
+  readonly kind: typeof CONTRACT_KEPT
+  readonly version: number
+  readonly digest: string
+  readonly block: readonly string[]
+}
+
+export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow | RecoveryRow | ContractKeptRow
 
 /** Whether a row of a package's ledger is a recovery it decided. */
 export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind === RECOVERY_DECIDED
+
+/** Whether a row of a package's ledger is a version of its contract. */
+export const isContractKeptRow = (row: LedgerRow): row is ContractKeptRow => row.kind === CONTRACT_KEPT
 
 /**
  * The attempts a package already paid for on one act: the recoveries that sent it again, counted over the package's
@@ -212,12 +240,21 @@ const isARecovery = (row: Row): boolean =>
   isAnInspection(row['inspection']) &&
   (RECOVERY_DECISIONS as readonly unknown[]).includes(row['decision'])
 
+/** A version at or above one, as a contract's first version is. */
+const isAVersion = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1
+
+/** A contract's own block: lines, and not a record standing in for one. The slice that wrote it reads it back. */
+const isAContractBlock = (value: unknown): boolean => Array.isArray(value) && value.every(isText)
+
+const isAContractKept = (row: Row): boolean => isAVersion(row['version']) && isText(row['digest']) && isAContractBlock(row['block'])
+
 const isLedgerRow = (row: Row): row is LedgerRow => {
   if (!hasCommon(row)) return false
   if ((MILESTONES as readonly unknown[]).includes(row['kind'])) return isText(row['note'])
   if (row['kind'] === ACT_ANNOUNCED) return isOutwardAct(row['act'])
   if (row['kind'] === ACT_CONCLUDED) return isPosition(row['announced_at']) && isOutcome(row['outcome'])
   if (row['kind'] === RECOVERY_DECIDED) return isARecovery(row)
+  if (row['kind'] === CONTRACT_KEPT) return isAContractKept(row)
   return false
 }
 
@@ -307,6 +344,26 @@ export async function noteRecovery(
     failure: input.failure,
     inspection: input.inspection,
     decision: input.decision,
+  })
+}
+
+/**
+ * Keeps one version of a package's contract (martha#513): the version, a digest of the block the brief carries, and the
+ * block's own lines. The row is the version — the store only appends, so a contract changed after this one is kept is a
+ * second row and this one stands.
+ */
+export async function noteTheContract(
+  host: LedgerHost,
+  input: Work & { readonly version: number; readonly digest: string; readonly block: readonly string[] },
+): Promise<void> {
+  await keep(host, {
+    kind: CONTRACT_KEPT,
+    package: input.package,
+    member: input.member,
+    at: host.clock.now(),
+    version: input.version,
+    digest: input.digest,
+    block: input.block,
   })
 }
 

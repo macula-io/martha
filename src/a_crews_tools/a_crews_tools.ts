@@ -23,6 +23,7 @@ import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_t
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE_TOOL, NOTE_WHAT_BECAME_TOOL, WHAT_WAS_SENT_TOOL, logTheMilestone, noteTheActsOutcome, whatTheMemberSent } from '../keep_the_ledger/the_ledger_tools.ts'
+import { KEEP_THE_CONTRACT_TOOL, keepTheContract } from '../keep_the_package_contract/the_contract_tools.ts'
 import { THE_OWNERS_TODO_ASK, addAnAct, closeAnAct } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { OWNER_TODO_ADD_TOOL, OWNER_TODO_DONE_TOOL, keepTheOwnersList, startSweeping, theOwnersTodoAsk } from '../keep_the_owners_todo_list/the_todo_tools.ts'
 import { closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
@@ -238,6 +239,7 @@ const THE_TOOLS = [
   LOG_A_MILESTONE_TOOL,
   WHAT_WAS_SENT_TOOL,
   NOTE_WHAT_BECAME_TOOL,
+  KEEP_THE_CONTRACT_TOOL,
   SEE_THE_CREW_TOOL,
   WHO_IS_FREE_TOOL,
   UNHELD_WORK_TOOL,
@@ -542,22 +544,25 @@ const declaring =
     return 'refused' in declared ? declared : act(declared, args)
   }
 
+/**
+ * What a park or a wake is asked, read once for both (martha#255): the crew's own store, this member, the declaration's
+ * table and the call's own words, so the two tools differ only in which of the two acts they run.
+ */
+const theParkAsked = (places: CrewToolPlaces, declared: CrewDeclared, args: Readonly<Record<string, unknown>>): AParkAsked => ({
+  stores: places.stores,
+  member: places.member,
+  settings: declared.settings,
+  now: places.ledger.clock.now(),
+  switching: triggerPlaceOf(places),
+  reason: textOf(args['reason']),
+  onto: textOf(args['member']),
+})
+
 /** What each tool answers, over one place: every tool is one slice's answer, told to the member. */
 function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Record<CrewToolName, AHandler>> {
   const ledger = { ledger: places.ledger, member: places.member }
   const parked = (declared: CrewDeclared, args: Readonly<Record<string, unknown>>, act: typeof parkAMember): Promise<CoreToolAnswer> =>
-    theParkToolOver(
-      {
-        stores: places.stores,
-        member: places.member,
-        settings: declared.settings,
-        now: places.ledger.clock.now(),
-        switching: triggerPlaceOf(places),
-        reason: textOf(args['reason']),
-        onto: textOf(args['member']),
-      } satisfies AParkAsked,
-      act,
-    )
+    theParkToolOver(theParkAsked(places, declared, args), act)
   /**
    * An acting tool's answer, in the order the base's own handlers had it (martha#256, #443 part 5 r=2): the call's
    * arguments are read first, by the slice that owns the tool, and this launch is asked for the processes it acts with
@@ -576,6 +581,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),
+    [KEEP_THE_CONTRACT_TOOL.name]: declaring(places, async (declared, args) => keepTheContract({ ...ledger, documents: places.documents, settings: declared.settings }, args)),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
     [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn(places) })),

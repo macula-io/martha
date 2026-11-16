@@ -19,6 +19,9 @@ import { test, type TestContext } from 'node:test'
 
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
+import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
+import { SHORT_SHA } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
@@ -340,4 +343,37 @@ test('#256: a verify_range call that names no clone, no end or no list is refuse
   assert.match(refusedBy(theRangeACallNames({})), /names the clone it is checked in, as path/)
   assert.match(refusedBy(theRangeACallNames({ path: '/clone', base: '', tip: 'b' })), /names its base/)
   assert.match(refusedBy(theRangeACallNames({ path: '/clone', base: 'a', tip: 'b', packages: 'nope' })), /packages is the list of work packages/)
+})
+
+test('#513: the menu line says what each package\'s acceptance criteria have at the exact tip', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#513`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'batch', base)
+  mergeHere(fixture.clone, head, `Land #281 (${work_package}, PASS)`)
+  const tip = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  const tests = aHostOver(aGithub(oneOpenPullRequestAtEach(fixture.repo, [head], 281)))
+  await aPassedVerdict(tests, work_package, base, head)
+
+  const without = theLineOf(await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] }))
+  assert.ok(without.includes(`acceptance of ${work_package}: no package contract recorded`), without)
+
+  // Two criteria: the file the branch adds is at the tip, and one nobody added is not.
+  const brief = [
+    '```package-contract',
+    'goal: the package is checked against its own criteria',
+    'acceptance: the work the branch adds is at the tip | document: work.txt',
+    'acceptance: a document nobody added is at the tip | document: nowhere.txt',
+    'allowed: push',
+    'budget: 30 minutes',
+    'done: every criterion is met at the tip',
+    '```',
+  ].join('\n')
+  const kept = await keepThePackageContract(tests.host, { package: work_package, member: SUPERVISOR, brief })
+  assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
+
+  const line = theLineOf(await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] }))
+  assert.ok(line.includes(`acceptance of ${work_package}: 1 of 2 criteria met at ${tip.slice(0, SHORT_SHA)}`), line)
+  assert.match(line, /not met: "a document nobody added is at the tip" \(nowhere\.txt is not at /)
 })
