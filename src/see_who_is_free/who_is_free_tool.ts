@@ -23,6 +23,16 @@ export const WHO_IS_FREE_DESCRIPTION =
   `Name a member to ask one question: may it take a package now? A no says why and names the members that fit instead, the same provider first. ` +
   `Only a role the declaration allows assign_work may ask.`
 
+/** What `who_is_free` takes, as the mod registers it. */
+export const WHO_IS_FREE_TOOL = {
+  name: WHO_IS_FREE,
+  description: WHO_IS_FREE_DESCRIPTION,
+  inputSchema: {
+    type: 'object',
+    properties: { member: { type: 'string', description: 'The member to ask about: may it take a package now? Leave it out for every member\'s row' } },
+  },
+}
+
 /** What the tool is handed: the declaration, who asks, the rows, how to read a park, the time, and whom it asks about. */
 export interface WhoIsFreeAsked {
   readonly settings: Pick<CrewSettings, 'members' | 'mode'>

@@ -43,7 +43,8 @@
 
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { clockOf } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import type { CrewPlace, ProcessOutcome, Refused } from '../host_contract/host_contract.ts'
+import type { CrewPlace, Processes, ProcessOutcome, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** Where a crew keeps its GitHub budget, under the one crew store (../host_contract's CrewStore). */
 export const GITHUB_BUDGET_PLACE = 'github_budget'
@@ -354,6 +355,28 @@ export interface TheGithubSpender {
   readonly place: CrewPlace | Refused
   readonly clock: { readonly now: () => number }
   readonly run: (args: readonly string[]) => Promise<ProcessOutcome>
+}
+
+/**
+ * What a launch must hold to build a spender: the crew's own store, the checkout `gh` runs in, the host's processes, and
+ * the clock. It lives here because the budget is the one place GitHub is read through, so a spender made anywhere else
+ * would be a second buyer of the same allowance (#320).
+ */
+export interface TheSpendersPlaces {
+  readonly stores: TheCrewFilesStores
+  readonly root: string
+  readonly processes: Processes
+  readonly clock: { readonly now: () => number }
+}
+
+/** The spender over one launch's places: the crew's budget record, its clock, and `gh` run in its checkout. */
+export function theGithubSpenderOf(places: TheSpendersPlaces): TheGithubSpender {
+  const { processes } = places
+  return {
+    place: places.stores.crew.place(GITHUB_BUDGET_PLACE),
+    clock: places.clock,
+    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root }),
+  }
 }
 
 /** What one spent call came to: what `gh` answered and the budget after it, or why no call was made. */

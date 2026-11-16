@@ -186,9 +186,9 @@ export interface ALinePutInTheRow {
  * answer, and a stopped review that replaced it would hide the switch the owner has to act on (martha#359). Answering
  * nothing is how a change says the row does not take it, and the writer then knows the line is not its own to tell.
  *
- * Its twin is the model switch's (../a_crews_tools, `rowAfterASwitch`), and the two stances differ on purpose: a switch
- * writes its line over any, because what it reports is the owner's file not being put back, and takes back only the
- * lines its own record carries. Both take back only their own; neither may leave the slot saying something nobody wrote.
+ * Its twin is the model switch's (`rowAfterASwitch`, below), and the two stances differ on purpose: a switch writes its
+ * line over any, because what it reports is the owner's file not being put back, and takes back only the lines its own
+ * record carries. Both take back only their own; neither may leave the slot saying something nobody wrote.
  */
 export function theRowWithTheLine(held: DashboardRow, putting: ALinePutInTheRow): DashboardRow | null {
   if (held.needs !== '' && held.needs !== putting.wrote) return null
@@ -202,6 +202,22 @@ export function theRowWithTheLine(held: DashboardRow, putting: ALinePutInTheRow)
  */
 export function theRowWithoutTheLineItWrote(held: DashboardRow, wrote: string): DashboardRow | null {
   return held.needs === wrote ? { ...held, needs: '' } : null
+}
+
+/** What a switch left for the owner: the line that needs them, and every line the row may still say of it. */
+export interface TheOwnersDefaultTold {
+  readonly why: string
+  /**
+   * The lines this switch is answerable for in the row (martha#359 r=3): the one its own record carries, and the one an
+   * open record it settled left there. The row's line goes when it is one of these and nothing needs the owner any more.
+   */
+  readonly before: readonly string[]
+}
+
+/** The row after a switch: the model reported, and the line that needs the owner when the file was not put back. */
+export function rowAfterASwitch(row: DashboardRow, told: TheOwnersDefaultTold): DashboardRow {
+  if (told.why !== '') return { ...row, needs: told.why }
+  return told.before.includes(row.needs) ? { ...row, needs: '' } : row
 }
 
 /** Where a member's row is kept: the host's store, which the launcher implements and a slice of the core only uses. */
