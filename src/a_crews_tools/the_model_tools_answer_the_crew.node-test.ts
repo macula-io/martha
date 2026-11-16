@@ -30,14 +30,13 @@ import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/re
 import {
   CREW_TOOL_NAMES,
   crewToolsOver,
-  PARK_A_MEMBER,
-  THE_TOOLS_ASK,
-  RETURN_TO_YOUR_OWN_MODEL,
   REFRESH_THIS_SESSION,
-  SWITCH_YOUR_MODEL,
   THE_MODEL_REPORT_ASK,
+  THE_TOOLS_ASK,
   type CrewTools,
 } from './a_crews_tools.ts'
+import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
+import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's `review_model` is read against. */
 const HOST_MODELS = ['sonnet', 'opus', 'fable']
