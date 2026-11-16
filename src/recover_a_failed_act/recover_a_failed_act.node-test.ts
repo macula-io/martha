@@ -265,7 +265,7 @@ test('a state that cannot be read pauses the package, and nothing is sent again'
   assert.equal(failure.decision, 'paused')
   assert.equal(sends, 1)
   assert.match(failure.told, /could not be read: ls-remote could not reach origin/)
-  assert.match(failure.told, /waits on the Supervisor/)
+  assert.match(failure.told, /The package is paused/)
 })
 
 test('a failure with nothing to read it by pauses the package rather than retrying', async () => {

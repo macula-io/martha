@@ -531,7 +531,7 @@ test('a retry that removed the branch and failed anyway is concluded from origin
   landTheBranch(fixture)
   const answer = toldOf(await tools.finish.answer(finished('acme/widget', SLUG)))
   assert.match(answer, /; Ceres\/261-the-refusals is no longer on origin$/, 'the retry removed the branch, and origin is what says so')
-  assert.doesNotMatch(answer, /waits on the Supervisor/, 'an act the inspection found had happened is not a pause')
+  assert.doesNotMatch(answer, /The package is paused/, 'an act the inspection found had happened is not a pause')
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch is gone: the retry sent the deletion')
   const rows = await readLedger(tools.host.host, PACKAGE)
   assert.deepEqual(
@@ -560,7 +560,7 @@ test('a deletion that failed, whose failure the store will not keep, is sent onc
   landTheBranch(fixture)
   const answer = toldOf(await tools.finish.answer(finished('acme/widget', SLUG)))
   assert.match(answer, /the attempt the package was given had already failed as command_failed, and this one failed as command_failed/)
-  assert.match(answer, /waits on the Supervisor/)
+  assert.match(answer, /The package is paused/)
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is where it was: the deletion failed')
   assert.deepEqual(
     await rowKinds(tools.host),

@@ -45,6 +45,9 @@ import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contrac
  * A landing keeps `package_landed` (martha#320's ruling): a package reaching the default branch is a fact about the
  * package, and it is what ends a package's waits. A member never writes it either, so a member cannot close every wait
  * on a package with one call.
+ *
+ * A resume keeps `package_resumed` (martha#512): whoever the crew's nudges go to lifts a package's pause, and only the
+ * tool that checks that grant writes it (../recover_a_failed_act), so a member cannot lift its own package's pause.
  */
 export const MILESTONES = [
   'checkpoint_reached',
@@ -53,6 +56,7 @@ export const MILESTONES = [
   'fix_shipped_after_release',
   'verdict_given',
   'package_landed',
+  'package_resumed',
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
 
@@ -151,6 +155,23 @@ export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind ==
  */
 export const theAttemptsOn = (rows: readonly LedgerRow[], act: OutwardAct): number =>
   rows.filter(isRecoveryRow).filter((row) => row.act.kind === act.kind && row.act.what === act.what && row.decision === 'retried_once').length
+
+/** The milestone a lifted pause is kept as (martha#512). */
+export const PACKAGE_RESUMED: Milestone = 'package_resumed'
+
+/**
+ * The pause a package stands under, or undefined when it stands under none (martha#512): the latest recovery that
+ * decided `paused`, when no resume was kept after it. Read from rows that outlive the session that paused, so a restart
+ * or a refresh does not lift a pause; only a `package_resumed` row does.
+ */
+export function thePauseOn(rows: readonly LedgerRow[]): RecoveryRow | undefined {
+  let pause: RecoveryRow | undefined
+  for (const row of rows) {
+    if (isRecoveryRow(row) && row.decision === 'paused') pause = row
+    else if (row.kind === PACKAGE_RESUMED) pause = undefined
+  }
+  return pause
+}
 
 /** An act that was sent and whose outcome no member has recorded. */
 export interface ActAwaitingOutcome {

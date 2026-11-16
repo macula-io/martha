@@ -19,6 +19,7 @@
 // it is the one that never retries. Silence is never taken for success.
 
 import type { ProcessOutcome } from '../host_contract/host_contract.ts'
+import { LOG_A_MILESTONE, RESUME_EVENT } from '../keep_the_ledger/keep_the_ledger.ts'
 import type { CiOutcome } from '../wait_for_ci/wait_for_ci.ts'
 import {
   ActNotSent,
@@ -27,9 +28,11 @@ import {
   noteRecovery,
   sendOutwardAct,
   theAttemptsOn,
+  thePauseOn,
   type LedgerHost,
   type OutwardAct,
   type RecoveryDecision,
+  type RecoveryRow,
   readLedger,
 } from '../log_ledger/log_ledger.ts'
 
@@ -180,6 +183,9 @@ export type TheAttempt = 'never_sent' | 'sent_and_failed' | 'may_have_run'
 /** How many automatic attempts one act of a package is given, over the package's whole life (martha#512's answer (b)). */
 export const ATTEMPTS_A_PACKAGE_IS_GIVEN = 1
 
+/** How a pause is lifted, in the words a refusal names it with: the milestone tool, and its event (martha#512). */
+const HOW_A_PAUSE_IS_LIFTED = (): string => `${LOG_A_MILESTONE}, event ${RESUME_EVENT}`
+
 /** The decision, and why: the words are recorded with it and told to the member. */
 export interface TheDecision {
   readonly decision: RecoveryDecision
@@ -309,11 +315,33 @@ async function keptOrSaid(writing: Promise<void>, what: string): Promise<AKeptRo
  */
 function theWordsOf(input: AnAttempt, parts: TheParts, unkept: readonly AKeptRow[] = []): string {
   const act = `the ${input.act.kind} (${input.act.what})`
-  const asked = parts.decision.decision === 'paused' ? ' It waits on the Supervisor: say so on your row, and do not go on with this package.' : ''
+  const asked =
+    parts.decision.decision === 'paused'
+      ? ` The package is paused: the Supervisor is nudged about it, and no act is sent on it until the Supervisor or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()}).`
+      : ''
   const lost = unkept.flatMap((row) =>
     row.kept ? [] : [` ${row.what.charAt(0).toUpperCase()}${row.what.slice(1)} was not recorded (${row.said}).`],
   ).join('')
   return `${input.package}: ${act} failed as ${parts.failure.class} (${parts.failure.evidence}). ${theSawOf(parts.inspection)}. ${parts.decision.why}.${lost} Nothing more is sent.${asked}`
+}
+
+/**
+ * An act refused because its package stands paused (martha#512): nothing was announced and nothing ran. A pause holds
+ * the package until whoever the crew's nudges go to resumes it, so a member that calls again straight after a pause gets
+ * this, and never a fresh first send of an act that may already have run.
+ */
+export class PackagePaused extends Error {
+  readonly told: string
+
+  constructor(input: AnAttempt, pause: RecoveryRow) {
+    const told =
+      `${input.package}: the ${input.act.kind} (${input.act.what}) was not sent, because the package is paused since the ` +
+      `${pause.act.kind} (${pause.act.what}) failed as ${pause.failure.class}. Nothing more is sent on it until the Supervisor ` +
+      `or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()}).`
+    super(told)
+    this.name = 'PackagePaused'
+    this.told = told
+  }
 }
 
 /**
@@ -325,6 +353,9 @@ function theWordsOf(input: AnAttempt, parts: TheParts, unkept: readonly AKeptRow
  * A store that will not keep the recovery's own rows never turns a fact about the world into its opposite: the answer
  * still says what the inspection found, and names the row the package does not hold. A decision that cannot be kept is
  * never acted on — an attempt no successor could read is not spent — so the package stops instead of sending again.
+ *
+ * A package that stands paused is refused before anything is announced (PackagePaused): a pause holds the package, not
+ * the one act that paused it.
  */
 export async function sendAnActAndRecover(
   host: LedgerHost,
@@ -332,6 +363,8 @@ export async function sendAnActAndRecover(
   send: () => Promise<string>,
   look: () => Promise<AnInspection>,
 ): Promise<string> {
+  const pause = thePauseOn(await readLedger(host, input.package))
+  if (pause !== undefined) throw new PackagePaused(input, pause)
   const first = await theEndingOf(sendOutwardAct(host, input, send))
   if ('said' in first) return first.said
   return recoverFrom(host, input, { failure: first.failure, send, look })

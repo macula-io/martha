@@ -29,8 +29,9 @@ import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.t
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
-/** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge. */
-export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld'] as const
+/** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge, and a
+ * `paused` one is a package a failed act paused until it is resumed (../recover_a_failed_act, martha#512). */
+export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld', 'paused'] as const
 export type NudgeKind = (typeof NUDGE_KINDS)[number]
 
 /**

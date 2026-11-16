@@ -22,7 +22,8 @@ import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contr
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { noteMilestone } from '../log_ledger/log_ledger.ts'
+import { noteMilestone, noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
+import { LOG_A_MILESTONE, RESUME_EVENT } from '../keep_the_ledger/keep_the_ledger.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -316,4 +317,42 @@ test('#320 close: an issue closed, handed off again and closed again ends the se
 
   const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
   assert.deepEqual(theWaitsDrawnFor(drawn, '#320'), [], `the hand-off after the first close was never asked about again, and outlived the second: ${JSON.stringify(drawn)}`)
+})
+
+// A package a failed act paused (martha#512): it reaches the receiver's pane from the ledger of the package a row holds,
+// and only the receiver lifts it, through log_a_milestone's resume event; a member's own resume is refused.
+
+/** Pauses a package the way a recovery does: a `paused` decision kept on its ledger, by the member whose act failed. */
+const pauseThePackage = async (crew: ACrew, package_name: string): Promise<void> =>
+  noteRecovery(crew.ledger, {
+    package: package_name,
+    member: MEMBER,
+    act: { kind: 'push', what: 'origin vesta/320-a-branch' },
+    failure: { class: 'unknown', evidence: 'the failure carried nothing to read it by' },
+    inspection: { read: 'origin', found: 'the branch is still there' },
+    decision: 'paused',
+  })
+
+test('#512: a paused package a row holds reaches the receiver\'s pane, until the receiver resumes it', async (t) => {
+  const crew = aCrew(t)
+  crew.beat(row(MEMBER, { holds: 'macula-io/martha#512' }))
+  await pauseThePackage(crew, 'macula-io/martha#512')
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.equal(drawn.filter((line) => line.startsWith(`- paused: ${MEMBER} on macula-io/martha#512, since `)).length, 1, `the pause did not reach the pane: ${JSON.stringify(drawn)}`)
+
+  const resumed = await crew.tools.answer(LOG_A_MILESTONE, { package: 'macula-io/martha#512', event: RESUME_EVENT, note: 'origin read: the branch is still there' }, 'a-session')
+  assert.ok('answer' in resumed && resumed.answer.startsWith('Kept: macula-io/martha#512 is resumed'), `the receiver could not resume: ${JSON.stringify(resumed)}`)
+  const after = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.deepEqual(after.filter((line) => line.startsWith('- paused: ')), [], `a resumed package is still drawn as paused: ${JSON.stringify(after)}`)
+})
+
+test('#512: a member\'s own resume through log_a_milestone is refused, and the package stays paused', async (t) => {
+  const crew = aCrew(t, { member: MEMBER })
+  await pauseThePackage(crew, 'macula-io/martha#512')
+  const before = (await readLedger(crew.ledger, 'macula-io/martha#512')).length
+
+  const own = await crew.tools.answer(LOG_A_MILESTONE, { package: 'macula-io/martha#512', event: RESUME_EVENT, note: 'I checked, it is fine' }, 'a-session')
+  assert.ok('answer' in own && own.answer.startsWith(`Not recorded: ${MEMBER} may not resume a paused package; only ${RECEIVER}`), `a member resumed its own package: ${JSON.stringify(own)}`)
+  assert.equal((await readLedger(crew.ledger, 'macula-io/martha#512')).length, before, 'the refused resume wrote a row')
 })
