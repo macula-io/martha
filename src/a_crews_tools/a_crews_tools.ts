@@ -59,11 +59,11 @@ import {
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { CREW_RECEIPTS_DESCRIPTION, READ_THE_RECEIPTS, whatBecameOfWhatISent } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
-import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { parkAMember, parkedPlace, theParkedMembers, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
-import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import {
   nudgesOf,
+  packagesNamedIn,
   theNudgesGoTo,
   theNudgesPartLines,
   theWaitsTheClosesLeave,
@@ -106,6 +106,9 @@ import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/s
 import { restartByTool } from '../stop_and_restart_a_member/restart_a_member.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { WHO_IS_FREE, WHO_IS_FREE_DESCRIPTION, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
+import { UNHELD_WORK, UNHELD_WORK_TOOL, unheldWorkOver } from '../find_the_unheld_work/unheld_work_tool.ts'
+import { theBacklogReaderOver, type TheBacklogReader } from '../find_the_unheld_work/keep_the_backlog_read.ts'
+import { theUnheldNudgesFor } from '../nudge_an_idle_crew/nudge_an_idle_crew.ts'
 import { BEAT_INTERVAL_MS, beatAfter, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   homeModelOf,
@@ -205,6 +208,7 @@ export const CREW_TOOL_NAMES = [
   'note_what_became_of_an_act',
   'see_the_crew',
   WHO_IS_FREE,
+  UNHELD_WORK,
   SAY_TO_THE_CREW,
   READ_THE_RECEIPTS,
   PARK_A_MEMBER,
@@ -490,6 +494,7 @@ export const CREW_TOOLS: readonly CrewTool[] = [
       properties: { member: { type: 'string', description: 'The member to ask about: may it take a package now? Leave it out for every member\'s row' } },
     },
   },
+  UNHELD_WORK_TOOL,
   {
     name: SAY_TO_THE_CREW,
     description: CREW_SAY_DESCRIPTION,
@@ -1002,11 +1007,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [REPORT_WHERE_THE_WORK_STANDS]: (args) => reportProgress(places, state, args),
     see_the_crew: () => seeTheCrewOf(places),
     [WHO_IS_FREE]: (args) => whoIsFreeOf(places, args),
-    [READ_THE_RECEIPTS]: async () => {
-      const declared = await crewOrRefusal(places)
-      if ('refused' in declared) return declared
-      return { answer: await whatBecameOfWhatISent(places.ledger, places.member, declared.settings.members.map((member) => member.name)) }
-    },
+    [UNHELD_WORK]: () => unheldWorkOf(places),
+    [READ_THE_RECEIPTS]: () => theReceiptsOf(places),
     [SAY_TO_THE_CREW]: async (args) => {
       const declared = await crewOrRefusal(places)
       if ('refused' in declared) return declared
@@ -1339,15 +1341,32 @@ async function theNudgesFor(places: CrewToolPlaces, settings: CrewSettings, rows
   const channel = await readTheChannel(places.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
   const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(places, messages))
-  const input = { rows: Object.values(rows), waits, parked: parkedMembersOf(places, settings), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
+  const input = { rows: Object.values(rows), waits, parked: theParkedMembers(places, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules), now: places.ledger.clock.now(), owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(places, waits)
-  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads)]), settings)
+  const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: backlogReaderOf(places), rows: input.rows, parked: input.parked, receivers })
+  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld]), settings)
+}
+
+/** How this launch reads the crew's backlog (martha#319): `gh` only when it holds processes. */
+const backlogReaderOf = (places: CrewToolPlaces): TheBacklogReader =>
+  theBacklogReaderOver(places.stores.crew, places.processes === undefined ? undefined : theGithubSpenderOf({ ...places, processes: places.processes }).run, places.ledger.clock.now())
+
+/** `read_the_receipts`: what became of what this member sent, among the crew's own members. */
+async function theReceiptsOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  return 'refused' in declared ? declared : { answer: await whatBecameOfWhatISent(places.ledger, places.member, declared.settings.members.map((member) => member.name)) }
+}
+
+/** `unheld_work` (martha#319): the declaration and the backlog reader, handed to the slice that decides. */
+async function unheldWorkOf(places: CrewToolPlaces): Promise<CoreToolAnswer> {
+  const declared = await crewOrRefusal(places)
+  return 'refused' in declared ? declared : await unheldWorkOver({ settings: declared.settings, asker: places.member, reader: backlogReaderOf(places) })
 }
 
 /** What ends a wait besides the channel's lines, for nudge_the_supervisor to apply (martha#415): the landings the ledgers
  * keep, the closes the budget's record holds, and GitHub's reader of new ones when this launch holds processes. */
 async function whatEndsAWaitIn(places: CrewToolPlaces, messages: readonly SentMessage[]): Promise<WhatEndsAWait> {
-  const landings = await landingsOf(places.ledger, packagesNamed(messages))
+  const landings = await landingsOf(places.ledger, packagesNamedIn(messages))
   const recorded = theClosesRecorded(places.stores.crew.place(GITHUB_BUDGET_PLACE))
   if (places.processes === undefined) return { landings, recorded }
   const spender = theGithubSpenderOf({ ...places, processes: places.processes })
@@ -1363,26 +1382,6 @@ async function theHeadsOfTheWaiters(places: CrewToolPlaces, waits: readonly { re
   if (places.processes === undefined || waits.length === 0) return {}
   const heads = await theHeadsOfTheWaits(theGithubSpenderOf({ ...places, processes: places.processes }), waits.map((wait) => wait.package))
   return 'refusal' in heads ? {} : heads
-}
-
-/** The packages the crew's own lines name: the only ones a wait can be about, so the only ledgers a landing is read in. */
-function packagesNamed(messages: readonly SentMessage[]): readonly string[] {
-  const named = messages.flatMap((message) => {
-    const read = readACrewLine(message.text)
-    return 'line' in read && read.line !== null ? [read.line.package] : []
-  })
-  return [...new Set(named)]
-}
-
-/** The members whose park marker says they are parked, or none when the crew's store will not answer (martha#255): a
- * store that cannot say is not the same fact as a member nobody parked, and a reader that cannot say reads no park. */
-function parkedMembersOf(places: CrewToolPlaces, settings: CrewSettings): readonly string[] {
-  const place = parkedPlace(places)
-  if ('refusal' in place) return []
-  return settings.members.flatMap((member) => {
-    const park = theParkOf(place, member.name)
-    return 'marker' in park && park.marker.parked ? [member.name] : []
-  })
 }
 
 /**

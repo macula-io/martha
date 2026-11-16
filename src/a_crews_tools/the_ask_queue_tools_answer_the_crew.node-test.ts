@@ -199,6 +199,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   gate: { kind: 'off' },
   channel_read_seconds: 30,
   handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
+  backlog: null,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */
