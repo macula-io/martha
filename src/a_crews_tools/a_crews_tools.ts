@@ -67,6 +67,8 @@ import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../ru
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { WHO_IS_FREE_TOOL, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
+import { UNHELD_WORK_TOOL, unheldWorkOver } from '../find_the_unheld_work/unheld_work_tool.ts'
+import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import {
   BEAT_INTERVAL_MS,
@@ -238,6 +240,7 @@ const THE_TOOLS = [
   NOTE_WHAT_BECAME_TOOL,
   SEE_THE_CREW_TOOL,
   WHO_IS_FREE_TOOL,
+  UNHELD_WORK_TOOL,
   SAY_TO_THE_CREW_TOOL,
   READ_THE_RECEIPTS_TOOL,
   PARK_A_MEMBER_TOOL,
@@ -575,6 +578,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
+    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn(places) })),
     [SAY_TO_THE_CREW_TOOL.name]: declaring(places, async (declared, args) => sayToTheCrewOver(theSendAsked(places, state, declared.settings, args))),
     [READ_THE_RECEIPTS_TOOL.name]: declaring(places, async (declared) => theReceiptsOver(theReceiptsAsked(places, declared.settings))),
     [PARK_A_MEMBER_TOOL.name]: declaring(places, (declared, args) => parked(declared, args, parkAMember)),

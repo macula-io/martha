@@ -128,6 +128,23 @@ export type HouseRuleMinutes = (typeof HOUSE_RULE_MINUTES)[number]
 /** How many milliseconds a minute is: the unit these windows are named in, and the one the rules read them as. */
 export const MINUTE_MS = 60_000
 
+/**
+ * Where a crew looks for work nobody holds (martha#319, package B): the top-level key, its places, and the idle window.
+ * A declaration without the key has no backlog view and no idle nudge. With the key, `idle_minutes` is required and has
+ * no default, as every window here; 0 turns the nudge off and leaves the view.
+ */
+export const BACKLOG = 'backlog'
+export const BACKLOG_KEYS = ['places', 'idle_minutes'] as const
+
+/** A place a backlog names: an organisation, or one repository of it. */
+export const A_BACKLOG_PLACE = /^[A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9._-]+)?$/
+
+/** A declared backlog: the places to look in, and how long a member may sit idle beside unheld work before a nudge. */
+export interface Backlog {
+  readonly places: readonly string[]
+  readonly idle_minutes: number
+}
+
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
 export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
@@ -208,6 +225,8 @@ export interface CrewSettings {
    * declaration names none.
    */
   readonly handover_ceiling_minutes: number
+  /** Where to look for work nobody holds, and the idle window (martha#319); null when the declaration names none. */
+  readonly backlog: Backlog | null
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -223,7 +242,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes'] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model'] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -329,7 +348,28 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     gate: gateOf(refuse, value['house_rules'], members),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
+    backlog: backlogOf(refuse, value[BACKLOG]),
   }
+}
+
+/** The declared backlog, or null when there is none: every place a name GitHub could hold, and the window named. */
+function backlogOf(refuse: Refuse, value: unknown): Backlog | null {
+  if (value === undefined) return null
+  if (!isObject(value)) return refuse.at(BACKLOG, `is not ${shapeOf(BACKLOG_KEYS)}`)
+  refuse.unknownKeys(value, BACKLOG_KEYS, `${BACKLOG}.`)
+  const places = backlogPlacesOf(refuse, value['places'])
+  const minutes = value['idle_minutes']
+  if (minutes === undefined) return refuse.at(`${BACKLOG}.idle_minutes`, 'is missing: a backlog names how long a member may sit idle beside unheld work, 0 for no nudge')
+  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 0) return refuse.at(`${BACKLOG}.idle_minutes`, 'is not a whole number of minutes, 0 or more')
+  return { places, idle_minutes: minutes }
+}
+
+/** The places a backlog names: at least one, each an organisation or owner/repo. */
+function backlogPlacesOf(refuse: Refuse, places: unknown): readonly string[] {
+  if (!Array.isArray(places) || places.length === 0) return refuse.at(`${BACKLOG}.places`, 'is not a list of at least one organisation or owner/repo')
+  const bad: unknown = places.find((place) => typeof place !== 'string' || !A_BACKLOG_PLACE.test(place))
+  if (bad !== undefined) return refuse.at(`${BACKLOG}.places`, `holds ${JSON.stringify(bad)}, which is not an organisation or owner/repo`)
+  return places as string[]
 }
 
 /**
