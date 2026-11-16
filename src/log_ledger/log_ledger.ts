@@ -67,9 +67,16 @@ export type OutwardActKind = (typeof OUTWARD_ACTS)[number]
 
 const ACT_ANNOUNCED = 'act_announced'
 const ACT_CONCLUDED = 'act_concluded'
+const RECOVERY_DECIDED = 'recovery_decided'
 
-/** Every kind of row the ledger writes. */
-export const LEDGER_ROW_KINDS = [...MILESTONES, ACT_ANNOUNCED, ACT_CONCLUDED] as const
+/**
+ * The kinds of row the ledger writes.
+ *
+ * `recovery_decided` is the fourth (martha#512): what a package did about an act that failed, kept beside the act's own
+ * two rows because it is a fact about the package and outlives the session that decided it. A successor reads the
+ * attempt it paid for from there, so a restart or a refresh cannot buy a second one.
+ */
+export const LEDGER_ROW_KINDS = [...MILESTONES, ACT_ANNOUNCED, ACT_CONCLUDED, RECOVERY_DECIDED] as const
 
 /** An outward act: its kind, and what it acts on, in the member's own words. */
 export type OutwardAct = {
@@ -107,7 +114,43 @@ export type ActConcludedRow = RowCommon & {
   readonly outcome: Outcome
 }
 
-export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow
+/**
+ * The four things a package may do about an act that failed (martha#512), one attempt at most.
+ *
+ * `retried_once` is the only decision that sends the act again, and only after the inspection found it did not happen.
+ * `concluded_from_the_inspection` is the act recorded from what was really found, which is how a timeout stops a
+ * second send. `replanned` says the member takes the failure back into its own work; `paused` stops the package and
+ * goes to the Supervisor. The names are the ledger's, as the acts' are: a row is read by every session of the crew.
+ */
+export const RECOVERY_DECISIONS = ['retried_once', 'concluded_from_the_inspection', 'replanned', 'paused'] as const
+export type RecoveryDecision = (typeof RECOVERY_DECISIONS)[number]
+
+/**
+ * The decision a package made about an act that failed, with what it was read from: the class the failure was given
+ * and the evidence for it, and what the inspection read and found. The class is a diagnosis, so its words belong to the
+ * slice that makes it (../recover_a_failed_act); the ledger keeps the row and the decisions it must count.
+ */
+export type RecoveryRow = RowCommon & {
+  readonly kind: typeof RECOVERY_DECIDED
+  readonly act: OutwardAct
+  readonly failure: { readonly class: string; readonly evidence: string }
+  readonly inspection: { readonly read: string; readonly found: string }
+  readonly decision: RecoveryDecision
+}
+
+export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow | RecoveryRow
+
+/** Whether a row of a package's ledger is a recovery it decided. */
+export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind === RECOVERY_DECIDED
+
+/**
+ * The attempts a package already paid for on one act: the recoveries that sent it again, counted over the package's
+ * whole life (martha#512). The act is read as the member described it, its kind and its what, because the row of an act
+ * that was never sent is not there to be named by; a successor counting from these rows cannot buy a second attempt with
+ * a restart or a refresh.
+ */
+export const theAttemptsOn = (rows: readonly LedgerRow[], act: OutwardAct): number =>
+  rows.filter(isRecoveryRow).filter((row) => row.act.kind === act.kind && row.act.what === act.what && row.decision === 'retried_once').length
 
 /** An act that was sent and whose outcome no member has recorded. */
 export interface ActAwaitingOutcome {
@@ -155,11 +198,26 @@ const isOutcome = (value: unknown): value is Outcome =>
   typeof (value as Row)['succeeded'] === 'boolean' &&
   isText((value as Row)['detail'])
 
+/** A failure as a recovery row keeps it: the class it was given and the evidence for it, each read as text. */
+const isAFailureNote = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && isText((value as Row)['class']) && isText((value as Row)['evidence'])
+
+/** What an inspection read and found, each read as text. */
+const isAnInspection = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && isText((value as Row)['read']) && isText((value as Row)['found'])
+
+const isARecovery = (row: Row): boolean =>
+  isOutwardAct(row['act']) &&
+  isAFailureNote(row['failure']) &&
+  isAnInspection(row['inspection']) &&
+  (RECOVERY_DECISIONS as readonly unknown[]).includes(row['decision'])
+
 const isLedgerRow = (row: Row): row is LedgerRow => {
   if (!hasCommon(row)) return false
   if ((MILESTONES as readonly unknown[]).includes(row['kind'])) return isText(row['note'])
   if (row['kind'] === ACT_ANNOUNCED) return isOutwardAct(row['act'])
   if (row['kind'] === ACT_CONCLUDED) return isPosition(row['announced_at']) && isOutcome(row['outcome'])
+  if (row['kind'] === RECOVERY_DECIDED) return isARecovery(row)
   return false
 }
 
@@ -222,6 +280,33 @@ export async function noteMilestone(
     member: input.member,
     at: host.clock.now(),
     note: input.note,
+  })
+}
+
+/**
+ * Keeps what a package decided about an act that failed: the class the failure was given and its evidence, what the
+ * inspection read and found, and the decision. A decision is a fact about the package, so it is a row of the package's
+ * stream: the successor that picks the package up reads the attempt its predecessor already paid for, and a restart or
+ * a refresh buys no second one (martha#512).
+ */
+export async function noteRecovery(
+  host: LedgerHost,
+  input: Work & {
+    readonly act: OutwardAct
+    readonly failure: { readonly class: string; readonly evidence: string }
+    readonly inspection: { readonly read: string; readonly found: string }
+    readonly decision: RecoveryDecision
+  },
+): Promise<void> {
+  await keep(host, {
+    kind: RECOVERY_DECIDED,
+    package: input.package,
+    member: input.member,
+    at: host.clock.now(),
+    act: input.act,
+    failure: input.failure,
+    inspection: input.inspection,
+    decision: input.decision,
   })
 }
 
