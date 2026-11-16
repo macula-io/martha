@@ -65,7 +65,7 @@ export function keepTheLifelineIn(directory: string): TheRunsEnd {
     fd: RUN_LIFELINE_FD,
     path,
     environment: { [RUN_LIFELINE_VARIABLE]: String(RUN_LIFELINE_FD) },
-    // The child gets the read end; this process keeps no copy of it, so the run holds one end and the child the other.
+    // The child gets the read end, and this process keeps its own copy until `close`; the launcher takes the pipe in itself.
     stdio: ['pipe', 'pipe', 'pipe', read],
     closeTheRunsEnd,
     close: () => {

@@ -94,6 +94,11 @@ function watching(fd: number, inherited: Readonly<Record<string, string | undefi
   // it is taken for the end of the run (martha#472: unknown is never clean).
   pipe.on('error', theRunWent)
   pipe.resume()
+  // The pipe says when the run went; it never keeps this process up by itself. A launch refused while its run is still
+  // there returns with nothing else held, and a pipe left referenced would end that launcher only when a run that may
+  // outlive it ends — which is the deadlock the recorded host's synchronous runner hit (#472 r=1). What does keep a
+  // launcher up is its member, and that is the one thing that must.
+  pipe.unref()
   return {
     kind: 'watched',
     inherited,
