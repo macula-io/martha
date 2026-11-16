@@ -221,3 +221,14 @@ export function theStormLine(storm: { readonly member: string; readonly percents
     `(at ${storm.percents.join('%, ')}%), the last from ${storm.file}. It stays parked until the owner or the Supervisor wakes it.`
   )
 }
+
+/** The members whose park marker says they are parked, or none when the crew's store will not answer (martha#255): a
+ * store that cannot say is not the same fact as a member nobody parked, and a reader that cannot say reads no park. */
+export function theParkedMembers(host: ParkingHost, members: readonly string[]): readonly string[] {
+  const place = parkedPlace(host)
+  if ('refusal' in place) return []
+  return members.filter((member) => {
+    const park = theParkOf(place, member)
+    return 'marker' in park && park.marker.parked
+  })
+}
