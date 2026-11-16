@@ -21,6 +21,7 @@
 // channel_read_seconds reads that value too (martha#374), so a file an earlier
 // release wrote still declares.
 
+import { memberNameKey } from './member_names.ts'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -173,6 +174,10 @@ export const MODE_TEXTS_DIRECTORY = 'modes'
 
 /** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
+
+/** The one rule member names are compared by (martha#528), held in ./member_names.ts so a slice this one imports can use it. */
+export { memberNameKey, sameMemberName } from './member_names.ts'
+
 
 export interface Member {
   readonly name: string
@@ -465,8 +470,8 @@ function memberOf(refuse: Refuse, member: unknown, at: string, roles: readonly s
 
 function memberNameOf(refuse: Refuse, name: unknown, at: string, seen: Set<string>): string {
   if (typeof name !== 'string' || !MEMBER_NAME.test(name)) refuse.at(`${at}.name`, `is not a name matching ${MEMBER_NAME}`)
-  // Names are compared case-folded: Terra and terra would share branches and a mailbox.
-  const folded = name.toLowerCase()
+  // Names are compared by the one rule (memberNameKey): Terra and terra would share branches and a mailbox.
+  const folded = memberNameKey(name)
   if (seen.has(folded)) refuse.at(`${at}.name`, 'is on the crew twice (names are compared ignoring case)')
   seen.add(folded)
   return name
