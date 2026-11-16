@@ -89,6 +89,16 @@ test('#319 B test 3: a failed read shows the last good list beside the error', a
   assert.match(later.answer, /read at 12:00 UTC/, 'the answer does not say when its list was read')
 })
 
+test('#319 B: a failed first read is refused, naming the error, and never answered as "nothing is unheld" (review r=1)', async () => {
+  const place = aPlace()
+  const answer = await theSupervisorAsks(aReader(place, NOW, FAILED))
+  assert.deepEqual(answer, {
+    refused: 'no read of the backlog has succeeded yet, so there is no list to tell unheld work from; the try at 12:00 UTC failed: HTTP 502: Bad Gateway',
+  })
+  const within = await theSupervisorAsks(aReader(place, NOW + BACKLOG_READ_INTERVAL_MS - 1, aPage(1)))
+  assert.ok('refused' in within, 'inside the interval the kept failed read was answered as a list')
+})
+
 test('#319 B: GitHub is asked again only once the interval has passed, and a later good read clears the error', async () => {
   const place = aPlace()
   const reader = aReader(place, NOW, aPage(1))

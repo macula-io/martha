@@ -47,13 +47,14 @@ export async function unheldWorkOver(asked: UnheldWorkAsked): Promise<{ readonly
   const kept = await theBacklogNow(asked.reader, backlog.places)
   if (kept !== undefined && 'refusal' in kept) return { refused: `the crew's backlog read cannot be kept: ${kept.refusal}` }
   if (kept === undefined) return { refused: 'nothing has read the backlog yet, and this launch cannot run gh to read it.' }
-  return { answer: theAnswerOf(kept, backlog.places, asked.settings.members.map((member) => member.name), asked.reader.now) }
+  // No read has succeeded, so there is no list: an empty split here would say "nothing is unheld" (review r=1).
+  if (kept.read_at === null) return { refused: `no read of the backlog has succeeded yet, so there is no list to tell unheld work from; the try at ${clockOf(kept.tried_at)} failed: ${String(kept.error)}` }
+  return { answer: theAnswerOf({ ...kept, read_at: kept.read_at }, backlog.places, asked.settings.members.map((member) => member.name), asked.reader.now) }
 }
 
-/** The answer's words: where it looked and when, what failed, then the split. */
-export function theAnswerOf(kept: TheKeptRead, places: readonly string[], members: readonly string[], now: number): string {
-  const when = kept.read_at === null ? 'never read' : `read at ${clockOf(kept.read_at)}`
-  const head = [`Backlog of ${places.join(', ')}, ${when}.`]
+/** The answer's words: where it looked and when, what failed, then the split. Only a read that once succeeded has a list. */
+export function theAnswerOf(kept: TheKeptRead & { readonly read_at: number }, places: readonly string[], members: readonly string[], now: number): string {
+  const head = [`Backlog of ${places.join(', ')}, read at ${clockOf(kept.read_at)}.`]
   if (kept.cut) head.push(`The search was cut at ${String(BACKLOG_PAGES_MOST)} pages: issues newer than the last one read are not in this list.`)
   if (kept.error !== null) head.push(`The newest read failed at ${clockOf(kept.tried_at)}: ${kept.error}. This is the last good list.`)
   return [...head, theSplitInWords(theSplitOf(kept.issues, members), now)].join('\n')
