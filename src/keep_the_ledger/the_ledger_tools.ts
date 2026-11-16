@@ -16,11 +16,11 @@ import {
   whatWasSent,
 } from './keep_the_ledger.ts'
 
-/** The name the ledger's second reader is registered under. */
-export const WHAT_WAS_SENT = 'what_was_sent'
+/** The name the ledger's second reader is registered under; only this file's tool record names it, so it is not exported. */
+const WHAT_WAS_SENT = 'what_was_sent'
 
-/** The name the act's outcome is recorded under. */
-export const NOTE_WHAT_BECAME = 'note_what_became_of_an_act'
+/** The name the act's outcome is recorded under, held as the one above is. */
+const NOTE_WHAT_BECAME = 'note_what_became_of_an_act'
 
 /** The schema shared by the tools that name a work package, which every one of the ledger's tools does. */
 export const A_PACKAGE: Readonly<Record<string, unknown>> = { type: 'string', description: 'The work package, owner/repo#n, as the issue is named' }

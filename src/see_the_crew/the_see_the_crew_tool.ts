@@ -17,8 +17,8 @@ import { GITHUB_BUDGET_PLACE, theClosesOfTheWaits, theClosesRecorded, theGithubS
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from './see_the_crew.ts'
 
-/** The name the pane is read under. */
-export const SEE_THE_CREW = 'see_the_crew'
+/** The name the pane is read under; nothing but this file's own tool record names it, so it is not exported. */
+const SEE_THE_CREW = 'see_the_crew'
 
 /** What `see_the_crew` says it is for: every row, in the declaration's order, and what has gone quiet. */
 export const SEE_THE_CREW_DESCRIPTION = "Every member's row of this crew, in the declaration's order, with what has gone quiet marked."

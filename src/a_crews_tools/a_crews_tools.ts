@@ -265,13 +265,6 @@ export type CrewToolName = (typeof THE_TOOLS)[number]['name']
 /** The tools, as the mod registers them. */
 export const CREW_TOOLS: readonly CrewTool[] = THE_TOOLS
 
-// The names a mod that may import only its own files spells by literal, held here beside the list of every tool, so
-// ../claude_code_relay/coincidences names each of them without reaching into six slices for six words.
-import { PARK_A_MEMBER, WAKE_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
-import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
-import { SWITCH_YOUR_MODEL, RETURN_TO_YOUR_OWN_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
-export { PARK_A_MEMBER, WAKE_A_MEMBER, RESTART_A_MEMBER, SWITCH_YOUR_MODEL, RETURN_TO_YOUR_OWN_MODEL }
-export { THE_CHANNEL_READ_ASK }
 export type { TheStartLine }
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
