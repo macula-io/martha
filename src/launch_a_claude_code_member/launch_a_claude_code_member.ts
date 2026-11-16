@@ -91,7 +91,7 @@ import { join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
 
-import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { bindNothing, recordMemberStopped } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
@@ -129,13 +129,20 @@ import {
 import { hostThatRunsTheRelay, RELAY_PLUGIN_DIR, rulesTheHostMatches } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import {
   cleanUpIfTheLauncherEnds,
-  killGroup,
   NOT_STARTED,
   startedMember,
   whatTheHostStartsWith,
   whenTheMemberStops,
   type Starting,
 } from '../end_a_launch/end_a_launch.ts'
+import {
+  killGroup,
+  takeTheLaunchOffTheDisk,
+  THE_RUN_IS_GONE,
+  theRunsLifeline,
+  type TheRunsLifeline,
+} from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
+import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import {
   hostSettingsOf,
   meshServerUnproved,
@@ -294,6 +301,11 @@ export interface LaunchMade extends ReadyLaunch {
   readonly ownerMemory: OwnerMemoryPlaces
   /** The switches that name the settings the launch wrote, when no approved copy was carried (martha#136). */
   readonly settingsArgs: readonly string[]
+  /**
+   * Whether the run that asked for this launch has gone (#472), read by the hold before a member is admitted: a launch
+   * given no lifeline is never told, which is every launch an owner's own terminal starts.
+   */
+  readonly theRunIsGone?: () => boolean
 }
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
@@ -638,8 +650,73 @@ function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: str
   return () => clearInterval(timer)
 }
 
-/** Starts one Claude Code member on its approved config, with its relay answered here. */
-export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
+/**
+ * The run's end over this launch (#472): the moment its pipe says the run has gone, the member's group is killed with
+ * no grace, then the relay directory and the snapshot go, then its launch record — what a launch does when a signal
+ * ends it, in the order that keeps the member from running while the directories are removed. A run that goes before
+ * the member's group is known is answered by `theGroupIsKnown`, which kills it as soon as the pid is in hand.
+ *
+ * A launch with no lifeline is watched by nothing, and its two calls say so by doing nothing.
+ */
+function watchItsRun(
+  lifeline: TheRunsLifeline,
+  launch: ClaudeCodeMemberLaunch,
+  made: LaunchMade,
+  theGroup: () => number | undefined,
+  stop: (why: string) => void,
+): { theGroupIsKnown(): void; forgetTheRun(): void } {
+  if (lifeline.kind !== 'watched') return { theGroupIsKnown: () => undefined, forgetTheRun: () => undefined }
+  const theRunWent = (): void => {
+    const group = theGroup()
+    if (group === undefined) return
+    stop(THE_RUN_IS_GONE)
+    takeTheLaunchOffTheDisk(made, () => recordMemberStopped(launchRecordsDirectory(launch.places.launch_records), launch.member_name))
+  }
+  lifeline.whenTheRunEnds(theRunWent)
+  return {
+    // The end may have come while no group was known, so `whenTheRunEnds` found nothing to kill: the group is in hand
+    // now, and a run that has gone is answered here and a run that has not waits for its own end.
+    theGroupIsKnown: () => {
+      if (lifeline.theRunIsGone()) theRunWent()
+    },
+    forgetTheRun: () => lifeline.forget(),
+  }
+}
+
+/**
+ * What this launch is asked with, once its run's lifeline is taken in: the same launch, and its member's environment
+ * without the variable that named the pipe (#472) — a member, a tool server or a nested `martha start` then finds no
+ * variable naming a descriptor that is not there.
+ */
+function underItsRun(asking: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeline): ClaudeCodeMemberLaunch {
+  return lifeline.kind === 'watched' ? { ...asking, inherited: lifeline.inherited } : asking
+}
+
+/** What a launch records of its run, for the hold that decides whether a member may run at all (#472). */
+function whatTheRunWatches(lifeline: TheRunsLifeline): { readonly theRunIsGone?: () => boolean } {
+  return lifeline.kind === 'watched' ? { theRunIsGone: lifeline.theRunIsGone } : {}
+}
+
+/**
+ * Starts one Claude Code member on its approved config, with its relay answered here. The run that asked for it keeps
+ * one end of a pipe open for as long as the member may run (#472): no variable is an owner's own start, and its member
+ * keeps outliving their shell, while a variable naming no pipe this launcher can read refuses the launch by name,
+ * before anything is made.
+ */
+export async function launchClaudeCodeMember(asking: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
+  const lifeline = theRunsLifeline(asking.inherited, NOT_STARTED)
+  const launch = underItsRun(asking, lifeline)
+  return lifeline.kind === 'refused' ? { started: false, refusal: told(launch, lifeline.refusal) } : launching(launch, lifeline)
+}
+
+/** The refusal, told to the owner as well as answered, so a line of it reaches their terminal. */
+function told(launch: ClaudeCodeMemberLaunch, refusal: string): string {
+  launch.tellOwner(refusal)
+  return refusal
+}
+
+/** The launch itself, on a run that has said whether it is still there. */
+async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeline): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
     launch.tellOwner(refusal)
     return { started: false, refusal }
@@ -683,17 +760,19 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     ready.removeSnapshot()
     return refuse(server)
   }
-  const made: LaunchMade = { ...ready, ...directories, ...places, server, binary: host.binary }
+  const made: LaunchMade = { ...ready, ...directories, ...places, server, binary: host.binary, ...whatTheRunWatches(lifeline) }
+  const itsRunWent = watchItsRun(lifeline, launch, made, () => group, stop)
 
   const started = await startedMember(launch, made, starting)
   if (typeof started === 'string') return refuse(started)
   group = started.pid
+  itsRunWent.theGroupIsKnown()
   const pid = started.pid
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
   const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop)
-  const ended = (): string | null => (backstop.disarm(), unwatch(), stoppedBecause)
+  const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()
 

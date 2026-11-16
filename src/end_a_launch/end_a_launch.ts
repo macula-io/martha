@@ -17,6 +17,7 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import process from 'node:process'
 
 import { type LaunchRecorded, recordMemberLaunch, recordMemberStopped } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { killGroup, refusedIfTheRunIsGone } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
@@ -40,15 +41,6 @@ export const NOT_STARTED = 'The member is not started'
  * otherwise leave the same member behind.
  */
 const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT']
-
-/** Sends SIGKILL to a whole process group; a group already gone is no error. */
-export function killGroup(group: number): void {
-  try {
-    process.kill(-group, 'SIGKILL')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
-  }
-}
 
 /**
  * How a spawned member's start ended: the pid the launcher kills the group of,
@@ -172,7 +164,7 @@ export async function startedMember(
   // between then leaves a record that already names its member (#124).
   const job = isOnTheOwnersTerminal(launch.stdio)
     ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid) =>
-        recordedInsideTheHold(relayDirectory.directory, pid, record(pid)),
+        refusedIfTheRunIsGone(made, () => recordedInsideTheHold(relayDirectory.directory, pid, record(pid))),
       )
     : undefined
   // On the owner's terminal `child` is the job-control shell: it exits once the
