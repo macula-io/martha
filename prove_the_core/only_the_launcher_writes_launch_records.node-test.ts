@@ -35,7 +35,6 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'linux_process_identity',
     'owners_settings_directory',
     'row_streams_directory',
-    'end_a_launch_when_its_run_ends',
   ])
   assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), [
     'answer_the_relay',
@@ -48,6 +47,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'declare_a_solo_crew',
     'drive_the_recorded_host',
     'end_a_launch',
+    'end_a_launch_when_its_run_ends',
     'find_what_a_later_git_run_reads',
     'hear_the_hosts_dialogs',
     'install_the_mesh_server_for_claude_code',

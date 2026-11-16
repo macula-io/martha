@@ -44,8 +44,7 @@
       "src/empty_directory_of_a_launch",
       "src/linux_process_identity",
       "src/owners_settings_directory",
-      "src/row_streams_directory",
-      "src/end_a_launch_when_its_run_ends"
+      "src/row_streams_directory"
     ],
     "hostAdapters": [
       "src/answer_the_relay",
@@ -58,6 +57,7 @@
       "src/declare_a_solo_crew",
       "src/drive_the_recorded_host",
       "src/end_a_launch",
+      "src/end_a_launch_when_its_run_ends",
       "src/find_what_a_later_git_run_reads",
       "src/hear_the_hosts_dialogs",
       "src/install_the_mesh_server_for_claude_code",
@@ -98,7 +98,7 @@
       "src/drive_the_recorded_host": 587,
       "src/empty_directory_of_a_launch": 24,
       "src/end_a_launch": 172,
-      "src/end_a_launch_when_its_run_ends": 174,
+      "src/end_a_launch_when_its_run_ends": 220,
       "src/find_what_a_later_git_run_reads": 494,
       "src/hear_the_hosts_dialogs": 40,
       "src/install_the_mesh_server_for_claude_code": 133,
@@ -108,7 +108,7 @@
       "src/keep_the_crews_files_as_directories": 161,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 565,
+      "src/launch_a_claude_code_member": 525,
       "src/linux_process_identity": 280,
       "src/list_stop_and_restart_the_crew": 90,
       "src/load_the_hosts_markdown": 330,
