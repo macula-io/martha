@@ -34,7 +34,7 @@ import { PANE, RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_pr
  * (martha#255 r=2, martha#315), what `$.env.get` returns (#104) — it refuses anything but a string literal, an imported
  * constant included. Each entry keeps its own part of it as its phrase or as the comment above it.
  */
-const A_HOOKS_MODULE_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module imports only its own files and holds by literal what it cannot import; and where the host reads such a name itself, a tool\'s name, the event an on(...) names, the command it runs, or what $.env.get returns, it refuses anything but a string literal, an imported constant included (#104)'
+const A_HOOKS_MODULE_CANNOT_IMPORT = 'the host installs the relay as a copy of its own folder, so a hooks module imports only its own files and holds by literal what it cannot import; and where the host reads such a name itself, a tool\'s name, the event an on(...) names, or what $.env.get returns, it refuses anything but a string literal, an imported constant included (#104)'
 
 export const COINCIDENCES: readonly Exception[] = [
   // The one rule in src/check_no_literal_restates_a_value makes an entry name its
@@ -113,7 +113,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: ELICITATION_RESULT, file: 'claude_code_relay/hooks/register.ts', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: NOTIFICATION, file: 'claude_code_relay/hooks/register.ts', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: TOOL_CHECK, file: 'claude_code_relay/hooks/register.ts', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
-  { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/register.ts', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  { value: RELAY_SOCKET_VARIABLE, file: 'claude_code_relay/hooks/register.ts', reason: 'the variable the relay reads with $.env.get, which the host takes there only as a string literal (#104)' },
   { value: THE_CHANNEL_READ_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
