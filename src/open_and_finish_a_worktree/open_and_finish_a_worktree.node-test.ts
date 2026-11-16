@@ -21,7 +21,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewSettings, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
-import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
+import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { readLedger } from '../log_ledger/log_ledger.ts'
@@ -135,14 +135,35 @@ function toolsOf(
   settings: CrewSettings,
   member: string = MEMBER,
   run: (request: ProcessRequest) => Promise<ProcessOutcome> = runReal,
+  rows?: HostContract['stores']['rows'],
 ): Tools {
-  const testHost = hostForTests({ run })
+  const testHost = hostForTests(rows === undefined ? { run } : { run, rows })
   const request: WorktreesRequest = { host: theHostOver(testHost), settings, member }
   return {
     open: { answer: (args) => openAWorktree(request, args) },
     finish: { answer: (args) => finishAWorktree(request, args) },
     host: testHost,
   }
+}
+
+/**
+ * A store that is up until it goes down, and refuses every append from then on: the shape of a store that stays down
+ * once the act has run. A recovery must still tell the member what it found there, and that the package holds no row
+ * of it (martha#512 r=2).
+ */
+function aStoreThatGoesDown(
+  up: HostContract['stores']['rows'],
+  reason: string,
+): { readonly rows: HostContract['stores']['rows']; readonly goesDown: () => void } {
+  let down = false
+  const rows: HostContract['stores']['rows'] = {
+    append: async (stream, row, expected_length) => {
+      if (down) throw new Error(`the store refused the row: ${reason}`)
+      return up.append(stream, row, expected_length)
+    },
+    read: (stream) => up.read(stream),
+  }
+  return { rows, goesDown: () => void (down = true) }
 }
 
 /** The host the slice acts over: the test host's own processes, with the ledger's clock and rows (martha#256). */
@@ -459,6 +480,66 @@ test('a deletion whose outcome the store will not keep is concluded from origin,
   assert.match(answer, /Ceres\/261-the-refusals is no longer on origin/, 'origin is what says the deletion happened, and its words are the answer')
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch is gone: it was sent')
   assert.deepEqual(await rowKinds(tools.host), ['act_announced', 'recovery_decided', 'act_concluded'], 'the act left awaiting is concluded from what was found, so no row is chased')
+})
+
+test('a deletion whose outcome the store will not keep is told as sent, and left awaiting (martha#512)', async (t) => {
+  const fixture = aCrew(t)
+  const ledger = hostForTests()
+  const store = aStoreThatGoesDown(ledger.host.stores.rows, 'the disk is still full')
+  let goDown: (() => void) | undefined
+  // The row is announced and git runs, and only then does the store go down and stay down: the act happened, and no row
+  // of what became of it can be kept.
+  const runGoingDownAfterTheAct = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (request.args.includes('--delete')) goDown?.()
+    return runReal(request)
+  }
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, runGoingDownAfterTheAct, store.rows)
+  goDown = store.goesDown
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const answer = toldOf(await tools.finish.answer(finished('acme/widget', SLUG)))
+  assert.match(answer, /found Ceres\/261-the-refusals is no longer on origin/, 'origin is asked, and what it found is told even when the store is down')
+  assert.match(answer, /The decision was not recorded \(the store refused the row: the disk is still full\)/, 'the member is told the package holds no decision')
+  assert.match(answer, /The act's ending was not recorded \(the store refused the row: the disk is still full\)/, 'and that the act\'s own ending was not concluded')
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch is gone: it was sent')
+  const rows = await readLedger({ clock: ledger.host.clock, stores: { rows: store.rows } }, PACKAGE)
+  assert.deepEqual(rows.map((row) => row.kind), ['act_announced'], 'the act is left awaiting, for a successor to check')
+})
+
+test('a retry that removed the branch and failed anyway is concluded from origin, not paused (martha#512)', async (t) => {
+  const fixture = aCrew(t)
+  let refuseTheOutcome: (() => void) | undefined
+  let deletes = 0
+  // The first deletion fails without removing anything and the store refuses its outcome, so the package spends the one
+  // attempt it is given. The retry really removes the branch and then exits 128: what happened is read from origin, and
+  // an act that happened is concluded, not paused.
+  const runDeletingOnTheRetry = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (!request.args.includes('--delete')) return runReal(request)
+    deletes += 1
+    if (deletes === 1) {
+      refuseTheOutcome?.()
+      refuseTheOutcome = undefined
+      return { exit_code: 1, stdout: '', stderr: 'remote: deleting a branch is not allowed here\n' }
+    }
+    await runReal(request)
+    return { exit_code: 128, stdout: '', stderr: 'fatal: the remote end hung up unexpectedly\n' }
+  }
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, runDeletingOnTheRetry)
+  refuseTheOutcome = (): void => tools.host.refuseNextAppend('the disk would not take it')
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const answer = toldOf(await tools.finish.answer(finished('acme/widget', SLUG)))
+  assert.match(answer, /; Ceres\/261-the-refusals is no longer on origin$/, 'the retry removed the branch, and origin is what says so')
+  assert.doesNotMatch(answer, /waits on the Supervisor/, 'an act the inspection found had happened is not a pause')
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch is gone: the retry sent the deletion')
+  const rows = await readLedger(tools.host.host, PACKAGE)
+  assert.deepEqual(
+    rows.map((row) => row.kind),
+    ['act_announced', 'recovery_decided', 'act_concluded', 'act_announced', 'act_concluded', 'recovery_decided'],
+    'the attempt left awaiting is concluded, the retry is announced and concluded as failed, and the reading of origin is kept',
+  )
+  assert.equal(rows[5]?.kind === 'recovery_decided' ? rows[5].decision : '', 'concluded_from_the_inspection', 'the retry\'s failure is decided by the same rule as the first')
+  assert.deepEqual(rows[5]?.kind === 'recovery_decided' ? rows[5].inspection : undefined, { read: `origin's refs for ${MEMBER}/${SLUG}`, found: `${MEMBER}/${SLUG} is no longer on origin` })
 })
 
 test('a deletion that failed, whose failure the store will not keep, is sent once more and then paused (martha#512)', async (t) => {

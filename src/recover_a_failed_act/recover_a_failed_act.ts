@@ -189,11 +189,13 @@ export interface TheDecision {
 /** The rules a decision is made by, written once so the words a member reads and the row it keeps cannot differ. */
 const WHY = {
   unknown: 'nothing here retries a failure it cannot name',
-  happened: 'the act had already happened, so it was recorded from what was found and not sent again',
+  happened: 'the act had already happened, so it was not sent again',
   cannot_tell: 'the act may have run and nothing can say what became of it, so it is not sent again',
   spent: 'this act has already spent the one attempt a package is given',
   refused: 'the act was sent and refused, so sending it again is the member\'s decision and not this rule\'s',
   again: 'the act did not happen, so it may be sent once more',
+  unrecorded: 'the decision could not be kept on the package, so sending the act again would spend an attempt no successor could read',
+  unconcluded: 'the attempt that was left awaiting could not be concluded, so the act is not sent again',
 } as const
 
 /** What a decision is read from: the failure, what the inspection found, how the attempt ended, and what was spent. */
@@ -274,12 +276,44 @@ interface TheParts {
   readonly decision: TheDecision
 }
 
-/** The line a member is told, and the row keeps: the act, the class, what was read, and what the package does now. */
-function theWordsOf(input: AnAttempt, parts: TheParts): string {
+/** What a look at an act's real state found, in the sentence a member reads: the read, then what it said. */
+const theSawOf = (inspection: AnInspection): string =>
+  inspection.state === 'cannot_tell' ? `${inspection.read} could not be read: ${inspection.found}` : `${inspection.read} found ${inspection.found}`
+
+/** What the store said when it would not keep a row: one line, and never nothing. */
+const saidAtTheStore = (refusal: unknown): string => {
+  const said = theMessageOf(refusal)
+  return said === '' ? 'the store refused the row and said nothing why' : said
+}
+
+/**
+ * A row the recovery needed, and whether the package holds it. A store that will not keep one never hides what the
+ * inspection found: the act's real state is still told, and so is the fact that nothing was recorded (martha#512 r=2).
+ */
+type AKeptRow = { readonly kept: true } | { readonly kept: false; readonly what: string; readonly said: string }
+
+/** Keeps a row, or says which one the store would not keep, instead of letting a store failure hide the state. */
+async function keptOrSaid(writing: Promise<void>, what: string): Promise<AKeptRow> {
+  try {
+    await writing
+    return { kept: true }
+  } catch (refusal) {
+    return { kept: false, what, said: saidAtTheStore(refusal) }
+  }
+}
+
+/**
+ * The line a member is told, and the row keeps: the act, the class, what was read, and what the package does now. A row
+ * the store would not keep is named after the decision, so the member knows the words describe the world and not what
+ * the package holds.
+ */
+function theWordsOf(input: AnAttempt, parts: TheParts, unkept: readonly AKeptRow[] = []): string {
   const act = `the ${input.act.kind} (${input.act.what})`
-  const saw = parts.inspection.state === 'cannot_tell' ? `${parts.inspection.read} could not be read: ${parts.inspection.found}` : `${parts.inspection.read} found ${parts.inspection.found}`
   const asked = parts.decision.decision === 'paused' ? ' It waits on the Supervisor: say so on your row, and do not go on with this package.' : ''
-  return `${input.package}: ${act} failed as ${parts.failure.class} (${parts.failure.evidence}). ${saw}. ${parts.decision.why}. Nothing more is sent.${asked}`
+  const lost = unkept.flatMap((row) =>
+    row.kept ? [] : [` ${row.what.charAt(0).toUpperCase()}${row.what.slice(1)} was not recorded (${row.said}).`],
+  ).join('')
+  return `${input.package}: ${act} failed as ${parts.failure.class} (${parts.failure.evidence}). ${theSawOf(parts.inspection)}. ${parts.decision.why}.${lost} Nothing more is sent.${asked}`
 }
 
 /**
@@ -287,6 +321,10 @@ function theWordsOf(input: AnAttempt, parts: TheParts): string {
  * is named and the act's real state read through `look`, one decision is kept on the package, and the act is sent again
  * only when the inspection found it did not happen and the package has not spent its attempt. An act that had already
  * happened is answered with what was found; one that is not sent again throws RecoveryDecided, carrying the words.
+ *
+ * A store that will not keep the recovery's own rows never turns a fact about the world into its opposite: the answer
+ * still says what the inspection found, and names the row the package does not hold. A decision that cannot be kept is
+ * never acted on — an attempt no successor could read is not spent — so the package stops instead of sending again.
  */
 export async function sendAnActAndRecover(
   host: LedgerHost,
@@ -309,22 +347,31 @@ interface ASend {
 /** Names the failure, reads the state, decides and keeps the decision; then does what was decided. */
 async function recoverFrom(host: LedgerHost, input: AnAttempt, attempt: ASend): Promise<string> {
   const parts = await thePartsOf(host, input, attempt)
-  await noteTheParts(host, input, parts)
-  if (parts.decision.decision === 'concluded_from_the_inspection') return concludedWhatWasFound(host, input, attempt, parts)
+  const noted = await noteTheParts(host, input, parts)
+  if (!noted.kept && parts.decision.decision === 'retried_once') {
+    // An attempt belongs to the package, and one the package cannot keep is one no successor would read. So a store
+    // failure here stops the package instead of buying a second attempt the ledger does not know about.
+    const stopped: TheParts = { failure: parts.failure, inspection: parts.inspection, decision: { decision: 'paused', why: WHY.unrecorded } }
+    throw new RecoveryDecided(theWordsOf(input, stopped, [noted]), stopped)
+  }
+  if (parts.decision.decision === 'concluded_from_the_inspection') return concludedWhatWasFound(host, input, attempt, parts, noted)
   if (parts.decision.decision === 'retried_once') return theOneMoreTry(host, input, attempt, parts)
-  throw new RecoveryDecided(theWordsOf(input, parts), parts)
+  throw new RecoveryDecided(theWordsOf(input, parts, [noted]), parts)
 }
 
 /** Keeps what a recovery was decided on: the class and its evidence, what was read and found, and the decision. */
-async function noteTheParts(host: LedgerHost, input: AnAttempt, parts: TheParts): Promise<void> {
-  await noteRecovery(host, {
-    package: input.package,
-    member: input.member,
-    act: input.act,
-    failure: { class: parts.failure.class, evidence: parts.failure.evidence },
-    inspection: { read: parts.inspection.read, found: parts.inspection.found },
-    decision: parts.decision.decision,
-  })
+async function noteTheParts(host: LedgerHost, input: AnAttempt, parts: TheParts): Promise<AKeptRow> {
+  return keptOrSaid(
+    noteRecovery(host, {
+      package: input.package,
+      member: input.member,
+      act: input.act,
+      failure: { class: parts.failure.class, evidence: parts.failure.evidence },
+      inspection: { read: parts.inspection.read, found: parts.inspection.found },
+      decision: parts.decision.decision,
+    }),
+    'the decision',
+  )
 }
 
 /** The three parts of the decision, read in the order the rule asks for them: the failure, the state, what was spent. */
@@ -338,40 +385,60 @@ async function thePartsOf(host: LedgerHost, input: AnAttempt, attempt: ASend): P
 /**
  * The act recorded from what the inspection found. Its row is concluded only where it was left awaiting, which is the
  * one case an inspection can settle: an act whose outcome was kept stands as it was written, and the recovery row is
- * what says the world holds more.
+ * what says the world holds more. A store that will not keep either row does not change what was found, so the answer
+ * still says it, and says which row the package does not hold.
  */
-async function concludedWhatWasFound(host: LedgerHost, input: AnAttempt, attempt: ASend, parts: TheParts): Promise<string> {
+async function concludedWhatWasFound(host: LedgerHost, input: AnAttempt, attempt: ASend, parts: TheParts, noted: AKeptRow): Promise<string> {
+  const unkept: AKeptRow[] = noted.kept ? [] : [noted]
   if (attempt.failure instanceof OutcomeNotKept) {
-    await concludeAct(host, { package: input.package, member: input.member, announced_at: attempt.failure.announced_at, outcome: { succeeded: true, detail: parts.inspection.found } })
+    const concluded = await keptOrSaid(
+      concludeAct(host, { package: input.package, member: input.member, announced_at: attempt.failure.announced_at, outcome: { succeeded: true, detail: parts.inspection.found } }),
+      "the act's ending",
+    )
+    if (!concluded.kept) unkept.push(concluded)
   }
-  return parts.inspection.found
+  return unkept.length === 0 ? parts.inspection.found : theWordsOf(input, parts, unkept)
 }
 
 /**
  * The first decision's one retry: the act is announced and sent once more. An act whose row was left awaiting is
- * concluded first, as what the inspection found, so no row of a retry stands open for a successor to chase. A second
- * failure is not sent again — the package is paused, the words are told, and both the attempt and the pause are on the
- * package for its successor.
+ * concluded first, as the inspection found it, so no row of a retry stands open for a successor to chase.
+ *
+ * The retry's own failure is decided by the same rule as the first one, with the attempt spent: what the inspection
+ * found had happened is concluded from what was found and never sent a third time, and anything else pauses the
+ * package. A retry that removed the branch and then failed anyway is therefore an act that happened, not a pause.
  */
 async function theOneMoreTry(host: LedgerHost, input: AnAttempt, attempt: ASend, first: TheParts): Promise<string> {
-  await concludeTheAwaitingOne(host, input, attempt, first.inspection)
+  const concluded = await concludeTheAwaitingOne(host, input, attempt, first.inspection)
+  if (!concluded.kept) {
+    const stopped: TheParts = { failure: first.failure, inspection: first.inspection, decision: { decision: 'paused', why: WHY.unconcluded } }
+    throw new RecoveryDecided(theWordsOf(input, stopped, [concluded]), stopped)
+  }
   const again = await theEndingOf(sendOutwardAct(host, input, attempt.send))
   if ('said' in again) return again.said
   const failure = classifyAFailure(theWitnessOf(again.failure))
   const inspection = await inspectTheActualState(attempt.look)
+  // The one attempt has been spent on the send above, so the cap settles this: what was found, or a pause.
+  const decided = decideARecovery({ failure, inspection, attempt: theAttemptThatWas(again.failure), attempts_spent: ATTEMPTS_A_PACKAGE_IS_GIVEN })
   const twice = `the attempt the package was given had already failed as ${first.failure.class}, and this one failed as ${failure.class}`
-  const parts: TheParts = { failure, inspection, decision: { decision: 'paused', why: twice } }
-  await noteTheParts(host, input, parts)
-  throw new RecoveryDecided(theWordsOf(input, parts), parts)
+  const parts: TheParts = { failure, inspection, decision: { decision: decided.decision, why: `${twice}; ${decided.why}` } }
+  const noted = await noteTheParts(host, input, parts)
+  if (decided.decision === 'concluded_from_the_inspection') {
+    return concludedWhatWasFound(host, input, { failure: again.failure, send: attempt.send, look: attempt.look }, parts, noted)
+  }
+  throw new RecoveryDecided(theWordsOf(input, parts, noted.kept ? [] : [noted]), parts)
 }
 
 /** The act of the attempt that was sent and left awaiting, concluded as what the inspection found before it is retried. */
-async function concludeTheAwaitingOne(host: LedgerHost, input: AnAttempt, attempt: ASend, inspection: AnInspection): Promise<void> {
-  if (!(attempt.failure instanceof OutcomeNotKept)) return
-  await concludeAct(host, {
-    package: input.package,
-    member: input.member,
-    announced_at: attempt.failure.announced_at,
-    outcome: { succeeded: false, detail: `${inspection.found}; it was sent once more` },
-  })
+async function concludeTheAwaitingOne(host: LedgerHost, input: AnAttempt, attempt: ASend, inspection: AnInspection): Promise<AKeptRow> {
+  if (!(attempt.failure instanceof OutcomeNotKept)) return { kept: true }
+  return keptOrSaid(
+    concludeAct(host, {
+      package: input.package,
+      member: input.member,
+      announced_at: attempt.failure.announced_at,
+      outcome: { succeeded: false, detail: `${inspection.found}; it was sent once more` },
+    }),
+    'the attempt that was left awaiting',
+  )
 }
