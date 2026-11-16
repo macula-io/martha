@@ -15,7 +15,9 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 import { itFails, theLinesOf, whatARunLeft, type WhatARunLeft } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
-import { THE_PLACES_A_STATE_ROOT_KEEPS, theReadingsThisMachineGives } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
+import { theReadingsThisMachineGives } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 
 const NAME = 'check_no_member_outlives_its_run'
 
@@ -49,4 +51,4 @@ const option = (name: string): string | undefined => {
   return at === -1 ? undefined : process.argv[at + 1]
 }
 
-process.exitCode = theGate(option('--proc') ?? '/proc')
+process.exitCode = theGate(option('--proc') ?? PROC_ROOT)

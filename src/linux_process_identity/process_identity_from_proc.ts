@@ -121,8 +121,11 @@ function namespaceIn(proc_root: string): string | undefined {
   }
 }
 
+/** Where this machine's kernel shows its processes: every reader of the live process tree takes it from here. */
+export const PROC_ROOT = '/proc'
+
 /** The live kernel's process identities. */
-export const linuxProcessIdentities: ProcessLookups = procProcessIdentities('/proc')
+export const linuxProcessIdentities: ProcessLookups = procProcessIdentities(PROC_ROOT)
 
 /** The start time in one /proc/<pid>/stat line, or null when the line is not one. */
 export function startTimeIn(stat: string): string | null {

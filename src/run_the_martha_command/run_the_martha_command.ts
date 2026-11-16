@@ -32,7 +32,8 @@ import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { stateRootOf, THE_PLACES_A_STATE_ROOT_KEEPS, theReadingsThisMachineGives } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
+import { theReadingsThisMachineGives } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS, stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -50,6 +51,7 @@ import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 
 /** The command ended as asked. */
 export const EXIT_DONE = 0
@@ -286,7 +288,7 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   for (const line of theCrewListed(crew, Date.now())) io.out(line)
   // A member a run started and left running is no member of this crew's: it is no line of the list, which is one line
   // per declared member, so it is a notice beside it (martha#472).
-  for (const line of theLeftoversShown(theReadingsThisMachineGives('/proc', THE_PLACES_A_STATE_ROOT_KEEPS))) io.err(line)
+  for (const line of theLeftoversShown(theReadingsThisMachineGives(PROC_ROOT, THE_PLACES_A_STATE_ROOT_KEEPS))) io.err(line)
   return EXIT_DONE
 }
 

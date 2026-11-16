@@ -30,14 +30,9 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-
-/**
- * The state home a run's processes find Martha's state in, under the home the run is given. Exported so a run that
- * reads back what the launcher kept derives it here rather than spelling the shape a second time.
- */
-export const stateHomeUnder = (home: string): string => join(home, '.local', 'state')
 
 /**
  * Where a run derived from this home and checkout reads the crew's streams (martha#254): the same place the launcher

@@ -11,6 +11,8 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync, readlinkSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
+
 /** What a run of the host did. */
 export interface HostRun {
   /** The host's own exit status, or null when it did not exit on its own. */
@@ -101,7 +103,7 @@ function resolved(path: string): string {
 function thePidsWorkingIn(folder: string): readonly number[] {
   let entries: readonly string[]
   try {
-    entries = readdirSync('/proc')
+    entries = readdirSync(PROC_ROOT)
   } catch {
     return []
   }
@@ -112,7 +114,7 @@ function thePidsWorkingIn(folder: string): readonly number[] {
     .filter((entry) => /^\d+$/.test(entry))
     .filter((entry) => {
       try {
-        const cwd = readlinkSync(join('/proc', entry, 'cwd'))
+        const cwd = readlinkSync(join(PROC_ROOT, entry, 'cwd'))
         return [...wanted].some((path) => cwd === path || cwd.startsWith(`${path}/`))
       } catch {
         return false
