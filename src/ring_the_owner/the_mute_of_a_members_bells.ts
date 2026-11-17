@@ -25,8 +25,24 @@
 
 import { join } from 'node:path'
 
-import type { StateLines } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
+import type { Refused } from '../host_contract/host_contract.ts'
+
+/**
+ * The crew's own state files, as the host keeps them: a slice names a file and the host writes or reads it, so no slice
+ * reaches a path on this machine itself (../keep_martha_state_outside_the_checkout is the adapter's own answer, and a
+ * slice may not import it).
+ *
+ * Spelled here rather than taken from the gate's audit, which has the same shape: that slice is sealed by its own test
+ * (../audit_the_gate_for_a_member's the_audit_never_reaches_a_turn), because its lines carry what the gate refused and
+ * who sent it, so no file but the audit's own may even name it. What is shared between the two is a shape, not a value.
+ */
+export interface StateLines {
+  /** Keeps one more line in `path`, or says why it could not. */
+  readonly append: (path: string, line: string, what: string) => Refused | undefined
+  /** The whole text of `path`, or why it cannot be read. */
+  readonly read: (path: string) => { readonly text: string } | Refused
+}
 
 /** The folder inside the crew's own state directory that holds the flips: one file for the whole crew. */
 export const THE_BELLS_PLACE = 'the-bells'
@@ -69,10 +85,11 @@ export interface TheAskOfTheBells {
  * Undefined for every other way the words could be read, which the command answers with its usage.
  */
 export function bellsOf(act: string, argv: readonly string[]): TheAskOfTheBells | undefined {
-  const [, member, way] = argv
   if (argv.length === 1) return { act, args: [] }
-  if (argv.length !== 3 || member === undefined || member === '' || member.startsWith('-')) return undefined
-  return theFlipIn(way) === undefined ? undefined : { act, member, args: [way!] }
+  const [, member, way] = argv
+  const bells = theFlipIn(way)
+  if (argv.length !== 3 || member === undefined || member === '' || member.startsWith('-') || bells === undefined) return undefined
+  return { act, member, args: [bells] }
 }
 
 /** Why a mute is refused where no owner is at the keyboard. */

@@ -18,6 +18,7 @@ import {
   bellsFileIn,
   flipTheBellsOf,
   THE_BELLS_FILE,
+  THE_BELLS_PLACE,
   theMuteOf,
   type TheBellsPlace,
 } from './the_mute_of_a_members_bells.ts'
@@ -26,7 +27,7 @@ import {
 function aPlace(t: { after: (fn: () => void) => void }): TheBellsPlace {
   const home = mkdtempSync(join(tmpdir(), 'martha-bells-'))
   t.after(() => removeTheTree(home))
-  const directory = join(home, 'the-bells')
+  const directory = join(home, THE_BELLS_PLACE)
   mkdirSync(directory)
   return {
     directory,

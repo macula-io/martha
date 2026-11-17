@@ -19,7 +19,7 @@ export interface AnOwnersScreen {
   readonly beats: DashboardStore
   /** The member whose row is moved: one row per member, never one per session (../show_dashboard_beat). */
   readonly member: string
-  /** Whether this member's bells ring at all, as the declaration and the owner's own mute leave it. */
+  /** Whether this member's bells ring at all, as the crew's declaration leaves them: the owner's own mute is `muted`. */
   readonly bells: TheBellsSwitch
   /**
    * Whether the owner has muted this member's bells, asked every time a bell is about to be rung (martha#371): a flip
