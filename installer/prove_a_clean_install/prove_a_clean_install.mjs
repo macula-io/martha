@@ -564,7 +564,7 @@ async function killEveryMember (members, plant) {
   const refusals = []
   for (const member of members) {
     member.child.stdin?.end()
-    if (!member.ended) killEvenIfGone(member)
+    if (!member.ended) refusals.push(...killEvenIfGone(member))
     if (!member.ended && !await endOf(member)) refusals.push(`martha start for ${member.name} did not end`)
     if (member.pid && !await endsInTime(member.pid, plant)) refusals.push(`${member.name}, pid ${member.pid}, is still alive after ${MEMBER_WAIT_MS} ms`)
   }
@@ -572,33 +572,79 @@ async function killEveryMember (members, plant) {
 }
 
 /**
- * Every process started under `pid`, deepest last. A start's wrapper is `script`, which runs the run in a session of
- * its own: the run is not in the wrapper's process group, so it is found by walking down from the wrapper (martha#590).
- * @param {number | undefined} pid
+ * `pgrep`'s exit status when it matched no process at all (martha#590 r=2). Every other status, and a `pgrep` that
+ * could not be run, is a walk that did not happen, never an answer of "no children".
+ */
+export const NOTHING_MATCHED = 1
+
+/**
+ * The child pids `pgrep` names for `pid`, or a refusal when the question could not be asked: a status of 2 or 3 (a
+ * usage or a system error) and a `pgrep` that is not there each read as "no children" if they are not told apart from
+ * `NOTHING_MATCHED`, and a tear-down would then report a run it never reached as ended (martha#590 r=2).
+ * @param {number} pid
+ * @param {string[]} refusals
  * @returns {number[]}
  */
-function descendantsOf (pid) {
-  if (!pid) return []
+function childrenOf (pid, refusals) {
   const ran = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
-  if (ran.status !== 0) return []
-  const found = []
-  for (const line of ran.stdout.trim().split('\n').filter((child) => child !== '')) {
-    found.push(Number(line))
-    found.push(...descendantsOf(Number(line)))
+  if (ran.error) {
+    refusals.push(`the children of pid ${pid} could not be read: ${reason(ran.error)}`)
+    return []
   }
-  return found
+  if (ran.status === NOTHING_MATCHED) return []
+  if (ran.status !== 0) {
+    refusals.push(`the children of pid ${pid} could not be read: pgrep ended with status ${String(ran.status)}`)
+    return []
+  }
+  return ran.stdout.trim().split('\n').filter((child) => child !== '').map(Number)
+}
+
+/**
+ * Every process under `pid`, deepest last, each one frozen before its own children are read (martha#590 r=1): a
+ * stopped process cannot fork, so the children read after the `SIGSTOP` are the last it will ever have, and a kill of
+ * everything collected cannot be outrun by a process that forks while the tree is walked. A start's wrapper is
+ * `script`, which runs the run in a session of its own: the run is not in the wrapper's process group, so it is found
+ * by walking down from the wrapper.
+ *
+ * A process that is already gone is skipped, and nothing under it can be walked, because it is no longer anyone's
+ * child. A process that could not be frozen or read is a refusal, never a silent stop: the tear-down fails by name on
+ * it rather than reporting a run as ended that it never reached.
+ * @param {number | undefined} pid
+ * @returns {{ frozen: number[], refusals: string[] }}
+ */
+function frozenUnder (pid) {
+  /** @type {number[]} */
+  const frozen = []
+  /** @type {string[]} */
+  const refusals = []
+  /** @param {number} at */
+  const walk = (at) => {
+    try {
+      process.kill(at, 'SIGSTOP')
+    } catch (error) {
+      // ESRCH: it ended before it could be frozen, and it is no longer anyone's child to walk. Anything else is a
+      // process still in the tree that the tear-down could not stop.
+      if (/** @type {{ code?: unknown }} */ (error)?.code !== 'ESRCH') refusals.push(`pid ${at} could not be frozen: ${reason(error)}`)
+      return
+    }
+    frozen.push(at)
+    for (const child of childrenOf(at, refusals)) walk(child)
+  }
+  if (pid) walk(pid)
+  return { frozen, refusals }
 }
 
 /**
  * The tear-down's kill of a member that may never have been named: the wrapper, everything the wrapper started, and
- * the member's own process group where one was named. What is under the wrapper is collected before any of it is
- * killed, so a run that forks as it is stopped is still found: a run killed only with its wrapper goes on writing
- * where it was, which is a relay root made again after the tear-down removed it (martha#590).
+ * the member's own process group where one was named. Every process under the wrapper is frozen before any of them is
+ * killed, so a run that forks while it is walked cannot put a child out of reach: a run killed only with its wrapper
+ * goes on writing where it was, which is a relay root made again after the tear-down removed it (martha#590).
  * @param {Member} member
+ * @returns {string[]} what could not be done, if anything: the tear-down fails on it by name
  */
 export function killEvenIfGone (member) {
-  const under = descendantsOf(member.child.pid)
-  for (const pid of [...under].reverse()) {
+  const { frozen, refusals } = frozenUnder(member.child.pid)
+  for (const pid of frozen) {
     try {
       process.kill(pid, 'SIGKILL')
     } catch {
@@ -611,6 +657,7 @@ export function killEvenIfGone (member) {
     // Its group is already gone.
   }
   member.child.kill('SIGKILL')
+  return refusals
 }
 
 /**

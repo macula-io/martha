@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, MEMBER_WAIT_MS, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -57,6 +57,30 @@ const alive = (pid) => {
   } catch {
     return false
   }
+}
+
+/**
+ * The session a pid runs in, read from /proc: a run under `script` leads a session of its own, and an orphan keeps its
+ * session id, so a process that escapes the wrapper is still counted in the session it was forked in (martha#590).
+ * @param {number} pid
+ */
+const sessionOf = (pid) => {
+  const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+  // The fields are counted after the process name in parentheses, which can itself hold spaces and brackets: the
+  // state, the parent, the group and the session follow the last ")".
+  return Number(stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/)[3])
+}
+
+/**
+ * Every process in `session`, as `pgrep` names it. An answer other than "some" or "none" fails the test instead of
+ * reading as an empty session, which would pass the check by never making it.
+ * @param {number} session
+ * @returns {number[]}
+ */
+const inSession = (session) => {
+  const ran = spawnSync('pgrep', ['-s', String(session)], { encoding: 'utf8' })
+  assert.ok(ran.status === 0 || ran.status === NOTHING_MATCHED, `pgrep -s ${session} answered ${String(ran.status)}`)
+  return ran.status === 0 ? ran.stdout.trim().split('\n').filter((line) => line !== '').map(Number) : []
 }
 
 /**
@@ -461,6 +485,95 @@ test('a start in flight is killed with everything under it, so nothing it began 
   const ended = Date.now() + MEMBER_WAIT_MS
   while (alive(writerPid) && Date.now() < ended) await delay(POLL_MS)
   assert.equal(alive(writerPid), false, 'nothing the start began is alive after the tear-down')
+})
+
+// martha#590 r=1: a run that forks while the tree is walked cannot put a child out of reach, because each process is
+// frozen before its own children are read. A walk that only collects first has a window per process, at one `pgrep`
+// spawn each, and the kill then leaves every parent alive the longest: a child forked in the window is reparented out
+// of the wrapper's tree when its parent dies, and no later walk finds it again.
+test('a run that forks while it is walked is frozen, so nothing of it outlives the tear-down (martha#590 r=1)', async (t) => {
+  const tree = scratch(t)
+  const pidFile = join(tree, 'pid')
+  const forker = join(tree, 'forker.sh')
+  // Two long-lived children for every short sleep, as a start in flight spawning its host over and over would: the
+  // run's own session is where they land, since a fork keeps its session and only setsid() leaves it.
+  const forks = `printf '%s\\n' "$$" > ${quoted(pidFile)}; while :; do sleep 300 & sleep 300 & sleep 0.005; done`
+  writeFileSync(forker, [
+    '#!/bin/sh',
+    "trap '' HUP",
+    `${quoted('sh')} -c ${quoted(forks)} &`,
+    'wait',
+    ''
+  ].join('\n'), { mode: RUNNABLE })
+  const member = { name: 'forking', child: startOnATerminal(quoted(forker), { cwd: tree, env: process.env }), pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  /** @type {number} */
+  let session = 0
+  t.after(() => {
+    // Everything still in the run's session goes, whatever the assertions said, so a failing case leaves nothing
+    // running for the next one.
+    for (const pid of session > 0 ? inSession(session) : []) { try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ } }
+    member.child.kill('SIGKILL')
+  })
+  const began = Date.now() + MEMBER_WAIT_MS
+  while (!existsSync(pidFile) && Date.now() < began) await delay(POLL_MS)
+  const runPid = Number(readFileSync(pidFile, 'utf8').trim())
+  assert.ok(runPid > 0, 'the run said its pid')
+  session = sessionOf(runPid)
+  assert.ok(session > 0 && session !== sessionOf(process.pid), `the run leads a session of its own, not the test's: ${session}`)
+  const forking = Date.now() + MEMBER_WAIT_MS
+  let walked = inSession(session)
+  while (walked.length <= 1 && Date.now() < forking) {
+    await delay(POLL_MS)
+    walked = inSession(session)
+  }
+  assert.ok(walked.length > 1, `the run forked children before the tear-down: ${walked.length} in session ${session}`)
+  assert.deepEqual(killEvenIfGone(member), [], 'the walk asked every process it froze for its children')
+  const ended = Date.now() + MEMBER_WAIT_MS
+  let left = inSession(session)
+  while (left.length > 0 && Date.now() < ended) {
+    await delay(POLL_MS)
+    left = inSession(session)
+  }
+  assert.deepEqual(left, [], `nothing in the run's session ${session} is alive after the tear-down`)
+})
+
+// martha#590 r=2: the walk asks `pgrep` for a process's children, and only its exit status 1 means the process has
+// none. A `pgrep` that is missing, or that ends with 2 or 3 (a usage or a system error), read as "no children" turns
+// the tear-down into a silent no-op over a run it never reached: the original bug with a green step over it.
+test('a walk that could not be made fails the tear-down by name, and only status 1 reads as no children (martha#590 r=2)', async (t) => {
+  const tree = scratch(t)
+  const nowhere = join(tree, 'not-on-this-path')
+  const usageError = join(tree, 'a-pgrep-that-errors')
+  const nothingMatched = join(tree, 'a-pgrep-that-finds-nothing')
+  for (const dir of [nowhere, usageError, nothingMatched]) mkdirSync(dir)
+  writeFileSync(join(usageError, 'pgrep'), ['#!/bin/sh', 'exit 2', ''].join('\n'), { mode: RUNNABLE })
+  writeFileSync(join(nothingMatched, 'pgrep'), ['#!/bin/sh', 'exit 1', ''].join('\n'), { mode: RUNNABLE })
+  const path = process.env.PATH
+  t.after(() => { process.env.PATH = path })
+  /** @type {Array<[string, string, RegExp | undefined]>} */
+  const cases = [
+    ['pgrep is not there', nowhere, /could not be read: /],
+    ['pgrep ends on a usage error', usageError, /could not be read: pgrep ended with status 2/],
+    ['pgrep found no children', nothingMatched, undefined]
+  ]
+  for (const [what, onlyPath, says] of cases) {
+    // A child with no children of its own: status 1 is believed here, so a real grandchild would be left running by
+    // the one case that must not refuse anything.
+    const child = spawn('sleep', ['300'], { stdio: 'ignore' })
+    t.after(() => { try { process.kill(Number(child.pid), 'SIGKILL') } catch { /* already gone */ } })
+    const member = { name: what, child, pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+    process.env.PATH = onlyPath
+    const refusals = killEvenIfGone(member)
+    process.env.PATH = path
+    const ended = Date.now() + MEMBER_WAIT_MS
+    while (alive(Number(child.pid)) && Date.now() < ended) await delay(POLL_MS)
+    assert.equal(alive(Number(child.pid)), false, `${what}: what the walk froze is killed`)
+    if (says === undefined) assert.deepEqual(refusals, [], `${what}: status 1 is an answer, so nothing is refused`)
+    else {
+      assert.equal(refusals.length, 1, `${what}: one refusal, never a silent no-op`)
+      assert.match(refusals[0] ?? '', says, what)
+    }
+  }
 })
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
