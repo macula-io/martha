@@ -28,7 +28,8 @@
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
-import { dirname } from 'node:path'
+import { tmpdir } from 'node:os'
+import { dirname, isAbsolute } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
@@ -97,6 +98,18 @@ export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; re
 /** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names
  * them: the rows are the crew's, not a checkout's (martha#254 R1). */
 const STATE_PLACES = [THE_PLACES_A_STATE_ROOT_KEEPS.records_place, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
+
+/**
+ * The roots this machine keeps in memory, which a reboot empties (martha#314): the OS's own temporary directory, and
+ * the runtime directory when the session has one. Derived here, in the adapter that launches, and never written out:
+ * this is the one place that knows a machine, and a crew that names its own roots in the declaration never reads it.
+ * A trailing slash is dropped, since a path is matched against a root by its prefix.
+ */
+function thisMachinesVolatileRoots(): readonly string[] {
+  const runtime = process.env['XDG_RUNTIME_DIR']
+  const roots = runtime !== undefined && isAbsolute(runtime) ? [tmpdir(), runtime] : [tmpdir()]
+  return [...new Set(roots.map((root) => root.replace(/\/+$/, '')))]
+}
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
@@ -321,6 +334,8 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         // workspace places: nothing that acts runs inside the member's session (martha#256).
         processes: thisMachine.processes,
         settings: ready.settings,
+        // What a reboot deletes on this machine, for a crew whose declaration names no root of its own (martha#314).
+        volatile_roots: thisMachinesVolatileRoots(),
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,

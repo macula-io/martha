@@ -28,6 +28,7 @@ import {
   OWNER,
   RESTART_MEMBER,
   STRICT_GATE,
+  VOLATILE_PATHS,
   WORKTREES,
   declareCrew,
   type CrewSettings,
@@ -143,6 +144,21 @@ test('the dashboard is a switch like the others: off unless the declaration name
 
   const named = await declare({ ...solo, house_rules: { dashboard: true } }).settings
   assert.equal(named.house_rules.dashboard, true, 'a crew that switches it on reads it on')
+})
+
+test('the roots a reboot deletes are the declaration\'s, and the launch\'s own when it names none (martha#314)', async () => {
+  const unnamed = await declare(solo).settings
+  assert.deepEqual(unnamed.volatile_paths, [], 'a crew that names no root declared one, so the machine roots apply')
+
+  const named = await declare({ ...solo, [VOLATILE_PATHS]: ['/var/scratch', '/run/user/1000/'] }).settings
+  assert.deepEqual(named.volatile_paths, ['/var/scratch', '/run/user/1000'], 'a trailing slash was kept as part of a root')
+})
+
+test('a root that is not absolute, an empty list and a root named twice are refused by field (martha#314)', async () => {
+  await refusedWith({ ...solo, [VOLATILE_PATHS]: 'scratch' }, VOLATILE_PATHS)
+  await refusedWith({ ...solo, [VOLATILE_PATHS]: [] }, VOLATILE_PATHS)
+  await refusedWith({ ...solo, [VOLATILE_PATHS]: ['scratch'] }, `${VOLATILE_PATHS}[0]`)
+  await refusedWith({ ...solo, [VOLATILE_PATHS]: ['/var/scratch', '/var/scratch/'] }, `${VOLATILE_PATHS}[1]`)
 })
 
 test('the mode is data: a mode of any name reads exactly as the same table named team', async () => {
