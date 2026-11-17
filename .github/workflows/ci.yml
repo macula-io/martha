@@ -293,6 +293,23 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:no-member-outlives-its-run
 
+  # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
+  # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
+  # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
+  # test plants holds a killed run's chain and must be named, and the same chain under a live runner must not be —
+  # prove_the_core/the_launchers_a_run_left.node-test.ts, which the suite runs.
+  no-launcher-outlives-its-run:
+    name: no launcher outlives its run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-launcher-outlives-its-run
+
   # Martha's names are its own (martha#468): no file, folder, tool, marker or variable of Martha's may be a name
   # crew-code also gives something, or a person reading a path, a transcript or a tool name cannot tell which crew a
   # thing belongs to. It runs as a job and as a node test, so no range gate reads green while the check did not run.
