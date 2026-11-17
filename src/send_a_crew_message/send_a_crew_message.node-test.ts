@@ -329,6 +329,17 @@ test('#512 slice 2: a message only to those the nudges go to passes a pause, com
   assert.deepEqual(kinds.slice(-2), ['act_announced', 'act_concluded'], 'the report was not announced and concluded in the ledger')
 })
 
+test('#512 slice 2: a message to those the nudges go to and to another member is held by a pause, and nothing reaches the channel', async () => {
+  const { host } = hostForTests({ now: 7_500 })
+  await aPausedPackage(host)
+  const before = (await readLedger(host, PAUSED)).length
+  // One addressee is the Supervisor the nudges go to, the other is not: the message reaches a member the pause holds from.
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Supervisor', 'Reviewer'], receivers: ['Supervisor'] }))
+  assert.ok('refused' in sent, `a message to the Supervisor and another member passed a pause: ${JSON.stringify(sent)}`)
+  assert.deepEqual(await readTheChannel(host), [], 'the message reached the channel')
+  assert.equal((await readLedger(host, PAUSED)).length, before, 'the message was announced')
+})
+
 test('#512 slice 2: a paused member whose crew names nobody for the nudges is told so by name, and nothing is sent', async () => {
   const { host } = hostForTests({ now: 7_500 })
   await aPausedPackage(host)
