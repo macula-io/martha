@@ -20,6 +20,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { holdTheMember, notRunningToRestart, restartAMember, restartByTool, type AStart, type HoldingHost } from './restart_a_member.ts'
@@ -296,10 +297,10 @@ test('#312: the asker reads a restart its launcher answered, and a launcher that
   const answering = anAskingHost(crew.lifecycle, { [LAUNCH.pid]: LAUNCH.process_started_at }, () => {
     const read = theRequestOf(crew.lifecycle, 'builder')
     if (read.kind !== 'pending') return
-    crew.lifecycle.keep('builder.json', JSON.stringify({ request: read.request, outcome: { id: read.request.id, ended_by: 'launcher', at: read.request.at, restarted: { started: true }, mid_turn: true, resumed_from: '/crew/handovers/builder-1.md' } }))
+    crew.lifecycle.keep('builder.json', JSON.stringify({ request: read.request, outcome: { id: read.request.id, ended_by: 'launcher', at: read.request.at, restarted: { started: true }, mid_turn: true, resumed_from: `/${THE_WHOLE_CREW}/${HANDOVERS_PLACE}/builder-1.md` } }))
   })
   const restarted = await restartAMember(answering.host, { member: 'builder', by: OWNER, reason: 'r', id: 'y', fresh: false })
-  assert.deepEqual(restarted, { kind: 'restarted', told: 'builder is restarted from its handover at /crew/handovers/builder-1.md; it ended mid-turn, so send again what it was working on.' })
+  assert.deepEqual(restarted, { kind: 'restarted', told: `builder is restarted from its handover at /${THE_WHOLE_CREW}/${HANDOVERS_PLACE}/builder-1.md; it ended mid-turn, so send again what it was working on.` })
   const silent = aCrew()
   const { host } = anAskingHost(silent.lifecycle, { [LAUNCH.pid]: LAUNCH.process_started_at })
   const unanswered = await restartAMember(host, { member: 'builder', by: OWNER, reason: 'r', id: 'z', fresh: true })

@@ -29,6 +29,7 @@ import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { EMPTY_DIRECTORY_MODE } from '../empty_directory_of_a_launch/empty_directory.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
@@ -198,7 +199,7 @@ function memberCommands(home: string, checkout: string, husky: string, direnv: D
     'git commit -q --allow-empty -m "a member commits"',
     'git status --porcelain > /dev/null',
     'npm install --offline --no-audit --no-fund > /dev/null 2>&1',
-    'test -e node_modules/dependency/package.json',
+    `test -e ${DEPENDENCIES}/dependency/${MANIFEST}`,
     // What direnv's shell hook runs on entering a directory, as a command of its
     // own so a missing direnv fails here. A blocked .envrc is direnv's answer to
     // an .envrc it was not told to trust: it exits 1 and says so.

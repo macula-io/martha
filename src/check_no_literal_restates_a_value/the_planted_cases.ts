@@ -293,6 +293,45 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: [`a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL ${GONE}`],
   },
   {
+    what: 'a constant written as a whole segment of a path literal the change adds (martha#437)',
+    base: { 'a_config/a_config.ts': "export const CONFIG = 'config'\n" },
+    head: { 'a_user/a_user.ts': "const at = join(checkout, '.git/config')\n" },
+    prints: ["a_user/a_user.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG"],
+  },
+  {
+    // The relay is the one place in the tree that holds a private copy of a value the core also holds, and its hooks
+    // are the files that spell paths (Jupiter's note on PR 469). A planted case in a hooks file proves the check reads
+    // them, not only the core.
+    what: 'a constant written as a whole segment of a path literal a hooks file of the relay adds (martha#437)',
+    base: { 'a_relay_copy/a_relay_copy.ts': "export const A_RELAYS_PLACE = 'a-relays-place'\n" },
+    head: { 'claude_code_relay/hooks/register.ts': "const at = join(place, 'hooks/a-relays-place/register.js')\n" },
+    prints: ["claude_code_relay/hooks/register.ts:1: 'a-relays-place' (a path segment) restates a_relay_copy/a_relay_copy.ts A_RELAYS_PLACE"],
+  },
+  {
+    what: 'a constant inside prose the change adds, which only a path separator would split out (martha#437)',
+    base: { 'a_config/a_config.ts': "export const CONFIG = 'config'\n" },
+    head: { 'a_user/a_user.ts': "say('read the config before the run')\n" },
+    prints: [],
+  },
+  {
+    what: 'a coincidence entry the change adds in a slice named like a constant, whose file path names a source (martha#437, r=1)',
+    base: { 'a_crews_tools/a_crews_tools.ts': "export const WAKE_IT = 'wake_it'\n", 'wake_it/wake_it.ts': 'export const run = () => 0\n' },
+    head: { 'wake_it/coincidences.ts': "export const COINCIDENCES = [{ value: 'x', file: 'wake_it/wake_it.ts', reason: 'r' }]\nconst notes = 'wake_it/notes.md'\n" },
+    prints: ["wake_it/coincidences.ts:2: 'wake_it' (a path segment) restates a_crews_tools/a_crews_tools.ts WAKE_IT"],
+  },
+  {
+    what: "a URL the change adds, holding a constant as a path segment, judged whole (the owner's ruling on martha#437, r=3)",
+    base: { 'a_repo/a_repo.ts': "export const THE_REPO = 'the-repo'\n" },
+    head: { 'a_user/a_user.ts': "call('https://example.invalid/anorg/the-repo/issues')\ncall('refs/the-repo/base')\n" },
+    prints: ["a_user/a_user.ts:2: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO"],
+  },
+  {
+    what: "an owner/repo name the change adds, bare and in an API route, judged whole (the owner's ruling on martha#437, r=3)",
+    base: { 'a_repo/a_repo.ts': "export const THE_REPO = 'the-repo'\n" },
+    head: { 'a_user/a_user.ts': "call('an-org/the-repo')\ncall('repos/an-org/the-repo/actions/runs')\ncall('anorg/the-repo')\n" },
+    prints: ["a_user/a_user.ts:3: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO"],
+  },
+  {
     what: 'a marker imported under a second name',
     base: {},
     head: { 'a_tool/tools.ts': "import type { DefinesItsValues as D } from './marker.ts'\nexport const TOOLS = Object.freeze({ Edit: 'file_path' }) satisfies D\n" },

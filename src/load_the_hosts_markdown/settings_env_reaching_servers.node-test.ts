@@ -9,8 +9,8 @@ import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const ALLOWED = ['HOME', 'PATH', 'MACULA_MESH_REALMS']
-const USER = '/owner/.claude/settings.json'
-const APPROVED = '/snapshot/.claude/settings.json'
+const USER = `/owner/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`
+const APPROVED = `/snapshot/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`
 const withEnv = (env: unknown) => JSON.stringify({ env })
 
 test('a settings env name nobody approved is refused, naming the file and the name, beside an allowed one', () => {
@@ -60,7 +60,7 @@ for (const [shape, text] of [
   })
 }
 
-test('the user settings file is under CLAUDE_CONFIG_DIR when it is set, else under HOME/.claude', () => {
+test(`the user settings file is under CLAUDE_CONFIG_DIR when it is set, else under HOME/${CLAUDE_FOLDER}`, () => {
   assert.deepEqual(userSettingsPath({ HOME: '/owner' }), { path: join('/owner', CLAUDE_FOLDER, USER_SETTINGS_FILE) })
   assert.deepEqual(userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: '/config' }), { path: join('/config', USER_SETTINGS_FILE) })
 })

@@ -67,7 +67,7 @@ test('a directory that is not in git is keyed by its own real path, which is one
   assert.equal(pathOf(crewStateDirectory(state_root, plain)), pathOf(crewStateDirectory(state_root, plain)))
 })
 
-test('the place is <state root>/crews/<64 hex>, mode 0700, and its rows sit under it (R1)', (t) => {
+test(`the place is <state root>/${CREWS_PLACE}/<64 hex>, mode 0700, and its rows sit under it (R1)`, (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
 

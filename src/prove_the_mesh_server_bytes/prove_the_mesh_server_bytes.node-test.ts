@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import {
   KNOWN_MESH_SERVER_SETTINGS,
   MESH_SERVER_REGISTRY,
@@ -165,7 +166,7 @@ test('a dependency reading by a key that is no literal is listed by file, not re
 })
 
 test('a file in no package of the lock is refused, naming it', () => {
-  assert.throws(() => environmentReadsInTree([source(`process.env.${KEPT}`, 'node_modules/stray/index.js')], lockWith()), /node_modules\/stray\/index\.js/)
+  assert.throws(() => environmentReadsInTree([source(`process.env.${KEPT}`, `${DEPENDENCIES}/stray/index.js`)], lockWith()), /node_modules\/stray\/index\.js/)
 })
 
 const readsOf = (name: string, read: string, file = `node_modules/${name}/index.js`) => ({ [name]: { reads: { [read]: [file] }, computed: [] } })
@@ -208,19 +209,19 @@ test('a read the bytes hold and the record leaves out, and one the record holds 
 
 // --- the tree a member runs ----------------------------------------------------
 
-const FILES = { 'node_modules/a/index.js': sriOf(new TextEncoder().encode('a')), 'node_modules/b/index.js': sriOf(new TextEncoder().encode('b')) }
+const FILES = { [`${DEPENDENCIES}/a/index.js`]: sriOf(new TextEncoder().encode('a')), [`${DEPENDENCIES}/b/index.js`]: sriOf(new TextEncoder().encode('b')) }
 
 test('a tree equal to its record has no change', () => {
   assert.equal(changesInTree(FILES, { ...FILES }), undefined)
 })
 
 test('a changed, a missing and a planted file are each named', () => {
-  const changed = changesInTree(FILES, { ...FILES, 'node_modules/a/index.js': sriOf(new TextEncoder().encode('evil')) }) ?? ''
-  assert.ok(changed.includes('node_modules/a/index.js') && !changed.includes('node_modules/b/index.js'), changed)
-  const { 'node_modules/b/index.js': _b, ...missing } = FILES
-  assert.ok(changesInTree(FILES, missing)?.includes('node_modules/b/index.js'))
-  const planted = changesInTree(FILES, { ...FILES, 'node_modules/a/preload.js': sriOf(new TextEncoder().encode('x')) }) ?? ''
-  assert.ok(planted.includes('node_modules/a/preload.js'), planted)
+  const changed = changesInTree(FILES, { ...FILES, [`${DEPENDENCIES}/a/index.js`]: sriOf(new TextEncoder().encode('evil')) }) ?? ''
+  assert.ok(changed.includes(`${DEPENDENCIES}/a/index.js`) && !changed.includes(`${DEPENDENCIES}/b/index.js`), changed)
+  const { [`${DEPENDENCIES}/b/index.js`]: _b, ...missing } = FILES
+  assert.ok(changesInTree(FILES, missing)?.includes(`${DEPENDENCIES}/b/index.js`))
+  const planted = changesInTree(FILES, { ...FILES, [`${DEPENDENCIES}/a/preload.js`]: sriOf(new TextEncoder().encode('x')) }) ?? ''
+  assert.ok(planted.includes(`${DEPENDENCIES}/a/preload.js`), planted)
 })
 
 // --- the record is reviewable ---------------------------------------------------

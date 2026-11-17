@@ -84,7 +84,7 @@ test('a member in a worktree may not write the main clone\'s memory folder, nor 
 test('a memory path spelled with ~/, with white space around it, or through a link is denied as the host resolves it', (t) => {
   const place = placeFor(t)
   const places = placesFor(place)
-  assertDenied(places, place.worktree, place.home, '~/.claude/projects/-work-main-clone/memory/MEMORY.md', '~/ against the host\'s home')
+  assertDenied(places, place.worktree, place.home, `~/${CLAUDE_FOLDER}/projects/-work-main-clone/memory/MEMORY.md`, '~/ against the host\'s home')
   assertDenied(places, place.worktree, place.home, `  ${join(place.mainMemory, 'MEMORY.md')}\n`, 'white space around it')
   symlinkSync(place.mainMemory, join(place.worktree, 'notes'))
   assertDenied(places, place.worktree, place.home, 'notes/MEMORY.md', 'a link in the worktree to a memory folder')
@@ -658,7 +658,7 @@ test('the permission rules deny the whole family by pattern, one rule for each d
  * markdown folders, the output styles and the transcript streams.
  */
 const A_WRITE_INTO: Readonly<Record<string, string>> = {
-  skills: 'skills/deploy.md',
+  skills: `${SKILLS_KIND}/deploy.md`,
   commands: 'commands/deploy.md',
   agents: 'agents/deploy.md',
   'output-styles': 'output-styles/deploy.md',
@@ -877,14 +877,14 @@ test('a git directory that appears during the session is covered from the next c
 // matched against the rules this repository wrote, and nothing else: the wording is the host's, and a line quoting one
 // of our rules is about that rule whatever it goes on to say.
 test('the host\'s own words are read for a rule this launch wrote, and a line about someone else\'s rule is not one (#226)', () => {
-  const written = ['Edit(//home/synthetic/.claude/projects/*/**)', 'Edit(//home/synthetic/.claude.json)']
+  const written = [`Edit(//home/synthetic/${CLAUDE_FOLDER}/projects/*/**)`, 'Edit(//home/synthetic/.claude.json)']
   const aboutOurRule = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude.json) is not matched by file permission checks'
   assert.deepEqual(hostLinesNamingARule(`starting\n${aboutOurRule}\n`, written), [aboutOurRule])
   // A rule the owner's own settings carry is the owner's business, and not a reason to refuse their member.
   assert.deepEqual(hostLinesNamingARule('Permission deny rule (user.json): Edit(//home/synthetic/notes/**) is not matched by file permission checks', written), [])
   assert.deepEqual(hostLinesNamingARule('', written), [])
   // Every line that names one, not the first: a host complaining about two rules is two faults to read.
-  const second = 'Permission deny rule (martha.json): Edit(//home/synthetic/.claude/projects/*/**) is not matched by file permission checks'
+  const second = `Permission deny rule (martha.json): Edit(//home/synthetic/${CLAUDE_FOLDER}/projects/*/**) is not matched by file permission checks`
   assert.deepEqual(hostLinesNamingARule(`${aboutOurRule}\n${second}\n`, written), [aboutOurRule, second])
 })
 
@@ -893,7 +893,7 @@ test('the host\'s own words are read for a rule this launch wrote, and a line ab
 // twin of a place this launch denies — has the host quote one of our own rules back at it. That is the owner's rule,
 // and refusing their member for it would leave an owner who protects their own CLAUDE.md unable to start one at all.
 test('a line is read for the rule it is about, and one the host prints twice is one rule (#226 r=1)', () => {
-  const written = ['Edit(//home/synthetic/.claude/projects/*/**)', 'Edit(//home/synthetic/.claude.json)']
+  const written = [`Edit(//home/synthetic/${CLAUDE_FOLDER}/projects/*/**)`, 'Edit(//home/synthetic/.claude.json)']
   const theOwnersDeadRule = 'Permission deny rule (.claude/settings.json): Write(//home/synthetic/.claude.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(//home/synthetic/.claude.json) instead (Edit rules cover all file-editing tools).'
   assert.deepEqual(hostLinesNamingARule(theOwnersDeadRule, written), [])
   // The owner's twin of one of our rules, printed among our own line: ours is counted, theirs is not.
