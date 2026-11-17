@@ -30,7 +30,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { LAND } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { ContractAction } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 
 const names = claudeCodeToolNames
@@ -256,3 +256,28 @@ test('the contract is asked last of all: a call the gate refuses keeps the gate\
   assert.match(answer, /nothing executes/i)
   assert.doesNotMatch(answer, /contract/)
 })
+
+test('a land is refused under the name this host calls the tool by, not only the core\'s own', () => {
+  const session = beginSession(store(), 's-1')
+  const called = `mcp__martha__${LAND_BATCH}`
+  const answer = denied(
+    answerToolCall({ names, tool: called, session, policy, launch, host: thisMachine, input: {}, contract: aContract(['push', 'handoff', 'tag']) }),
+  )
+  assert.match(answer, /this call lands, and package synthetic-owner\/repo#7's contract \(version 2\) allows push, handoff, tag only/)
+  // The core's own name is refused by the same rule, so the two spellings cannot drift apart.
+  const own = denied(
+    answerToolCall({ names, tool: LAND_BATCH, session, policy, launch, host: thisMachine, input: {}, contract: aContract(['push', 'handoff', 'tag']) }),
+  )
+  assert.match(own, /this call lands/)
+})
+
+test('a contract the ledger could not read back refuses the act and says why, and no call that is not one', () => {
+  const session = beginSession(store(), 's-1')
+  const unreadable = { package: 'synthetic-owner/repo#7', why: 'row 3 is not a contract block' }
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: unreadable }),
+  )
+  assert.match(answer, /could not be read \(row 3 is not a contract block\), so push is refused until the ledger answers/)
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: unreadable }), undefined)
+})
+

@@ -826,7 +826,7 @@ async function theDenialOfACall(
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.gate === undefined ? {} : { gate: place.gate }),
-    audit: place.audit, contract: await theContractACrewHolds(place.crew),
+    audit: place.audit, contract: await theContractACrewHolds(place.crew, { tool: call.tool, input: call.input }, place.names),
   })?.deny
   if (verdict !== undefined) return verdict
   // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role

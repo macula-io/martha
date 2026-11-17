@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CONTRACT_ACTIONS } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import { LAND, LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -40,13 +40,55 @@ test('a command is read as its own words, a quoted run being one word', () => {
   assert.deepEqual(theWordsOfACommand("cd /tmp && git push"), ['cd', '/tmp', '&&', 'git', 'push'])
 })
 
-test("a line break begins another command, so a script's last line is read as one", () => {
-  // The commonest push there is: a script whose last line pushes. Without the break, `git` reads as the argument of the
-  // line above it and the push is let through.
+test("a script's last line that pushes is a push, wherever in the command it sits", () => {
+  // The commonest push there is: a script whose last line pushes. A reader that only looked at a command's first word,
+  // or that dropped the line break, saw `git` as the argument of the line above it and let the push through.
   assert.deepEqual(theActsOfACall(aShellCall('npm test\ngit push origin main'), PACKAGE), ['push'])
   assert.deepEqual(theActsOfACall(aShellCall('npm test\n\ncd out\ngit tag v1'), PACKAGE), ['tag'])
   // Inside a quote a break is part of the word, so a commit message that mentions a push is not one.
   assert.deepEqual(theActsOfACall(aShellCall('git commit -m "fix one\ngit push is broken"'), PACKAGE), [])
+})
+
+// --- the shapes a member writes a push in, one test each (martha#513 slice 2, round 2) --
+
+test('a push run through git -C is a push', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git -C /work/repo push origin main'), PACKAGE), ['push'])
+})
+
+test("a push run through git's -c is a push", () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git -c core.pager=cat push'), PACKAGE), ['push'])
+})
+
+test('a push behind an assignment is a push', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('GIT_SSH_COMMAND=ssh git push'), PACKAGE), ['push'])
+})
+
+test('a push that ends its command with a ; is a push', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git push;'), PACKAGE), ['push'])
+})
+
+test('a push with nothing spacing it from && is a push', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('cd x&&git push'), PACKAGE), ['push'])
+})
+
+test('a push after an & is a push, whatever leads up to it', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('a & b, then git push'), PACKAGE), ['push'])
+})
+
+test('a push inside parentheses is a push', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('(git push)'), PACKAGE), ['push'])
+})
+
+test('words that only talk about a push are no act, quoted, and sh -c stays out of scope', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('echo "git push"'), PACKAGE), [])
+  assert.deepEqual(theActsOfACall(aShellCall('sh -c "git push"'), PACKAGE), [])
+})
+
+test("a land arrives under the host's own name for the tool, and is still a land", () => {
+  const called = `mcp__martha__${LAND_BATCH}`
+  assert.deepEqual(theActsOfACall({ tool: called, input: {} }, PACKAGE), [])
+  assert.deepEqual(theActsOfACall({ tool: called, input: {} }, PACKAGE, ownNameOfCalledTool), [LAND])
+  assert.deepEqual(theActsOfACall({ tool: `mcp__martha__${FAST_FORWARD_AFTER_THE_OWNERS_YES}`, input: {} }, PACKAGE, ownNameOfCalledTool), [LAND])
 })
 
 // --- what act a call is -------------------------------------------------------------
@@ -123,6 +165,19 @@ test('a package with no contract, and a package the owner called unbounded, refu
   const unbounded: TheContractInForce = { package: PACKAGE, version: 1, kind: 'unbounded', allowed: [] }
   assert.equal(refuseACallOutsideTheContract(aShellCall('git push --tags'), unbounded), undefined)
   assert.equal(refuseACallOutsideTheContract({ tool: LAND_BATCH, input: {} }, unbounded), undefined)
+})
+
+test('a contract the ledger cannot read back refuses that act alone, and the words say why', () => {
+  const unreadable = { package: PACKAGE, why: 'row 3 is not a contract block' }
+  const refused = refuseACallOutsideTheContract(aShellCall('git push origin main'), unreadable)
+  assert.ok(refused !== undefined)
+  assert.match(
+    refused,
+    /this call pushes, and package synthetic-owner\/repo#7's contract could not be read \(row 3 is not a contract block\), so push is refused until the ledger answers/,
+  )
+  // A call that is no act runs whatever the ledger could not answer: the unreadable contract refuses that act alone.
+  assert.equal(refuseACallOutsideTheContract(aShellCall('npm test'), unreadable), undefined)
+  assert.equal(refuseACallOutsideTheContract({ tool: 'some_read', input: {} }, unreadable), undefined)
 })
 
 test('the gate\'s words are the contract\'s words: the two vocabularies are the same four acts', () => {

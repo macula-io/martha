@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS } from '../declare_crew/declare_crew.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -21,6 +22,8 @@ import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/re
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
+import { isAContractThatCannotBeRead, type TheContractHanded, type TheContractInForce } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-contract-in-force-'))
@@ -57,6 +60,8 @@ const documents = {
 /** The ledger the crew reads and a test keeps contracts in: one store, so the crew sees what the test kept. */
 const ledger = { clock: { now: () => 1_000 }, stores: { rows: rowStreamsDirectory(join(home, CREW_ROWS_PLACE)) } }
 const beats = dashboardRowsIn(join(home, 'row'))
+/** The host's own split of a called name: how the relay hands the crew every call (martha#513 slice 2, round 2). */
+const names = claudeCodeToolNames
 
 const theToolsOf = (member: string): CrewTools =>
   crewToolsOver({
@@ -83,27 +88,35 @@ const aBriefAllowing = (allowed: string, extra: readonly string[] = []): string 
     '```',
   ].join('\n')
 
+/** The contract in force, when the crew answered one: what a readable ledger gives, and undefined for no contract or none read. */
+const theContractSaid = (handed: TheContractHanded): TheContractInForce | undefined =>
+  handed === undefined || isAContractThatCannotBeRead(handed) ? undefined : handed
+
+/** A call the gate would hand the contract: a shell command, which the act table reads by its own words. */
+const aCall = (command: string) => ({ tool: CLAUDE_CODE_SHELL_TOOL, input: { command } })
+
 test('the crew answers the contract of the package its member holds: its newest version, in the gate\'s own words', async () => {
   const tools = theToolsOf(BUILDER)
+  const pushes = aCall('git push origin main')
   // A member holding no package is held to nothing, so the gate refuses nothing for it.
-  assert.equal(await tools.theContractInForce(), undefined)
+  assert.equal(await tools.theContractInForce(pushes, names), undefined)
 
   // It reports the package it works on, and still holds no contract: nothing is refused yet.
   await tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the work', step: 0, of: 1, package: PACKAGE }, 'session-builder')
-  assert.equal(await tools.theContractInForce(), undefined)
+  assert.equal(await tools.theContractInForce(pushes, names), undefined)
 
   const first = await keepThePackageContract(ledger, { package: PACKAGE, member: SUPERVISOR, brief: aBriefAllowing('push, land') })
   assert.ok('answer' in first, 'refused' in first ? first.refused : '')
-  assert.deepEqual(await tools.theContractInForce(), { package: PACKAGE, version: 1, kind: 'bounded', allowed: ['push', LAND] })
+  assert.deepEqual(await tools.theContractInForce(pushes, names), { package: PACKAGE, version: 1, kind: 'bounded', allowed: ['push', LAND] })
 
   // A change is a new version, and the new version is the one in force.
   const second = await keepThePackageContract(ledger, { package: PACKAGE, member: SUPERVISOR, brief: aBriefAllowing('handoff') })
   assert.ok('answer' in second, 'refused' in second ? second.refused : '')
-  assert.deepEqual(await tools.theContractInForce(), { package: PACKAGE, version: 2, kind: 'bounded', allowed: ['handoff'] })
+  assert.deepEqual(await tools.theContractInForce(pushes, names), { package: PACKAGE, version: 2, kind: 'bounded', allowed: ['handoff'] })
 
   // A member that holds another package is held to that one's contract, not to this one's.
   await theToolsOf(SUPERVISOR).answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'other work', step: 0, of: 1, package: 'synthetic-owner/other#9' }, 'session-lead')
-  assert.equal(await theToolsOf(SUPERVISOR).theContractInForce(), undefined)
+  assert.equal(await theToolsOf(SUPERVISOR).theContractInForce(pushes, names), undefined)
 })
 
 test('a package the owner called unbounded answers an unbounded contract, which refuses no act at all', async () => {
@@ -117,7 +130,7 @@ test('a package the owner called unbounded answers an unbounded contract, which 
     brief: ['```package-contract', 'unbounded: the owner asked for a spike', `owner_yes: ${String(ask)}`, '```'].join('\n'),
   })
   assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
-  const in_force = await tools.theContractInForce()
+  const in_force = theContractSaid(await tools.theContractInForce(aCall('git push origin main'), names))
   assert.equal(in_force?.kind, 'unbounded')
   assert.deepEqual(in_force?.allowed, [])
 })

@@ -45,7 +45,7 @@ import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   refuseACallOutsideTheContract,
-  type TheContractInForce,
+  type TheContractHanded,
 } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 
 export type { ApprovedLaunch, LaunchHost }
@@ -85,11 +85,12 @@ export interface ToolCall {
    */
   readonly audit?: GateAuditPlace | undefined
   /**
-   * The contract the package this member holds is run under (martha#513 slice 2), or none: absent refuses nothing, which
-   * is the case of a package with no contract and of a crew that keeps none. Read by the caller from the package's own
-   * ledger (../a_crews_tools), never guessed here: the gate stays a function of what it is handed.
+   * What the package this member holds says about this call (martha#513 slice 2), or none: absent refuses nothing, which
+   * is the case of a package with no contract, of a call that is no act, and of a crew that keeps none. Read by the
+   * caller from the package's own ledger (../a_crews_tools), never guessed here: the gate stays a function of what it is
+   * handed. A contract the ledger could not read back arrives as that, and refuses the acts it cannot judge.
    */
-  readonly contract?: TheContractInForce | undefined
+  readonly contract?: TheContractHanded
 }
 
 /** The refusal an audited member's call gets when its own line cannot be kept: the gate's words, then why it stopped. */
@@ -107,7 +108,7 @@ export function answerToolCall(asked: ToolCall): ToolCallAnswer {
 
   // The package's own contract, last of all (martha#513 slice 2): it narrows what the gate has already allowed and never
   // widens it, and a call refused above keeps saying the more serious reason.
-  const refusedByTheContract = refuseACallOutsideTheContract({ tool: asked.tool, input: asked.input }, asked.contract)
+  const refusedByTheContract = refuseACallOutsideTheContract({ tool: asked.tool, input: asked.input }, asked.contract, asked.names.ownNameOf)
   return refusedByTheContract === undefined ? undefined : { deny: refusedByTheContract }
 }
 
