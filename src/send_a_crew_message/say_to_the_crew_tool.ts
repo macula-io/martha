@@ -32,6 +32,8 @@ export interface ASendAsked {
   readonly ledger: ChannelHost & LedgerHost
   readonly member: string
   readonly roster: readonly string[]
+  /** Who the crew's nudges go to: the only members a message on a paused package may reach (martha#512 slice 2). */
+  readonly receivers: readonly string[]
   /** The member's row, whose `holds` is the package the send is announced in; null when it holds none. */
   readonly held: DashboardRow | null
   readonly to: unknown
@@ -47,6 +49,7 @@ export async function sayToTheCrewOver(asked: ASendAsked): Promise<AToolAnswer> 
   const sent = await sendACrewMessage(asked.ledger, {
     member: asked.member,
     roster: asked.roster,
+    receivers: asked.receivers,
     package: held === null || held.holds === '' ? null : held.holds,
     to: asked.to,
     text: asked.text,

@@ -1,4 +1,4 @@
-// One bounded recovery after an announced act fails (martha#512, slice 1).
+// One bounded recovery after an announced act fails (martha#512, slices 1 and 2).
 //
 // This exists so a failure costs a package one attempt at most, and only after the act's real state has been read: a
 // push that may have run is never sent twice, and a failure nothing here can name stops the package and reaches the
@@ -12,8 +12,13 @@
 // is really there through the sender's own look, decides, and keeps the decision on the package, so a successor reads
 // the attempt the package already paid for and a restart or a refresh buys no second one.
 //
-// The gate of 2026-11-16 put the announced outward acts first: a push, a tag, a handoff, a room message. A tool call the
-// host runs has no row before it runs, and giving every call one is a later slice.
+// The gate of 2026-11-16 put the announced outward acts first: a push, a tag, a handoff, a room message. Slice 1 recovered
+// one package's act; slice 2 runs the same core over an act that lands several packages at once (a batch's push and its
+// fast-forward, through ./send_an_act_on_every_package), and routes the crew's messages through it. One rule holds across
+// packages: a retry needs every ledger to have kept the decision, and a pause is claimed only on the packages whose row
+// was kept. A pause holds every act on its package except one: a message only to those the crew's nudges go to, so a
+// paused member can still say it is paused. A tool call the host runs has no row before it runs, and giving every call
+// one is martha#513.
 //
 // What it will not do: send an act again whose outcome is unknown, or whose send was refused. `unknown` is a class, and
 // it is the one that never retries. Silence is never taken for success.
@@ -26,15 +31,16 @@ import {
   OutcomeNotKept,
   concludeAct,
   noteRecovery,
-  sendOutwardAct,
   theAttemptsOn,
   thePauseOn,
   type LedgerHost,
+  type Outcome,
   type OutwardAct,
   type RecoveryDecision,
   type RecoveryRow,
   readLedger,
 } from '../log_ledger/log_ledger.ts'
+import { sendOnEveryPackage, type AnActOnPackages, type AnAnnouncement } from './send_an_act_on_every_package.ts'
 
 /**
  * The classes a failure can be given (martha#512). A class is a name the tree agrees on, in its own words, and not a
@@ -234,18 +240,6 @@ export interface AnAttempt {
   readonly act: OutwardAct
 }
 
-/** How one send ended: what it said, or the failure it threw. */
-type AnEnding = { readonly said: string } | { readonly failure: unknown }
-
-/** One send, with its failure kept rather than thrown, so the recovery can read it. */
-async function theEndingOf(sending: Promise<string>): Promise<AnEnding> {
-  try {
-    return { said: await sending }
-  } catch (failure) {
-    return { failure }
-  }
-}
-
 /** How the ledger says the attempt ended: its three endings, read from the error the send threw. */
 function theAttemptThatWas(failure: unknown): TheAttempt {
   if (failure instanceof ActNotSent) return failure.row_may_stand_at === undefined ? 'never_sent' : 'may_have_run'
@@ -292,47 +286,63 @@ const saidAtTheStore = (refusal: unknown): string => {
   return said === '' ? 'the store refused the row and said nothing why' : said
 }
 
-/**
- * A row the recovery needed, and whether the package holds it. A store that will not keep one never hides what the
- * inspection found: the act's real state is still told, and so is the fact that nothing was recorded (martha#512 r=2).
- */
-type AKeptRow = { readonly kept: true } | { readonly kept: false; readonly what: string; readonly said: string }
 
-/** Keeps a row, or says which one the store would not keep, instead of letting a store failure hide the state. */
-async function keptOrSaid(writing: Promise<void>, what: string): Promise<AKeptRow> {
+/**
+ * A row the recovery needed, the package it was for, and whether that package holds it. A store that will not keep one
+ * never hides what the inspection found: the act's real state is still told, and so is the fact that nothing was
+ * recorded (martha#512 r=2).
+ */
+type AKeptRow = { readonly kept: true; readonly package: string } | { readonly kept: false; readonly package: string; readonly what: string; readonly said: string }
+
+/** Keeps a row on one package, or says which one the store would not keep, instead of letting a store failure hide the state. */
+async function keptOrSaid(work_package: string, writing: Promise<void>, what: string): Promise<AKeptRow> {
   try {
     await writing
-    return { kept: true }
+    return { kept: true, package: work_package }
   } catch (refusal) {
-    return { kept: false, what, said: saidAtTheStore(refusal) }
+    return { kept: false, package: work_package, what, said: saidAtTheStore(refusal) }
   }
 }
 
+/** The packages whose every row was kept: the only ones a pause recorded on them can be claimed for. */
+const thePackagesThatKept = (packages: readonly string[], rows: readonly AKeptRow[]): readonly string[] =>
+  packages.filter((one) => rows.every((row) => row.kept || row.package !== one))
+
 /**
- * The line a member is told, and the row keeps: the act, the class, what was read, and what the package does now. A row
+ * The line a member is told, and the row keeps: the act, the class, what was read, and what the packages do now. A row
  * the store would not keep is named after the decision, so the member knows the words describe the world and not what
- * the package holds.
+ * the package holds. `held` names the packages a pause stands on: the hold and the nudge are claimed for those alone.
  */
-function theWordsOf(input: AnAttempt, parts: TheParts, unkept: readonly AKeptRow[] = []): string {
+function theWordsOf(input: AnActOnPackages, parts: TheParts, rows: readonly AKeptRow[], held: readonly string[]): string {
   const act = `the ${input.act.kind} (${input.act.what})`
-  const asked = parts.decision.decision === 'paused' ? thePauseWords(unkept) : ''
-  const lost = unkept.flatMap((row) =>
-    row.kept ? [] : [` ${row.what.charAt(0).toUpperCase()}${row.what.slice(1)} was not recorded (${row.said}).`],
+  const asked = parts.decision.decision === 'paused' ? thePauseWords(input.packages, held) : ''
+  const lost = rows.flatMap((row) =>
+    row.kept ? [] : [` ${row.what.charAt(0).toUpperCase()}${row.what.slice(1)}${input.packages.length > 1 ? ` for ${row.package}` : ''} was not recorded (${row.said}).`],
   ).join('')
-  return `${input.package}: ${act} failed as ${parts.failure.class} (${parts.failure.evidence}). ${theSawOf(parts.inspection)}. ${parts.decision.why}.${lost} Nothing more is sent.${asked}`
+  return `${input.packages.join(', ')}: ${act} failed as ${parts.failure.class} (${parts.failure.evidence}). ${theSawOf(parts.inspection)}. ${parts.decision.why}.${lost} Nothing more is sent.${asked}`
 }
 
+/** What a pause holds, and the one message it lets through (martha#512 slice 2): said wherever the hold is told. */
+const WHAT_A_PAUSE_HOLDS = (): string =>
+  `no act is sent on it, except a message only to those the crew's nudges go to, until the Supervisor or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()})`
+
+/** A package the pause could not be recorded on: nothing holds it, nobody is nudged, and the duty is the member's. */
+const NOTHING_HOLDS_ONE = ' The pause could not be recorded, so nothing holds the package and the Supervisor is not nudged: do not go on with this package, and tell the Supervisor yourself.'
+
 /**
- * What a pause does, told only as far as the ledger holds it (martha#512 r=2). The hold and the nudge both read the
- * `paused` row, so they are claimed only when every row the pause passed was kept. On each paused path the rows passed
- * are exactly the ones whose refusal leaves no `paused` row: the pause row itself, or the row whose refusal stopped the
- * package before a pause row was written. Otherwise nothing holds the package, and the duty is the member's.
+ * What a pause does, told only as far as the ledgers hold it (martha#512 r=2, slice 2). The hold and the nudge both read
+ * the `paused` row, so they are claimed for the packages in `held` and no other: a package whose row the store would not
+ * keep is named, and its member told to stop and report.
  */
-function thePauseWords(unkept: readonly AKeptRow[]): string {
-  if (unkept.every((row) => row.kept)) {
-    return ` The package is paused: the Supervisor is nudged about it, and no act is sent on it until the Supervisor or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()}).`
-  }
-  return ' The pause could not be recorded, so nothing holds the package and the Supervisor is not nudged: do not go on with this package, and tell the Supervisor yourself.'
+function thePauseWords(packages: readonly string[], held: readonly string[]): string {
+  const unheld = packages.filter((one) => !held.includes(one))
+  if (packages.length === 1) return unheld.length === 0 ? ` The package is paused: the Supervisor is nudged about it, and ${WHAT_A_PAUSE_HOLDS()}.` : NOTHING_HOLDS_ONE
+  const paused = held.length === 0 ? '' : ` ${held.join(', ')} ${held.length === 1 ? 'is' : 'are'} paused: the Supervisor is nudged about each, and ${WHAT_A_PAUSE_HOLDS()}.`
+  const not_held =
+    unheld.length === 0
+      ? ''
+      : ` The pause could not be recorded on ${unheld.join(', ')}, so nothing holds ${unheld.length === 1 ? 'it' : 'them'} and the Supervisor is not nudged: do not go on with ${unheld.length === 1 ? 'it' : 'them'}, and tell the Supervisor yourself.`
+  return `${paused}${not_held}`
 }
 
 /**
@@ -346,12 +356,16 @@ export class PackagePaused extends Error {
   constructor(input: AnAttempt, pause: RecoveryRow) {
     const told =
       `${input.package}: the ${input.act.kind} (${input.act.what}) was not sent, because the package is paused since the ` +
-      `${pause.act.kind} (${pause.act.what}) failed as ${pause.failure.class}. Nothing more is sent on it until the Supervisor ` +
-      `or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()}).`
+      `${pause.act.kind} (${pause.act.what}) failed as ${pause.failure.class}: ${WHAT_A_PAUSE_HOLDS()}.`
     super(told)
     this.name = 'PackagePaused'
     this.told = told
   }
+}
+
+/** Whether a send may pass a pause: only a message to those the crew's nudges go to does (martha#512 slice 2, Q1). */
+export interface TheHold {
+  readonly passes_the_hold?: boolean
 }
 
 /**
@@ -365,99 +379,132 @@ export class PackagePaused extends Error {
  * never acted on — an attempt no successor could read is not spent — so the package stops instead of sending again.
  *
  * A package that stands paused is refused before anything is announced (PackagePaused): a pause holds the package, not
- * the one act that paused it.
+ * the one act that paused it. The one send that passes it is a message only to those the crew's nudges go to, so a
+ * member on a paused package can still report; it passes the hold and nothing else, so it is recovered like any act.
  */
 export async function sendAnActAndRecover(
   host: LedgerHost,
   input: AnAttempt,
   send: () => Promise<string>,
   look: () => Promise<AnInspection>,
+  hold: TheHold = {},
 ): Promise<string> {
-  const pause = thePauseOn(await readLedger(host, input.package))
-  if (pause !== undefined) throw new PackagePaused(input, pause)
-  const first = await theEndingOf(sendOutwardAct(host, input, send))
-  if ('said' in first) return first.said
-  return recoverFrom(host, input, { failure: first.failure, send, look })
+  return sendAnActOnEveryPackageAndRecover(host, { packages: [input.package], member: input.member, act: input.act }, send, look, hold)
 }
 
-/** The failure of one attempt, and the two ways to go on from it: what the sender runs, and what it looks at. */
+/**
+ * The same recovery for an act that lands several packages at once (martha#512 slice 2): announced in every package's
+ * ledger, sent once, decided once, and the decision kept in every ledger. A package that stands paused refuses the act.
+ * The attempt is spent when any package has spent it; a retry is sent only when every ledger kept the decision to send
+ * it, and a pause is claimed only for the packages whose ledger kept it.
+ */
+export async function sendAnActOnEveryPackageAndRecover(
+  host: LedgerHost,
+  input: AnActOnPackages,
+  send: () => Promise<string>,
+  look: () => Promise<AnInspection>,
+  hold: TheHold = {},
+): Promise<string> {
+  if (hold.passes_the_hold !== true) await refuseAPausedPackage(host, input)
+  const first = await sendOnEveryPackage(host, input, send)
+  if ('said' in first) return first.said
+  return recoverFrom(host, input, { failure: first.failure, awaiting: first.awaiting, send, look })
+}
+
+/** Throws PackagePaused for the first package of the act that stands paused. */
+async function refuseAPausedPackage(host: LedgerHost, input: AnActOnPackages): Promise<void> {
+  for (const work_package of input.packages) {
+    const pause = thePauseOn(await readLedger(host, work_package))
+    if (pause !== undefined) throw new PackagePaused({ package: work_package, member: input.member, act: input.act }, pause)
+  }
+}
+
+/** The failure of one attempt, what it left awaiting, and the two ways to go on from it: what the sender runs, and what it looks at. */
 interface ASend {
   readonly failure: unknown
+  readonly awaiting: readonly AnAnnouncement[]
   readonly send: () => Promise<string>
   readonly look: () => Promise<AnInspection>
 }
 
+/** A decision that stops the packages before anything else is sent, with no pause row written on any of them. */
+const stoppedBecause = (parts: TheParts, why: string): TheParts => ({ failure: parts.failure, inspection: parts.inspection, decision: { decision: 'paused', why } })
+
 /** Names the failure, reads the state, decides and keeps the decision; then does what was decided. */
-async function recoverFrom(host: LedgerHost, input: AnAttempt, attempt: ASend): Promise<string> {
+async function recoverFrom(host: LedgerHost, input: AnActOnPackages, attempt: ASend): Promise<string> {
   const parts = await thePartsOf(host, input, attempt)
   const noted = await noteTheParts(host, input, parts)
-  if (!noted.kept && parts.decision.decision === 'retried_once') {
-    // An attempt belongs to the package, and one the package cannot keep is one no successor would read. So a store
-    // failure here stops the package instead of buying a second attempt the ledger does not know about.
-    const stopped: TheParts = { failure: parts.failure, inspection: parts.inspection, decision: { decision: 'paused', why: WHY.unrecorded } }
-    throw new RecoveryDecided(theWordsOf(input, stopped, [noted]), stopped)
+  if (parts.decision.decision === 'retried_once' && noted.some((row) => !row.kept)) {
+    // An attempt belongs to the package, and one a package cannot keep is one no successor would read. So a store
+    // failure on any ledger stops the act instead of buying a second attempt that ledger does not know about.
+    const stopped = stoppedBecause(parts, WHY.unrecorded)
+    throw new RecoveryDecided(theWordsOf(input, stopped, noted, []), stopped)
   }
   if (parts.decision.decision === 'concluded_from_the_inspection') return concludedWhatWasFound(host, input, attempt, parts, noted)
   if (parts.decision.decision === 'retried_once') return theOneMoreTry(host, input, attempt, parts)
-  throw new RecoveryDecided(theWordsOf(input, parts, [noted]), parts)
+  throw new RecoveryDecided(theWordsOf(input, parts, noted, thePackagesThatKept(input.packages, noted)), parts)
 }
 
-/** Keeps what a recovery was decided on: the class and its evidence, what was read and found, and the decision. */
-async function noteTheParts(host: LedgerHost, input: AnAttempt, parts: TheParts): Promise<AKeptRow> {
-  return keptOrSaid(
-    noteRecovery(host, {
-      package: input.package,
+/** Keeps what a recovery was decided on, in every package's ledger: the class and its evidence, what was read and found, and the decision. */
+async function noteTheParts(host: LedgerHost, input: AnActOnPackages, parts: TheParts): Promise<readonly AKeptRow[]> {
+  const rows: AKeptRow[] = []
+  for (const work_package of input.packages) {
+    const row = {
+      package: work_package,
       member: input.member,
       act: input.act,
       failure: { class: parts.failure.class, evidence: parts.failure.evidence },
       inspection: { read: parts.inspection.read, found: parts.inspection.found },
       decision: parts.decision.decision,
-    }),
-    'the decision',
-  )
+    }
+    rows.push(await keptOrSaid(work_package, noteRecovery(host, row), 'the decision'))
+  }
+  return rows
 }
 
 /** The three parts of the decision, read in the order the rule asks for them: the failure, the state, what was spent. */
-async function thePartsOf(host: LedgerHost, input: AnAttempt, attempt: ASend): Promise<TheParts> {
+async function thePartsOf(host: LedgerHost, input: AnActOnPackages, attempt: ASend): Promise<TheParts> {
   const failure = classifyAFailure(theWitnessOf(attempt.failure))
   const inspection = await inspectTheActualState(attempt.look)
-  const attempts_spent = theAttemptsOn(await readLedger(host, input.package), input.act)
+  let attempts_spent = 0
+  for (const work_package of input.packages) attempts_spent = Math.max(attempts_spent, theAttemptsOn(await readLedger(host, work_package), input.act))
   return { failure, inspection, decision: decideARecovery({ failure, inspection, attempt: theAttemptThatWas(attempt.failure), attempts_spent }) }
 }
 
-/**
- * The act recorded from what the inspection found. Its row is concluded only where it was left awaiting, which is the
- * one case an inspection can settle: an act whose outcome was kept stands as it was written, and the recovery row is
- * what says the world holds more. A store that will not keep either row does not change what was found, so the answer
- * still says it, and says which row the package does not hold.
- */
-async function concludedWhatWasFound(host: LedgerHost, input: AnAttempt, attempt: ASend, parts: TheParts, noted: AKeptRow): Promise<string> {
-  const unkept: AKeptRow[] = noted.kept ? [] : [noted]
-  if (attempt.failure instanceof OutcomeNotKept) {
-    const concluded = await keptOrSaid(
-      concludeAct(host, { package: input.package, member: input.member, announced_at: attempt.failure.announced_at, outcome: { succeeded: true, detail: parts.inspection.found } }),
-      "the act's ending",
-    )
-    if (!concluded.kept) unkept.push(concluded)
-  }
-  return unkept.length === 0 ? parts.inspection.found : theWordsOf(input, parts, unkept)
+/** Concludes every announcement an attempt left awaiting with one outcome; answers each row and whether it was kept. */
+async function concludeTheAwaiting(host: LedgerHost, member: string, awaiting: readonly AnAnnouncement[], outcome: Outcome, what: string): Promise<readonly AKeptRow[]> {
+  const rows: AKeptRow[] = []
+  for (const one of awaiting) rows.push(await keptOrSaid(one.package, concludeAct(host, { package: one.package, member, announced_at: one.at, outcome }), what))
+  return rows
 }
 
 /**
- * The first decision's one retry: the act is announced and sent once more. An act whose row was left awaiting is
+ * The act recorded from what the inspection found. Its rows are concluded only where they were left awaiting, which is
+ * the one case an inspection can settle: an act whose outcome was kept stands as it was written, and the recovery row is
+ * what says the world holds more. A store that will not keep either row does not change what was found, so the answer
+ * still says it, and says which row the packages do not hold.
+ */
+async function concludedWhatWasFound(host: LedgerHost, input: AnActOnPackages, attempt: ASend, parts: TheParts, noted: readonly AKeptRow[]): Promise<string> {
+  const concluded = await concludeTheAwaiting(host, input.member, attempt.awaiting, { succeeded: true, detail: parts.inspection.found }, "the act's ending")
+  const rows = [...noted, ...concluded]
+  return rows.every((row) => row.kept) ? parts.inspection.found : theWordsOf(input, parts, rows, [])
+}
+
+/**
+ * The first decision's one retry: the act is announced and sent once more. An act whose rows were left awaiting is
  * concluded first, as the inspection found it, so no row of a retry stands open for a successor to chase.
  *
  * The retry's own failure is decided by the same rule as the first one, with the attempt spent: what the inspection
  * found had happened is concluded from what was found and never sent a third time, and anything else pauses the
- * package. A retry that removed the branch and then failed anyway is therefore an act that happened, not a pause.
+ * packages. A retry that removed the branch and then failed anyway is therefore an act that happened, not a pause.
  */
-async function theOneMoreTry(host: LedgerHost, input: AnAttempt, attempt: ASend, first: TheParts): Promise<string> {
-  const concluded = await concludeTheAwaitingOne(host, input, attempt, first.inspection)
-  if (!concluded.kept) {
-    const stopped: TheParts = { failure: first.failure, inspection: first.inspection, decision: { decision: 'paused', why: WHY.unconcluded } }
-    throw new RecoveryDecided(theWordsOf(input, stopped, [concluded]), stopped)
+async function theOneMoreTry(host: LedgerHost, input: AnActOnPackages, attempt: ASend, first: TheParts): Promise<string> {
+  const concluded = await concludeTheAwaiting(host, input.member, attempt.awaiting, { succeeded: false, detail: `${first.inspection.found}; it was sent once more` }, 'the attempt that was left awaiting')
+  if (concluded.some((row) => !row.kept)) {
+    const stopped = stoppedBecause(first, WHY.unconcluded)
+    throw new RecoveryDecided(theWordsOf(input, stopped, concluded, []), stopped)
   }
-  const again = await theEndingOf(sendOutwardAct(host, input, attempt.send))
+  const again = await sendOnEveryPackage(host, input, attempt.send)
   if ('said' in again) return again.said
   const failure = classifyAFailure(theWitnessOf(again.failure))
   const inspection = await inspectTheActualState(attempt.look)
@@ -466,22 +513,28 @@ async function theOneMoreTry(host: LedgerHost, input: AnAttempt, attempt: ASend,
   const twice = `the attempt the package was given had already failed as ${first.failure.class}, and this one failed as ${failure.class}`
   const parts: TheParts = { failure, inspection, decision: { decision: decided.decision, why: `${twice}; ${decided.why}` } }
   const noted = await noteTheParts(host, input, parts)
-  if (decided.decision === 'concluded_from_the_inspection') {
-    return concludedWhatWasFound(host, input, { failure: again.failure, send: attempt.send, look: attempt.look }, parts, noted)
-  }
-  throw new RecoveryDecided(theWordsOf(input, parts, noted.kept ? [] : [noted]), parts)
+  const retried: ASend = { failure: again.failure, awaiting: again.awaiting, send: attempt.send, look: attempt.look }
+  if (decided.decision === 'concluded_from_the_inspection') return concludedWhatWasFound(host, input, retried, parts, noted)
+  throw new RecoveryDecided(theWordsOf(input, parts, noted, thePackagesThatKept(input.packages, noted)), parts)
 }
 
-/** The act of the attempt that was sent and left awaiting, concluded as what the inspection found before it is retried. */
-async function concludeTheAwaitingOne(host: LedgerHost, input: AnAttempt, attempt: ASend, inspection: AnInspection): Promise<AKeptRow> {
-  if (!(attempt.failure instanceof OutcomeNotKept)) return { kept: true }
-  return keptOrSaid(
-    concludeAct(host, {
-      package: input.package,
-      member: input.member,
-      announced_at: attempt.failure.announced_at,
-      outcome: { succeeded: false, detail: `${inspection.found}; it was sent once more` },
-    }),
-    'the attempt that was left awaiting',
-  )
+/**
+ * Whether none of these packages stands paused, for an act that lands them all (martha#512 slice 2): read before
+ * anything is cut, merged or announced, so a batch that would be refused writes nothing on any of its packages. A pause
+ * that already stands holds the batch and pauses nothing else; only a pause decided on the batch's own push pauses
+ * every package in it. A ledger that cannot be read refuses too, since it cannot say the package is not paused.
+ */
+export async function noneOfTheseIsPaused(host: LedgerHost, packages: readonly string[], what: string): Promise<{ readonly ok: true } | { readonly refused: string }> {
+  for (const work_package of packages) {
+    let pause: RecoveryRow | undefined
+    try {
+      pause = thePauseOn(await readLedger(host, work_package))
+    } catch (error) {
+      return { refused: `the ledger of ${work_package} could not be read, so nothing says it is not paused (${theMessageOf(error)}): ${what}.` }
+    }
+    if (pause !== undefined) {
+      return { refused: `${what}: ${work_package} is paused since the ${pause.act.kind} (${pause.act.what}) failed as ${pause.failure.class}, and ${WHAT_A_PAUSE_HOLDS()}. Leave it out of the batch, or land the batch once it is resumed.` }
+    }
+  }
+  return { ok: true }
 }

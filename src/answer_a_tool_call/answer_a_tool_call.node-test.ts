@@ -30,6 +30,8 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import type { ContractAction } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 
 const names = claudeCodeToolNames
 
@@ -224,3 +226,58 @@ test('once the owner approves the new tree, the calls run again', (t) => {
   const again = { ...approved, approved_fingerprints: [fingerprintOf(readLaunchState(approved, thisMachine))] }
   assert.equal(answerToolCall({ names, tool: 'Read', session, policy, launch: again, host: thisMachine }), undefined)
 })
+
+// --- the package's own contract, last (martha#513 slice 2) --------------------
+
+/** A contract on a package, allowing the acts it names. */
+const aContract = (allowed: readonly ContractAction[]) => ({
+  package: 'synthetic-owner/repo#7',
+  version: 2,
+  kind: 'bounded' as const,
+  allowed,
+})
+
+test('a call that is an act the contract leaves out is refused, naming the act, the version and what it allows', () => {
+  const session = beginSession(store(), 's-1')
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, contract: aContract(['handoff', LAND]) }),
+  )
+  assert.match(answer, /this call pushes, and package synthetic-owner\/repo#7's contract \(version 2\) allows handoff, land only/)
+  // A call that is no act runs whatever the contract says, and one the contract allows runs too.
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: aContract([]) }), undefined)
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: aContract(['push']) }), undefined)
+})
+
+test('the contract is asked last of all: a call the gate refuses keeps the gate\'s own reason', () => {
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: aContract([]) }),
+  )
+  assert.match(answer, /nothing executes/i)
+  assert.doesNotMatch(answer, /contract/)
+})
+
+test('a land is refused under the name this host calls the tool by, not only the core\'s own', () => {
+  const session = beginSession(store(), 's-1')
+  const called = `mcp__martha__${LAND_BATCH}`
+  const answer = denied(
+    answerToolCall({ names, tool: called, session, policy, launch, host: thisMachine, input: {}, contract: aContract(['push', 'handoff', 'tag']) }),
+  )
+  assert.match(answer, /this call lands, and package synthetic-owner\/repo#7's contract \(version 2\) allows push, handoff, tag only/)
+  // The core's own name is refused by the same rule, so the two spellings cannot drift apart.
+  const own = denied(
+    answerToolCall({ names, tool: LAND_BATCH, session, policy, launch, host: thisMachine, input: {}, contract: aContract(['push', 'handoff', 'tag']) }),
+  )
+  assert.match(own, /this call lands/)
+})
+
+test('a contract the ledger could not read back refuses the act and says why, and no call that is not one', () => {
+  const session = beginSession(store(), 's-1')
+  const unreadable = { package: 'synthetic-owner/repo#7', why: 'row 3 is not a contract block' }
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: unreadable }),
+  )
+  assert.match(answer, /could not be read \(row 3 is not a contract block\), so push is refused until the ledger answers/)
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: unreadable }), undefined)
+})
+

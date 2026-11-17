@@ -43,6 +43,10 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { keepAWouldRefusal, type AWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import {
+  refuseACallOutsideTheContract,
+  type TheContractHanded,
+} from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 
 export type { ApprovedLaunch, LaunchHost }
 
@@ -80,6 +84,13 @@ export interface ToolCall {
    * A caller with no audit folder says so rather than leaving the field out, so a launcher reads one line here.
    */
   readonly audit?: GateAuditPlace | undefined
+  /**
+   * What the package this member holds says about this call (martha#513 slice 2), or none: absent refuses nothing, which
+   * is the case of a package with no contract, of a call that is no act, and of a crew that keeps none. Read by the
+   * caller from the package's own ledger (../a_crews_tools), never guessed here: the gate stays a function of what it is
+   * handed. A contract the ledger could not read back arrives as that, and refuses the acts it cannot judge.
+   */
+  readonly contract?: TheContractHanded
 }
 
 /** The refusal an audited member's call gets when its own line cannot be kept: the gate's words, then why it stopped. */
@@ -88,7 +99,24 @@ const refusedBecauseTheAuditCouldNotBeKept = (refusal: string, why: string): Too
 })
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
+export function answerToolCall(asked: ToolCall): ToolCallAnswer {
+  const refusedBeforeTheGate = theRefusalBeforeTheGate(asked)
+  if (refusedBeforeTheGate !== undefined) return refusedBeforeTheGate
+
+  const refusedByTheGate = theGatesAnswer({ tool: asked.tool, session: asked.session, policy: asked.policy, gate: asked.gate ?? 'enforced', audit: asked.audit })
+  if (refusedByTheGate !== undefined) return refusedByTheGate
+
+  // The package's own contract, last of all (martha#513 slice 2): it narrows what the gate has already allowed and never
+  // widens it, and a call refused above keeps saying the more serious reason.
+  const refusedByTheContract = refuseACallOutsideTheContract({ tool: asked.tool, input: asked.input }, asked.contract, asked.names.ownNameOf)
+  return refusedByTheContract === undefined ? undefined : { deny: refusedByTheContract }
+}
+
+/**
+ * The refusals that come before the gate, each of which stands on the call, the launch or the session: the launch
+ * rechecked, the reach rule, the raw mesh read, and the two that stand on text the session took in.
+ */
+function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -114,13 +142,10 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
   // started that has not stopped. An audited member's call runs on them too, and each leaves its line (martha#321 r=2);
   // the owner's switch turns them off with the taint rule and nothing else.
   const offTheRecord = refusedOffTheRecord(session, tool, agents_running)
-  if (offTheRecord !== undefined && gate !== 'off') {
-    return gate === 'enforced'
-      ? { deny: offTheRecord.refusal }
-      : auditedOrRefused(audit, { tool, arrival: { path: null, from_node_id: null, why: offTheRecord.why }, refusal: offTheRecord.refusal })
-  }
-
-  return theGatesAnswer({ tool, session, policy, gate, audit })
+  if (offTheRecord === undefined || gate === 'off') return undefined
+  return gate === 'enforced'
+    ? { deny: offTheRecord.refusal }
+    : auditedOrRefused(audit, { tool, arrival: { path: null, from_node_id: null, why: offTheRecord.why }, refusal: offTheRecord.refusal })
 }
 
 /**

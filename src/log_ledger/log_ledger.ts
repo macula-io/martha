@@ -15,10 +15,10 @@
 //   instead of sending it again. That is the mechanical half of revalidating on
 //   resume (#3).
 //
-//   Where that holds: for every act sent through sendOutwardAct, which is the
-//   only way this slice lets an act out. A slice that sends a kind of act (a
-//   push, a room message) routes it through sendOutwardAct when it lands; until
-//   then nothing sends one at all.
+//   Where that holds: for every act sent through sendOutwardAct, or announced
+//   with announceAct for an act that lands several packages at once. Those are
+//   the only two ways the ledger lets an act out, and ../recover_a_failed_act is
+//   the one caller of each that recovers a failure (martha#512).
 //
 // A package is an issue, owner/repo#n, and its name is checked before it names
 // a stream.
@@ -553,10 +553,10 @@ export async function announceAct(host: LedgerHost, input: Work & { readonly act
  *   kept, by a store failure or because a successor concluded the act first.
  *   The act stays awaiting until someone checks it. Never send it again.
  *
- * This is the only way the ledger lets an act out, so an act sent through it
- * always has its row first. An act that does not go through it has no row: the
- * slice that sends each kind of act (a push, a room message) routes it here
- * when that slice lands.
+ * With announceAct, this is the only way the ledger lets an act out, so an act
+ * sent through it always has its row first. An act that does not go through
+ * either has no row. ../recover_a_failed_act sends every announced act through
+ * one of them (martha#512 slice 2).
  */
 export async function sendOutwardAct(
   host: LedgerHost,

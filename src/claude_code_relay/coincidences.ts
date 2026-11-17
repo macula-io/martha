@@ -13,6 +13,7 @@ import { KEEP_THE_PACKAGE_CONTRACT } from '../keep_the_package_contract/keep_the
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { PARK_A_MEMBER, WAKE_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -129,6 +130,10 @@ export const COINCIDENCES: readonly Exception[] = [
   // The relay's beat, which is a minute too (martha#441): a hooks module imports only its own files, so the relay cannot
   // import the core's MINUTE_MS, and its beat is the same duration under its own name.
   { value: REFRESH_BEAT_MS, file: 'claude_code_relay/hooks/crew_turn_beat.ts', reason: 'a hooks module imports only its own files, so the relay cannot import the core MINUTE_MS; its beat is the same minute under its own name' },
+  // Where the relay reads this host's own state line (martha#437): the same root as the core's PROC_ROOT, held by literal
+  // for the reason the beat above is, and the same one word the core's readers take. The relay's own tests read the core's
+  // constant, so a copy that drifts from it is caught twice: here by name, and there by a read nothing answers.
+  { value: PROC_ROOT, file: 'claude_code_relay/hooks/register.ts', reason: 'a hooks module imports only its own files, so the relay cannot import the core PROC_ROOT; its own copy is the same root, its only reader takes it from there, and the relay\'s tests read the core\'s constant' },
   // The relay's own half-minute wait (martha#441): this file is the protocol both sides of a launch read, so it imports
   // nothing, and its wait for the launcher to check a checkout's tree is the same half minute as the launcher's wait
   // for a host answer and not the same deadline.
