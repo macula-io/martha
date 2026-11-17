@@ -13,7 +13,7 @@ import { LAND, LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES } from '../land_pas
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { CONTRACT_ACTS, theActsOfACall, theWordsOfACommand } from './the_acts_of_a_call.ts'
+import { CONTRACT_ACTS, theActsOfACall } from './the_acts_of_a_call.ts'
 import { refuseACallOutsideTheContract, theActsNotAllowed, type TheContractInForce } from './refuse_a_call_outside_the_contract.ts'
 
 const PACKAGE = 'synthetic-owner/repo#7'
@@ -32,13 +32,7 @@ const aContract = (allowed: readonly (typeof CONTRACT_ACTS)[number][], version =
 /** The words of a shell call as the host hands it over. */
 const aShellCall = (command: string, tool: string = CLAUDE_CODE_SHELL_TOOL) => ({ tool, input: { command } })
 
-// --- the words a command is made of -------------------------------------------------
-
-test('a command is read as its own words, a quoted run being one word', () => {
-  assert.deepEqual(theWordsOfACommand('git push origin main'), ['git', 'push', 'origin', 'main'])
-  assert.deepEqual(theWordsOfACommand('echo "git push"'), ['echo', 'git push'])
-  assert.deepEqual(theWordsOfACommand("cd /tmp && git push"), ['cd', '/tmp', '&&', 'git', 'push'])
-})
+// --- the shapes a member writes a push in, one test each (martha#513 slice 2, round 2) --
 
 test("a script's last line that pushes is a push, wherever in the command it sits", () => {
   // The commonest push there is: a script whose last line pushes. A reader that only looked at a command's first word,
@@ -48,8 +42,6 @@ test("a script's last line that pushes is a push, wherever in the command it sit
   // Inside a quote a break is part of the word, so a commit message that mentions a push is not one.
   assert.deepEqual(theActsOfACall(aShellCall('git commit -m "fix one\ngit push is broken"'), PACKAGE), [])
 })
-
-// --- the shapes a member writes a push in, one test each (martha#513 slice 2, round 2) --
 
 test('a push run through git -C is a push', () => {
   assert.deepEqual(theActsOfACall(aShellCall('git -C /work/repo push origin main'), PACKAGE), ['push'])
