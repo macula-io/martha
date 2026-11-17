@@ -2763,6 +2763,15 @@ function holdersInGroupOf(group: number, path: string): number[] {
 }
 
 /**
+ * Fails unless the member's environment names the pipe nowhere (#472). What it says when it fails is the entries that
+ * name it and nothing else: that environment is the run's own, so every other entry of it is one of the owner's.
+ */
+function assertThePipeIsUnnamed(environment: readonly string[]): void {
+  const naming = environment.filter((named) => named.startsWith(`${RUN_LIFELINE_VARIABLE}=`))
+  assert.equal(naming.length, 0, `the member is handed no variable naming the pipe: ${JSON.stringify(naming)}`)
+}
+
+/**
  * How long a launcher's own answer to its run's end may take: a pipe closing and a group kill, not a host's pace
  * (#472). A wait for that answer with no bound would end as the harness's timeout, which names no assertion.
  */
@@ -2783,6 +2792,20 @@ async function reactsWithin(holds: () => boolean, ms: number): Promise<boolean> 
   }
   return holds()
 }
+
+test('a member handed a variable naming the pipe is failed by that entry alone, never by its whole environment (#472)', () => {
+  const anOwnersOwn = 'AN_OWNERS_OWN_SECRET=what-no-log-carries'
+  const naming = `${RUN_LIFELINE_VARIABLE}=${RUN_LIFELINE_FD}`
+  assert.doesNotThrow(() => assertThePipeIsUnnamed(['PATH=/usr/bin', anOwnersOwn]), 'an environment naming no pipe passes')
+  let said = ''
+  try {
+    assertThePipeIsUnnamed(['PATH=/usr/bin', naming, anOwnersOwn])
+  } catch (error) {
+    said = error instanceof Error ? error.message : String(error)
+  }
+  assert.ok(said.includes(naming), `the entry that names the pipe is what a failure says: ${said}`)
+  assert.equal(said.includes(anOwnersOwn), false, `and never the rest of the member's environment: ${said}`)
+})
 
 test('a run that closes its lifeline takes its member down with it, leaving no relay directory, snapshot or record (#472)', async (t) => {
   const place = placeFor(t)
@@ -2814,7 +2837,7 @@ test('a run that closes its lifeline takes its member down with it, leaving no r
   // so a tool server or a nested `martha start` reading it would be told of a run it cannot read. The rest of the run's
   // own environment is inherited, which is what says this environment was read at all.
   const environment = readFileSync(`/proc/${member}/environ`, 'utf8').split('\0')
-  assert.equal(environment.some((named) => named.startsWith(`${RUN_LIFELINE_VARIABLE}=`)), false, `the member is handed no variable naming the pipe: ${JSON.stringify(environment)}`)
+  assertThePipeIsUnnamed(environment)
   assert.equal(environment.some((named) => named.startsWith('PATH=')), true, 'and inherits the run\'s own environment besides it')
   assert.equal(readdirSync(place.relay_root).length, 1, 'the launch has its relay directory while it runs')
   assert.equal(readdirSync(place.snapshot_root).length, 1)

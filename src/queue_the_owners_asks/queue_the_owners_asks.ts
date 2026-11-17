@@ -346,6 +346,26 @@ const withTheOwner = (claim: ABatch): string =>
   `Batch ${String(claim.id)} is taken and not settled: ${String(claim.asks.length)} ask(s) are with the owner.`
 
 /**
+ * Every ask the owner has answered yes to, by id: the settles the stream holds, whatever batch they name, across the
+ * queue's whole life (martha#513). It is what a package's unbounded mark and an acceptance criterion are checked
+ * against: a yes the owner gave is a fact of the crew's, and a reader of one does not need a batch or a window.
+ */
+export async function theAsksTheOwnerSaidYesTo(host: LedgerHost): Promise<readonly number[]> {
+  return theRowsIn(await host.stores.rows.read(OWNER_ASKS_STREAM)).settled.flatMap((settle) => settle.yes)
+}
+
+/**
+ * The asks the owner said yes to, each with the question it was asked in: an answer is evidence of what it was asked
+ * about, so a caller that stands on one reads whether it was asked about its own matter (martha#513's unbounded
+ * contract, which is the owner's word about that package and not a yes to whatever else they were asked that day).
+ */
+export async function theAsksSaidYesToWithTheirWords(host: LedgerHost): Promise<readonly AnAsk[]> {
+  const rows = theRowsIn(await host.stores.rows.read(OWNER_ASKS_STREAM))
+  const said_yes = new Set(rows.settled.flatMap((settle) => settle.yes))
+  return rows.asks.filter((ask) => said_yes.has(ask.id))
+}
+
+/**
  * `take_the_owners_asks`: every waiting ask this crew still declares claimed as one batch, or why nothing was. A batch already
  * taken inside its window is refused — the owner is still looking at it — and every ask is admitted by the queue's own
  * gate before any of it is handed over, so a row nobody wrote through `ask_the_owner` is never in a menu. An ask the gate

@@ -310,6 +310,7 @@ const answerReportProgress = ($: CrewEngine, e: Record<string, unknown>): Promis
 const answerLogAMilestone = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'log_a_milestone')
 const answerWhatWasSent = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'what_was_sent')
 const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'note_what_became_of_an_act')
+const answerKeepTheContract = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'keep_the_package_contract')
 const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
 const answerWhoIsFree = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'who_is_free')
 const answerUnheldWork = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'unheld_work')
@@ -375,6 +376,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__log_a_milestone' }, answerLogAMilestone)
   on('tool.call', { tool: 'mcp__martha__what_was_sent' }, answerWhatWasSent)
   on('tool.call', { tool: 'mcp__martha__note_what_became_of_an_act' }, answerNoteWhatBecame)
+  on('tool.call', { tool: 'mcp__martha__keep_the_package_contract' }, answerKeepTheContract)
   on('tool.call', { tool: 'mcp__martha__see_the_crew' }, answerSeeTheCrew)
   on('tool.call', { tool: 'mcp__martha__who_is_free' }, answerWhoIsFree)
   on('tool.call', { tool: 'mcp__martha__unheld_work' }, answerUnheldWork)
@@ -403,10 +405,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
 
-  on('command.run', { command: PANE }, async ($: CrewEngine) => {
-    await openThePane($)
-    return { text: '' }
-  })
+  // The pane's own command opens it and answers nothing: the drawing is `ui.render`'s (martha#313).
+  on('command.run', { command: PANE }, async ($: CrewEngine) => { await openThePane($); return { text: '' } })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 

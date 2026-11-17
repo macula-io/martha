@@ -19,6 +19,8 @@ import { test, type TestContext } from 'node:test'
 
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contract_tools.ts'
+import { REPORT_PROGRESS_TOOL } from '../report_where_the_work_stands/report_progress_tool.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -97,8 +99,9 @@ function placeOf(t: TestContext): { readonly home: string; readonly checkout: st
 }
 
 /**
- * The crew a member of a solo crew holds, with one standing item recorded (martha#317): what the crew hands a session
- * at its start is a source the record takes in, so the drive starts its sessions with a crew that hands one.
+ * The crew a member of a solo crew holds, with one standing item recorded (martha#317) and one package's contract kept
+ * (martha#513): what the crew hands a session at its start is a source the record takes in, so the drive starts its
+ * sessions with a crew that hands both, and the member's own row says which package it holds.
  */
 async function aCrewThatHandsAStandingItem(place: { readonly home: string; readonly checkout: string; readonly rows: string }): Promise<CrewTools> {
   // A solo crew's table grants assign_work to the owner alone, so each of its members keeps the items (#316's answer).
@@ -109,7 +112,7 @@ async function aCrewThatHandsAStandingItem(place: { readonly home: string; reado
   const ledger = { clock: { now: () => 0 }, stores: { rows: rowStreamsDirectory(place.rows) } }
   const recorded = await recordAStandingItem(ledger, { kind: 'held', id: 'a-package', item: 'a pull request', reason: 'a demo', until: 'the demo is over' }, member)
   assert.ok('told' in recorded, 'refused' in recorded ? recorded.refused : '')
-  return crewToolsOver({
+  const crew = crewToolsOver({
     member,
     ledger,
     beats: dashboardRowsIn(join(place.home, 'beats')),
@@ -117,7 +120,17 @@ async function aCrewThatHandsAStandingItem(place: { readonly home: string; reado
     documents: { read: async (path) => readFileSync(path, 'utf8') },
     stores: { crew: keepTheCrewsFilesAsDirectories(join(place.home, 'crew-store')) },
   })
+  const brief = join(place.home, 'BRIEF.md')
+  writeFileSync(brief, ['```package-contract', 'goal: a session is handed its package contract', `allowed: push`, 'budget: 30 minutes', 'done: the tip is green', 'acceptance: the contract is handed at the start | ci: CI', '```'].join('\n'))
+  const kept = await crew.answer(KEEP_THE_CONTRACT_TOOL.name, { package: HELD_PACKAGE, brief }, 'a-session-before')
+  assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
+  const reported = await crew.answer(REPORT_PROGRESS_TOOL.name, { task: 'a contract to hand', step: 0, of: 1, package: HELD_PACKAGE }, 'a-session-before')
+  assert.ok('answer' in reported, 'refused' in reported ? reported.refused : '')
+  return crew
 }
+
+/** The package the drive's member holds, synthetic because this repository is public. */
+const HELD_PACKAGE = 'synthetic-owner/repo#7'
 
 /** Drives the relay with every declared event, each in a session of its own; returns every recorded path. */
 async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[]> {
@@ -197,6 +210,12 @@ test('the drive is not vacuous: without the standing items the crew hands the mo
   const recorded = await pathsTheLauncherRecords(t)
   const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.standing_items)).map((gap) => gap.path)
   assert.ok(named.includes(PATH_OF_SOURCE.standing_items), named.join(', '))
+})
+
+test('the drive is not vacuous: without the package contract the crew hands at start, A22 is named', async (t) => {
+  const recorded = await pathsTheLauncherRecords(t)
+  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.package_contract)).map((gap) => gap.path)
+  assert.ok(named.includes(PATH_OF_SOURCE.package_contract), named.join(', '))
 })
 
 /** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */

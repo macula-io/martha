@@ -6,6 +6,7 @@
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
+import { theContractPartOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { theStandingItemsOf } from '../keep_the_supervisors_standing_items/the_standing_tools.ts'
 import { theStandingPartOfTheStart, todayOf } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { mayKeepTheOwnersList } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -15,6 +16,12 @@ import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts
 
 /** The source the standing items are taken in on, at a session's start (martha#317): its own inbound path. */
 export const STANDING_ITEMS_SOURCE: TurnSource = 'standing_items'
+
+/**
+ * The source a package's contract is taken in on, at a session's start and after a refresh (martha#513): its own inbound
+ * path, because the text bounds the work and comes from the crew's stream rather than from the session itself.
+ */
+export const PACKAGE_CONTRACT_SOURCE: TurnSource = 'package_contract'
 
 /** What a session is handed at its start, and the sources its record takes in for it (martha#317). */
 export interface TheStartLine {
@@ -34,17 +41,22 @@ export interface TheStartLineAsked {
 }
 
 /**
- * The line this member's session starts on: what the member's own row says it holds, and every act of that package that
- * was sent with no outcome recorded (martha#254 design line 53, test 10). The row is the member's, so a session that
- * resumes a package reads its predecessor's package and checks what became of what it sent, instead of hoping it asks.
- * Null when the member holds no package, or when nothing of it was left waiting.
+ * The line this member's session starts on: the package's contract, what the member's own row says it holds of that
+ * package, and every act of it that was sent with no outcome recorded (martha#254 design line 53, test 10; martha#513).
+ * The row is the member's, so a session that resumes a package reads its predecessor's package and checks what became of
+ * what it sent, instead of hoping it asks. Null when the member holds no package and nothing else is handed.
  */
 export async function theLineToHandAtStart(asked: TheStartLineAsked): Promise<TheStartLine | null> {
   const standing = await theStandingPartHanded(asked)
+  const held = asked.held?.holds ?? ''
+  const contract = await theContractPartOf(asked.ledger, held)
   const acts = await theOpenActsHanded(asked)
-  const line = [standing, acts].filter((part) => part !== null).join('\n\n')
+  const line = [contract, standing, acts].filter((part) => part !== null && part !== undefined).join('\n\n')
   if (line === '') return null
-  return { line, taken_in: standing === null ? [] : [STANDING_ITEMS_SOURCE] }
+  const taken_in: TurnSource[] = []
+  if (contract !== undefined) taken_in.push(PACKAGE_CONTRACT_SOURCE)
+  if (standing !== null) taken_in.push(STANDING_ITEMS_SOURCE)
+  return { line, taken_in }
 }
 
 /** The open acts of the package this member holds, or null when it holds none or nothing of it waits. */
