@@ -46,6 +46,8 @@ import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contr
 import { nameTheFailedReviewIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { keepWhatTheReviewResolvedTo } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
 import { theAgentInAToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+/** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
+const isAnAgentsAnswerTool = (tool: string): boolean => CLAUDE_CODE_TOOL_RESULT_ROWS[tool]?.reads === 'an_agents_answer'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
@@ -55,7 +57,7 @@ import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hea
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { approvedStartTreeOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -311,7 +313,7 @@ function agentOfAResult(
 export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostSession> = new Map<string, HostSession>()): MemberRelay {
   const state: RelayState = {
     place,
-    approved_start: approvedStartTree(place.launch),
+    approved_start: approvedStartTreeOf(place.launch, thisMachine),
     sessions,
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
@@ -458,17 +460,6 @@ function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unkn
   const source = sourceOfAMeshToolResult(own_name)
   const sender = senderOfARingResult(own_name, input, answer)
   return sender === undefined ? { source: source as Exclude<TurnSource, 'cross_session'> } : { source: source as Exclude<TurnSource, 'cross_session'>, ...sender }
-}
-
-/**
- * The checkout's tree as it is now, before the host starts, when the owner
- * approved this start state; `null` otherwise. A checkout with no config is
- * launched whatever it holds and approves nothing, so it gets `null`, and
- * every read in it counts (decided 2026-11-07, martha#127).
- */
-function approvedStartTree(launch: ApprovedLaunch): string | null {
-  const state = readLaunchState(launch, thisMachine, launch.approved_tree)
-  return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
 }
 
 function stopMember(place: MemberRelayPlace, why: string): RelayReply {
@@ -905,7 +896,7 @@ async function recordToolResult(
   answer: unknown,
 ): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
   const { place } = state
-  const agent = CLAUDE_CODE_TOOL_RESULT_ROWS[call.tool]?.reads === 'an_agents_answer' ? agentOfAResult(state, call, answer) : undefined
+  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
   // A mesh tool's own session answer may carry nothing of anyone else's (martha#251): read first, so an answer whose
   // every leaf came from this launch takes nothing in and the member keeps the shell it needs for the ring it was
   // about to make. Every other answer, this tool's included when the launch cannot say what it supplied, records on

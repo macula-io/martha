@@ -15,7 +15,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { theContractIn, theContractOfABlock } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
-import { noteTheContract, type LedgerHost as TheLedgerHost } from '../log_ledger/log_ledger.ts'
+import { CONTRACT_KEPT, noteTheContract, type LedgerHost as TheLedgerHost } from '../log_ledger/log_ledger.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -70,7 +70,7 @@ function aHostForTheBudget(options: { readonly now?: number } = {}) {
 async function keepTheContract(host: LedgerHost, block: readonly string[]): Promise<void> {
   const read = theContractOfABlock(block)
   assert.ok('ok' in read, 'refused' in read ? read.refused : '')
-  const versions = (await readLedger(host, PACKAGE)).filter((row) => row.kind === 'contract_kept')
+  const versions = (await readLedger(host, PACKAGE)).filter((row) => row.kind === CONTRACT_KEPT)
   await noteTheContract(host as TheLedgerHost, {
     package: PACKAGE,
     member: 'Supervisor',
