@@ -21,6 +21,10 @@
 //   done: what ends the package
 //   ```
 //
+// A `ci` criterion names the CI job or the whole workflow run whose green is its evidence, so `ci: CI` (the workflow this
+// repository's runs are named) and `ci: structural floor` (one of its jobs) are both read, and a criterion is met when
+// that job, or every job of that run, succeeded at the tip.
+//
 // An unbounded contract is the owner's answer instead, and carries nothing else: `unbounded: the reason` and
 // `owner_yes: <the ask the owner answered yes to>`.
 //
@@ -103,13 +107,14 @@ type Step<T> = { readonly ok: T } | { readonly refused: string }
 const no = (refused: string): Step<never> => ({ refused })
 
 /**
- * A digest of the block: its lines with their trailing space taken off, joined as one text. A block whose words changed
+ * A digest of the block: its lines with the space around them taken off, joined as one text. A block whose words changed
  * has another digest, and so is another version; a block whose indentation or trailing space changed has the same one,
- * because that is not a change a member could read.
+ * because that is not a change a member could read. Both ends are trimmed: a brief indents its block to sit under a list
+ * item as readily as it leaves it flush, and the same contract is the same version either way.
  */
 export const theDigestOf = (block: readonly string[]): string =>
   createHash('sha256')
-    .update(block.map((line) => line.trimEnd()).join('\n'), 'utf8')
+    .update(block.map((line) => line.trim()).join('\n'), 'utf8')
     .digest('hex')
 
 /** The block a brief carries, or why it carries none: its lines, the fences not among them. */

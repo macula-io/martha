@@ -14,7 +14,7 @@
 // rendered half read.
 
 import { isContractKeptRow, readLedger, noteTheContract, WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { theAsksTheOwnerSaidYesTo } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { theAsksSaidYesToWithTheirWords } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   theContractIn,
   theContractOfABlock,
@@ -66,13 +66,30 @@ export type TheContractKept = { readonly answer: string } | { readonly refused: 
 /** Whether this version is the one the package already holds, so a re-read of the same brief keeps no second row. */
 const alreadyHeld = (newest: AContractVersion | undefined, digest: string): boolean => newest?.digest === digest
 
-/** Why an unbounded contract may not be kept, or undefined when the owner's yes is there: only the owner says it. */
-async function whyNotUnbounded(host: LedgerHost, contract: APackageContract): Promise<string | undefined> {
+/** Whether an ask's own question is about this package: it names the package, or says the package needs no contract. */
+const asksAboutThePackage = (package_name: string, question: string): boolean => {
+  const said = question.toLowerCase()
+  return said.includes(package_name.toLowerCase()) || said.includes('unbounded')
+}
+
+/**
+ * Why an unbounded contract may not be kept, or undefined when the owner's yes is there: only the owner says it, and
+ * what they answered yes to is an ask about this package, because a yes to something else says nothing about this one.
+ */
+async function whyNotUnbounded(host: LedgerHost, package_name: string, contract: APackageContract): Promise<string | undefined> {
   if (contract.kind !== 'unbounded') return undefined
-  const yes = await theAsksTheOwnerSaidYesTo(host)
-  return yes.includes(contract.owner_yes)
-    ? undefined
-    : `the owner has not said yes to ask ${String(contract.owner_yes)}, and only the owner may mark a package unbounded (martha#513).`
+  const said_yes = await theAsksSaidYesToWithTheirWords(host)
+  const answered = said_yes.find((ask) => ask.id === contract.owner_yes)
+  if (answered === undefined) {
+    return `the owner has not said yes to ask ${String(contract.owner_yes)}, and only the owner may mark a package unbounded (martha#513).`
+  }
+  if (!asksAboutThePackage(package_name, answered.question)) {
+    return (
+      `the owner said yes to ask ${String(contract.owner_yes)}, which asked ${JSON.stringify(answered.question)}: their word ` +
+      `about ${package_name} is what marks it unbounded, and that ask did not ask about it (martha#513).`
+    )
+  }
+  return undefined
 }
 
 /**
@@ -86,7 +103,7 @@ export async function keepThePackageContract(host: LedgerHost, keeping: TheKeepi
   }
   const read = theContractIn(keeping.brief)
   if ('refused' in read) return read
-  const why_not = await whyNotUnbounded(host, read.ok.contract)
+  const why_not = await whyNotUnbounded(host, keeping.package, read.ok.contract)
   if (why_not !== undefined) return { refused: why_not }
   const newest = await theNewestContractOf(host, keeping.package)
   if (alreadyHeld(newest, read.ok.digest)) {
@@ -105,7 +122,7 @@ export async function keepThePackageContract(host: LedgerHost, keeping: TheKeepi
 const theEvidenceSaid = (evidence: ACriterion['evidence']): string => {
   if (evidence.kind === 'test') return `the test file ${evidence.of} at the tip`
   if (evidence.kind === 'document') return `the document ${evidence.of} at the tip`
-  if (evidence.kind === 'ci') return `the CI job ${JSON.stringify(evidence.of)} green on the tip`
+  if (evidence.kind === 'ci') return `the CI job or run ${JSON.stringify(evidence.of)} green on the tip`
   return `the owner's yes to ask ${evidence.of}`
 }
 

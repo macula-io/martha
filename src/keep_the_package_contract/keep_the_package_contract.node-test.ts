@@ -3,8 +3,8 @@ import { test } from 'node:test'
 
 import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { readLedger } from '../log_ledger/log_ledger.ts'
-import { OWNER_ASKS_STREAM, ASKS_SETTLED } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { OWNER_ASKS_STREAM, ASK_QUEUED, ASKS_SETTLED } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theLineToHandAtStart } from '../hand_a_member_its_crew_text/the_start_line.ts'
 import { theResumePrompt } from '../write_my_handover/write_my_handover.ts'
@@ -74,6 +74,16 @@ const aBrief = (changed: Readonly<Record<string, string | null>> = {}, extra: re
 
 /** The block of a package the owner says needs no contract. */
 const anUnboundedBlock = (ask = 4): readonly string[] => ['unbounded: the owner asked for a spike', `owner_yes: ${String(ask)}`]
+
+/**
+ * An ask this crew's owner answered yes to, as its own stream holds it: the ask queued with the question it was asked
+ * in, then the settle that ticks it. Answers the ask's id, which is the position its row was appended at.
+ */
+async function anAskSaidYesTo(host: { readonly host: LedgerHost }, question = `does ${PACKAGE} need a contract, or is it unbounded?`): Promise<number> {
+  const ask = await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question, asked_by: SUPERVISOR, since: 0 })
+  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+  return ask
+}
 
 /** The contract a brief carries, failing the test when it carries none. */
 const theContractOf = (brief: string): ABoundedContract => {
@@ -158,9 +168,11 @@ test('an unbounded contract is the owner\'s word: their reason and the ask they 
   assert.match(refusalOf(theBriefWithBlock([...anUnboundedBlock(), 'goal: a thing'])), /bounded or unbounded, never both/)
 })
 
-test('the digest follows the contract\'s words and not its spacing, so trailing space is no new version', () => {
-  const one = ['goal: a thing', 'allowed: push'].map((line) => line.trimEnd())
+test('the digest follows the contract\'s words and not its spacing, so trailing space or an indent is no new version', () => {
+  const one = ['goal: a thing', 'allowed: push']
   assert.equal(theDigestOf(one), theDigestOf(['goal: a thing  ', 'allowed: push\t']))
+  // A brief that indents its block to sit under a list item says the same contract, so it is the same version.
+  assert.equal(theDigestOf(one), theDigestOf(['  goal: a thing', '  allowed: push']))
   assert.notEqual(theDigestOf(one), theDigestOf(['goal: another thing', 'allowed: push']))
 })
 
@@ -175,6 +187,16 @@ test('the first contract a Supervisor keeps is version 1, and the same brief aga
   assert.ok('answer' in first, 'refused' in first ? first.refused : '')
   assert.match(first.answer, /version 1/)
   const again = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: aBrief() })
+  assert.ok('answer' in again, 'refused' in again ? again.refused : '')
+  assert.match(again.answer, /already holds this contract as version 1; nothing was kept/)
+  assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 1)
+})
+
+test('a brief that indents its block says the same contract, so keeping it again records no new version', async () => {
+  const host = aHostKeeping()
+  await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: aBrief() })
+  const indented = theBriefWithBlock(A_BLOCK.map((line) => `  ${line}`))
+  const again = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: indented })
   assert.ok('answer' in again, 'refused' in again ? again.refused : '')
   assert.match(again.answer, /already holds this contract as version 1; nothing was kept/)
   assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 1)
@@ -207,15 +229,26 @@ test('a package name that is not one is refused, and so is a brief this slice ca
 
 test('a package is marked unbounded only on the owner\'s yes to the ask it names', async () => {
   const host = aHostKeeping()
-  const unbounded = theBriefWithBlock(anUnboundedBlock())
-  const not_yet = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: unbounded })
-  assert.match(refusalBy(not_yet), /the owner has not said yes to ask 4/)
+  // An ask was put about this package and the owner has not answered it: nothing is kept.
+  const unanswered = await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: `is ${PACKAGE} unbounded?`, asked_by: SUPERVISOR, since: 0 })
+  const brief = theBriefWithBlock(anUnboundedBlock(unanswered))
+  assert.match(refusalBy(await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief })), new RegExp(`the owner has not said yes to ask ${String(unanswered)}`))
 
-  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [4] })
-  const kept = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: unbounded })
+  // Then the owner says yes to that ask, and the same brief is kept as the unbounded contract it says.
+  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [unanswered] })
+  const kept = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief })
   assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
   const newest = await theNewestContractOf(host.host, PACKAGE)
-  assert.deepEqual(newest?.contract, { kind: 'unbounded', reason: 'the owner asked for a spike', owner_yes: 4 })
+  assert.deepEqual(newest?.contract, { kind: 'unbounded', reason: 'the owner asked for a spike', owner_yes: unanswered })
+})
+
+test('a yes to an ask about something else does not mark this package unbounded', async () => {
+  const host = aHostKeeping()
+  const ask = await anAskSaidYesTo(host, 'may I delete the stale branch a member left on origin?')
+  const refused = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(ask)) })
+  assert.match(refusalBy(refused), /which asked "may I delete the stale branch a member left on origin\?"/)
+  assert.match(refusalBy(refused), new RegExp(`their word about ${PACKAGE.replace('#', '\\#')} is what marks it unbounded`))
+  assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 0)
 })
 
 /** What a call refused, failing the test when it kept something. */
@@ -239,7 +272,7 @@ test('the part handed names the version, the goal, every criterion with its evid
   assert.match(said, /version 1, kept by supervisor/)
   assert.match(said, /goal: a package is handed the contract it is held to/)
   assert.match(said, /1\. a brief with no contract is refused — evidenced by the test file src\//)
-  assert.match(said, /2\. the contract is handed at every start — evidenced by the CI job "CI" green on the tip/)
+  assert.match(said, /2\. the contract is handed at every start — evidenced by the CI job or run "CI" green on the tip/)
   assert.match(said, /3\. the owner said the evidence is enough — evidenced by the owner's yes to ask 12/)
   assert.match(said, /allowed: push, handoff/)
   assert.match(said, /budget: 120 minutes, 30 tool calls/)
@@ -248,13 +281,13 @@ test('the part handed names the version, the goal, every criterion with its evid
 
 test('an unbounded package is handed the owner\'s reason and the ask they gave it in', async () => {
   const host = aHostKeeping()
-  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [4] })
+  const ask = await anAskSaidYesTo(host)
   await keepThePackageContract(host.host, {
     package: PACKAGE,
     member: SUPERVISOR,
-    brief: theBriefWithBlock(anUnboundedBlock()),
+    brief: theBriefWithBlock(anUnboundedBlock(ask)),
   })
-  assert.match(theContractPart(PACKAGE, await theNewestContractOf(host.host, PACKAGE)), /unbounded by the owner's word: the owner asked for a spike \(ask 4\)/)
+  assert.match(theContractPart(PACKAGE, await theNewestContractOf(host.host, PACKAGE)), new RegExp(`unbounded by the owner's word: the owner asked for a spike \\(ask ${String(ask)}\\)`))
 })
 
 test('a start hands the contract the package holds, and the resume prompt hands the same one', async () => {
@@ -290,7 +323,7 @@ test('a member holding no package is handed nothing of a contract', async () => 
 // --- the criteria at a revision ---------------------------------------------------
 
 /** What every criterion has at a revision where everything the contract names is there. */
-const theEvidence = { revision: 'abcdef1234', jobSucceeded: (job: string) => job === 'CI', fileIsThere: async () => true, ownerSaidYes: async (ask: number) => ask === 12 }
+const theEvidence = { revision: 'abcdef1234', ciSucceeded: (what: string) => what === 'CI', fileIsThere: async () => true, ownerSaidYes: async (ask: number) => ask === 12 }
 
 /** A host holding the contract the criteria are read from. */
 async function aHostHoldingTheContract() {
@@ -314,22 +347,22 @@ test('a criterion whose evidence is not at this revision is not met, and is name
 
 test('a CI job that did not succeed there, and an ask the owner never answered, are both named as not met', async () => {
   const host = await aHostHoldingTheContract()
-  const said = await theAcceptanceOf(host.host, PACKAGE, { ...theEvidence, jobSucceeded: () => false, ownerSaidYes: async () => false })
+  const said = await theAcceptanceOf(host.host, PACKAGE, { ...theEvidence, ciSucceeded: () => false, ownerSaidYes: async () => false })
   assert.match(said, /1 of 3 criteria met/)
-  assert.match(said, /no CI job named "CI" succeeded on abcdef1234/)
+  assert.match(said, /no CI job or run named "CI" was green on abcdef1234/)
   assert.match(said, /the owner has not said yes to ask 12/)
 })
 
 test('a package with no contract is said so, never counted as met, and an unbounded one says why it is not checked', async () => {
   const host = aHostKeeping()
   assert.equal(await theAcceptanceOf(host.host, PACKAGE, theEvidence), `acceptance of ${PACKAGE}: no package contract recorded`)
-  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [4] })
+  const ask = await anAskSaidYesTo(host)
   await keepThePackageContract(host.host, {
     package: PACKAGE,
     member: SUPERVISOR,
-    brief: theBriefWithBlock(anUnboundedBlock()),
+    brief: theBriefWithBlock(anUnboundedBlock(ask)),
   })
-  assert.equal(await theAcceptanceOf(host.host, PACKAGE, theEvidence), `acceptance of ${PACKAGE}: unbounded by the owner's word (ask 4)`)
+  assert.equal(await theAcceptanceOf(host.host, PACKAGE, theEvidence), `acceptance of ${PACKAGE}: unbounded by the owner's word (ask ${String(ask)})`)
 })
 
 // --- the tool ---------------------------------------------------------------------

@@ -24,6 +24,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { HANDOVERS_PLACE, THE_HANDOVER_WRITTEN, THE_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
 
@@ -74,7 +75,9 @@ interface ACrew {
   /** What the mod asks at a turn's end, one turn after the last write, as a real launcher does. */
   readonly ask: (session: string, percent: number, answer?: string) => Promise<string>
   /** A report of the member's own progress, one turn after the last write. */
-  readonly report: (task: string, step: number, of: number) => Promise<void>
+  readonly report: (task: string, step: number, of: number, package_name?: string) => Promise<void>
+  /** A package's contract, kept in the crew's own ledger as the Supervisor keeps it (martha#513). */
+  readonly keepAContract: (package_name: string, brief: string) => Promise<void>
 }
 
 let crewsSoFar = 0
@@ -121,10 +124,15 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
     saidInTheChannel: async () => (await readTheChannel(ledger)) as readonly { readonly message: { readonly to: unknown; readonly text: string } }[],
     openTheSession: (session, percent) => answerWith(session, percent, '', true),
     ask: (session, percent, answer = '') => answerWith(session, percent, answer, false),
-    report: async (task, step, of) => {
+    report: async (task, step, of, package_name) => {
       clock.at += 1_000
-      const answered = await tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task, step, of }, 'a-session')
+      const reported = package_name === undefined ? { task, step, of } : { task, step, of, package: package_name }
+      const answered = await tools.answer(REPORT_WHERE_THE_WORK_STANDS, reported, 'a-session')
       assert.ok('answer' in answered, `a report was refused: ${'refused' in answered ? answered.refused : ''}`)
+    },
+    keepAContract: async (package_name, brief) => {
+      const kept = await keepThePackageContract(ledger, { package: package_name, member: SUPERVISOR, brief })
+      assert.ok('answer' in kept, `the contract was refused: ${'refused' in kept ? kept.refused : ''}`)
     },
   }
 }
@@ -274,6 +282,37 @@ test('#255: a successor is not asked on the finished report its predecessor alre
   // The row still shows the predecessor's finished task, and the flow file outlives the clear: the successor's first
   // flow reads the report its predecessor was asked on, rather than handing over again into the same work.
   assert.equal(await crew.ask('b-session', 25, 'read my handover, carrying on'), 'none', 'the successor was asked on its predecessor\'s finished task')
+})
+
+test('#513: a successor is handed its package contract in the resume prompt the flow itself sends (r=1 M5)', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true, sessions: ['a-session', 'b-session'] })
+  const work_package = 'synthetic-owner/repo#7'
+  const brief = [
+    '```package-contract',
+    'goal: the successor is held to the contract its predecessor was',
+    'acceptance: the work is at the tip | document: work.txt',
+    'allowed: push',
+    'budget: 60 minutes',
+    'done: the reviewer passed the tip',
+    '```',
+  ].join('\n')
+  await crew.keepAContract(work_package, brief)
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  await crew.report('task x', 1, 1, work_package)
+  assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: `first rules; what runs; holding ${work_package}` }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.equal(await crew.ask('a-session', 41, THE_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
+
+  // The successor's first question is the one the flow's own resume answers: the prompt carries the contract the package's
+  // ledger holds, read by the flow rather than by a test calling the prompt's builder by hand.
+  crew.clock.at += MINUTE_MS
+  const resumed = await crew.tools.answer(THE_REFRESH_ASK, questionOf(5, null, '', ''), 'b-session')
+  assert.ok('answer' in resumed, `the flow refused the successor's first question: ${'refused' in resumed ? resumed.refused : ''}`)
+  const order = JSON.parse(resumed.answer) as { readonly carry: string; readonly text?: string }
+  assert.equal(order.carry, CARRY_A_TEXT, 'the successor was not resumed from its handover')
+  assert.ok(order.text !== undefined, 'the resume order carried no prompt')
+  assert.match(order.text, /The package contract, version 1, kept by supervisor/)
+  assert.match(order.text, /goal: the successor is held to the contract its predecessor was/)
 })
 
 test('#255: a successor taken past the limit hands over on the task its predecessor was asked about (r=3 R1′, P4)', async () => {

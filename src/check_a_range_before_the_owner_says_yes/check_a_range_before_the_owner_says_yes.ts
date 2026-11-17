@@ -389,11 +389,10 @@ async function theAcceptanceAtTheTip(
   ci: TheRuns,
 ): Promise<Step<readonly string[]>> {
   if (work === undefined) return { ok: [] }
-  const jobs = [...ci.jobs.values()].flat()
   const said_yes = await theAsksTheOwnerSaidYesTo(host)
   const at = {
     revision: settled.tip,
-    jobSucceeded: (job: string) => jobs.some((one) => one.name === job && one.conclusion === 'success'),
+    ciSucceeded: (what: string) => theCISucceeded(what, ci),
     fileIsThere: (path: string) => fileAtTheTip(host, settled.path, settled.tip, path),
     ownerSaidYes: async (ask: number) => said_yes.includes(ask),
   }
@@ -411,6 +410,20 @@ async function theAcceptanceAtTheTip(
 /** Whether `path` is in the tree at `tip`: git answers by its exit alone, and its own words when it cannot look. */
 const fileAtTheTip = async (host: Pick<HostContract, 'processes'>, cwd: string, tip: string, path: string): Promise<boolean> =>
   (await git(host, cwd, ['cat-file', '-e', `${tip}:${path}`])).exit_code === 0
+
+/**
+ * Whether a criterion's `ci` evidence is green on the tip (martha#513): a job of that name that succeeded, or a run of
+ * that name whose every job succeeded — a criterion may name either, and the contract's own example names a workflow. A
+ * run holding no job is not green: it ran nothing, whatever GitHub concludes about it.
+ */
+function theCISucceeded(what: string, ci: TheRuns): boolean {
+  if ([...ci.jobs.values()].flat().some((one) => one.name === what && one.conclusion === 'success')) return true
+  return ci.runs.some((run) => {
+    if (run.name !== what) return false
+    const held = ci.jobs.get(run.id) ?? []
+    return held.length > 0 && held.every((one) => one.conclusion === 'success')
+  })
+}
 
 /** What GitHub holds on the tip, said in one clause: no run at all, every job green, or each job that is not. */
 function theCILine(tip: string, ci: TheRuns): string {

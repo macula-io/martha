@@ -22,8 +22,8 @@ import { theNewestContractOf } from './keep_the_package_contract.ts'
 export interface TheEvidenceAt {
   /** The revision the criteria are checked at: the tip the owner is asked to say yes to. */
   readonly revision: string
-  /** Whether a CI job of this name succeeded on that revision, as the runs there say. */
-  readonly jobSucceeded: (job: string) => boolean
+  /** Whether a job of this name, or a run of this name whose every job succeeded, was green on that revision. */
+  readonly ciSucceeded: (what: string) => boolean
   /** Whether `path` is in the tree at that revision. */
   readonly fileIsThere: (path: string) => Promise<boolean>
   /** Whether the owner answered yes to that ask. */
@@ -43,9 +43,9 @@ const isMet = (checked: ACriterionChecked): checked is ACriterionChecked & { rea
 async function theCriterionAt(criterion: ACriterion, at: TheEvidenceAt): Promise<ACriterionChecked> {
   const { kind, of } = criterion.evidence
   if (kind === 'ci') {
-    return at.jobSucceeded(of)
+    return at.ciSucceeded(of)
       ? { criterion: criterion.criterion, evidence: criterion.evidence, met: true }
-      : { criterion: criterion.criterion, evidence: criterion.evidence, met: false, why: `no CI job named ${JSON.stringify(of)} succeeded on ${at.revision}` }
+      : { criterion: criterion.criterion, evidence: criterion.evidence, met: false, why: `no CI job or run named ${JSON.stringify(of)} was green on ${at.revision}` }
   }
   const there = kind === 'owner_yes' ? await at.ownerSaidYes(Number(of)) : await at.fileIsThere(of)
   if (there) return { criterion: criterion.criterion, evidence: criterion.evidence, met: true }
