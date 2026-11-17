@@ -5,8 +5,8 @@
 // is the same loss at a wider scale). The roots are never written here: a crew names its own in the declaration, and
 // when it names none the roots the launch knows from the machine are used, so this file holds no path of its own.
 //
-// No I/O and no import but the handover tool's name, so every host runs the same rule: what a text cites, which of
-// those a reboot deletes, and the one line the member reads.
+// No I/O, and no import but node:path and the handover tool's name, so every host runs the same rule: what a text
+// cites, which of those a reboot deletes, and the one line the member reads.
 
 import { isAbsolute } from 'node:path'
 
@@ -55,5 +55,5 @@ export function volatilePathsIn(text: string, roots: readonly string[]): string[
  */
 export const theVolatileNote = (paths: readonly string[]): string =>
   `${paths.join(', ')} ${paths.length === 1 ? 'does' : 'do'} not survive a reboot: ` +
-  'the directory it sits under is kept in memory, so the file is gone at the next one. ' +
+  'the root it sits under is kept in memory, so the file is gone at the next one. ' +
   `Write what matters into your handover (${WRITE_MY_HANDOVER_TOOL}) or into the text itself, and cite that instead.`
