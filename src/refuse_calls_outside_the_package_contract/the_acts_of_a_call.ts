@@ -27,7 +27,17 @@ export interface AReadableCall {
   readonly input?: Readonly<Record<string, unknown>> | undefined
 }
 
-/** The words a command is made of, a quoted run being one word: `echo "git push"` is the words `echo` and `git push`. */
+/** The words that end one command and begin the next, so a `git` after one of them is a command of its own. */
+const THE_NEXT_COMMAND = new Set(['&&', ';', '||', '|', '\n'])
+
+/**
+ * The words a command is made of, a quoted run being one word: `echo "git push"` is the words `echo` and `git push`.
+ *
+ * A line break is a word of its own outside a quote, because it is where the shell starts another command: the commonest
+ * way a member pushes is the last line of a script, and a reader that dropped the break would see `git` as the argument
+ * of the line above it and let that push through. Inside a quote it is part of the word, so a commit message that
+ * mentions a push is not one.
+ */
 export function theWordsOfACommand(command: string): readonly string[] {
   const words: string[] = []
   let word = ''
@@ -42,15 +52,15 @@ export function theWordsOfACommand(command: string): readonly string[] {
     if (inQuotes && character === quoted) quoted = undefined
     else if (inQuotes) word += character
     else if (character === '"' || character === "'") quoted = character
-    else if (/\s/.test(character)) keep()
+    else if (character === '\n') {
+      keep()
+      words.push(character)
+    } else if (/\s/.test(character)) keep()
     else word += character
   }
   keep()
   return words
 }
-
-/** The words that end one command and begin the next, so a `git` after one of them is a command of its own. */
-const THE_NEXT_COMMAND = new Set(['&&', ';', '||', '|'])
 
 /** Whether the word at `at` starts a command: the first word, or one right after a separator. */
 const startsACommand = (words: readonly string[], at: number): boolean => at === 0 || THE_NEXT_COMMAND.has(words[at - 1] ?? '')

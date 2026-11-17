@@ -40,6 +40,15 @@ test('a command is read as its own words, a quoted run being one word', () => {
   assert.deepEqual(theWordsOfACommand("cd /tmp && git push"), ['cd', '/tmp', '&&', 'git', 'push'])
 })
 
+test("a line break begins another command, so a script's last line is read as one", () => {
+  // The commonest push there is: a script whose last line pushes. Without the break, `git` reads as the argument of the
+  // line above it and the push is let through.
+  assert.deepEqual(theActsOfACall(aShellCall('npm test\ngit push origin main'), PACKAGE), ['push'])
+  assert.deepEqual(theActsOfACall(aShellCall('npm test\n\ncd out\ngit tag v1'), PACKAGE), ['tag'])
+  // Inside a quote a break is part of the word, so a commit message that mentions a push is not one.
+  assert.deepEqual(theActsOfACall(aShellCall('git commit -m "fix one\ngit push is broken"'), PACKAGE), [])
+})
+
 // --- what act a call is -------------------------------------------------------------
 
 test('the acts a call is, in the contract\'s own words: the four, and none for anything else', () => {
