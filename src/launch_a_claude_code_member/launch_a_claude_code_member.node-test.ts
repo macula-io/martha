@@ -2528,7 +2528,7 @@ async function killWhateverNamesTheHome(home: string): Promise<void> {
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
     let line = ''
     try {
-      line = readFileSync(`/proc/${pid}/cmdline`, 'utf8')
+      line = readFileSync(`${PROC_ROOT}/${pid}/cmdline`, 'utf8')
     } catch {
       continue
     }
@@ -2836,7 +2836,7 @@ test('a run that closes its lifeline takes its member down with it, leaving no r
   // And the member is handed no variable naming it (#472 r=3): the number it would name is one the launcher has closed,
   // so a tool server or a nested `martha start` reading it would be told of a run it cannot read. The rest of the run's
   // own environment is inherited, which is what says this environment was read at all.
-  const environment = readFileSync(`/proc/${member}/environ`, 'utf8').split('\0')
+  const environment = readFileSync(`${PROC_ROOT}/${member}/environ`, 'utf8').split('\0')
   assertThePipeIsUnnamed(environment)
   assert.equal(environment.some((named) => named.startsWith('PATH=')), true, 'and inherits the run\'s own environment besides it')
   assert.equal(readdirSync(place.relay_root).length, 1, 'the launch has its relay directory while it runs')
@@ -3276,7 +3276,7 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
-    `readlink /proc/$$/fd/0 > '${note('tty')}'`,
+    `readlink ${PROC_ROOT}/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
     // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
     // The launcher's own status is noted when it ends, so a test waiting on the terminal can fail at once with it
