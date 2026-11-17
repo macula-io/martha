@@ -32,6 +32,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
@@ -44,6 +45,9 @@ import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settin
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { nameTheFailedReviewIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { keepWhatTheReviewResolvedTo } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
+import { theAgentInAToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+/** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
+const isAnAgentsAnswerTool = (tool: string): boolean => CLAUDE_CODE_TOOL_RESULT_ROWS[tool]?.reads === 'an_agents_answer'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
@@ -53,7 +57,7 @@ import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hea
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { approvedStartTreeOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -300,7 +304,7 @@ function agentOfAResult(
   call: { readonly agent_id: string | undefined },
   answer: unknown,
 ): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  const fromTheAnswer = agentIdIn(answer)
+  const fromTheAnswer = theAgentInAToolResult(answer)
   if (fromTheAnswer !== undefined) return agentStateOf(state, fromTheAnswer)
   return call.agent_id === undefined ? undefined : agentStateOf(state, call.agent_id)
 }
@@ -309,7 +313,7 @@ function agentOfAResult(
 export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostSession> = new Map<string, HostSession>()): MemberRelay {
   const state: RelayState = {
     place,
-    approved_start: approvedStartTree(place.launch),
+    approved_start: approvedStartTreeOf(place.launch, thisMachine),
     sessions,
     broken: new Map<string, string>(),
     agents: new Map<string, AgentRun>(),
@@ -456,17 +460,6 @@ function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unkn
   const source = sourceOfAMeshToolResult(own_name)
   const sender = senderOfARingResult(own_name, input, answer)
   return sender === undefined ? { source: source as Exclude<TurnSource, 'cross_session'> } : { source: source as Exclude<TurnSource, 'cross_session'>, ...sender }
-}
-
-/**
- * The checkout's tree as it is now, before the host starts, when the owner
- * approved this start state; `null` otherwise. A checkout with no config is
- * launched whatever it holds and approves nothing, so it gets `null`, and
- * every read in it counts (decided 2026-11-07, martha#127).
- */
-function approvedStartTree(launch: ApprovedLaunch): string | null {
-  const state = readLaunchState(launch, thisMachine, launch.approved_tree)
-  return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
 }
 
 function stopMember(place: MemberRelayPlace, why: string): RelayReply {
@@ -652,16 +645,6 @@ function callOf(body: Body): { readonly tool: string; readonly input: Body; read
   return { tool, input, agent_id: agentIdOf(call), id: isText(id) ? id : undefined }
 }
 
-/** The agent a tool result hands back, as the host stamps it: `tool_response.agentId` (martha#170). */
-function agentIdIn(answer: unknown): unknown {
-  return isBody(answer) ? answer['agentId'] : undefined
-}
-
-/** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
-function isAnAgentsAnswerTool(tool: string): boolean {
-  return CLAUDE_CODE_TOOL_RESULT_ROWS[tool]?.reads === 'an_agents_answer'
-}
-
 /** The run this launcher keeps for an agent, made on first sight: a call with an id it never saw start is still one. */
 function runOf(state: RelayState, session: HostSession, agent_id: string): AgentRun {
   const existing = state.agents.get(agent_id)
@@ -795,6 +778,10 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const agent_id = noteTheAgentsCall(state, session, body)
   const denial = await theDenialOfACall(state, session, call, agent_id)
   if (denial !== undefined) return denied(denial)
+  // The call runs, so it is counted against the package's budget before it does (martha#513, slice 3): a call whose row
+  // cannot be kept does not run, so a member cannot spend where nothing counts it.
+  const uncounted = await noteTheCallCounted(place.crew, session.id, place.names.ownNameOf(call.tool))
+  if (uncounted !== undefined) return denied(uncounted)
   place.signed_runs?.callAllowed(call.tool, call.input)
   await noteTheReviewThisLauncherLetThrough(state, call)
   // The call runs, so the owner is no longer being asked about it (martha#313): the dialog it raised closes here, before
@@ -827,6 +814,7 @@ async function theDenialOfACall(
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.gate === undefined ? {} : { gate: place.gate }),
     audit: place.audit, contract: await theContractACrewHolds(place.crew, { tool: call.tool, input: call.input }, place.names),
+    spend: await theSpendACrewHolds(place.crew, session.id),
   })?.deny
   if (verdict !== undefined) return verdict
   // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role

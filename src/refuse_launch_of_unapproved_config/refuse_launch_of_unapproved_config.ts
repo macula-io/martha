@@ -423,6 +423,17 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
 }
 
 /** The config and the work tree, as the gate reads them. */
+/**
+ * The checkout's tree as it is now, before the host starts, when the owner approved this start state; `null` otherwise.
+ * A checkout with no config is launched whatever it holds and approves nothing, so it gets `null`, and every read in it
+ * counts (decided 2026-11-07, martha#127). It lives here because what a launch approves is this slice's subject; the
+ * relay that asks it holds the host it reads through.
+ */
+export function approvedStartTreeOf(launch: ApprovedLaunch, host: LaunchHost): string | null {
+  const state = readLaunchState(launch, host, launch.approved_tree)
+  return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
+}
+
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
   const crewText = readCrewText(place, machine)

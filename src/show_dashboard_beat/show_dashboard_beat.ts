@@ -91,6 +91,20 @@ export interface AnOwnerDialogOnARow {
   readonly reads: string
 }
 
+/**
+ * The row's own field for what the member's package has spent of its budget (martha#513, slice 3): a spelling of the
+ * row, and nothing else. What a budget is, which units count on a host and when the clock started are the budget
+ * slice's business (../hold_a_package_to_its_budget); the row only carries the numbers a gauge reads.
+ */
+export const SPEND_FIELD = 'spend'
+
+/** One unit of a package's budget, as the row carries it: what the package spent, and what its contract allows. */
+export interface AUnitOnARow {
+  readonly unit: string
+  readonly spent: number
+  readonly limit: number
+}
+
 /** One member's row, whole. */
 export interface DashboardRow {
   readonly member: string
@@ -123,6 +137,14 @@ export interface DashboardRow {
    * member that has not reported yet.
    */
   readonly reported_at?: number
+  /**
+   * What the package this member holds has spent of its budget (martha#513, slice 3), in the units its contract names
+   * and the order it names them: absent or undefined when there is no budget to report, so a row written before the
+   * field existed still reads, and a member that moves off a package does not carry its old numbers. It is written with
+   * the host facts at a turn's end, the same write that carries the context share, so it is as fresh as the member's
+   * last turn — which is where a member nearing its wall is seen.
+   */
+  readonly spend?: readonly AUnitOnARow[] | undefined
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -249,12 +271,18 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
 
 /**
  * The fields a row carries only when it has something to say, each optional and never demanded of a row written
- * before it existed: the refresh flow the member is in (martha#255), and the dialogs the host has open for the owner
- * (martha#313).
+ * before it existed: the refresh flow the member is in (martha#255), the dialogs the host has open for the owner
+ * (martha#313), and what the member's package has spent (martha#513, slice 3).
  */
 const isTheOptionalFields = (row: Record<string, unknown>): boolean =>
   (row[REFRESH_FIELD] === undefined || row[REFRESH_FIELD] === null || isARefreshsPhase(row[REFRESH_FIELD])) &&
-  (row[OWNER_DIALOGS_FIELD] === undefined || isOwnerDialogs(row[OWNER_DIALOGS_FIELD]))
+  (row[OWNER_DIALOGS_FIELD] === undefined || isOwnerDialogs(row[OWNER_DIALOGS_FIELD])) &&
+  (row[SPEND_FIELD] === undefined || isBudgetUnits(row[SPEND_FIELD]))
+
+/** Whether a field is what a package has spent, as a row carries it: one entry per unit, each a count and its limit. */
+const isBudgetUnits = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every((one: unknown) => isRecord(one) && isText(one['unit']) && isPosition(one['spent']) && isPosition(one['limit']))
 
 /** Whether a field is the dialogs a row holds: a list of whole dialogs, each with its key, its kind and its words. */
 const isOwnerDialogs = (value: unknown): boolean =>

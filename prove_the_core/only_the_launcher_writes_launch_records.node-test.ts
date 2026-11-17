@@ -111,13 +111,14 @@ test('a bad hostAdapters entry read from package.json is reported as martha.host
   const tree = mkdtempSync(join(tmpdir(), 'martha-544-'))
   try {
     mkdirSync(join(tree, HOST_GLUE_ROOT, 'real_directory'), { recursive: true })
-    const plant = (hostAdapters: readonly unknown[]) =>
+    const real = [`${HOST_GLUE_ROOT}/real_directory`]
+    const plant = (hostGlue: readonly unknown[], hostAdapters: readonly unknown[]) =>
       writeFileSync(
         join(tree, 'package.json'),
-        JSON.stringify({ martha: { hostGlue: [`${HOST_GLUE_ROOT}/real_directory`], hostAdapters } }),
+        JSON.stringify({ martha: { hostGlue, hostAdapters } }),
       )
 
-    plant([`${HOST_GLUE_ROOT}/real_directory`])
+    plant(real, real)
     assert.deepEqual(declaredHostGlue(tree, 'hostAdapters'), ['real_directory'])
 
     const refused: readonly (readonly unknown[])[] = [
@@ -126,9 +127,16 @@ test('a bad hostAdapters entry read from package.json is reported as martha.host
       [`${HOST_GLUE_ROOT}/real_directory`, `${HOST_GLUE_ROOT}/real_directory`],
     ]
     for (const hostAdapters of refused) {
-      plant(hostAdapters)
+      plant(real, hostAdapters)
       assert.throws(() => declaredHostGlue(tree, 'hostAdapters'), /package\.json martha\.hostAdapters /, JSON.stringify(hostAdapters))
       assert.deepEqual(declaredHostGlue(tree), ['real_directory'], JSON.stringify(hostAdapters))
+    }
+    // The default key's own name is pinned the same way (#565): with only the adapters planted bad, a list name
+    // hard-wired in declaredHostGlue would report a bad machine glue entry as the adapters'.
+    for (const hostGlue of refused) {
+      plant(hostGlue, real)
+      assert.throws(() => declaredHostGlue(tree), /package\.json martha\.hostGlue /, JSON.stringify(hostGlue))
+      assert.deepEqual(declaredHostGlue(tree, 'hostAdapters'), ['real_directory'], JSON.stringify(hostGlue))
     }
   } finally {
     removeTheTree(tree)

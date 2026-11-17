@@ -43,6 +43,7 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { keepAWouldRefusal, type AWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { refuseACallPastTheBudget, type ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import {
   refuseACallOutsideTheContract,
   type TheContractHanded,
@@ -85,6 +86,15 @@ export interface ToolCall {
    */
   readonly audit?: GateAuditPlace | undefined
   /**
+   * What the package this member holds has spent of its budget (martha#513, slice 3), read by the caller: the units its
+   * contract names and what was spent of each. Absent, undefined, or a package with count left refuses nothing.
+   *
+   * It is asked after the gate and before the contract's acts (slice 2), and that order is the whole of the rule: a call
+   * refused for tainted text keeps the gate's reason, and a member at its wall is told it is spent rather than told to
+   * ask the owner for a new contract version — which would invite it to try something else and hit the wall anyway.
+   */
+  readonly spend?: ASpendInForce | undefined
+  /**
    * What the package this member holds says about this call (martha#513 slice 2), or none: absent refuses nothing, which
    * is the case of a package with no contract, of a call that is no act, and of a crew that keeps none. Read by the
    * caller from the package's own ledger (../a_crews_tools), never guessed here: the gate stays a function of what it is
@@ -105,6 +115,13 @@ export function answerToolCall(asked: ToolCall): ToolCallAnswer {
 
   const refusedByTheGate = theGatesAnswer({ tool: asked.tool, session: asked.session, policy: asked.policy, gate: asked.gate ?? 'enforced', audit: asked.audit })
   if (refusedByTheGate !== undefined) return refusedByTheGate
+
+  // What the package has spent of its budget, after the gate and before the contract's acts (martha#513, slice 3): it
+  // can only turn a yes into a no, and a member at its wall is told it is spent rather than told to ask the owner for a
+  // new contract version — which would invite it to try something else and hit the wall anyway. The four calls that end
+  // a package run whatever the package has spent.
+  const refusedPastTheBudget = refuseACallPastTheBudget({ tool: asked.tool }, asked.spend, asked.names.ownNameOf)
+  if (refusedPastTheBudget !== undefined) return { deny: refusedPastTheBudget }
 
   // The package's own contract, last of all (martha#513 slice 2): it narrows what the gate has already allowed and never
   // widens it, and a call refused above keeps saying the more serious reason.
