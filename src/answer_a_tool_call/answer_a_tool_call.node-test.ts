@@ -227,6 +227,26 @@ test('once the owner approves the new tree, the calls run again', (t) => {
   assert.equal(answerToolCall({ names, tool: 'Read', session, policy, launch: again, host: thisMachine }), undefined)
 })
 
+// --- the package's budget (martha#513, slice 3) -------------------------------
+
+/** A package with nothing left: what the gate is handed when a member has spent its budget whole. */
+const aSpentBudget = { package: 'synthetic-owner/repo#7', version: 1, units: [{ unit: 'tool calls' as const, spent: 5, limit: 5 }] }
+
+test('the budget is asked after the gate, so a call the gate refuses keeps the gate\'s own reason', () => {
+  const tainted = takeInTurn(beginSession(store(), 's-budget-1'), { source: 'cross_session' }, bindNothing)
+
+  const said = denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine, spend: aSpentBudget }))
+  assert.match(said, /nothing executes/i)
+})
+
+test('a call the gate allows is refused at the wall, and one that ends the package runs', () => {
+  const fresh = beginSession(store(), 's-budget-2')
+
+  const said = denied(answerToolCall({ names, tool: 'Read', session: fresh, policy, launch, host: thisMachine, spend: aSpentBudget }))
+  assert.match(said, /5 of 5 tool calls/)
+  assert.equal(answerToolCall({ names, tool: 'mcp__martha__write_my_handover', session: fresh, policy, launch, host: thisMachine, spend: aSpentBudget }), undefined)
+})
+
 // --- the package's own contract, last (martha#513 slice 2) --------------------
 
 /** A contract on a package, allowing the acts it names. */
@@ -281,3 +301,14 @@ test('a contract the ledger could not read back refuses the act and says why, an
   assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: unreadable }), undefined)
 })
 
+test('a member at its wall is told it is spent, not told to ask for a new contract version', () => {
+  const session = beginSession(store(), 's-budget-3')
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, spend: aSpentBudget, contract: aContract([]) }),
+  )
+  assert.match(answer, /is spent/)
+  assert.match(answer, /5 of 5 tool calls/)
+  // The contract's own refusal would name what that contract allows, which is nothing; this answer is the budget's,
+  // whose own closing line speaks of a new version of the contract and so cannot be told apart by that word alone.
+  assert.doesNotMatch(answer, /allows no act at all/)
+})

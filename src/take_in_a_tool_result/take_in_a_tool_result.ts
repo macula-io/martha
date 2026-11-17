@@ -88,6 +88,14 @@ export type ToolResultRows = Readonly<Record<string, ToolResultReading>>
 /** What the record holds for a tool result the host did not place, naming the tool so the gap is visible (martha#170). */
 export const unplacedToolResult = (tool: string): Ingestion => ({ path: `${UNPLACED_TOOL_RESULT}: ${tool}`, from_node_id: null })
 
+/**
+ * The agent a tool result hands back, as the host stamps it: `tool_response.agentId` (martha#170). Read here because a
+ * tool result is what this slice takes in, and whose work it is decides what the member took in by it.
+ */
+export function theAgentInAToolResult(answer: unknown): unknown {
+  return typeof answer === 'object' && answer !== null ? (answer as Record<string, unknown>)['agentId'] : undefined
+}
+
 /** What the record holds for a tool result the host did not place, before the tool is known. */
 const UNPLACED_TOOL_RESULT = 'tool-result-unplaced'
 

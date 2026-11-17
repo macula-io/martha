@@ -11,8 +11,9 @@ import { SYNC_OFF_SETTING, HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFr
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch, markdownFolders } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
-const USER = '/owner/.claude/settings.json'
+const USER = `/owner/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`
 const HOOK = { matcher: '', hooks: [{ type: 'command', command: 'echo from-the-owner' }] }
 const PLUGIN = 'formatter@tools'
 const file = (settings: unknown) => ({ path: USER, text: JSON.stringify(settings), managed: false })
@@ -93,7 +94,7 @@ test('the watch refuses a hook or plugin in the user file, the managed file and 
 
 // --- hooks in an agent's, a skill's or a command's frontmatter (martha#146) ---
 
-const AGENT_FILE = '/owner/.claude/agents/helper.md'
+const AGENT_FILE = `/owner/${CLAUDE_FOLDER}/agents/helper.md`
 const PATTERN = CLAUDE_CODE_OWNERS_MARKDOWN.frontmatter_pattern
 const md = (text: string) => ({ path: AGENT_FILE, text, managed: false })
 const withFrontmatter = (frontmatter: string) => `---\nname: helper\n${frontmatter}\n---\nBody.\n`
@@ -247,7 +248,7 @@ test('a double-quoted value that never closes is refused as cannot-be-told (mart
 })
 
 test('a synced skill is refused with the remedy its owner can carry out, and any other file with the one it can edit (martha#243)', () => {
-  const synced = hooksInFrontmatterOf({ path: '/owner/.claude/skills/synced/acct-1/xlsx/SKILL.md', text: HOOKED, managed: false, synced: true }, PATTERN) ?? ''
+  const synced = hooksInFrontmatterOf({ path: `/owner/${CLAUDE_FOLDER}/${SKILLS_KIND}/${SYNCED_SKILLS_FOLDER}/acct-1/xlsx/SKILL.md`, text: HOOKED, managed: false, synced: true }, PATTERN) ?? ''
   assert.ok(synced.includes('claude.ai'), synced === '' ? 'not refused' : synced)
   assert.ok(synced.includes(SYNC_OFF_SETTING), synced)
   assert.ok(!synced.includes('move the hooks out of that file'), synced)

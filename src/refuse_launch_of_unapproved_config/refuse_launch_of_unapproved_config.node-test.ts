@@ -31,7 +31,7 @@ import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { DECLARATION_DIRECTORY } from '../declare_crew/declare_crew.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -133,7 +133,7 @@ test('a pull that changes an approved server under the same name needs a new app
 
 test('a pull that changes only the script an approved hook runs is refused', (t) => {
   const place = scratch(t)
-  const script = '.claude/hooks/start.sh'
+  const script = `${CLAUDE_FOLDER}/hooks/start.sh`
   put(place.checkout, SETTINGS, hookRunning(script))
   put(place.checkout, script, '#!/bin/sh\necho hello\n')
   commitAll(place.checkout, 'a hook')

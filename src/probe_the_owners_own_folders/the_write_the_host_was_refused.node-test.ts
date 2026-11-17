@@ -8,8 +8,10 @@ import { test } from 'node:test'
 import { deniedWriteIn, printedText } from './the_write_the_host_was_refused.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { OWNER_CONFIG } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
+import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 
-const TARGET = '/scratch/owner-config/skills/probe-note.md'
+const TARGET = `/scratch/${OWNER_CONFIG}/${SKILLS_KIND}/probe-note.md`
 
 /** The host's answer to the gated run, as the host prints it: one json object, ending in a newline. */
 const answerThatRefusedTheWrite = (target: string): string =>
@@ -26,7 +28,7 @@ test('the write the host was refused is read out of the answer the run printed a
 })
 
 test('a refusal of another path, or of another tool, is not this row\'s refused write (#154 r=2)', () => {
-  const otherPath = printedText(Buffer.from(answerThatRefusedTheWrite('/scratch/owner-config/agents/other.md')))
+  const otherPath = printedText(Buffer.from(answerThatRefusedTheWrite(`/scratch/${OWNER_CONFIG}/agents/other.md`)))
   assert.equal(deniedWriteIn(otherPath, TARGET), false)
   const otherTool = printedText(Buffer.from(JSON.stringify({ permission_denials: [{ tool_name: CLAUDE_CODE_SHELL_TOOL, tool_input: { file_path: TARGET } }] })))
   assert.equal(deniedWriteIn(otherTool, TARGET), false)
