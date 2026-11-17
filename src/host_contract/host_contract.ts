@@ -175,6 +175,31 @@ export interface FileTree {
 }
 
 /**
+ * What the launcher keeps of one checkout, outside the checkout, so a read of an unchanged checkout hashes nothing
+ * (martha#177): the record of what the gate hashed last time, and git's own index of that read.
+ *
+ * This is the launcher's seam, like KeyedRowStore, and not part of HostContract: the adapter that launches a member
+ * holds it, hands it to the launch gate, and every other slice sees nothing of it.
+ */
+export interface KeptTreeRead {
+  /** The record's bytes, or undefined when nothing is kept for this checkout. */
+  read(): Uint8Array | undefined
+  /** Keeps these bytes as the record, whole: under a staging name, then renamed into place. */
+  keep(bytes: Uint8Array): void
+  /**
+   * The git index a read made under `key` is kept in: the one kept under that same key, and an empty one otherwise, so
+   * an index of blobs hashed under other attributes is never used for a read made under these.
+   */
+  indexFor(key: string): string
+}
+
+/** Where the launcher keeps its read of a checkout, one for each checkout it reads (martha#177). */
+export interface TreeReadPlace {
+  /** What is kept for the checkout whose top is `top`, or why it cannot be used. */
+  keptFor(top: string): KeptTreeRead | Refused
+}
+
+/**
  * A directory just made, new and empty, that a slice may write into and remove,
  * and nowhere else. A name that would leave the directory (absolute, or with
  * `..` reaching above it) is refused by the adapter, whatever the slice checked.

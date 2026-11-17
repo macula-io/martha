@@ -45,7 +45,7 @@
 
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
-import type { Processes, Stores } from '../host_contract/host_contract.ts'
+import type { Processes, Stores, TreeReadPlace } from '../host_contract/host_contract.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { judgeTheCheckout, objectFormatOf } from './the_launcher_judges_the_tree.ts'
 
@@ -75,8 +75,11 @@ export type TreeRead =
  *
  * `attribute_tree` is the tree whose attributes the read obeys — the tree the owner approved. Omitted, HEAD's own
  * tree is used, which is what an approval is read against while there is no approval yet.
+ *
+ * `tree_read` is where the launcher keeps what it hashed last time, so an unchanged checkout is not hashed again
+ * (martha#177). Omitted, every file is read: a read with no place is exactly the read before it.
  */
-export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost, attribute_tree?: string): TreeRead {
+export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost, attribute_tree?: string, tree_read?: TreeReadPlace): TreeRead {
   const found = checkoutOnDisk(dir, host)
   if (found === undefined) return { kind: 'none' }
   if (holds(realOrResolved(host, found.top), realOrResolved(host, stop_dir))) return { kind: 'none' }
@@ -84,7 +87,8 @@ export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost
   if (format === undefined) {
     return { kind: 'refused', refusal: `The checkout at ${found.top} does not say which object format it holds, so the files a member would run cannot be judged (martha#167); approve the checkout again.` }
   }
-  const read = judgeTheCheckout({ top: realOrResolved(host, found.top), git_dir: found.git_dir, attribute_tree: attribute_tree ?? null }, format, host)
+  const place = { top: realOrResolved(host, found.top), git_dir: found.git_dir, attribute_tree: attribute_tree ?? null }
+  const read = judgeTheCheckout(tree_read === undefined ? place : { ...place, tree_read }, format, host)
   return read.kind === 'refused' ? { kind: 'refused', refusal: read.refusal, ...(read.the_approved_tree === true ? { the_approved_tree: true as const } : {}) } : { kind: 'tree', tree: read.tree, changes: read.changes }
 }
 

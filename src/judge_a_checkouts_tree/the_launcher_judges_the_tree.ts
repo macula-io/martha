@@ -43,9 +43,10 @@
 
 import { join } from 'node:path'
 
-import { blobUnderTheTree, type GitObjectFormat, type LauncherStore } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
-import type { FileTree, Processes, ScratchDirectories, ScratchDirectory } from '../host_contract/host_contract.ts'
+import { rawBlobOf, type GitObjectFormat } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
+import type { FileTree, KeptTreeRead, Processes, ScratchDirectories, ScratchDirectory, TreeReadPlace } from '../host_contract/host_contract.ts'
 import { whyAConvertedFileIsRefused } from './conversions_a_launch_passes.ts'
+import { recordBytesOf, recordOf, recordedRawIn, type RecordedBytes } from './the_launchers_tree_record.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The parts of the host contract this read goes through. */
@@ -62,6 +63,8 @@ export interface JudgePlace {
   readonly git_dir: string
   /** The tree the owner approved; HEAD's own tree when there is no approval yet. */
   readonly attribute_tree: string | null
+  /** Where the launcher keeps what it hashed last time for this checkout, when it keeps anything (martha#177). */
+  readonly tree_read?: TreeReadPlace
 }
 
 /** One path that differs between two trees: its new mode and blob, or that it is gone. */
@@ -145,7 +148,7 @@ function readInTheLaunchersGitDir(place: JudgePlace, format: GitObjectFormat, ho
   if (typeof approved === 'string') return refused(approved)
   const start = theTreeTheLiveTreeStartsFrom(head, attribute_tree, approved, host, judge, scratch)
   if (typeof start === 'string') return refused(start)
-  return readTheLiveTree(attributed, format, host, judge, start, approved.entries)
+  return readTheLiveTree(attributed, format, host, judge, scratch, start, approved.entries)
 }
 
 /**
@@ -170,20 +173,89 @@ function theTreeTheLiveTreeStartsFrom(
   return theTreeItReadItself(head, "the checkout's own tree", host, judge, scratch, 'head')
 }
 
-/** Writes the live tree and judges every file of it against the entries of the tree whose attributes apply. */
+/** A live tree the launcher could not write, and the words to show the owner. */
+interface RefusedTree {
+  readonly kind: 'refused'
+  readonly refusal: string
+}
+
+/** The live tree as a read finds it, and the paths git hashed again for it rather than taking from its index (martha#177). */
+interface LiveRead {
+  readonly live: LiveTree
+  /** The paths whose bytes git did not take from the index, when it could say; undefined when it could not, and every file is read. */
+  readonly rehashed: ReadonlySet<string> | undefined
+}
+
+/**
+ * Writes the live tree and judges every file of it against the entries of the tree whose attributes apply: from what
+ * the launcher kept of its last read of this checkout, when it has anything kept (martha#177).
+ */
 function readTheLiveTree(
   place: JudgePlace,
   format: GitObjectFormat,
   host: JudgeHost,
   judge: string,
+  scratch: ScratchDirectory,
   start: VerifiedTree,
   approved: ReadonlyMap<string, TreeEntry>,
 ): JudgedTree {
-  const live = writeTheLiveTree(place, place.attribute_tree as string, judge, start.index, host)
-  if ('kind' in live) return live
+  const attribute_tree = place.attribute_tree as string
+  const kept = keptReadFor(place)
+  const attempt = (kept_read: KeptTreeRead | undefined) => readTheTreeIn(place, attribute_tree, format, host, judge, scratch, start.index, kept_read)
+  const first = attempt(kept)
+  // A kept index the launcher cannot use (a lock another read holds, or a file nothing can read) costs this read its
+  // speed and never its answer: it is read again from a fresh index, exactly as before martha#177.
+  const read = 'live' in first || kept === undefined ? first : attempt(undefined)
+  if (!('live' in read)) return read
 
-  const refusal = judgeEveryFile(place, place.attribute_tree as string, live.entries, approved, format, host, judge)
-  return refusal === undefined ? { kind: 'tree', tree: live.tree, changes: differencesBetween(approved, live.entries) } : { kind: 'refused', refusal }
+  const judged = judgeEveryFile(place, attribute_tree, read.live.entries, approved, format, host, judge, recordKeptIn(kept), read.rehashed)
+  if (kept !== undefined) kept.keep(recordBytesOf(judged.recorded))
+  return judged.refusal === undefined
+    ? { kind: 'tree', tree: read.live.tree, changes: differencesBetween(approved, read.live.entries) }
+    : { kind: 'refused', refusal: judged.refusal }
+}
+
+/** What the launcher kept of this checkout, when it has a place to keep it in and the place can be used. */
+function keptReadFor(place: JudgePlace): KeptTreeRead | undefined {
+  const kept = place.tree_read?.keptFor(place.top)
+  return kept === undefined || 'refusal' in kept ? undefined : kept
+}
+
+/** The record the launcher kept, when what is kept is one whole; undefined when it is not, and every file is read. */
+function recordKeptIn(kept: KeptTreeRead | undefined): ReadonlyMap<string, RecordedBytes> | undefined {
+  const bytes = kept?.read()
+  return bytes === undefined ? undefined : recordOf(bytes)
+}
+
+/** The live tree, read from the kept index when there is one, and the paths git hashed again for it. */
+function readTheTreeIn(
+  place: JudgePlace,
+  attribute_tree: string,
+  format: GitObjectFormat,
+  host: JudgeHost,
+  judge: string,
+  scratch: ScratchDirectory,
+  seed: string,
+  kept: KeptTreeRead | undefined,
+): LiveRead | JudgedTree {
+  const index = kept === undefined ? seed : kept.indexFor(indexKeyOf(format, attribute_tree))
+  const rehashed = kept === undefined ? undefined : rehashedPaths(place, judge, index, host)
+  const live = writeTheLiveTree(place, attribute_tree, judge, index, host, scratch)
+  return 'kind' in live ? live : { live, rehashed }
+}
+
+/** What an index is kept under: the object format, and the tree whose attributes the read obeys, which decide every blob in it. */
+const indexKeyOf = (format: GitObjectFormat, attribute_tree: string): string => `${format}\n${attribute_tree}\n`
+
+/**
+ * The paths git would hash again for the work tree as it is: every entry whose stat no longer matches the index's, which
+ * is the set `git add` re-reads (its own racy-clean rule included). Undefined when there is no index kept yet, or git
+ * cannot say, and then every file is read.
+ */
+function rehashedPaths(place: JudgePlace, judge: string, index: string, host: JudgeHost): ReadonlySet<string> | undefined {
+  if (host.stores.files.kindOf(index).kind === 'absent') return undefined
+  const listed = gitRawIn(host, judge, ['diff-files', '--name-only', '-z'], { GIT_WORK_TREE: place.top, GIT_INDEX_FILE: index })
+  return listed === undefined ? undefined : new Set(listed.split(RECORD).filter((path) => path !== ''))
 }
 
 /**
@@ -285,8 +357,12 @@ function entriesFromListing(listed: string): ReadonlyMap<string, TreeEntry> {
 /**
  * The tree git would write with the checkout's files as they are, hashed under the tree whose attributes apply, and
  * the entries it is made of as the launcher read them back from its own index.
+ *
+ * The id is written from an index of its own, carrying no cache-tree: an index `git add` has written primes one with the
+ * ids it holds, and `write-tree` on that index answers with the id it was primed with rather than computing one, so a
+ * kept index (martha#177) could name the approved tree over entries that are not it.
  */
-function writeTheLiveTree(place: JudgePlace, attribute_tree: string, judge: string, index: string, host: JudgeHost): LiveTree | JudgedTree {
+function writeTheLiveTree(place: JudgePlace, attribute_tree: string, judge: string, index: string, host: JudgeHost, scratch: ScratchDirectory): LiveTree | RefusedTree {
   // The blobs `git add` hashes for new and changed files are written into the checkout's own object store, as `git add`
   // wrote them before the gate ran in a git dir of its own: the owner approves a tree naming them, and a later read has
   // to find them once this scratch directory is gone.
@@ -298,19 +374,28 @@ function writeTheLiveTree(place: JudgePlace, attribute_tree: string, judge: stri
     GIT_OBJECT_DIRECTORY: objects,
   })
   if (added === undefined) return { kind: 'refused', refusal: `the checkout cannot be read as a working tree, ${THE_TREE_CANNOT_BE_JUDGED}` }
-  // The trees, too, are written there rather than in the scratch git dir: the id the owner approves is read again by a
-  // later process as the tree whose attributes apply, so it has to outlive this scratch.
-  const written = gitIn(host, judge, ['write-tree'], { GIT_INDEX_FILE: index, GIT_OBJECT_DIRECTORY: objects })
-  if (written === undefined) return { kind: 'refused', refusal: `the checkout cannot be written as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` }
   const listed = gitRawIn(host, judge, ['ls-files', '-s', '-z'], { GIT_INDEX_FILE: index })
   if (listed === undefined) return { kind: 'refused', refusal: `the checkout's tree cannot be listed as it was written, ${THE_TREE_CANNOT_BE_JUDGED}` }
+  // The trees are written into the checkout's store too: the id the owner approves is read again by a later process as
+  // the tree whose attributes apply, so it has to outlive this scratch.
+  const written = writtenBackFrom(listed, judge, host, join(scratch.path, 'live.recomputed.index'), { GIT_OBJECT_DIRECTORY: objects })
+  if (written === undefined) return { kind: 'refused', refusal: `the checkout cannot be written as a tree, ${THE_TREE_CANNOT_BE_JUDGED}` }
   return { tree: written, entries: entriesFromListing(listed) }
 }
 
 /**
- * Judges every file of the live tree against the approved one: its own bytes first, then git only for a file those
- * bytes do not explain. A file that matches the approved blob only through a conversion is refused when the
- * conversion is more than a line ending.
+ * The tree id `listed` (one index's entries, as `git ls-files -s -z` prints them) makes, written from an index of its
+ * own that carries no cache-tree; undefined when git could not write it.
+ */
+function writtenBackFrom(listed: string, judge: string, host: JudgeHost, index: string, set: Readonly<Record<string, string>> = {}): string | undefined {
+  const moved = gitRawIn(host, judge, ['update-index', '-z', '--index-info'], { GIT_INDEX_FILE: index, ...set }, listed)
+  return moved === undefined ? undefined : gitIn(host, judge, ['write-tree'], { GIT_INDEX_FILE: index, ...set })
+}
+
+/**
+ * Judges every file of the live tree against the approved one: its own bytes' id, or the record of that id when the
+ * launcher has already hashed these very bytes (martha#177). A file that matches the approved blob only through a
+ * conversion is refused when the conversion is more than a line ending. What was hashed here is kept for the next read.
  */
 function judgeEveryFile(
   place: JudgePlace,
@@ -320,21 +405,43 @@ function judgeEveryFile(
   format: GitObjectFormat,
   host: JudgeHost,
   judge: string,
-): string | undefined {
-  const store: LauncherStore = { repository: judge, tree: attribute_tree, format, processes: host.processes, scratch: host.stores.scratch }
+  record: ReadonlyMap<string, RecordedBytes> | undefined,
+  rehashed: ReadonlySet<string> | undefined,
+): { readonly refusal?: string; readonly recorded: ReadonlyMap<string, RecordedBytes> } {
   const attributes = { repository: judge, tree: attribute_tree, processes: host.processes }
-
+  const recorded = new Map<string, RecordedBytes>()
   for (const [path, entry] of entries) {
-    const bytes = bytesOnDisk(place.top, path, entry.mode, host)
-    if (bytes === undefined) continue
+    // The record is for the bytes git left alone: a path git hashed again is read here, whatever the record holds.
+    const kept_record = rehashed === undefined || rehashed.has(path) ? undefined : record
+    const raw = rawIdOf(place.top, path, entry.mode, format, host, kept_record, entry.blob)
+    if (raw === undefined) continue
+    recorded.set(path, { blob: entry.blob, raw })
     const approved_blob = approved.get(path)?.blob
-    const judged = blobUnderTheTree(store, path, bytes, (blob) => blob === approved_blob)
-    if (judged === undefined) return `${path} cannot be hashed the way git would store it, ${THE_TREE_CANNOT_BE_JUDGED}`
-    if (judged.raw || judged.blob !== approved_blob) continue
+    if (raw === approved_blob || entry.blob !== approved_blob) continue
     const refused = whyAConvertedFileIsRefused(attributes, path)
-    if (refused !== undefined) return refused
+    if (refused !== undefined) return { refusal: refused, recorded }
   }
-  return undefined
+  return { recorded }
+}
+
+/**
+ * The id `path`'s bytes have themselves, before any conversion: the record's when it holds this very blob already, and
+ * the bytes hashed here when it does not. Undefined for a mode the gate does not read, or bytes it cannot read, which
+ * the tree itself judges by mode.
+ */
+function rawIdOf(
+  top: string,
+  path: string,
+  mode: string,
+  format: GitObjectFormat,
+  host: JudgeHost,
+  record: ReadonlyMap<string, RecordedBytes> | undefined,
+  blob: string,
+): string | undefined {
+  const kept = recordedRawIn(record, path, blob)
+  if (kept !== undefined) return kept
+  const bytes = bytesOnDisk(top, path, mode, host)
+  return bytes === undefined ? undefined : rawBlobOf(bytes, format)
 }
 
 /**

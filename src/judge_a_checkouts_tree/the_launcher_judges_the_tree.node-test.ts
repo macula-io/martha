@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { blobUnderTheTree, rawBlobOf, type LauncherStore } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
+import type { FileTree, TreeReadPlace } from '../host_contract/host_contract.ts'
+import { INDEX_NAME, keepWhatTheLauncherHashed, TREE_READ_PLACE } from '../keep_what_the_launcher_hashed/keep_what_the_launcher_hashed.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { judgeTheCheckout, objectFormatOf } from './the_launcher_judges_the_tree.ts'
+import { recordBytesOf } from './the_launchers_tree_record.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 
 // Every test reads a real checkout and a real launcher-owned git dir, and removes them when it ends.
@@ -193,3 +197,126 @@ function countingStore(): { readonly calls: number; readonly store: LauncherStor
     store,
   }
 }
+
+// --- what the launcher keeps, so an unchanged checkout is not hashed again (martha#177) ---
+
+/** The bytes a read of the checkout's files handed over, as `judgedKeeping` counts them. */
+interface ReadCounter {
+  bytes: number
+}
+
+/** The state a test's kept read sits in, under the checkout's own home. */
+function keptIn(t: TestContext, home: string): TreeReadPlace {
+  const state = { directory: join(home, 'state'), state_root: join(home, 'state') }
+  t.after(() => removeTheTree(state.directory))
+  mkdirSync(state.directory, { recursive: true, mode: 0o700 })
+  return keepWhatTheLauncherHashed(state)
+}
+
+/** The checkout read with what the launcher kept, with every byte the gate reads counted. */
+function judgedKeeping(where: Place, kept: TreeReadPlace, options: { readonly read?: ReadCounter; readonly attribute_tree?: string | null } = {}) {
+  const git_dir = join(where.checkout, '.git')
+  const files: FileTree = {
+    ...thisMachine.stores.files,
+    bytesOf: (path) => {
+      if (options.read !== undefined) options.read.bytes += 1
+      return thisMachine.stores.files.bytesOf(path)
+    },
+  }
+  const host = { stores: { files, scratch: thisMachine.stores.scratch }, processes: thisMachine.processes }
+  const place = { top: where.checkout, git_dir, attribute_tree: options.attribute_tree ?? null, tree_read: kept }
+  return judgeTheCheckout(place, objectFormatOf(git_dir, host) ?? 'sha1', host)
+}
+
+test('an unchanged checkout is read again without hashing a file: the gate reads no byte, and git says nothing is dirty', (t) => {
+  const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n', 'sub/two.txt': 'two\n' })
+  const kept = keptIn(t, where.home)
+  const read: ReadCounter = { bytes: 0 }
+  const first = judgedKeeping(where, kept, { read })
+  assert.equal(first.kind, 'tree')
+  assert.ok(read.bytes > 0, 'the first read hashes every file')
+  const approved = first.kind === 'tree' ? first.tree : ''
+
+  assert.deepEqual(dirtyPathsOf(where), [], 'git itself says the kept index leaves it nothing to hash again')
+  read.bytes = 0
+  const again = judgedKeeping(where, kept, { read, attribute_tree: approved })
+  assert.equal(again.kind, 'tree')
+  assert.equal(again.kind === 'tree' ? again.tree : '', approved, 'the same tree, from what was kept and the stat alone')
+  assert.equal(read.bytes, 0, 'the gate reads no byte of any file')
+})
+
+/** Every path git says the kept index leaves dirty, which is every path an `add` would hash again. */
+function dirtyPathsOf(where: Place): readonly string[] {
+  const [one] = readdirSync(join(where.home, 'state', TREE_READ_PLACE))
+  const index = join(where.home, 'state', TREE_READ_PLACE, one ?? '', INDEX_NAME)
+  const run = spawnSync('git', ['--git-dir', join(where.checkout, '.git'), 'diff-files', '--name-only', '-z'], {
+    encoding: 'utf8',
+    env: { ...process.env, GIT_WORK_TREE: where.checkout, GIT_INDEX_FILE: index },
+  })
+  assert.equal(run.status, 0, `git diff-files: ${run.stderr}`)
+  return run.stdout.split('\u0000').filter((path) => path !== '')
+}
+
+test('a file changed with its mtime put back is still caught, whatever the record holds for it', (t) => {
+  const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n' })
+  const kept = keptIn(t, where.home)
+  const first = judgedKeeping(where, kept)
+  const approved = first.kind === 'tree' ? first.tree : ''
+  const file = join(where.checkout, 'hook.sh')
+  const before = lstatSync(file)
+  writeFileSync(file, '#!/bin/sh\necho approve2\n')
+  utimesSync(file, before.atime, before.mtime)
+
+  const again = judgedKeeping(where, kept, { attribute_tree: approved })
+  assert.equal(again.kind, 'tree')
+  const changes = again.kind === 'tree' ? again.changes : []
+  assert.deepEqual(changes.map(({ path }) => path), ['hook.sh'], 'the changed bytes are seen, whatever the mtime says')
+})
+
+test('bytes that differ but hash to the approved blob through an ident conversion are refused, not passed from the record', (t) => {
+  const where = place(t, { '.gitattributes': '*.sh ident\n', 'hook.sh': '#!/bin/sh\n# $Id$\necho ok\n' })
+  const kept = keptIn(t, where.home)
+  const first = judgedKeeping(where, kept)
+  assert.equal(first.kind, 'tree', 'the approved bytes are already collapsed, so nothing is converted')
+  const approved = first.kind === 'tree' ? first.tree : ''
+
+  // The bytes differ from the approved ones, and git's blob for them is the approved blob again: only `ident` does that.
+  writeFileSync(join(where.checkout, 'hook.sh'), '#!/bin/sh\n# $Id: planted $\necho ok\n')
+  const again = judgedKeeping(where, kept, { attribute_tree: approved })
+  assert.equal(again.kind, 'refused', 'a conversion that is not a line ending is refused, and the record cannot pass it')
+  assert.match(again.kind === 'refused' ? again.refusal : '', /ident/)
+})
+
+test('a change the checkout’s own index has staged is still caught: the launcher reads its own index and its own record', (t) => {
+  const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n' })
+  const kept = keptIn(t, where.home)
+  const first = judgedKeeping(where, kept)
+  const approved = first.kind === 'tree' ? first.tree : ''
+  writeFileSync(join(where.checkout, 'hook.sh'), '#!/bin/sh\necho approve2\n')
+  // The checkout's own index says nothing is modified, and its cache-tree answers `write-tree` without computing one.
+  git(where.checkout, 'add', '--all')
+  git(where.checkout, 'write-tree')
+
+  const again = judgedKeeping(where, kept, { attribute_tree: approved })
+  assert.equal(again.kind, 'tree')
+  assert.notEqual(again.kind === 'tree' ? again.tree : '', approved, 'the checkout’s index decides nothing')
+})
+
+test('a record naming a blob git no longer holds for the path is not used, so the file is read and the change seen', (t) => {
+  const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n' })
+  const kept = keptIn(t, where.home)
+  const first = judgedKeeping(where, kept)
+  const approved = first.kind === 'tree' ? first.tree : ''
+  const approved_blob = git(where.checkout, 'rev-parse', `${approved}:hook.sh`)
+  writeFileSync(join(where.checkout, 'hook.sh'), '#!/bin/sh\necho approve2\n')
+
+  // A record planted for the bytes before the change: it names the approved blob, which git no longer gives this path.
+  const keptFor = kept.keptFor(realpathSync(where.checkout))
+  assert.ok(keptFor !== undefined && !('refusal' in keptFor))
+  if (keptFor === undefined || 'refusal' in keptFor) return
+  keptFor.keep(recordBytesOf(new Map([['hook.sh', { blob: approved_blob, raw: approved_blob }]])))
+
+  const again = judgedKeeping(where, kept, { attribute_tree: approved })
+  assert.equal(again.kind, 'tree')
+  assert.notEqual(again.kind === 'tree' ? again.tree : '', approved, 'the entry is dropped for another blob, and the bytes are read')
+})

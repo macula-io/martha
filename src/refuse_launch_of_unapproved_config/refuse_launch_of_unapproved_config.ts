@@ -51,6 +51,7 @@ import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import type { TreeReadPlace } from '../host_contract/host_contract.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -401,6 +402,11 @@ export interface LaunchPlace {
    * approved. Omitted, the launch reads no crew text and this slice is as it was before it.
    */
   readonly crew_text_files?: readonly string[]
+  /**
+   * Where the launcher keeps what it hashed last time of this checkout, so an unchanged checkout is not hashed again
+   * on every launch and every recheck (martha#177). Omitted, every file is read, as it was before this was kept.
+   */
+  readonly tree_read?: TreeReadPlace
 }
 
 /**
@@ -435,7 +441,7 @@ export function approvedStartTreeOf(launch: ApprovedLaunch, host: LaunchHost): s
 }
 
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
-  const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
+  const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree, place.tree_read)
   const crewText = readCrewText(place, machine)
   // One refusal, whichever half of the state refuses first: the checkout's tree, or a crew text that is a directory.
   const refusal = read.kind === 'refused' ? read.refusal : crewTextDirectoryIn(crewText)

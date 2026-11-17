@@ -27,6 +27,7 @@
 import { crewTextFilesToApprove } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
+import { keepWhatTheLauncherHashed } from '../keep_what_the_launcher_hashed/keep_what_the_launcher_hashed.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   appendApproval,
@@ -101,7 +102,7 @@ function showConfig(request: ApproveRequest, launch: LaunchState, fingerprint: s
 /** Shows the owner the config a member would start from, and keeps their yes to it. */
 export async function approveConfig(request: ApproveRequest): Promise<ApproveOutcome> {
   if (!request.terminal.is_terminal) return { kind: 'refused', refusal: NOT_A_TERMINAL }
-  const place = { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, ...(await crewTextFilesHere(request)) }
+  const place = { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, tree_read: keepWhatTheLauncherHashed(request.state), ...(await crewTextFilesHere(request)) }
   const launch = readLaunchState(place, thisMachine)
   if (launch.entries.every((entry) => entry.kind === 'absent')) return { kind: 'nothing' }
 

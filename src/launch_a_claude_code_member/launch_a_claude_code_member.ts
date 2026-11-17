@@ -554,6 +554,7 @@ async function servedRelay(
       stop_dir: launch.place.stop_dir,
       approved_fingerprints: launch.place.approved_fingerprints,
       ...(launch.place.since_approval === undefined ? {} : { since_approval: launch.place.since_approval }),
+      ...(launch.place.tree_read === undefined ? {} : { tree_read: launch.place.tree_read }),
     },
     policy: launch.policy,
     // What the gate does to this member, read from the declaration once (martha#321): absent means enforced, never off.
