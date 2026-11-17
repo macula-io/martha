@@ -53,6 +53,21 @@ export async function theNewestContractOf(host: LedgerHost, package_name: string
   return (await theContractVersionsOf(host, package_name)).at(-1)
 }
 
+/**
+ * The newest version a package holds, or why the ledger could not say: a read that throws is an answer here, not a
+ * crash, because both the gate and the launcher refuse a package on an unreadable ledger rather than guess one is kept.
+ */
+export async function theNewestContractOrWhy(
+  host: LedgerHost,
+  package_name: string,
+): Promise<{ readonly newest: AContractVersion | undefined } | { readonly why: string }> {
+  try {
+    return { newest: await theNewestContractOf(host, package_name) }
+  } catch (why) {
+    return { why: why instanceof Error ? why.message : String(why) }
+  }
+}
+
 /** What a keeper is handed: the package, the brief the contract is in, and the member keeping it. */
 export interface TheKeeping {
   readonly package: string
@@ -162,12 +177,14 @@ function theBoundContractSaid(version: AContractVersion): string {
 
 /**
  * The part of a session's first line that carries the package's contract, or says the package has none: a package may
- * not be worked without one, and a contract the owner called unbounded says so with the reason they gave.
+ * not be worked without one, so a contract the owner called unbounded says so with the reason they gave, and a package
+ * with no version at all says that none of its work runs (martha#597).
  */
 export function theContractPart(package_name: string, version: AContractVersion | undefined): string {
   if (version === undefined) {
     return (
-      `${package_name} has no package contract recorded, so its work is not yet bounded by one. Its Supervisor keeps it with ` +
+      `${package_name} has no package contract recorded, so none of its work runs: its calls are refused except the ones ` +
+      `that end it — its handover, say to the crew, report and park still run. Its Supervisor keeps the contract with ` +
       `the ${KEEP_THE_PACKAGE_CONTRACT} tool, and a package the owner says needs none is kept as unbounded with their reason.`
     )
   }

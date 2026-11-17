@@ -11,7 +11,10 @@ import { CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host
 import { CONTRACT_ACTIONS } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import { LAND, LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
+import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contract_tools.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { CONTRACT_ACTS, theActsOfACall, theWordsOfACommand } from './the_acts_of_a_call.ts'
 import { refuseACallOutsideTheContract, theActsNotAllowed, type TheContractInForce } from './refuse_a_call_outside_the_contract.ts'
@@ -181,11 +184,28 @@ test('a refused call is told which act it is, the contract\'s version, and what 
   assert.match(none, /this call lands, and package .* allows no act at all, so land is not in it/)
 })
 
-test('a package with no contract, and a package the owner called unbounded, refuse nothing at all', () => {
+test('a call handed no contract at all, and a package the owner called unbounded, refuse nothing at all', () => {
   assert.equal(refuseACallOutsideTheContract(aShellCall('git push'), undefined), undefined)
   const unbounded: TheContractInForce = { package: PACKAGE, version: 1, kind: 'unbounded', allowed: [] }
   assert.equal(refuseACallOutsideTheContract(aShellCall('git push --tags'), unbounded), undefined)
   assert.equal(refuseACallOutsideTheContract({ tool: LAND_BATCH, input: {} }, unbounded), undefined)
+})
+
+test('a package with no contract recorded refuses every call but the ones that end it and the tool that keeps one (martha#597)', () => {
+  const none_recorded = { package: PACKAGE }
+  // An act and a call that is no act are refused alike: this gate does not stand only on the act table.
+  for (const call of [aShellCall('git push origin main'), aShellCall('npm test'), { tool: 'Read', input: { file_path: 'a-file' } }]) {
+    const refused = refuseACallOutsideTheContract(call, none_recorded, ownNameOfCalledTool)
+    assert.ok(refused !== undefined, call.tool)
+    assert.match(refused, /package synthetic-owner\/repo#7 has no contract recorded, so none of its work runs until one is kept/)
+    assert.match(refused, /keeps it with keep_the_package_contract/)
+  }
+  // The four that end a package still run, by the host's own name for each, and so does the tool that keeps a contract.
+  for (const own_name of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {
+    assert.equal(refuseACallOutsideTheContract({ tool: `mcp__martha__${own_name}`, input: {} }, none_recorded, ownNameOfCalledTool), undefined, own_name)
+  }
+  // A look-alike is another call, refused like any other.
+  assert.ok(refuseACallOutsideTheContract({ tool: 'mcp__martha__not_write_my_handover', input: {} }, none_recorded, ownNameOfCalledTool) !== undefined)
 })
 
 test('a contract the ledger cannot read back refuses that act alone, and the words say why', () => {
