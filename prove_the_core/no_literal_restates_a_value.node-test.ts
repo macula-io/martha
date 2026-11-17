@@ -315,3 +315,39 @@ test('a new exported definition is named against the holder that held its value 
     "a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
   ])
 })
+
+test('a template with a substitution is judged piece by piece, and what the run time builds or an address holds is left alone (martha#437)', () => {
+  const settings = source('a_settings/a_settings.ts', "export const SETTINGS_FILE = 'settings.json'\n")
+  const user = source('a_user/a_user.ts', 'call(`${dir}/settings.json`)\ncall(`${dir}/settings.${flavour}`)\ncall(`${dir}settings.json`)\ncall(`https://example.invalid/${owner}/settings.json`)\n')
+
+  assert.deepEqual(restatementsIn([settings, user], { judged: null }).map(lineOfAFinding), [
+    "a_user/a_user.ts:1: 'settings.json' (a path segment) restates a_settings/a_settings.ts SETTINGS_FILE",
+  ])
+})
+
+test("a template's dynamic-import specifier and a tag's template are not read (martha#437)", () => {
+  const settings = source('a_settings/a_settings.ts', "export const SETTINGS_FILE = 'settings.json'\n")
+  const user = source('a_user/a_user.ts', 'const load = () => import(`./${dir}/settings.json`)\nconst query = sql`x/${dir}/settings.json`\ncall(`x/settings.json`)\n')
+
+  assert.deepEqual(restatementsIn([settings, user], { judged: null }).map(lineOfAFinding), [
+    "a_user/a_user.ts:3: 'settings.json' (a path segment) restates a_settings/a_settings.ts SETTINGS_FILE",
+  ])
+})
+
+test('a GitHub API route is an address whose owner may have no hyphen and may be built at run time, and a directory named repos is still a path (martha#437, Jupiter on PR 469)', () => {
+  for (const route of ['repos/rgfaber/wordcraft/actions/runs', '/repos/macula-io/martha/issues', 'repos/\u0000/commits', 'gh api /repos/macula-io/martha/pulls']) {
+    assert.equal(holdsAnAddress(route), true, route)
+  }
+  for (const path of ['repos/file.ts', 'src/repos/file.ts', 'torvalds/linux', 'actions/runs']) {
+    assert.equal(holdsAnAddress(path), false, path)
+  }
+})
+
+test("a template's spans are read as the compiler cooks them, so an escape cannot hide a value (martha#437)", () => {
+  const settings = source('a_settings/a_settings.ts', "export const SETTINGS_FILE = 'settings.json'\n")
+  const user = source('a_user/a_user.ts', 'call(`${dir}/settings\\u002Ejson`)\n')
+
+  assert.deepEqual(restatementsIn([settings, user], { judged: null }).map(lineOfAFinding), [
+    "a_user/a_user.ts:1: 'settings.json' (a path segment) restates a_settings/a_settings.ts SETTINGS_FILE",
+  ])
+})
