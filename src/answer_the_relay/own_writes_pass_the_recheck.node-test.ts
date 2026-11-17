@@ -76,7 +76,7 @@ function checkoutFor(t: TestContext, { files = {}, approved = (on_disk) => on_di
   const checkout = join(home, 'checkout')
   mkdirSync(checkout)
   git(checkout, 'init', '-q', '.')
-  const committed = { 'README.md': 'a checkout\n', '.mcp.json': SERVERS, '.gitignore': '.claude/settings.local.json\n', ...files }
+  const committed = { 'README.md': 'a checkout\n', '.mcp.json': SERVERS, '.gitignore': `${CLAUDE_FOLDER}/settings.local.json\n`, ...files }
   for (const [path, text] of Object.entries(committed)) {
     mkdirSync(dirname(join(checkout, path)), { recursive: true })
     writeFileSync(join(checkout, path), text)
@@ -352,8 +352,8 @@ test("the member's own Write to the checkout's config passes, as any own write d
 test("a config file git ignores is outside the tree, so even the member's own Write to it stops it", async (t) => {
   const place = checkoutFor(t)
   await started(place)
-  const why = MOVED('.claude/settings.local.json')
-  assert.deepEqual(await wrote(place, '.claude/settings.local.json', '{}\n'), STOPPING(why))
+  const why = MOVED(`${CLAUDE_FOLDER}/settings.local.json`)
+  assert.deepEqual(await wrote(place, `${CLAUDE_FOLDER}/settings.local.json`, '{}\n'), STOPPING(why))
 })
 
 test('a tree the owner approved that the checkout no longer holds refuses: nothing can be told apart', async (t) => {

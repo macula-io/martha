@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { BACKLOG, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { theNudgeLine } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -73,7 +73,7 @@ test('#319 B: a window of 0 turns the nudge off, and its line carries a declared
 /** A crew place held in memory. */
 function aPlace(): CrewPlace {
   const files = new Map<string, string>()
-  return { path: '/a-crew-store/backlog', keep: (name, text) => void files.set(name, text), read: (name) => (files.has(name) ? { text: files.get(name) ?? '' } : undefined), names: () => [...files.keys()] }
+  return { path: `/a-crew-store/${BACKLOG}`, keep: (name, text) => void files.set(name, text), read: (name) => (files.has(name) ? { text: files.get(name) ?? '' } : undefined), names: () => [...files.keys()] }
 }
 
 /** gh answering one page with two unheld issues. */

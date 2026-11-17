@@ -207,14 +207,14 @@ function askTheInstalledTree(installed: string, script: string, more: Readonly<R
 
 /** The contact-policy labels the pinned server defines, by code, read from its own module. */
 function labelsOf(tree: string): Readonly<Record<string, string>> {
-  const script = `const p = await import(\`\${process.env.TREE}/node_modules/\${process.env.PACKAGE}/dist/policy.js\`);
+  const script = `const p = await import(\`\${process.env.TREE}/${DEPENDENCIES}/\${process.env.PACKAGE}/dist/policy.js\`);
 console.log(JSON.stringify(Object.fromEntries(Object.values(p.POLICY).map((code) => [String(code), p.policyLabel(code)]))))`
   return askTheInstalledTree(tree, script) as Readonly<Record<string, string>>
 }
 
 /** The petnames the pinned server derives, read from its own module. */
 function petnamesOf(tree: string): readonly { readonly id: RecordedId; readonly petname: string }[] {
-  const script = `const m = await import(\`\${process.env.TREE}/node_modules/\${process.env.PACKAGE}/dist/petname.js\`);
+  const script = `const m = await import(\`\${process.env.TREE}/${DEPENDENCIES}/\${process.env.PACKAGE}/dist/petname.js\`);
 console.log(JSON.stringify(JSON.parse(process.env.IDS).map((node_id) => ({ node_id, petname: m.petname(node_id) }))))`
   const taken = askTheInstalledTree(tree, script, { IDS: JSON.stringify(PETNAME_IDS.map(recordedNodeId)) }) as readonly {
     readonly node_id: string

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { RECORDED_HOST, CLAUDE_CODE_HOOK_SWITCHES } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { hookExitCallsIn, hookSwitchesOf, hookSwitchesSourceIn, managedSettingsPlaceIn } from './the_rules_a_hosts_binary_carries.ts'
 
 /** The host's function as 2.1.318 spells it, the shape the recorder cuts. */
@@ -188,7 +189,7 @@ test('a recorded function that reads a new key turns that key into a switch, wit
 })
 
 test('the recorded managed settings place is the folder, file and drop-in folder the host reads on Linux', () => {
-  assert.deepEqual(RECORDED_HOST.managed_settings, { dir: '/etc/claude-code', file: 'managed-settings.json', drop_in: 'managed-settings.d' })
+  assert.deepEqual(RECORDED_HOST.managed_settings, { dir: `/etc/${CLAUDE_CODE}`, file: 'managed-settings.json', drop_in: 'managed-settings.d' })
   const text =
     'switch(P()){case"macos":return"/Library/Application Support/ClaudeCode";case"windows":return"C:\\\\Program Files\\\\ClaudeCode";default:return"/etc/claude-code"}' +
     'getDropInDir(){return this.dropInDir??=qC(LS(),"managed-settings.d")' +

@@ -315,6 +315,36 @@ test('#513: a successor is handed its package contract in the resume prompt the 
   assert.match(order.text, /goal: the successor is held to the contract its predecessor was/)
 })
 
+test('#513 slice 3: the row the turn writes carries what the package spent, so the owner sees a member nearing its wall', async () => {
+  const crew = await aCrewOfTools('builder')
+  const work_package = 'synthetic-owner/repo#9'
+  const brief = [
+    '```package-contract',
+    'goal: the owner sees what a package has spent without asking',
+    'acceptance: the number is on the row | document: work.txt',
+    'allowed: push',
+    'budget: 3 tool calls',
+    'done: the reviewer passed the tip',
+    '```',
+  ].join('\n')
+  await crew.keepAContract(work_package, brief)
+  await crew.report('the budget', 1, 3, work_package)
+  // Two calls run and are counted, as the relay counts them on its allow path.
+  await crew.tools.noteTheCallCounted('a-session', 'Read')
+  await crew.tools.noteTheCallCounted('a-session', 'Read')
+
+  // A turn ends, which is the row's one write: the number goes where a gauge reads it.
+  await crew.ask('a-session', 20)
+  const row = theRowOf('builder', crew.home)
+  assert.ok(row !== null, 'the question wrote no row')
+  assert.deepEqual(row.spend, [{ unit: 'tool calls', spent: 2, limit: 3 }], 'the row does not carry what the package spent')
+
+  // A member holding no bounded package gets no number, rather than one left over from another package.
+  const free = await aCrewOfTools('builder')
+  await free.ask('a-session', 20)
+  assert.equal(theRowOf('builder', free.home)?.spend, undefined, 'a row with no budget to report carries a spend anyway')
+})
+
 test('#255: a successor taken past the limit hands over on the task its predecessor was asked about (r=3 R1′, P4)', async () => {
   const crew = await aCrewOfTools('builder', { refresh_between_tasks: true, sessions: ['a-session', 'b-session'] })
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
