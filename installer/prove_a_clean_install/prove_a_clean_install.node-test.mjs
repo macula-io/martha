@@ -8,11 +8,12 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, tearDown, MEMBER_WAIT_MS, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -424,6 +425,38 @@ for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
     })
   }
 }
+
+// martha#590: the tear-down removes the relay root while a start it interrupted may still be writing there. A run
+// whose wrapper is gone reads its own end only when it next writes, and writes once more before it goes — which is how
+// the SIGINT-in-flight case above came back red once in a while with its own step logged as passed: the removal and its
+// own detail both said the root was gone, and the root was there again when the run had ended.
+test('the tear-down removes the relay root until it stays removed, while a run goes on writing there (martha#590)', async (t) => {
+  const base = scratch(t)
+  const root = join(base, 'relay-root')
+  const done = join(base, 'done')
+  const writer = join(base, 'writer.sh')
+  // A run still writing where it was: a write every POLL_MS for a few rounds, then it records that it has finished, so
+  // the test knows no further write can bring the root back.
+  const rounds = 10
+  writeFileSync(writer, [
+    '#!/bin/sh',
+    `i=0; while [ $i -lt ${rounds} ]; do mkdir -p ${quoted(root)}; date > ${quoted(join(root, 'wrote'))}; i=$((i+1)); sleep ${POLL_MS / 1000}; done`,
+    `: > ${quoted(done)}`,
+    ''
+  ].join('\n'), { mode: RUNNABLE })
+  const writing = spawn('sh', [writer], { stdio: 'ignore' })
+  t.after(() => { writing.kill('SIGKILL') })
+  const began = Date.now() + MEMBER_WAIT_MS
+  while (!existsSync(join(root, 'wrote')) && Date.now() < began) await delay(POLL_MS)
+  assert.equal(existsSync(join(root, 'wrote')), true, 'the run is writing into the relay root')
+  /** @type {string[]} */
+  const lines = []
+  assert.equal(await tearDown((line) => lines.push(line), { relayRoot: root, members: [] }, {}), true, lines.join('\n'))
+  const finished = Date.now() + MEMBER_WAIT_MS
+  while (!existsSync(done) && Date.now() < finished) await delay(POLL_MS)
+  assert.equal(existsSync(done), true, 'the run has finished writing')
+  assert.equal(existsSync(root), false, `the relay root stays removed\n${lines.join('\n')}`)
+})
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
 // interrupted and fails; a hold that logged and returned at once would leave them green, because the signal still ends

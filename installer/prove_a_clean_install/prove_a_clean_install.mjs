@@ -52,15 +52,15 @@ const STOOD_IN = 'the sigstore bundle check is stood in, a local release is sign
 // The signals that interrupt a run; it then tears down before it ends.
 const INTERRUPTS = /** @type {const} */ (['SIGINT', 'SIGTERM'])
 // How long a member has to come up, and then to end once it is stopped.
-const MEMBER_WAIT_MS = 30_000
+export const MEMBER_WAIT_MS = 30_000
 // How often a wait for a member looks again.
-const POLL_MS = 50
+export const POLL_MS = 50
 // How long the stand-in host stays up unless it is stopped: far longer than any run. The stand-in never reports its
 // session's start, so on a terminal the launcher's backstop would stop it after TRUST_ANSWER_DEADLINE_MS (ten minutes,
 // host_runs_the_relay.ts); a run stops every member long before, so the backstop never fires here and is no part of it.
 const HOST_HOLDS_SECONDS = 600
 // The stand-in host's mode: its owner may run it.
-const RUNNABLE = 0o700
+export const RUNNABLE = 0o700
 // The fresh checkout's committer, whom `martha init` declares the solo crew for.
 const OWNER = 'clean install'
 // util-linux script, giving a command a terminal of its own and ending with its status.
@@ -298,7 +298,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
 }
 
 /** @param {string} word */
-const quoted = (word) => `'${word.replaceAll("'", `'\\''`)}'`
+export const quoted = (word) => `'${word.replaceAll("'", `'\\''`)}'`
 
 /**
  * A stand-in `claude`: the installed tree's answers to the launcher, then it notes its arguments by its pid and
@@ -528,7 +528,7 @@ async function stopMember (member, plant) {
  * @param {Running} running
  * @param {Plant} plant
  */
-async function tearDown (log, { work, registry, relayRoot, members }, plant) {
+export async function tearDown (log, { work, registry, relayRoot, members }, plant) {
   try {
     await step({ log }, 'tear down', async () => {
       const refusals = [...await killEveryMember(members, plant), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
