@@ -10,6 +10,7 @@ import {
   ACTS,
   BACKLOG,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
+  CLONES,
   CREW_CODE_DECLARATION_DIRECTORY,
   CREW_CODE_DECLARATION_FILE,
   HANDOVER_CEILING_MINUTES_LEAST,
@@ -27,6 +28,7 @@ import {
   OWNER,
   RESTART_MEMBER,
   STRICT_GATE,
+  WORKTREES,
   declareCrew,
   type CrewSettings,
 } from './declare_crew.ts'
@@ -299,7 +301,7 @@ test('the strict gate is a house rule, off unless the declaration names it, and 
 test('every declared switch is read from the one list, so a new rule is neither misspelt nor forgotten', async () => {
   // Two switches also name what they read with (martha#256's places, martha#320's windows): switching either on alone is
   // refused, as the tests below say, so each is named here with them.
-  const places = { clones: '/crew-place/clones', worktrees: '/crew-place/worktrees' }
+  const places = { clones: `/crew-place/${CLONES}`, worktrees: `/crew-place/${WORKTREES}` }
   const windows = { [STALLED_MINUTES]: 60, [REVIEW_MINUTES]: 45, [PERSON_MINUTES]: 30 }
   const withIt = (name: string) => (name === 'workspace_layout' ? places : name === NUDGES ? windows : {})
   for (const name of HOUSE_RULE_SWITCHES) {
@@ -312,12 +314,12 @@ test('every declared switch is read from the one list, so a new rule is neither 
 // --- where a crew keeps its clones and its worktrees (martha#256) -------------
 
 test('a crew whose workspace layout is on must name where its clones and worktrees live, each field by name', async () => {
-  const layout = { workspace_layout: true, clones: '/crew-place/clones', worktrees: '/crew-place/worktrees' }
+  const layout = { workspace_layout: true, clones: `/crew-place/${CLONES}`, worktrees: `/crew-place/${WORKTREES}` }
   const declared = await declare({ ...solo, house_rules: layout }).settings
-  assert.equal(declared.house_rules.clones, '/crew-place/clones')
-  assert.equal(declared.house_rules.worktrees, '/crew-place/worktrees')
-  await refusedWith({ ...solo, house_rules: { workspace_layout: true, worktrees: '/crew-place/worktrees' } }, 'house_rules.clones')
-  await refusedWith({ ...solo, house_rules: { workspace_layout: true, clones: '/crew-place/clones' } }, 'house_rules.worktrees')
+  assert.equal(declared.house_rules.clones, `/crew-place/${CLONES}`)
+  assert.equal(declared.house_rules.worktrees, `/crew-place/${WORKTREES}`)
+  await refusedWith({ ...solo, house_rules: { workspace_layout: true, worktrees: `/crew-place/${WORKTREES}` } }, 'house_rules.clones')
+  await refusedWith({ ...solo, house_rules: { workspace_layout: true, clones: `/crew-place/${CLONES}` } }, 'house_rules.worktrees')
 })
 
 test('a place that is not an absolute path is refused by name, and a crew with the layout off needs none', async () => {

@@ -299,6 +299,15 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: ["a_user/a_user.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG"],
   },
   {
+    // The relay is the one place in the tree that holds a private copy of a value the core also holds, and its hooks
+    // are the files that spell paths (Jupiter's note on PR 469). A planted case in a hooks file proves the check reads
+    // them, not only the core.
+    what: 'a constant written as a whole segment of a path literal a hooks file of the relay adds (martha#437)',
+    base: { 'a_relay_copy/a_relay_copy.ts': "export const A_RELAYS_PLACE = 'a-relays-place'\n" },
+    head: { 'claude_code_relay/hooks/register.ts': "const at = join(place, 'hooks/a-relays-place/register.js')\n" },
+    prints: ["claude_code_relay/hooks/register.ts:1: 'a-relays-place' (a path segment) restates a_relay_copy/a_relay_copy.ts A_RELAYS_PLACE"],
+  },
+  {
     what: 'a constant inside prose the change adds, which only a path separator would split out (martha#437)',
     base: { 'a_config/a_config.ts': "export const CONFIG = 'config'\n" },
     head: { 'a_user/a_user.ts': "say('read the config before the run')\n" },

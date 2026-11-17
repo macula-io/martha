@@ -9,6 +9,7 @@ import { test } from 'node:test'
 import type { ProcessOutcome, ProcessRequest, Processes } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { MAX_ASK, theBranch } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { CLONES as CLONES_PLACE } from '../declare_crew/declare_crew.ts'
 import {
   WHY_HALF_A_REMOVAL,
   WHY_THE_BRANCH_WOULD_BE_CHANGED,
@@ -19,7 +20,7 @@ import {
 } from './read_the_tips_a_removal_covers.ts'
 
 // A made-up owner's home: this repository is public, so no real path appears here.
-const CLONES = '/an-owners-home/clones'
+const CLONES = `/an-owners-home/${CLONES_PLACE}`
 const REPO = 'macula-io/martha'
 const CLONE = `${CLONES}/${REPO}`
 const BRANCH = 'vesta/313-old'

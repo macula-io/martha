@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import { CREW_CODE_DECLARATION_DIRECTORY, DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -31,7 +32,7 @@ import {
   type TheTextsAMemberReads,
 } from './hand_a_member_its_crew_text.ts'
 
-const ROOT = '/crews/site'
+const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
 
 const shipped = (name: string): string => readFileSync(join(SHIPPED_TEXTS, name), 'utf8')
