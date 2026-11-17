@@ -17,9 +17,13 @@ import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { theContractIn, theContractOfABlock } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import { noteTheContract, type LedgerHost as TheLedgerHost } from '../log_ledger/log_ledger.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
-import { refuseACallPastTheBudget } from './refuse_a_call_past_the_budget.ts'
+import { THE_CALLS_THAT_END_A_PACKAGE, refuseACallPastTheBudget } from './refuse_a_call_past_the_budget.ts'
 import { SPEND_COUNTED, spendStreamOf, theSpendCounts } from './the_spend_stream.ts'
 import { theUncountableBudgetNote } from './the_spend_in_force.ts'
 import { theBudgetOver } from './the_budget_tools.ts'
@@ -122,7 +126,7 @@ test('at the limit the next call is refused, named with what was spent and the f
   assert.match(refused, new RegExp(PACKAGE.replace('#', '#')))
 
   // The four that end the package stay open, under the names Claude Code calls them by.
-  for (const ending of ['write_my_handover', 'say_to_the_crew', 'park_a_member', 'report_where_the_work_stands']) {
+  for (const ending of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, PARK_A_MEMBER, REPORT_WHERE_THE_WORK_STANDS]) {
     assert.equal(
       refuseACallPastTheBudget(aCall(`mcp__martha__${ending}`), spend, CLAUDE_CODE.ownNameOf),
       undefined,
@@ -138,7 +142,7 @@ test('the ending calls are the same calls without a server name, and a look-alik
   await budget.noteTheCallCounted(SESSION, 'some_working_tool')
   const spend = await budget.theSpendInForce(SESSION)
 
-  assert.equal(refuseACallPastTheBudget(aCall('write_my_handover'), spend, CLAUDE_CODE.ownNameOf), undefined)
+  assert.equal(refuseACallPastTheBudget(aCall(WRITE_MY_HANDOVER_TOOL), spend, CLAUDE_CODE.ownNameOf), undefined)
   // A name that merely ends with one is another call: it is refused like any other.
   assert.notEqual(refuseACallPastTheBudget(aCall('mcp__martha__not_write_my_handover'), spend, CLAUDE_CODE.ownNameOf), undefined)
 })
@@ -268,12 +272,6 @@ test('a budget this host cannot count says so at the start line, rather than pre
   assert.match(said, /no token count/)
 })
 
-test('every name on the ending table is one the tree defines, so a renamed tool cannot slip off it', async () => {
-  const { WRITE_MY_HANDOVER_TOOL } = await import('../write_my_handover/write_my_handover.ts')
-  const { PARK_A_MEMBER } = await import('../park_and_wake_a_member/the_park_tools.ts')
-  const { REPORT_WHERE_THE_WORK_STANDS } = await import('../report_where_the_work_stands/report_where_the_work_stands.ts')
-  const { SAY_TO_THE_CREW } = await import('../send_a_crew_message/send_a_crew_message.ts')
-  const { THE_CALLS_THAT_END_A_PACKAGE } = await import('./refuse_a_call_past_the_budget.ts')
-
+test('every name on the ending table is one the tree defines, so a renamed tool cannot slip off it', () => {
   assert.deepEqual([...THE_CALLS_THAT_END_A_PACKAGE].sort(), [WRITE_MY_HANDOVER_TOOL, PARK_A_MEMBER, REPORT_WHERE_THE_WORK_STANDS, SAY_TO_THE_CREW].sort())
 })
