@@ -555,12 +555,14 @@ async function tearDown (log, { work, registry, relayRoot, members }, plant) {
 }
 
 /**
- * Every member still running is killed with its process group, and its `martha start` with it.
+ * Every member still running is killed with its process group, and its `martha start` with it. What a kill could not do
+ * is a refusal, so the tear-down fails by name instead of reporting a run it never reached as ended (martha#590 r=2).
+ * Exported for the case that drives that refusal through the list the tear-down fails on, not the walk alone.
  * @param {Member[]} members
  * @param {Plant} plant
  * @returns {Promise<string[]>} which did not end, if any
  */
-async function killEveryMember (members, plant) {
+export async function killEveryMember (members, plant) {
   const refusals = []
   for (const member of members) {
     member.child.stdin?.end()

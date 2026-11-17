@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, killEveryMember, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -575,6 +575,27 @@ test('a walk that could not be made fails the tear-down by name, and only status
     }
   }
 })
+
+// martha#590 r=2: the refusal is the tear-down's, not the walk's alone. A walk that could not be made must reach the
+// list the tear-down fails on, or the tear-down reports a run it never reached as ended and the refusal is dropped on
+// the floor: the same silent no-op one layer up from where the walk made it.
+test('a walk the tear-down could not make is one of its refusals (martha#590 r=2)', async (t) => {
+  const tree = scratch(t)
+  const nowhere = join(tree, 'not-on-this-path')
+  mkdirSync(nowhere)
+  const child = spawn('sleep', ['300'], { stdio: 'ignore' })
+  t.after(() => { try { process.kill(Number(child.pid), 'SIGKILL') } catch { /* already gone */ } })
+  // A member the tear-down kills, whose own promise then says it ended: the only refusal left is the walk's.
+  const member = { name: 'walked', child, pid: 0, said: '', ended: '', exited: Promise.resolve('ended') }
+  const path = process.env.PATH
+  t.after(() => { process.env.PATH = path })
+  process.env.PATH = nowhere
+  const refusals = await killEveryMember([member], {})
+  process.env.PATH = path
+  assert.equal(refusals.length, 1, `one refusal, the walk's, held by the tear-down: ${JSON.stringify(refusals)}`)
+  assert.match(refusals[0] ?? '', /the children of pid \d+ could not be read: /, 'and it names the walk that failed')
+})
+
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
 // interrupted and fails; a hold that logged and returned at once would leave them green, because the signal still ends
