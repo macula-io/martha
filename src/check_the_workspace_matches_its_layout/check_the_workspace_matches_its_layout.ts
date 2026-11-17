@@ -42,7 +42,7 @@ const THE_BRANCH = ['rev-parse', '--abbrev-ref', 'HEAD']
 const THE_DIRTY_WORK = ['status', '--porcelain']
 
 /** The argument git takes to name the place a clone came from, which is what tells one repository from another. */
-const THE_ORIGIN = ['config', '--get', 'remote.origin.url']
+const THE_ORIGIN = ['remote', 'get-url', 'origin']
 
 /** The argument git takes to list a clone's worktrees, the branch of each and whether only its record is left. */
 const THE_WORKTREES = ['worktree', 'list', '--porcelain']

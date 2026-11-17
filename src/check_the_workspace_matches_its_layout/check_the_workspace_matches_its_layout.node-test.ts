@@ -105,7 +105,7 @@ test('a worktree whose directory is gone is named, and one the crew declared is 
 
 test('one repository cloned twice is named with both of its clones', async (t) => {
   const fixture = aCleanWorkspace(t)
-  const origin = gitIn(fixture.clone, 'config', '--get', 'remote.origin.url')
+  const origin = gitIn(fixture.clone, 'remote', 'get-url', 'origin')
   gitIn(fixture.clones, 'clone', '--quiet', origin, join('acme', 'widget-again'))
   assert.match((await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n'), /is cloned 2 times/)
 })
