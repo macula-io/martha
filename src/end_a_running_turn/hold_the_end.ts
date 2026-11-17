@@ -7,10 +7,23 @@
 // none in flight; every call denied while it is held; the end handed back on the yes to the last one in flight; and the
 // hold dropped only when the turn it names ends, or the end expires. The relay only aborts when told.
 //
-// It holds nothing on disk: one launcher answers one member, and a launcher that dies takes its member with it.
+// It holds nothing on disk itself: one launcher answers one member, and a launcher that dies takes its member with it.
+// The one thing it writes is the line that says which call the end rode on, in the journal its launcher hands it with
+// the question (martha#498): no other thing knows which call's answer carried the end, and a run reading the order of
+// its requests cannot tell that end from one ordered after the tool finished without it.
+//
+// What this needs of the launcher's journal: one line about one of the host's calls, by the id the host gave it.
+
+import { CARRY_THE_END } from './end_the_running_turn.ts'
+import { THE_END_RODE_ON_THE_CALL } from './the_end_rode_on_a_call.ts'
 
 /** Why a call is denied while an end is held: the turn is about to end, and nothing more is started in it. */
 export const A_TOOL_WHILE_THE_END_IS_HELD = 'this turn is being ended so the member can hand over; no tool starts in it'
+
+/** What this needs of the launcher's journal, where a run reads which call the end rode on (martha#498). */
+export interface TheJournalsRecordOfACall {
+  noted(event: string, why: string, tool_use_id?: string): void
+}
 
 /** One session's calls in flight, and the end held in it with whether it was handed out yet. */
 interface ASessionsHold {
@@ -26,8 +39,11 @@ export interface TheEndsHold {
   deniesACall(session: string): string | undefined
   /** A call the launcher allowed, by the host's id: in flight until it is answered. */
   aCallAllowed(session: string, tool_use_id: string): void
-  /** A call answered yes: the turn to end when it was the last in flight under a held end, else undefined. */
-  aCallAnswered(session: string, tool_use_id: string): string | undefined
+  /**
+   * A call answered yes: the turn to end when it was the last in flight under a held end, else undefined — and, where a
+   * journal is handed in, the line that says this call's own answer carried it (martha#498).
+   */
+  aCallAnswered(session: string, tool_use_id: string, journal?: TheJournalsRecordOfACall): string | undefined
   /** A turn ended: only the one the end names drops the hold and what was in flight, never a subagent's. */
   aTurnEnded(session: string, turn_id: string): void
   /** The end expired before it was carried (ruling D): calls may start again. */
@@ -45,11 +61,12 @@ export function holdingTheEnds(): TheEndsHold {
     },
     deniesACall: (session) => (sessions.get(session)?.held === undefined ? undefined : A_TOOL_WHILE_THE_END_IS_HELD),
     aCallAllowed: (session, tool_use_id) => void of(session).in_flight.add(tool_use_id),
-    aCallAnswered(session, tool_use_id) {
+    aCallAnswered(session, tool_use_id, journal) {
       const one = sessions.get(session)
       if (one === undefined || !one.in_flight.delete(tool_use_id)) return undefined
       if (one.held === undefined || one.held.carried || one.in_flight.size > 0) return undefined
       one.held.carried = true
+      journal?.noted(CARRY_THE_END, THE_END_RODE_ON_THE_CALL, tool_use_id)
       return one.held.turn_id
     },
     aTurnEnded(session, turn_id) {
