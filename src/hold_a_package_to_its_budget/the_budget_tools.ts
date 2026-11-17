@@ -1,10 +1,13 @@
 // The budget as the crew holds it for a member's session (martha#513, slice 3).
 //
-// This exists so the count is read once and the per-call cost is one append. A session's first question reads the
-// package's newest contract and its spend stream; every question after that is answered from what was read, and every
-// call the relay lets run appends one row and moves the tally by one. A refresh is a new session, so the read happens
-// again and the successor starts from the stream — which is how the count outlives the session without any session
-// having to remember it.
+// This exists so the count is read once and the per-call cost is one append and one small file. The session's first
+// question for a package reads that package's newest contract and its spend stream; every question after that about the
+// same package is answered from what was read, and every call the relay lets run appends one row and moves the tally by
+// one. What the member's own row names is read on every call, because the package is usually named part-way into a
+// session — the brief and the handover come first, and `report_where_the_work_stands` names the package — and the cache
+// is keyed by session and package so neither that report nor a move to another package is missed (r=1 R1). A refresh is
+// a new session, so the read happens again and the successor starts from the stream — which is how the count outlives
+// the session without any session having to remember it.
 //
 // Deliberately read differently from the contract's allowed actions (../refuse_calls_outside_the_package_contract),
 // which reads the newest contract on every act: an act is rare, a tool call is not. The price is that a version which
@@ -14,7 +17,7 @@
 // A package with no contract, an unbounded one, a member holding nothing, and a ledger this slice cannot read all count
 // nothing and stop nothing: a budget is a bound on work, and none of those has one to bound.
 
-import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import type { AUnitOnARow, DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theContractVersionsOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import type { ABudget, BudgetUnit } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
@@ -63,12 +66,10 @@ async function theCountsOrTheReason(host: LedgerHost, package_name: string): Pro
 }
 
 /**
- * The budget a member's session is held to, read once: the package its own row names, that package's newest contract
- * (a bounded one only), the moment a package's minutes started, and what it has spent. Null when no budget can bind.
+ * The budget a member's session is held to for `package_name`, read once: that package's newest contract (a bounded one
+ * only), the moment a package's minutes started, and what it has spent. Null when no budget can bind.
  */
-async function readTheBudget(places: TheBudgetPlaces): Promise<AHeldBudget | null> {
-  const package_name = places.beats.read(places.member)?.holds ?? ''
-  if (package_name === '') return null
+async function readTheBudget(places: TheBudgetPlaces, package_name: string): Promise<AHeldBudget | null> {
   try {
     const versions = await theContractVersionsOf(places.ledger, package_name)
     const newest = versions.at(-1)
@@ -81,14 +82,25 @@ async function readTheBudget(places: TheBudgetPlaces): Promise<AHeldBudget | nul
 }
 
 /**
- * The budget over the places a launch gave: one read per session at its first call, then the tally in memory. The map
- * holds a null for a session with no budget to bind, so a member holding nothing asks its row once and not once a call.
+ * The budget over the places a launch gave: one read for each session and package the member's row names, then the
+ * tally in memory.
+ *
+ * The row is read on every call, and what it names is part of the cache's key, because the package is usually named
+ * part-way into a session: a member reads its brief and its handover first, and `report_where_the_work_stands` is the
+ * call that names the package. Keyed by the session alone, the "nothing binds yet" read from before that report would
+ * hold for the whole session, and neither the calls after it nor the successor session would be held to anything
+ * (r=1 R1). The same key holds when a member is handed another package without a refresh: the new package's budget is
+ * the one in force, not the one it left. Reading the row costs one small file a call, never a stream — the contract and
+ * the spend stream are still read once for each session and package.
  */
 export function theBudgetOver(places: TheBudgetPlaces): TheBudgetAsACrewHoldsIt {
   const held = new Map<string, AHeldBudget | null>()
   const theHeldFor = async (session_id: string): Promise<AHeldBudget | null> => {
-    if (!held.has(session_id)) held.set(session_id, await readTheBudget(places))
-    return held.get(session_id) ?? null
+    const package_name = places.beats.read(places.member)?.holds ?? ''
+    if (package_name === '') return null
+    const key = `${session_id}\u0000${package_name}`
+    if (!held.has(key)) held.set(key, await readTheBudget(places, package_name))
+    return held.get(key) ?? null
   }
   return {
     async theSpendInForce(session_id) {
@@ -128,9 +140,17 @@ export async function noteTheCallCounted(
 const theSpendSaid = (units: readonly AUnitSpent[]): string => units.map((one) => `${String(one.spent)} of ${String(one.limit)} ${one.unit}`).join(', ')
 
 /**
+ * What the member's dashboard row carries of its budget (martha#513, slice 3): the units it has spent of each, in the
+ * row's own spelling, or undefined when there is no count to show — a member holding nothing, an unbounded package, or
+ * a count that could not be read. No gauge is drawn here (#309); the number is put where a gauge can read it.
+ */
+export const theSpendOnARow = (spend: ASpendInForce | undefined): readonly AUnitOnARow[] | undefined => spend?.units
+
+/**
  * What a member is handed about its budget at a start or after a refresh: what it has spent of each unit, and the units
  * this host cannot count. Read fresh, because a start is where the count is meant to be re-read — the relay's own read
- * is the one that happens once a session (./the_budget_tools' theBudgetOver). Null when there is no budget to report.
+ * is the one that happens once for each session and package (./the_budget_tools' theBudgetOver). Null when there is no
+ * budget to report.
  */
 export async function theSpendPartOfTheStart(host: LedgerHost, package_name: string, now: number): Promise<string | null> {
   if (package_name === '') return null

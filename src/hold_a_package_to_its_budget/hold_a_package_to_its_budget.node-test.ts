@@ -5,8 +5,10 @@
 // it starts once, at the first version that is bounded and names minutes, and time spent waiting counts.
 //
 // What these tests hold: a call is counted when it runs; at the limit every call is refused except the four that end the
-// package cleanly, matched by the host's own names; the count survives a successor session; an unbounded package never
-// stops; and a counted call reads neither the package's act ledger nor the spend stream more than once a session.
+// package cleanly, matched by the host's own names; the count survives a successor session; the budget binds from the
+// call that names the package, however late in the session that is, and follows the member onto another package; an
+// unbounded package never stops; and a counted call reads neither the package's act ledger nor the spend stream more
+// than once a session.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -24,7 +26,7 @@ import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.t
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 import { THE_CALLS_THAT_END_A_PACKAGE, refuseACallPastTheBudget } from './refuse_a_call_past_the_budget.ts'
-import { SPEND_COUNTED, spendStreamOf, theSpendCounts } from './the_spend_stream.ts'
+import { SPEND_COUNTED, noteTheCallCounted as noteTheStreamRow, spendStreamOf, theSpendCounts } from './the_spend_stream.ts'
 import { theUncountableBudgetNote } from './the_spend_in_force.ts'
 import { theBudgetOver } from './the_budget_tools.ts'
 
@@ -66,13 +68,13 @@ function aHostForTheBudget(options: { readonly now?: number } = {}) {
   return { given, host, streamsRead: () => [...streams_read] }
 }
 
-/** Keeps `block` as the package's contract, through the ledger's own row, as the Supervisor's tool does. */
-async function keepTheContract(host: LedgerHost, block: readonly string[]): Promise<void> {
+/** Keeps `block` as `package_name`'s contract, through the ledger's own row, as the Supervisor's tool does. */
+async function keepTheContract(host: LedgerHost, block: readonly string[], package_name: string = PACKAGE): Promise<void> {
   const read = theContractOfABlock(block)
   assert.ok('ok' in read, 'refused' in read ? read.refused : '')
-  const versions = (await readLedger(host, PACKAGE)).filter((row) => row.kind === CONTRACT_KEPT)
+  const versions = (await readLedger(host, package_name)).filter((row) => row.kind === CONTRACT_KEPT)
   await noteTheContract(host as TheLedgerHost, {
-    package: PACKAGE,
+    package: package_name,
     member: 'Supervisor',
     version: versions.length + 1,
     digest: read.ok.digest,
@@ -90,6 +92,20 @@ function placesOver(host: LedgerHost, holds: string) {
     ledger: host,
     beats: { read: () => holdingThePackage(holds), keep: () => {} },
   } as unknown as Parameters<typeof theBudgetOver>[0]
+}
+
+/**
+ * Places whose member row names the package the test moves: a member's first calls in a session read its brief and its
+ * handover, and `report_where_the_work_stands` names the package some calls later (r=1 R1).
+ */
+function placesOverARowThatMoves(host: LedgerHost): { readonly places: Parameters<typeof theBudgetOver>[0]; readonly holding: (package_name: string) => void } {
+  const row = { holds: '' }
+  const places = {
+    member: MEMBER,
+    ledger: host,
+    beats: { read: () => holdingThePackage(row.holds), keep: () => {} },
+  } as unknown as Parameters<typeof theBudgetOver>[0]
+  return { places, holding: (package_name) => void (row.holds = package_name) }
 }
 
 /** A call the budget judges: its tool, and nothing else it needs. */
@@ -161,6 +177,69 @@ test('a successor session reads the count from the stream and is refused on its 
   assert.ok(spend !== undefined)
   assert.deepEqual(spend.units, [{ unit: 'tool calls', spent: 3, limit: 3 }])
   assert.notEqual(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
+})
+
+test('a session handed its package after its first call is held to it from the call that names it (r=1 R1)', async () => {
+  const { host } = aHostForTheBudget()
+  await keepTheContract(host, aBlock('2 tool calls'))
+  const { places, holding } = placesOverARowThatMoves(host)
+  const budget = theBudgetOver(places)
+
+  // The brief and the handover are read before the member reports what it holds: nothing binds yet, and nothing counts.
+  assert.equal(await budget.theSpendInForce(SESSION), undefined)
+  assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
+
+  // The report names the package, and from the next call the budget holds: the first two calls run and count, the three
+  // after them are refused — five calls on a two-call budget are not five calls that run.
+  holding(PACKAGE)
+  const ran: boolean[] = []
+  for (let call = 0; call < 5; call += 1) {
+    const spend = await budget.theSpendInForce(SESSION)
+    const refused = refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf)
+    ran.push(refused === undefined)
+    if (refused === undefined) await budget.noteTheCallCounted(SESSION, 'some_working_tool')
+  }
+  assert.deepEqual(ran, [true, true, false, false, false], 'the calls after the package was named were not held to its budget')
+
+  // And the two that ran were counted: a successor reads them, not zero.
+  const successor = await theBudgetOver(placesOver(host, PACKAGE)).theSpendInForce('a-session-after')
+  assert.deepEqual(successor?.units, [{ unit: 'tool calls', spent: 2, limit: 2 }], 'the calls that ran after the package was named were never counted')
+})
+
+test('a member handed another package in the same session is held to the new one, not the one it left (r=1 R1)', async () => {
+  const other = 'synthetic-owner/repo#18'
+  const { host } = aHostForTheBudget()
+  await keepTheContract(host, aBlock('10 tool calls'))
+  await keepTheContract(host, aBlock('1 tool calls'), other)
+  const { places, holding } = placesOverARowThatMoves(host)
+  const budget = theBudgetOver(places)
+
+  holding(PACKAGE)
+  assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
+  assert.deepEqual((await budget.theSpendInForce(SESSION))?.units, [{ unit: 'tool calls', spent: 1, limit: 10 }])
+
+  // The member is handed another package: its own budget is the one in force, with its own count.
+  holding(other)
+  assert.deepEqual((await budget.theSpendInForce(SESSION))?.units, [{ unit: 'tool calls', spent: 0, limit: 1 }], 'the package the member left kept its budget in force')
+  assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
+  const spend = await budget.theSpendInForce(SESSION)
+  assert.notEqual(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined, 'the new package had a call left and did not refuse one')
+})
+
+test('a second session in the same launch counts from the stream, not from the tally the first one kept', async () => {
+  const { host } = aHostForTheBudget()
+  await keepTheContract(host, aBlock('10 tool calls'))
+  const budget = theBudgetOver(placesOver(host, PACKAGE))
+  await budget.noteTheCallCounted('a-session-before', 'some_working_tool')
+  await budget.noteTheCallCounted('a-session-before', 'some_working_tool')
+  // Another writer counts one more, as a writer other than this budget would: the stream is the count, not memory.
+  await noteTheStreamRow(host, { package: PACKAGE, member: MEMBER, unit: 'tool calls', count: 1 })
+
+  assert.deepEqual(
+    (await budget.theSpendInForce('a-session-after'))?.units,
+    [{ unit: 'tool calls', spent: 3, limit: 10 }],
+    'the new session was answered from the tally the session before it kept rather than from the stream',
+  )
 })
 
 test('an unbounded package counts nothing and never stops a call', async () => {

@@ -85,8 +85,9 @@ export interface ToolCall {
    * What the package this member holds has spent of its budget (martha#513, slice 3), read by the caller: the units its
    * contract names and what was spent of each. Absent, undefined, or a package with count left refuses nothing.
    *
-   * It is asked last of all, so a call refused for what it is keeps the more serious reason, and after the gate, so a
-   * call refused for tainted text is refused by the gate and not by a budget the member could not spend anyway.
+   * It is asked after the gate and before the contract's acts (slice 2), and that order is the whole of the rule: a call
+   * refused for tainted text keeps the gate's reason, and a member at its wall is told it is spent rather than told to
+   * ask the owner for a new contract version — which would invite it to try something else and hit the wall anyway.
    */
   readonly spend?: ASpendInForce | undefined
 }
@@ -134,8 +135,9 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
 
 /**
  * What the gate and then the package's budget answer (martha#513, slice 3), in that order: the gate first, so a call it
- * refuses keeps its own reason, and the budget last, so it can only turn a yes into a no. The four calls that end a
- * package run whatever the package has spent.
+ * refuses keeps its own reason, and the budget after it and before the contract's acts, so it can only turn a yes into a
+ * no and a member at its wall is told that rather than told to ask for a new version. The four calls that end a package
+ * run whatever the package has spent.
  */
 function theGatesAndTheBudgetsAnswer(
   asked: Pick<ToolCall, 'tool' | 'session' | 'policy' | 'names'> & { readonly gate: GateMode; readonly audit: GateAuditPlace | undefined; readonly spend: ASpendInForce | undefined },
