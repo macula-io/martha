@@ -19,6 +19,9 @@ import {
   type RelayHook,
 } from './hooks/register.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+// The core's root, not the relay's copy of it: the fake engine answers only under the root the core reads, so a relay
+// copy that drifted from it would go unanswered here (martha#437).
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { heardTaken, LARGEST_RELAYED_ANSWER, RELAY_DEADLINE_MS, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
@@ -83,7 +86,7 @@ function fakeEngine(launcher: Launcher, environment: Record<string, string> = { 
         return { cancel: () => undefined }
       },
     },
-    fs: { read: async (path) => (path === '/proc/self/stat' ? OWN_STAT : Promise.reject(new Error(`no ${path}`))) },
+    fs: { read: async (path) => (path === `${PROC_ROOT}/self/stat` ? OWN_STAT : Promise.reject(new Error(`no ${path}`))) },
     process: {
       run: async (argv) => {
         ran.push(argv)
