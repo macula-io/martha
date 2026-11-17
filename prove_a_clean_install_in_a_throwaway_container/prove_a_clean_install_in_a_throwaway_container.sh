@@ -805,9 +805,13 @@ case "${1:-}" in
         ;;
       # The host's transcripts, read by the run's own script against the case's folder as the container's home: a script
       # that reads more than the transcripts is answered with more. A case whose transcript.goes exists stands for a
-      # container that stops giving them once the member has answered.
+      # container that stops giving them once the member has answered: the one read that finds the turn is given, every
+      # read after it is not.
       *.claude/projects*)
-        if [ -f "${standin}/transcript.goes" ] && [ -f "${standin}/answered" ]; then exit 125; fi
+        if [ -f "${standin}/transcript.goes" ] && [ -f "${standin}/answered" ]; then
+          if [ -f "${standin}/transcript.given" ]; then exit 125; fi
+          : > "${standin}/transcript.given"
+        fi
         . "$(dirname "$0")/member.facts"
         sh -c "$(printf '%s' "${5:-}" | sed "s#${home}#${standin}/home#g")"
         ;;
