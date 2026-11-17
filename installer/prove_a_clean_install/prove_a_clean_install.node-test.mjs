@@ -8,11 +8,12 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, MEMBER_WAIT_MS, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -424,6 +425,43 @@ for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
     })
   }
 }
+
+// martha#590: a start that is never named is killed with everything under it, not only the wrapper. `script` runs the
+// run in a session of its own, so the run is not in the wrapper's process group; killed only with the wrapper it goes
+// on writing under the relay root, and a tear-down then says it removed a root the run has made again — which is how
+// the SIGINT-in-flight case above came back red once in a while with its own step logged as passed.
+test('a start in flight is killed with everything under it, so nothing it began outlives the tear-down (martha#590)', async (t) => {
+  const tree = scratch(t)
+  const pidFile = join(tree, 'pid')
+  const writer = join(tree, 'writer.sh')
+  // The run a start holds does not end with its wrapper: it reads its own end when it next writes, and until then it
+  // goes on writing where it was. It forks, as a run does, so what writes is a child of a child of the wrapper, and a
+  // kill that reaches only one level under the wrapper leaves it writing.
+  const writes = `printf '%s\\n' "$$" > ${quoted(pidFile)}; while :; do mkdir -p ${quoted(join(tree, 'relay'))}; date > ${quoted(join(tree, 'relay', 'wrote'))}; sleep ${POLL_MS / 1000}; done`
+  writeFileSync(writer, [
+    '#!/bin/sh',
+    "trap '' HUP",
+    `${quoted('sh')} -c ${quoted(writes)} &`,
+    'wait',
+    ''
+  ].join('\n'), { mode: RUNNABLE })
+  const member = { name: 'in flight', child: startOnATerminal(quoted(writer), { cwd: tree, env: process.env }), pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  /** @type {number} */
+  let writerPid = 0
+  t.after(() => {
+    if (writerPid > 0) { try { process.kill(writerPid, 'SIGKILL') } catch { /* already gone */ } }
+    try { process.kill(-member.child.pid, 'SIGKILL') } catch { /* no such group */ }
+  })
+  const began = Date.now() + MEMBER_WAIT_MS
+  while (!existsSync(pidFile) && Date.now() < began) await delay(POLL_MS)
+  writerPid = Number(readFileSync(pidFile, 'utf8').trim())
+  assert.ok(writerPid > 0, 'the start said the pid of what it began')
+  assert.equal(alive(writerPid), true, 'what the start began is alive before the tear-down')
+  killEvenIfGone(member)
+  const ended = Date.now() + MEMBER_WAIT_MS
+  while (alive(writerPid) && Date.now() < ended) await delay(POLL_MS)
+  assert.equal(alive(writerPid), false, 'nothing the start began is alive after the tear-down')
+})
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
 // interrupted and fails; a hold that logged and returned at once would leave them green, because the signal still ends

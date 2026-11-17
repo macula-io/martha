@@ -52,15 +52,15 @@ const STOOD_IN = 'the sigstore bundle check is stood in, a local release is sign
 // The signals that interrupt a run; it then tears down before it ends.
 const INTERRUPTS = /** @type {const} */ (['SIGINT', 'SIGTERM'])
 // How long a member has to come up, and then to end once it is stopped.
-const MEMBER_WAIT_MS = 30_000
+export const MEMBER_WAIT_MS = 30_000
 // How often a wait for a member looks again.
-const POLL_MS = 50
+export const POLL_MS = 50
 // How long the stand-in host stays up unless it is stopped: far longer than any run. The stand-in never reports its
 // session's start, so on a terminal the launcher's backstop would stop it after TRUST_ANSWER_DEADLINE_MS (ten minutes,
 // host_runs_the_relay.ts); a run stops every member long before, so the backstop never fires here and is no part of it.
 const HOST_HOLDS_SECONDS = 600
 // The stand-in host's mode: its owner may run it.
-const RUNNABLE = 0o700
+export const RUNNABLE = 0o700
 // The fresh checkout's committer, whom `martha init` declares the solo crew for.
 const OWNER = 'clean install'
 // util-linux script, giving a command a terminal of its own and ending with its status.
@@ -298,7 +298,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
 }
 
 /** @param {string} word */
-const quoted = (word) => `'${word.replaceAll("'", `'\\''`)}'`
+export const quoted = (word) => `'${word.replaceAll("'", `'\\''`)}'`
 
 /**
  * A stand-in `claude`: the installed tree's answers to the launcher, then it notes its arguments by its pid and
@@ -341,6 +341,16 @@ const ownersEnvironment = (box, hostDir, relayRoot) => ({
 })
 
 /**
+ * A command started on a terminal of its own, as the owner starts a member: `script` makes the terminal, and the words
+ * are the shell's.
+ * @param {string} words the command, quoted for the shell
+ * @param {{ cwd: string, env: NodeJS.ProcessEnv }} options
+ */
+export function startOnATerminal (words, options) {
+  return spawn('script', [...ON_A_TERMINAL, words, '/dev/null'], { ...options, stdio: 'pipe' })
+}
+
+/**
  * The installed command as the owner runs it in `project`: plainly, or on a terminal of its own.
  * @param {{ martha: string, project: string, env: NodeJS.ProcessEnv }} at
  */
@@ -350,7 +360,7 @@ function theOwner ({ martha, project, env }) {
   return {
     run: (/** @type {string[]} */ ...args) => spawnSync(process.execPath, [martha, ...args], { ...options, encoding: 'utf8', input: '', timeout: MEMBER_WAIT_MS }),
     onATerminal: (/** @type {string[]} */ ...args) => spawnSync('script', [...ON_A_TERMINAL, words(args), '/dev/null'], { ...options, encoding: 'utf8', input: '', timeout: MEMBER_WAIT_MS }),
-    startOnATerminal: (/** @type {string[]} */ ...args) => spawn('script', [...ON_A_TERMINAL, words(args), '/dev/null'], { ...options, stdio: 'pipe' })
+    startOnATerminal: (/** @type {string[]} */ ...args) => startOnATerminal(words(args), options)
   }
 }
 
@@ -562,7 +572,7 @@ async function killEveryMember (members, plant) {
 }
 
 /** @param {Member} member */
-function killEvenIfGone (member) {
+export function killEvenIfGone (member) {
   try {
     if (member.pid) process.kill(-member.pid, 'SIGKILL')
   } catch {
