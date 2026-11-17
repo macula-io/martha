@@ -1,5 +1,9 @@
 // What the workspace's layout refuses of a git call (martha#562, port-map step 9).
 //
+// NOT ENFORCED YET. No seam calls this slice: package 1 lands the rules, their tests and the facts they need, and
+// package 2 wires the three seams (the relay's tool_called, the `git` shim on the member's PATH, and the clone's
+// ref-transaction hook) through ../ask_git_what_a_member_is_about_to_change, which is the slice those seams call.
+//
 // Three rules, and no more. A clone stays on its default branch, so where the work of a branch belongs is a worktree
 // (the first rule, and the second, which the first holds). And another member's worktree or branch is theirs: no member
 // removes or moves one, and no role is exempt, the Supervisor included.

@@ -1,5 +1,9 @@
 // The git calls a shell line makes, and the directory each of them runs in (martha#562).
 //
+// Called by ../guard_workspace (and so by every seam that will call the guard) and by
+// ../refuse_calls_outside_the_package_contract's act table. Nothing here enforces anything on its own: it reads a line
+// and says what it holds.
+//
 // One reader, because two readers would disagree: the package contract reads a line for the acts it performs and the
 // workspace guard reads it for the places it touches, and a line read one way by one and another way by the other is
 // exactly the gap a member's cleverest line would find. So the words of a command, where git's own options end, and

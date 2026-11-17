@@ -5,6 +5,7 @@
 // a prune would meet, with the branch each of them is on. This slice asks for them, runs the guard, and hands back the
 // refusal. All three seams of the guard end here — the relay's tool_called, the `git` shim on the member's PATH, and
 // the clone's own ref-transaction hook — so the facts are asked one way and the answers are the same three answers.
+// None of the three is wired yet: package 2 lands them, and nothing calls this slice until it does.
 //
 // Every run carries Martha's own settings (../run_marthas_own_git) and reads only: `for-each-ref` lists branches,
 // `worktree list` lists worktrees. Nothing here writes, fetches or prunes.
