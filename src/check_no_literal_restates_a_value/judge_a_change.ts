@@ -70,9 +70,7 @@ export function linesTheChangeAdds(root: string, base: string, head: string): Se
 
 /** The path of every source under the core that the change touches, deleted ones too, relative to the repository. */
 function touchedSources(root: string, merge_base: string, head: string): string[] {
-  return git(root, ['diff', '--name-only', '--no-renames', merge_base, head, '--', CORE])
-    .split('\n')
-    .filter((path) => path !== '' && isScannedSource(basename(path)))
+  return git(root, ['diff', '--name-only', '--no-renames', merge_base, head, '--', CORE]).split('\n').filter((path) => path !== '' && isScannedSource(basename(path)))
 }
 
 /** A file as one commit holds it; empty when that commit does not hold it. */
