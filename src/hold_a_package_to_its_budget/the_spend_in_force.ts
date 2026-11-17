@@ -9,6 +9,7 @@
 // version changes the limit, which is what makes raising it the remedy for a package that spent its minutes waiting.
 // Counting from the earliest version instead would spend a package the moment it was first bounded.
 
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { AContractVersion } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import type { ABudget, APackageContract, BudgetUnit } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import type { AUnitSpent } from './refuse_a_call_past_the_budget.ts'
@@ -44,7 +45,7 @@ export function theUncountableBudgetNote(contract: APackageContract): string | u
 /** What one unit has spent, or undefined when this host cannot count it. */
 const theSpentOf = (unit: BudgetUnit, counted: Partial<Record<BudgetUnit, number>>, clock_started_at: number | undefined, now: number): number | undefined => {
   if (unit === 'tool calls') return counted[unit] ?? 0
-  if (unit === 'minutes' && clock_started_at !== undefined) return Math.floor((now - clock_started_at) / 60_000)
+  if (unit === 'minutes' && clock_started_at !== undefined) return Math.floor((now - clock_started_at) / MINUTE_MS)
   return undefined
 }
 

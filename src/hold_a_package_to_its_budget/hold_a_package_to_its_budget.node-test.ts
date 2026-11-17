@@ -16,6 +16,7 @@ import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { theContractIn, theContractOfABlock } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import { noteTheContract, type LedgerHost as TheLedgerHost } from '../log_ledger/log_ledger.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 import { refuseACallPastTheBudget } from './refuse_a_call_past_the_budget.ts'
@@ -184,7 +185,7 @@ test('a member holding no package, and a package with no contract, count nothing
 test('minutes spend a package with calls left, and they count while it waits', async () => {
   const { host, given } = aHostForTheBudget({ now: 1_000 })
   await keepTheContract(host, aBlock('30 minutes, 100 tool calls'))
-  given.advanceClock(31 * 60_000)
+  given.advanceClock(31 * MINUTE_MS)
   const spend = await theBudgetOver(placesOver(host, PACKAGE)).theSpendInForce(SESSION)
 
   assert.ok(spend !== undefined)
@@ -199,7 +200,7 @@ test('the clock starts at the first version that names minutes, so a package bou
   const { host, given } = aHostForTheBudget({ now: 1_000 })
   // Version 1 is unbounded, and a week passes while the package waits.
   await keepTheContract(host, ['unbounded: not bounded yet', 'owner_yes: 9'])
-  given.advanceClock(7 * 24 * 60 * 60_000)
+  given.advanceClock(7 * 24 * 60 * MINUTE_MS)
   // Version 2 bounds it, from this moment: 30 minutes of a 30 minute budget cannot be gone at once.
   await keepTheContract(host, aBlock('30 minutes'))
 
