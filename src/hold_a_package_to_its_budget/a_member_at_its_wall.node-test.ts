@@ -15,7 +15,7 @@ import { test, type TestContext } from 'node:test'
 
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import {
   CLAUDE_CODE_HOOK_SWITCHES,
   CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
@@ -191,7 +191,7 @@ test('at the wall the relay refuses the next call, and the handover runs under t
   // The one call the budget allows, counted as it runs.
   assert.equal(theDenyIn(await relay.answer('tool_called', call('Read'))), undefined)
 
-  const refused = theDenyIn(await relay.answer('tool_called', call('Bash')))
+  const refused = theDenyIn(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL)))
   assert.ok(refused !== undefined, 'a call past the budget was allowed to run')
   assert.match(refused, /1 of 1 tool calls/)
   assert.deepEqual(allowed, ['Read'], 'a receipt was taken for a call that never ran')
