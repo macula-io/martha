@@ -20,7 +20,8 @@
 // How old a process is comes from the kernel's own two numbers — field 22 of its stat line, in clock ticks since boot,
 // over the kernel's CLK_TCK, added to the boot's `btime`. It is NOT the timestamp of the process's /proc directory,
 // which procfs sets when the directory is first looked at: a chain that had stood for hours read as newborn that way,
-// sat under the age this rule cuts at, and a real leftover passed as clean (review r=1, Jupiter, measured on host00).
+// sat under the age this rule cuts at, and a real leftover passed as clean (review r=1, Jupiter: a six-second-old
+// process read as newborn).
 //
 // `--proc` reads another kernel's tree and `--temp` another temp dir, which is how a test drives this gate over a killed
 // run's chain and the home it made, without planting a process of its own in the machine's /proc. A tree read that way

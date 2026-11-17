@@ -43,11 +43,18 @@ const FIELDS_BETWEEN_PARENT_AND_START = 21 - 4
 /** How many clock ticks this kernel counts to a second, asked of the same source the check asks. */
 const A_CLOCK_TICKS_PER_SECOND = Number(spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).stdout.trim())
 
-/** How long a real child is left standing before its age is read: longer than any drift in reading a start. */
-const A_CHILD_STANDS_MS = 3000
+/**
+ * How long a real child is left standing before its age is read: long enough that the two ways of reading an age are
+ * far apart — the directory stamp says "just now", the kernel's own start says this long ago.
+ */
+const A_CHILD_STANDS_MS = 6000
 
-/** How far the child's own word for its start and the kernel's numbers for it may differ. */
-const A_START_READING_DRIFT_MS = 1000
+/**
+ * How far the child's own word for its start and the kernel's numbers for it may differ. The child's word is written
+ * after Node has booted, which on a loaded runner takes about a second (1003 ms measured on CI), so this is several
+ * times that — and still half the time the two readings of an age are apart.
+ */
+const A_START_READING_DRIFT_MS = 3000
 
 /** A process as the kernel lists it: its pid, its parent, what it runs, and how long it has stood. */
 const aProc = (pid: number, ppid: number, command_line: string, started_at: number = NOW - 2 * A_LEFTOVER_STANDS_MS) =>
@@ -147,9 +154,9 @@ function aStatLine(pid: number, ppid: number, started_at: number): string {
 test('a process\'s age is read from the kernel\'s own start, never from the /proc directory\'s timestamp (#559 r=1)', async (t) => {
   // A real child on the real kernel, because this is the fault a planted kernel could not show: procfs stamps a
   // process's directory when the directory is first looked at, not when the process started, so a reader that took the
-  // age from that stamp answered "just now" for a chain that had stood for hours (Jupiter, on host00: a 6 s old sleep
-  // read 0.00 s). Here the child says when it started, it is left standing a while, and its age is read the way the
-  // check reads it — from field 22 over CLK_TCK, added to the boot's btime.
+  // age from that stamp answered "just now" for a chain that had stood for hours (review r=1: a six-second-old
+  // process read as newborn). Here the child says when it started, it is left standing a while, and its age is read
+  // the way the check reads it — from field 22 over CLK_TCK, added to the boot's btime.
   const child = spawn(process.execPath, ['-e', 'process.stdout.write(String(Date.now())); setInterval(() => undefined, 1 << 30)'], {
     stdio: ['ignore', 'pipe', 'inherit'],
   })
