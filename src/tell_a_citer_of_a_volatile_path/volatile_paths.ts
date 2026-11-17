@@ -8,7 +8,20 @@
 // No I/O and no import but the handover tool's name, so every host runs the same rule: what a text cites, which of
 // those a reboot deletes, and the one line the member reads.
 
+import { isAbsolute } from 'node:path'
+
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+
+/**
+ * The roots this machine keeps in memory, from the two facts a host reads off it: its temporary directory, and its
+ * runtime directory when it has one (martha#314). The rule lives here, where a decision belongs, and the reading of the
+ * machine lives in the adapter that launches, which hands both in. A runtime directory that is not absolute names no
+ * root, a trailing slash is not part of one, and one directory named twice is named once.
+ */
+export function machineRootsFrom(temporaryDirectory: string, runtimeDirectory: string | undefined): readonly string[] {
+  const named = [temporaryDirectory, ...(runtimeDirectory !== undefined && isAbsolute(runtimeDirectory) ? [runtimeDirectory] : [])]
+  return [...new Set(named.map(root => root.replace(/\/+$/, '')))]
+}
 
 /**
  * The roots in force: the ones the crew declares, or — when it declares none — the ones the launch knows from the

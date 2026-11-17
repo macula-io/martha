@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { theRootsInForce, theVolatileNote, volatilePathsIn } from './volatile_paths.ts'
+import { machineRootsFrom, theRootsInForce, theVolatileNote, volatilePathsIn } from './volatile_paths.ts'
 
 const ROOT = '/var/scratch'
 const RUNTIME = '/run/user/1000'
@@ -26,7 +26,7 @@ test('#314: a deeper directory that merely ends in a root, a longer name, and a 
   assert.deepEqual(volatilePathsIn('/home/test/work/var/scratch/x', [ROOT]), [])
   assert.deepEqual(volatilePathsIn(`${ROOT}foo/x`, [ROOT]), [])
   assert.deepEqual(volatilePathsIn('see https://github.com/macula-io/martha/pull/314', [ROOT]), [])
-  assert.deepEqual(volatilePathsIn('the handover is /home/test/martha/handovers/HANDOVER.md', [ROOT]), [])
+  assert.deepEqual(volatilePathsIn('the handover is /home/test/martha/notes/HANDOVER.md', [ROOT]), [])
 })
 
 test('#314: a path after an equals sign or a star is a path', () => {
@@ -44,6 +44,14 @@ test('#314: roots the crew declares are the roots in force, and the machine\'s o
   assert.deepEqual(theRootsInForce([], [RUNTIME]), [RUNTIME])
   // A declared root displaces the machine's rather than adding to it, so a root the crew leaves out is an ordinary path.
   assert.deepEqual(volatilePathsIn(`${ROOT}/a and ${RUNTIME}/b`, theRootsInForce([ROOT], [RUNTIME])), [`${ROOT}/a`])
+})
+
+test('#314: the machine\'s own roots are the two facts a host reads off it, and a runtime directory that is not one names no root', () => {
+  assert.deepEqual(machineRootsFrom('/var/tmp', RUNTIME), ['/var/tmp', RUNTIME])
+  assert.deepEqual(machineRootsFrom('/var/tmp', undefined), ['/var/tmp'])
+  assert.deepEqual(machineRootsFrom('/var/tmp', 'scratch'), ['/var/tmp'], 'a runtime directory that is not absolute named a root')
+  assert.deepEqual(machineRootsFrom('/var/tmp/', `${RUNTIME}/`), ['/var/tmp', RUNTIME], 'a trailing slash was kept as part of a root')
+  assert.deepEqual(machineRootsFrom(RUNTIME, RUNTIME), [RUNTIME], 'one directory named twice was named twice')
 })
 
 test('#314: the note names the paths, what a reboot does to them, and where to write them instead', () => {
