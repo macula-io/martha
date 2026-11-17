@@ -125,7 +125,7 @@
       "src/run_the_martha_command": 390,
       "src/run_the_nodes_own_npm_alone": 165,
       "src/serve_the_relay_to_a_launch": 244,
-      "src/start_a_member": 242,
+      "src/start_a_member": 239,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153
     },
