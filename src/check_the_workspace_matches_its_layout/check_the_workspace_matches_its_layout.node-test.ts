@@ -57,9 +57,12 @@ function aCleanWorkspace(t: TestContext): Fixture {
   return { root, clones, worktrees, clone }
 }
 
-/** The places as a check reads them: names from the disk, git from the disk. */
+/** The places as a check reads them: names from the disk, the path itself from the disk, git from the disk. */
 const anInspectionOf = (fixture: Fixture) => ({
-  files: { childrenOf: (path: string): readonly string[] => { try { return readdirSync(path) } catch { return [] } } } as Pick<FileTree, 'childrenOf'>,
+  files: {
+    childrenOf: (path: string): readonly string[] => { try { return readdirSync(path) } catch { return [] } },
+    realPathOf: (path: string): string | null => { try { return realpathSync(path) } catch { return null } },
+  } as Pick<FileTree, 'childrenOf' | 'realPathOf'>,
   processes: {
     run: async (request) => {
       const ended = spawnSync(request.command, [...request.args], { cwd: request.cwd, encoding: 'utf8' })
